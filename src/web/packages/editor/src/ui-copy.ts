@@ -1459,25 +1459,16 @@ export const uiCopy = {
      *  the card's own, so the two surfaces cannot disagree. */
     preview: {
       close: "Close",
-      file: "File",
       shape: "Shape",
       attribution: "Attribution",
-      /** Where the declaration came from: the Assets pane declares local files
-       *  only, so this is the one origin the surface can name. */
-      localFile: "Local file",
       noneRecorded: "None recorded",
       /** The caption's verb, without a measurement this build could not read. */
       fit: "fit",
-      statusUnused:
-        "A local file. No object, background or type token refers to it.",
-      statusUsed:
-        "The artboard's background, an object on the canvas, or a type token refers to it.",
       usedByNothing: "Used by nothing",
       /** The surface says `Used by N objects`; the manager's reachability
        *  answer is a boolean, so the line names the routes rather than a count
        *  nobody measured. */
       usedBySome: "Used by the artboard background, an object or a type token",
-      recycleNote: "Remove goes to the Recycle Bin on save",
       /** The two commands the card's words do not fit: its Replace and Remove
        *  are reused, and these are the one-word forms the 2×2 foot draws. */
       background: "Background",
@@ -1526,6 +1517,7 @@ export const uiCopy = {
       filterKind: "Kind",
       filterAll: "All",
       guide: "Guide",
+      refresh: "Refresh library",
       importPackage: "Import a .mpkg video",
       noMatches: "No wallpaper matches these filters.",
       empty: "This library holds no wallpapers Yunari can read.",
@@ -1992,6 +1984,22 @@ export const uiCopy = {
        *  imported: a package can only be checked for what is already in it. */
       dynamicText:
         "A clock or other dynamic text already in the video cannot be removed by Yunari and will loop as-is.",
+    },
+    /** The surface a video import passes through before the host normalizer:
+     *  the author picks the span, and only a cut span is blended at the loop. */
+    trimVideo: {
+      title: "Trim video",
+      hint: "Drag the ends to choose the loop. The last second dissolves into the first.",
+      start: "Start",
+      end: "End",
+      selection: (start: string, end: string) => `${start} – ${end}`,
+      output: (length: string) => `Loop is ${length}`,
+      useWhole: "Use whole video",
+      confirm: "Trim and import",
+      tooLong: (limit: string) =>
+        `This video is longer than ${limit}. Choose a span to import.`,
+      unplayable:
+        "This video cannot be played here. Use the whole file, or trim it with another tool.",
     },
     /** Shown when a normalize press produced no answer the pane can read — a
         host refusal arrives in its own words and is never replaced by this. */

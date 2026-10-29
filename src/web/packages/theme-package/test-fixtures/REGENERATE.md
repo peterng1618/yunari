@@ -18,6 +18,12 @@ read the bytes, they never spawn ffmpeg. Each command was run from
   -an -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 35 \
   -movflags +faststart long.mp4
 
+# too-long.mp4 — 61.5 s, past the 60 s cap, otherwise conforming
+"$FF" -hide_banner -nostdin -y -f lavfi \
+  -i color=c=0x336699:size=320x180:rate=30:duration=61.5 \
+  -an -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 35 \
+  -movflags +faststart too-long.mp4
+
 # wide.mp4 — 5120x180 long edge, over the 4096 cap
 "$FF" -hide_banner -nostdin -y -f lavfi \
   -i color=c=0x336699:size=5120x180:rate=30:duration=1 \

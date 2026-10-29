@@ -400,8 +400,16 @@ export async function run(argv: readonly string[]): Promise<number> {
     },
     themeStore,
     // The Steam library on this PC, read on demand: the install is located per
-    // listing, because a library can appear while the editor is open.
-    wallpaperEngine: createWallpaperEngineSource(),
+    // listing, because a library can appear while the editor is open. The scan
+    // is cached beside the other disposable host data so a rebuild does not
+    // reread every scene package.
+    wallpaperEngine: createWallpaperEngineSource({
+      cacheDir: path.join(
+        path.dirname(settingsDir),
+        "cache",
+        "wallpaper-engine",
+      ),
+    }),
     // A thumbnail is this machine's rendering of a theme, so it lives in that
     // theme's own folder rather than in a directory of its own. The editor
     // writes it after the save that replaced the folder, which is why the

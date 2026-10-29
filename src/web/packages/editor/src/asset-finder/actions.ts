@@ -57,7 +57,15 @@ export async function importFinderResult(input: {
         type: mime,
       },
     );
-    const reference = await input.manager.import(file);
+    // The declaration carries the same licence and source as the credit, so
+    // the preview can answer where an imported file came from. The credit is
+    // still the package member; this is the asset's own reading of it.
+    const reference = await input.manager.import(file, {
+      license: { name: input.result.licence },
+      ...(input.result.sourceUrl === ""
+        ? {}
+        : { sourceUrl: input.result.sourceUrl }),
+    });
     input.document.addCredit(credit);
     input.place(reference.id);
     return { ok: true };

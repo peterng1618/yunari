@@ -53,6 +53,7 @@ globalThis.ResizeObserver ??= class {
 } as never;
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
+HTMLMediaElement.prototype.pause = () => undefined;
 
 // React only flushes work scheduled inside `act` when it has been told it is in
 // a test; without this, `act` warns and the update lands after the assertion.
@@ -648,10 +649,24 @@ describe("the Assets pane's import", () => {
     expect(alert(host).textContent).toBe(uiCopy.panels.assetPlaced);
   });
 
-  it("hands a picked video to the video import instead of declaring it", async () => {
+  it("offers a picked video's trim before handing it to the video import", async () => {
     const { host, importSpy, importVideo } = await mountWithManager();
 
     await importFile(host, VIDEO_FILE);
+
+    const trim = document.querySelector("[data-yunari-video-trim-modal]");
+    expect(trim).not.toBeNull();
+    expect(importVideo).not.toHaveBeenCalled();
+    expect(importSpy).not.toHaveBeenCalled();
+
+    const whole = trim?.querySelector<HTMLButtonElement>(
+      "[data-yunari-video-trim-whole]",
+    );
+    if (whole === null || whole === undefined)
+      throw new Error("no whole-video control.");
+    await act(async () => {
+      whole.click();
+    });
 
     expect(importVideo).toHaveBeenCalledTimes(1);
     expect(importVideo.mock.calls[0]?.[0]).toBe(VIDEO_FILE);

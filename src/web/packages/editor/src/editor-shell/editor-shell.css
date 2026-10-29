@@ -1698,11 +1698,13 @@ body,
 
 /* The `?` reference is a Base UI dialog, portalled to `body` like the menu popup
    and the tooltip, so its classes are named here rather than reached by a
-   descendant selector. The scrim sits above the tooltip's `z-index: 50` and the
-   menu positioner's `60`, both of which are `body` siblings — and *below* the
-   select positioner's `80`, because a `ControlSelect` opened inside a dialog is
-   a sibling of this scrim rather than a descendant of the popup above it, and
-   faces the wrong way round the list is unclickable. */
+   descendant selector. The scrim sits above the menu positioner's `60`, both of
+   which are `body` siblings — and *below* the select positioner's `80`, because
+   a `ControlSelect` opened inside a dialog is a sibling of this scrim rather
+   than a descendant of the popup above it, and faces the wrong way round the
+   list is unclickable. The tooltip is `90`: a control inside a dialog mounts
+   one as a `body` sibling too, and at `50` its label sat behind the popup it
+   belonged to. */
 .editor-shell-dialog-overlay {
   position: fixed;
   inset: 0;
@@ -2971,7 +2973,9 @@ body,
   padding: 12px;
 }
 .editor-shell-tooltip {
-  z-index: 50;
+  /* Above every dialog and select: a control inside a modal mounts its tooltip
+     as a `body` sibling, so the dialog's `71` would otherwise cover it. */
+  z-index: 90;
   /* A tooltip is a reading, not a control: it must never take a pointer event
      from the thing it describes. On the rail's vertical stack a slot's popup
      lands over its neighbour, and capturing there made the neighbour

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { contentTypeFor } from "../serve/static-path.js";
 import { fetchAuthorName } from "./author.js";
+import { fingerprintOf, readListingCache, writeListingCache } from "./cache.js";
 import { readSceneFacts, type SceneFacts } from "./classify.js";
 import { type LibraryItem, scanLibrary } from "./library.js";
 import { locateInstall, type WallpaperEngineInstall } from "./locate.js";
@@ -62,11 +63,15 @@ export function createWallpaperEngineSource(
     readonly locate?: typeof locateInstall;
     readonly classify?: typeof readSceneFacts;
     readonly fetchImpl?: typeof fetch;
+    /** Where the scan's JSON cache lives. Absent keeps the cache in memory,
+     *  which is the test fixture's and an embedded host's behaviour. */
+    readonly cacheDir?: string;
   } = {},
 ): WallpaperEngineSource {
   const locate = options.locate ?? locateInstall;
   const classify = options.classify ?? readSceneFacts;
   const fetchImpl = options.fetchImpl;
+  const cacheDir = options.cacheDir;
   // The real locator answers `undefined` on every non-Windows platform, which
   // is a different answer from "not installed". An injected locator is a
   // fixture, so the platform it runs on says nothing about the library.
@@ -77,6 +82,16 @@ export function createWallpaperEngineSource(
   let scanned: ReadonlyMap<string, LibraryItem> | undefined;
   /** The install the last scan read, for the two paths that are not an item. */
   let located: WallpaperEngineInstall | undefined;
+  /** The scan behind the last answer, with the fingerprint that proved it. */
+  let memo:
+    | {
+        readonly fingerprint: string;
+        readonly items: readonly LibraryItem[];
+        readonly stored: readonly StoredItem[];
+        readonly skipped: number;
+        readonly byId: ReadonlyMap<string, LibraryItem>;
+      }
+    | undefined;
 
   async function listing(): Promise<WallpaperEngineAnswer> {
     // An unavailable answer also forgets the last scan: an item served from a
@@ -92,17 +107,57 @@ export function createWallpaperEngineSource(
     // while the editor is open.
     const install = await locate(process.env, process.platform);
     if (install === undefined) {
+      memo = undefined;
       return { available: false, reason: "not-installed" };
     }
     // Kept before the library check: the project route needs the install's own
     // paths even when it holds no library.
     located = install;
     if (install.libraries.length === 0) {
+      memo = undefined;
       return { available: false, reason: "no-library" };
     }
 
+    // A cheap stat pass is the freshness check. It runs on every listing, so
+    // the first click in a session and the pane's Refresh both notice a theme
+    // that was subscribed or removed.
+    const fingerprint = await fingerprintOf(install);
+    if (memo?.fingerprint === fingerprint) {
+      scanned = memo.byId;
+      return {
+        available: true,
+        install: install.root,
+        items: memo.stored,
+        skipped: memo.skipped,
+      };
+    }
+
+    if (cacheDir !== undefined) {
+      const cached = await readListingCache(cacheDir, install, fingerprint);
+      if (cached !== undefined) {
+        const byId = new Map(
+          cached.items.map((item) => [item.workshopId, item] as const),
+        );
+        memo = {
+          fingerprint,
+          items: cached.items,
+          stored: cached.stored,
+          skipped: cached.skipped,
+          byId,
+        };
+        scanned = byId;
+        return {
+          available: true,
+          install: install.root,
+          items: cached.stored,
+          skipped: cached.skipped,
+        };
+      }
+    }
+
     const scan = await scanLibrary(install);
-    const items: StoredItem[] = [];
+    const stored: StoredItem[] = [];
+    const resolved: LibraryItem[] = [];
     const byId = new Map<string, LibraryItem>();
     let skipped = scan.skipped;
 
@@ -125,13 +180,28 @@ export function createWallpaperEngineSource(
         }
       }
 
-      items.push(toStoredItem(item, payload, facts));
+      stored.push(toStoredItem(item, payload, facts));
+      resolved.push(item);
       byId.set(item.workshopId, item);
     }
 
     scanned = byId;
+    memo = {
+      fingerprint,
+      items: resolved,
+      stored,
+      skipped,
+      byId,
+    };
+    if (cacheDir !== undefined) {
+      await writeListingCache(cacheDir, install, fingerprint, {
+        items: resolved,
+        stored,
+        skipped,
+      });
+    }
 
-    return { available: true, install: install.root, items, skipped };
+    return { available: true, install: install.root, items: stored, skipped };
   }
 
   async function itemOf(workshopId: string): Promise<LibraryItem | undefined> {

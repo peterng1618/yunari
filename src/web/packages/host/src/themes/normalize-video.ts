@@ -6,12 +6,15 @@ import path from "node:path";
 import {
   readVideoFacts,
   VIDEO_LIMITS,
+  VIDEO_TRIM,
   type VideoFacts,
+  type VideoTrimRange,
   videoRefusals,
 } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "./ffmpeg-hash.mjs";
+import { MAX_ASSET_BYTES } from "./store.js";
 
 /**
  * Brings a source video inside the publish envelope, or copies it untouched.
@@ -31,6 +34,9 @@ const USAGE = "usage: yunari normalize-video <input.mp4> <output.mp4>";
 /** ffmpeg's own progress output goes to stderr; a hang or a runaway log must
  *  not outgrow the child-process buffer. */
 const MAX_STDERR_BYTES = 4 * 1024 * 1024;
+
+/** The ffmpeg rate the envelope requires. */
+const FRAMES_PER_SECOND = 30;
 
 /** The installed package's own version. The hash file is keyed by it, so a bump
  *  refuses rather than verifying against digests for some other build. */
@@ -75,6 +81,9 @@ export async function normalizeVideo(
   options: {
     readonly fit?: "cover" | "contain";
     readonly aspect?: NormalizeAspect;
+    /** A span of the source to keep. Trimming always re-encodes and always
+     *  blends the loop seam; a re-encode that is not a trim does neither. */
+    readonly trim?: VideoTrimRange;
     readonly ffmpegPath?: string;
     readonly run?: Run;
     readonly verifyForTest?: Verify;
@@ -86,16 +95,30 @@ export async function normalizeVideo(
       ok: false,
       message: "That video cannot be read; an H.264 MP4 is required.",
     };
-  if (videoRefusals("video", facts).length === 0)
+
+  const trimmed =
+    options.trim === undefined ? undefined : trimOf(facts, options.trim);
+  if (typeof trimmed === "string") return { ok: false, message: trimmed };
+  if (trimmed !== undefined && trimmed.spanMs > VIDEO_LIMITS.maxDurationMs)
+    return {
+      ok: false,
+      message:
+        `That selection is ${trimmed.spanMs} ms long; the maximum is ` +
+        `${VIDEO_LIMITS.maxDurationMs} ms.`,
+    };
+
+  // An untrimmed, conforming file is copied byte for byte. A trimmed span is
+  // always re-encoded: the cut and the blend cannot be a stream copy.
+  if (trimmed === undefined && videoRefusals("video", facts).length === 0)
     return { ok: true, bytes, reencoded: false };
 
   // Decided before the encoder runs: a copy is lossless, and the output is
   // still re-probed below because these flags are a promise rather than proof.
-  const copyOnly = copyRemuxSuffices(facts);
-  // Refused before the encoder is even resolved: a 31-second loop is not made
+  const copyOnly = trimmed === undefined && copyRemuxSuffices(facts);
+  // Refused before the encoder is even resolved: a 61-second loop is not made
   // conforming by re-encoding it, and trimming it would discard the author's
   // footage silently.
-  if (facts.durationMs > VIDEO_LIMITS.maxDurationMs)
+  if (trimmed === undefined && facts.durationMs > VIDEO_LIMITS.maxDurationMs)
     return {
       ok: false,
       message:
@@ -135,7 +158,7 @@ export async function normalizeVideo(
     const outcome = await run(
       copyOnly
         ? remuxArgs(input, output)
-        : ffmpegArgs(input, output, facts, fit, options.aspect),
+        : ffmpegArgs(input, output, facts, fit, options.aspect, trimmed),
     );
     // The child's stderr can carry paths and encoder internals; the sentence
     // names the failure without echoing them.
@@ -174,26 +197,84 @@ export async function normalizeVideo(
   }
 }
 
+/** The span with its two ends clamped to the source. */
+interface TrimmedSpan extends VideoTrimRange {
+  readonly spanMs: number;
+}
+
+/** The usable span, or the sentence naming why the trim cannot run. */
+function trimOf(facts: VideoFacts, trim: VideoTrimRange): TrimmedSpan | string {
+  const { startMs, endMs } = trim;
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    startMs < 0 ||
+    endMs <= startMs
+  )
+    return "That trim is not a usable range; the end must come after the start.";
+
+  // The editor's video element and the MP4's own timing can disagree by a
+  // little; clamping is kinder than refusing a selection that reaches the end.
+  const start = Math.max(0, Math.min(startMs, facts.durationMs));
+  const end = Math.max(0, Math.min(endMs, facts.durationMs));
+  if (end <= start)
+    return "That trim is not a usable range; the end must come after the start.";
+
+  const spanMs = end - start;
+  if (spanMs < VIDEO_TRIM.minSpanMs)
+    return (
+      `That selection is ${spanMs} ms long; a trimmed loop needs at least ` +
+      `${VIDEO_TRIM.minSpanMs} ms so the ${VIDEO_TRIM.blendMs} ms blend has room.`
+    );
+
+  return { startMs: start, endMs: end, spanMs };
+}
+
+/** A filter time, in seconds, without trailing zeros. */
+function seconds(ms: number): string {
+  return (ms / 1000).toFixed(6).replace(/\.?0+$/u, "");
+}
+
 export function ffmpegArgs(
   input: string,
   output: string,
   facts: VideoFacts,
   fit: "cover" | "contain",
   aspect?: NormalizeAspect,
+  trim?: TrimmedSpan,
 ): string[] {
   const box = targetBox(facts, fit, aspect);
-  const cap = bitrateCap(Math.max(box.width, box.height));
+  const cap = bitrateCap(
+    Math.max(box.width, box.height),
+    trim?.spanMs ?? facts.durationMs,
+  );
+  // An input seek keeps a long source from being decoded up to the in point;
+  // the trim's filters then run on a timeline that starts at zero.
+  const seek =
+    trim === undefined
+      ? []
+      : ["-ss", seconds(trim.startMs), "-t", seconds(trim.spanMs)];
+  const picture =
+    trim === undefined
+      ? ["-vf", scaleFilter(facts, fit, aspect)]
+      : [
+          "-filter_complex",
+          blendFilter(facts, fit, aspect, trim.spanMs),
+          "-map",
+          "[out]",
+        ];
+
   return [
     "-hide_banner",
     "-nostdin",
     "-y",
+    ...seek,
     "-i",
     input,
     "-an",
-    "-vf",
-    scaleFilter(facts, fit, aspect),
+    ...picture,
     "-r",
-    "30",
+    String(FRAMES_PER_SECOND),
     "-c:v",
     "libx264",
     "-profile:v",
@@ -203,8 +284,8 @@ export function ffmpegArgs(
     "-crf",
     "23",
     // CRF alone lets a hard 4K frame spend more than the asset cap allows.
-    // Capping the rate keeps 30 s inside 80 MiB and still lets easy scenes
-    // spend far less than the cap.
+    // Capping the rate keeps the whole duration inside the per-asset bound and
+    // still lets easy scenes spend far less than the cap.
     "-maxrate",
     String(cap),
     "-bufsize",
@@ -215,6 +296,33 @@ export function ffmpegArgs(
     "mp4",
     output,
   ];
+}
+
+/**
+ * The loop's dissolve, as one filter graph.
+ *
+ * The first `VIDEO_TRIM.blendMs` of the span is the head; the rest is the
+ * body. The body plays to its end, then dissolves into the head over the same
+ * length. At the end of that dissolve the picture is the head's last frame,
+ * which is the body's first frame, so the file's own loop point is continuous.
+ * The output is one blend shorter than the span. `fps` and `format` are stated
+ * before the split because `xfade` requires both inputs to agree on them.
+ */
+function blendFilter(
+  facts: VideoFacts,
+  fit: "cover" | "contain",
+  aspect: NormalizeAspect | undefined,
+  spanMs: number,
+): string {
+  const blend = seconds(VIDEO_TRIM.blendMs);
+  const offset = seconds(spanMs - VIDEO_TRIM.blendMs * 2);
+  return (
+    `[0:v]fps=${FRAMES_PER_SECOND},format=yuv420p,split=2[body][head];` +
+    `[body]trim=start=${blend},setpts=PTS-STARTPTS[bodyv];` +
+    `[head]trim=end=${blend},setpts=PTS-STARTPTS[headv];` +
+    `[bodyv][headv]xfade=transition=fade:duration=${blend}:offset=${offset}[xf];` +
+    `[xf]${scaleFilter(facts, fit, aspect)}[out]`
+  );
 }
 
 /** A copy that drops audio and moves `moov` forward, for the two faults that
@@ -245,11 +353,16 @@ function copyRemuxSuffices(facts: VideoFacts): boolean {
   );
 }
 
-/** The capped-CRF ladder, in bits per second, by the output's long edge. */
-function bitrateCap(longEdge: number): number {
-  if (longEdge <= 1920) return 6_000_000;
-  if (longEdge <= 2560) return 12_000_000;
-  return 20_000_000;
+/** The capped-CRF ladder, in bits per second, by the output's long edge. The
+ *  duration-aware half is the asset bound: a 60-second clip at the 4K ladder's
+ *  20 Mb/s would be 150 MB, so the rate is lowered until 90% of the bound is
+ *  enough for the whole clip. */
+function bitrateCap(longEdge: number, durationMs: number): number {
+  const ladder =
+    longEdge <= 1920 ? 6_000_000 : longEdge <= 2560 ? 12_000_000 : 20_000_000;
+  const seconds = Math.max(durationMs, 1_000) / 1000;
+  const bound = Math.floor((MAX_ASSET_BYTES * 0.9 * 8) / seconds);
+  return Math.max(500_000, Math.min(ladder, bound));
 }
 
 /**

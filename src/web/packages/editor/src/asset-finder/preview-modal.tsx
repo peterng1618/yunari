@@ -72,7 +72,7 @@ export function FinderPreviewModal(props: {
             className="flex w-[var(--asset-preview-panel-width)] flex-none flex-col border-l border-edge bg-panel"
           >
             <div className="flex flex-none flex-col gap-[var(--space-6)] border-b border-edge pt-[var(--space-14)] pr-[var(--asset-preview-header-gutter)] pb-[var(--space-12)] pl-[var(--space-16)]">
-              <span className="truncate text-lg font-semibold text-text">
+              <span className="break-words text-lg font-semibold text-text [overflow-wrap:anywhere]">
                 {preview.name}
               </span>
               {preview.meta === "" ? null : (

@@ -110,12 +110,6 @@ function PillGroup({
   );
 }
 
-/** The file's extension, upper-cased: a reading of the path, not a word. */
-function extensionOf(path: string): string {
-  const dot = path.lastIndexOf(".");
-  return dot < 0 ? path : path.slice(dot + 1).toUpperCase();
-}
-
 /** The size's aspect ratio in its lowest whole terms (`2400×1600` → `3:2`).
  *  Repetends (`1366×768`) keep the divisor's remainder rather than inventing a
  *  rounded bucket: the pill is a measurement, not a classification. */
@@ -243,15 +237,6 @@ function AssetPreviewModal({
         ]),
   ];
 
-  const fileReadings: readonly PillReading[] = [
-    {
-      id: "format",
-      name: extensionOf(asset.path),
-      mono: false,
-      proposed: false,
-    },
-    { id: "origin", name: copy.localFile, mono: false, proposed: false },
-  ];
   const shapeReadings: readonly PillReading[] =
     size === undefined
       ? []
@@ -348,8 +333,8 @@ function AssetPreviewModal({
           className="flex w-[var(--asset-preview-panel-width)] flex-none flex-col border-l border-edge bg-panel"
         >
           <div className="flex flex-none flex-col gap-[var(--space-6)] border-b border-edge pt-[var(--space-14)] pr-[var(--asset-preview-header-gutter)] pb-[var(--space-12)] pl-[var(--space-16)]">
-            <div className="flex min-w-0 items-center gap-[var(--space-8)]">
-              <span className="truncate text-lg font-semibold text-text">
+            <div className="flex min-w-0 items-start gap-[var(--space-8)]">
+              <span className="min-w-0 break-words text-lg font-semibold text-text [overflow-wrap:anywhere]">
                 {assetFileName(asset)}
               </span>
               <span className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted">
@@ -375,11 +360,6 @@ function AssetPreviewModal({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-[var(--space-12)] overflow-auto px-[var(--space-16)] py-[var(--space-12)]">
-            <p className="text-xs leading-[1.45] text-muted">
-              {input.inUse ? copy.statusUsed : copy.statusUnused}
-            </p>
-
-            <PillGroup id="file" name={copy.file} readings={fileReadings} />
             <PillGroup id="shape" name={copy.shape} readings={shapeReadings} />
             <PillGroup
               id="attribution"
@@ -391,7 +371,6 @@ function AssetPreviewModal({
               <span id="asset-preview-usage">
                 {input.inUse ? copy.usedBySome : copy.usedByNothing}
               </span>
-              <span>{copy.recycleNote}</span>
             </div>
           </div>
 

@@ -2427,7 +2427,7 @@ describe("the Wallpaper Engine import transaction", () => {
 
   it("imports nothing and credits nothing when the normalizer refuses", async () => {
     const refusal =
-      "That video is 45000 ms long; the maximum is 30000 ms. Trim it and try again.";
+      "That video is 45000 ms long; the maximum is 60000 ms. Trim it and try again.";
     const manager = new AssetManager();
     const importSpy = vi.spyOn(manager, "import");
     const setBackgroundMedia = vi.fn();

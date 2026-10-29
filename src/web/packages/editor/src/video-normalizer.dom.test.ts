@@ -70,6 +70,21 @@ describe("requestNormalizedVideo", () => {
     expect(init?.body).toBe(bytes);
   });
 
+  it("names the trim span in the query, not the body", async () => {
+    const fetcher = serving({
+      ok: true,
+      bytesBase64: btoa("normalized"),
+      reencoded: true,
+    });
+    const bytes = new Uint8Array([4, 5, 6]);
+
+    await requestNormalizedVideo(bytes, { startMs: 1_500, endMs: 12_000 });
+
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(url).toBe(`${VIDEO_NORMALIZE_PATH}?startMs=1500&endMs=12000`);
+    expect(init?.body).toBe(bytes);
+  });
+
   it("answers the host's refusal sentence", async () => {
     serving({ ok: false, message: "That video is too large." });
 

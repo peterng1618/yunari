@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WallpaperEngineInstall } from "./locate.js";
 import { createWallpaperEngineSource } from "./source.js";
 
@@ -160,6 +160,47 @@ describe("the Wallpaper Engine source", () => {
     expect(byId.get("202")).not.toHaveProperty("stillAtRest");
     expect(byId.get("202")).not.toHaveProperty("hasText");
     expect(byId.get("203")).toMatchObject({ kind: "video" });
+  });
+
+  it("reuses the persisted scan across a restart and notices library changes", async () => {
+    await fixture();
+    const cacheDir = path.join(tmp, "cache");
+
+    const first = createWallpaperEngineSource({ locate, cacheDir });
+    const original = await first.listing();
+    if (!original.available) throw new Error(original.reason);
+    expect(original.items).toHaveLength(3);
+
+    // A fresh source is a fresh host process: the package scan must not run
+    // again when the library fingerprint still matches.
+    const classify = vi.fn();
+    const second = createWallpaperEngineSource({ locate, classify, cacheDir });
+    const cached = await second.listing();
+    if (!cached.available) throw new Error(cached.reason);
+    expect(classify).not.toHaveBeenCalled();
+    expect(cached.items.map((item) => item.workshopId).sort()).toEqual(
+      original.items.map((item) => item.workshopId).sort(),
+    );
+    expect(cached.skipped).toBe(original.skipped);
+
+    // A subscription appears as a new directory, which changes the
+    // fingerprint and earns a scan.
+    await writeItem(
+      "205",
+      "project.json",
+      JSON.stringify({ type: "video", file: "clip.mp4" }),
+    );
+    await writeItem("205", "clip.mp4", "mp4");
+
+    const added = await second.listing();
+    if (!added.available) throw new Error(added.reason);
+    expect(added.items.map((item) => item.workshopId)).toContain("205");
+
+    // Removing it is noticed the same way.
+    await fs.rm(path.join(library, "205"), { recursive: true, force: true });
+    const removed = await second.listing();
+    if (!removed.available) throw new Error(removed.reason);
+    expect(removed.items.map((item) => item.workshopId)).not.toContain("205");
   });
 
   it("answers not-installed when there is no install", async () => {

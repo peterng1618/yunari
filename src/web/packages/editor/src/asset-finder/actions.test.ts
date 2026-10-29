@@ -65,6 +65,12 @@ describe("importFinderResult", () => {
     expect(manager.declarations.map((entry) => entry.path)).toEqual([
       "assets/house.svg",
     ]);
+    // The declaration carries the credit's licence and source, so the asset
+    // preview can answer where it came from.
+    expect(manager.declarations[0]).toMatchObject({
+      license: { name: "ISC" },
+      sourceUrl: "https://lucide.dev/icons/house",
+    });
     expect(addCredit).toHaveBeenCalledWith({
       kind: "icon",
       title: "house",

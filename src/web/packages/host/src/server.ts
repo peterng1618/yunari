@@ -4555,7 +4555,32 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      const normalized = await normalizeVideo(source);
+      // A trim is two query values, not a JSON envelope: the body stays the
+      // video's own bytes, so the route still streams one large object.
+      const start = url.searchParams.get("startMs");
+      const end = url.searchParams.get("endMs");
+      let trim:
+        | { readonly startMs: number; readonly endMs: number }
+        | undefined;
+      if (start !== null || end !== null) {
+        const startMs = start === null ? Number.NaN : Number(start);
+        const endMs = end === null ? Number.NaN : Number(end);
+        if (
+          !Number.isFinite(startMs) ||
+          !Number.isFinite(endMs) ||
+          startMs < 0 ||
+          endMs <= startMs
+        ) {
+          sendText(response, 400, "That trim is not a usable range.");
+          return;
+        }
+        trim = { startMs, endMs };
+      }
+
+      const normalized = await normalizeVideo(
+        source,
+        trim === undefined ? {} : { trim },
+      );
       if (!normalized.ok) {
         // The normalizer's own sentence: it names which rule was broken, and a
         // sentence composed here would lose that.

@@ -1,4 +1,5 @@
 import type { FontAssetReference } from "@yunari/renderer-core";
+import type { VideoTrimRange } from "@yunari/theme-package";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -34,6 +35,7 @@ import {
   type VideoImportStep,
 } from "./import-video-modal.js";
 import { isPreviewable, openAssetPreview } from "./preview-modal.js";
+import { VideoTrimModal } from "./video-trim-modal.js";
 
 /**
  * The Assets pane's body: every declared file as a card, grouped by kind.
@@ -79,6 +81,7 @@ interface AssetsPaneProps {
     file: File,
     isPackage: boolean,
     onStep: (step: VideoImportStep) => void,
+    trim?: VideoTrimRange,
   ) => Promise<ImportOutcome>;
   /** The one font commit: declares or amends the face, then writes the preset
    *  and the credit. The cap check and the document writes are the caller's,
@@ -255,8 +258,25 @@ export function AssetsPane({
   /** The pick the modal is running: a video or package the host prepares before
    *  anything is declared. */
   const [videoImport, setVideoImport] = useState<
-    { readonly file: File; readonly package: boolean } | undefined
+    | {
+        readonly file: File;
+        readonly package: boolean;
+        readonly trim?: VideoTrimRange;
+      }
+    | undefined
   >();
+  /** A picked video's trim surface, open before the import modal. The object
+   *  URL is the player's source and is revoked when the surface gives way. */
+  const [videoTrim, setVideoTrim] = useState<
+    { readonly file: File; readonly src: string } | undefined
+  >();
+  // The picked file's object URL lives only while its trim surface does.
+  useEffect(() => {
+    if (videoTrim === undefined) return;
+    return () => {
+      URL.revokeObjectURL(videoTrim.src);
+    };
+  }, [videoTrim]);
   /** The font whose metadata form is open. A pick opens one before anything is
    *  declared; Create type preset on a card opens the same form for its face. */
   const [font, setFont] = useState<FontDraft | undefined>();
@@ -346,7 +366,13 @@ export function AssetsPane({
         refuse(new Error("No video import route is wired."));
         return;
       }
-      setVideoImport({ file, package: isPackageFile(file) });
+      // A package is extracted whole by the host; only a bare video has a span
+      // to choose, so only that pick opens the trim surface first.
+      if (isPackageFile(file)) {
+        setVideoImport({ file, package: true });
+      } else {
+        setVideoTrim({ file, src: URL.createObjectURL(file) });
+      }
       setMessage("");
       return;
     }
@@ -397,11 +423,12 @@ export function AssetsPane({
     file: File,
     isVideoPackage: boolean,
     onStep: (step: VideoImportStep) => void,
+    trim?: VideoTrimRange,
   ): Promise<ImportOutcome> => {
     if (onImportVideo === undefined) {
       return { ok: false, message: uiCopy.panels.assetImportFailed };
     }
-    const outcome = await onImportVideo(file, isVideoPackage, onStep);
+    const outcome = await onImportVideo(file, isVideoPackage, onStep, trim);
     if (outcome.ok) setMessage(uiCopy.panels.assetBackgroundSet);
     return outcome;
   };
@@ -785,12 +812,32 @@ export function AssetsPane({
           </section>
         );
       })}
+      {videoTrim === undefined ? null : (
+        <VideoTrimModal
+          src={videoTrim.src}
+          name={videoTrim.file.name}
+          onConfirm={(trim) => {
+            setVideoImport({
+              file: videoTrim.file,
+              package: false,
+              ...(trim === undefined ? {} : { trim }),
+            });
+            setVideoTrim(undefined);
+          }}
+          onClose={() => setVideoTrim(undefined)}
+        />
+      )}
       {videoImport !== undefined && (
         <ImportVideoModal
           file={videoImport.file}
           package={videoImport.package}
           onRun={(onStep) =>
-            runVideoImport(videoImport.file, videoImport.package, onStep)
+            runVideoImport(
+              videoImport.file,
+              videoImport.package,
+              onStep,
+              videoImport.trim,
+            )
           }
           onClose={() => setVideoImport(undefined)}
         />

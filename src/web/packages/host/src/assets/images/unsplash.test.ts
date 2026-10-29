@@ -8,6 +8,7 @@ const API = "https://api.unsplash.com/";
 
 interface PhotoOverrides {
   id?: string;
+  slug?: string;
   premium?: boolean;
   plus?: boolean;
   smallHost?: string;
@@ -18,6 +19,7 @@ function photo(overrides: PhotoOverrides = {}) {
   const id = overrides.id ?? "p1";
   return {
     id,
+    slug: overrides.slug ?? `${id}-slug`,
     alt_description: "a cat on a wall",
     premium: overrides.premium ?? false,
     plus: overrides.plus ?? false,
@@ -280,8 +282,27 @@ describe("unsplashSource.bytesOf", () => {
     expect(image).toBeGreaterThan(trigger);
     expect(bytes).toMatchObject({
       contentType: "image/jpeg",
-      filename: "p1.jpg",
+      // The imported name is the photo's full slug, not the id alone.
+      filename: "p1-slug.jpg",
     });
     expect(new TextDecoder().decode(bytes?.bytes)).toBe("<jpeg bytes>");
+  });
+
+  it("falls back to the id when the API returns no usable slug", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `${API}photos/p1`) {
+        return new Response(JSON.stringify(photo({ slug: "../escape" })), {
+          status: 200,
+        });
+      }
+      if (url.endsWith("/download")) return new Response("{}", { status: 200 });
+      if (url.startsWith("https://images.unsplash.com/"))
+        return new Response("<jpeg bytes>", { status: 200 });
+      return new Response("no route", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const bytes = await unsplashSource.bytesOf("p1", context(fetcher));
+    expect(bytes?.filename).toBe("p1.jpg");
   });
 });
