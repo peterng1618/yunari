@@ -37,11 +37,10 @@ import { STARTER_BACKDROP_PATH } from "./starter-backdrop.js";
 type ObjectJson = Readonly<Record<string, unknown>>;
 
 /**
- * The reference artboard and the box of every card on it, measured off
- * the reference theme target: the card
- * borders were located by the transition of its two-pixel outline. Stated here
- * rather than imported from the builder, so the assertion is against the
- * measurement and not against whatever the builder happens to emit.
+ * The starter's authored artboard and the box of every card on it: the card
+ * borders come from the starter's two-pixel outline. Stated here rather than
+ * imported from the builder, so the assertion is against the authored geometry
+ * and not against whatever the builder happens to emit.
  *
  * The id is the card's **group**, because the group is the card and carries the
  * panel's measured box; the frosted rectangle inside it is one part.
@@ -166,7 +165,7 @@ describe("the new Fabric document", () => {
       mono: { family: "Consolas, monospace", weight: "400" },
     });
     // Every run carries its own size; a run without one would fall to the
-    // artboard default, which is not what the reference measured.
+    // artboard default, which is not the starter's authored size.
     for (const run of nodesOf(document_).flatMap(
       (object) =>
         (
