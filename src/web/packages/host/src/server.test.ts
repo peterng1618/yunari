@@ -10334,7 +10334,7 @@ describe("The published overlay", () => {
     }
   });
 
-  it("resolves the root through the published theme first, then the stored choice", async () => {
+  it("lays the published theme over the display that holds it, not the others", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
     const store = createThemeStore(dir);
     const activeTheme = createActiveThemeStore(dir);
@@ -10349,8 +10349,7 @@ describe("The published overlay", () => {
       await store.write("living-room", createValidPackage());
       await store.write("studio", createValidPackage("studio", "Studio"));
       // The consumer chose `studio`, so a `/` with nothing else to go on shows
-      // that — and the published document taking precedence over the choice is
-      // the whole point of the overlay.
+      // that.
       await activeTheme.write(DEFAULT_DISPLAY, "studio");
 
       const before = await request(hosted.server, "GET", "/");
@@ -10358,6 +10357,8 @@ describe("The published overlay", () => {
         "/?theme=studio&data=live&theme-source=map",
       );
 
+      // A publish of a theme this display does not hold leaves it where it is:
+      // one author's working document must not move another display (2026-10-29).
       await request(
         hosted.server,
         "PUT",
@@ -10365,9 +10366,23 @@ describe("The published overlay", () => {
         themeBody(createValidPackage()),
       );
 
+      const other = await request(hosted.server, "GET", "/");
+      expect(other.headers.location).toBe(
+        "/?theme=studio&data=live&theme-source=map",
+      );
+
+      // The theme it does publish is served as the working document, which is
+      // the whole point of the overlay.
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/publish?id=studio",
+        themeBody(createValidPackage("studio", "Studio")),
+      );
+
       const after = await request(hosted.server, "GET", "/");
       expect(after.headers.location).toBe(
-        "/?theme=living-room&data=live&theme-source=published",
+        "/?theme=studio&data=live&theme-source=published",
       );
     } finally {
       await hosted.close();
@@ -10570,14 +10585,15 @@ describe("The root page resolves the display that asked", () => {
     // The person's own instruction for that page.
     expect(await source("/?theme=studio")).toBe("link");
 
-    // The publish outranks both. A page showing it must not be moved by an
-    // assignment: reloading there would re-resolve to the published theme and
-    // see the map's entry again on the next poll — a reload loop.
+    // The publish covers the theme this display holds, so the page showing it
+    // must not be moved by an assignment: reloading there would re-resolve to
+    // the published theme and see the map's entry again on the next poll — a
+    // reload loop.
     await request(
       hosted.server,
       "PUT",
-      "/api/publish?id=studio",
-      themeBody(createValidPackage("studio", "Studio")),
+      "/api/publish?id=living-room",
+      themeBody(createValidPackage()),
     );
 
     expect(await source()).toBe("published");

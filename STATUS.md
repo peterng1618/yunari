@@ -17,10 +17,11 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the h
 
 ## Last completed change
 
-- **A changed still frame re-extracts:** `setBackground` compared only the asset id, so setting `fallbackFrame` in the editor left the glass standing on the previous frame; it now remounts when the frame value changes.
-- **Red-proved:** dropping the frame comparison fails "re-extracts the still when the declared frame changes".
-- **An unchanged frame is a no-op:** the same background again does not restart the clip, so an unrelated edit costs nothing.
-- **A swapped video already remounts:** `setBackgroundMedia` destroys and re-mounts the layer, so a replaced asset resolves its own bytes and its own first frame.
+- **A publish no longer moves every display:** `/` resolved the published theme ahead of the display's own assignment, so editing theme A put it on the panel assigned theme B; the publish now leads only where the display holds that theme, or holds none.
+- **The follower reloads only for its own theme:** the publish revision is global, so an unrelated publish reloaded every page; it reloads only when the published id is this page's theme, or clears it.
+- **Ruling changed:** the publish outranks the map for the theme it publishes; a display with no assignment still falls back to it.
+- **Red-proved:** both new tests fail when their condition is removed.
+- **A published display page re-resolves too:** keeping its theme id pinned the display to that theme, so a later assignment could never move it; a published page with no display keeps its id.
 
 ## Next
 

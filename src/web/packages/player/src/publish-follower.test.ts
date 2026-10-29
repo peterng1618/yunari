@@ -29,7 +29,31 @@ describe("followPublished", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("reloads once the revision moves", async () => {
+  it("reloads once the revision moves for the theme it shows", async () => {
+    let revision = 4;
+    const reload = vi.fn();
+    const stop = followPublished(
+      {
+        pageUrl: MAP_PAGE,
+        fetch: vi.fn(
+          async () => new Response(JSON.stringify({ id: "studio", revision })),
+        ),
+      },
+      reload,
+      { intervalMs: 5 },
+    );
+
+    await settle(20);
+    revision = 5;
+    await settle(40);
+    stop();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a page showing another theme alone when that theme is published", async () => {
+    // MAP_PAGE shows `studio`; the revision is global, so a publish of
+    // `living-room` moves it without being news for this page (2026-10-29).
     let revision = 4;
     const reload = vi.fn();
     const stop = followPublished(
@@ -49,7 +73,7 @@ describe("followPublished", () => {
     await settle(40);
     stop();
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("stops, and says so, when the host refuses the session", async () => {
@@ -487,7 +511,16 @@ describe("reResolveUrl", () => {
       reResolveUrl(`${page}?theme=studio&data=live&theme-source=link`),
     ).toBe(`${page}?theme=studio&theme-source=link`);
 
-    // A published page keeps its id, exactly as it behaves today.
+    // A published display page is the host's answer too: keeping its id would
+    // pin the display to that theme, so a later assignment could never move it.
+    expect(
+      reResolveUrl(
+        `${page}?display=left-screen&theme=studio&data=live&theme-source=published`,
+      ),
+    ).toBe(`${page}?display=left-screen&theme-source=published`);
+
+    // A published page with no display is the person's own preview, and keeps
+    // what it was opened on.
     expect(
       reResolveUrl(`${page}?theme=studio&data=live&theme-source=published`),
     ).toBe(`${page}?theme=studio&theme-source=published`);

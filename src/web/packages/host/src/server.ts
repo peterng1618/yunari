@@ -5041,17 +5041,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
             )
           : undefined;
       const live = published.read()?.id;
-      const theme =
-        live ??
-        requested ??
-        stored ??
-        (available.length === 1 ? available[0]?.id : undefined);
+      // A publish is an overlay on the theme it publishes, not on every
+      // display: it wins where this display holds that same theme, or holds
+      // none at all. Letting it lead unconditionally moved a panel assigned to
+      // another theme onto the author's working document (2026-10-29).
+      const overlaid =
+        live !== undefined && (stored === undefined || stored === live);
+      const theme = overlaid
+        ? live
+        : (requested ??
+          stored ??
+          (available.length === 1 ? available[0]?.id : undefined));
       // Where the theme came from, because every display arrives carrying one:
       // the player reads this to know whether an assignment may move it at all.
       // Without it, the person's own link and the host's own resolution are the
       // same URL, and the display's poll would be answered `null` for ever.
-      const source =
-        live !== undefined ? "published" : requested !== null ? "link" : "map";
+      const source = overlaid
+        ? "published"
+        : requested !== null
+          ? "link"
+          : "map";
 
       if (theme === undefined) {
         // Nothing to show: either a first run, or a choice to make. Both lead

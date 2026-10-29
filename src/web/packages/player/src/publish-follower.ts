@@ -69,15 +69,23 @@ const PAGE_BASE = "http://yunari.invalid";
  *
  * `theme` goes too, but **only for a page the host resolved itself**: that id is
  * the host's own answer and is the one that has to be re-asked, while a link
- * page's id is the person's instruction and a published page's id is what it is
- * showing. `display` and `session` are never touched, so the display still names
- * itself and the sighting survives the reload.
+ * page's id is the person's instruction. A *published* page is the host's answer
+ * too when it names a display: keeping the id there would pin the display to the
+ * theme once published, so a later assignment could never move it. A published
+ * page with no display is the person's preview and keeps its id. `display` and
+ * `session` are never touched, so the display still names itself and the sighting
+ * survives the reload.
  */
 export function reResolveUrl(href: string): string {
   const page = new URL(href, PAGE_BASE);
   page.searchParams.delete("data");
 
-  if (page.searchParams.get("theme-source") === "map") {
+  const source = page.searchParams.get("theme-source");
+  const hostResolved =
+    source === "map" ||
+    (source === "published" && page.searchParams.get("display") !== null);
+
+  if (hostResolved) {
     page.searchParams.delete("theme");
   }
 
@@ -127,6 +135,12 @@ export function followPublished(
   let last: number | undefined;
   let lastTheme: string | null | undefined;
   let lastPresentation: DisplayPresentation | undefined;
+  /** The theme in this page's own URL, and the theme last published. A publish
+   *  of another theme moves the revision too, and this page has nothing to
+   *  reload for: one author's working document must not restart another
+   *  display (2026-10-29). */
+  const pageTheme = page.searchParams.get("theme");
+  let lastPublished: string | null | undefined;
 
   const tick = async (): Promise<void> => {
     if (stopped) return;
@@ -143,6 +157,7 @@ export function followPublished(
       if (response.ok) {
         const body = (await response.json()) as {
           revision?: unknown;
+          id?: unknown;
           display?: {
             theme?: unknown;
             shape?: unknown;
@@ -174,6 +189,16 @@ export function followPublished(
           }
         }
 
+        const published =
+          body.id === null || typeof body.id === "string" ? body.id : undefined;
+        const wasPublished = lastPublished;
+        lastPublished = published;
+        // A publish of this page's theme is news; so is one clearing it, which
+        // is the page dropping the overlay. Anything else leaves the page be.
+        const concernsThisPage =
+          published === pageTheme ||
+          (published === null && wasPublished === pageTheme);
+
         if (typeof body.revision === "number") {
           // `last` moves even on the reload path. Reloading and returning with
           // `last` still stale re-fires on every tick, which is invisible in
@@ -181,7 +206,7 @@ export function followPublished(
           // moment the reload does not — a test double, or a blocked reload.
           const moved = last !== undefined && body.revision !== last;
           last = body.revision;
-          if (moved) {
+          if (moved && concernsThisPage) {
             reload();
             return;
           }
