@@ -21,13 +21,13 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the h
 - **The wire gains nothing:** changed pixels are chosen on the source frame, before quantising; solid black and white stay byte-identical.
 - **Red-proved:** dropping the threshold term flattens a 128 grey to one level and fails "dithers a mid tone instead of flat-banding it".
 - **Applied to the device:** `@yunari/host` rebuilt and restarted; the panel repaints from the dithered encoder.
-- **Unverified on the panel:** the dither is proved by the encoder test only — nobody has looked at the device since the restart.
+- **Confirmed on the panel:** the user sees no colour banding; a fine grain is visible only up close, which is the dither doing its job.
 
 ## Next
 
-1. Look at the panel: confirm the bands are gone and the texture is not visible at arm's length.
-2. Finish `vg-791`: overlay alpha, glass over video, and a stop that leaves no clip looping.
-3. Decide the screen-command policy: report the reconnect, or forbid it until rediscovery works (`vg-789`).
+1. Finish `vg-791`: overlay alpha, glass over video, and a stop that leaves no clip looping.
+2. Decide the screen-command policy: report the reconnect, or forbid it until rediscovery works (`vg-789`).
+3. Reclaim-device spec — designed, awaiting the user's approval of the shape.
 4. Drain the backlog: a reproduction pass first, not a fix pass.
 
 ## Blockers / unverified
