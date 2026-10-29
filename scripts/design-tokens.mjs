@@ -34,12 +34,12 @@
  * consuming them are, and one instrument covers it rather than two.
  *
  * This is deliberately the *cheap* ratchet, and its second px tier is coarse in
- * a way that is documented rather than accidental: in a spacing property
- * The design's spacing steps are enforced exactly, because the property is right there to
- * read, and everywhere else only the values DESIGN.md prints are allowed. The
- * real enforcement is the browser assertion in Task 4 — every gated element's
- * computed spacing on DESIGN.md's scale — which is what catches a `26px` in a
- * place this text scan cannot reason about.
+ * a way that is documented rather than accidental: in a spacing property the
+ * design's spacing steps are enforced exactly, because the property is right
+ * there to read, and everywhere else only the values DESIGN.md prints are
+ * allowed. The real enforcement is the browser assertion in Task 4 — every
+ * gated element's computed spacing on DESIGN.md's scale — which is what catches
+ * a `26px` in a place this text scan cannot reason about.
  *
  * `node scripts/design-tokens.mjs --self-test` proves every rule still fires.
  * A guard that passes because it looked at nothing is the defect this file
