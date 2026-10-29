@@ -542,7 +542,7 @@ describe("the new Fabric document", () => {
     await canvas.dispose();
   });
 
-  it("gives every card the radius and border width measured off the reference", () => {
+  it("gives every card the starter's radius and border width", () => {
     const theme = createNewFabricTheme();
     // A card is a stroked Rect; the background is a Rect too, so the match set
     // is filtered rather than assumed. The frosted rectangle is inside its card
@@ -553,9 +553,9 @@ describe("the new Fabric document", () => {
     expect(cards.map((card) => card["id"]).sort()).toEqual(
       CARDS.map((card) => card.id.replace("group-", "")).sort(),
     );
-    // Measured off the reference theme target:
+    // The starter's authored geometry:
     // the top border occupies rows 187-188 and the left border columns 40-41 of
-    // the 1672-wide reference, and first appears 10px in from the corner.
+    // the 1672-wide artboard, and first appears 10px in from the corner.
     for (const card of cards) {
       expect(card["strokeWidth"], String(card["id"])).toBe(2);
       expect(card["rx"], String(card["id"])).toBe(10);
@@ -611,8 +611,8 @@ describe("the new Fabric document", () => {
       (object) => trackingOf(runsOf(object)[0]) !== undefined,
     );
 
-    // Tracked: the wordmark and the overline under it. Both values are measured
-    // off the reference image — see `starterTracking`.
+    // Tracked: the wordmark and the overline under it. Both values are the
+    // starter's authored tracking — see `starterTracking`.
     expect(trackedObjects.map((object) => object["id"])).toEqual([
       "wordmark",
       "strapline",

@@ -1418,7 +1418,7 @@ test.describe("the per-kind inspector column", () => {
     expect(radar.series[0]?.data[0]?.value).toHaveLength(4);
 
     // Fewer than three spokes leaves the frame and draws no polygon: never a
-    // polygon closed on a reading nobody took (§D1).
+    // polygon closed on a reading nobody took.
     const fewer = (await builtOption(page, "radar-fewer")) as {
       series: { data: readonly unknown[] }[];
     };
@@ -1812,7 +1812,7 @@ test.describe("the per-kind inspector column", () => {
     await expect(endpoint).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  test("the section header takes the drawing's rule, the mono count and the faint, and the subject name the 600", async ({
+  test("the section header takes the trailing rule, the mono count and the faint, and the subject name the 600", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1829,10 +1829,10 @@ test.describe("the per-kind inspector column", () => {
       series: ["cpu.load"],
     });
 
-    // Plan 1's parity census (`vg-390`) re-derived these two from the drawing:
-    // `:30` draws the header's
-    // count in `ui-monospace` and `var(--faint)`, and `:24` draws the subject's
-    // name at weight 600. The type scale gives counts to UI mono and titles 600; the palette gives
+    // Plan 1's parity census (`vg-390`) re-derived these two from the header:
+    // its count is
+    // `ui-monospace` in `var(--faint)`, and the subject's
+    // name is weight 600. The type scale gives counts to UI mono and titles 600; the palette gives
     // `--faint` to counts. Both were
     // inherited before this case existed — the count took the heading's sans
     // and `--muted`, the name the shell's 400.
@@ -1858,11 +1858,11 @@ test.describe("the per-kind inspector column", () => {
       "600",
     );
 
-    // The header's trailing rule, which every current drawing draws between the
+    // The header's trailing rule, which the section header draws between the
     // count and the chevron. Nothing
-    // argued against it, so it is a difference the drawing wins. Its neighbouring
+    // argued against it, so the header keeps it. Its neighbouring
     // case — the read-only rows' omitted dashed divider, where `column.tsx`'s
-    // the control set note won instead — left with the read-only section (item 17).
+    // note won instead — left with the read-only section (item 17).
     const rule = page.locator(
       '[data-yunari-section="position"] [data-yunari-section-rule]',
     );

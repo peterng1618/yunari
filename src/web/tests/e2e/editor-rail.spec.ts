@@ -1603,7 +1603,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   //
   // **The popup caps itself at `90vh`, and the project's 720px viewport caps the
   // box at 648** — a height any declaration at or above 648 would satisfy, so
-  // the drawing's 760 would never be exercised. Read the geometry at a viewport
+  // the box's 760 would never be exercised. Read the geometry at a viewport
   // tall enough for the box, then restore the project's own size for the rest of
   // the case (the page is this test's own, but later steps read the layout too).
   const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
@@ -1613,7 +1613,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await page.setViewportSize(projectViewport);
   // **The popup's own cap, which the tall read cannot exercise.** At the
   // project's 720px viewport `90vh` is 648, so the 760 box is capped there —
-  // the drawing's height would otherwise run past the fold and clip the foot.
+  // the box's height would otherwise run past the fold and clip the foot.
   const capped = await drawn("store-01");
   expect(
     capped.height,
@@ -1630,12 +1630,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
     portrait.stage,
     `the stage follows the item instead of holding one height (${itemReading})`,
   ).toBe(landscape.stage);
-  // The drawing's own numbers, read where the box can reach them; the stage is
+  // The box's own numbers, read where the box can reach them; the stage is
   // the box's content height — the 1px border twice.
-  expect(
-    landscape.height,
-    `the modal is not the drawing's 760px (${itemReading})`,
-  ).toBe(760);
+  expect(landscape.height, `the modal is not 760px (${itemReading})`).toBe(760);
   // 760 less the popup's 1px border twice; written as the subtraction so the
   // test does not mint a second design-language number for a derived height.
   expect(
@@ -1741,9 +1738,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
     bar.rowWidth,
     `the per-page row is not the 158px its label and well need (${barReading})`,
   ).toBe(158);
-  // **The label and the well are one line**, which is what the drawing draws and
+  // **The label and the well are one line**, which is what the row draws and
   // what the row's own width buys: a row given only the well's 76px wraps the
-  // well to a second line, and the bar grows from the drawing's 43px to 61. The
+  // well to a second line, and the bar grows from the row's 43px to 61. The
   // two boxes are read against each other rather than against a `top`, because
   // one line means the label's own middle falls inside the well's box — the well
   // is 27px tall and the label 14, so their tops differ by 6 with nothing wrong.
@@ -1811,7 +1808,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await page.keyboard.press("Escape");
 
   // **The Shape popover's groups, as a rendered popover** (R115). The three
-  // headings are the drawing's, the sentence above them is the one that says why
+  // headings are the item's own, the sentence above them is the one that says why
   // they matter, and the values are the items' own readings — none of which a
   // flat list would show.
   await region.locator("[data-yunari-facet='shape']").click();
@@ -1834,19 +1831,19 @@ test("the store lists a library, opens an item, and comes back to the same page"
   });
   expect(
     groups.hint,
-    `the Shape popover does not carry the drawing's sentence (${groupReading})`,
+    `the Shape popover does not carry the facet's sentence (${groupReading})`,
   ).toBe(uiCopy.store.facets.shapeHint);
   const headings = uiCopy.store.facets.shapeGroups;
   expect(
     groups.headings,
-    `the Shape popover does not draw the drawing's three labelled groups (${groupReading})`,
+    `the Shape popover does not draw the three labelled groups (${groupReading})`,
   ).toEqual([headings.orientation, headings.aspect, headings.size]);
   expect(
     groups.values,
     `the Shape values are not the items' own readings (${groupReading})`,
   ).toEqual([
     // Both orientations, because two of the thirty themes are portrait: an
-    // option is offered for what the listing holds and not for what a drawing
+    // option is offered for what the listing holds and not for what a fixture
     // imagines.
     uiCopy.store.orientations.landscape,
     uiCopy.store.orientations.portrait,
@@ -2040,7 +2037,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   ).toHaveText(badgeWord);
   record("store-origin-badge", `badge "${badgeWord}"`);
 
-  // **What the badge sits in is the claim** (`gallery.tsx`): the drawing puts it
+  // **What the badge sits in is the claim** (`gallery.tsx`): the gallery puts it
   // in the facts band rather than beside the name, so a badge that moved would
   // change the grid while a bare existence check stayed green.
   expect(
@@ -2052,7 +2049,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
     "the origin badge is not drawn in the cell's own facts band",
   ).toBe(true);
 
-  // **A theme the host holds no record of came from nowhere.** Drawing the
+  // **A theme the host holds no record of came from nowhere.** Showing the
   // badge for it is a fact no record carries, which is what this reading is for.
   await expect(
     badgeOf("boundary-plain"),
@@ -2080,7 +2077,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
 
   const pillOf = (tag: string) =>
     styleGroup.locator(`[data-yunari-store-item-pill='${tag}']`);
-  // The drawing's own words for a word the vocabulary does not hold yet, as a
+  // The store's own words for a word the vocabulary does not hold yet, as a
   // literal for the reason the badge's word is one.
   await expect(
     pillOf("warm-lantern"),
@@ -2117,7 +2114,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   }
   expect(
     pills.proposed.edge,
-    `the proposed pill is not drawn on the drawing's dashed edge (${pillReading})`,
+    `the proposed pill is not drawn on the dashed edge (${pillReading})`,
   ).toBe("dashed");
   expect(
     pills.settled.edge,
@@ -3234,7 +3231,7 @@ async function settled(page: Page): Promise<void> {
 /**
  * **The store's `open` action loads a library theme as the editor's document**
  * (R134), from the cell and from the item's own footer alike — the label the
- * drawing gives it is *Open in editor* — while **the cell's own surface is what
+ * store gives it is *Open in editor* — while **the cell's own surface is what
  * opens the item's**, so a cell opens a modal.
  *
  * **Nothing serves `/api/themes` at the editor preview**, so both routes are
@@ -3372,19 +3369,19 @@ test("the store opens a library theme as the document, from the cell and its foo
   const surfaceOf = (id: string) =>
     cellOf(id).locator("[data-yunari-store-cell-surface]");
 
-  // **The cell's own bands are where the drawing puts them, and this is the
+  // **The cell's own bands are where the cell puts them, and this is the
   // reading that says so** (A.7b). The surface, the byline and the facts band
   // are three elements now where they were one padded column, so the spacing
   // between them is arithmetic a later edit can move without anything failing:
-  // the drawing's 10px inside the cell and 6px between the bands, which the spacing scale's
+  // the cell's 10px inset and 6px between the bands, which the spacing scale's
   // step table owns as `--space-10` and `--space-6`. The 26px band is the third
-  // band's own height and is read here too, because it is what the drawing
+  // band's own height and is read here too, because it is what the band
   // fixes and a wrapper that padded it would squash it.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
   // puts between their text, and measuring the rects would report 0 for every
-  // gap — passing with the drawing's spacing deleted. The content box (the rect
+  // gap — passing with the cell's spacing deleted. The content box (the rect
   // inside the border and the padding) is where the line really sits, so the
   // padding is the gap again; and since every box here abuts the next, the
   // arithmetic is the whole of it: a margin a later edit added would move a gap
@@ -3415,7 +3412,7 @@ test("the store opens a library theme as the document, from the cell and its foo
     );
     // The 26px band itself, not the wrapper that pads it and not one action
     // inside it: the four controls are centred in the band, so a shorter one
-    // would read as a band that is shorter than the 26px the drawing fixes.
+    // would read as a band that is shorter than the 26px the band fixes.
     const band = cell
       .querySelector("[data-yunari-store-cell-action]")
       ?.parentElement?.getBoundingClientRect();
@@ -3424,7 +3421,7 @@ test("the store opens a library theme as the document, from the cell and its foo
       ?.getBoundingClientRect();
     const cellRect = cell.getBoundingClientRect();
     return {
-      // The cell's own 1px edge is inside its box, so the 10px the drawing puts
+      // The cell's own 1px edge is inside its box, so the 10px the cell puts
       // above it is measured from the border's inner edge.
       cellInnerBottom:
         cellRect.bottom -
@@ -3453,23 +3450,23 @@ test("the store opens a library theme as the document, from the cell and its foo
   };
   expect(
     gapOf(bands.pictureBottom, bands.nameTop, "name under the picture"),
-    `the name is not the drawing's 10px under the picture (${bandReading})`,
+    `the name is not 10px under the picture (${bandReading})`,
   ).toBe(10);
   expect(
     gapOf(bands.nameBottom, bands.bylineTop, "byline"),
-    `the byline is not the drawing's 6px under the name (${bandReading})`,
+    `the byline is not 6px under the name (${bandReading})`,
   ).toBe(6);
   expect(
     gapOf(bands.bylineBottom, bands.bandTop, "facts band"),
-    `the facts band is not the drawing's 6px under the byline (${bandReading})`,
+    `the facts band is not 6px under the byline (${bandReading})`,
   ).toBe(6);
   expect(
     gapOf(bands.bandBottom, bands.cellInnerBottom, "band's own foot"),
-    `the facts band does not sit the drawing's 10px above the cell's edge (${bandReading})`,
+    `the facts band does not sit 10px above the cell's edge (${bandReading})`,
   ).toBe(10);
   expect(
     gapOf(bands.bandTop, bands.bandBottom, "band"),
-    `the facts band is not the 26px the drawing fixes (${bandReading})`,
+    `the facts band is not the 26px the band fixes (${bandReading})`,
   ).toBe(26);
 
   // **The cell's own surface opens the item's**, and the open control below is
@@ -3481,7 +3478,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   ).toBeVisible();
   await expect(
     page.locator("[data-yunari-store-item-action='open']"),
-    "the item's own surface does not print the short word the drawing gives the open action",
+    "the item's own surface does not print the short word the store gives the open action",
   ).toHaveText(uiCopy.store.item.actions.open);
   await page.locator("[data-yunari-store-item-close]").click();
   await expect(modal, "the item's own surface does not close").toBeHidden();

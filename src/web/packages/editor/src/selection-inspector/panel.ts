@@ -394,7 +394,7 @@ function writePaint(
  * A colour alone draws nothing, so the committed edit must leave something to
  * see and tune — falling below the panel rather than glowing evenly around it.
  * A shadow already there keeps its own blur and offsets; only its colour is
- * re-resolved from the reference just written.
+ * re-resolved from the colour just written.
  */
 function writeShadow(
   object: FabricObject,
@@ -481,7 +481,7 @@ const MAX_SWEEP_DEGREES = 360;
  * **absolute coordinates in the object's own space**, so any `scaleX`/`scaleY`
  * on the object is a scale from a different drawing. Measured: a path sized to
  * 28 × 28 and then given 14 × 14 of new data drew **1 × 3 units** — the new
- * data multiplied by the old drawing's scale, which is the order every icon in
+ * data multiplied by the old geometry's scale, which is the order every icon in
  * a dashboard is built in (insert, size, then draw).
  *
  * So the data wins and the scale goes back to 1, which leaves the object at the

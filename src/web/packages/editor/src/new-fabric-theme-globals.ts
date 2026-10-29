@@ -205,9 +205,9 @@ export function starterRoleForSize(size: number): StarterTypeRole {
 }
 
 /**
- * The reference's tracking, in px at its authored size.
+ * The starter's tracking, in px at its authored size.
  *
- * Measured off the reference, not judged by eye: "SYSTEM" advances 6px at 17px
+ * The starter's own letterforms fix them: "SYSTEM" advances 6px at 17px
  * and "YUNARI" 28px at 36px. Only those two sizes track; a numeral's advance is
  * a grid cell, so readings and the clock stay untracked.
  */

@@ -15,7 +15,7 @@ import { uiCopy } from "./ui-copy.js";
  * The display's own chooser: the one control a reader at a paired screen has
  * for changing what that screen shows.
  *
- * What is pinned here is the request and the refusal, not the drawing: the
+ * What is pinned here is the request and the refusal, not the rendering: the
  * body is the whole authority question (the display is the credential's, so a
  * `display` key would be a client naming someone else's screen), and a
  * session-less reader is offered nothing rather than a control that can only

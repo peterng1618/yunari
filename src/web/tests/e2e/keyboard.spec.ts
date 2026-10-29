@@ -224,7 +224,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   const refusal = row.locator('[data-yunari-shortcut-reason][role="alert"]');
 
   // ── 1. Empty overrides ───────────────────────────────────────────────────
-  // Proves the panel renders the drawing's own state: every chord is its
+  // Proves the panel renders the default state: every chord is its
   // default, and the header's return-to-default action is offered with nothing
   // to return. The store is read too, because "no row is rebound" is a claim
   // about what was stored and the marks alone cannot say it.
@@ -265,8 +265,8 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
 
   // ── The `?` sheet's chord mark, which Step 3 of the task must not move ────
   // The panel's chip is scoped to `.editor-shell-keyboard`, and the sheet
-  // renders the shared `.editor-shell-dialog kbd` rule with no drawing behind
-  // it. Read as a computed style rather than inspected: the shared rule is what
+  // renders the shared `.editor-shell-dialog kbd` rule with no dedicated rule
+  // behind it. Read as a computed style rather than inspected: the shared rule is what
   // a change made for the modal would have moved by accident.
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
@@ -286,7 +286,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
     });
   expect(
     sheetChip,
-    "the sheet's chord mark moved with the modal's chip, and no drawing governs the sheet",
+    "the sheet's chord mark moved with the modal's chip, and no other rule governs the sheet",
   ).toEqual({ padding: "0px", borderWidth: "0px", borderRadius: "0px" });
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();

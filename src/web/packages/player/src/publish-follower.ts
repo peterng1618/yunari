@@ -6,7 +6,7 @@
  * for readings and adding a second event channel would be a second owner for
  * "the host has news". A refusal is not silence: a session that expired turns
  * every poll into a 403, and a follower that read that as "nothing changed"
- * would leave a frozen dashboard with no explanation (§ Review Focus 4).
+ * would leave a frozen dashboard with no explanation (Review Focus 4).
  *
  * The poll names the display it is for, read from the page it is on, and that
  * is what lets the host answer an assignment at all: the page carries the

@@ -1,6 +1,6 @@
 /** Artboard sizes, derived from a ratio, an orientation and a resolution.
     A new document picks one; a document with a size the presets cannot name
-    keeps it, because the numeric fields are the same fields (§ artboard panel). */
+    keeps it, because the numeric fields are the same fields (the artboard panel). */
 
 export type ArtboardRatioId = "16:9" | "19.5:9" | "4:3";
 export type ArtboardResolutionId = "1080p" | "2k" | "4k";

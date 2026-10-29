@@ -10,7 +10,7 @@ import { type StoredItem, toStoredItem } from "./wire.js";
 
 /**
  * The whole host surface behind one object the server takes as an option
- *. The browser names an item by its `workshopId`; every path lives here.
+ * The browser names an item by its `workshopId`; every path lives here.
  */
 
 export type UnavailableReason =

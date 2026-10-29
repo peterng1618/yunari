@@ -11,7 +11,7 @@ import { isDesktopSurface } from "./surface.js";
  *
  * The unit suite proves the modal's classes and attributes, but jsdom lays
  * nothing out: a stylesheet regression in the box, the panel's fixed width or
- * the foot's one accent verb would pass every gate. This reads the drawing's
+ * the foot's one accent verb would pass every gate. This reads the layout's
  * numbers off the rendered product instead.
  *
  * **The same 20×20 PNG `editor.spec.ts` imports**, and for the same reason: a
@@ -68,9 +68,9 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
   const modal = page.locator(MODAL);
   await expect(modal).toBeVisible();
 
-  // The viewer's box: the finder's inset-24 rule, capped by the drawing's own
+  // The viewer's box: the finder's inset-24 rule, capped by the dialog's own
   // 1132 and 852. Measured on the dialog popup, not the flex body inside it —
-  // the popup owns the drawing's width and height, and its 1px border twice is
+  // the popup owns the width and height, and its 1px border twice is
   // why the body reads 1130 inside a 1132 box. The height's subtraction is
   // written here so a changed dialog rule cannot pass by matching itself.
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
@@ -96,14 +96,12 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
 
   expect(
     box.width,
-    `the box is not the width the drawing fixes (${reading})`,
+    `the box is not the width the dialog fixes (${reading})`,
   ).toBe(1132);
   expect(box.height, `the box is not the inset-24 cap (${reading})`).toBe(
     expectedHeight,
   );
-  expect(panelWidth, `the panel is not the drawing's 270px (${reading})`).toBe(
-    270,
-  );
+  expect(panelWidth, `the panel is not 270px (${reading})`).toBe(270);
 
   // One primary verb: a picture's Place box takes the accent and its
   // Background does not.

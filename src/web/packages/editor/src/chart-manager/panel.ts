@@ -130,7 +130,7 @@ const MAX_BINDINGS: Readonly<Record<ChartFamily, number>> = {
   line: Number.POSITIVE_INFINITY,
   bar: Number.POSITIVE_INFINITY,
   pie: Number.POSITIVE_INFINITY,
-  // More spokes than twelve collapse the polygon at theme sizes (§D1).
+  // More spokes than twelve collapse the polygon at theme sizes.
   radar: 12,
   polarBar: Number.POSITIVE_INFINITY,
 };

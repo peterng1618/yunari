@@ -297,7 +297,7 @@ test.describe("shell palettes", () => {
       previews
         .filter((preview) => preview.accent === "")
         .map((preview) => preview.palette),
-      "these previews have no accent bar, so the card is not the two-bar preview the drawing draws",
+      "these previews have no accent bar, so the card is not the two-bar preview",
     ).toEqual([]);
 
     // No preview shows the *live* palette's ground or accent while naming a
@@ -513,7 +513,7 @@ test.describe("shell palettes", () => {
    *  whole *palette* rather than an element, which is not the boundary the spacing scale draws.
    *  Task 5 moved the gradient and the blur onto the clusters by name and gave the
    *  chrome the palette's own `--panel`. The clusters' glass was then removed
-   *  outright: the drawing never blurred anything and filled a cluster from the
+   *  outright: the theme never blurred anything and filled a cluster from the
    *  same charcoal at 95%, so the gradient, the two inner highlights and the blur
    *  were the product's own invention. **Elevation is now the whole difference**
    *  between the two rows, and it is what this assertion discriminates on.

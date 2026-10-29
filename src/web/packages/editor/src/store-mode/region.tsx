@@ -684,8 +684,8 @@ function StoreRegion(props: {
             has one select and this is it, and a bare well with a chevron would
             be a second copy of its popup, its keyboard model and its `readOnly`
             refusal to keep in step. The label is the row's own rather
-            than a name only a screen reader hears, which is what the drawing's
-            unlabelled well would leave it with. */}
+            than a name only a screen reader hears, which an unlabelled well would
+            leave it with. */}
         <ControlSelect
           id={SORT_ID}
           label={uiCopy.store.sort.label}

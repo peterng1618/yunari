@@ -10,9 +10,9 @@ import { glyphStrokeWidth } from "../../editor-shell/icons.js";
  *
  * The surface lives here rather than in `card-library.ts` because that module
  * is data (a card's parts, its readings, how a copy is minted) and this is a
- * React surface. **The library owns the name; the pane owns the drawing.**
+ * React surface. **The library owns the name; the pane owns the rendering.**
  *
- * Stroke paths at the design's weight on the 24px grid, taken from the reference's
+ * Stroke paths at the design's weight on the 24px grid, taken from the starter's
  * own tile artwork, so no icon family and no dependency arrives with them. That
  * is exactly its own escape from the library — a card unit tile may carry a
  * diagram of what it builds because the library is a fixed set of eight — while

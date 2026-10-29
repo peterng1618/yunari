@@ -28,7 +28,7 @@ export type Bridge = {
   editor: {
     artboard(): { readonly width: number; readonly height: number };
     /** Fabric's canvas, read for the plate's paint and the viewport transform —
-     *  the drawing itself rather than a summary of it. */
+     *  the canvas itself rather than a summary of it. */
     canvas: unknown;
     viewport: {
       zoom(): number;

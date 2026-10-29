@@ -288,7 +288,7 @@ function group(id: string): {
 }
 
 /**
- * The box is the 960 × 760 and the stage takes the box's height
+ * The box is 960 × 760 and the stage takes the box's height
  * whatever the item is, so the modal does not change size as a person steps
  * between items.
  *
@@ -300,7 +300,7 @@ function group(id: string): {
  * its own ratio inside, is measured in the browser case.
  *
  * **The numbers are pinned, not the shape of a class.** `DESIGN.md` fixes the
- * modal at 960 and its height at the 760 because a case that accepted
+ * modal at 960 and its height at 760 because a case that accepted
  * `h-<any>` would pass a 100px stage.
  */
 it("keeps the 960px box and the stage's one height", async () => {
@@ -404,7 +404,7 @@ it("reads the stage's size and fit, and survives a record without one", async ()
  * the record's own reading: a sensor by the descriptor's `label` rather than by
  * its `semanticKey`, and a shape by its own words.
  *
- * The group names are the — Reads and Shape — and not the facet row's
+ * The group names are the modal's own — Reads and Shape — and not the facet row's
  * (Sensors, Colour mode): the row names what a filter narrows by, and the modal
  * names what the theme reads and how it is shaped.
  */
@@ -483,11 +483,13 @@ it("draws the Style group, and marks the tag the vocabulary does not hold", asyn
     "a tag the vocabulary does not hold is drawn as a settled one",
   ).toContain("border-dashed");
 
-  // The `font:500` belongs to the pill's own box, not to the mark, so
+  // The `font:500` weight belongs to the pill's own box, not to the mark, so
   // both pills carry it: a settled pill and a proposed one differ in edge and
   // colour, and in nothing else.
   for (const id of ["retro", "retro-diner"]) {
-    expect(pillClass(id), `${id}: not the weight`).toContain("font-medium");
+    expect(pillClass(id), `${id}: not the medium weight`).toContain(
+      "font-medium",
+    );
   }
 });
 

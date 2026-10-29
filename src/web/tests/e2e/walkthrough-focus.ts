@@ -19,7 +19,7 @@ import type { Page } from "@playwright/test";
 /**
  * The shell's regions.
  *
- * **Taken from the design's own drawing, not invented to fit a result.** Its
+ * **Taken from the shell's own layout, not invented to fit a result.** Its
  * labelled bands are `header · rail · pane · stage · inspector · status bar`.
  * The four here are the body's — the body regions the interactions act in,
  * and the ones that own a focusable surface: the rail chooses a pane, the pane
@@ -28,9 +28,9 @@ import type { Page } from "@playwright/test";
  *
  * **The box is the boundary, and it is why there are four and not six.** These
  * four are exactly `.editor-shell-body`'s children (`shell-layout.tsx`), and
- * The drawing puts the header and the status bar outside that box — the
+ * The layout puts the header and the status bar outside that box — the
  * `<header>` before it and the `<footer id="status">` after it. A reader
- * counting the drawing's bands against this list is off by those two on
+ * counting the shell's bands against this list is off by those two on
  * purpose, and the reason is the box rather than how the bands are used.
  *
  * **The instrument does reach into the header, and a command path is not a
@@ -51,8 +51,8 @@ import type { Page } from "@playwright/test";
  *
  * **A second, independent statement of the same four**: `vg-231` in the
  * register calls `.editor-shell-body`'s children "the shell's four body
- * regions", and names them rail, pane, stage and inspector. Two documents and
- * the drawing agree, which is why this list is a reading rather than a guess.
+ * regions", and names them rail, pane, stage and inspector. Two documents
+ * agree, which is why this list is a reading rather than a guess.
  */
 export const REGIONS = ["rail", "pane", "stage", "inspector"] as const;
 

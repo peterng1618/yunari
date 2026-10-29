@@ -88,7 +88,7 @@ export const defaultBarSettings: BarSettings = {
  * What both bar families carry for paint and data.
  *
  * A polar bar has no orientation, so the helpers below ask whether one is
- * present rather than forcing a cartesian growth direction onto it (§E1).
+ * present rather than forcing a cartesian growth direction onto it.
  */
 export type BarPaintSettings =
   | BarSettings

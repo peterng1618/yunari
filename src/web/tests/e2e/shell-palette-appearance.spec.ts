@@ -225,7 +225,7 @@ test.describe("shell palettes", () => {
           );
         }
         // A cluster is the chrome's own fill plus a shadow, and nothing else:
-        // no blur and no sheen, which is what the drawing has always painted.
+        // no blur and no sheen, which is what the clusters have always painted.
         if (cluster.blur !== "none") {
           failures.push(
             `${palette} ${selector}: the cluster blurs its backdrop (${cluster.blur})`,

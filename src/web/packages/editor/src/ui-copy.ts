@@ -418,7 +418,7 @@ export const uiCopy = {
    *
    * **The words are `packages/host/public/settings.html`'s** — its hints, its
    * device labels, its status line — taken rather than rewritten, because they
-   * are the same questions, and the committed drawing says so. Two things
+   * are the same questions, and the committed page says so. Two things
    * diverge. That page no longer lists themes (A.10): the listing is the store
    * mode's local half, and an assignment is made from a theme's own row. And
    * its questions hint carries a sentence this one does not — which display the
@@ -1104,7 +1104,7 @@ export const uiCopy = {
      *  refuses to render a heading over nothing, so a library of untagged
      *  themes draws two groups rather than an empty third. The word its proposed
      *  pill carries is the field's own (`panels.tagsProposed`), because the
-     *  drawing draws that pill on the modal and in the field alike. */
+     *  same pill appears on the modal and in the field alike. */
     pillGroups: {
       reads: "Reads",
       shape: "Shape",
@@ -1140,8 +1140,7 @@ export const uiCopy = {
     },
     /** One cell of either gallery. The actions are keyed by `CellAction`, so an
      *  action added to the cell without a word for it fails to compile rather
-     *  than drawing an
-     *  icon-only button nobody can name.
+     *  than drawing an icon-only button nobody can name.
      *
      *  **The origin badge's word is not here**: the item's own surface says the
      *  same fact, so it is one key at `store.fromStore` rather than two. */
@@ -1628,7 +1627,7 @@ export const uiCopy = {
    *
    * `units` is the card library's own word for what it holds — a card is a
    * *unit* an author inserts (`card-library.ts`), and it is the word the Add
-   * pane's title bar carries in the drawing. `tokens` is the Tokens pane's own
+   * pane's title bar carries. `tokens` is the Tokens pane's own
    * list, the theme's paints; the reserved `none` is not one of them, because
    * `PaintList` lists every token but that one.
    *
@@ -1741,7 +1740,7 @@ export const uiCopy = {
    * registry's labels and `chartFamilies`, so no entry copy lives here. */
   canvasMenu: { label: "Canvas actions" },
   /** The stage's own name: the region the artboard is drawn in, so a reader
-   *  reaching the canvas is told which surface it is before the drawing. */
+   *  reaching the canvas is told which surface it is before its content. */
   stage: { label: "Editor canvas" },
   /** The shared control set's refusal copy. A control that refuses a value the
    *  author can repair says why, and those words are user-visible text, so they

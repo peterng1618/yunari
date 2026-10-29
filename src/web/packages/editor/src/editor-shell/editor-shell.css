@@ -511,7 +511,7 @@ body,
   /* The elevation 3 carries a scrim as well as a shadow,
      and this is it. A token rather than a palette role
      because the palette names no scrim role, and a token rather than the literal
-     the overlay wrote because §10 forbids a hex value in a surface. */
+     the overlay wrote because the palette rule forbids a hex value in a surface. */
   --elev-scrim: #00000073;
   /* The step table is the spacing scale, not the layout one: a region's own
      height, a dialog's bounds and the compact-viewport breakpoint are
@@ -1967,7 +1967,7 @@ body,
    and the hairline between it and the panel is the panel's own `border-left`.
 
    **The column ground (`#0e1217`) is not painted.** It is the hex
-   `vg-217` already records: §10 forbids it in a surface and no palette token is
+   `vg-217` already records: the palette rule forbids it in a surface and no palette token is
    that tone — `--shell-backdrop` is a *gradient* under `light`, so it is a
    ground rather than a column's fill, and every other surface role is lighter
    than the panel, the wrong direction. The column therefore reads on the frame's

@@ -130,7 +130,7 @@ async function readItem(
   }
 
   // A preset for another wallpaper carries no `type` and a `preset` object
-  //, so it is refused here along with every other unknown shape — the
+  // with no payload, so it is refused here along with every other unknown shape — the
   // point is that it never reaches a list with no payload behind it.
   const type = typeOf(project.type);
   if (type === undefined) {

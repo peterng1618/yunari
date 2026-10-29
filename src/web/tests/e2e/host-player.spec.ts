@@ -771,7 +771,7 @@ test.describe("hosted player over the real host", () => {
     //
     // **A host without that sensor is the other half of the claim.** Linux CI
     // has no LHM and no GPU name, so `gpu.name` never reports; the rule there is
-    // the product's own — a missing reading is not fabricated (§ providers), so
+    // the product's own — a missing reading is not fabricated (providers), so
     // the caption must stay the gap. Requiring a reading made this case a
     // statement about the runner's hardware rather than about the wiring.
     await expect

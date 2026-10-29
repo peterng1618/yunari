@@ -14,7 +14,7 @@ import type { EngineColor } from "./fill.js";
  * Polar bar adapter. A bar around an angle axis: one category per binding, the
  * reading as the radius. It is its own family because its settings differ from
  * a cartesian bar's — no orientation, a start angle, two radii — and it reuses
- * the bar's paint and data helpers, which it hands `to-top` gradients (§E1).
+ * the bar's paint and data helpers, which it hands `to-top` gradients.
  */
 
 export type PolarBarSettings = Omit<
@@ -32,7 +32,7 @@ const {
   segmentSpacingPercent: _segmentSpacingPercent,
   segmentFill: _segmentFill,
   // A polar bar's width is an angle, not the cartesian bar's pixel default:
-  // leaving it unset is what lets `categoryGapPercent` size the bar (§E1).
+  // leaving it unset is what lets `categoryGapPercent` size the bar.
   barWidth: _barWidth,
   ...barDefaults
 } = defaultBarSettings;
