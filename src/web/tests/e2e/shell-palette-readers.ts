@@ -39,7 +39,7 @@ export async function openEditor(page: Page): Promise<void> {
  *
  * `header` is the shell chrome the palette paints, and it is named for the
  * surface rather than for the control that used to sit on it: the palette chip
- * left the header for §7's Appearance tab, so the chip is no longer a surface
+ * left the header for the Appearance tab, so the chip is no longer a surface
  * that is on screen for a reader to measure.
  */
 export async function shellColours(

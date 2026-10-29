@@ -56,7 +56,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
   // moves are one walk of one scene.
   const uses = usage?.();
   // The pane's own list, from the module the bridge's count also reads, so the
-  // rows drawn and the number in the title bar cannot disagree (§7.3).
+  // rows drawn and the number in the title bar cannot disagree.
   const ids = paletteTokenIds(palette);
   // A preset ref is not this list's selection: `aria-pressed` would otherwise
   // mark a paint row whose id happened to match.

@@ -5,7 +5,7 @@
  * `onApplyToSelected` from whichever store names a type token — the
  * inspector's token first, the shell's canvas projection otherwise. The
  * actions are built directly, so the callbacks are what the footer would run;
- * the button's own drawing is `fonts.dom.test.tsx`'s case.
+ * the button's own rendering is `fonts.dom.test.tsx`'s case.
  */
 
 import type { FabricThemeEnvelope, FontCut } from "@yunari/renderer-core";

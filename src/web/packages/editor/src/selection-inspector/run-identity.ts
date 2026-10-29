@@ -18,7 +18,7 @@ import type { TextRun } from "@yunari/renderer-core";
  * remounting the field under the caret.
  *
  * Runtime only, and never persisted: a reloaded document is a genuine target
- * change, and remounting every row for it is what §5 asks for.
+ * change, and remounting every row for it is what the control set asks for.
  */
 const identities = new WeakMap<TextRun, string>();
 let issued = 0;

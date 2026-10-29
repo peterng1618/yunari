@@ -114,9 +114,9 @@ export const uiCopy = {
       document: "Document",
     },
   },
-  /** The settings modal the rail's gear opens (§7). A modal is a surface, not
+  /** The settings modal the rail's gear opens. A modal is a surface, not
    *  a pane, so its words live here rather than under `rail`: the three tabs
-   *  are §7's table, and `close` is the `Dialog.Close` the modal renders so a
+   *  are the table, and `close` is the `Dialog.Close` the modal renders so a
    *  touch screen reader — with no Escape key — can still leave it. */
   settings: {
     title: "Settings",
@@ -142,15 +142,15 @@ export const uiCopy = {
     connectionsWhereToGetKey: "Where to get a key",
     connectionsFooter:
       "Keys are stored in a local settings file and sent only to the source that owns them.",
-    /** §7's About tab: what the editor is, and the facts this build can read.
+    /** The About tab: what the editor is, and the facts this build can read.
      *  The provenance is one sentence naming the product; the three fact labels
      *  say which fact each row is, and the release fact's *label* is the
      *  Document pane's own word (`panels.releaseVersion`), reused rather than
-     *  respelled so one fact keeps one word (§9). */
+     *  respelled so one fact keeps one word. */
     aboutProvenance: "Yunari, a dashboard theme editor.",
     aboutProductVersion: "Product version",
     aboutSchemaVersion: "Schema version",
-    /** §7's Appearance tab. `palette` is the name the header chip's trigger
+    /** The Appearance tab. `palette` is the name the header chip's trigger
         already used for this same choice — the trigger said
         `${palette}: ${value}` — so the surface reads the same after the move
         rather than acquiring a second word for one thing. */
@@ -166,7 +166,7 @@ export const uiCopy = {
         than leaving to be discovered. */
     followSystemSessionOnly:
       "This browser is not keeping editor settings, so the choice lasts until the editor is reloaded.",
-    /** §7's Previews tab. One row per stored token, showing the lens ids that
+    /** The Previews tab. One row per stored token, showing the lens ids that
      *  token derives; the add row's shape choice, field and action. */
     previewRatiosHeading: "Preview ratios",
     previewRatiosHint:
@@ -178,7 +178,7 @@ export const uiCopy = {
     previewRatioAdd: "Add",
     previewRatioRemove: "Remove preview ratio",
     previewRatioReset: "Reset",
-    /** §9: a refusal states its reason. `duplicate` is the derived lens ids,
+    /** the refusal rule: a refusal states its reason. `duplicate` is the derived lens ids,
         not the typed text — a row of `16:9` already offers `9:16`. */
     previewRatioDuplicate: "That ratio is already offered in the display menu.",
     previewRatioInvalid:
@@ -187,15 +187,15 @@ export const uiCopy = {
       "No preview ratios left. The display menu offers Fit only until you add one.",
     previewRatiosSessionOnly:
       "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
-    /** §7's Keyboard tab: the reference with editing. One word for one act —
-     *  the arm button's `aria-label` and its tooltip are this string (§6). */
+    /** The Keyboard tab: the reference with editing. One word for one act —
+     *  the arm button's `aria-label` and its tooltip are this string. */
     keyboardRebind: "Change chord",
     keyboardReset: "Reset",
     keyboardResetAll: "Reset all",
     /** What a row says instead of its chord while it is listening. */
     keyboardPrompt: "Press a chord…",
-    /** §9: a refusal states its reason. Each is a whole sentence the row shows
-     *  beside the binding it did not make — never a tooltip (§5.3). */
+    /** the refusal rule: a refusal states its reason. Each is a whole sentence the row shows
+     *  beside the binding it did not make — never a tooltip. */
     keyboardTaken: (action: string): string =>
       `${action} already answers to that chord. Press another.`,
     /** Takes the **printed chord** (`Ctrl+R`, `F5`), not the bare key: the
@@ -394,7 +394,7 @@ export const uiCopy = {
    *
    * **The user chose `Editor · Themes · Host` on 2026-10-19** (SDD ruling R100),
    * over the draft names — *theme store*, *theme editor*, *host
-   * settings* — and over the drawings' `This PC`, which named the machine
+   * settings* — and over the surfaces' `This PC`, which named the machine
    * rather than a peer of `Themes`. The key `thisPc` and the mode id `"this-pc"`
    * are unchanged: an id is never shown to anyone, so renaming one buys a
    * reader nothing and costs every call site.
@@ -864,7 +864,7 @@ export const uiCopy = {
     /** The states a Mine row can carry, as the word beside it. `published` has
      *  no badge word because the public surface already shows it, and `draft`
      *  is not a state this surface explains yet: a badge word the surface cannot
-     *  account for is worse than none (§9). `published` is still here because a
+     *  account for is worse than none. `published` is still here because a
      *  landed submission's footer names the state beside its version.
      *
      *  **The two sentences are the modal's, not the cell's**: a badge is a word
@@ -970,7 +970,7 @@ export const uiCopy = {
      *  tolerance, and every exact size is reachable under it. */
     otherShape: "Other",
     /** An exact artboard size as one reading. A multiplication sign rather than
-     *  the letter `x`, which is what the drawing prints and what keeps a size
+     *  the letter `x`, which is what the surface prints and what keeps a size
      *  from reading as the ratio written the same way. Keyed because the two
      *  numbers are data. */
     size: (width: number, height: number): string => `${width}×${height}`,
@@ -1007,7 +1007,7 @@ export const uiCopy = {
     },
     /** One line per refusal from the catalogue read, **naming the identifier the
      *  catalogue used**: a kind this build does not ship has no display word, and
-     *  inventing one would be a word for something nothing declared (§9). An
+     *  inventing one would be a word for something nothing declared. An
      *  entry that declared no kind at all is named by nothing, so the sentence
      *  says where it was rather than what it claimed. */
     catalogueRefused: (kind: string | undefined, count: number): string =>
@@ -1096,12 +1096,12 @@ export const uiCopy = {
       remixedFrom: (name: string): string => `Remixed from ${name}`,
     },
     /** The modal's pill groups, which are the facet's own content under the name
-     *  the drawing gives it: the row names what a filter narrows by (*Sensors*,
+     *  the surface gives it: the row names what a filter narrows by (*Sensors*,
      *  *Colour mode*), and the modal names what the theme reads, how it is shaped
      *  and what style it carries.
      *
      *  **Style is drawn only where the theme declares a tag.** `PillGroup`
-     *  refuses to render a heading over nothing (§9), so a library of untagged
+     *  refuses to render a heading over nothing, so a library of untagged
      *  themes draws two groups rather than an empty third. The word its proposed
      *  pill carries is the field's own (`panels.tagsProposed`), because the
      *  drawing draws that pill on the modal and in the field alike. */
@@ -1150,8 +1150,8 @@ export const uiCopy = {
        *  rather than a missing reading, which is why it is a word and not the
        *  gap's blank. */
       noAuthor: "No author",
-      /** The four actions, as the drawing's facts band orders them. Spelled as
-       *  the drawing does — **Open in editor**, **Assign to display**, **Export
+      /** The four actions, as the facts band orders them. Spelled as
+       *  the surface does — **Open in editor**, **Assign to display**, **Export
        *  package** and **Delete** — because each names the operation the library
        *  already has rather than the mechanism behind it. */
       actions: {
@@ -1160,7 +1160,7 @@ export const uiCopy = {
         export: "Export package",
         delete: "Delete",
       } satisfies Record<CellAction, string>,
-      /** Why an action this build does not run is disabled. The drawing gives
+      /** Why an action this build does not run is disabled. The surface gives
        *  every cell four actions, so all four are drawn and the two no phase
        *  owns are disabled with this reason rather than answering a press with
        *  nothing (R164). It names no owner and promises no date, because the
@@ -1204,7 +1204,7 @@ export const uiCopy = {
      *  `statusBar.objects` composes a count: a bare `6` is announced as a
      *  number and says nothing about what pressing it does. The sizes
      *  themselves are numbers and stay data — `all` is the one entry in the
-     *  well that is a word, and the drawing's own word for it. */
+     *  well that is a word, and its own word for it. */
     pager: {
       perPage: "Per page",
       all: "All",
@@ -1460,7 +1460,7 @@ export const uiCopy = {
       statusUsed:
         "The artboard's background, an object on the canvas, or a type token refers to it.",
       usedByNothing: "Used by nothing",
-      /** The drawing says `Used by N objects`; the manager's reachability
+      /** The surface says `Used by N objects`; the manager's reachability
        *  answer is a boolean, so the line names the routes rather than a count
        *  nobody measured. */
       usedBySome: "Used by the artboard background, an object or a type token",
@@ -1613,7 +1613,7 @@ export const uiCopy = {
   saveState: { unsaved: "Unsaved changes" },
   /** The status bar's own readings. `live` is the one word on the host mark the
    *  strip draws when the LAN is serving this document; the two counts are the
-   *  strip's left half, which §7.6 makes the readouts it rests on. `objects`
+   *  strip's left half, which the status-bar rule makes the readouts it rests on. `objects`
    *  carries the noun because a bare number names nothing, and `selected` needs
    *  none because the word is the same at one and at many. */
   statusBar: {
@@ -1622,7 +1622,7 @@ export const uiCopy = {
       `${count} ${count === 1 ? "object" : "objects"}`,
     selected: (count: number): string => `${count} selected`,
   },
-  /** §7.3's title-bar counts: one per pane's own list, so a pane whose list has
+  /** The title-bar counts: one per pane's own list, so a pane whose list has
    *  not loaded prints nothing rather than a `0` (the same rule `statusBar`'s
    *  counts take for a scene that has not mounted).
    *
@@ -1633,7 +1633,7 @@ export const uiCopy = {
    * `PaintList` lists every token but that one.
    *
    * **The Composition pane's count is deliberately not here.** Its list is the
-   * scene's own objects, which §7.6's strip already names, so the pane reads
+   * scene's own objects, which the strip already names, so the pane reads
    * `statusBar.objects` rather than a second spelling of one fact — the
    * duplication the row accepted and named. */
   paneCounts: {
@@ -1686,11 +1686,11 @@ export const uiCopy = {
    *  are listed here rather than composed from a number and a unit, so the menu
    *  cannot say `1` and leave the reader to guess FPS from the neighbour.
    *
-   *  The two readings answer different questions (§6): one answers for every
+   *  The two readings answer different questions: one answers for every
    *  sensor the theme names, the other for what this machine reports. Neither is
    *  the fallback for the other, so neither is called a preview of the other.
    *
-   *  A row here is a menu row and a menu row is sentence case (§9). Value runs
+   *  A row here is a menu row and a menu row is sentence case. Value runs
    *  have no row: their token is the *editing* view and ends with the edit. */
   view: {
     dataSource: "Readings from",
@@ -2051,7 +2051,7 @@ export const uiCopy = {
     description: "Description",
     /** The style-tag field: the vocabulary an author picks from, and the one
      *  path to a word it does not hold. `tagsProposed` composes the pill a
-     *  proposal is drawn as — the drawing's own reading, `<tag> · proposed` on
+     *  proposal is drawn as — its own reading, `<tag> · proposed` on
      *  a dashed pill, so a reader knows the word is new rather than that the
      *  facet failed to match. Each refusal names the word it refused, because
      *  the author has to see which one.

@@ -53,7 +53,7 @@ export function useControlTooltip(
  * it, so neither can be changed without the other.
  *
  * `--hot` marks the destructive ones and only those; a destructive control
- * whose action is refused goes `--faint` rather than dimming red (§4).
+ * whose action is refused goes `--faint` rather than dimming red.
  */
 export function ControlIconButton(
   props: ControlProps & {

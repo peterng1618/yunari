@@ -39,7 +39,7 @@ export type ActiveKind = "none" | "object" | "group" | "chart" | "background";
 type ShellAction = ObjectActionId;
 
 export interface EditorShellSnapshot {
-  /** The scene's own object total — §7.6's left readout, and the one fact the
+  /** The scene's own object total — the left readout, and the one fact the
    *  strip carries that is not a message. The scene is the canvas, so this is
    *  counted there rather than held here.
    *
@@ -50,7 +50,7 @@ export interface EditorShellSnapshot {
    *  really holds nothing reports `0`, which is a reading rather than a
    *  default, and the two are different answers. */
   readonly objectCount: number | undefined;
-  /** The Tokens pane's own list, as §7.3's title bar counts it: the theme's
+  /** The Tokens pane's own list, as the title bar counts it: the theme's
    *  paints, minus the reserved `none` (`paletteTokenIds`, the same module
    *  `PaintList` draws its rows from — one membership rule, so the number beside
    *  the title and the rows under it cannot disagree).
@@ -65,7 +65,7 @@ export interface EditorShellSnapshot {
   readonly selectedCount: number;
   readonly locked: boolean;
   readonly activeKind: ActiveKind;
-  /** The document's identity, as the session reports it (§7.5): the theme's own
+  /** The document's identity, as the session reports it: the theme's own
    *  name, or its id where the theme carries no name. `undefined` only while no
    *  document is open — never `""`, because a chip that named nothing is a
    *  claim the product does not have. The reading is `documentNameOf`, the same

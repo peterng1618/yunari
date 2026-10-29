@@ -48,7 +48,7 @@ function roleText(role: LayerRole): string {
  * Both carry the row's name beside the verb — three buttons reading "Expand"
  * in one tree tell a reader nothing about which group each one opens — and that
  * one string is both the accessible name and the tooltip, mounted from the
- * control set's one owner of the pairing (`useControlTooltip`, §6), so the two
+ * control set's one owner of the pairing (`useControlTooltip`, the icon set), so the two
  * cannot disagree.
  *
  * It renders a bare `<button>` and no wrapper on purpose: `.yunari-layer-state`
@@ -132,8 +132,8 @@ class LayerStore {
 }
 
 /** Paired with `.yunari-layer-row`'s height in `editor-shell.css`: the row is
- * the control set's 26px panel rhythm (§3) because the row's own controls are
- * 26px squares (§5), and a 26px control in a shorter row is a control the row
+ * the control set's 26px panel rhythm because the row's own controls are
+ * 26px squares, and a 26px control in a shorter row is a control the row
  * clips.
  *
  * Exported with the indent pair below because the drop line's placement is this

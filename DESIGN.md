@@ -345,8 +345,8 @@ two objects stays discoverable instead of appearing once a third is added. One
 surface owns them.
 
 Floating clusters are `--radius-xl`, `--panel` at 95%, 1px `--edge`, elevation 1,
-and sit 14–16px in from the stage's edges. **No backdrop blur**: the drawing
-fills a cluster from the same `--panel` the chrome uses and separates it from the
+and sit 14–16px in from the stage's edges. **No backdrop blur**: a cluster
+fills from the same `--panel` the chrome uses and separates itself from the
 stage by its elevation shadow alone.
 
 ### The status bar
@@ -504,11 +504,11 @@ one is sized to 180px and holds that width while the facet row beside it wraps
 to a second line.
 
 **The store's page-size well is 76px**, for the same reason: the pager is a bar
-rather than a field row, so the per-page choice is sized by the drawing instead
-of by a field row's value cell.
+rather than a field row, so the per-page choice takes a fixed width instead
+of a field row's value cell.
 
 **The store's pager row is 158px wide, and the arithmetic is what fixes it.**
-The drawing draws the per-page label *beside* its well, not above it, so the row
+The per-page label sits *beside* its well, not above it, so the row
 is the 74px label column, the 8px gap and the 76px well — 74 + 8 + 76 — and the
 label and the well share the bar's one line. A row given only the well's 76px
 wraps the well to a second line and makes the bar 61px (`pager.tsx`).
@@ -519,8 +519,8 @@ control pads its wells with `px-[var(--space-6)]` (`control-well.tsx`'s
 `wellClasses`, the 6px step at `editor-shell.css`'s `--space-6`) and the border
 1px, leaving the field `well − 12 − 2` — 22px at 36 and 24 at 38, which is the
 floor, so 40 keeps a pixel either side of the box that rule measures. A well's
-horizontal padding is 6, which is what both drawings draw (`padding:4px 6px`) and
-what `wellClasses` writes.
+horizontal padding is 6, which is what `wellClasses` writes
+(`padding:4px 6px`).
 
 ### Rules that make it readable
 
@@ -533,7 +533,7 @@ what `wellClasses` writes.
    **The grid is a 74px label column and one value cell**, and the cell is one
    track whatever fills it: a well, a select, a slider and a segmented group
    occupy the same geometry, so a section's boxes share a left edge rather than
-   each starting where its own content ends. A row a surface's own drawing shapes
+   each starting where its own content ends. A row a surface shapes
    differently — a switch row whose label fills the row inside a panel box, a
    control spanning the row under its own heading — is not a field row and keeps
    the shape it is drawn with.

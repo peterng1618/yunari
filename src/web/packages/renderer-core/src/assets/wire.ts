@@ -82,7 +82,7 @@ export interface AssetSourceListing {
   readonly configurable: boolean;
   /** The kind of preset this source yields, or `null` when it yields none. */
   readonly presetKind: PresetKind | null;
-  /** The host a search term is sent to, named by the first-search notice (§5).
+  /** The host a search term is sent to, named by the first-search notice.
    *  `null` when the term never leaves this computer. */
   readonly host: string | null;
 }

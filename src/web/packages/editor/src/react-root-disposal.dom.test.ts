@@ -278,15 +278,13 @@ describe("the palette panel's and token inspector's React roots", () => {
 });
 
 /**
- * The shipped sources, minus the two kinds of file whose root outlives any
- * editor surface and so has no disposal path to be on:
+ * The shipped sources, minus test files, whose tree is the test's and so has
+ * no disposal path to be on:
  *
- * - `*.test.*` and `*.test-stage.*` — a test's tree is the test's;
- * - `control-fixture.tsx` — the control set's preview page, a build entry whose
- *   lifetime is the page's, not an editor surface's.
+ * - `*.test.*` and `*.test-stage.*`.
  *
  * Those exclusions are the ones this task enumerated, and the case below names
- * the three harness pages so the exclusion stays a judgement about them rather
+ * the two harness pages so the exclusion stays a judgement about them rather
  * than a pattern that happened to miss them.
  */
 function shippedSourceFiles(dir = SRC): readonly string[] {
@@ -299,7 +297,6 @@ function shippedSourceFiles(dir = SRC): readonly string[] {
     if (!/\.tsx?$/.test(name)) return [];
     if (/\.test\.tsx?$/.test(name)) return [];
     if (/\.test-stage\.tsx?$/.test(name)) return [];
-    if (name === "control-fixture.tsx") return [];
     return [path];
   });
 }
@@ -374,10 +371,9 @@ describe("every shipped React root", () => {
   });
 
   it("does not read the dev harness pages it excludes", () => {
-    // These three do contain `createRoot`; naming them here is what makes the
+    // These two do contain `createRoot`; naming them here is what makes the
     // exclusion above a decision about them rather than an accident.
     for (const harness of [
-      "control-fixture.tsx",
       "chart-manager/chart-stage.test-stage.tsx",
       "selection-inspector/runs.test-stage.tsx",
     ]) {

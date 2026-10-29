@@ -3,11 +3,11 @@ import { expect, type Locator, type Page } from "@playwright/test";
 /** The editor, served by the preview projects. */
 export const EDITOR = "http://127.0.0.1:4174/";
 
-/** The rail's gear: the only route to the shell palette since §7 moved it out of
+/** The rail's gear: the only route to the shell palette since the shell layout moved it out of
  *  the header. Named by the class only that control carries. */
 export const SETTINGS_GEAR = ".editor-shell-rail-settings";
 
-/** §7's modal, read by its own name rather than by class — the reference sheet
+/** The modal, read by its own name rather than by class — the reference sheet
  *  is a Base UI dialog too. */
 export const SETTINGS_DIALOG = { name: "Settings" } as const;
 
@@ -37,7 +37,7 @@ export async function openShell(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
-/** §7's Appearance tab, open, returning the modal it is in.
+/** The Appearance tab, open, returning the modal it is in.
  *
  *  Base UI tabs keep the inactive panels out of the DOM, so a caller that wants
  *  the six swatches has to be on the tab as well as in the modal. Idempotent: a

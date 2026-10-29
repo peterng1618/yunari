@@ -172,7 +172,7 @@ function stubRect(element: HTMLElement, width: number, height: number): void {
 const valueOf = (picker: Picker, testId: string): number =>
   Number(picker.find(testId).getAttribute("aria-valuenow"));
 
-/** Types into the field and presses Enter, the way §5's text control commits. */
+/** Types into the field and presses Enter, the way the text control commits. */
 async function typeAndEnter(
   input: HTMLInputElement,
   value: string,
@@ -197,7 +197,7 @@ it("renders a labelled trigger inside the well, and the trigger opens the popup"
   expect(picker.trigger.getAttribute("aria-label")).toBe(uiCopy.panels.colour);
   expect(
     picker.trigger.closest("[class*='bg-panel-2']"),
-    "the trigger sits inside a §5 well",
+    "the trigger sits inside a control well",
   ).not.toBeNull();
   expect(picker.query("colour-picker")).not.toBeNull();
 

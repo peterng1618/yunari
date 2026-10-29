@@ -297,7 +297,7 @@ function popupOpen(): boolean {
 }
 
 it("prints the publish chord on the header control, from the live table", async () => {
-  // §7.1's mark, and plan 2 left it off because there was nothing to run. It is
+  // The mark, and plan 2 left it off because there was nothing to run. It is
   // printed here and only here because this is the commit that binds
   // `publish.surface` to the act the control itself performs — a printed chord
   // that runs nothing is the state that was deliberately not shipped.

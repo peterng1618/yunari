@@ -393,7 +393,7 @@ describe("editor panels", () => {
  * The panels this file audits, mounted at once: the artboard panel, the palette
  * panel, the type preset panel, the token inspector's two sections (a preset and
  * a paint), the selection inspector on two disjoint field
- * sets, the Add pane, the new-theme chooser and §7's Settings modal — and, since
+ * sets, the Add pane, the new-theme chooser and the Settings modal — and, since
  * plan 6 Task 4, the shell's own React chrome: the rail, the pane's chrome with
  * its action footer, and the canvas dock (`mountShellChrome`, which is also
  * where the reason the Composition tree is *not* among them is written down).
@@ -626,7 +626,7 @@ let chromeRoot: Root | undefined;
 let settingsRoot: Root | undefined;
 
 /**
- * §7's Settings modal, open on the Keyboard tab.
+ * The Settings modal, open on the Keyboard tab.
  *
  * The modal is a `Dialog`, so it is portalled to `body` and is audited through
  * the body the caller returns. Base UI mounts only the *active* tab panel, so

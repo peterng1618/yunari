@@ -4,7 +4,7 @@ import path from "node:path";
 import type { LibraryItem } from "./library.js";
 
 /**
- * What one item resolves to (§4), first match wins: an image extension is an
+ * What one item resolves to, first match wins: an image extension is an
  * image before the type is consulted, then the type decides. A payload that is
  * not on disk is not an outcome — the item is dropped rather than listed with
  * nothing behind it.
@@ -71,7 +71,7 @@ export async function resolvePayload(
 ): Promise<ItemPayload | undefined> {
   // `project.file` is third-party content, so a path that leaves the item's own
   // directory is not a payload. A payload absent from disk is not an outcome
-  // either (§4): the item is dropped rather than served as an empty asset.
+  // either: the item is dropped rather than served as an empty asset.
   if (!insideOf(item.directory, item.payload)) {
     return undefined;
   }

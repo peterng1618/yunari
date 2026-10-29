@@ -81,16 +81,6 @@ jobs:
         # gitignored, so a fresh checkout has nothing until this step runs.
         run: npx vite build packages/editor
 
-      - name: Build editor control fixture
-        # The control fixture is a page on the editor's preview server
-        # (`/control-fixture.html`), built by a second invocation into the same
-        # `dist` with `emptyOutDir: false` (vite.config.fixture.ts). Without it
-        # the preview SPA-falls back to `index.html`, so the route would render
-        # the editor instead of the fixture.
-        # Deliberately NOT chained into `npm run build` — the fixture must stay
-        # out of the editor's production output.
-        run: npm run build:fixture -w @yunari/editor
-
       - name: Build host
         # Not previewed by Playwright, so this is not the webServer trap — but
         # the bin shim refuses to start without dist/, so a build break here is

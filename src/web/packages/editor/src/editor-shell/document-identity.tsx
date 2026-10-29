@@ -3,7 +3,7 @@ import type { SelectionStore } from "./shell-stores.js";
 
 /**
  * The stage's top-left corner: what the author is editing, and whether it is
- * saved (§7.5).
+ * saved.
  *
  * The name reaches it through the shell's snapshot — the bridge's own
  * projection — so a late-set bridge arrives here the same way it arrives at
@@ -16,7 +16,7 @@ import type { SelectionStore } from "./shell-stores.js";
  *
  * Nothing renders while no document is open — `documentName` is `undefined`
  * then — because a chip invented for a document that is not there is a claim
- * the product does not have (§9).
+ * the product does not have.
  */
 export function DocumentIdentity({
   store,
@@ -42,7 +42,7 @@ export function DocumentIdentity({
 
   return (
     <p className="editor-shell-identity" data-dirty={dirty}>
-      {/* The record dot (§6's filled glyph): warn while the document differs
+      {/* The record dot (the filled glyph): warn while the document differs
           from what was saved, faint when it does not. */}
       <span className="editor-shell-identity-dot" aria-hidden="true" />
       {/* The whole name is the reading a text-overflow clip would hide, so the

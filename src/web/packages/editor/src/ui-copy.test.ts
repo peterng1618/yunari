@@ -59,7 +59,7 @@ function pictographs(value: unknown, path = "uiCopy"): string[] {
 }
 
 /**
- * §6: the two readings answer different questions, and neither is the fallback
+ * the icon set: the two readings answer different questions, and neither is the fallback
  * for the other. The words have to say which question each one answers — an
  * author building a theme for somebody else's machine reads this menu before
  * they discover the theme names a sensor their PC does not have.
@@ -72,7 +72,7 @@ it("names each reading for the question it answers", () => {
 });
 
 /**
- * **The origin word is pinned as a literal, because the drawings are its owner
+ * **The origin word is pinned as a literal, because the surfaces are its owner
  * and this table is not.** Every surface that prints it reads
  * `uiCopy.store.fromStore`, so a case asserting the badge says *that key* stays
  * green if the key's own value changes — and it did change once: *Installed* is
@@ -81,23 +81,23 @@ it("names each reading for the question it answers", () => {
  * *From the store*. One fact, two
  * views, two words; this is the only assertion that tells them apart.
  */
-it("words the local origin badge the way the drawing does", () => {
+it("words the local origin badge the way the surface does", () => {
   expect(uiCopy.store.fromStore).toBe("From the store");
 });
 
 /**
- * **The two store words the drawings settle, pinned as literals because the
+ * **The two store words the surfaces settle, pinned as literals because the
  * drawings own them and this table does not.** Both were drift: the tabs read
  * `Local`/`Online` where both drawings label them `Your themes`/`Store`, and
- * the kind badge read `Dashboard theme` where both drawings draw `Theme`.
+ * the kind badge read `Dashboard theme` where both surfaces draw `Theme`.
  * A case asserting the key would stay green through the value changing again.
  */
-it("names the store's two halves the way the drawings label the tabs", () => {
+it("names the store's two halves the way the surfaces label the tabs", () => {
   expect(uiCopy.store.halves.local).toBe("Your themes");
   expect(uiCopy.store.halves.online).toBe("Store");
 });
 
-it("names the dashboard theme kind the way the drawings badge it", () => {
+it("names the dashboard theme kind the way the surfaces badge it", () => {
   expect(uiCopy.store.cell.kinds["dashboard-theme"]).toBe("Theme");
 });
 
@@ -231,7 +231,7 @@ it("pins the submission's sentences as literals", () => {
 });
 
 /**
- * §9: a menu's rows are sentence case. The list is the menu's own — its three
+ * the refusal rule: a menu's rows are sentence case. The list is the menu's own — its three
  * names, its File and Edit rows and its View settings — not the whole table,
  * which carries `W`, `H`, `CPU`, `2K`, `(empty)` and `Left`/`Right`:
  * abbreviations, marks and a parenthesised gap, none of them a row a menu

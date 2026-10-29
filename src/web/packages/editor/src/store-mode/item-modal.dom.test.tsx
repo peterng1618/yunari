@@ -288,7 +288,7 @@ function group(id: string): {
 }
 
 /**
- * The box is the drawing's 960 × 760 and the stage takes the box's height
+ * The box is the 960 × 760 and the stage takes the box's height
  * whatever the item is, so the modal does not change size as a person steps
  * between items.
  *
@@ -300,7 +300,7 @@ function group(id: string): {
  * its own ratio inside, is measured in the browser case.
  *
  * **The numbers are pinned, not the shape of a class.** `DESIGN.md` fixes the
- * modal at 960 and its height at the drawing's 760 because a case that accepted
+ * modal at 960 and its height at the 760 because a case that accepted
  * `h-<any>` would pass a 100px stage.
  */
 it("keeps the 960px box and the stage's one height", async () => {
@@ -313,10 +313,9 @@ it("keeps the 960px box and the stage's one height", async () => {
   expect(landscape.box, "the modal is not the 960px DESIGN.md fixes").toContain(
     "w-[960px]",
   );
-  expect(
-    landscape.box,
-    "the modal does not take the drawing's 760px height",
-  ).toContain("h-[var(--store-item-height)]");
+  expect(landscape.box, "the modal does not take the 760px height").toContain(
+    "h-[var(--store-item-height)]",
+  );
   expect(
     landscape.stage,
     "the stage sets a height of its own instead of taking the box's",
@@ -339,7 +338,7 @@ it("draws a 270px right panel and no caption band", async () => {
     document.body.querySelector<HTMLElement>("[data-yunari-store-item-panel]"),
     "right panel",
   );
-  // jsdom computes no width; the class carries the drawing's 270px token.
+  // jsdom computes no width; the class carries the 270px token.
   expect(panel.className).toContain("w-[var(--store-item-panel-width)]");
   expect(stage().nextElementSibling, "the panel is not beside the stage").toBe(
     panel,
@@ -405,7 +404,7 @@ it("reads the stage's size and fit, and survives a record without one", async ()
  * the record's own reading: a sensor by the descriptor's `label` rather than by
  * its `semanticKey`, and a shape by its own words.
  *
- * The group names are the drawing's — Reads and Shape — and not the facet row's
+ * The group names are the — Reads and Shape — and not the facet row's
  * (Sensors, Colour mode): the row names what a filter narrows by, and the modal
  * names what the theme reads and how it is shaped.
  */
@@ -454,7 +453,7 @@ function pillClass(id: string): string {
  *
  * The vocabulary is the listing's and arrives as a prop, so this case hands the
  * set it is about rather than deriving one: what the modal owns is reading a tag
- * against it. Both halves of the drawing's mark are read — the words
+ * against it. Both halves of the mark are read — the words
  * (`<tag> · proposed`) and the dashed edge — because either alone would pass a
  * pill that was indistinguishable from a settled one in the other respect.
  */
@@ -484,20 +483,18 @@ it("draws the Style group, and marks the tag the vocabulary does not hold", asyn
     "a tag the vocabulary does not hold is drawn as a settled one",
   ).toContain("border-dashed");
 
-  // The drawing's `font:500` belongs to the pill's own box, not to the mark, so
+  // The `font:500` belongs to the pill's own box, not to the mark, so
   // both pills carry it: a settled pill and a proposed one differ in edge and
   // colour, and in nothing else.
   for (const id of ["retro", "retro-diner"]) {
-    expect(pillClass(id), `${id}: not the drawing's weight`).toContain(
-      "font-medium",
-    );
+    expect(pillClass(id), `${id}: not the weight`).toContain("font-medium");
   }
 });
 
 /**
  * **A theme that declares no tag draws no Style group**, which is the rule the
  * group's heading shares with the Reads group: a heading over nothing is a word
- * that says nothing (§9), and every theme in the library was untagged before the
+ * that says nothing, and every theme in the library was untagged before the
  * format carried the field.
  */
 it("draws no Style group for a theme that declares no tags", async () => {
@@ -511,7 +508,7 @@ it("draws no Style group for a theme that declares no tags", async () => {
 
 /**
  * The panel's head names the item and says what it is, and the foot writes its
- * actions in the drawing's short words, in its own order.
+ * actions in the short words, in its own order.
  *
  * The kind is a badge rather than a title bar's word: what a kind is called is
  * `uiCopy.store.cell.kinds`, and a kind this build does not know prints its own
@@ -547,7 +544,7 @@ it("names the item in the panel and writes its actions in the short words", asyn
   );
   expect(
     actions.map((action) => action.textContent?.trim()),
-    "the actions are not the drawing's short words in its own order",
+    "the actions are not the short words in its own order",
   ).toEqual([
     uiCopy.store.item.actions.delete,
     uiCopy.store.item.actions.export,
@@ -558,11 +555,11 @@ it("names the item in the panel and writes its actions in the short words", asyn
 
 /**
  * Each action is a box holding a 12px glyph and one word, and **Delete is the
- * only one carrying §4's destructive marker**. The mark is the attribute the
+ * only one carrying the destructive marker**. The mark is the attribute the
  * shell's rule paints `--hot`; no box is filled — an accent fill would make one
  * of four the act.
  *
- * **Delete is disabled by R164 today, so §4 paints it `--faint`, not `--hot`.**
+ * **Delete is disabled by R164 today, so the palette paints it `--faint`, not `--hot`.**
  * jsdom computes no colour, so this case reads the mark and the disabled state
  * rather than the paint; `editor-shell.control-rules.test.ts` holds that the
  * shell declines to paint a disabled mark.
@@ -601,7 +598,7 @@ it("gives Delete the destructive marker and its R164 reason", async () => {
     .map((action) => action.getAttribute("data-yunari-store-item-action"));
   expect(
     marked,
-    "more than Delete carries §4's mark, so more than one word would paint --hot",
+    "more than Delete carries the mark, so more than one word would paint --hot",
   ).toEqual(["delete"]);
 
   const deleteBox = must(
@@ -629,7 +626,7 @@ it("gives Delete the destructive marker and its R164 reason", async () => {
 /**
  * **The footer draws the four and only two of them run** (R164).
  *
- * Delete and Export package are drawn because the drawing draws them, and no
+ * Delete and Export package are drawn because the surface draws them, and no
  * task in this plan and no phase owns either — so
  * they are disabled with their reason rather than answering a press with
  * nothing. Every button is read through `must`, because a case that passed by
@@ -766,7 +763,7 @@ it("reports its own close rather than closing itself", async () => {
 
 /**
  * **The catalogue's counts are facts about the item rather than about a facet**,
- * so they join the caption's right-hand end — the drawing's `1.4.0 · 2026-10-14`
+ * so they join the caption's right-hand end — the `1.4.0 · 2026-10-14`
  * plus the cell's two numbers — rather than taking a row or a pill group of
  * their own. `1,204` rather than `1204` is the
  * formatter's, and both are counted against the literal because the separator
@@ -822,7 +819,7 @@ it("joins the catalogue's counts to the caption's right-hand end", async () => {
 
 /**
  * **The online footer carries the same install reading the cell does** — the
- * drawing's *Install*, *Installed* or *Update* in place of the library's four
+ * cell's *Install*, *Installed* or *Update* in place of the library's four
  * actions.
  *
  * Installed is a **mark**, not a control, because there is nothing to do; the
@@ -868,7 +865,7 @@ it("carries the cell's install reading in the footer instead of the library's fo
       );
       expect(
         reading.className,
-        "the mark's word is not drawn in the drawing's muted colour",
+        "the mark's word is not drawn in the muted colour",
       ).toContain("text-muted");
       expect(
         must(
@@ -951,8 +948,8 @@ it("disables the footer's install in flight and states the host's refusal", asyn
   ).toBe(false);
 });
 
-/** **A library item's footer is untouched** — the four actions, in the
- *  drawing's order, and no catalogue reading among them. This is the half of the
+/** **A library item's footer is untouched** — the four actions, in this
+ *  order, and no catalogue reading among them. This is the half of the
  *  guard that keeps phase A's surface intact. */
 it("draws no catalogue reading for a library item", async () => {
   await mount(modalFor(fixtureItem(LANDSCAPE)));

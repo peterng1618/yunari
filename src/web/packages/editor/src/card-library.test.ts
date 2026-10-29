@@ -212,7 +212,7 @@ describe("the card library", () => {
     // not know, so the library's half is what is pinned here: one diagram per
     // unit, in the library's order — a ninth card cannot arrive undrawn, and
     // **no two units share a picture**, which is what makes the diagram an
-    // identification rather than decoration (§5.2).
+    // identification rather than decoration.
     const diagrams = CARD_LIBRARY.map((entry) => entry.diagram);
     expect(diagrams).toEqual([
       "time",

@@ -31,7 +31,7 @@ function ruleBodies(selector: string): string {
   return bodies.join("\n");
 }
 
-/** §5 rule 6's second clause: "On a glyph-only control with no resting border —
+/** the second clause: "On a glyph-only control with no resting border —
  *  the icon button — it is the border it acquires on hover. Nothing moves,
  *  nothing scales." A wash is what the rule forbids here. */
 const GLYPH_ONLY = [
@@ -41,7 +41,7 @@ const GLYPH_ONLY = [
   ".editor-shell-view-step",
 ] as const;
 
-describe("§5 rule 6 on the shell's glyph-only controls", () => {
+describe("the glyph-only hover rule on the shell's glyph-only controls", () => {
   for (const selector of GLYPH_ONLY) {
     it(`${selector} acquires --muted on hover and nothing else moves`, () => {
       const resting = ruleBodies(selector);
@@ -60,7 +60,7 @@ describe("§5 rule 6 on the shell's glyph-only controls", () => {
       ).toContain("border-color: var(--muted)");
       expect(
         hover,
-        `${selector}:hover washes its background where §5 rule 6 asks for the ` +
+        `${selector}:hover washes its background where the glyph-only hover rule asks for the ` +
           "border the control acquires",
       ).not.toContain("background");
     });
@@ -83,11 +83,11 @@ describe("§5 rule 6 on the shell's glyph-only controls", () => {
   });
 });
 
-/** §2 gives list rows `--text-sm`. A dialog is portalled, so a body that
- *  declares no role inherits the host document's base and lands on a §2 step by
+/** the type scale gives list rows `--text-sm`. A dialog is portalled, so a body that
+ *  declares no role inherits the host document's base and lands on a type-scale step by
  *  accident — `vg-317`: the `?` sheet's rows read `--text-md` because
  *  `index.html` said 13px, not because any rule of the dialog's chose it. */
-describe("§2's role on a dialog's own body", () => {
+describe("the role on a dialog's own body", () => {
   it("declares the list-row role rather than inheriting the portal's base", () => {
     expect(
       ruleBodies(".editor-shell-dialog"),
@@ -97,7 +97,7 @@ describe("§2's role on a dialog's own body", () => {
   });
 });
 
-/** §4's destructive mark, painted by one rule that reaches every surface.
+/** The destructive mark, painted by one rule that reaches every surface.
  *
  *  `vg-226`'s complaint was that Delete was `--hot` in the dock and ordinary in
  *  the layer footer and the canvas context menu. The colour is painted by the
@@ -119,7 +119,7 @@ const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
 /** A declaration whose *property* is `color`, not `border-color`/`background-color`. */
 const PAINTS_COLOUR = /(?<![\w-])color\s*:/;
 
-/** §4's mark lands on a `<button>` (the dock, the pane footer) or on a menu item
+/** The mark lands on a `<button>` (the dock, the pane footer) or on a menu item
  *  (a `menuitem`/`menuitemradio` role — the canvas context menu). A selector part
  *  is in that family when it **names** one of them, anywhere and in any form: a
  *  bare substring test for `button` or `menuitem`, case-insensitive.
@@ -165,7 +165,7 @@ function colourBearingMarkableControls(): readonly string[] {
 
 /**
  * The colour-bearing rules in that family that are *allowed* to exist, each one a
- * surface that renders no registry action — so no control carrying §4's mark is
+ * surface that renders no registry action — so no control carrying the mark is
  * ever inside it, and its `color:` cannot beat the marker rule.
  *
  * Written out rather than counted, and checked one-directionally — every
@@ -180,7 +180,7 @@ function colourBearingMarkableControls(): readonly string[] {
  *  - `.editor-shell-dialog > button` — a dialog's own buttons (`?` sheet, theme
  *    dialog), which are direct children of the dialog and no registry's.
  *  - `.editor-shell-dialog > button:hover` — the same buttons on hover.
- *  - `.editor-shell-mode-switch button` — §7.1's three mode segments. The
+ *  - `.editor-shell-mode-switch button` — the three mode segments. The
  *    switch chooses a shell surface; it renders no registry action, so no
  *    control carrying the mark is ever inside it, and a `<button>` takes its
  *    ink from the UA's own rule rather than by inheritance.
@@ -202,7 +202,7 @@ const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   '.editor-shell-rail button[aria-pressed="true"]',
 ];
 
-describe("§4's destructive mark", () => {
+describe("the destructive mark", () => {
   it("paints --hot from the shared marker, and from one rule that no surface scopes", () => {
     // The mark is painted **only where the control can run** (`vg-570`): the
     // footer draws the registry's commands disabled with nothing selected, and
@@ -213,7 +213,7 @@ describe("§4's destructive mark", () => {
       ruleBodies(
         '[data-yunari-destructive]:not([disabled]):not([aria-disabled="true"])',
       ),
-      "no rule keys §4's `--hot` on the shared `data-yunari-destructive`, so a " +
+      "no rule keys the `--hot` on the shared `data-yunari-destructive`, so a " +
         "surface the bare selector cannot be beaten to — the portalled context " +
         "menu — paints its destructive action as ordinary text",
     ).toContain("color: var(--hot)");
@@ -255,7 +255,7 @@ describe("§4's destructive mark", () => {
         (part) => !MARKABLE_CONTROL_ALLOWLIST.includes(part),
       ),
       "a rule declares a colour whose selector names a button or a menu item — " +
-        "the controls §4's mark lands on. A declaration there applies directly " +
+        "the controls the mark lands on. A declaration there applies directly " +
         "to the element, so it outranks the bare marker attribute by specificity " +
         "and the destructive action paints ordinary. The listed selectors are " +
         "the ones not yet allowlisted below: move the colour onto the surface's " +
@@ -320,7 +320,7 @@ function bodiesNaming(part: string): string {
 
 /**
  * `vg-464`: two owners drew one focus boundary. The well `control-well.tsx`
- * draws is the owner — rounded to the control's own radius, §5's halo beside it
+ * draws is the owner — rounded to the control's own radius, the halo beside it
  * — so the field inside it says `outline-none` and the shell's fallback has to
  * *lose* to that. Unlayered it beat both whatever their specificity, and every
  * field in a well wore a second, square outline inside the rounded one (the

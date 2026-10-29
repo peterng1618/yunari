@@ -11,10 +11,10 @@
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
  * 26px numeral and the 14px chevron are declarations read off the class list
- * rather than a reflow; the drawing fixes them. **The well's 76px and its row's
+ * rather than a reflow; the surface fixes them. **The well's 76px and its row's
  * 158px are read twice**: their class lists here, and the drawn boxes in the
  * browser (`tests/e2e/editor-rail.spec.ts`), which is where the wrap that made
- * the bar 61px instead of the drawing's 43 was measured.
+ * the bar 61px instead of the 43 was measured.
  */
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -247,7 +247,7 @@ it("numbers nothing for a page count that is not a whole number", () => {
 /**
  * The current page carries the store's chosen treatment — `--stage` behind a
  * `--text` numeral, the same one the halves and the facet rows take — and never
- * an accent fill (§4).
+ * an accent fill.
  */
 it("marks the current page with the chosen treatment and no accent fill", async () => {
   const container = await mount(pager({ current: 6, total: 12 }));
@@ -267,7 +267,7 @@ it("marks the current page with the chosen treatment and no accent fill", async 
     "the current page is not lifted to the raised background",
   ).toContain("[background:var(--stage)]");
   expect(treatment, "the current numeral is not --text").toContain("text-text");
-  // §4 rations the accent to one filled element per region, so the chosen
+  // the palette rations the accent to one filled element per region, so the chosen
   // treatment is a raised background and a `--text` numeral and never a fill.
   // The focus ring is not a fill and is not what this reads.
   for (const fill of [
@@ -373,7 +373,7 @@ it("disables the forward step on the last page", async () => {
   expect(onPage).toHaveBeenCalledWith(11);
 });
 
-/** The size well: the four sizes in the drawing's order, named from the table,
+/** The size well: the four sizes in the order, named from the table,
  *  and the chosen one reported. */
 it("offers the four page sizes and reports the one chosen", async () => {
   const onSize = vi.fn();
@@ -404,7 +404,7 @@ it("offers the four page sizes and reports the one chosen", async () => {
   );
   expect(
     options.map((option) => option.getAttribute("data-yunari-option")),
-    "the well does not offer the four sizes in the drawing's order",
+    "the well does not offer the four sizes in the order",
   ).toEqual(["12", "24", "48", "all"]);
   expect(
     options.map((option) => option.textContent),
@@ -423,10 +423,10 @@ it("offers the four page sizes and reports the one chosen", async () => {
 });
 
 /**
- * **The row the `Per page` label and its well share is 158px** — §5's 74px label
- * column, §3's 8px gap and the drawing's 76px well, each already fixed — because
+ * **The row the `Per page` label and its well share is 158px** — the 74px label
+ * column, the 8px gap and the 76px well, each already fixed — because
  * a row given only the well's 76px wraps the well onto a second line, and the
- * bar grows from the drawing's 43px to 61.
+ * bar grows from the 43px to 61.
  *
  * The number is pinned here and the *boxes* are measured in the browser
  * (`tests/e2e/editor-rail.spec.ts`): jsdom lays nothing out, so a case that
@@ -434,7 +434,7 @@ it("offers the four page sizes and reports the one chosen", async () => {
  * that asserts only the class list cannot see the wrap. Both halves are read,
  * and neither alone is the claim.
  */
-it("gives the label and its well §5's own row width", async () => {
+it("gives the label and its well its own row width", async () => {
   const container = await mount(pager({}));
 
   const row = must(

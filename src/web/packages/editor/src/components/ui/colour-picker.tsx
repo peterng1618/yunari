@@ -128,7 +128,7 @@ function ChannelTrack({
 }
 
 /**
- * The palette's colour picker: one trigger in a §5 well, and a popover holding
+ * The palette's colour picker: one trigger in a control well, and a popover holding
  * the area, the two channel strips, the value field, the preset library row and
  * the eyedropper.
  *

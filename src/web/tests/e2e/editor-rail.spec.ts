@@ -29,11 +29,11 @@ const EDITOR = "http://127.0.0.1:4174/";
 
 /** The design's rail accent bar, in px. A bare number rather than a `px`
  *  string so the one value is written once and the assertion's message spells
- *  it from here — §3's step table has no entry for it. */
+ *  it from here — the step table has no entry for it. */
 const RAIL_ACCENT_BAR_PX = 2;
 
-/** §7.1's header strip, in px, for the same reason: `--header-height` is a
- *  density rather than one of §3's steps, so the one value is written here and
+/** The header strip, in px, for the same reason: `--header-height` is a
+ *  density rather than one of the steps, so the one value is written here and
  *  the mode-switch case spells its message from this. */
 const HEADER_STRIP_PX = 42;
 
@@ -140,7 +140,7 @@ test("shows the theme's own panel in the left column, and swaps away from it", a
   await expect(page.locator("[data-yunari-artboard-width]")).toBeVisible();
 });
 
-/** §7.7's "Chrome stays still", and the ruling `vg-208` carries, on a real box.
+/** The "Chrome stays still", and the ruling `vg-208` carries, on a real box.
  *
  *  The rule the row is about put the pane's one `overflow: auto` on the *column*,
  *  so the column scrolled the title bar and the footer along with the list. The
@@ -226,7 +226,7 @@ test("a pane's title bar and footer stay put while its body scrolls", async ({
   ).toBeGreaterThan(0);
   expect(
     measured.columnScrolled.offset,
-    "the pane's column is still a scroller, so §7.7's rule is still on the wrong box",
+    "the pane's column is still a scroller, so the rule is still on the wrong box",
   ).toBe(0);
   expect(
     measured.bodyScrolled.offset,
@@ -274,7 +274,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   // stopped laying out rows at all still fails this.
   await openEveryGroup(page);
 
-  // The offset lives on the showing pane's **body** (§7.7, `vg-208`), so the
+  // The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), so the
   // scroll is taken there. The column is what goes `hidden` on a collapse and
   // the body is hidden with it, which is what makes the restore below the pin
   // it is: a real browser discards a `display: none` box's scroll position, so
@@ -301,7 +301,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
 });
 
-/** §7.7's per-pane offsets, on every pane that can hold one. The rule is one
+/** The per-pane offsets, on every pane that can hold one. The rule is one
  *  sentence — "preserve per-pane offsets and disclosure state across routine
  *  updates" — and `choosePane` implements it once, over a map keyed by the
  *  rail's slot. The case above pins it for the Composition pane; a proof of one
@@ -325,7 +325,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
  *  they move with font loading — and the guard above is the load-bearing claim,
  *  not the sizes.
  *
- *  The offset lives on the showing pane's **body** (§7.7, `vg-208`), and a
+ *  The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), and a
  *  browser discards a `display: none` box's scroll position — the swap hides
  *  the pane it leaves — so what the read-back finds after the return is the
  *  shell's own restore and not the box remembering.
@@ -376,7 +376,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   testInfo.annotations.push({ type: "pane-offsets", description: report });
 });
 
-/** §7.7's desktop-density proof, for the one cluster the rail's column can
+/** The desktop-density proof, for the one cluster the rail's column can
  *  starve. **Reachability, not visibility.**
  *
  *  The dock is a fixed 639px row of every object and arrange action, centred on
@@ -388,7 +388,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
  *  a bounding box: a control drawn outside its stage is `visible` to Playwright
  *  and unclickable to an author.
  *
- *  The three configurations are §7.7's own. The third is a viewport rather than
+ *  The three configurations are its own. The third is a viewport rather than
  *  a root `zoom`, because 200% browser zoom halves the CSS viewport — that is
  *  what the shell's media queries answer, and a `zoom` on the root leaves the
  *  layout viewport at 1280 while the fixed 46/246/280 columns stop adapting. */
@@ -440,7 +440,7 @@ test("every dock control stays reachable with the rail's column in place", async
       `${view.name}: a dock control is drawn where nothing can click it`,
     ).toEqual([]);
 
-    // And the cluster sits inside the stage at all: §7.5's 14px is the least a
+    // And the cluster sits inside the stage at all: the 14px is the least a
     // cluster clears its stage's edges by, and the overrun this pinned is what
     // put the row outside them.
     const insets = await page.evaluate(() => {
@@ -557,7 +557,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
  * rendered offset.
  *
  * The last two assertions are F2's invariant. `min-height`, not `height`, is
- * what §7.7 requires — a refusal may not be ellipsized, so a long diagnostic
+ * what the overflow rule requires — a refusal may not be ellipsized, so a long diagnostic
  * wraps and the strip grows a line rather than cutting the message or spilling
  * over the stage. **No refusal reachable at this width is long enough to wrap**:
  * the editor's own refusals are short fixed strings, and the one long message,
@@ -626,7 +626,7 @@ test("the status bar is the window's full-width bottom edge", async ({
 });
 
 /**
- * §7.6's left readouts, as the strip draws them, and the report beside them.
+ * The left readouts, as the strip draws them, and the report beside them.
  *
  * The counts are the strip's *resting* content: nothing has to happen for them
  * to be there. What they read is the scene's own — compared against the
@@ -715,13 +715,13 @@ test("the status bar reads the scene's counts, and still carries its message", a
 });
 
 /**
- * §7.3's count, in each pane's title bar, read where an author reads it.
+ * The count, in each pane's title bar, read where an author reads it.
  *
  * The row ruled it per pane, so this walks all four slots and reads each title
  * bar against **the list that pane draws** rather than against a number this
  * test remembers: the Add pane's count is the tiles under it, the Tokens pane's
  * is the token rows under it, and the Composition pane's is the scene's own
- * total, which is also what §7.6's strip prints — the duplication the row
+ * total, which is also what the strip prints — the duplication the row
  * accepted and named, asserted here as one string in two surfaces so a pane
  * that drifted to a different number fails.
  *
@@ -797,8 +797,8 @@ test("every pane's title bar carries the count of its own list, and Document car
  * jsdom has no layout and no cascade, so a `*.dom.test.tsx` case cannot see a
  * rendered side — the bar lived at `left: -8px`, painting outside the rail's
  * outer edge (the window's left edge), with a comment eight lines above it
- * stating the rule it broke. The parity gate could not catch it either: the
- * mockup drew the same bar in the same wrong place, so the two agreed. This is
+ * stating the rule it broke. A parity gate could not catch it either: both
+ * sides drew the same bar in the same wrong place, so the two agreed. This is
  * the assertion that can see it — the bar's own edges measured against the
  * rail's — and the measurement is printed as the report's evidence.
  *
@@ -834,7 +834,7 @@ test("the selected slot's accent bar sits on the rail's inner edge", async ({
     // resolves against its containing block's padding box, and this Chromium
     // hands back the *used* `left`, so composing it against the slot's
     // border-box rect counts the slot's border a second time. The slot carries
-    // §5 rule 6's 1px transparent resting border, which is exactly that 1px.
+    // the 1px transparent resting border, which is exactly that 1px.
     const borderLeft = Number.parseFloat(slotStyle.borderLeftWidth) || 0;
     const borderRight = Number.parseFloat(slotStyle.borderRightWidth) || 0;
     const left =
@@ -856,13 +856,13 @@ test("the selected slot's accent bar sits on the rail's inner edge", async ({
   console.log(`accent-bar ${report}`);
   testInfo.annotations.push({ type: "accent-bar", description: report });
 
-  // §5's rail slot, which is the size the bar's offset is derived from: at 34px
+  // The rail slot, which is the size the bar's offset is derived from: at 34px
   // the same `-6px` lands the bar's outer edge 1px short of the rail. Read here
   // rather than by a geometry case of its own, because the two numbers are one
   // decision — `vg-227` moved the slot and the bar together.
   expect(
     measured.slotRight - measured.slotLeft,
-    "the slot is §5's 36px rail slot",
+    "the slot is the 36px rail slot",
   ).toBe(36);
   expect(
     measured.barWidth,
@@ -976,7 +976,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   await expect(dialog).toBeHidden();
   await expect(gear).toBeFocused();
 
-  // ── §7.7's constrained proof, in this same procedure ───────────────────────
+  // ── the constrained proof, in this same procedure ───────────────────────
   //
   // DESIGN.md asks for "the full shell at 1280×720 and 1440×900 CSS pixels,
   // then at 200% browser zoom", with every control reachable through scrolling
@@ -985,7 +985,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   //
   // **200% zoom is modelled as the CSS-pixel viewport it produces** — 640×360,
   // which is what a browser zoom does: it halves the layout viewport in CSS
-  // pixels, and `80vh` and every other length in §7's modal then resolve
+  // pixels, and `80vh` and every other length in the modal then resolve
   // against the halved box, exactly as they do at a real 200%. CSS `zoom` on the
   // root, which is the cheap way to widen a capture, is *not* faithful here and
   // measurably so: it scales a `vh`-capped fixed dialog
@@ -1012,7 +1012,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   }
 
   // (2) The panel scrolls rather than clipping. Read on the Keyboard tab, which
-  // holds the twenty-row table: this is the case §7.7's sentence is about, and
+  // holds the twenty-row table: this is the case the sentence is about, and
   // it is the tab left selected for (3).
   await dialog.getByRole("tab", { name: uiCopy.settings.keyboard }).click();
   const scroller = await dialog.evaluate((element) => ({
@@ -1048,7 +1048,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
 });
 
 /**
- * §7.1's mode switch, as a rendered box and as the guard in front of it.
+ * The mode switch, as a rendered box and as the guard in front of it.
  *
  * Two facts live only in a browser. The first is the switch's geometry: it is
  * the header's own control, so it has to fit the 42px strip rather than grow it,
@@ -1151,7 +1151,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toBeLessThan(paint.header);
   // The chosen treatment, measured rather than assumed: a lifted ground and
   // `--text` that differ from an unchosen segment's — and neither is the
-  // region's accent, because §4 spends the header's one accent-filled control
+  // region's accent, because the palette spends the header's one accent-filled control
   // on the publish button.
   expect(
     paint.chosenFill,
@@ -1235,7 +1235,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toHaveAttribute("aria-pressed", "true");
 
   // The question, discarded: the mode moves, and the editor's own header actions
-  // do not follow it — §7.1's right-hand region is per-mode.
+  // do not follow it — the right-hand region is per-mode.
   await segment(uiCopy.modes.themes).click();
   await prompt
     .getByRole("button", { name: uiCopy.replaceDocument.discard, exact: true })
@@ -1300,7 +1300,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
 /**
  * The store mode's own header row, as a rendered row.
  *
- * §7.2 forbids a second bar under the header, so what the store draws is the
+ * the rail rule forbids a second bar under the header, so what the store draws is the
  * *region's* first row rather than a strip between the header and the content.
  * This case reads the row really drawn — both halves, the search well, five
  * facet buttons and the sort well, all inside the region — and reads the
@@ -1346,7 +1346,7 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   const header = region.locator("[data-yunari-store-header]");
   await expect(header, "the region draws no header row").toBeVisible();
 
-  // The two halves, named and opening on Local — §5's Segmented, which is what
+  // The two halves, named and opening on Local — the Segmented, which is what
   // the region's own header row carries rather than a second mode switch.
   const halves = header.locator("[data-yunari-store-halves] button");
   await expect(halves).toHaveCount(2);
@@ -2802,7 +2802,7 @@ test("the line for a skipped kind names the identifier the catalogue declared", 
   ).toHaveCount(1);
   // **The identifier, as a literal** — `widget-preset` is a kind this build has
   // no word for, and a display word invented here would be a name nothing
-  // declared (§9). The rest of the sentence is the surface's own.
+  // declared. The rest of the sentence is the surface's own.
   await expect(
     line,
     "the skipped-kind line does not name the wire identifier",
@@ -3376,7 +3376,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   // reading that says so** (A.7b). The surface, the byline and the facts band
   // are three elements now where they were one padded column, so the spacing
   // between them is arithmetic a later edit can move without anything failing:
-  // the drawing's 10px inside the cell and 6px between the bands, which §3's
+  // the drawing's 10px inside the cell and 6px between the bands, which the spacing scale's
   // step table owns as `--space-10` and `--space-6`. The 26px band is the third
   // band's own height and is read here too, because it is what the drawing
   // fixes and a wrapper that padded it would squash it.

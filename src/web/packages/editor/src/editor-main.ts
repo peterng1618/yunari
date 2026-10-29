@@ -407,7 +407,7 @@ async function start(): Promise<void> {
           // entered-group dim is lifted for it (`vg-527`).
           () => shell.editor.groupingManager.suspendDim(),
         )?.toDataURL("image/png"),
-      // The theme's paints, for the Tokens pane's title-bar count (§7.3). The
+      // The theme's paints, for the Tokens pane's title-bar count. The
       // session owns the document, so this is pulled at each snapshot rather
       // than copied: a token added, renamed or deleted moves the number, and
       // `subscribeDocumentChange` is what republishes it.

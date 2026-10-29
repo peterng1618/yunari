@@ -37,7 +37,7 @@ import { uiCopy } from "../../ui-copy.js";
  * the whole of a visibility or lock control's state, and the control set's icon
  * button is a plain action with no `aria-pressed` to carry it. They take the
  * control set's one owner of the name/tooltip pairing instead
- * (`useControlTooltip`), so their name and their tooltip are one string (§6)
+ * (`useControlTooltip`), so their name and their tooltip are one string
  * exactly as an icon button's are.
  *
  * They are also direct children of `.yunari-layer-state`, never wrapped: the
@@ -90,7 +90,7 @@ export function RowAffordances({
 }
 
 /**
- * One of the row's controls: a 26px square at the control set's box (§5), whose
+ * One of the row's controls: a 26px square at the control set's box, whose
  * one word is both its accessible name and its tooltip, armed from the control
  * set's one owner of the pairing so the two cannot disagree.
  *
@@ -129,7 +129,7 @@ function RowControl({
 }
 
 /** Locked is a filled lock and unlocked an outline one: at this size the
- *  outlines differ only by a gap in the shackle, so the state rides §6's
+ *  outlines differ only by a gap in the shackle, so the state rides the icon set's
  *  `filled` escape and the vocabulary's own weight — no second glyph, no second
  *  stroke weight. */
 function LockStateIcon({

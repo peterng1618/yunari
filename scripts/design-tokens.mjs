@@ -59,7 +59,7 @@ const SPACING_STEPS = new Set([4, 6, 8, 10, 12, 14, 16, 20, 24, 32]);
 const ALWAYS_PX = new Set([0, 1]);
 
 /**
- * A px here *is* a spacing decision, so it is held to §3's steps alone —
+ * A px here *is* a spacing decision, so it is held to the steps alone —
  * DESIGN.md's `26px` row rhythm is a density, not a gutter, and 26 is in no step.
  */
 const SPACING_PROPERTY =
@@ -69,7 +69,7 @@ const SPACING_PROPERTY =
  * Tailwind's spacing utilities with an arbitrary length — `p-[26px]`,
  * `gap-x-[7px]`, `md:mt-[30px]`, and their negatives `-mt-[26px]`. In a `.tsx`
  * there is no declaration property to read, so the utility name is the signal
- * that the px is a spacing decision; these are held to §3's steps the way a
+ * that the px is a spacing decision; these are held to the steps the way a
  * CSS spacing property is. Scoped to these names on purpose: `h-[26px]`,
  * `size-[24px]`, `translate-x-[10px]` and `min-w-[10rem]` are not spacing
  * properties and stay in tier 2. Longest name first so `px-`/`gap-x-` win over
@@ -246,9 +246,9 @@ function position(text, index) {
 /**
  * Violations in one file's source. `designLanguagePx` is the tier-2 allowlist: px
  * lengths the design fixes outside its spacing table, whatever the property —
- * the row rhythms, the rail and pane widths, §7.2's `2px` accent bar on the rail's
- * inner edge, §7.3's `28px` mark slot, the pill and toggle heights, the slider's
- * track and value well, the swatch, and §6's stroke widths among them. It is the
+ * the row rhythms, the rail and pane widths, the `2px` accent bar on the rail's
+ * inner edge, the `28px` mark slot, the pill and toggle heights, the slider's
+ * track and value well, the swatch, and the stroke widths among them. It is the
  * set of values that actually appear, not an enumeration of every number
  * the design prints. What it deliberately does NOT cover is type sizes
  * 13/15/19, because a value here is allowed *anywhere*, so adding them would
@@ -503,7 +503,7 @@ async function selfTest() {
     ["a hex colour is a violation", "a.css", ".x { color: #ff0000; }", 1],
     ["a role reference is not", "a.css", ".x { color: var(--text); }", 0],
 
-    // Tier 1: a spacing property is held to §3's steps, and to nothing else.
+    // Tier 1: a spacing property is held to the steps, and to nothing else.
     ["an off-scale px spacing is a violation", "a.css", ".x { padding: 7px; }", 1],
     ["an on-scale px spacing is not", "a.css", ".x { padding: 12px; }", 0],
     ["a DESIGN.md row rhythm is not a spacing step", "a.css", ".x { margin: 26px; }", 1, { designLanguagePx: [26] }],
@@ -561,9 +561,9 @@ async function selfTest() {
     ["a tsx gap utility with an off-scale value is a violation", "a.tsx", 'const c = "gap-[7px]";', 1],
     ["a tsx spacing utility on a step is not", "a.tsx", 'const c = "px-[12px]";', 0],
     // A leading `-` is a negative margin/inset, not an exemption: it is held to
-    // §3 the same way, so this case fails if negative support is removed.
+    // the spacing scale the same way, so this case fails if negative support is removed.
     [
-      "a negative tsx spacing utility is held to §3",
+      "a negative tsx spacing utility is held to the spacing scale",
       "a.tsx",
       'const c = "-mt-[26px]";',
       1,
@@ -632,8 +632,8 @@ async function selfTest() {
     ["a value only a comment holds is unconsumed", [1.8], [["a.tsx", '// a 1.8px stroke\nconst s = "";']], [1.8]],
     ["a value only a definition block holds is unconsumed", [46], [["a.css", "@theme static { --x: 46px; }"]], [46]],
     // The rule is about what a file *writes*, not about what the allowlist
-    // suppresses: a spacing utility is held to §3 anyway, and its value still
-    // counts as written, which is why a §3 step in the list is not reported.
+    // suppresses: a spacing utility is held to the spacing scale anyway, and its value still
+    // counts as written, which is why a scale step in the list is not reported.
     ["a spacing utility still writes its value", [46], [["a.tsx", 'const s = "p-[46px]";']], []],
     // A read that failed truncates the union, so the rule reports nothing and
     // names the unread pair instead: `46`'s only consumer is the file that did

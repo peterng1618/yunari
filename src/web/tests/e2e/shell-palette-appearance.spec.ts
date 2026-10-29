@@ -61,7 +61,7 @@ test.describe("shell palettes", () => {
         const fill = rule.style.getPropertyValue("background");
         if (!/var\(--(?:panel|shell-surface)\)/.test(fill)) continue;
         // **Elevation is the discriminator**, because it is the whole of the
-        // difference between §3's two rows. It used to be `backdrop-filter`,
+        // difference between the two rows. It used to be `backdrop-filter`,
         // and that read was already dead before it was removed: Lightning CSS
         // emits the blur as the prefixed property alone, this Chromium has
         // dropped the alias, and so every cluster computed `none` (`vg-311`).
@@ -130,7 +130,7 @@ test.describe("shell palettes", () => {
 
     expect(
       membership.blurred,
-      "`editor-shell.css` still authorises a backdrop blur, and §3 and §7.5 say a cluster does not blur its backdrop — the count is the declarations, prefixed forms included",
+      "`editor-shell.css` still authorises a backdrop blur, and the spacing scale and the stage rule say a cluster does not blur its backdrop — the count is the declarations, prefixed forms included",
     ).toEqual([]);
 
     const read = (selector: string) =>
@@ -201,7 +201,7 @@ test.describe("shell palettes", () => {
         }
         if (chrome.image !== "none") {
           failures.push(
-            `${palette} ${selector}: the chrome carries a gradient (${chrome.image}) — the sheen is the cluster's, per §3's elevation 1`,
+            `${palette} ${selector}: the chrome carries a gradient (${chrome.image}) — the sheen is the cluster's, per the elevation 1`,
           );
         }
         if (chrome.blur !== "none") {
@@ -221,7 +221,7 @@ test.describe("shell palettes", () => {
         const clusterAlpha = backgroundAlpha(cluster.background);
         if (clusterAlpha === null || clusterAlpha >= 1) {
           failures.push(
-            `${palette} ${selector}: the cluster's fill is ${cluster.background}, and §3 has a floating cluster never fully opaque`,
+            `${palette} ${selector}: the cluster's fill is ${cluster.background}, and the spacing scale has a floating cluster never fully opaque`,
           );
         }
         // A cluster is the chrome's own fill plus a shadow, and nothing else:
@@ -411,7 +411,7 @@ test.describe("shell palettes", () => {
    *
    *  The computed comparison above is necessary and not sufficient: it can tell
    *  two surfaces apart but cannot say whether either is a surface an author
-   *  would recognise, and §9's acceptance item asks for the eye. Deliberately
+   *  would recognise, and the acceptance item asks for the eye. Deliberately
    *  NOT a golden file — a screenshot here is read by a person once, beside the
    *  change that made it. `choosePalette` closes the popup and asserts the
    *  attribute, so each frame is the editor in one palette rather than the menu

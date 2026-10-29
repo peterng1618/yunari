@@ -28,7 +28,7 @@ export function PublishIndicator({
   // always-mounted regions are the ones that speak.
   return (
     <p className="editor-shell-live">
-      {/* §6 names the live check as a **filled** glyph at 12px: a 1.8px stroke
+      {/* the icon set names the live check as a **filled** glyph at 12px: a 1.8px stroke
           on a 12px check reads faint, and the answer DESIGN.md gives is the
           fill rather than a second stroke weight. */}
       <Glyph icon={CHECK_GLYPH} size={12} filled />

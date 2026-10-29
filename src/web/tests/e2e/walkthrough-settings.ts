@@ -4,7 +4,7 @@ import { focusedWithin, tabToMark } from "./walkthrough-focus.js";
 
 /**
  * The settings modal's keyboard vocabulary: the two of §13.1's interactions
- * that live in one popup — §4's shell palette and the shortcut capture — and the
+ * that live in one popup — the shell palette and the shortcut capture — and the
  * route that reaches them.
  *
  * Split out of `walkthrough-shell.ts` on Ruling L's own principle, when Task 4's
@@ -16,7 +16,7 @@ import { focusedWithin, tabToMark } from "./walkthrough-focus.js";
  * is where focus is observed.
  */
 
-/** §7's settings modal and the rail's gear that opens it (`rail.tsx`,
+/** The settings modal and the rail's gear that opens it (`rail.tsx`,
  *  `components/ui/dialog.tsx`). */
 export const SETTINGS_MODAL_CLASS = ".editor-shell-dialog";
 const SETTINGS_GEAR = "data-rail-settings";
@@ -118,7 +118,7 @@ async function activateTab(
 }
 
 /**
- * Chooses one of §4's six shell palettes in Settings, with no pointer — by
+ * Chooses one of the six shell palettes in Settings, with no pointer — by
  * arrowing onto its card.
  *
  * **The arrows are what choose it; this helper presses nothing else.** Base UI's
@@ -178,7 +178,7 @@ export async function choosePalette(page: Page, name: Palette): Promise<void> {
 }
 
 /**
- * A §4 palette the shell is **not** already in.
+ * A palette the shell is **not** already in.
  *
  * **The decision has one owner** because it has two callers — §13.1's
  * four-interaction test and the assembled walk — and both need a choice that is

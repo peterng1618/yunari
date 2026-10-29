@@ -4,7 +4,7 @@ import type { CellAction } from "./local-source.js";
 /**
  * Why a cell's action is drawn disabled, or `undefined` for one a build runs.
  *
- * The drawing gives every cell four actions and the item's footer the same four,
+ * The surface gives every cell four actions and the item's footer the same four,
  * so all four stay drawn (R164) — and the two **no task in this plan and no
  * phase owns** are disabled where they are drawn,
  * with their reason, rather than answering a press with nothing. One owner for

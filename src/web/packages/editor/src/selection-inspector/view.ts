@@ -448,7 +448,7 @@ export type ProjectionPorts = Pick<
  * flight previews through `preview` — the same write as `commit`, with no
  * history entry and no re-publish — so the canvas shows what the author is
  * choosing while the column's own value stays the last committed one. `commit`
- * is the release: one changed value, one entry (§5's one undo boundary).
+ * is the release: one changed value, one entry (the one undo boundary).
  * `cancelPreview` puts the value the gesture started from back, through the same
  * writer, and records nothing, because nothing was recorded to undo.
  */

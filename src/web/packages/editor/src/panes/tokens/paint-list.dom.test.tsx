@@ -230,7 +230,7 @@ it("lists every token with its name and its usage figure, and skips the none tok
 });
 
 it("states a missing reading rather than fabricating a zero when there is no scene", async () => {
-  // §2.3 and the host's rule: a missing reading is stated, never defaulted.
+  // the missing-reading rule and the host's rule: a missing reading is stated, never defaulted.
   const { host } = await mount(PAINT_LIST_PALETTE, { usage: undefined });
 
   expect(usageFigure(host, "background")).toBe(uiCopy.panels.notSet);

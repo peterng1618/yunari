@@ -1296,7 +1296,7 @@ describe("Host theme routes", () => {
     }
   });
 
-  it("forbids PUT from non-loopback addresses (§7)", async () => {
+  it("forbids PUT from non-loopback addresses", async () => {
     const res = await request(
       hosted.server,
       "PUT",

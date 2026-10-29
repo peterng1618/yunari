@@ -61,7 +61,7 @@ interface TooltipOptions {
    *  screen reader reads the picture: `printed` is the platform's own mark
    *  (`⌘Z`) and shows, `spoken` is what it is called (`Command Z`) and is the
    *  chip's `aria-label`. A single string would have to be one or the other,
-   *  and a tooltip that shows "Command Z" is not the tooltip §7 asked for. */
+   *  and a tooltip that shows "Command Z" is not the tooltip the shell layout asked for. */
   readonly shortcut?: { readonly printed: string; readonly spoken: string };
 }
 

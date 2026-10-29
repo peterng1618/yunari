@@ -11,8 +11,8 @@ declares in `dependencies`, `devDependencies` or `optionalDependencies`,
 package this project does not itself install or ship, so it is not a direct
 dependency.** A package reached only through another
 package's own dependencies has no entry here, and its absence is not a missing
-notice; the closure is enumerated at release time, by the dependency override
-notes in `src/web/package.json`. Every
+notice; the closure is enumerated at release time under the licence-closure
+rule in [docs/operations.md](docs/operations.md#release-process). Every
 direct dependency is a row in one of the two tables below, with the version the
 lockfile resolves and the licence its installed `package.json` declares — or,
 where that manifest declares none, the licence named by its `LICENSE` title;
@@ -322,5 +322,5 @@ metadata when adding them. This is the closure half of the scope stated at the
 top of this file: the runtime/editor table and the build/test paragraph are the
 direct-dependency inventory, while the vendored-source, runtime-icon and
 bundled-asset sections are not dependencies and fall outside it. The transitive
-graph is enumerated at release by this rule and by the dependency override notes
-in `src/web/package.json`.
+graph is enumerated at release by the licence-closure rule in
+[docs/operations.md](docs/operations.md#release-process).

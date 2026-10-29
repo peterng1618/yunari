@@ -422,7 +422,7 @@ describe("EditorSession", () => {
   });
 
   it("binds the chord the header prints to the shell's own publish surface", () => {
-    // §7.1. The header prints this chord beside the publish control, so the
+    // The header prints this chord beside the publish control, so the
     // gesture does what that control does — it opens the surface — and owns no
     // publish path of its own. The manager is a stub here (the mock above),
     // which is what lets this case read back the handler the session registered

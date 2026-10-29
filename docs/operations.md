@@ -70,6 +70,11 @@ revoke it.
   stable releases use `latest`.
 - Release assets are the `.tgz` and a staged-tree `.zip` attached to the GitHub
   Release.
+- **Licence closure ships with each release.** Before publishing, enumerate the
+  complete runtime and transitive dependency closure from the lockfile, not just
+  the direct dependencies, and ship every licence and NOTICE text that closure
+  requires. `THIRD-PARTY-NOTICES.md` is the direct inventory the CI check
+  compares against; it is not the closure.
 - winget is not supported until a packaged Windows executable exists.
 
 ## CI
@@ -77,8 +82,8 @@ revoke it.
 `.github/workflows/ci.yml` runs on `main`/`develop` pushes, PRs to `main`, and a
 nightly schedule:
 
-- **frontend** — install, `npm run gate`, typecheck, build player/editor/host and
-  the control fixture, enforce the player size budget, install Chromium, run the
+- **frontend** — install, `npm run gate`, typecheck, build player/editor/host,
+  enforce the player size budget, install Chromium, run the
   Playwright suite under `xvfb-run`.
 - **licences** — derive every non-workspace dependency from the manifests and
   require a mention in `THIRD-PARTY-NOTICES.md`. It fails if it derives no names

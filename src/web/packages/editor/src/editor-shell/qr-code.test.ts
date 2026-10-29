@@ -4,7 +4,7 @@ import { QUIET_ZONE_MODULES, qrMatrix } from "./qr-code.js";
 
 /** The payload this has to carry: what `main.ts` composes for a paired phone —
  *  a LAN address, the host's port, and the 43 characters `pairing.ts` mints
- *  from 32 bytes of CSPRNG. 77 characters, measured (§6 probe). */
+ *  from 32 bytes of CSPRNG. 77 characters, measured (the icon set probe). */
 const URL = `http://192.168.1.42:5227/?session=${"a".repeat(43)}`;
 
 /** One block per module, at `scale` pixels a side, as the RGBA bytes a decoder

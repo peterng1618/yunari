@@ -1,5 +1,5 @@
 /**
- * §7's `?` reference, as rows rather than as a surface.
+ * The `?` reference, as rows rather than as a surface.
  *
  * The sheet and the tooltip read one projection of one table, so a chord cannot
  * be right in one and wrong in the other. Nothing here decides *which* actions

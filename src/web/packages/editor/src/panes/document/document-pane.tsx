@@ -21,7 +21,7 @@ import { MetadataFields } from "./metadata-fields.js";
  * reads every `section h2` and matches the panel's name against it, and the
  * disclosure chrome's `▾` would arrive in that text beside the title.
  *
- * §8's ordering, most likely first: what the theme is, then the board it is
+ * The ordering, most likely first: what the theme is, then the board it is
  * drawn on — the size and the presets that set it. The board's paint and the
  * media behind it are the background layer's, authored in the selection
  * inspector's column rather than here.

@@ -316,7 +316,7 @@ export function panelMaterialFields(
  * `numberField` clamped an out-of-range value to the bound it crossed, and this
  * writer still does, because a commit can reach it without the control. The
  * control is the stricter of the two — a draft past a bound is kept with its
- * reason rather than coerced (§5) — so the clamp is the copy that holds for a
+ * reason rather than coerced — so the clamp is the copy that holds for a
  * bypassed one, and the fraction rule is the control's `integer` flag and
  * `editRefusal`'s, not this writer's.
  */

@@ -18,7 +18,7 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
  * The editor's one filled accent button, and behind it everything publishing
  * has to say.
  *
- * **The button opens the surface; it is not the host switch.** §7.1 gives the
+ * **The button opens the surface; it is not the host switch.** the header rule gives the
  * header one primary control and the facts live behind a press — but a control
  * that turned the LAN off when an author pressed it to read the phone address
  * would lose the fact the address exists to carry, mid-presentation. So the
@@ -172,7 +172,7 @@ export function PublishControl({
         data-yunari-publish=""
       >
         {uiCopy.publish.start}
-        {/* §7.1's mark, and plan 2 left it off because there was nothing to
+        {/* The mark, and plan 2 left it off because there was nothing to
             run. It is the same action id the press answers to through the
             chord, so the mark and the act cannot disagree — a printed chord
             that ran nothing is the state this row exists to end. */}

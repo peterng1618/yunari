@@ -86,7 +86,7 @@ it("gives a group a generic glyph, and nothing it could not know", () => {
   // **Nothing it could not know.** The same mark carrying fields the kind arm
   // never reads — the shape of a group's members, its name — draws the *same*
   // glyph. A treatment derived from a group's contents would differ here, which
-  // is what makes §5.1's correction structural rather than a comment.
+  // is what makes the correction structural rather than a comment.
   const planted = {
     kind: "group",
     name: "CPU card",

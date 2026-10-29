@@ -141,7 +141,7 @@ function halves(header: HTMLElement): readonly HTMLButtonElement[] {
 }
 
 /**
- * §7.2's "a second horizontal bar under the header is forbidden", one level
+ * The "a second horizontal bar under the header is forbidden", one level
  * down: the region draws its own header row, and it is the region's *first*
  * row rather than a strip above one.
  *
@@ -264,7 +264,7 @@ it("draws the search well and the sort well, and the sort follows the half", asy
 });
 
 /**
- * §5's checkbox choice row, which is the one control this commit adds to the
+ * The checkbox choice row, which is the one control this commit adds to the
  * design language: a set you may choose *several* of is not rule 7's radio
  * group, so the row's semantics are a checkbox and the group is a plain group.
  *
@@ -519,7 +519,7 @@ interface FacetRun {
 
 /**
  * One facet's own popover, opened, and what it draws: the sentence above the
- * options where the drawing has one, and the labelled runs of values.
+ * options where the surface has one, and the labelled runs of values.
  *
  * It is read **inside that popup** rather than across `body`, so a case that
  * opens two in turn cannot read the first one's values and call them the
@@ -638,7 +638,7 @@ it("lists the items and opens one from the cell's own surface", async () => {
 
 /**
  * **The `open` action asks for a document and opens no modal**, from the cell
- * and from the modal's own footer alike: the drawing labels it *Open in editor*
+ * and from the modal's own footer alike: the surface labels it *Open in editor*
  * and the library's existing operation is what the label names (R134).
  *
  * The two are one case because they are one route — the modal draws the cell's
@@ -831,7 +831,7 @@ it("closes back onto the same page, filter and sort", async () => {
  * size exactly one theme declares is not offered (it would be a theme wearing a
  * filter's clothes), and a size two themes declare is.
  *
- * **The groups are read too** (R115): the drawing draws Shape's three groups as
+ * **The groups are read too** (R115): the surface draws Shape's three groups as
  * labelled runs under "A theme must match every group.", and a flat list is what
  * hides the AND — a person who picks Landscape + 16:9 and gets no portrait 16:9
  * theme has been told the opposite of what the filter does.
@@ -863,18 +863,18 @@ it("derives the facet values from the items", async () => {
   ]);
   expect(
     colour.hint,
-    "a facet the drawing draws without a sentence says one anyway",
+    "a facet the surface draws without a sentence says one anyway",
   ).toBeUndefined();
 
   const shape = await openFacet("shape", uiCopy.store.facets.shape);
   expect(
     shape.hint,
-    "the shape popover does not carry the sentence the drawing draws",
+    "the shape popover does not carry the sentence the surface draws",
   ).toBe(uiCopy.store.facets.shapeHint);
   const headings = uiCopy.store.facets.shapeGroups;
   expect(
     shape.runs,
-    "the shape facet flattens the drawing's three labelled groups",
+    "the shape facet flattens the three labelled groups",
   ).toEqual([
     {
       group: headings.orientation,
@@ -936,7 +936,7 @@ it("gives an ungrouped run's rows the spacing it gives a grouped one's", async (
  * under**, which is one grouping and not a second reading of the key here.
  *
  * A key this build does not know has no family, so it is offered under no
- * heading rather than under an invented one (§9) — and it is still offered,
+ * heading rather than under an invented one — and it is still offered,
  * because a theme that binds it is a theme the library holds.
  */
 it("groups the sensors by the family the vocabulary files them under", async () => {
@@ -1893,8 +1893,8 @@ it("draws only the refusal line when every catalogue entry was refused", async (
 /**
  * **The skipped-kind line names the identifier the catalogue used**, never a
  * display word: this build has no vocabulary for `widget-preset`, and inventing
- * one would be §9's word for something nothing declared. The line sits below the
- * grid and above the pager, where the drawing puts it.
+ * one would be the word for something nothing declared. The line sits below the
+ * grid and above the pager, where the surface puts it.
  */
 it("names the identifier of a kind the store skipped", async () => {
   vi.stubGlobal(

@@ -24,10 +24,9 @@ import type { FieldView } from "./view.js";
  * The radius a panel gets when the author turns the treatment on.
  *
  * A value to move, not a rule: a treatment with no blur is valid and shows
- * nothing, so enabling one has to leave something visible. It sits inside the
- * band Task 1 measured flat, and it is **not** measured off the reference image
- * — that image is a design mockup over a photograph, not a rendering whose
- * radius can be read back.
+ * nothing, so enabling one has to leave something visible. It sits in the
+ * theme's blur band; no photograph can yield a radius, so the value is chosen
+ * here rather than read back from one.
  */
 const DEFAULT_GLASS_BLUR_RADIUS = 16;
 
@@ -133,7 +132,7 @@ function frostTheSurface(
  * subject with the shape's own reason in the row, because withholding it "left
  * nothing anywhere saying so". The author has since ruled the other way — the
  * subject's inability is a fact about its kind, and a section that exists only
- * to refuse one row is not a question (§7.4, "a property a kind does not have is
+ * to refuse one row is not a question (the inspector rule, "a property a kind does not have is
  * not shown as a field"). The reason is not carried elsewhere either: an author
  * selecting a group is simply offered no glass, without a sentence explaining
  * what was never theirs to set.

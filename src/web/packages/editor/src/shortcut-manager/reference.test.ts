@@ -6,7 +6,7 @@ import { shortcutReferenceGroups } from "./reference.js";
 describe("shortcutReferenceGroups", () => {
   it("lists every action the table binds, once, across the groups", () => {
     const rows = shortcutReferenceGroups().flatMap((group) => group.rows);
-    // Derived, never a literal: §7's sheet is a projection of
+    // Derived, never a literal: the sheet is a projection of
     // `PRODUCT_SHORTCUTS`, and a binding added to the table must arrive here.
     // **No literal count stands beside this one.** Task 1.1's test already pins
     // the table's own size; a second pin here would need editing in the same

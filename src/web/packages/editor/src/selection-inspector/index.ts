@@ -660,7 +660,7 @@ export function createSelectionInspector(
   /**
    * The column's three write routes, on one funnel.
    *
-   * A preview and its cancel are the gesture's own halves (§5): the preview
+   * A preview and its cancel are the gesture's own halves: the preview
    * writes the field and repaints without re-publishing the column, so the
    * control's moving value stays its own state; the cancel writes the start
    * value back and re-publishes once. Neither records a history entry.

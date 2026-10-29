@@ -44,14 +44,14 @@ import {
  * order the questions are asked. A test enumerates this rather than reading the
  * DOM, and the column renders exactly the sections it returns.
  *
- * The four questions are §7.4's — Content is what it shows, Position is where it
+ * The four questions are the — Content is what it shows, Position is where it
  * sits and how big, Layer is how it presents, Paint is what ink — and they come
  * in `SETTINGS_SECTIONS` order, the one place that order is decided. `advanced`
  * is not a fifth question: it is the collapsed-and-counted treatment, and it
  * goes last when it exists.
  *
  * **No section starts closed.** Position was the one that did, on the reasoning
- * that geometry is set once and the binding is chosen constantly. §8 allows
+ * that geometry is set once and the binding is chosen constantly. The pane order allows
  * putting a section away when it is adjusted rarely, and a new object's position
  * is the thing the author selected it to write — so the asymmetry cost more than
  * it saved and `defaultOpenOf` answers the same for every question. A reader may

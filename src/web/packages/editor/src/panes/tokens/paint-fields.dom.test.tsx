@@ -244,7 +244,7 @@ function popupField(): HTMLInputElement | null {
   );
 }
 
-/** Types into the popup field and presses Enter, the way §5's text control
+/** Types into the popup field and presses Enter, the way the text control
  *  commits — no blur, because the press is what settles the gesture. */
 async function typeAndEnter(
   input: HTMLInputElement,

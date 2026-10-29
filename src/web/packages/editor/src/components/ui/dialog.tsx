@@ -13,7 +13,7 @@ import { destructiveMarker } from "../../object-actions.js";
  * action button already imports this primitive — four copies of this string had
  * drifted apart before it moved. A dialog button is chrome around an answer
  * rather than a `Control` component, so it carries the well's surface and edge
- * and stays outside the closed control vocabulary (§5).
+ * and stays outside the closed control vocabulary.
  *
  * The string is the drifted copy's, because it is the superset: `enabled:hover:`
  * is `hover:` on a button that is never disabled, and `disabled:text-faint` is
@@ -29,9 +29,9 @@ export const ACTION_BUTTON =
  * The store's item panel and the asset preview draw the same foot, so they draw
  * this one control rather than two copies that drift. `tone` is the only
  * difference they allow: `accent` for the preview's primary command. A
- * destructive command carries §4's mark, which the shell paints `--hot` and
+ * destructive command carries the mark, which the shell paints `--hot` and
  * refuses to paint on a disabled control. **No tone fills the box** — a filled
- * one would make a single command the act, and the drawings ration the accent.
+ * one would make a single command the act, and the palette rations the accent.
  */
 export function ActionBox(props: {
   readonly icon: LucideIcon;

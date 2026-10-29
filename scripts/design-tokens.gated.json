@@ -30,7 +30,6 @@
     "src/web/packages/editor/src/components/ui/control-choice-row.tsx",
     "src/web/packages/editor/src/components/ui/inspector-section.tsx",
     "src/web/packages/editor/src/components/ui/dialog.tsx",
-    "src/web/packages/editor/src/control-fixture.tsx",
     "src/web/packages/editor/src/editor-shell/canvas-dock.tsx",
     "src/web/packages/editor/src/editor-shell/document-identity.tsx",
     "src/web/packages/editor/src/editor-shell/display-switch.tsx",

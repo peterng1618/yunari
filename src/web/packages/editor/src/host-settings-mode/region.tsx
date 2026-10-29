@@ -48,7 +48,7 @@ import { WeatherSection } from "./weather-section.js";
  *
  * **It absorbs `packages/host/public/settings.html`, rebuilt in the shell's own
  * React** rather than an iframe over that page — its four sections, its words
- * and its status line, in §5's controls. The one section it does not take is
+ * and its status line, in the controls. The one section it does not take is
  * that page's Themes list: the store mode's local half owns listing, opening,
  * activating and removing a theme now, and A.9 puts the assignment on a theme's
  * own row. **So this region shows which theme a display has and never chooses
@@ -145,7 +145,7 @@ function reason(error: unknown): string {
 }
 
 /**
- * The two halves of §7.6's strip while the Host mode is showing, already spelled:
+ * The two halves of the strip while the Host mode is showing, already spelled:
  * the display count on the left, the last write's answer on the right.
  *
  * **The region owns the content and the shell owns the placement.** The strip is
@@ -341,7 +341,7 @@ function HostSettings(props: {
       ? undefined
       : panels?.find((panel) => panel.heldId === selected);
 
-  /** **The mode's status line is published, not drawn**: §7.6's strip is the
+  /** **The mode's status line is published, not drawn**: the strip is the
    *  shell's and is the same strip in every mode, so the region hands it the two
    *  strings and the shell places them. A count no read answered is `null`
    *  rather than `0`, which is the same refusal the rows above make. */
@@ -566,7 +566,7 @@ function HostSettings(props: {
   };
 
   return (
-    // **No status strip of its own.** §7.6's bar is the shell's, drawn once as a
+    // **No status strip of its own.** The bar is the shell's, drawn once as a
     // sibling of every mode's region, and this mode's line reaches it through
     // `onStatus` rather than through a second bar stacked on top of it.
     <div data-yunari-host-region="" className="flex min-h-0 flex-1 flex-col">
@@ -578,10 +578,10 @@ function HostSettings(props: {
             hint={uiCopy.hostSettings.displays.hint}
           >
             {/* **The rows are a choice, and the choice is which display the
-                questions below speak for** — never which theme it shows. §5's
+                questions below speak for** — never which theme it shows. The control set's
                 Segmented is the control for one of a small set, composed in its
                 bare form as the header's mode switch and the store's halves
-                are, and each row is dressed as the drawing's card rather than
+                are, and each row is dressed as the card rather than
                 as a segment. */}
             {displays.length === 0 ? null : (
               <ToggleGroup

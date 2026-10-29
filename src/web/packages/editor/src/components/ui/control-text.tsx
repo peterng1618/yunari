@@ -30,7 +30,7 @@ export function ControlText(
     /**
      * A multi-line field (a polyline's points, a path's data). The draft and
      * commit rules are the same; only the box differs — a document does not fit
-     * one line, and §5's 26px well is for one-line answers.
+     * one line, and the 26px well is for one-line answers.
      */
     readonly multiline?: boolean;
     readonly rows?: number;

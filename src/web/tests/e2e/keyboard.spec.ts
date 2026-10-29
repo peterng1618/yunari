@@ -90,7 +90,7 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
       probe.ownBackground,
       "the row paints its own background, so the pixel beside it is not the surface the ring sits on",
     ).toBe("rgba(0, 0, 0, 0)");
-    // §5.4's boundary is a solid ring, not the browser's `auto` one.
+    // The boundary is a solid ring, not the browser's `auto` one.
     expect(probe.outlineStyle, palette).toBe("solid");
     expect(probe.outlineWidth, palette).toBeGreaterThanOrEqual(2);
 
@@ -118,7 +118,7 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
   await captureVisualReview(page, testInfo, "keyboard-armed-row");
 });
 
-/** §5.4's boundary minimum: 3:1, the ratio the control set's own focus
+/** The boundary minimum: 3:1, the ratio the control set's own focus
  *  boundaries are gated at. */
 const BOUNDARY_MIN = 3;
 
@@ -253,7 +253,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   );
 
   // ── 3. A refusal in the armed row ────────────────────────────────────────
-  // §9's reason and role: the sentence lands in the row that refused, names the
+  // The reason and role: the sentence lands in the row that refused, names the
   // action that holds the chord, and the row stays armed so the author can press
   // the chord they meant. Ctrl+O is `file.open`'s default.
   await page.keyboard.press("Control+o");
@@ -436,7 +436,7 @@ test("? opens the sheet, and the document behind it does not change", async ({
     name: uiCopy.shortcuts.reference,
   });
   await expect(sheet).toBeVisible();
-  // Every action is listed, which is the sheet's whole promise: §7's figure for
+  // Every action is listed, which is the sheet's whole promise: the figure for
   // the table is eighteen, Task 3.3's `?` row makes it nineteen, Task 3.1's
   // `publish.surface` row makes it twenty, and the asset finder's
   // `file.findAssets` row makes it twenty-one. The row count is a property of
@@ -501,7 +501,7 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   // `Positioner`; a `Popup` placed straight in the portal renders unpositioned,
   // and the same class of mistake put this control's popover in the top-left
   // corner of the window once before (`panel.dom.test.ts:187-192`). The trigger
-  // fills its §5 well since Task 6 removed the swatch wrapper, so the anchor is
+  // fills its the control set well since Task 6 removed the swatch wrapper, so the anchor is
   // the well's own box and the positioner's 6px offset is measured from it.
   const [well, popup] = await Promise.all([
     trigger.boundingBox(),

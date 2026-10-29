@@ -5,7 +5,7 @@ import { shortcutReferenceGroups } from "../shortcut-manager/reference.js";
 import { uiCopy } from "../ui-copy.js";
 
 /**
- * §7's reference, as a surface rather than as content.
+ * The reference, as a surface rather than as content.
  *
  * Every row comes from `shortcut-manager/reference.ts` and every word from
  * `uiCopy`, so this file owns layout and nothing else — the same reason

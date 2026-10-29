@@ -21,7 +21,7 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import { Glyph, KEYBOARD_GLYPH, PENCIL_GLYPH } from "./icons.js";
 
-/** The refusal as §9 requires it: the reason, in words, rendered in the row of
+/** The refusal as the refusal rule requires it: the reason, in words, rendered in the row of
  *  the binding it did not make. The words are `uiCopy`'s — this chooses which
  *  of them, and names the action a taken chord belongs to. */
 function refusalWords(
@@ -60,7 +60,7 @@ function chordFrom(
 }
 
 /**
- * §7's Keyboard tab: the reference the `?` sheet renders, with each row's chord
+ * The Keyboard tab: the reference the `?` sheet renders, with each row's chord
  * editable.
  *
  * The rows are `shortcutReferenceGroups()` — the same projection the sheet and
@@ -242,12 +242,12 @@ export function SettingsKeyboard(props: {
                     {uiCopy.settings.keyboardReset}
                   </button>
                 </dd>
-                {/* §9's refusal, **in the armed row**. It used to be one node at
+                {/* The refusal, **in the armed row**. It used to be one node at
                     the tab's foot, which on a table this long sits twenty
                     scrollable rows away from the very row the author is on: a
                     refusal they cannot see is a refusal not stated. The row is
                     the one that armed, has focus and is on screen, so the
-                    sentence lands where §9 says it does. Only the armed row
+                    sentence lands where the refusal rule says it does. Only the armed row
                     carries it — a refusal exists only while a row is listening
                     — and the node is present while armed even when empty, so a
                     screen reader hears the alert when it fills. */}

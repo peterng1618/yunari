@@ -34,7 +34,7 @@ describe("parseArgs", () => {
     });
   });
 
-  it("is loopback by default, not a wildcard bind (§7)", () => {
+  it("is loopback by default, not a wildcard bind", () => {
     const result = run();
 
     expect(result).toMatchObject({ options: { host: "127.0.0.1" } });

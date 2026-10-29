@@ -142,7 +142,7 @@ const MODIFIED_KEY_DEFERRED_ACTION_IDS: ReadonlySet<ProductShortcutId> =
  *
  *  A capture asks this, because a modifier-less letter bound to an action that
  *  does *not* defer would make that action stop reaching the author while they
- *  type — the opposite of what the action promises, and a §2.3 behaviour change
+ *  type — the opposite of what the action promises, and a missing-reading rule behaviour change
  *  dressed as a preference. */
 export function defersToTextEntry(action: ProductShortcutId): boolean {
   if (MODIFIED_KEY_DEFERRED_ACTION_IDS.has(action)) return true;
@@ -321,7 +321,7 @@ function consumesKey(
 /**
  * The distinct actions the table binds, in the table's own order.
  *
- * §7's reference is a list of *actions*, so the four actions bound twice
+ * The reference is a list of *actions*, so the four actions bound twice
  * (`edit.redo`, `edit.delete`, `canvas.front`, `canvas.back`) appear once — the
  * second chord is a property of the action, not a second row. The order is the
  * table's rather than sorted, because the table is grouped by where the action

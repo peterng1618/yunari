@@ -105,7 +105,7 @@ export interface ItemSource {
  * One callback rather than four props, and rather than an `onOpen`: the cell
  * draws four actions, so a callback per action would be four props a caller can
  * half-wire, and an `onOpen` alone cannot express the other three. The plan's
- * Step 3 requires all four, and the drawing's facts band carries all four.
+ * Step 3 requires all four, and the facts band carries all four.
  */
 export type CellAction = "open" | "assign" | "export" | "delete";
 
@@ -155,7 +155,7 @@ export function localThemeSource(client: ThemeLibraryClient): ItemSource {
 type FacetMatcher = (item: StoreItem, chosen: readonly string[]) => boolean;
 
 /**
- * Shape's three groups, in the order the drawing's Shape popover offers them.
+ * Shape's three groups, in the order the Shape popover offers them.
  * Each is read off the item's own record, so a group's reading and the value a
  * person chooses come from one vocabulary.
  */

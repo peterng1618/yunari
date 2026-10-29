@@ -370,7 +370,7 @@ describe("panel fields in the selection inspector", () => {
     const track = field<HTMLInputElement>("[data-yunari-panel-radius]");
     expect(track.max).toBe("100");
 
-    // A draft past the bound is kept with its reason rather than clamped (§5),
+    // A draft past the bound is kept with its reason rather than clamped,
     // which is the rule every other bounded number in the column keeps.
     rect.set({ rx: 8, ry: 8 });
     const well = field<HTMLInputElement>("[data-yunari-panel-radius-well]");
@@ -403,7 +403,7 @@ describe("panel fields in the selection inspector", () => {
     await edit(width, "-4");
 
     // The field refuses the draft with its reason rather than clamping it: the
-    // track cannot reach below zero either, and §5's validation belongs to the
+    // track cannot reach below zero either, and the validation belongs to the
     // one number control, which says why rather than coercing.
     expect(rect.get("strokeWidth")).toBe(before);
     expect(history.saveState).not.toHaveBeenCalled();
@@ -952,7 +952,7 @@ describe("a shape whose geometry the author retypes", () => {
    * Measured on the surface while drawing the device icons: a path sized to
    * 28 × 28 and then given 14 × 14 of new data drew **1 × 3 units**. Its
    * commands are absolute coordinates in its own space, so the scale the
-   * earlier size wrote belonged to a drawing that no longer exists — and
+   * earlier size wrote belonged to a surface that no longer exists — and
    * insert-then-size-then-draw is the order every icon in a dashboard is built
    * in.
    */

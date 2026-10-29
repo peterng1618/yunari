@@ -199,7 +199,7 @@ export function GradientEditor({
             style={{
               left: `${stop.offset * 100}%`,
               background: stop.color,
-              // §4's boundary role, not a shadow: the 1px spread separates the
+              // The boundary role, not a shadow: the 1px spread separates the
               // dot from the track beneath it, which is separation rather than
               // altitude (`--elev-*` are offset-and-blur depths).
               boxShadow: "0 0 0 1px var(--edge)",

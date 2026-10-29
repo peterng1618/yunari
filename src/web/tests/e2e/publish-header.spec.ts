@@ -132,7 +132,7 @@ test.describe("the header's publish surface", () => {
 
     await page.goto(`${HOST}/editor/`);
 
-    // The bar's control opens the surface; the host switch is inside it (§7.1
+    // The bar's control opens the surface; the host switch is inside it (the header rule
     // puts the facts behind the press, and F1 puts the switch with them: a
     // press that only meant "where is the address" must not stop a session).
     const publish = page.locator("[data-yunari-publish]");

@@ -55,16 +55,15 @@ function rect(
 /**
  * The card, and the only place that says a panel is made of glass.
  *
- * The box and the outline are measured off the reference theme, not chosen: its
- * card border occupies two pixels and first appears ten pixels in from the
- * top-left corner on both axes. The outline token is already the right value —
- * a translucent cool line of that alpha composites to about the border the
- * reference shows.
+ * The box and the outline are the starter theme's own: its card border occupies
+ * two pixels and first appears ten pixels in from the top-left corner on both
+ * axes. The outline token is already the right value — a translucent cool line
+ * of that alpha composites to about that border.
  *
  * The fill is `frost` and the treatment is what makes the panel transmit what
  * is behind it, because at `panel`'s 85 % alpha a blur is a blur of nothing.
  * The authored radius is the one the theme's cards share, and it is inside both
- * the published bound of 48 and Task 1's measured-flat 0-64 px band.
+ * the published bound of 48 and the theme's flat-blur band (0-64 px).
  */
 const FROST_RADIUS = 40;
 

@@ -100,7 +100,7 @@ it("carries the settings gear at the foot, and it is not a slot", () => {
 
   // The gear is on the rail and not one of the slots: it has no
   // `aria-pressed`, because it chooses nothing, and it carries no `data-rail-slot`,
-  // because the slot enumeration must not grow to include it (§3.2). It is named
+  // because the slot enumeration must not grow to include it. It is named
   // by the modal it opens, not by a slot word.
   expect(gear(host).getAttribute("aria-label")).toBe(uiCopy.settings.title);
   expect(gear(host).hasAttribute("aria-pressed")).toBe(false);

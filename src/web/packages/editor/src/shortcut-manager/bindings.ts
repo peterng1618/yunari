@@ -32,7 +32,7 @@ export type ShortcutOverrides = Readonly<
  *
  *  Structured rather than worded: every word in the product is `uiCopy`'s, and
  *  a reason carrying its own sentence would be a second copy table — the one
- *  thing §9's refusal rule cannot survive. `taken` names the action so the
+ *  thing the refusal rule cannot survive. `taken` names the action so the
  *  sentence can say *whose* chord it is, and `reserved` carries the chord as
  *  `display.ts` prints it — the whole chord, `Ctrl+R`, and not the bare key: it
  *  is the chord the browser keeps, and naming `R` alone would say the browser

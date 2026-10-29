@@ -8,7 +8,7 @@ import { uiCopy } from "../ui-copy.js";
 import type { FacetSelection } from "./local-source.js";
 
 /** One value a facet offers: what it is called, how many themes carry it, and
- *  **the group it is filed under**, where the drawing draws one. The group is
+ *  **the group it is filed under**, where the surface draws one. The group is
  *  the same kind of value `ControlOption.group` is, and the runs are read the
  *  same way (`control-select.tsx`). */
 export interface FacetOption {
@@ -19,7 +19,7 @@ export interface FacetOption {
 }
 
 /** One facet of the row: its own name, the sentence its popover says above the
- *  options where the drawing draws one, and the values it offers. */
+ *  options where the surface draws one, and the values it offers. */
 export interface Facet {
   readonly id: string;
   readonly name: string;
@@ -52,7 +52,7 @@ export function toggleFacet(
 }
 
 /** The ids one facet's controls carry, derived from the facet and the value the
- *  way `useControlIds` derives one from a control — §5 rule 5 wants every
+ *  way `useControlIds` derives one from a control — the control-id rule wants every
  *  control to have one, and a facet's values are the record's, so the id cannot
  *  be minted from a counter that would move with the catalogue. */
 const facetTriggerId = (facetId: string): string =>
@@ -68,7 +68,7 @@ const facetTriggerId = (facetId: string): string =>
  */
 const RUN_CLASSES = "flex flex-col gap-[var(--space-4)]";
 
-/** §2's eyebrow, over a run's rows. */
+/** The eyebrow, over a run's rows. */
 const RUN_HEADING_CLASSES =
   "px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-2)] text-2xs font-semibold tracking-[0.11em] text-faint uppercase";
 
@@ -76,12 +76,12 @@ const facetOptionId = (facetId: string, optionId: string): string =>
   `${facetTriggerId(facetId)}-${optionId}`;
 
 /**
- * §5's **well with chevron**, and its count: a facet's trigger says what it
+ * The **well with chevron**, and its count: a facet's trigger says what it
  * filters by and how many values are chosen behind it, so the author reads what
  * the row is doing without opening five popovers.
  *
  * The count is only drawn when there is one. A facet with nothing chosen says
- * nothing rather than `0`, which §9 forbids as a fabricated reading — and a
+ * nothing rather than `0`, which the refusal rule forbids as a fabricated reading — and a
  * literal zero here would also be indistinguishable from a facet whose count
  * has not been derived yet.
  */
@@ -97,7 +97,7 @@ function FacetButton(props: {
     <Popover.Root>
       {/* The trigger is the well the control set already draws, with the
           chevron `ControlSelect` puts in its own: one idiom for "opens a list".
-          The open state raises the resting `--edge` to `--muted`, which is §5
+          The open state raises the resting `--edge` to `--muted`, which is the control set
           rule 6's hover treatment on a control that carries a border — a
           pointer and a keyboard user see the same mark. */}
       <Popover.Trigger
@@ -126,7 +126,7 @@ function FacetButton(props: {
             data-yunari-facet-popup={facet.id}
             className="flex max-h-[var(--available-height)] w-[16rem] flex-col gap-[var(--space-4)] overflow-y-auto rounded-xl border border-edge bg-panel p-[var(--space-8)] shadow-[var(--elev-2)]"
           >
-            {/* The sentence the drawing puts above the groups, where the facet
+            {/* The sentence the surface puts above the groups, where the facet
                 has one. It is the facet's own data rather than a Shape special
                 case: what makes Shape's groups worth labelling is that every one
                 of them has to hold, and a facet whose values are alternatives
@@ -140,10 +140,10 @@ function FacetButton(props: {
               </p>
             )}
             {/* **The groups are drawn, not flattened**: each run of values
-                sharing a group takes §2's eyebrow as its
+                sharing a group takes the eyebrow as its
                 heading, and a value filed under nothing — a sensor whose key
                 this build does not know — is drawn under no heading rather than
-                under an invented one (§9). The runs come from the select's own
+                under an invented one. The runs come from the select's own
                 rule, so the two lists cannot group differently.
 
                 **One wrapper for both branches, so grouping adds a heading and
@@ -189,7 +189,7 @@ function FacetButton(props: {
  * The design's **checkbox choice row**: the choice row's geometry and its
  * chosen treatment, with a checkbox in place of the radio and no group owning
  * one checked bit — a facet is a set you may choose *several* of, which is why
- * §5's rule 7 (a radio in one labelled `radiogroup`) is not this control's shape.
+ * The rule 7 (a radio in one labelled `radiogroup`) is not this control's shape.
  *
  * The row is the whole target, the box is decoration beside its own name, and
  * the count is the number of themes behind the value: the author chooses by how
@@ -234,7 +234,7 @@ function FacetOptionRow(props: {
 
 /**
  * The store's facet row: one well-with-chevron per facet, each opening a
- * popover of §5's checkbox choice rows.
+ * popover of the checkbox choice rows.
  *
  * **It draws the values it is given and derives none.** The values come from
  * the items — A.3's record is what a theme's facets are read off — so this row

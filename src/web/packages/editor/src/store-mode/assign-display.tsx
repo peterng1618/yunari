@@ -28,7 +28,7 @@ function reason(error: unknown): string {
 }
 
 /**
- * The display choice a cell's **Assign to display** opens: §5's select, whose
+ * The display choice a cell's **Assign to display** opens: the select, whose
  * value is the display a theme is put on.
  *
  * **The list is the host's answer, read when the choice opens and kept

@@ -33,7 +33,7 @@ const PANELS = ["Theme settings", "Paint tokens", "Type tokens"];
  *  old chooser is gone with the field set it browsed, so `[data-yunari-palette-token]`
  *  is not named here: there is no such control to name. */
 const PAINT_CONTROLS = [
-  // A solid token's one colour control is the picker's trigger in its §5 well;
+  // A solid token's one colour control is the picker's trigger in its the control set well;
   // the exact-value field is inside the picker's popover, which the audit does
   // not open — the trigger is what an author meets first.
   "[data-yunari-palette-name]",
@@ -107,7 +107,7 @@ const BACKGROUND_CONTROLS = [
   "[data-yunari-background-flip-y]",
 ];
 
-/** §7's Appearance tab, which is not one of the three panels either.
+/** The Appearance tab, which is not one of the three panels either.
  *
  *  This entry is the audit following a control rather than widening its
  *  contract. It was the header's palette chip, which lost its name when the

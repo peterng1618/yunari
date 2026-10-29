@@ -249,7 +249,7 @@ export function AssetFinder({
   /** The Colours tab's kind filter. A palette and a gradient are different
    *  presets, so a question about one must not be answered with the other. */
   const [presetFilter, setPresetFilter] = useState<KindFilter>("all");
-  /** The hosts the first host-contacting search reached, shown once (§5).
+  /** The hosts the first host-contacting search reached, shown once.
    *  A search that reached none is not the disclosure: a person is told before
    *  the term leaves, not after. */
   const [notice, setNotice] = useState<string | undefined>(undefined);

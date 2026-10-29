@@ -1,7 +1,7 @@
 import type * as React from "react";
 
 /**
- * One section of the Host mode: §2's eyebrow, the sentence that says what it is,
+ * One section of the Host mode: the eyebrow, the sentence that says what it is,
  * and the rows. Not `InspectorSection` — that one is a disclosure whose header
  * is a button, and none of these sections collapses.
  *

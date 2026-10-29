@@ -105,7 +105,7 @@ export function DisplaySwitch({
   const percent = `${Math.round(zoom * 100)}%`;
 
   return (
-    // §7.5's top-right corner, as one floating cluster. The readout is the
+    // The top-right corner, as one floating cluster. The readout is the
     // cluster's control and its own treatment lives on the cluster, so a reader
     // of the cluster's computed style (`shell-appearance.spec.ts`) sees the
     // surface the author sees. The chooser stays a portal, so the cluster holds

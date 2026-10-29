@@ -19,7 +19,7 @@ import {
  * on the focus target, which is what the row's `<label for>` names.
  *
  * The 26×14 pill is the *paint*; the target is the 24×24 `hitTargetClasses`
- * carries, because §5's dense-chrome rule is about what can be hit, not what
+ * carries, because the dense-chrome rule is about what can be hit, not what
  * is drawn.
  *
  * Hover raises the resting `--edge` to `--muted`, but only
@@ -30,7 +30,7 @@ export function ControlToggle(
   props: ControlProps & {
     readonly checked: boolean;
     readonly onChange: (value: boolean) => void;
-    /** The row's shape, where the surface's drawing draws this switch as
+    /** The row's shape, where the surface draws this switch as
      *  something other than the inspector's labelled row — the settings modal
      *  draws it `boxed`. */
     readonly shape?: ControlShape;

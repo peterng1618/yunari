@@ -103,7 +103,7 @@ export interface SettingsSectionDefinition {
  * The four questions, ordered — **the one place section order is decided**.
  *
  * Position and Layer stay separate because moving a thing and scaling it are
- * different mistakes (§4). A field's own place inside its section is its order
+ * different mistakes. A field's own place inside its section is its order
  * in the family array below, so this list orders the sections and nothing else.
  *
  * It carried a fifth, `spends`, until item 17 removed the read-only section that

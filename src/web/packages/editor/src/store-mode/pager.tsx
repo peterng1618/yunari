@@ -22,7 +22,7 @@ import { uiCopy } from "../ui-copy.js";
  * one** for the same reason: it lives where the filter is applied rather than
  * here, so the pager cannot hold a page number a filter has invalidated.
  *
- * The bar is the drawing's own: a 12px gap, 8px over 16px of padding, and a 1px
+ * The bar is its own: a 12px gap, 8px over 16px of padding, and a 1px
  * `--edge` above it.
  */
 
@@ -105,11 +105,11 @@ export function pageNumbers(
   return shown;
 }
 
-/** One numeral: §5's icon button carrying the page's own number.
+/** One numeral: the icon button carrying the page's own number.
  *
  *  The page in force takes the chosen treatment every other chosen thing in this
  *  store takes — the raised `--stage` behind a `--text` numeral, never an accent
- *  fill (§4). Its name is the table's, because a bare `6` is announced as a
+ *  fill. Its name is the table's, because a bare `6` is announced as a
  *  number and says nothing about what pressing it does. */
 function PageNumber(props: {
   readonly page: number;
@@ -136,7 +136,7 @@ function PageNumber(props: {
   );
 }
 
-/** The mark a skipped run leaves: the drawing's ellipsis, in a numeral's own box
+/** The mark a skipped run leaves: the ellipsis, in a numeral's own box
  *  so the row's rhythm does not shift where pages are missing. It is decoration
  *  — the numbers either side say which run is skipped — so it is not read. */
 function PageGap(): React.JSX.Element {
@@ -165,12 +165,12 @@ export function Pager(props: {
       data-yunari-store-pager=""
       className="flex flex-none items-center gap-[var(--space-12)] border-t border-edge px-[var(--space-16)] py-[var(--space-8)]"
     >
-      {/* §5's select, and the drawing's 76px well. **The label sits beside the
-          well rather than above it**, which is what the drawing draws and what
-          the browser measures: the row is §5's 74px label column, §3's 8px gap
+      {/* The select, and the 76px well. **The label sits beside the
+          well rather than above it**, which is what the surface draws and what
+          the browser measures: the row is the 74px label column, the 8px gap
           and the 76px well — 158px, the three values each already fixed, and the
           one width this row needs rather than a 76px column that wraps the well
-          to a second line and makes the bar 61px against the drawing's 43. */}
+          to a second line and makes the bar 61px against the 43. */}
       <span data-yunari-store-page-row="" className="w-[158px] flex-none">
         <ControlSelect
           id={PAGE_SIZE_ID}

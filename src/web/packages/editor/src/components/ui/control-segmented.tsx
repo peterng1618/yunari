@@ -21,7 +21,7 @@ import {
  * press, so the reason stays readable where a disabled group would take it out
  * of the tab order.
  *
- * Each label is a target in its own right, so each carries §5's 24×24 hit area
+ * Each label is a target in its own right, so each carries the 24×24 hit area
  * through `hitTargetClasses`; the label's own box is 22px tall, and the rows'
  * 4px gap keeps the two expanded targets from meeting.
  *

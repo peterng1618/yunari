@@ -160,7 +160,7 @@ function expressionLiterals(text, openBrace) {
 
 /**
  * class -> Set of the production files that write it, for every whole literal.
- * Only PRODUCT: a test, a script or a drawing writing a class is not the product
+ * Only PRODUCT: a test or a script writing a class is not the product
  * applying it, and reading them makes this script's own fixtures findings.
  */
 function classWrites(root, files) {

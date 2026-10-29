@@ -1312,7 +1312,7 @@ describe("the column's sections", () => {
     // ask and none of them stands a header over nothing. **An inspector may be
     // empty**: until item 17 removed the read-only section, a locked object kept
     // one and this column never showed zero sections, so the empty answer is the
-    // one §7.4's rule and the removed section together produce. The lead block
+    // one the rule and the removed section together produce. The lead block
     // above the sections still names the lock.
     expect(locked.get("locked")).toBe(true);
     expect(host.querySelector("[data-yunari-locked]")).not.toBeNull();

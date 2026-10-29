@@ -33,7 +33,7 @@ export function systemShellPalette(prefersDark: boolean): ShellPalette {
 
 /** The palette in force: the author's choice, or what the OS asks for.
  *
- *  One rule, and it is the whole of §9's "the palette picker as an explicit
+ *  One rule, and it is the whole of the "the palette picker as an explicit
  *  override": a choice is never overridden by the OS. */
 export function resolveShellPalette(
   choice: ShellPalette | undefined,

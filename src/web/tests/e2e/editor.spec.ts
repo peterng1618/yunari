@@ -4804,7 +4804,7 @@ test.describe("Fabric editor route", () => {
     // entry set — and since `vg-463` it is not in the toolbar to leak from.
     expect(itemNames).not.toContain("Align left");
 
-    // §4's mark has to **paint**, not merely be present. `vg-226`'s failure was
+    // The mark has to **paint**, not merely be present. `vg-226`'s failure was
     // exactly that gap: both surfaces carried `data-yunari-destructive` and only
     // the dock resolved to `--hot`, because the colour came from a rule scoped to
     // the dock and the popup is portalled outside it. No vitest case can settle
@@ -4837,7 +4837,7 @@ test.describe("Fabric editor route", () => {
     ).not.toBeNull();
     expect(
       colours.menuDelete,
-      "Delete is §4's `--hot` in the dock and ordinary in the canvas menu",
+      "Delete is the `--hot` in the dock and ordinary in the canvas menu",
     ).toBe(colours.dockDelete);
     expect(
       colours.footerDelete,
@@ -5701,7 +5701,7 @@ async function clientOfStarterGauge(
 /**
  * Selects the RAM card's gauge, by entering the card and picking its row.
  *
- * **Two gestures, because they are two** (§3): a click *selects*
+ * **Two gestures, because they are two**: a click *selects*
  * and gives the card's settings; entering gives the parts. The RAM gauge is a
  * part, so it is reached by entering — `bridge.selectLayer` takes
  * `owner ?? target`, so with the card merely open a click on the gauge's row

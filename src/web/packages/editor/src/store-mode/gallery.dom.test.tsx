@@ -7,11 +7,11 @@
  * brief's rulings add: the picture a theme does not have is dropped rather than
  * left broken and a replaced address draws again, the two actions a build runs
  * travel through the one `onAction` callback while the two it does not are drawn
- * disabled and say why (R164), and the byline is the drawing's.
+ * disabled and say why (R164), and the byline is fixed.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
  * grid's `272px` minimum and the picture's `2/1` are declarations read off the
- * class list rather than a reflow; the drawing fixes them and DESIGN.md's Layout
+ * class list rather than a reflow; the layout fixes them and DESIGN.md's Layout
  * section carries the minimum. Nothing mounts this gallery until A.6 wires it
  * into the region, so there is no page to inspect in a browser and no browser
  * case here.
@@ -341,7 +341,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
  * The four actions are drawn, the two a build runs report through the one
  * callback, and **the two it does not run are not actionable** (R164).
  *
- * The drawing gives every cell four actions, so all four stay drawn; the two no
+ * The surface gives every cell four actions, so all four stay drawn; the two no
  * phase owns are disabled and state why, because a control that looks live and
  * answers a press with nothing is the defect the ruling answers. The cell draws
  * four, so `onAction` carries which one as well as which item — the plan's
@@ -378,7 +378,7 @@ it("draws its four actions, runs the two it has and disables the two it has not"
   const buttons = actions.map(actionButton);
   expect(
     buttons.map((button) => button.getAttribute("aria-label")),
-    "the cell does not name its four actions in the drawing's order",
+    "the cell does not name its four actions in the order",
   ).toEqual([
     uiCopy.store.cell.actions.open,
     uiCopy.store.cell.actions.assign,
@@ -419,11 +419,11 @@ it("draws its four actions, runs the two it has and disables the two it has not"
 
 /**
  * **The cell's own surface is what opens the item's**, and it is not one of the
- * four actions: the drawing's facts band draws those, and `open` among them
+ * four actions: the facts band draws those, and `open` among them
  * names the library operation its own label prints.
  *
  * It is a button rather than a handler on the `li`, because a cell a person can
- * only reach with a mouse is a control the keyboard cannot use (§5's keyboard
+ * only reach with a mouse is a control the keyboard cannot use (the keyboard
  * section), and a click on one of the four actions must not also open the item.
  */
 it("opens the item from the cell's own surface rather than from an action", async () => {
@@ -462,11 +462,11 @@ it("opens the item from the cell's own surface rather than from an action", asyn
 });
 
 /**
- * The byline is the drawing's mono line: the author with the `@`, the date, and
+ * The byline is the mono line: the author with the `@`, the date, and
  * *No author* where the document declares none — a fact about the theme rather
  * than a missing reading.
  */
-it("writes the byline the drawing draws, and says so when there is no author", async () => {
+it("writes the byline the surface draws, and says so when there is no author", async () => {
   const container = await mount(
     <Gallery
       items={[
@@ -500,11 +500,11 @@ it("writes the byline the drawing draws, and says so when there is no author", a
  * case that never drew anything — a cell badging every theme, or one badging
  * none, fails here either way.
  *
- * **The query is scoped to the facts band**, because the band is the drawing's
+ * **The query is scoped to the facts band**, because the band is the
  * whole reason for the badge's position: beside the name it would make this
  * half's cells taller than the online half's, and the cell is one cell shared by
  * both halves. A badge that merely exists somewhere in the cell is not the
- * drawing's badge.
+ * badge.
  *
  * **The word is the local half's own**, *From the store*, and not the online
  * half's *Installed*: `uiCopy.store.fromStore` carries why.
@@ -522,7 +522,7 @@ it("badges the cell whose theme came from the store, and leaves the other unbadg
     />,
   );
 
-  /** One cell's facts band, which is where the drawing puts the badge. */
+  /** One cell's facts band, which is where the surface puts the badge. */
   function band(id: string): HTMLElement {
     return must(
       container.querySelector<HTMLElement>(
@@ -550,11 +550,11 @@ it("badges the cell whose theme came from the store, and leaves the other unbadg
 });
 
 /**
- * **The online half's left slot is the drawing's, in the same band**: the kind
+ * **The online half's left slot is fixed, in the same band**: the kind
  * badge and the download count. The count is pinned as the
  * literal `1,204` because the thousands separator is the assertion — a bare
  * `1204` would pass on any locale and is what the red proof breaks — and the
- * badge as the drawing's `Theme`, which is also the copy case's value.
+ * badge as the `Theme`, which is also the copy case's value.
  *
  * The second cell is mounted in the same pass, so the absence of both is a
  * reading of that cell rather than a case that never drew anything: an item
@@ -592,7 +592,7 @@ it("draws the kind badge and the download count for an online item, and neither 
       ),
       "kind badge",
     ).textContent,
-    "the badge is not the drawing's word for the kind",
+    "the badge is not the word for the kind",
   ).toBe("Theme");
   const downloads = must(
     band("living-room").querySelector<HTMLElement>(
@@ -602,7 +602,7 @@ it("draws the kind badge and the download count for an online item, and neither 
   );
   expect(
     visibleText(downloads),
-    "the count is not the drawing's thousand-separated reading",
+    "the count is not the thousand-separated reading",
   ).toBe("1,204");
   // The figure is visible and its noun is read — see `uiCopy.store.counts` —
   // so the composed reading is figure, one space, noun.
@@ -743,7 +743,7 @@ it("decides the install state from the catalogue and the item", () => {
 /**
  * **The installed state is a mark, not a control**: a check in `--accent` beside
  * the word in `--muted`, with no button, because there is nothing to do. A
- * disabled button here would be a control drawn where the drawing draws none.
+ * disabled button here would be a control drawn where the surface draws none.
  */
 it("marks an installed online item without drawing a control", async () => {
   const container = await mount(
@@ -766,11 +766,11 @@ it("marks an installed online item without drawing a control", async () => {
   );
   expect(
     mark.textContent,
-    "the mark is not the drawing's word for an installed item",
+    "the mark is not the word for an installed item",
   ).toBe(uiCopy.store.cell.installStates.installed);
   expect(
     mark.className,
-    "the mark's word is not drawn in the drawing's muted colour",
+    "the mark's word is not drawn in the muted colour",
   ).toContain("text-muted");
   expect(
     must(
@@ -789,8 +789,8 @@ it("marks an installed online item without drawing a control", async () => {
  * **Install and Update are controls that report a press** — phase D owns the
  * install, so the cell hands the item up rather than deciding anything here.
  *
- * The three states are read together: `installed` is the mark the drawing draws
- * and reports nothing, and the other two carry the drawing's words and reach
+ * The three states are read together: `installed` is the mark the surface draws
+ * and reports nothing, and the other two carry the words and reach
  * `onInstall` with the item whose control was pressed.
  */
 it("reports a press on Install and Update, and draws no control for an installed item", async () => {
@@ -829,7 +829,7 @@ it("reports a press on Install and Update, and draws no control for an installed
       `${state} action`,
     );
     expect(button.tagName, `${state} is not a control`).toBe("BUTTON");
-    expect(button.textContent, `${state} is not the drawing's word`).toBe(
+    expect(button.textContent, `${state} is not the word`).toBe(
       uiCopy.store.cell.installStates[state],
     );
     expect(button.disabled, `${state} is drawn live`).toBe(false);
@@ -855,7 +855,7 @@ it("reports a press on Install and Update, and draws no control for an installed
 
 /**
  * **A Mine row carries its state as a word after its name**, and the word is
- * the signal rather than a colour (§5). `pending` is drawn here; `published`
+ * the signal rather than a colour. `pending` is drawn here; `published`
  * draws none, because on the public surface being listed *is* the state.
  *
  * The band is read in the same case: a state is a fact about the author's own

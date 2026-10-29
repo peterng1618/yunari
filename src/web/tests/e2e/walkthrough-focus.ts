@@ -28,7 +28,7 @@ import type { Page } from "@playwright/test";
  *
  * **The box is the boundary, and it is why there are four and not six.** These
  * four are exactly `.editor-shell-body`'s children (`shell-layout.tsx`), and
- * §7's drawing puts the header and the status bar outside that box — the
+ * The drawing puts the header and the status bar outside that box — the
  * `<header>` before it and the `<footer id="status">` after it. A reader
  * counting the drawing's bands against this list is off by those two on
  * purpose, and the reason is the box rather than how the bands are used.

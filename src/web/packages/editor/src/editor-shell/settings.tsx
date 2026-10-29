@@ -75,7 +75,7 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
  *  (stroke-based, `currentColor`, on a 24px grid). The
  *  navigation column carries a glyph per row; its three are a palette, a
  *  keyboard and an info mark, all of which the installed set has, so no glyph
- *  is invented and §6 needs no addition. The
+ *  is invented and the icon set needs no addition. The
  *  word stays beside the glyph, so the tab's accessible name is the label. */
 const SETTINGS_TAB_GLYPHS: Readonly<Record<SettingsTab, LucideIcon>> = {
   appearance: PALETTE_GLYPH,
@@ -101,7 +101,7 @@ interface VersionFact {
 /** Each fact's label, by the id it renders under. One owner of "what this row
  *  is called": the release row keeps the Document pane's own word for that fact
  *  (`panels.releaseVersion`), reused rather than respelled so one fact keeps one
- *  word (§9). */
+ *  word. */
 const VERSION_FACT_LABELS: Readonly<Record<VersionFact["id"], string>> = {
   "product-version": uiCopy.settings.aboutProductVersion,
   "schema-version": uiCopy.settings.aboutSchemaVersion,
@@ -133,11 +133,11 @@ export function versionFacts(
   return facts;
 }
 
-/** §7's Appearance tab: the six shell palettes, and follow-the-system.
+/** The Appearance tab: the six shell palettes, and follow-the-system.
  *
  *  The six are **cards in one radio group** rather than a `Segmented`, which
  *  the design sizes at 2–4 labels: six lifted segments is a control the design
- *  does not draw. The group takes §5 rule 7's grid (`repeat(3,1fr)` of
+ *  does not draw. The group takes the grid (`repeat(3,1fr)` of
  *  `--radius-lg` cards), so the columns follow it; the group's own keyboard
  *  model still walks the six in reading order, and a narrower dialog changing
  *  the columns would not change the arrow keys.
@@ -218,7 +218,7 @@ function AppearanceTab({
             swatch={
               // Two bars, each resolving a role **of the palette this card
               // names** rather than of the one in force: the ground
-              // (§4's `--bg`, "the window behind everything") and the accent.
+              // (the `--bg`, "the window behind everything") and the accent.
               // The attribute is on each bar and not on the wrapper — a bar
               // that inherited it would be repainted by the baseline
               // declaration `.editor-shell-palette-swatch` carries, which is
@@ -258,7 +258,7 @@ function AppearanceTab({
   );
 }
 
-/** §7's Previews tab: the author-managed catalogue the display menu lists.
+/** The Previews tab: the author-managed catalogue the display menu lists.
  *
  *  **One row per stored token**, showing the lens ids that token derives — a
  *  row of `16:9` offers `16:9` and `9:16`, and Remove removes the token, not
@@ -283,7 +283,7 @@ function PreviewsTab({
   const tokens = activePreviewRatioTokens();
   const [shape, setShape] = useState<PreviewShape>("rect");
   const [draft, setDraft] = useState("");
-  /** Why the last Add did nothing, as §9 words it. `undefined` is "no refusal"
+  /** Why the last Add did nothing, as the refusal rule words it. `undefined` is "no refusal"
    *  and renders nothing — never an empty line standing in for one. */
   const [reason, setReason] = useState<string | undefined>(undefined);
 
@@ -427,7 +427,7 @@ function PreviewsTab({
         </button>
       </div>
       {reason === undefined ? null : (
-        // §9's refusal, announced the way the Keyboard tab's is: the node is
+        // The refusal, announced the way the Keyboard tab's is: the node is
         // an alert, so the sentence reaches a screen reader when Add refuses.
         <p className="text-sm" data-yunari-preview-ratio-reason="" role="alert">
           {reason}
@@ -442,7 +442,7 @@ function PreviewsTab({
   );
 }
 
-/** §7's About tab: what this editor is, and the version facts this build can
+/** The About tab: what this editor is, and the version facts this build can
  *  honestly read.
  *
  *  It renders `versionFacts` and nothing else, so the one rule it could break —
@@ -450,7 +450,7 @@ function PreviewsTab({
  *  The release version arrives as a prop because the fact is the shell's
  *  (`ThemeMetadata.version`), read once there and handed down: the tab reads no
  *  document, no store and no panel. Where a fact is absent the row is absent
- *  too — no `panels.notSet`, no dash that could read as a version (§9). */
+ *  too — no `panels.notSet`, no dash that could read as a version. */
 function AboutTab({
   releaseVersion,
 }: {
@@ -716,13 +716,13 @@ export function Settings(props: {
       closeLabel={uiCopy.settings.close}
     >
       <h2 className="editor-shell-dialog-lead">{uiCopy.settings.title}</h2>
-      {/* A **vertical** tablist: the drawing's navigation is a column beside the
-          panel, not a row of words above it. §5
+      {/* A **vertical** tablist: settings navigation is a column beside the
+          panel, not a row of words above it. The control set
           opens the control vocabulary — "The vocabulary is closed. A control is
-          one of these, or it is not a control." — and no *tab* is in it, so
-          DESIGN.md requires nothing about the axis, and the drawing is the
-          authority: "The mockup governs wherever the written rules are silent.
-          Silence is not permission — it is the drawing's jurisdiction." The
+          one of these, or it is not a control." — and no *tab* is in it, so the
+          written rules leave the axis open. The column is this surface's own
+          rule: it keeps the three rows beside the panel instead of adding a
+          second strip above it. The
           primitive stays Base UI's and only its orientation and treatment
           change; `orientation` is what points the arrow keys up and down the
           three rows rather than across. */}

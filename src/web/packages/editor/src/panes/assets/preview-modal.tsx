@@ -55,10 +55,10 @@ interface PillReading {
   readonly proposed: boolean;
 }
 
-/** One pill: the drawing's `--panel-2` inside a 1px edge at a full radius. A
- *  reading the package does not hold is dashed and muted — the drawing's mark
+/** One pill: the `--panel-2` inside a 1px edge at a full radius. A
+ *  reading the package does not hold is dashed and muted — the mark
  *  for `None recorded`. A long reading (a source URL, an attribution sentence)
- *  is one truncated line with the whole value on `title`: the drawing's pills
+ *  is one truncated line with the whole value on `title`: the pills
  *  are chips, and a three-line chip is not one. */
 function Pill({
   reading,
@@ -80,7 +80,7 @@ function Pill({
   );
 }
 
-/** §2's eyebrow over its pills. An empty group is not drawn: a heading over
+/** The eyebrow over its pills. An empty group is not drawn: a heading over
  *  nothing is a word that says nothing, which is what a video whose metadata
  *  has not arrived would otherwise leave on screen. */
 function PillGroup({

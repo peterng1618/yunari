@@ -108,7 +108,7 @@ export function newObjectName(
 export const NEW_PANEL_SIZE = { width: 360, height: 200 } as const;
 
 /**
- * A new panel's corner radius, measured off the reference theme rather than
+ * A new panel's corner radius, taken from the starter theme rather than
  * chosen: its card border first appears 10px in from the top-left corner on
  * both axes.
  */
