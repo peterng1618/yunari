@@ -329,7 +329,10 @@ export function mountBackgroundMedia(
     mountedAssetId = asset.id;
     layer.append(child);
 
-    const frame = media.fallbackFrame;
+    // A video with no declared still stands on its first frame: a static panel
+    // that has no picture paints nothing, and a glass card over a video would
+    // turn into a bare grey tint (observed on the TURZX panel 2026-10-29).
+    const frame = media.fallbackFrame ?? 0;
 
     if (child instanceof HTMLVideoElement) {
       child.addEventListener("error", () => {
@@ -337,21 +340,19 @@ export function mountBackgroundMedia(
         showFallback();
       });
 
-      if (frame !== undefined) {
-        // An autoplay refusal is a display without video, not an error: the
-        // still is what it shows instead.
-        void child.play()?.catch(() => {
-          failed = true;
-          showFallback();
-        });
-        stopFallback = extractFrame(child, frame, layer, (canvas) => {
-          if (element !== child) return;
-          fallback = canvas;
-          if (failed) showFallback();
-          // A static panel now has a picture where it had none.
-          onFrame?.();
-        });
-      }
+      // An autoplay refusal is a display without video, not an error: the
+      // still is what it shows instead.
+      void child.play()?.catch(() => {
+        failed = true;
+        showFallback();
+      });
+      stopFallback = extractFrame(child, frame, layer, (canvas) => {
+        if (element !== child) return;
+        fallback = canvas;
+        if (failed) showFallback();
+        // A static panel now has a picture where it had none.
+        onFrame?.();
+      });
     }
 
     // Whether anything follows the frames is the surface count's answer, not
@@ -447,10 +448,9 @@ export function mountBackgroundMedia(
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
         paint(ctx, region, device, sampling) {
-          // A static panel stands on the declared frame — the picture an image
-          // background or a paint would give it (`0135`). With none there is
-          // nothing static, so the layer paints nothing and the paint behind it
-          // shows through.
+          // A static panel stands on the declared frame — or the video's first
+          // frame when it declares none — the picture an image background or a
+          // paint would give it (`0135`).
           const drawSource: CanvasImageSource | undefined =
             sampling === "static" ? fallback : mounted;
           if (drawSource === undefined) return false;

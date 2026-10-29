@@ -29,87 +29,110 @@ const recordingContext = () => {
   };
 };
 
+/**
+ * jsdom decodes nothing, so the video's size, duration and seek are stated.
+ * `scheduled` holds the frame callbacks the sampler registers, `drawn` the
+ * frames the probe draws, and `time` the last seek — the frame it measured.
+ */
+function stubProbeMedia() {
+  const scheduled: ((now: number, meta: { mediaTime: number }) => void)[] = [];
+  const drawn: unknown[][] = [];
+  const restores: (() => void)[] = [];
+  let currentTime = 0;
+  const patch = (
+    target: object,
+    key: string,
+    descriptor: PropertyDescriptor,
+  ): void => {
+    const before = Object.getOwnPropertyDescriptor(target, key);
+    Object.defineProperty(target, key, descriptor);
+    restores.push(() => {
+      if (before === undefined) {
+        Reflect.deleteProperty(target, key);
+      } else {
+        Object.defineProperty(target, key, before);
+      }
+    });
+  };
+  patch(HTMLVideoElement.prototype, "requestVideoFrameCallback", {
+    configurable: true,
+    value: (callback: (now: number, meta: { mediaTime: number }) => void) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+  });
+  patch(HTMLVideoElement.prototype, "cancelVideoFrameCallback", {
+    configurable: true,
+    value: () => undefined,
+  });
+  patch(HTMLMediaElement.prototype, "play", {
+    configurable: true,
+    value: () => undefined,
+  });
+  patch(HTMLMediaElement.prototype, "pause", {
+    configurable: true,
+    value: () => undefined,
+  });
+  patch(HTMLVideoElement.prototype, "videoWidth", {
+    configurable: true,
+    get: () => 320,
+  });
+  patch(HTMLVideoElement.prototype, "videoHeight", {
+    configurable: true,
+    get: () => 180,
+  });
+  patch(HTMLMediaElement.prototype, "duration", {
+    configurable: true,
+    get: () => 10,
+  });
+  patch(HTMLMediaElement.prototype, "readyState", {
+    configurable: true,
+    get: () => 4,
+  });
+  patch(HTMLMediaElement.prototype, "currentTime", {
+    configurable: true,
+    get: () => currentTime,
+    set(this: HTMLMediaElement, value: number) {
+      currentTime = value;
+      this.dispatchEvent(new Event("seeked"));
+    },
+  });
+  patch(HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value: () => ({
+      drawImage: (...args: unknown[]) => {
+        drawn.push(args);
+      },
+    }),
+  });
+  patch(HTMLCanvasElement.prototype, "toDataURL", {
+    configurable: true,
+    value: () => "data:image/png;base64,AA",
+  });
+  return {
+    scheduled,
+    drawn,
+    time: () => currentTime,
+    restore: () => {
+      for (const restore of restores.reverse()) restore();
+    },
+  };
+}
+
+/** The probe reads the frame rate from two callbacks, then seeks to the frame. */
+const measureFrameRate = (media: ReturnType<typeof stubProbeMedia>): void => {
+  // The last callback is the probe's: without a sampler following the live
+  // video, it is also the only one.
+  media.scheduled.at(-1)?.(0, { mediaTime: 0 });
+  media.scheduled.at(-1)?.(0, { mediaTime: 1 / 25 });
+};
+
 describe("a video background's declared frame", () => {
   it("samples a video's declared frame and shows it when the video cannot play", () => {
     // 0135: a moving background is re-blurred for the glass on every frame.
     // The declared frame is the picture instead — measured, not assumed:
     // `currentTime = frame / fps`, with the fps taken from two callbacks.
-    const scheduled: ((now: number, meta: { mediaTime: number }) => void)[] =
-      [];
-    const drawn: unknown[][] = [];
-    let currentTime = 0;
-    const restores: (() => void)[] = [];
-    const patch = (
-      target: object,
-      key: string,
-      descriptor: PropertyDescriptor,
-    ): void => {
-      const before = Object.getOwnPropertyDescriptor(target, key);
-      Object.defineProperty(target, key, descriptor);
-      restores.push(() => {
-        if (before === undefined) {
-          Reflect.deleteProperty(target, key);
-        } else {
-          Object.defineProperty(target, key, before);
-        }
-      });
-    };
-    patch(HTMLVideoElement.prototype, "requestVideoFrameCallback", {
-      configurable: true,
-      value: (callback: (now: number, meta: { mediaTime: number }) => void) => {
-        scheduled.push(callback);
-        return scheduled.length;
-      },
-    });
-    patch(HTMLVideoElement.prototype, "cancelVideoFrameCallback", {
-      configurable: true,
-      value: () => undefined,
-    });
-    patch(HTMLMediaElement.prototype, "play", {
-      configurable: true,
-      value: () => undefined,
-    });
-    patch(HTMLMediaElement.prototype, "pause", {
-      configurable: true,
-      value: () => undefined,
-    });
-    patch(HTMLVideoElement.prototype, "videoWidth", {
-      configurable: true,
-      get: () => 320,
-    });
-    patch(HTMLVideoElement.prototype, "videoHeight", {
-      configurable: true,
-      get: () => 180,
-    });
-    patch(HTMLMediaElement.prototype, "duration", {
-      configurable: true,
-      get: () => 10,
-    });
-    patch(HTMLMediaElement.prototype, "readyState", {
-      configurable: true,
-      get: () => 4,
-    });
-    patch(HTMLMediaElement.prototype, "currentTime", {
-      configurable: true,
-      get: () => currentTime,
-      set(this: HTMLMediaElement, value: number) {
-        currentTime = value;
-        this.dispatchEvent(new Event("seeked"));
-      },
-    });
-    patch(HTMLCanvasElement.prototype, "getContext", {
-      configurable: true,
-      value: () => ({
-        drawImage: (...args: unknown[]) => {
-          drawn.push(args);
-        },
-      }),
-    });
-    patch(HTMLCanvasElement.prototype, "toDataURL", {
-      configurable: true,
-      value: () => "data:image/png;base64,AA",
-    });
-
+    const media = stubProbeMedia();
     try {
       const host = document.createElement("div");
       let frames = 0;
@@ -127,7 +150,7 @@ describe("a video background's declared frame", () => {
       });
       // The still is only read when a panel asks for it, so the video's own
       // frames are still followed until the scene says nothing is sampling.
-      expect(scheduled, "the live picture is followed").toHaveLength(1);
+      expect(media.scheduled, "the live picture is followed").toHaveLength(1);
 
       const videos = host.querySelectorAll("video");
       const probe = videos[videos.length - 1];
@@ -135,15 +158,19 @@ describe("a video background's declared frame", () => {
       expect(probe, "a probe element reads the frame").not.toBe(videos[0]);
 
       probe?.dispatchEvent(new Event("loadedmetadata"));
-      expect(scheduled, "the probe measures the frame rate").toHaveLength(2);
-      scheduled[1]?.(0, { mediaTime: 0 });
-      scheduled[2]?.(0, { mediaTime: 1 / 25 });
+      expect(media.scheduled, "the probe measures the frame rate").toHaveLength(
+        2,
+      );
+      measureFrameRate(media);
 
       // Frame 12 at the measured 25 fps.
-      expect(currentTime).toBeCloseTo(0.48, 3);
-      expect(drawn, "the probe's frame is drawn once").toHaveLength(1);
-      expect(drawn[0]?.[0]).toBe(probe);
-      expect((drawn[0]?.[3] as number) ?? 0, "capped, not full size").toBe(320);
+      expect(media.time()).toBeCloseTo(0.48, 3);
+      expect(media.drawn, "the probe's frame is drawn once").toHaveLength(1);
+      expect(media.drawn[0]?.[0]).toBe(probe);
+      expect(
+        (media.drawn[0]?.[3] as number) ?? 0,
+        "capped, not full size",
+      ).toBe(320);
       expect(frames, "the sampler is told it has a picture").toBe(1);
       expect(probe?.isConnected, "the probe is released").toBe(false);
 
@@ -166,40 +193,47 @@ describe("a video background's declared frame", () => {
       expect(host.querySelector("img")?.src).toBe("data:image/png;base64,AA");
       handle.destroy();
     } finally {
-      for (const restore of restores.reverse()) restore();
+      media.restore();
     }
   });
 
-  it("paints the paint, not the video, for a static panel with no declared frame", () => {
-    // Static means the picture an image background or a paint would give: with
-    // no frame declared there is no still, so the video is not a stand-in.
-    const host = document.createElement("div");
-    const handle = mountBackgroundMedia({
-      host,
-      background: { media: { assetId: "loop", bounds: "theme" } },
-      artboard: ARTBOARD,
-      assets: [LOOP],
-      resolveAsset: () => ({ url: "blob:loop" }),
-    });
-    const video = host.querySelector("video");
-    if (video === null) throw new Error("the layer mounted no video");
-    // jsdom decodes nothing, so the size and the decoded frame are stated.
-    Object.defineProperty(video, "videoWidth", { value: 400 });
-    Object.defineProperty(video, "videoHeight", { value: 200 });
-    Object.defineProperty(video, "readyState", { value: 4 });
+  it("stands a video with no declared frame on its first frame", () => {
+    // A static panel with no picture paints nothing, and glass over a video
+    // becomes a bare grey tint (seen on the TURZX panel, 2026-10-29). With no
+    // frame authored, frame 0 is the still.
+    const media = stubProbeMedia();
+    try {
+      const host = document.createElement("div");
+      const handle = mountBackgroundMedia({
+        host,
+        background: { media: { assetId: "loop", bounds: "theme" } },
+        artboard: ARTBOARD,
+        assets: [LOOP],
+        resolveAsset: () => ({ url: "blob:loop" }),
+      });
+      const videos = host.querySelectorAll("video");
+      const probe = videos[videos.length - 1];
+      probe?.dispatchEvent(new Event("loadedmetadata"));
+      measureFrameRate(media);
 
-    const device = { left: 0, top: 0, width: 400, height: 200 };
-    const live = recordingContext();
-    expect(handle.backdrop()?.paint(live.ctx, device, device, "dynamic")).toBe(
-      true,
-    );
-    expect(live.calls[0]?.[0]).toBe(video);
+      expect(media.time(), "the first frame, not a later one").toBeCloseTo(
+        0,
+        3,
+      );
+      expect(media.drawn, "the probe's frame is drawn once").toHaveLength(1);
 
-    const still = recordingContext();
-    expect(handle.backdrop()?.paint(still.ctx, device, device, "static")).toBe(
-      false,
-    );
-    expect(still.calls, "nothing static to show").toHaveLength(0);
-    handle.destroy();
+      const { calls, ctx } = recordingContext();
+      const device = { left: 0, top: 0, width: 400, height: 200 };
+      expect(handle.backdrop()?.paint(ctx, device, device, "static")).toBe(
+        true,
+      );
+      expect(calls[0]?.[0], "the glass reads the still").toBeInstanceOf(
+        HTMLCanvasElement,
+      );
+      expect(calls[0]?.[0]).not.toBe(videos[0]);
+      handle.destroy();
+    } finally {
+      media.restore();
+    }
   });
 });
