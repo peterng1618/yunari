@@ -7,8 +7,8 @@ import path from "node:path";
 /**
  * Moving a theme to the operating system's trash, which is the recovery the
  * delete is built on: a theme is a folder of authored work on disk (ADR-0017),
- * so removing it is not a cleanup. See `docs/decisions/0021` for the searches
- * behind each route and why nothing here is `fs.rm`.
+ * so removing it is not a cleanup. The searches behind each route are why
+ * nothing here is `fs.rm`.
  *
  * Node has no trash API at any version — `fs.trash` and `fsPromises.trash` are
  * both `undefined` on Node 24 — and the host takes no runtime dependency

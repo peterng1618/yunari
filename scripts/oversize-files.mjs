@@ -25,7 +25,7 @@
  * Exit 0 = nothing over the stop that the ceiling does not name. Exit 1 = an
  * addition. Exit 2 = the ceiling cannot be read, or the run could not complete:
  * a ratchet that fails open on its own breakage reports green over an unchecked
- * tree, so this one does not. See docs/decisions/0065.
+ * tree, so this one does not.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

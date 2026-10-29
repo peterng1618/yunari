@@ -1100,7 +1100,7 @@ export function createThemeStore(
      *
      * A theme is a folder of authored work (ADR-0017), so this is the one
      * destructive act the store has, and the trash is what makes it
-     * recoverable — the ruling that put it there, and `docs/decisions/0021` for
+     * recoverable — the ruling that put it there, and the reason for
      * how each platform's own trash is reached. There is no fallback to an
      * unlink: a refused delete is recoverable and a silent one is not.
      *

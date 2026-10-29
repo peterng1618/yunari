@@ -62,7 +62,7 @@ describe("the catalogue's source", () => {
     const items = await source.list();
 
     // One plain read of the address, with no `cache:` option: the browser's own
-    // HTTP cache is the whole freshness mechanism (`docs/decisions/0088`).
+    // HTTP cache is the whole freshness mechanism.
     expect(fetcher).toHaveBeenCalledWith(catalogueIndexUrl());
     const [item] = items;
     if (item === undefined) throw new Error("the source listed nothing");

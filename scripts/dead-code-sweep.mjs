@@ -10,7 +10,7 @@
  * alive by a 984-line test and no mount for long enough to be filed twice as
  * `vg-268` and `vg-283`, until Phase 19's Task 19.1 mounted it and both closed.
  * `ui-copy-readers.ts` is the same class today, and permanently so — a test
- * reader is supposed to have no production importer (`docs/decisions/0058`).
+ * reader is supposed to have no production importer.
  *
  * What this is NOT: a verdict. Every hit is a candidate, printed with the search
  * that found it, and a human or an agent has to say whether the code is dead.
@@ -20,8 +20,8 @@
  * literal — all of which are live with no importer anywhere. None of it is
  * visible to this graph, and a literal search that comes back empty is not
  * proof of death. The same goes for a file's *content*: `design-md.mjs`,
- * `design-tokens.mjs`, `ownership-sweep.mjs` and `reuse-gate.mjs` read the
- * source tree as data, so a constant nothing imports can still redden a gate.
+ * `design-tokens.mjs` and `dead-selectors.mjs` read the source tree as data, so
+ * a constant nothing imports can still redden a gate.
  *
  * Six candidate kinds, and each one records the search that found it:
  *

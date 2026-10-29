@@ -8,7 +8,6 @@
 // `createLucideIcon`, which imports React, and React is not the host's
 // dependency. The generated file is pure data.
 //
-// Decision: docs/decisions/0093-the-asset-finder-is-host-searched.md
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

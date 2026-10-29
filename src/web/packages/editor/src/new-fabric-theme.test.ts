@@ -38,7 +38,7 @@ type ObjectJson = Readonly<Record<string, unknown>>;
 
 /**
  * The reference artboard and the box of every card on it, measured off
- * `docs/superpowers/specs/2026-09-26-reference-theme-target.png`: the card
+ * the reference theme target: the card
  * borders were located by the transition of its two-pixel outline. Stated here
  * rather than imported from the builder, so the assertion is against the
  * measurement and not against whatever the builder happens to emit.
@@ -553,7 +553,7 @@ describe("the new Fabric document", () => {
     expect(cards.map((card) => card["id"]).sort()).toEqual(
       CARDS.map((card) => card.id.replace("group-", "")).sort(),
     );
-    // Measured off docs/superpowers/specs/2026-09-26-reference-theme-target.png:
+    // Measured off the reference theme target:
     // the top border occupies rows 187-188 and the left border columns 40-41 of
     // the 1672-wide reference, and first appears 10px in from the corner.
     for (const card of cards) {
@@ -784,7 +784,7 @@ describe("the new Fabric document", () => {
     // The authored radius itself, not just "some radius": 40 is the value that
     // dissolves the sunset's structure behind the card, and a round trip that
     // quietly fell back to a default would leave a panel that blurs without
-    // diffusing — see `docs/decisions/0013-frost-is-diffusion-grain-saturation-and-an-edge.md`.
+    // diffusing — see the round-trip case.
     const authored = childrenOf(cpuCard()).find(
       (object) => object["id"] === "cpu-card",
     )?.["yunariGlass"];

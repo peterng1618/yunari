@@ -183,9 +183,9 @@ test.describe("the header's publish surface", () => {
     // https, the origin a display is a secure context at, and **by the host's
     // own name**: a display's cookie and storage are scoped to the origin it
     // pairs on, so a dotted quad there is a phone that must pair again the
-    // moment DHCP moves the host (`docs/decisions/0132`). The plain address the
+    // moment DHCP moves the host. The plain address the
     // popup prints beside it is the fallback, and it is a dotted quad — a device
-    // that cannot resolve the name is what it exists for (`docs/decisions/0076`).
+    // that cannot resolve the name is what it exists for.
     expect(shown).toMatch(/^https:\/\/[^:\s]+\.local:\d+$/);
     expect(
       await facts.locator(".editor-shell-publish-note").first().textContent(),

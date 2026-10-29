@@ -152,8 +152,7 @@ const MIN_REGION_PX = 2;
  * hides the diffusion is worse than none, because the eye reads noise as
  * "not blurred". The tile is the same; the level comes from the reading.
  *
- * Not a dial. Grain is a property of the material — see
- * `docs/decisions/0013-frost-is-diffusion-grain-saturation-and-an-edge.md`.
+ * Not a dial. Grain is a property of the material.
  */
 const GRAIN_ALPHA = 0.015;
 
@@ -878,7 +877,7 @@ function sampleRegion(
  * One branch per shape the product can prove is closed, and no fallback: the
  * frosted treatment needs a closed path to sample the backdrop through, so a
  * kind with no branch here is refused rather than clipped to a rectangle it
- * does not have. See `docs/decisions/0015-glass-clips-any-closed-path-not-only-rects.md`.
+ * does not have.
  */
 function localPath(
   ctx: CanvasRenderingContext2D,

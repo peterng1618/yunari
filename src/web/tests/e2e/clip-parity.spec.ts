@@ -26,7 +26,7 @@ import { isDesktopSurface } from "./surface.js";
  * **Open in editor** control, and a real host serves the same document to the
  * player. The claim is
  * not "both clip at the artboard". That was `host-bleed.spec.ts`'s, and it went
- * with the crop notice (`docs/decisions/0069`); the cases below read it on both
+ * with the crop notice; the cases below read it on both
  * surfaces' own pixels now, and the player's mount of the clip is
  * `packages/player/src/artboard-clip.dom.test.ts`. It is the narrower one the
  * row asks for: the artboard clip does not

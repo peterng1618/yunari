@@ -43,7 +43,7 @@ export interface FacetRecord {
   }[];
   /** The style tags the document declares, deduplicated and in its own order.
    *  Required and possibly empty: every record is derived from a document, so
-   *  there is always an answer (docs/decisions/0087). */
+   * there is always an answer. */
   readonly tags: readonly string[];
   readonly orientation: Orientation;
   readonly aspect: AspectBucket;

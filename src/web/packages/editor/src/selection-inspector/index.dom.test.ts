@@ -1344,7 +1344,7 @@ describe("the column's sections", () => {
     expect(inSection("layer", '[data-yunari-geometry="width"]')).toBeNull();
     // The deliberate bleed toggle left Position with its mark, and the user
     // ruled it out of every surface rather than only the display
-    // (`docs/decisions/0069`, `vg-578`). Asserted rather than left to the
+    // (`vg-578`). Asserted rather than left to the
     // absence of a symbol, because this row is where it used to be.
     expect(inSection("position", "[data-yunari-bleeds]")).toBeNull();
   });
@@ -2145,7 +2145,7 @@ describe("the column a kind gets", () => {
    * (`EVERY_OBJECT` and `text`'s Type-preset row) and
    * `data-yunari-reveal-type-presets` (`text`). It named 17 until Task 25.7,
    * which removed `data-yunari-bleeds` from `EVERY_OBJECT` with the deliberate
-   * bleed control (`docs/decisions/0069`). The pre-plan inspector at
+   * bleed control. The pre-plan inspector at
    * `190dc1a4` rendered **46** distinct `data-yunari-*` names. The census
    * (`git grep -oh 'data-yunari-[a-zA-Z-]*' 190dc1a4 --
    * src/web/packages/editor/src/selection-inspector | sort -u | wc -l`) prints
@@ -2352,8 +2352,7 @@ describe("the column a kind gets", () => {
         // that offered one would write a clip nothing there can hold.
         expect(host.querySelector("[data-yunari-crop]")).toBeNull();
         // The toggle used to be offered for every selection, containers included,
-        // because every object can overhang. Nothing is marked any more
-        // (`docs/decisions/0069`).
+        // because every object can overhang. Nothing is marked any more.
         expect(host.querySelector("[data-yunari-bleeds]")).toBeNull();
       },
     );

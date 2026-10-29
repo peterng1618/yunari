@@ -132,7 +132,7 @@ describe("published Fabric theme schema", () => {
   it("refuses the old typePresets bag and names the key", () => {
     // `globals` is closed and publishes no `typePresets`, so a document still
     // carrying the old bag fails on that key. There is no schema evaluator in
-    // this repo (docs/decisions/0023), so the refusal is read off the schema's
+    // this repo, so the refusal is read off the schema's
     // own key set the way every other pin in this file reads it.
     const document = schema();
     const globals = document.$defs["globals"]!;
@@ -147,8 +147,8 @@ describe("published Fabric theme schema", () => {
   });
 
   it("admits a run's authored size, leading and tracking through opaque fabric JSON", () => {
-    // A run lives inside Fabric JSON, which the schema validates as opaque
-    // (docs/decisions/0023). `fabricObject` keeps only the keys Yunari reads
+    // A run lives inside Fabric JSON, which the schema validates as opaque.
+    // `fabricObject` keeps only the keys Yunari reads
     // and admits the rest as JSON, which is what lets a run's own `fontSize`,
     // `lineHeight` and `letterSpacing` through rather than a second text model
     // here drifting from the validator.
@@ -307,7 +307,7 @@ describe("published Fabric theme schema", () => {
     // here while the schema, which has no flags to give, keeps refusing it.
     expect(TAG_PATTERN.flags).toBe("");
     // And no vocabulary in the format, on either level. This is the decision's
-    // whole content (docs/decisions/0087): an enum here would make a style the
+    // whole content: an enum here would make a style the
     // catalogue does not yet have wait for a schema release.
     expect(tags["enum"]).toBeUndefined();
     expect(items["enum"]).toBeUndefined();

@@ -14,7 +14,7 @@ import { hostClient } from "./host-theme.js";
  * whatever the host does, so a run against it reports `isSecureContext: true`,
  * a granted wake lock and a registered service worker on a host that serves
  * plain http — the trap the row exists to remove, and the reason Task 25.8's
- * measurement is quoted in `docs/decisions/0070` rather than re-derived here.
+ * measurement is taken rather than re-derived here.
  *
  * **The browser is launched by this file, with the host's root allowlisted**,
  * rather than taken from the runner. `ignoreHTTPSErrors` is not enough and the

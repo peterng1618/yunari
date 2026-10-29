@@ -418,8 +418,7 @@ export const uiCopy = {
    *
    * **The words are `packages/host/public/settings.html`'s** — its hints, its
    * device labels, its status line — taken rather than rewritten, because they
-   * are the same questions, and the checked drawing
-   * (`docs/design/mockups/current/host-settings.html`) says so. Two things
+   * are the same questions, and the committed drawing says so. Two things
    * diverge. That page no longer lists themes (A.10): the listing is the store
    * mode's local half, and an assignment is made from a theme's own row. And
    * its questions hint carries a sentence this one does not — which display the
@@ -1674,8 +1673,7 @@ export const uiCopy = {
      *  because the card is the only moment the owner is thinking about it (spec
      *  § "Finding the host after its address changes"). The last clause is not
      *  hedging — Android 11 and earlier and a device on Private DNS cannot
-     *  resolve the name, and then the address is what it types
-     *  (`docs/decisions/0132`). */
+     *  resolve the name, and then the address is what it types. */
     reserveAddress:
       "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
     warning:

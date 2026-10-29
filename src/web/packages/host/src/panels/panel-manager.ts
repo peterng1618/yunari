@@ -14,8 +14,7 @@ import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
  *
  * **The host's third kind of display, and the only one it draws.** A paired
  * client and a local monitor are browsers the host *serves*; a panel has no
- * URL and nothing to admit, so the host has to produce its pixels
- * (`docs/decisions/0130-panel-protocol.md`).
+ * URL and nothing to admit, so the host has to produce its pixels itself.
  *
  * The manager is deliberately thin. It reads the records, opens what is
  * attached, and owns one interval per panel; everything a panel *is* lives

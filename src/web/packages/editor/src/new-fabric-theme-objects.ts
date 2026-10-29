@@ -179,7 +179,7 @@ export interface Run {
 
 /**
  * How a run is worn: size, leading and the measured tracking, authored on the
- * run rather than on the token it names (docs/decisions/0128).
+ * run rather than on the token it names.
  */
 function runStyle(run: Run): Record<string, unknown> {
   const letterSpacing = starterTracking[run.size];
@@ -255,8 +255,7 @@ export function text(
       // `updateText` restores that width on every refresh. That is the
       // difference between a centred reading landing in its card and rendering
       // flush-left and overflowing out of it.
-      // The author's box, and the copy that survives a save. See
-      // `docs/decisions/0003`.
+      // The author's box, and the copy that survives a save.
       box: { width, height },
       ...(options?.align === undefined ? {} : { align: options.align }),
       ...(options?.verticalAlign === undefined

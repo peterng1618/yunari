@@ -8,7 +8,6 @@
 // are copied as data. The package is dev-only: the host loads the generated
 // module, never the package.
 //
-// Decision: docs/decisions/0093-the-asset-finder-is-host-searched.md
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

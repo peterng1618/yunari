@@ -161,7 +161,7 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
 /** The rule, and the figure when the scene is available to read. Never a count
  *  this panel worked out for itself: `outsideCount` is `scene-fabric`'s, and
  *  every countable object is in it — nothing is excluded since the deliberate
- *  bleed mark went (`docs/decisions/0069`). */
+ * bleed mark went. */
 function sizeNote(
   artboard: Artboard,
   boxes: readonly SceneBox[] | undefined,

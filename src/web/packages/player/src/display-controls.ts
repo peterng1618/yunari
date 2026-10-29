@@ -14,7 +14,7 @@ import { uiCopy } from "./ui-copy.js";
  *
  * **Two of the three can be refused, and saying so is the point.** The host
  * serves https beside http on the same port, from a certificate it issues
- * itself (`vg-580`, `docs/decisions/0070`), so the display is a secure context
+ * itself (`vg-580`), so the display is a secure context
  * at the https origin once that root is installed — and at the http origin, or
  * before the root is installed, the two APIs are gated on things a phone at
  * `http://<lan-ip>:<port>` does not have: the Screen Wake Lock API on a secure

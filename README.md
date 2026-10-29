@@ -161,10 +161,6 @@ Prereleases are published under the `next` dist-tag and are not reached by
 `@latest`. winget is **not supported**; it is deferred until a packaged Windows
 executable exists.
 
-The operational runbook — release-please flow, the first-publish bootstrap,
-trusted publishing, the dry run, and what a bad release costs — is
-[`docs/engineering/releases.md`](docs/engineering/releases.md).
-
 ## Architecture
 
 `renderer-core` is the semantic boundary: types, theme semantics and scene
@@ -185,9 +181,6 @@ scene model.
 | `@yunari/theme-package` | Theme ZIP packages: read, validate, export |
 | `@yunari/store-worker` | Cloudflare Worker: theme catalogue, auth, presigned uploads and R2 delivery |
 | `@yunari/fake-source` | Deterministic synthetic samples for developing and testing the display path |
-
-Current system shape: [`docs/architecture/README.md`](docs/architecture/README.md).
-Concept ownership: [`docs/architecture/ownership.md`](docs/architecture/ownership.md).
 
 ## Development
 
@@ -222,24 +215,13 @@ YUNARI_CAPTURE=1 npx playwright test --project=desktop-chromium \
 ```
 
 `YUNARI_CAPTURE_DIR` changes the output directory (default
-`docs/evidence/screenshots`). Which captures are registered, and their freshness
-rule, is [`docs/evidence/screenshots/README.md`](docs/evidence/screenshots/README.md).
+`test-results/captures`).
 
 ## Docs and licence
 
-- [`docs/README.md`](docs/README.md) — the documentation map.
-- [`docs/product/requirements.md`](docs/product/requirements.md) — product truth.
-- [`docs/architecture/README.md`](docs/architecture/README.md) — current
-  architecture and boundaries.
-- [`docs/decisions/`](docs/decisions/) — durable architecture decisions;
-  [`docs/adr/`](docs/adr/) — the earlier set.
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) and
   [`docs/superpowers/plans/`](docs/superpowers/plans/) — feature designs and
   implementation plans.
-- [`docs/engineering/gotchas.md`](docs/engineering/gotchas.md) — non-obvious
-  traps. [`docs/engineering/dependencies.md`](docs/engineering/dependencies.md) —
-  dependency and licence provenance.
-- [`AGENTS.md`](AGENTS.md) — rules for coding agents in this repository.
 
 Yunari is [MIT licensed](LICENSE). Third-party provenance and licences:
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

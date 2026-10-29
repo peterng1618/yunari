@@ -1348,7 +1348,7 @@ describe("Host theme routes", () => {
 
       expect(res.status).toBe(200);
       // The route hands the folder to the trash and does nothing else itself,
-      // which is the whole recovery claim (docs/decisions/0021).
+      // which is the whole recovery claim.
       expect(trashed).toEqual([path.join(dir, "living-room")]);
       const list = await request(deleting.server, "GET", "/api/themes");
       expect(
@@ -10856,7 +10856,7 @@ describe("The host's secure origin", () => {
     // **The case that fails if the listener is made https-only.** The host
     // prints its display addresses https-first, with the plain address beside
     // each one as the fallback a device that has not installed the root
-    // certificate opens (`docs/decisions/0076`) — so a port that stopped
+    // certificate opens — so a port that stopped
     // answering http would leave that device with no way in at all, the pairing
     // link and the certificate fetch both being http until the root is on it.
     // Both protocols on one port is what makes the fallback true, and nothing
@@ -11445,7 +11445,7 @@ describe("Host Wallpaper Engine routes", () => {
   });
 
   it("answers the removed export routes as unknown paths", async () => {
-    // The engine is never driven (docs/decisions/0124): no route starts it, and
+    // The engine is never driven: no route starts it, and
     // no route serves what it would have written.
     const hosted = host(fakeSource());
 

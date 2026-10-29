@@ -22,7 +22,7 @@ export const HOST_PORT = 4175;
 
 /**
  * A client for a host this spec started, accepting the certificate it issues
- * itself (`docs/decisions/0070`).
+ * itself.
  *
  * The host serves both protocols on one port, so a spec may read it either way;
  * this exists for the ones that read the **secure** origin, which is the one a
@@ -136,7 +136,7 @@ export const CHART_NODE_ID = "e2e-gauge";
  * **It used to carry the deliberate bleed mark, and does not any more.** That is
  * the whole point of keeping it: the strip this theme once raised at mount is
  * what moved `stray-quarter` +30.61 px, and the same composition with the strip
- * gone is what `vg-572` waits on (`docs/decisions/0069`).
+ * gone is what `vg-572` waits on.
  *
  * **The discs are placed so part of each survives the clip.** A `Wedge` swept
  * 0°–90° occupies the bottom-right quadrant of its own centre, so a centre near

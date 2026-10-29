@@ -24,7 +24,7 @@ import { StoreStatusBadge } from "./status-badge.js";
  * It is handed its items and narrows nothing — A.5 owns what a query and a
  * facet selection filter, A.6 mounts it in the region and owns the empty states,
  * and the source it reads is A.4's. What is here is the cell's own geometry,
- * taken from `docs/design/mockups/current/store-themes.html`.
+ * taken from the store-themes drawing.
  */
 
 /** The four actions in the drawing's own order: open, assign, export, delete. */

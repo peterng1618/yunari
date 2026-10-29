@@ -1,8 +1,8 @@
 # yunari-store — owner deployment runbook
 
 The Worker, D1 database, R2 bucket and secrets in this file are created by the
-**owner**. Nothing here has been run by the agent; `docs/product/backlog.jsonl`
-carries what stays unverified. The code is the authority for every binding named below
+**owner**. Nothing here has been run by the agent; the open issues carry what
+stays unverified. The code is the authority for every binding named below
 (`src/env.ts`, `src/auth.ts`, `src/index.ts`, `wrangler.toml`).
 
 Run every command in this README from `src/web/packages/store-worker`

@@ -375,7 +375,7 @@ type Body =
 /**
  * The two halves, as §5's `Segmented` in its **bare** form — the well holding
  * the labels, the chosen one lifted to `--stage` with `--text`, and no row label
- * beside it (`docs/decisions/0074`). The header's mode switch is the same
+ * beside it. The header's mode switch is the same
  * control in the same kind of strip, composed the same way for the same reason:
  * the region's header row is a bar rather than a field row, so there is no label
  * column to fill, and the set's one `ControlSegmented` is a labelled row.

@@ -12,8 +12,7 @@
  * platform-optional package is installed on its own platform only: its row and
  * lockfile version are still required, and its licence is compared where it is
  * installed, with the check saying in its output when it could not be read
- * here. Scope stays direct dependencies; the closure is the release rule in
- * `docs/engineering/dependencies.md`.
+ * here. Scope stays direct dependencies; the closure is the release rule.
  *
  * `node scripts/check-third-party.mjs`
  *

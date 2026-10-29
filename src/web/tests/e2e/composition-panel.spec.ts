@@ -41,7 +41,7 @@ import { isDesktopSurface } from "./surface.js";
  *   two acts (both read back through the bridge), the right column's three
  *   states, and the two-hundred-row re-measurement — one document, one viewport,
  *   one machine, which is what the case says of its own numbers. Three of these
- *   cases carry the captures registered in `docs/evidence/screenshots/README.md`.
+ *   cases carry captures under `test-results/captures/`.
  * - **Plan 5's Task 6** owns the two cases at the end of this file: the role
  *   column saying what the document says a card is, on the starter and on a copy
  *   inserted beside it.

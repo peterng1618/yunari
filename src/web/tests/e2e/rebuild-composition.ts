@@ -31,7 +31,7 @@ import {
  * on a display. The composition is the same in both, and it lives here so the
  * two cannot drift into testing different things.
  *
- * The target is `docs/superpowers/specs/2026-09-26-reference-theme-target.png`.
+ * The target is the reference theme target.
  * **The image is the reference.** No coordinate or value is taken from the
  * shipped theme: the whole point is to find what the authoring surface cannot
  * express, and copying the answer hides exactly that. Everything here is

@@ -102,7 +102,7 @@ export function storePairing(storage: Storage, pairing: PairedHost): void {
 
 /** The scheme a display was served over. Both are real: the host serves https
  *  beside http on the same port, and the http address is what a device that has
- *  not installed the root certificate opens (`docs/decisions/0076`). */
+ * not installed the root certificate opens. */
 export type PageScheme = "http" | "https";
 
 /**

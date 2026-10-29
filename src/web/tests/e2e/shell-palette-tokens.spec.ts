@@ -270,7 +270,7 @@ test.describe("shell palettes", () => {
     await expect(group).toBeVisible();
 
     /** **Both bars of every card**, because the preview is two of them (plan 8
-     *  Task 5, `docs/design/mockups/current/settings.html:44-87`): the ground
+     * Task 5): the ground
      *  bar carries the class the parity table's height row addresses and the
      *  accent bar is its next sibling, each with its own `data-shell-palette`.
      *  Reading the ground alone would call two palettes identical where only

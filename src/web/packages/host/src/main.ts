@@ -192,7 +192,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   await customProvider.reload();
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
-  // registry's cycle (docs/decisions/0099).
+  // registry's cycle.
   const weatherSettings = createWeatherSettingsStore(settingsDir);
   const weatherProvider = new WeatherProvider({
     settings: weatherSettings,
@@ -239,7 +239,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   );
   // Two test seams, each honoured only when non-empty: a store fixture for the
   // searched metadata, and a fixed foreground so a browser proof needs no
-  // running game. Unset changes nothing (docs/engineering/gotchas.md).
+  // running game. Unset changes nothing.
   const storeBaseUrl = process.env.YUNARI_STEAM_STORE;
   const fixedForeground = process.env.YUNARI_FOREGROUND_EXE;
   const gameStore = createSteamStore({
@@ -309,7 +309,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The certificate is not optional, and the reason is the origin rather than
   // any route: a phone at `http://<lan-ip>:<port>` is not a secure context, so
   // it can neither hold a screen wake lock nor register the service worker an
-  // installable app needs (`vg-580`, `docs/decisions/0070`). Serving plain http
+  // installable app needs (`vg-580`). Serving plain http
   // would fail on the display and pass on this PC, which is the trap the row
   // exists to remove — so a host that cannot produce a certificate refuses to
   // start and says which directory it could not write, rather than starting
@@ -547,14 +547,14 @@ export async function run(argv: readonly string[]): Promise<number> {
       : initialHost;
   /** https first, http beside it: a display is a secure context only at the
    *  https origin, and the plain address is what a device that has not
-   *  installed the root certificate can still open (`docs/decisions/0076`). */
+   * installed the root certificate can still open. */
   const localSecure = `https://${displayHost}:${bound}`;
   const localPlain = `http://${displayHost}:${bound}`;
   /** The address a display would use, whether or not the LAN is open — the
    *  certificate covers it either way, and the console names it. */
   const lan = await lanAddress();
   /** And the name it dials instead where the platform answers one: it survives
-   *  a DHCP lease where the address does not (`docs/decisions/0132`). */
+   * a DHCP lease where the address does not. */
   const name = stableName();
 
   console.log(`\nYunari v${VERSION}`);
@@ -646,7 +646,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     // **The name where there is one**, because this is the link a display
     // pairs on and the origin its cookie and storage are then scoped to: a
     // dotted quad there is a phone that must pair again the moment DHCP moves
-    // the host (`docs/decisions/0132`). The address is printed beside it, for a
+    // the host. The address is printed beside it, for a
     // device that cannot resolve the name and for the one without the root.
     const dial = name ?? hostPart;
     const networkSecure = `https://${dial}:${bound}`;

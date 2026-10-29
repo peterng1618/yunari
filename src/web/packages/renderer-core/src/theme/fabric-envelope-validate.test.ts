@@ -1864,7 +1864,7 @@ describe("an object's authored display name", () => {
 
 describe("a theme saved before a key was retired", () => {
   it("still loads when it carries a key the schema no longer publishes", () => {
-    // The persisted-key decision (`docs/decisions/0069`): `yunariBleeds` left
+    // The persisted-key decision: `yunariBleeds` left
     // the published schema, and the object's `additionalProperties: jsonValue`
     // is what keeps a document that still carries it loadable. The scene walk
     // refuses an unknown *value*, never an unknown key, so retiring a key is a
@@ -1947,7 +1947,7 @@ describe("a theme's style tags", () => {
       validateFabricThemeEnvelope(withTags(["retro", "neon-2"])),
     ).toMatchObject({ ok: true });
     // A duplicate is not a refusal: the facet deduplicates, and the spec makes the
-    // shape and the count the whole of what the format enforces (docs/decisions/0087).
+    // shape and the count the whole of what the format enforces.
     expect(validateFabricThemeEnvelope(withTags(["retro", "retro"])).ok).toBe(
       true,
     );
@@ -1956,7 +1956,7 @@ describe("a theme's style tags", () => {
   it("accepts a tag no vocabulary holds yet, which is the only way it can join one", () => {
     // The spec's own sentence, as a case: a tag the vocabulary does not yet know
     // has to be writable before the vocabulary can grow to include it. This fails
-    // the moment anyone adds an enum `dystopian` is not in (docs/decisions/0087).
+    // the moment anyone adds an enum `dystopian` is not in.
     expect(validateFabricThemeEnvelope(withTags(["dystopian"]))).toMatchObject({
       ok: true,
     });

@@ -427,7 +427,7 @@ test.describe("hosted player over the real host", () => {
   //
   // The number in the comment used to be the failing value. It is now the
   // authored one: `yunariText.box` is the owner, and Fabric's own width is a
-  // cache it re-asserts. See `docs/decisions/0003`.
+  // cache it re-asserts.
   //
   // The starter is saved through the host's own store rather than a fixture,
   // because the three objects are the starter's own and no fixture has them.
@@ -1411,7 +1411,7 @@ test.describe("a display fed by the real host", () => {
       );
       await page.waitForTimeout(400);
       await page.screenshot({
-        path: "../../docs/evidence/screenshots/host-theme-thumbnail-desktop-chromium.png",
+        path: "../../test-results/captures/host-theme-thumbnail-desktop-chromium.png",
         fullPage: true,
       });
     }
@@ -2694,8 +2694,8 @@ function setGroupCaching(page: Page, caching: boolean): Promise<boolean> {
  * and both APIs the controls want are gated on one — but `localhost` IS one, so
  * a run at `http://127.0.0.1:4175` sees the wake lock present and proves
  * nothing about the phone the control is for. The host does serve https beside
- * http on that same port now, from a root it issues itself (`vg-580`,
- * `docs/decisions/0070`), and since `docs/decisions/0076` https is the address
+ * http on that same port now, from a root it issues itself (`vg-580`),
+ * and since https is the address
  * printed first — so the cases here run at the plain origin deliberately: that
  * is the fallback a device without the root certificate still gets, and the
  * last case reads this browser's answer about exactly that origin.
@@ -2975,7 +2975,7 @@ test.describe("the display's own controls", () => {
     // bundle is served here over plain http on the LAN address, so the reading is
     // the browser's answer about the origin rather than a claim about it.
     //
-    // **Which shape that is, since `docs/decisions/0076`.** The printed address
+    // **Which shape that is, since then.** The printed address
     // is https and the plain one beside it is the *fallback*, for a device that
     // has not installed the host's root certificate — so what this case reads is
     // the fallback's answer, and it is still worth reading: the fallback is what
@@ -4662,7 +4662,7 @@ const PLAYER_CONTENT_TYPES: Readonly<Record<string, string>> = {
 /**
  * The built player, over plain http on the LAN address — the origin a display
  * still reaches by opening the address the host prints, which the host answers
- * on the same port as its secure one (`vg-580`, `docs/decisions/0070`). Served
+ * on the same port as its secure one (`vg-580`). Served
  * from the spec rather than by a second host so that the only thing under test
  * is the origin: the display cannot load a theme from here, and does not need
  * to for a reading that is a property of the origin.

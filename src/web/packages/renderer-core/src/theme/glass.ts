@@ -41,8 +41,7 @@ export interface GlassTreatment {
  * an open path has no interior to sample, and a `Path` is arbitrary author data
  * whose closedness the product cannot know. Text, image and chart objects are
  * excluded on their own terms: they are not panels, and a blur behind a glyph
- * or a plotted series has no meaning. See
- * `docs/decisions/0015-glass-clips-any-closed-path-not-only-rects.md`.
+ * or a plotted series has no meaning.
  */
 const GLASS_OBJECT_TYPES: ReadonlySet<string> = new Set([
   "Rect",

@@ -248,8 +248,8 @@ body,
 }
 
 /* ── One source, five derivations ──────────────────────────────────────────
-   **Graphite is the source.** Its values are the drawn shell's own token table
-   (`docs/design/mockups/current/shell.html:17-18`), transcribed role for role
+   **Graphite is the source.** Its values are the drawn shell's own token table,
+   transcribed role for role
    and never tuned here. **Every other palette is derived from graphite**: it
    keeps its own hue for the two roles that carry identity — `--accent`, and the
    edge's own tint — and takes from graphite the *relationships* between the
@@ -562,8 +562,7 @@ body,
   --compact-layer-panel-width: 280px;
   /* How wide the Host mode's sections run. A settings form is read, not
      scanned, and its rows are label-and-well pairs that a 2560px window would
-     stretch past reading. The measure is the drawing's own
-     (`docs/design/mockups/current/host-settings.html:43`). */
+     stretch past reading. The measure is the drawing's own. */
   --host-settings-measure: 640px;
   /* The finder's dimensions and the Assets card's mark are the drawings'
      (`asset-finder-fonts.html`, `assets-pane.html`); the specimen glyph sizes
@@ -591,8 +590,7 @@ body,
    `var(--color-shell-surface)` and the browser resolves that at `:root`, which
    loses every subtree that declares `--shell-*` for itself. One does:
    `.editor-shell-palette-swatch` above, a preview bar naming a palette it is
-   not rendering under, which `tests/e2e/shell-appearance.spec.ts` holds.
-   Decision: docs/decisions/0035. */
+   not rendering under, which `tests/e2e/shell-appearance.spec.ts` holds. */
 @theme inline {
   --color-shell-backdrop: var(--shell-backdrop);
   --color-shell-surface: var(--shell-surface);
@@ -1089,9 +1087,9 @@ body,
 
    **Two bars, the palette's ground and its accent** — the drawing
    (`current/settings.html:44-87`) draws both, and one bar cannot show a palette
-   §4 gives two roles. The row that reads the preview's height
-   (`tests/e2e/mockup-parity.ts`) addresses `.editor-shell-palette-swatch`, which
-   is the ground bar; the accent bar is its next sibling. */
+   §4 gives two roles. The row that reads the preview's height addresses
+   `.editor-shell-palette-swatch`, which is the ground bar; the accent bar is its
+   next sibling. */
 .editor-shell-palette-swatch,
 .editor-shell-palette-swatch-accent {
   flex: 1;
@@ -1969,7 +1967,6 @@ body,
    "The vocabulary is closed. A control is one of these, or it is not a control."
    and no *tab* control is in it, so no rule requires the horizontal form; §7
    fixes the three tabs and what each holds, never their direction; and spec §13
-   (`docs/superpowers/specs/2026-10-08-editor-design-language-design.md:451-454`)
    says "The mockup governs wherever the written rules are silent. Silence is not
    permission — it is the drawing's jurisdiction", naming this very strip at
    `:458-459` ("D1 kept a horizontal tab strip because '§7 fixes the three tabs

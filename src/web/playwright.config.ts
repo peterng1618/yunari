@@ -94,11 +94,9 @@ export default defineConfig({
   // clear the other's traces, which the survivor reports as test failures (vg-216).
   outputDir: "test-results/main",
   // Every Playwright spec is a `.spec.ts`. The default (`spec` **or** `test`)
-  // would also collect a Vitest unit test that lives beside the harness —
-  // `tests/e2e/mockup-values.test.ts` is one, because the reader it proves is
-  // pure and belongs to no browser (see `vitest.config.ts`). Playwright collecting
-  // it would be an import of `vitest`'s `test` and a hard error for the whole
-  // suite, not one skipped file.
+  // would also collect a Vitest unit test that lives beside the harness, and an
+  // import of `vitest`'s `test` is a hard error for the whole suite, not one
+  // skipped file.
   testMatch: "**/*.spec.ts",
   // Seeds the host fixture once; the config itself runs in every worker.
   globalSetup: "./tests/e2e/global-setup.ts",

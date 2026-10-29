@@ -15,8 +15,6 @@
  * Every point is chosen with margin. A probe one pixel outside a shape lands on
  * the clip's antialiased edge and reads a faint wash instead of nothing, which
  * is a test that passes for the wrong reason.
- *
- * `docs/decisions/0015-glass-clips-any-closed-path-not-only-rects.md`.
  */
 
 import {

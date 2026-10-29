@@ -34,10 +34,9 @@ const PLANS = join(ROOT, "docs/superpowers/plans");
 const SCANNED = /\.(md|ts|tsx|mjs|js|cjs|json|css|html|ya?ml)$/;
 
 /**
- * `.jsonl` is deliberately absent. `docs/product/backlog.jsonl` carries a `plan`
- * field on 70 rows and most name a moved plan, but whether that field is a live
- * pointer or a historical label is a ruling `vg-434` names and does not take —
- * so this check refuses to answer it by failing on it.
+ * `.jsonl` is deliberately absent: whether a `plan` field on a backlog line is a
+ * live pointer or a historical label is not this check's ruling to take, so it
+ * refuses to answer it by failing on it.
  */
 const EXCLUDED = /\.jsonl$/;
 

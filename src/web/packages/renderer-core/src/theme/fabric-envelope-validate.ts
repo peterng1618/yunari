@@ -191,8 +191,7 @@ function themeLanguage(metadata: unknown, issues: ValidationIssue[]): void {
  *
  * Membership is unchecked on purpose — the vocabulary is the catalogue's, and a
  * tag it does not yet know has to be writable before it can join it — and a
- * duplicate is left for the facet to collapse rather than refused here
- * (docs/decisions/0087).
+ * duplicate is left for the facet to collapse rather than refused here.
  */
 function styleTags(metadata: unknown, issues: ValidationIssue[]): void {
   if (!isRecord(metadata)) return;

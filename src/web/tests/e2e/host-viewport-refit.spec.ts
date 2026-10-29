@@ -75,7 +75,7 @@ import {
  *
  * **What it read, on `e2e-bleed` (640×360) served by the real host, one 54 s
  * recording per viewport** — the theme is now `e2e-overhang`, the same
- * composition with the deliberate bleed mark removed (`docs/decisions/0069`),
+ * composition with the deliberate bleed mark removed,
  * so a later run is comparable frame for frame with the numbers below. In the
  * steady state on either side of each drive a
  * driven height change re-fits and returns exactly, and the re-fit lands 15–18 ms
@@ -105,7 +105,7 @@ import {
  * exactly why the reading above excluded it.
  *
  * **The strip is gone, and the mount frames are what the next run reads.**
- * Task 25.7 removed the crop notice (`docs/decisions/0069`, `vg-578`), so the
+ * Task 25.7 removed the crop notice (`vg-578`), so the
  * frames before the baseline are the reading `vg-572` waits on: the composition
  * must hold still where a strip used to take room. The instrument is unchanged,
  * which is what makes the two runs comparable — the frames, the slices and the

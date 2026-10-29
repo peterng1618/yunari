@@ -1,6 +1,6 @@
 /**
- * A real Open-Meteo capture for Berlin, 2026-10-24 — the probe recorded in
- * `docs/decisions/0099`. No test reaches the network.
+ * A real Open-Meteo capture for Berlin, 2026-10-24 — the probe recorded in the
+ * commit that added this file. No test reaches the network.
  *
  * The current conditions are the values in the task's ruling 3 and the daily
  * figures are from the same request. `pressure_msl` is the one field the

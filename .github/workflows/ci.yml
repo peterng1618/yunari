@@ -34,14 +34,6 @@ jobs:
         working-directory: src/web
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # The parity gate dates a licence by the commit the rule it quotes
-          # entered (`tests/e2e/mockup-values.test.ts`), and a depth-1 clone
-          # answers every history query with the boundary commit — every licence
-          # would read as written by its own citing commit. This job runs
-          # `npm run gate`, so it is the one that needs the history; the ledger
-          # refuses a shallow tree loudly rather than manufacturing findings.
-          fetch-depth: 0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -212,7 +204,7 @@ jobs:
         # a wrong version installed against a manifest also prints `invalid:`
         # with `ELSPROBLEMS` and passes. `npm ls --all` cannot exit 0 while
         # overrides are in force, so the tolerated `invalid`/`extraneous` lines
-        # are accounted for by hand in docs/engineering/dependencies.md.
+        # are accounted for by hand in the override notes in src/web/package.json.
         run: |
           set -euo pipefail
           status=0

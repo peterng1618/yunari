@@ -1430,10 +1430,9 @@ it("pads a well with the step §3's table names for it", () => {
   // §3's table gave the 4px step to well padding — three sources against one
   // table cell, with no case reading either side of the split, so nothing ever
   // reddened on it. `design-tokens.mjs` holds a surface to §3's *steps* and
-  // never compares that list to the table's own assignment, and
-  // `design-language-controls.spec.ts` reads the well's right edge against the
-  // row, which passes at either width. This is the missing read: the table's
-  // assignment and the class the well is built from, against each other.
+  // never compares that list to the table's own assignment. This is the missing
+  // read: the table's assignment and the class the well is built from, against
+  // each other.
   //
   // The table moves rather than the pad, and that is the row's own ruling: the
   // code and *both* drawings write 6 horizontally, so the cell is the odd one

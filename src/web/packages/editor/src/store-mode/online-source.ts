@@ -11,7 +11,7 @@ import type { ItemSource, StoreItem } from "./local-source.js";
 /**
  * The catalogue's listing as an `ItemSource`.
  *
- * **One read, and the browser's cache is the whole mechanism** (`docs/decisions/0088`):
+ * **One read, and the browser's cache is the whole mechanism**:
  * no `cache:` option, no `ETag`, no TTL, no retry and no timeout, because the
  * origin's `max-age=60` is the freshness contract and the platform owns the
  * rest. A failed read throws rather than answering an empty catalogue; the

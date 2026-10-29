@@ -97,7 +97,7 @@ export const uiCopy = {
    * *origin* the display was served from, because that is what a phone at
    * `http://<lan-ip>:<port>` lacks and no setting on the phone can change it.
    * The host now serves https beside http on the same port, from a certificate
-   * it issues itself (`vg-580`, `docs/decisions/0070`), so a reader has two
+   * it issues itself (`vg-580`), so a reader has two
    * things to act on — the scheme and the root — and both are named.
    * The dimmer's label names the overlay and says outright that it is not the
    * screen's own brightness — a browser cannot set that, and a control that

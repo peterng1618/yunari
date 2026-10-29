@@ -158,7 +158,7 @@ function refuse(path) {
     return `"${scratchSegment}" is a scratch segment. Deliverables live under docs/, src/, scripts/, schema/ or tests/; scratch goes outside the tree.`;
   }
   if (SCRATCH_NAMES.some((pattern) => pattern.test(name))) {
-    return `"${name}" is a scratch-shaped file name. If it is evidence, it belongs in docs/evidence/ or in the SDD workspace, not in the working tree.`;
+    return `"${name}" is a scratch-shaped file name. If it is evidence, it belongs in test-results/captures/ or in the SDD workspace, not in the working tree.`;
   }
   return undefined;
 }
@@ -260,7 +260,7 @@ function selfTest() {
   const cases = [
     // [path, expected to be refused]
     ["src/web/packages/player/src/chrome.ts", false],
-    ["docs/evidence/screenshots/README.md", false],
+    ["docs/superpowers/plans/example.md", false],
     ["src/web/vitest-080.json", true],
     ["src/web/.agent-scratch/p1-repro.mjs", true],
     [".claude/worktrees/agent-abc/notes.md", false],

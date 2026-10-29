@@ -26,7 +26,7 @@ import {
  * the leaf is disposable, which is what makes a moved LAN address cheap.
  *
  * The decision, the seven rungs and the advisory carried with `node-forge` are
- * `docs/decisions/0070`.
+ * recorded in the commit that introduced this module.
  */
 
 /** Under the 398-day ceiling browsers apply to a TLS server certificate, so no

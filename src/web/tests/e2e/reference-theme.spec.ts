@@ -1415,8 +1415,8 @@ test.describe("the reference composition, captured", () => {
 
     // **The picture itself, looked at.** The capture is a data URL rather than
     // a file, so it is shown at 2x on a dark ground — the library card's own
-    // conditions — and the screenshot is taken of that. Registered in
-    // `docs/evidence/screenshots/README.md` and inspected before it is kept.
+    // conditions — and the screenshot is taken of that. Registered under
+    // `test-results/captures/` and inspected before it is kept.
     expect(capture.png.length).toBeGreaterThan(1000);
     // **The paint is read before it is written into CSS** (`vg-451`). A palette
     // entry that is renamed or absent would interpolate as `undefined`, which
@@ -1835,8 +1835,8 @@ test.describe("the reference composition, captured", () => {
       "and the opaque card is no worse",
     ).toBeGreaterThan(whiteOn(reading.underCpu));
 
-    // The picture itself, looked at. Registered in
-    // `docs/evidence/screenshots/README.md` and inspected before it is kept.
+    // The picture itself, looked at. Registered under
+    // `test-results/captures/` and inspected before it is kept.
     await captureVisualReview(page, testInfo, "editor-starter-backdrop");
   });
 });

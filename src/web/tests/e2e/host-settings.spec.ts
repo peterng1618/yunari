@@ -635,7 +635,7 @@ test.describe("the settings page in a screenshot", () => {
     await expect(questions(page)).toBeVisible();
 
     const directory =
-      process.env["YUNARI_CAPTURE_DIR"] ?? "../../docs/evidence/screenshots";
+      process.env["YUNARI_CAPTURE_DIR"] ?? "../../test-results/captures";
     const name = `settings-theme-question-${testInfo.project.name}.png`;
     const screenshot = await page.screenshot({
       fullPage: true,

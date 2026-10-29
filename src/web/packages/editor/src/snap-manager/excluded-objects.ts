@@ -7,8 +7,8 @@ import { type FabricObject, Group } from "fabric/es";
  * It is excluded by id — `background` is the plate's conventional id, which
  * the starter used to author and an author can still draw — not by
  * `selectable`, which would also drop locked neighbours. The starter no longer
- * authors one: its backdrop is packaged media mounted below the canvas
- * (`docs/decisions/0011`), so nothing on the canvas spans the artboard. */
+ * authors one: its backdrop is packaged media mounted below the canvas,
+ * so nothing on the canvas spans the artboard. */
 export const IGNORED_IDS: readonly string[] = ["background"];
 
 /** The objects one group holds; every other object holds none. The one reader

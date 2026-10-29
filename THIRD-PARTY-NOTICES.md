@@ -1,8 +1,8 @@
 # Third-party notices
 
 Yunari is MIT licensed; see [LICENSE](LICENSE). This is the current development
-inventory, not a release-grade transitive audit. Provenance:
-[`docs/engineering/dependencies.md`](docs/engineering/dependencies.md).
+inventory, not a release-grade transitive audit. Provenance: the workspace
+manifests and `src/web/package-lock.json`.
 
 **Scope: direct dependencies only — the packages a workspace `package.json`
 declares in `dependencies`, `devDependencies` or `optionalDependencies`,
@@ -11,8 +11,8 @@ declares in `dependencies`, `devDependencies` or `optionalDependencies`,
 package this project does not itself install or ship, so it is not a direct
 dependency.** A package reached only through another
 package's own dependencies has no entry here, and its absence is not a missing
-notice; the closure is enumerated at release time, by the release rule in
-[`docs/engineering/dependencies.md`](docs/engineering/dependencies.md). Every
+notice; the closure is enumerated at release time, by the dependency override
+notes in `src/web/package.json`. Every
 direct dependency is a row in one of the two tables below, with the version the
 lockfile resolves and the licence its installed `package.json` declares — or,
 where that manifest declares none, the licence named by its `LICENSE` title;
@@ -75,7 +75,7 @@ Release packaging must include `vendor/lhm/LICENSE` and
 distribution. PawnIO is **not** in the archive — LHM fetches it at runtime and
 it is LGPL-2.1 — so a first-run PawnIO download needs its own review before
 being enabled. Provenance and the pinned digest:
-`docs/engineering/dependencies.md`; `vendor/lhm/PROVENANCE.txt` records the
+`vendor/lhm/PROVENANCE.txt` records the
 version, source URL and sha256 of the staged release.
 
 ### PresentMon (bundled external program)
@@ -90,7 +90,7 @@ MIT requires the copyright and permission notice to travel with the binary, so
 the vendor script stages PresentMon's own `LICENSE.txt` beside it. Release
 packaging must include `vendor/presentmon/LICENSE.txt` in the shipped
 distribution. Provenance and the pinned digest:
-`docs/engineering/dependencies.md`; `vendor/presentmon/PROVENANCE.txt` records
+`vendor/presentmon/PROVENANCE.txt` records
 the version, source URL and sha256 of the staged release.
 
 ### systray2 / systray-portable (bundled Linux external program)
@@ -112,7 +112,6 @@ permission notice to travel with the binary, so the vendor script stages
 distribution. Source:
 <https://registry.npmjs.org/systray2/-/systray2-2.1.4.tgz>, pinned sha256
 `24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00`.
-Provenance: `docs/engineering/dependencies.md`.
 
 ## Build/test
 
@@ -323,5 +322,5 @@ metadata when adding them. This is the closure half of the scope stated at the
 top of this file: the runtime/editor table and the build/test paragraph are the
 direct-dependency inventory, while the vendored-source, runtime-icon and
 bundled-asset sections are not dependencies and fall outside it. The transitive
-graph is enumerated at release by this rule and by the release rule in
-[`docs/engineering/dependencies.md`](docs/engineering/dependencies.md).
+graph is enumerated at release by this rule and by the dependency override notes
+in `src/web/package.json`.

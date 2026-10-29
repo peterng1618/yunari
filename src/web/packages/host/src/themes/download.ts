@@ -6,8 +6,7 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
  * so this is where the trust boundary is held: https only, the store's own
  * host, no redirect, and the reader's own cap enforced while the body streams.
  * The bytes then go to the owners that already exist (`importThemePackage`,
- * `ThemeStore`, `ThemeOriginsStore`); this module writes nothing. See
- * docs/decisions/0089.
+ * `ThemeStore`, `ThemeOriginsStore`); this module writes nothing.
  */
 
 export interface DownloadOptions {

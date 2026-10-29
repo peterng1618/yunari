@@ -12,7 +12,7 @@ import {
 
 /**
  * What each platform's trash is reached by, without running any of them. The
- * decision note (`docs/decisions/0021`) records why there is no dependency and
+ * decision note records why there is no dependency and
  * no native binary; these are the claims that note makes, as assertions.
  */
 describe("trashPlan", () => {

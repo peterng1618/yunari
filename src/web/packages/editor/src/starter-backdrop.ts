@@ -8,7 +8,7 @@ import backdropUrl from "./starter-backdrop.jpg?url";
  * It is a photograph because the gradient it replaced had no horizontal
  * structure at all — measured 0.00 mean luma step between adjacent columns,
  * against 2.14 here — so every frosted panel over it read as an even fill no
- * matter how wide the blur was. `docs/decisions/0011` has the measurements and
+ * matter how wide the blur was. has the measurements and
  * the rejected alternatives, including the runtime-CDN one that would have
  * tainted the canvas and broken every capture that reads pixels.
  *

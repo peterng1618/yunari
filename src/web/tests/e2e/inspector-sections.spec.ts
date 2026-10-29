@@ -1829,8 +1829,8 @@ test.describe("the per-kind inspector column", () => {
       series: ["cpu.load"],
     });
 
-    // Plan 1's parity census (`vg-390`) re-derived these two from
-    // `docs/design/mockups/current/controls.html`: `:30` draws the header's
+    // Plan 1's parity census (`vg-390`) re-derived these two from the drawing:
+    // `:30` draws the header's
     // count in `ui-monospace` and `var(--faint)`, and `:24` draws the subject's
     // name at weight 600. §2 gives counts to UI mono (`DESIGN.md:124`) and
     // titles 600 (`:149`); §4 gives `--faint` to counts (`:103`). Both were

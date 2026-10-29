@@ -25,7 +25,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const DEFAULT_ALLOWLIST = resolve(ROOT, "docs/engineering/audit-allowlist.json");
+const DEFAULT_ALLOWLIST = resolve(ROOT, "schema/audit-allowlist.json");
 const GHSA = /GHSA(-[0-9a-z]{4}){3}/i;
 const REQUIRED = ["package", "advisory", "reason", "reviewed"];
 

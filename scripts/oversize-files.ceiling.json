@@ -40,7 +40,6 @@
   "src/web/tests/e2e/host-player.spec.ts",
   "src/web/tests/e2e/host-theme.ts",
   "src/web/tests/e2e/inspector-sections.spec.ts",
-  "src/web/tests/e2e/mockup-values.test.ts",
   "src/web/tests/e2e/reference-theme.spec.ts",
   "src/web/tests/e2e/snapping.spec.ts"
 ]

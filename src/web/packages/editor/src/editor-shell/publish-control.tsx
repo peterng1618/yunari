@@ -141,8 +141,8 @@ export function PublishControl({
   //
   // **The name is dialled where the host has one**, because a display's cookie
   // and storage are scoped to the origin it paired on: a dotted quad that DHCP
-  // moves is a phone that has to pair again, while the name does not move
-  // (`docs/decisions/0132`). The address is still what gates this block and is
+  // moves is a phone that has to pair again, while the name does not move.
+  // The address is still what gates this block and is
   // still printed, because a device that cannot resolve the name — Android 11
   // and earlier, or one on Private DNS — is exactly the device an address is
   // for.
@@ -265,8 +265,7 @@ export function PublishControl({
                 {/* https is what makes the display a secure context — the wake
                     lock and fullscreen are gated on it — so it is the address
                     printed. The plain one is what a device that has not
-                    installed the root certificate can still open
-                    (`docs/decisions/0076`). */}
+                    installed the root certificate can still open. */}
                 <span className="editor-shell-publish-note">
                   {`Fallback http://${shown.address}:${shown.port}`}
                 </span>

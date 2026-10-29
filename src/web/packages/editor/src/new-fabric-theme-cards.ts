@@ -23,7 +23,7 @@ import { uiCopy } from "./ui-copy.js";
  *
  * Every builder returns one Fabric group over the card's parts, and every
  * position and size below is still a measurement off
- * `docs/superpowers/specs/2026-09-26-reference-theme-target.png` at 1672 × 941:
+ * the reference theme target at 1672 × 941:
  * the card borders were located by the transition of the two-pixel outline, the
  * text and icons by connected components of bright ink inside each card, and the
  * rings by their saturated strokes. `cardGroup` is what turns those artboard

@@ -370,7 +370,7 @@ export interface HostServerOptions {
   /** The leaf and its key. Omitted only by the unit suite: the launcher always
    *  brings one, because a display that cannot hold a wake lock or register a
    *  service worker is the failure `vg-580` exists to remove, and it is the
-   *  origin rather than any route that decides it. See `docs/decisions/0070`. */
+   * origin rather than any route that decides it. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
    *  the host has none to offer, and the route then says so. Only the PEM is
@@ -403,7 +403,7 @@ export interface HostingState {
    *  hostname. **Beside the address, not instead of it**: a device that cannot
    *  resolve `.local` still has a dotted quad to type, and an owner has one to
    *  read aloud. The name is what survives a DHCP lease, which is why the
-   *  pairing symbol dials it (`docs/decisions/0132`). */
+   * pairing symbol dials it. */
   readonly name: string | null;
   /** The port this host is bound to, or null when it is not bound. */
   readonly port: number | null;
@@ -1267,7 +1267,7 @@ const MAX_SOCKET_CONNECTIONS = 256;
  * and it is kept only because the pairing link that points at it belongs to the
  * per-display-themes spec, which owns what that link should carry. A display
  * reaches the secure origin by typing `https` in front of the address until
- * then. Recorded in `docs/decisions/0070`.
+ * then.
  */
 export function createPortListener(
   plain: http.Server,
@@ -3741,7 +3741,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // is the same bytes any loopback visitor already has: no reading, no theme,
     // no device in it. Everything this guard exists to protect stays behind it —
     // `/api/themes/**`, the sample stream, `/api/display` — and `/editor` keeps
-    // its own loopback guard. See `docs/decisions/0019`.
+    // its own loopback guard.
     const isBundleAsset =
       url.pathname.startsWith("/assets/") ||
       // The browser probes this unprompted and without a token, and the repo
@@ -3752,7 +3752,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // rel="manifest">` fetch carries none either, so a paired phone was
       // refused the manifest and the worker script and the player would not
       // install. Same rule as the assets beside them — bundle bytes, no
-      // reading, no theme, no device (docs/decisions/0019, 0071).
+      // reading, no theme, no device.
       url.pathname === "/manifest.webmanifest" ||
       url.pathname === "/sw.js";
 
@@ -3833,8 +3833,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     // The Wallpaper Engine library this PC holds, and one item's bytes. The
-    // browser names an item by its `workshopId`; every path stays in the host
-    // (docs/decisions/0097).
+    // browser names an item by its `workshopId`; every path stays in the host.
     if (url.pathname === "/api/wallpaper-engine") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -4393,8 +4392,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // bytes land in the folder and the answer is the id they landed under, so
     // the theme survives the editor closing and appears in the local list. The
     // host reads the package — the browser posts bytes and maps the answer —
-    // because the id rule and the no-overwrite rule are the folder's rules
-    // (docs/decisions/0078).
+    // because the id rule and the no-overwrite rule are the folder's rules.
     //
     // Matched before `/api/themes/:id`, which would otherwise read `import` as
     // a theme id — the same reason `/api/themes/active` is answered above.
@@ -4499,7 +4497,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     // The catalogue's Install action. The host fetches the package because the
-    // editor's browser cannot (docs/decisions/0089), and the operation records
+    // editor's browser cannot, and the operation records
     // the origin after the write so the listing can say where a theme came from.
     // Matched here, before `/api/themes/:id`, for the same reason `import` is.
     if (url.pathname === "/api/themes/install") {
@@ -4778,7 +4776,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        // The store moves the folder to the OS trash (docs/decisions/0021) and
+        // The store moves the folder to the OS trash and
         // answers false for anything it would not have listed, so a 404 here
         // means the same "no such theme" an open would have said.
         let removed: boolean;

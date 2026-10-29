@@ -9,11 +9,9 @@ Delete the guidance lines as you fill each section in, and keep the headings.
 The form a human fills in the browser is `.github/ISSUE_TEMPLATE/bug.yml`; it
 asks the same questions. This file is the same shape in a form `gh` can post.
 
-**Where the record lives:** an issue is an INPUT, not the backlog.
-`docs/product/backlog.jsonl` is the source of truth and `npm run backlog:check`
-enforces its states; this issue is pulled into that file when asked, and is
-closed with a comment naming the check that ran. Do not treat closing an issue
-as fixing a thing — the doc is what gets closed.
+**Where the record lives:** an issue is the record. GitHub Issues tracks planned
+work and defects; close an issue with a comment naming the check that ran, not
+with a close reason alone.
 -->
 
 **What happens**

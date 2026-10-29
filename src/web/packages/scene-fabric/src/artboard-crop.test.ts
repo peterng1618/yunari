@@ -15,7 +15,7 @@ import {
  * The counting is a fact about the scene rather than about a surface, and the
  * editor's artboard panel is the only reader left: it takes `outsideCount`.
  * `outsideEdges` was the player's, for the sentence its crop notice printed,
- * and the user removed that notice on 2026-10-18 (`docs/decisions/0069`). Its
+ * and the user removed that notice on 2026-10-18. Its
  * cases stay here rather than going with the file that rendered the sentence,
  * because a function no surface reads is exactly where a silent change goes
  * unnoticed.
@@ -25,7 +25,7 @@ import {
  * different name.
  *
  * There was a third exclusion, an author's mark that a crop was deliberate, and
- * the user removed it on 2026-10-18 (`docs/decisions/0069`). Every overhang
+ * the user removed it on 2026-10-18. Every overhang
  * counts now, which is why no case below mentions one.
  */
 
@@ -87,8 +87,8 @@ describe("what counts as cropped", () => {
 
 describe("the slack at an edge", () => {
   it("forgives a panel flush against the edge, and one a fraction past it", () => {
-    // The case the player's own suite carried until its notice went
-    // (`docs/decisions/0069`), re-pointed at the counting both surfaces read
+    // The case the player's own suite carried until its notice went,
+    // re-pointed at the counting both surfaces read
     // rather than dropped with the sentence it used to render: `EDGE_TOLERANCE`
     // is still what decides this, and Fabric's coordinates are fractional, so a
     // panel the author placed at the edge must not read as cropped over a

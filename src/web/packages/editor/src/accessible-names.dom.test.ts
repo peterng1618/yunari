@@ -281,7 +281,7 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Stroke
       "INPUT[type=][aria-hidden]", // Shadow
       // The inspector's one toggle. It was three: deliberate bleed on both
-      // mounts, which went with its mark (`docs/decisions/0069`), and frosted
+      // mounts, which went with its mark, and frosted
       // glass on the shape alone. The text run's frost toggle is gone with its
       // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
       // section at all rather than a switch that writes nothing.

@@ -612,7 +612,7 @@ async function start(): Promise<void> {
  * a broken theme: the media layer would report it unreadable and the artboard
  * would show nothing behind the glass. A package opened from disk brings its
  * own, which is why this is only wired into the two paths that *build* the
- * starter. `docs/decisions/0011`.
+ * starter.
  */
 let starterBytes: Promise<Readonly<Record<string, Uint8Array>>> | undefined;
 function starterAssets(): Promise<Readonly<Record<string, Uint8Array>>> {

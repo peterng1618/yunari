@@ -397,7 +397,7 @@ export async function captureVisualReview(
     );
   }
   const directory =
-    process.env["YUNARI_CAPTURE_DIR"] ?? "../../docs/evidence/screenshots";
+    process.env["YUNARI_CAPTURE_DIR"] ?? "../../test-results/captures";
   const filename = `${name}-${testInfo.project.name}.png`;
   const path = `${directory}/${filename}`;
   const screenshot =

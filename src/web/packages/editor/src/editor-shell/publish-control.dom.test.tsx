@@ -350,7 +350,7 @@ it("opens the surface without moving the host, and keeps every fact behind the p
   expect(hostSwitch()?.getAttribute("aria-pressed")).toBe("true");
   expect(popupText()).toContain(`https://${ADDRESS}:${PORT}`);
   // And the plain address beside it, because a device that has not installed
-  // the root certificate cannot open the https one (`docs/decisions/0076`).
+  // the root certificate cannot open the https one.
   expect(popupText()).toContain(`http://${ADDRESS}:${PORT}`);
   // The code in type beside the address, because a device with no camera has
   // nowhere else to read it, and the symbol carries the same one.
@@ -537,8 +537,8 @@ it("dials the host's stable name, and prints the address beside it", async () =>
   );
   // **Both, because they are two different facts.** The symbol and the line above
   // it carry the origin a display pairs on — the name, because a display's cookie
-  // and storage are scoped to the origin and the address is the half DHCP moves
-  // (`docs/decisions/0132`). The address survives as what a device that cannot
+  // and storage are scoped to the origin and the address is the half DHCP moves.
+  // The address survives as what a device that cannot
   // resolve the name types: Android 11 and earlier, and any device on Private
   // DNS, fail on `.local` and need it.
   expect(popupText()).toContain(`http://${ADDRESS}:${PORT}`);

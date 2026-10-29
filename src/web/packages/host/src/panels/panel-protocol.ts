@@ -5,7 +5,7 @@ import forge from "node-forge";
  * bytes with a two-byte trailer.
  *
  * Pure, so the packet's bytes are testable against the constants three
- * independent drivers agree on (see docs/decisions/0130-panel-protocol.md).
+ * independent drivers agree on (see.md).
  * Nothing here touches USB.
  */
 

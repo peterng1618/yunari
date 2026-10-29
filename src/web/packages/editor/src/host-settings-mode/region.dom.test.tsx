@@ -18,8 +18,7 @@
  *
  * **What it deliberately does not measure.** jsdom lays nothing out and paints
  * nothing, so nothing here is a claim about how the region looks. The drawing it
- * follows (`docs/design/mockups/current/host-settings.html`) is read by its own
- * gate, not by this file.
+ * follows is read by its own gate, not by this file.
  */
 import type { DisplayShape } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";

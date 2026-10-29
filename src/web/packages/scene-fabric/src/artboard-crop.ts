@@ -12,8 +12,8 @@ import { type FabricObject, Group } from "fabric/es";
  * The counting lives here rather than in the surface that reads it because it is
  * a fact about the scene, not about what an inspector chooses to say about it.
  * **The editor's artboard panel is the only reader left.** The player raised the
- * same figure as a crop notice until the user removed it on 2026-10-18
- * (`docs/decisions/0069`): a display says nothing about an overhang now, and
+ * same figure as a crop notice until the user removed it on 2026-10-18:
+ * a display says nothing about an overhang now, and
  * every one of them counts.
  */
 
@@ -58,8 +58,8 @@ export const EDGE_TOLERANCE = 1;
  * `countedBoxes`, and both surfaces are handed boxes by `sceneBoxesOf`.
  *
  * **Every overhang counts.** There was a third term — an author's mark that a
- * crop was deliberate — and the user removed it on 2026-10-18
- * (`docs/decisions/0069`): nothing is marked, so an object that runs off the
+ * crop was deliberate — and the user removed it on 2026-10-18:
+ * nothing is marked, so an object that runs off the
  * edge on purpose reads as a fault for as long as it stands.
  */
 export function countable(box: SceneBox): boolean {

@@ -231,8 +231,7 @@ describe("stableName", () => {
     vi.spyOn(os, "hostname").mockReturnValue("study-pc");
 
     // Not a dotted quad: a display's cookie and storage are scoped to the origin
-    // it paired on, and the address is the half that DHCP moves
-    // (`docs/decisions/0132`).
+    // it paired on, and the address is the half that DHCP moves.
     expect(stableName()).toBe("study-pc.local");
   });
 

@@ -118,11 +118,11 @@ const MODE_SWITCH_ID = "yunari-shell-modes";
 const modeSegmentId = (mode: ShellMode): string => `${MODE_SWITCH_ID}-${mode}`;
 
 /**
- * DESIGN.md §5's Segmented, in the header's **bare** form (see 0074).
+ * DESIGN.md §5's Segmented, in the header's **bare** form.
  *
  * The one Segmented component (`components/ui/control-segmented.tsx`) is a
  * labelled *row* — §5's 74px label column beside a value cell — and the header
- * drawing (`docs/design/mockups/current/shell.html`) draws this one as a well
+ * drawing draws this one as a well
  * with the three names in it and no label at all, so the group is its own
  * label and the primitive is composed here rather than the row vocabulary
  * growing a fourth shape for one caller.

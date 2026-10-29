@@ -146,7 +146,7 @@ export function isAttached(
  * Plain `http` on loopback is deliberate, not an oversight about TLS. A loopback
  * origin is a secure context by the platform's own rule, so this display keeps
  * `wakeLock` and `serviceWorker` with no certificate to install — where the
- * https origin this host also serves (`docs/decisions/0070`) would cost a
+ * https origin this host also serves would cost a
  * per-device CA root for nothing.
  */
 export function launchFor(

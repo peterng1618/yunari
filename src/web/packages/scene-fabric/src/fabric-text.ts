@@ -45,7 +45,7 @@ import { textShapeFor } from "./text-runs.js";
  * unbreakable run and never narrows (`fabric/dist/index.mjs:18453`), and
  * `width` is one of its `textLayoutProperties` (`:18760`), so every width write
  * re-enters that. The author's box therefore lives on the object as authored
- * content and is re-asserted here; see `docs/decisions/0003`.
+ * content and is re-asserted here; see.
  */
 
 /** Fabric's typings make `Textbox` incompatible with `FabricText` under exact optional types. */
