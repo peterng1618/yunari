@@ -17,23 +17,22 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the h
 
 ## Last completed change
 
-- **Glass over a video paints a picture again:** a static panel's still falls back to the video's first frame when none is declared (`media.fallbackFrame ?? 0` in `background-media`), ending the bare grey tint.
-- **`panel=1` still means `"static"`:** `panelGlassSampling` maps the host's panel page to it and leaves a browser display on the live default.
-- **Red-proved:** restoring the old undefined frame fails "stands a video with no declared frame on its first frame"; the rendered panel page shows the cards over the blurred first frame.
-- **Rebuilt `@yunari/player` and `@yunari/host`:** the host build does not rebuild the player, so the panel was served a stale bundle before (`6bbb3d3`).
-- **Gate:** `npm run gate` `EXIT=0` after a formatter fix; scene-fabric 449 tests, typecheck and biome green.
+- **The panel's UI is dithered before 4-bit packing:** `overlayUpdate` adds a 4x4 Bayer fraction of one step before rounding, so a smooth still is no longer 16 flat bands (seen on the panel 2026-10-29).
+- **The wire gains nothing:** changed pixels are chosen on the source frame, before quantising; solid black and white stay byte-identical.
+- **Red-proved:** dropping the threshold term flattens a 128 grey to one level and fails "dithers a mid tone instead of flat-banding it".
+- **Applied to the device:** `@yunari/host` rebuilt and restarted; the panel repaints from the dithered encoder.
+- **Unverified on the panel:** the dither is proved by the encoder test only — nobody has looked at the device since the restart.
 
 ## Next
 
-1. Finish `vg-791`: overlay alpha, glass over video, and a stop that leaves no clip looping.
-2. Decide the screen-command policy: report the reconnect, or forbid it until rediscovery works (`vg-789`).
-3. Reclaim-device spec — designed, awaiting the user's approval of the shape.
+1. Look at the panel: confirm the bands are gone and the texture is not visible at arm's length.
+2. Finish `vg-791`: overlay alpha, glass over video, and a stop that leaves no clip looping.
+3. Decide the screen-command policy: report the reconnect, or forbid it until rediscovery works (`vg-789`).
 4. Drain the backlog: a reproduction pass first, not a fix pass.
 
 ## Blockers / unverified
 
 - **The panel is held and painting:** do not press `screen`/`restart` — they re-enumerate the port and the host never recovers (`vg-789`).
-
 - **Overlay alpha and glass over video are unverified on pixels:** the device accepted every frame, but no capture proof exists.
 - **`vg-789`/`vg-790` are the blocking product defects:** unplug and re-enumeration are not handled; a held port is silently invisible.
 - **Video stop is unverified:** whether `STOP_VIDEO` leaves the panel still or looping after a host exit was not observed.

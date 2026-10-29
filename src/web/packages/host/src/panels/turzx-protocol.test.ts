@@ -102,6 +102,17 @@ function red(
   return pixels;
 }
 
+function grey(width: number, height: number, value: number): Uint8Array {
+  const pixels = blank(width, height);
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = value;
+    pixels[i + 1] = value;
+    pixels[i + 2] = value;
+    pixels[i + 3] = 255;
+  }
+  return pixels;
+}
+
 describe("overlayUpdate", () => {
   it("encodes a new rectangle as its pixels plus a visible segment", () => {
     const update = overlayUpdate(
@@ -120,6 +131,25 @@ describe("overlayUpdate", () => {
     expect([...update.body.slice(11, 16)]).toEqual([0, 0, 1, 0, 2]);
     expect(update.visibleBytes).toBe(5);
     expect(update.imageSize).toBe(5 + 6 + 5 + 2);
+  });
+
+  it("dithers a mid tone instead of flat-banding it", () => {
+    // 4 bits per channel turns a smooth gradient into 16 flat bands; a 128 grey
+    // must land on both 7 and 8 across a 4x4 patch, or the panel shows a step.
+    const update = overlayUpdate(blank(4, 4), grey(4, 4, 128), {
+      width: 4,
+      height: 4,
+    });
+    const levels = new Set<number>();
+    let at = 0;
+    for (let y = 0; y < 4; y += 1) {
+      at += 5; // the row's segment header: offset, width
+      for (let x = 0; x < 4; x += 1) {
+        levels.add((update.body[at + 2] ?? 0) >>> 4); // red's high nibble
+        at += 3;
+      }
+    }
+    expect([...levels].sort()).toEqual([7, 8]);
   });
 
   it("drops the old position from the visible list", () => {

@@ -304,6 +304,25 @@ function segmentsInRow(
 }
 
 /**
+ * 4x4 Bayer thresholds. The overlay stores 4 bits per channel, so a smooth
+ * gradient is 16 flat bands on the panel (observed 2026-10-29, static glass
+ * over a video); a fraction of one step before rounding trades the band edge
+ * for a fixed texture that reads as the tone between them. Solid black and
+ * white stay exact, and the changed-pixel test runs before this, so no extra
+ * bytes reach the wire.
+ */
+const DITHER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/** One 4-bit channel value, dithered by the pixel's position. */
+function dither(value: number, x: number, y: number): number {
+  const threshold = DITHER_4[((y & 3) << 2) | (x & 3)] ?? 0;
+  return Math.max(
+    0,
+    Math.min(15, Math.round((value / 255) * 15 + threshold / 16 - 0.5)),
+  );
+}
+
+/**
  * The per-frame UPDATE_BITMAP payload: the pixels that changed since
  * `previous`, then the spans that are visible at all.
  *
@@ -373,14 +392,17 @@ export function overlayUpdate(
 
     for (let pixel = 0; pixel < segment.width; pixel += 1) {
       const index = segment.at + pixel * 4;
-      const red = current[index] ?? 0;
-      const green = current[index + 1] ?? 0;
-      const blue = current[index + 2] ?? 0;
+      const cell = segment.offset + pixel;
+      const x = cell % width;
+      const y = (cell - x) / width;
+      const red = dither(current[index] ?? 0, x, y);
+      const green = dither(current[index + 1] ?? 0, x, y);
+      const blue = dither(current[index + 2] ?? 0, x, y);
       const alpha = Math.floor(((current[index + 3] ?? 0) / 255) * 15);
 
-      message[at] = (Math.floor((blue / 255) * 15) << 4) | ((alpha & 0xc) >> 2);
-      message[at + 1] = (Math.floor((green / 255) * 15) << 4) | (alpha & 0x3);
-      message[at + 2] = Math.floor((red / 255) * 15) << 4;
+      message[at] = (blue << 4) | ((alpha & 0xc) >> 2);
+      message[at + 1] = (green << 4) | (alpha & 0x3);
+      message[at + 2] = red << 4;
       at += 3;
     }
   }
