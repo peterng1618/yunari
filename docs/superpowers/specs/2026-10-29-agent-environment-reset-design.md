@@ -22,7 +22,7 @@ Remove Yunari's accumulated agent configuration and development documentation, t
 ## Lean replacement
 
 - `AGENTS.md`: concise project/toolchain facts, commands, Orca/Superpowers/GitHub Issues ownership, code guardrails, verification, Git safety, and selected gotchas. State that docs and comments explain only non-obvious invariants; no diary, chronology, or repeated rationale.
-- `DESIGN.md`: retain a normative editor visual-language contract derived from current styles/components. Preserve stable `§N` markers and machine-checked token frontmatter where current tooling uses them. Remove historical rationale and references to deleted artifacts.
+- `DESIGN.md`: retain a normative editor visual-language contract derived from current styles/components. Conform to Google design.md: YAML token frontmatter and `##` Markdown guidance, with tokens normative. Remove custom `§N` markers and citation machinery. Remove historical rationale and references to deleted artifacts.
 - `docs/README.md`: short map to current docs and Superpowers artifacts.
 - `docs/product.md`: current product scope and invariants from code/tests.
 - `docs/architecture.md`: current package boundaries and ownership from code.
