@@ -486,6 +486,25 @@ describe("a panel's controls", () => {
     }
   });
 
+  it("cuts a reply at the first NUL when a drained tail is glued to it", async () => {
+    // Observed on hardware: QUERY_STATUS came back as the same phrase twice,
+    // NUL-padded between, once a drained reply's tail shared the burst.
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO at open
+      "needReSend:0|renderCnt:0", // drained
+      `needReSend:0|renderCnt:7${"\0".repeat(40)}needReSend:0|renderCnt:7`,
+    );
+    const panel = await opened(fake.transport);
+
+    try {
+      await expect(panel.controls!.run({ kind: "status" })).resolves.toBe(
+        "needReSend:0|renderCnt:7",
+      );
+    } finally {
+      await panel.close();
+    }
+  });
+
   it("ends a status wait on silence with the named error", async () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88",

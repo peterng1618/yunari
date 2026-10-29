@@ -607,8 +607,19 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/**
+ * A text reply, cut at the first NUL.
+ *
+ * The wire pads replies with NULs, and a burst can carry a drained reply's tail
+ * followed by this command's answer — observed on hardware as the same phrase
+ * twice, NULs between. The first NUL is the boundary; everything after it is
+ * not part of one reply.
+ */
 function decodeReply(reply: Uint8Array): string {
-  return new TextDecoder("latin1").decode(reply).replace(/[\0\s]+$/, "");
+  return new TextDecoder("latin1")
+    .decode(reply)
+    .split("\0")[0]!
+    .replace(/\s+$/, "");
 }
 
 /** A QUERY_STATUS answer: the panel names its own counters in the reply. */
