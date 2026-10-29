@@ -5,7 +5,7 @@ import { artboardBackdrop } from "./artboard-backdrop.js";
 import type { BackdropMedia, DeviceRect } from "./glass.js";
 
 /**
- * The composition decision 0080 rests on: what a glass panel samples is the
+ * The composition rule: what a glass panel samples is the
  * board's paint **with its media over it**, and not the canvas, which sits above
  * the media and can no longer carry the paint at all.
  *

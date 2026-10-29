@@ -67,7 +67,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  *
  * `min`/`max` below are **the document's bounds**, not only the control's: the
  * envelope loader refuses a present value outside them, and refuses a family's
- * crossed `min`/`max` pair where both halves are present (decision 0082, from
+ * crossed `min`/`max` pair where both halves are present (per
  * `vg-348`'s ruling of 2026-10-12). A change to a number here therefore changes
  * what loads, not only what a control offers — the table is the one owner of
  * that question, which is why the loader reads it instead of keeping a second

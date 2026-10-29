@@ -181,11 +181,11 @@ export function isBlocked(props: {
  * and the two the drawings draw differently take their own.
  *
  * - `column` — a fixed label column and one value cell: what
- *   `mockups/current/controls.html` declares for every field row, and what
- *   `mockups/current/shell.html:227` and its eleven siblings declare in the
+ *   the controls drawing declares for every field row, and what
+ *   the shell drawing and its eleven siblings declare in the
  *   panes and the inspector (`width:74px;flex:0 0 auto` beside `flex:1`).
  * - `boxed` — the row *is* a panel box with the label filling it:
- *   `mockups/current/settings.html:89-93` draws the follow-the-system switch as
+ *   the settings drawing draws the follow-the-system switch as
  *   `--panel-2` inside a 1px `--edge` at `--radius-lg`, the label at `flex:1`
  *   and the switch at the right, with no label column at all. A surface whose
  *   drawing draws that owns it — the settings modal — and the inspector's own
@@ -220,7 +220,7 @@ export type ControlShape = "column" | "boxed" | "headed";
  *
  * With `shape` at its default, the control slot is the row's **one value
  * track**. It is a fixed-width label column and a flexible cell, which is what
- * the drawing declares (`mockups/current/controls.html`): the label is
+ * the drawing declares: the label is
  * `width:74px;flex:0 0 auto`, the value is `flex:1`. The cell is the geometry
  * and each control fills it — `ControlWell` is `w-full`, the select's trigger
  * and the slider's root already were, and a segmented group fills it too.

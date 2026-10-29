@@ -153,8 +153,7 @@ describe("the editor on a URL that names a theme", () => {
     // `theme.json` past the host's size bound was answered as absence, so the
     // editor mounted the template and wrote "Editor ready" over a document the
     // author has on disk. The outcome is its own kind, not `none` — the caller
-    // must say the theme is too large rather than that nothing was asked for
-    // (decisions/0043, 0084).
+    // must say the theme is too large rather than that nothing was asked for.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),
       open: vi.fn(async () => {

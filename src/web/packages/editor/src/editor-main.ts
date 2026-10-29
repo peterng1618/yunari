@@ -573,7 +573,7 @@ async function start(): Promise<void> {
     // A theme the URL named that is stored but past the size the host will read
     // is not a blank success either: the author is told the saved theme is too
     // large to open, over the template that stands in for the document they
-    // asked for (vg-409, decisions/0084).
+    // asked for (vg-409).
     case "too-large": {
       const theme = createNewFabricTheme();
       await mount({

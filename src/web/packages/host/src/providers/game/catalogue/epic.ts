@@ -11,8 +11,8 @@ const EPIC_MANIFEST_DIRS = [
 ] as const;
 
 /**
- * One Epic manifest, or `undefined` when it is a DLC or an incomplete install
- * (decision 0110). A DLC names its parent in `MainGameAppName`; an incomplete
+ * One Epic manifest, or `undefined` when it is a DLC or an incomplete install.
+ * A DLC names its parent in `MainGameAppName`; an incomplete
  * install has no executable to match yet.
  */
 function parseEpicManifest(text: string): InstalledGame | undefined {

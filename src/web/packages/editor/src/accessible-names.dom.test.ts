@@ -244,8 +244,8 @@ describe("editor panels", () => {
       // The selected type token's inspector, mounted after the palette pane:
       // its family and weight choosers, each a `ControlSelect`'s value carrier.
       // Its reassignment chooser is not here because it is not on screen: the
-      // box is revealed by the first Delete press and starts empty
-      // (`decisions/0130`), so nothing before that point can reach it.
+      // box is revealed by the first Delete press and starts empty,
+      // so nothing before that point can reach it.
       "INPUT[type=][aria-hidden]", // Family (token)
       "INPUT[type=][aria-hidden]", // Weight (token)
       // The paint section of the same inspector, after the preset section: its

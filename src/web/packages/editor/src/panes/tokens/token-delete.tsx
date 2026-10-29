@@ -22,8 +22,7 @@ export interface DeleteTarget {
  *
  * **The empty state is the primitive's, not a "None" entry.** An unselected
  * `ControlSelect` prints its placeholder; a synthetic option would put a
- * non-choice in the list, where it reads as a value the author could pick
- * (`decisions/0130`).
+ * non-choice in the list, where it reads as a value the author could pick.
  *
  * The `data-*` hooks stay with the caller: they are the surface's selectors,
  * and this component knows nothing about which token kind it is deleting.

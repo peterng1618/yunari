@@ -133,7 +133,7 @@ function ChannelTrack({
  * the eyedropper.
  *
  * Everything but the paint is composed from the control set; the live/settled
- * state machine is `useColourPicker`'s (decision 0100), and the preset menu is
+ * state machine is `useColourPicker`'s, and the preset menu is
  * the canvas menu's controlled pattern. `<input type="color">` still cannot do
  * this: a theme paint carries alpha, and a native input has no alpha channel.
  */

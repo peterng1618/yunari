@@ -425,7 +425,7 @@ export async function selectTestFiles(root) {
  * remainder growing, and it takes no position on where a new component's tokens
  * come from, which the row records as a policy call rather than a scanner edit.
  *
- * Only surfaces the design language can reach (decision 0092): the editor's DOM
+ * Only surfaces the design language can reach: the editor's DOM
  * package. A custom property resolves only in a document that loaded
  * `editor-shell.css`, so a canvas context, a Fabric object, a standalone player
  * or host page and a persisted theme value cannot consume it whatever they
@@ -443,9 +443,9 @@ export async function selectTestFiles(root) {
 const NOT_PRODUCT_SOURCE = /\.test\.tsx?$|\.spec\.ts$|-fixture\.tsx?$/;
 
 /**
- * Where the design language cannot reach, and the reason beside each rule
- * (decision 0092). A path is excluded only when its surface cannot resolve a
- * custom property; "not converted yet" is not a reason to exclude anything.
+ * Where the design language cannot reach, and the reason beside each rule. A
+ * path is excluded only when its surface cannot resolve a custom property; "not
+ * converted yet" is not a reason to exclude anything.
  */
 const OUTSIDE_DESIGN_LANGUAGE = [
   // No editor stylesheet: the host's standalone pages, the player's own chrome.
@@ -1018,7 +1018,7 @@ if (isEntryPoint) {
     `design-tokens: the remainder is ${remainder.length} file(s) off the gated list that still hold a literal, against a ceiling of ${ceiling}`,
   );
   notices.push(
-    `design-tokens: ${excluded.length} file(s) outside the design language's reach are not counted (decision 0092)`,
+    `design-tokens: ${excluded.length} file(s) outside the design language's reach are not counted`,
   );
   if (remainder.length > ceiling) {
     console.error(

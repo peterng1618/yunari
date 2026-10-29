@@ -4,7 +4,7 @@ import { MAX_BOX_ART_BYTES } from "./box-art.js";
 import { matchStoreGame, normalizeGameName } from "./name-match.js";
 
 /**
- * Steam store metadata for a game with no local manifest (decision 0109).
+ * Steam store metadata for a game with no local manifest.
  *
  * Two keyless requests resolve a name to an app id, and the answer — including
  * "no match" and a 10-minute backoff after a failure — is cached under the

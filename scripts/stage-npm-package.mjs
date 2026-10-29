@@ -6,7 +6,7 @@
  * The staged tree mirrors the workspace — `packages/host/{bin,dist,public}`,
  * `packages/player/dist`, `packages/editor/dist` and `schema/` — so the bin
  * shim's `../dist/main.js`, the launcher's `packagesDir` and `productVersion()`
- * resolve without a production path change (decision 0111).
+ * resolve without a production path change.
  *
  * `node scripts/stage-npm-package.mjs --out <dir> [--expect-version <version>]
  *   [--source <repo>]`
@@ -30,7 +30,7 @@ import { pathToFileURL } from "node:url";
 /** The five packages the built host bundle imports by bare specifier. The
  *  workspace manifests declare three; `culori` and `fflate` arrive through
  *  renderer-core/theme-package, and the staged manifest must still name them or
- *  an installed host fails with ERR_MODULE_NOT_FOUND (decision 0111, rung 6). */
+ *  an installed host fails with ERR_MODULE_NOT_FOUND (rung 6). */
 export const RUNTIME_DEPENDENCIES = [
   "culori",
   "fflate",

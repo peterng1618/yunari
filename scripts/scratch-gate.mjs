@@ -260,7 +260,7 @@ function selfTest() {
   const cases = [
     // [path, expected to be refused]
     ["src/web/packages/player/src/chrome.ts", false],
-    ["docs/superpowers/plans/example.md", false],
+    ["docs/superpowers/plans/example.md", false], // doc-ref-ok: self-test fixture
     ["src/web/vitest-080.json", true],
     ["src/web/.agent-scratch/p1-repro.mjs", true],
     [".claude/worktrees/agent-abc/notes.md", false],

@@ -11,7 +11,7 @@ import {
 
 /**
  * Every game launcher's installed apps, read through injected seams so the
- * catalogue is testable without this machine's stores (decision 0110).
+ * catalogue is testable without this machine's stores.
  *
  * Each reader is local and read-only: a missing directory or malformed file is
  * an empty list, never an error, because an absent launcher must not take the

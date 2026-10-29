@@ -9,7 +9,7 @@ import {
 /**
  * The shapes a drawing gives a choice. `row` is §5's **choice row** and the
  * default; `card` is the settings modal's palette tile, which
- * `mockups/current/settings.html:44-87` draws as a `--radius-lg` card at
+ * the settings drawing draws as a `--radius-lg` card at
  * `--panel-2` carrying the caller's swatch *above* the name, the chosen one
  * marked by the accent border and its 3px glow rather than by a lift. `chip` is
  * §5's **preset chip**: a 24px rounded square carrying the swatch alone, its

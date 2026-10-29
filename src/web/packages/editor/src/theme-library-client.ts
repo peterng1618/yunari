@@ -110,7 +110,7 @@ export class ThemeValidationError extends Error {
  * used to give for both. The `413` the host answers carries no issues, because
  * nothing about the document is invalid: the reason is its size, and that is
  * the whole of it, so this is its own error rather than a validation failure
- * (vg-409, decisions/0043, 0084).
+ * (vg-409).
  */
 export class ThemeTooLargeError extends Error {
   constructor(id: string) {
@@ -301,7 +301,7 @@ export function createThemeLibraryClient(options?: {
       }
       // The theme is there and the reason is its size rather than its content,
       // so it gets its own error instead of the not-found a dead id gets — the
-      // same half the 422 above fixed for validation (vg-409, decisions/0084).
+      // same half the 422 above fixed for validation (vg-409).
       if (response.status === 413) {
         throw new ThemeTooLargeError(id);
       }

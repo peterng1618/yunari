@@ -56,7 +56,7 @@ if ($null -ne $value) { [Console]::Out.Write([string]$value) }
 
 /**
  * The executable's version-info ProductName, used as the local name a store
- * lookup searches for (decision 0109). An absent PowerShell, a failed run or an
+ * lookup searches for. An absent PowerShell, a failed run or an
  * empty value is `undefined`; nothing here is ever reported as a failure.
  */
 export function readProductName(

@@ -41,7 +41,7 @@ export interface ArtboardBackdropOptions {
  * reader no letterbox. It cannot simply be dropped, though: the glass samples
  * the canvas's own pixels, so a board whose paint only reached the host would
  * leave every panel sampling nothing — measured as alpha 130, the tint over
- * transparency — which is the defect decision 0079 closed, in another costume.
+ * transparency — which is that defect in another costume.
  *
  * The two are composed rather than listed because they are one surface: the
  * paint is what shows wherever the media is not, and a theme with no media (or

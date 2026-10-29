@@ -45,8 +45,7 @@ import {
  * the report again. `invalid` carries the validator's own issues, and a caller
  * that ignores it will not compile (ADR-0043). `too-large` is the same defect
  * one trigger over — a stored document past the store's size bound — and it is
- * its own kind rather than `none` for the same reason (`vg-409`,
- * `decisions/0084`).
+ * its own kind rather than `none` for the same reason (`vg-409`).
  */
 export type BootThemeOutcome =
   | { readonly kind: "opened"; readonly content: ThemeLibraryContent }

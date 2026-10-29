@@ -48,8 +48,8 @@ import type { StoreLookupResult } from "./store-metadata.js";
  * engine window class. A Steam match still gives the name and, when Steam's
  * cache holds it, the local box art URL. `game.app` names the executable for
  * every process, game or not; a store lookup happens only when a name or
- * artwork key is demanded and neither the catalogue nor Steam names the app
- * (decision 0109). A store failure is a gap for that key, never the provider's
+ * artwork key is demanded and neither the catalogue nor Steam names the app.
+ * A store failure is a gap for that key, never the provider's
  * failure, so presence keeps answering.
  */
 

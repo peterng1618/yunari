@@ -245,11 +245,11 @@ export const PREVIEW_GLYPH: LucideIcon = Maximize2;
 export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
 export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
 
-/** The store cell's four actions, from the drawing's facts band
- *  (`mockups/current/store-themes.html`): a folder for opening the item, a
- *  monitor for assigning it to a display, a download for exporting it as a
- *  package, and the bin for deleting it — the last is the one the mark in §4
- *  paints `--hot`, which the control's own `destructive` flag carries. */
+/** The store cell's four actions, from the drawing's facts band: a folder for
+ *  opening the item, a monitor for assigning it to a display, a download for
+ *  exporting it as a package, and the bin for deleting it — the last is the one
+ *  the mark in §4 paints `--hot`, which the control's own `destructive` flag
+ *  carries. */
 export const OPEN_ITEM_GLYPH: LucideIcon = Folder;
 export const ASSIGN_ITEM_GLYPH: LucideIcon = Monitor;
 export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
@@ -332,10 +332,9 @@ export const TWISTY_GLYPHS: Readonly<
   expanded: ChevronDown,
 };
 
-/** The pager's two steps, from the drawing's own chevrons
- *  (`mockups/current/store-themes.html`): each points the way the press goes,
- *  and the step that would leave the listing is the disabled one rather than a
- *  missing glyph. */
+/** The pager's two steps, from the drawing's own chevrons: each points the way
+ *  the press goes, and the step that would leave the listing is the disabled
+ *  one rather than a missing glyph. */
 export const PREVIOUS_PAGE_GLYPH: LucideIcon = ChevronLeft;
 export const NEXT_PAGE_GLYPH: LucideIcon = ChevronRight;
 

@@ -322,7 +322,7 @@ describe("MediaProvider descriptors and script", () => {
   it("reads the endpoint volume and mute in the same script as the poll", () => {
     const script = smtcScript();
 
-    // The interop decision 0103's probe pinned.
+    // The interop probe pinned.
     expect(script).toContain("BCDE0395-E52F-467C-8E3D-C4579291692E");
     expect(script).toContain("5CDF2C82-841E-4546-9722-0CF74078229A");
     expect(script).toContain("GetMasterVolumeLevelScalar");

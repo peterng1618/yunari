@@ -308,8 +308,8 @@ export interface HostServerOptions {
   /** The running Steam game's local box art. Omitted when this host reads no
    *  Steam library; the route then answers 404 rather than inventing a picture. */
   readonly gameArtwork?: GameArtworkSource;
-  /** Where the store provider caches covers it looked up for a non-Steam game
-   *  (decision 0109). The route only reads it; the provider owns every download,
+  /** Where the store provider caches covers it looked up for a non-Steam game.
+   *  The route only reads it; the provider owns every download,
    *  so a request never starts a fetch. Omitted keeps the route local-art only. */
   readonly gameCoverCacheDir?: string;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
@@ -3502,7 +3502,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // probe. A display reads it through the same credential as media artwork;
     // loopback is this PC. The name is not content-addressed, so the cache is
     // bounded rather than immutable. The downloaded cover is read only, never
-    // fetched: the provider is the one owner of the store's CDN (decision 0109).
+    // fetched: the provider is the one owner of the store's CDN.
     if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -3947,7 +3947,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // A mobile export the author saved by hand (decision 0124): the host reads
+    // A mobile export the author saved by hand: the host reads
     // the package, extracts its video and normalizes it. Needs no install.
     if (url.pathname === "/api/wallpaper-engine/mpkg") {
       if (request.method !== "POST") {
@@ -4660,12 +4660,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // A stored document past the size the store will read is understood
           // and too large to serve, which is the same 413 every other themes
           // route answers an over-large thing with — and the author is told the
-          // theme is there, which is the half a 404 got wrong (vg-409,
-          // decisions/0043). RFC 9110 §15.5.14 frames 413 around *request*
+          // theme is there, which is the half a 404 got wrong (vg-409).
+          // RFC 9110 §15.5.14 frames 413 around *request*
           // content and this is a stored document on a GET; the stretch is
           // taken deliberately, because inventing a second size-ish status
-          // would be worse vocabulary than reusing this codebase's own
-          // (decisions/0084).
+          // would be worse vocabulary than reusing this codebase's own.
           if (error instanceof ThemeTooLargeError) {
             sendText(response, 413, error.message);
             return;

@@ -28,8 +28,8 @@ body,
    a bare `:root` and `[data-shell-palette="x"]` are the same node at equal
    specificity, so nothing but order picks between them. `palette.ts` owns the
    resolution rule and this mirrors its outcome for the one paint CSS reaches
-   before `applyShellPalette` writes the attribute; decision 0035 rejected a
-   second owner of the mapping, which is what an inline script resolving the
+   before `applyShellPalette` writes the attribute; a second owner of the
+   mapping was rejected, which is what an inline script resolving the
    palette ahead of the bundle would have been. */
 :root {
   --shell-surface: #eff9f2bf;

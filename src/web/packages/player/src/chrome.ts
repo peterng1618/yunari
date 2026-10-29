@@ -28,7 +28,7 @@ import { uiCopy } from "./ui-copy.js";
  * notice, which can flash on any reconnect and would move a dashboard nobody
  * touched, so every one of them `overlay`s — they sit at the display's edge and
  * the composition stays put. The one strip that took room was the crop notice,
- * and it is gone (decision 0069, `vg-578`). The theme chooser
+ * and it is gone (`vg-578`). The theme chooser
  * (`theme-chooser.ts`) is the deliberate exception: it is persistent, and its
  * one re-fit happens at mount rather than flashing under a reader's hand.
  */

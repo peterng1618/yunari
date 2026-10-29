@@ -798,7 +798,7 @@ describe("ThemeStore", () => {
     // editor mounted the template under "Editor ready" — over a document the
     // author has on disk. It is the typed error now, its own member of the
     // family above rather than a validation failure: the validator never sees
-    // this document, and the bound is the store's own (decisions/0043, 0084).
+    // this document, and the bound is the store's own.
     const store = createThemeStore(tmpDir);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     const document = JSON.stringify(envelopeFor("oversized", "Oversized"));

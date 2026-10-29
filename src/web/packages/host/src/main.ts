@@ -226,7 +226,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // helper only while a display binds game.*. A named root lets a portable
   // install — or a test fixture — point at its own library; absent, the
   // registry's SteamPath is the answer. A game outside Steam is named by the
-  // store's cached lookup, kept beside the other caches (decision 0109).
+  // store's cached lookup, kept beside the other caches.
   const namedSteamRoot = process.env.YUNARI_STEAM_ROOT;
   const steamRoot =
     namedSteamRoot === undefined || namedSteamRoot === ""
@@ -729,7 +729,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         // Stop only the LHM this run started; one the owner already ran is theirs.
         externalApps.stopOwnedLhm();
         // The media helper is a child process this run started; leaving it
-        // polling after the host exits is the orphan decision 0102 prevents.
+        // polling after the host exits would orphan it.
         mediaProvider.stop();
         // Same for the RTSS helper: a PowerShell left polling outlives the host.
         frameProvider.stop();

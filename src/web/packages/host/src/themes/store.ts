@@ -187,7 +187,7 @@ export class ThemeValidationError extends Error {
  * bound is the store's own, not the schema's — so dressing it as one would
  * report a fault that does not exist. What it must not be either is the
  * `undefined` an absent theme answers with, which is what told a reader a theme
- * they can see on disk was not there (vg-409, decisions/0043).
+ * they can see on disk was not there (vg-409).
  *
  * It carries no `issues`: there is no diagnosis to hand over, only the fact
  * that the document is too large to open. The bound is named because shrinking
@@ -641,7 +641,7 @@ function parseThemeDocument(id: string, bytes: Buffer): unknown {
  * standing where `theme.json` belongs is not this theme's document. A file that
  * *is* there and cannot be read throws rather than answering `undefined`: the
  * two facts were indistinguishable to every reader, and only the open path
- * wants them apart (vg-110, vg-409, decisions/0043).
+ * wants them apart (vg-110, vg-409).
  *
  * Both refusals are typed and neither is the other: a document that does not
  * validate is a {@link ThemeValidationError} carrying the validator's issues,

@@ -47,7 +47,7 @@ const HEADER_STRIP_PX = 42;
  * whatever the network says that day, not what the case is measuring.
  *
  * The default is the honest state — "there is no catalogue here" — and a 404
- * keeps it distinguishable from an empty catalogue, which decision 0088 says
+ * keeps it distinguishable from an empty catalogue, which
  * must not be drawn when the read failed.
  *
  * A case that needs a catalogue registers `**\/index.json` itself in its body.
