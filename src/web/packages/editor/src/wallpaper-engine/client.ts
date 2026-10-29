@@ -204,6 +204,11 @@ function extensionOf(contentType: string | null): string | undefined {
   return bare === undefined ? undefined : EXTENSIONS[bare];
 }
 
+/** The host route an item's own bytes are served from. */
+export function itemAssetPath(workshopId: string): string {
+  return `/api/wallpaper-engine/item/${encodeURIComponent(workshopId)}/asset`;
+}
+
 export async function fetchItemAsset(
   item: WallpaperEngineItem,
   options?: WallpaperEngineClientOptions,
@@ -211,11 +216,7 @@ export async function fetchItemAsset(
   const { fetcher, url } = request(options);
 
   try {
-    const response = await fetcher(
-      url(
-        `/api/wallpaper-engine/item/${encodeURIComponent(item.workshopId)}/asset`,
-      ),
-    );
+    const response = await fetcher(url(itemAssetPath(item.workshopId)));
     if (!response.ok) return undefined;
 
     const contentType = response.headers.get("content-type");

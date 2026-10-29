@@ -1,3 +1,4 @@
+import type { VideoTrimRange } from "@yunari/theme-package";
 import { uiCopy } from "./ui-copy.js";
 
 /** Where the host brings a video into the publish envelope. Named once. */
@@ -20,10 +21,16 @@ export type NormalizeOutcome =
  */
 export async function requestNormalizedVideo(
   source: File | Uint8Array,
+  trim?: VideoTrimRange,
 ): Promise<NormalizeOutcome> {
+  const query =
+    trim === undefined
+      ? ""
+      : `?startMs=${encodeURIComponent(String(trim.startMs))}` +
+        `&endMs=${encodeURIComponent(String(trim.endMs))}`;
   let response: Response;
   try {
-    response = await fetch(VIDEO_NORMALIZE_PATH, {
+    response = await fetch(`${VIDEO_NORMALIZE_PATH}${query}`, {
       method: "POST",
       headers: { "content-type": "application/octet-stream" },
       // A File is already a body; a Uint8Array is sent as its bytes.

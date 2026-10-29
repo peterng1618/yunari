@@ -17,7 +17,7 @@ const fixture = (name: string): Uint8Array =>
   );
 
 const conforming = fixture("conforming.mp4");
-const long = fixture("long.mp4");
+const long = fixture("too-long.mp4");
 const wide = fixture("wide.mp4");
 const odd = fixture("odd.mp4");
 const audio = fixture("audio.mp4");
@@ -201,13 +201,13 @@ describe("readVideoFacts", () => {
 
   it("keeps the larger duration when mdhd and the sample table disagree", () => {
     const mdhd = boxAt(long, ["moov", "trak", "mdia", "mdhd"]);
-    // mdhd is shortened to 15.75 s while the 945 samples still total 31.5 s.
+    // mdhd is shortened to 15.75 s while the samples still total 61.5 s.
     const crafted = patchUint32(long, mdhd.payload + 16, 241_920);
 
     const facts = readVideoFacts(crafted)!;
     expect(facts.frameRate).toBe(30);
     expect(videoRefusals(PATH, facts)).toEqual([
-      `${PATH}: duration 31500 ms exceeds the 30000 ms maximum`,
+      `${PATH}: duration 61500 ms exceeds the 60000 ms maximum`,
     ]);
   });
 
@@ -266,20 +266,20 @@ describe("readVideoFacts", () => {
 describe("videoRefusals", () => {
   it("names the file and the duration bound", () => {
     const facts = readVideoFacts(long)!;
-    expect(facts.durationMs).toBe(31_500);
+    expect(facts.durationMs).toBe(61_500);
     expect(videoRefusals(PATH, facts)).toEqual([
-      `${PATH}: duration 31500 ms exceeds the 30000 ms maximum`,
+      `${PATH}: duration 61500 ms exceeds the 60000 ms maximum`,
     ]);
   });
 
   it("refuses a duration just over the bound that display rounding would hide", () => {
     const mdhd = boxAt(conforming, ["moov", "trak", "mdia", "mdhd"]);
-    // 460807 / 15360 = 30.00045 s: `Math.round` would print it as 30000 ms.
-    const crafted = patchUint32(conforming, mdhd.payload + 16, 460_807);
+    // 921601 / 15360 = 60.000065 s: `Math.round` would print it as 60000 ms.
+    const crafted = patchUint32(conforming, mdhd.payload + 16, 921_601);
     const facts = readVideoFacts(crafted)!;
-    expect(facts.durationMs).toBe(30_001);
+    expect(facts.durationMs).toBe(60_001);
     expect(videoRefusals(PATH, facts)).toContain(
-      `${PATH}: duration 30001 ms exceeds the 30000 ms maximum`,
+      `${PATH}: duration 60001 ms exceeds the 60000 ms maximum`,
     );
   });
 
@@ -401,13 +401,13 @@ describe("videoRefusals", () => {
         "assets/clip.mp4": long,
       }),
     ).toEqual([
-      `assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum`,
+      `assets/clip.mp4: duration 61500 ms exceeds the 60000 ms maximum`,
     ]);
   });
 
   it("publishes the envelope bounds", () => {
     expect(VIDEO_LIMITS).toEqual({
-      maxDurationMs: 30_000,
+      maxDurationMs: 60_000,
       maxLongEdge: 4096,
       maxFrameRate: 30,
     });

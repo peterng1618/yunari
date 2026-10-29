@@ -180,13 +180,13 @@ export function SelectControl(
         </Select.Trigger>
         <Select.Portal>
           {/* **Above the dialog pair, because a select can be inside a dialog.**
-              The shell's floating layers are ordered tooltip 50 / menu and
-              select 60 / dialog scrim 70 / dialog 71 (`editor-shell.css`), and a
-              popup portalled to `body` from inside a `Dialog` is a sibling of
-              that dialog's scrim rather than a descendant of its popup — at 60
-              the scrim covers the list and every option is unclickable, which is
-              what the new-theme chooser and the library chooser both did. 80
-              keeps one order for both places. */}
+              The shell's floating layers are ordered menu and select 60 /
+              dialog scrim 70 / dialog 71 / tooltip 90 (`editor-shell.css`),
+              and a popup portalled to `body` from inside a `Dialog` is a
+              sibling of that dialog's scrim rather than a descendant of its
+              popup — at 60 the scrim covers the list and every option is
+              unclickable, which is what the new-theme chooser and the library
+              chooser both did. 80 keeps one order for both places. */}
           <Select.Positioner sideOffset={6} className="z-80">
             {/* **A list taller than the room it opens into scrolls.** Base UI
                 measures the space on the popup's chosen side and publishes it as

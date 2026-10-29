@@ -11,6 +11,7 @@ import { sceneBoxesOf } from "@yunari/scene-fabric";
 import {
   MAX_CREDITS_ENTRIES,
   type ThemeCreditsEntry,
+  type VideoTrimRange,
 } from "@yunari/theme-package";
 import { ActiveSelection, type FabricObject } from "fabric/es";
 import { applyArrange, canArrange } from "./arrange.js";
@@ -619,8 +620,12 @@ export class EditorSession {
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
       onFontCommit: (input) => this.#commitFont(input),
-      onImportVideo: (file, isPackage, onStep) =>
-        this.importPickedVideo(file, { package: isPackage, onStep }),
+      onImportVideo: (file, isPackage, onStep, trim) =>
+        this.importPickedVideo(file, {
+          package: isPackage,
+          onStep,
+          ...(trim === undefined ? {} : { trim }),
+        }),
       onBackground: (asset) => {
         const background = this.#document.envelope.background;
         this.#document.setBackground({
@@ -796,7 +801,10 @@ export class EditorSession {
    * `library.ts` never classifies an image or a web wallpaper, so a video is the
    * only item this can receive.
    */
-  async importWallpaperItem(item: WallpaperEngineItem): Promise<ImportOutcome> {
+  async importWallpaperItem(
+    item: WallpaperEngineItem,
+    trim?: VideoTrimRange,
+  ): Promise<ImportOutcome> {
     const file = await fetchItemAsset(item);
     if (file === undefined) {
       return {
@@ -808,7 +816,7 @@ export class EditorSession {
     // §15: a video crosses the host's envelope before the manager sees it, and
     // the normalizer's refusal — never a sentence composed here — is the
     // authority.
-    const normalized = await normalizeWallpaperVideo(file);
+    const normalized = await normalizeWallpaperVideo(file, trim);
     if (!normalized.ok) return { ok: false, message: normalized.message };
 
     const attribution = item.attribution;
@@ -851,6 +859,8 @@ export class EditorSession {
     options: {
       readonly package: boolean;
       readonly onStep?: (step: VideoImportStep) => void;
+      /** A span the video import keeps; packages are extracted, not trimmed. */
+      readonly trim?: VideoTrimRange;
     },
   ): Promise<ImportOutcome> {
     options.onStep?.("preparing");
@@ -874,7 +884,7 @@ export class EditorSession {
       // records the licence it cannot know and no source.
       metadata = { license: { name: "unknown" } };
     } else {
-      const normalized = await requestNormalizedVideo(file);
+      const normalized = await requestNormalizedVideo(file, options.trim);
       if (!normalized.ok) return { ok: false, message: normalized.message };
       prepared = new File(
         [normalized.bytes as unknown as BlobPart],
@@ -1150,7 +1160,7 @@ export class EditorSession {
    */
   #wallpaperActions(): WallpaperActions {
     return {
-      onSetBackground: (item) => this.importWallpaperItem(item),
+      onSetBackground: (item, trim) => this.importWallpaperItem(item, trim),
       onConvert: (item) => startProject(item.workshopId),
       onImportPackage: (file, onStep) =>
         this.importPickedVideo(file, { package: true, onStep }),
@@ -1467,12 +1477,14 @@ export class EditorSession {
 /** One video item, through the host's envelope. */
 async function normalizeWallpaperVideo(
   file: File,
+  trim: VideoTrimRange | undefined,
 ): Promise<
   | { readonly ok: true; readonly file: File; readonly reencoded: boolean }
   | { readonly ok: false; readonly message: string }
 > {
   const normalized = await requestNormalizedVideo(
     new Uint8Array(await file.arrayBuffer()),
+    trim,
   );
   if (!normalized.ok) return normalized;
   return {

@@ -44,15 +44,18 @@ function packageOf(id: string, name: string): Uint8Array {
   return written.bytes;
 }
 
-/** The committed 31.5 s fixture, read rather than regenerated. */
+/** The committed 61.5 s fixture, read rather than regenerated. */
 const LONG_VIDEO = new Uint8Array(
   readFileSync(
-    new URL("../../../theme-package/test-fixtures/long.mp4", import.meta.url),
+    new URL(
+      "../../../theme-package/test-fixtures/too-long.mp4",
+      import.meta.url,
+    ),
   ),
 );
 
 const DURATION_REFUSAL =
-  "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum";
+  "assets/clip.mp4: duration 61500 ms exceeds the 60000 ms maximum";
 
 /** A package declaring one video asset, carrying the over-cap fixture. */
 function packageWithLongVideo(id: string, name: string): Uint8Array {

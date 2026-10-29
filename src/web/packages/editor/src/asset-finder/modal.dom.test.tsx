@@ -468,6 +468,27 @@ describe("AssetFinder's Wallpaper Engine tab", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("re-reads the library when the refresh control is pressed", async () => {
+    stubLibrary();
+    await render([wallpaperEngine]);
+    await settle();
+    const fetcher = vi.mocked(globalThis.fetch);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    const refresh = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-wallpaper-engine-refresh]",
+    );
+    if (refresh === null) throw new Error("no refresh control.");
+    await act(async () => {
+      refresh.click();
+    });
+    await settle();
+
+    // The host fingerprints the library on every listing; clearing the answer
+    // is what makes the pane ask again inside one session.
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("runs the selected scene's conversion from the footer and marks the card", async () => {
     stubLibrary();
     await render([wallpaperEngine]);

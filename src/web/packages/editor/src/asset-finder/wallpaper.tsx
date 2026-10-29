@@ -1,3 +1,4 @@
+import type { VideoTrimRange } from "@yunari/theme-package";
 import type * as React from "react";
 import { useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
@@ -5,6 +6,7 @@ import {
   Glyph,
   INFO_GLYPH,
   INSTALL_ITEM_GLYPH,
+  REFRESH_GLYPH,
 } from "../editor-shell/icons.js";
 import {
   ImportVideoModal,
@@ -32,6 +34,7 @@ import { WallpaperEngineGuide } from "./wallpaper-engine-guide.js";
 export interface WallpaperActions {
   readonly onSetBackground: (
     item: WallpaperEngineItem,
+    trim?: VideoTrimRange,
   ) => Promise<ImportOutcome>;
   readonly onConvert: (
     item: WallpaperEngineItem,
@@ -78,6 +81,7 @@ export function wallpaperCards(
 export function wallpaperActionsOf(
   item: WallpaperEngineItem | undefined,
   actions: WallpaperActions | undefined,
+  trim?: VideoTrimRange,
 ): readonly FinderAction[] {
   if (item === undefined || actions === undefined) return [];
   const copy = words();
@@ -91,7 +95,10 @@ export function wallpaperActionsOf(
         tone: "plain",
         disabled: false,
         run: async () => {
-          const outcome = await actions.onSetBackground(item);
+          const outcome =
+            trim === undefined
+              ? await actions.onSetBackground(item)
+              : await actions.onSetBackground(item, trim);
           return outcome.ok
             ? { ok: true, message: copy.backgroundSet(item.title) }
             : outcome;
@@ -130,9 +137,10 @@ export function wallpaperActionsOf(
  */
 export function WallpaperTools(props: {
   readonly onImportPackage: WallpaperActions["onImportPackage"] | undefined;
+  readonly onRefresh?: (() => void) | undefined;
   readonly onStatus: (message: string) => void;
 }): React.JSX.Element {
-  const { onImportPackage, onStatus } = props;
+  const { onImportPackage, onRefresh, onStatus } = props;
   const copy = words();
   const [guideOpen, setGuideOpen] = useState(false);
   const [packageFile, setPackageFile] = useState<File | undefined>();
@@ -140,6 +148,15 @@ export function WallpaperTools(props: {
 
   return (
     <div className="flex flex-none items-center gap-[var(--space-4)]">
+      {onRefresh === undefined ? null : (
+        <ControlIconButton
+          label={copy.refresh}
+          data={{ "data-yunari-wallpaper-engine-refresh": "" }}
+          onClick={onRefresh}
+        >
+          <Glyph icon={REFRESH_GLYPH} size={14} />
+        </ControlIconButton>
+      )}
       {onImportPackage === undefined ? null : (
         <>
           <ControlIconButton

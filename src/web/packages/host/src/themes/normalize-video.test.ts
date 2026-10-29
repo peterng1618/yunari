@@ -50,14 +50,14 @@ describe("normalizeVideo", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("refuses a 31-second input without spawning the encoder", async () => {
+  it("refuses a 61-second input without spawning the encoder", async () => {
     const run = vi.fn(async () => ({ code: 0, stderr: "" }));
 
-    const result = await normalizeVideo(fixture("long.mp4"), { run });
+    const result = await normalizeVideo(fixture("too-long.mp4"), { run });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.message).toContain("30000");
+    expect(result.message).toContain("60000");
     expect(run).not.toHaveBeenCalled();
   });
 
@@ -139,11 +139,11 @@ describe("normalizeVideo", () => {
   it("refuses encoder output that parses but breaks the envelope", async () => {
     // The case above dies at "not even a readable MP4"; this one reaches the
     // `videoRefusals` arm: an encoder that ignored the bounds wrote a parseable
-    // 31.5-second file, which must not be handed back as a success.
-    const encoded = fixture("long.mp4");
+    // 61.5-second file, which must not be handed back as a success.
+    const encoded = fixture("too-long.mp4");
     const refusal = videoRefusals("normalized", readVideoFacts(encoded)!);
     expect(refusal).toContain(
-      "normalized: duration 31500 ms exceeds the 30000 ms maximum",
+      "normalized: duration 61500 ms exceeds the 60000 ms maximum",
     );
     const run = runWriting(encoded);
 
@@ -188,6 +188,79 @@ describe("normalizeVideo", () => {
     expect(facts === undefined ? [] : videoRefusals("out.mp4", facts)).toEqual(
       [],
     );
+  });
+
+  it("trims to the selected span and blends the loop seam", async () => {
+    const run = runWriting(fixture("conforming.mp4"));
+
+    const result = await normalizeVideo(fixture("long.mp4"), {
+      trim: { startMs: 10_000, endMs: 15_000 },
+      ffmpegPath: "ffmpeg-stub",
+      run,
+      verifyForTest: acceptHash,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.reencoded).toBe(true);
+    const args = run.mock.calls[0]?.[0] ?? [];
+    // An input seek, sized to the span, so the decoder does not walk the
+    // source up to the in point.
+    expect(args.slice(args.indexOf("-ss"), args.indexOf("-ss") + 4)).toEqual([
+      "-ss",
+      "10",
+      "-t",
+      "5",
+    ]);
+    expect(args).not.toContain("-vf");
+    const graph = args[args.indexOf("-filter_complex") + 1] ?? "";
+    expect(graph).toContain("split=2");
+    expect(graph).toContain("xfade=transition=fade:duration=1:offset=3");
+    expect(args[args.indexOf("-map") + 1]).toBe("[out]");
+  });
+
+  it("does not blend a re-encode that is not a trim", async () => {
+    const run = runWriting(fixture("conforming.mp4"));
+
+    const result = await normalizeVideo(fixture("wide.mp4"), {
+      ffmpegPath: "ffmpeg-stub",
+      run,
+      verifyForTest: acceptHash,
+    });
+
+    expect(result.ok).toBe(true);
+    const args = run.mock.calls[0]?.[0] ?? [];
+    expect(args).not.toContain("-filter_complex");
+    expect(args).toContain("-vf");
+  });
+
+  it("refuses a trim span past the duration cap without spawning", async () => {
+    const run = vi.fn(async () => ({ code: 0, stderr: "" }));
+
+    const result = await normalizeVideo(fixture("too-long.mp4"), {
+      trim: { startMs: 0, endMs: 61_500 },
+      run,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain("61500");
+    expect(result.message).toContain("60000");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("refuses a trim span shorter than the blend needs", async () => {
+    const run = vi.fn(async () => ({ code: 0, stderr: "" }));
+
+    const result = await normalizeVideo(fixture("conforming.mp4"), {
+      trim: { startMs: 0, endMs: 1_500 },
+      run,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).toContain("2000");
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("refuses cover without an aspect, without spawning", async () => {

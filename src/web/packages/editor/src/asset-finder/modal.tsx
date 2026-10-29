@@ -5,14 +5,17 @@ import type {
   ListingCategory,
   PresetKind,
 } from "@yunari/renderer-core";
+import type { VideoTrimRange } from "@yunari/theme-package";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { Dialog } from "../components/ui/dialog.js";
 import { Glyph, PREVIEW_GLYPH } from "../editor-shell/icons.js";
+import { VideoTrimModal } from "../panes/assets/video-trim-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   fetchWallpaperEngine,
+  itemAssetPath,
   type WallpaperEngineAnswer,
   type WallpaperEngineItem,
 } from "../wallpaper-engine/client.js";
@@ -277,6 +280,9 @@ export function AssetFinder({
    *  running. The preview is a second surface over the finder, not a tab. */
   const [previewing, setPreviewing] = useState<PreviewTarget | undefined>();
   const [runningAsset, setRunningAsset] = useState<string | undefined>();
+  /** The Wallpaper Engine video whose span the author is choosing. A video's
+   *  "set background" opens the trim surface before the host normalizer runs. */
+  const [trimming, setTrimming] = useState<WallpaperEngineItem | undefined>();
   const tickets = useRef(new Map<ListingCategory, number>());
 
   /** A category exists when the registry lists one, or when the session offers
@@ -765,12 +771,19 @@ export function AssetFinder({
   const localFooter: readonly FinderAction[] = isLocal
     ? wallpaperActionsOf(local.selection, wallpaper)
     : [];
-  const runLocalAction = (
+  const runLocalActionNow = (
     action: FinderAction,
-    item: WallpaperEngineItem | undefined = local.selection,
+    item: WallpaperEngineItem | undefined,
+    trim?: VideoTrimRange,
   ): void => {
+    const chosen =
+      trim === undefined
+        ? action
+        : (wallpaperActionsOf(item, wallpaper, trim).find(
+            (entry) => entry.id === action.id,
+          ) ?? action);
     setLocalRunning(action.id);
-    void Promise.resolve(action.run()).then((result) => {
+    void Promise.resolve(chosen.run()).then((result) => {
       setLocalRunning(undefined);
       setLocal((current) => ({
         ...current,
@@ -787,6 +800,17 @@ export function AssetFinder({
         },
       }));
     });
+  };
+  /** A video's span is asked for first; every other write runs as it stands. */
+  const runLocalAction = (
+    action: FinderAction,
+    item: WallpaperEngineItem | undefined = local.selection,
+  ): void => {
+    if (action.id === "set-background" && item?.kind === "video") {
+      setTrimming(item);
+      return;
+    }
+    runLocalActionNow(action, item);
   };
   const selectLocal = (card: FinderCardModel): void => {
     const item = localShown.find((entry) => entry.workshopId === card.id);
@@ -1078,6 +1102,11 @@ export function AssetFinder({
             {isLocal ? (
               <WallpaperTools
                 onImportPackage={wallpaper?.onImportPackage}
+                onRefresh={() => {
+                  // The host re-checks the library fingerprint on every
+                  // listing, so clearing the answer is the refresh.
+                  setLibrary(undefined);
+                }}
                 onStatus={(message) => {
                   setLocal((current) => ({
                     ...current,
@@ -1323,6 +1352,23 @@ export function AssetFinder({
           </>
         )}
       </FinderFrame>
+      {trimming === undefined ? null : (
+        <VideoTrimModal
+          src={itemAssetPath(trimming.workshopId)}
+          name={trimming.title}
+          onConfirm={(trim) => {
+            const item = trimming;
+            setTrimming(undefined);
+            const action = wallpaperActionsOf(item, wallpaper, trim).find(
+              (entry) => entry.id === "set-background",
+            );
+            if (action !== undefined) runLocalActionNow(action, item);
+          }}
+          onClose={() => {
+            setTrimming(undefined);
+          }}
+        />
+      )}
       <FinderPreviewModal
         preview={
           previewing === undefined ? undefined : previewModel(previewing)

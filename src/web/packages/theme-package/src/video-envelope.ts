@@ -16,10 +16,26 @@ export interface VideoLimits {
 }
 
 export const VIDEO_LIMITS: VideoLimits = {
-  maxDurationMs: 30_000,
+  maxDurationMs: 60_000,
   maxLongEdge: 4096,
   maxFrameRate: 30,
 };
+
+/** A span an author selected from a longer source, in source milliseconds. The
+ *  editor sends it to the host's normalizer; the host is the one that decides
+ *  whether it fits the envelope. */
+export interface VideoTrimRange {
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+/** A trimmed loop's dissolve, and the shortest span that leaves a body after
+ *  it. The editor's trim UI and the host's encoder both read these, so the two
+ *  cannot disagree about what a usable selection is. */
+export const VIDEO_TRIM = {
+  blendMs: 1_000,
+  minSpanMs: 2_000,
+} as const;
 
 export interface VideoFacts {
   readonly width: number;
