@@ -133,7 +133,7 @@ describe("the artboard backdrop", () => {
       width: 20,
       height: 20,
       media: undefined,
-    }).paint(context, REGION, DEVICE);
+    }).paint(context, REGION, DEVICE, "dynamic");
 
     expect(painted, "a colour is a backdrop on its own").toBe(true);
     expect(pixel(context, 4, 4)).toEqual(PAINTED);
@@ -147,7 +147,7 @@ describe("the artboard backdrop", () => {
       width: 20,
       height: 20,
       media: halfRed(true),
-    }).paint(context, REGION, DEVICE);
+    }).paint(context, REGION, DEVICE, "dynamic");
 
     expect(pixel(context, 2, 10), "the media wins where it painted").toEqual([
       255, 0, 0, 255,
@@ -180,8 +180,8 @@ describe("the artboard backdrop", () => {
       media,
     });
 
-    backdrop.paint(context, REGION, DEVICE);
-    const kept = backdrop.paint(context, REGION, DEVICE);
+    backdrop.paint(context, REGION, DEVICE, "dynamic");
+    const kept = backdrop.paint(context, REGION, DEVICE, "dynamic");
 
     expect(kept, "the colour is still a backdrop for that frame").toBe(true);
     expect(pixel(context, 2, 10), "the kept frame is untouched").toEqual([
@@ -209,7 +209,7 @@ describe("the artboard backdrop", () => {
       width: 20,
       height: 20,
       media: undefined,
-    }).paint(context, REGION, device);
+    }).paint(context, REGION, device, "dynamic");
 
     const left = pixel(context, 0, 10)[0] ?? 0;
     const right = pixel(context, 19, 10)[0] ?? 0;
@@ -236,7 +236,7 @@ describe("the artboard backdrop", () => {
       width: 20,
       height: 20,
       media: undefined,
-    }).paint(context, REGION, DEVICE);
+    }).paint(context, REGION, DEVICE, "dynamic");
 
     const top = pixel(context, 10, 0)[0] ?? 0;
     const bottom = pixel(context, 10, 19)[0] ?? 0;
@@ -251,7 +251,7 @@ describe("the artboard backdrop", () => {
       width: 20,
       height: 20,
       media: halfRed(false),
-    }).paint(context, REGION, DEVICE);
+    }).paint(context, REGION, DEVICE, "dynamic");
 
     expect(pixel(context, 2, 10), "where the media would have been").toEqual(
       PAINTED,

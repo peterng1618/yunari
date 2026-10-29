@@ -24,6 +24,9 @@ import type { PanelGeometry } from "./panel-device.js";
 const MOUNT_TIMEOUT_MS = 20_000;
 /** Chrome's own log line is the only reliable signal that the port is up. */
 const START_TIMEOUT_MS = 20_000;
+/** A capture measures ~45 ms. A reply that never comes must free the loop that
+ *  is waiting for it, rather than leave the panel frozen with no message. */
+const REPLY_TIMEOUT_MS = 5_000;
 
 export interface RasterOptions {
   /** The browser executable, from `findBrowser`. */
@@ -91,10 +94,16 @@ export interface Devtools {
  * handling beyond what a capture needs.
  */
 class BrowserDevtools implements Devtools {
+  private closed = false;
+
   private constructor(
     private readonly socket: WebSocket,
     private nextId: number,
-  ) {}
+  ) {
+    this.socket.addEventListener("close", () => {
+      this.closed = true;
+    });
+  }
 
   static async connect(url: string): Promise<BrowserDevtools> {
     const socket = new WebSocket(url);
@@ -114,15 +123,34 @@ class BrowserDevtools implements Devtools {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<CdpReply> {
+    if (this.closed) {
+      return Promise.reject(
+        new Error(`the browser's devtools socket closed before ${method}`),
+      );
+    }
+
     const id = this.nextId;
     this.nextId += 1;
 
     return new Promise((resolve, reject) => {
+      // **A reply that never comes is the failure that froze a panel.** Without
+      // this the caller waits on a promise nothing will settle, and the tick
+      // that owns it never returns to try again.
+      const timer = setTimeout(() => {
+        this.socket.removeEventListener("message", onMessage);
+        reject(new Error(`${method} got no reply in ${REPLY_TIMEOUT_MS} ms`));
+      }, REPLY_TIMEOUT_MS);
+
+      const settle = (): void => {
+        clearTimeout(timer);
+        this.socket.removeEventListener("message", onMessage);
+      };
+
       const onMessage = (event: MessageEvent): void => {
         const message = JSON.parse(String(event.data)) as CdpReply;
         if (message.id !== id) return;
 
-        this.socket.removeEventListener("message", onMessage);
+        settle();
         if (message.error !== undefined) {
           reject(new Error(message.error.message ?? method));
           return;
@@ -132,7 +160,13 @@ class BrowserDevtools implements Devtools {
       };
 
       this.socket.addEventListener("message", onMessage);
-      this.socket.send(JSON.stringify({ id, method, params }));
+
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        settle();
+        reject(error);
+      }
     });
   }
 

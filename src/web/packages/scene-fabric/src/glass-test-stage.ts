@@ -9,6 +9,7 @@
  * `*.dom.test.ts` imports it.
  */
 
+import type { GlassSampling } from "@yunari/renderer-core";
 import { Group, Point, Rect, StaticCanvas } from "fabric/es";
 import { afterEach } from "vitest";
 import {
@@ -98,6 +99,8 @@ export function bars(
 export interface PaintCall {
   readonly region: DeviceRect;
   readonly device: DeviceRect;
+  /** Which picture the panel asked the media to stand on (`0135`). */
+  readonly sampling: GlassSampling;
 }
 
 export function stage(options: {
@@ -209,10 +212,14 @@ export function stage(options: {
                 ? {}
                 : { screenRect: stub.screenRect }),
               ...(stub?.plate === undefined ? {} : { plate: stub.plate }),
-              paint: (ctx, region, device) => {
+              paint: (ctx, region, device, sampling) => {
                 regions.push({ ...region });
-                paints.push({ region: { ...region }, device: { ...device } });
-                return stub?.paint(ctx, region, device) ?? true;
+                paints.push({
+                  region: { ...region },
+                  device: { ...device },
+                  sampling,
+                });
+                return stub?.paint(ctx, region, device, sampling) ?? true;
               },
             };
           },

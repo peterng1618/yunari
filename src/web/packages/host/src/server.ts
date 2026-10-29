@@ -2276,14 +2276,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // runner is stopped, because a record nothing points at is a panel
         // still showing a theme nobody assigned it.
         options.launcher?.close(id);
-        // A panel that cannot release its port — unplugged mid-stop — must not
-        // become an unhandled rejection at the process level. The record is
-        // gone either way, so the failure is reported and not answered.
-        void options.panels?.stop(id).catch((error: unknown) => {
+        // The answer waits for the release: a restart queued behind it would
+        // otherwise claim a device the old runner has not let go. A panel that
+        // cannot release its port — unplugged mid-stop — must not become an
+        // unhandled rejection at the process level, so the failure is reported
+        // and not answered; the record is gone either way.
+        try {
+          await options.panels?.stop(id);
+        } catch (error) {
           console.error(
             `Panel ${id}: ${error instanceof Error ? error.message : String(error)}`,
           );
-        });
+        }
 
         sendJson(response, 200, { ok: true });
         return;
@@ -4167,7 +4171,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
         // A panel plays its theme itself, so a new assignment is a new clip and
         // nothing re-reads it while the old runner is alive. The restart is what
-        // makes the assignment visible on the glass.
+        // makes the assignment visible on the glass, and it is awaited because
+        // the device has to be released before it is claimed again — an
+        // unawaited close is a reopen that fails with error 5.
         const panels = options.panels;
         const assigned =
           panels === undefined ? undefined : await displays?.find(key);

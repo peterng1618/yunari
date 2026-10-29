@@ -1,4 +1,4 @@
-import { glassTreatment } from "@yunari/renderer-core";
+import { type GlassSampling, glassTreatment } from "@yunari/renderer-core";
 import {
   Circle,
   Ellipse,
@@ -82,11 +82,14 @@ export interface BackdropMedia {
    *  is the whole backdrop, as in the glass tests' stubs. */
   readonly plate?: BackdropPlate;
   /** Paints the media over `region` of `ctx`, with `device` its rect in `ctx`'s
-   *  own pixels. False when the source has decoded no pixels yet. */
+   *  own pixels, standing on the picture `sampling` names. False when that
+   *  picture has no pixels yet — a static panel with no declared still paints
+   *  nothing, which leaves the paint behind it showing. */
   paint(
     ctx: CanvasRenderingContext2D,
     region: DeviceRect,
     device: DeviceRect,
+    sampling: GlassSampling,
   ): boolean;
 }
 
@@ -106,6 +109,10 @@ export interface GlassHandle {
   sync(): void;
   /** Scratch canvases still allocated. Zero after `dispose`. */
   liveSurfaces(): number;
+  /** Panels that need the media's live frames: those whose treatment samples
+   *  live. Zero here means a playing video has nothing to repaint for, which is
+   *  what a panel over a motionless part of it saves. */
+  samplingSurfaces(): number;
   dispose(): void;
 }
 
@@ -461,7 +468,13 @@ export function createGlass(options: GlassOptions): GlassHandle {
     // that a frame it cannot paint reuses the last one it did (0079). The
     // scratch is still rebuilt from nothing every frame, which is what keeps
     // the canvas half fresh.
-    const backdrop = backdropFor(panel, region, options.backdrop?.(), plane);
+    const backdrop = backdropFor(
+      panel,
+      region,
+      options.backdrop?.(),
+      plane,
+      treatment.sampling ?? "dynamic",
+    );
     if (backdrop !== undefined) {
       scratchContext.drawImage(backdrop, 0, 0);
     }
@@ -583,6 +596,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     region: DeviceRect,
     media: BackdropMedia | undefined,
     plane: Matrix,
+    sampling: GlassSampling,
   ): HTMLCanvasElement | undefined {
     // No media at all is not the same as media with no frame: a backdrop kept
     // from a previous layer would be a picture of something no longer there.
@@ -626,11 +640,11 @@ export function createGlass(options: GlassOptions): GlassHandle {
     let painted: boolean;
     if (angle === 0) {
       if (disc === undefined) {
-        painted = media.paint(context, region, device);
+        painted = media.paint(context, region, device, sampling);
       } else {
         context.save();
         clipDisc(context, disc, region);
-        painted = media.paint(context, region, device);
+        painted = media.paint(context, region, device, sampling);
         context.restore();
       }
     } else {
@@ -643,8 +657,16 @@ export function createGlass(options: GlassOptions): GlassHandle {
       context.translate(pivotX, pivotY);
       context.rotate((angle * Math.PI) / 180);
       context.translate(-pivotX, -pivotY);
-      painted = media.paint(context, region, device);
+      painted = media.paint(context, region, device, sampling);
       context.restore();
+    }
+    // A static panel stands on the still — the picture an image background or a
+    // paint would give it. With no declared frame there is no still, so nothing
+    // is painted and a kept live sample is dropped: showing the last video frame
+    // would be neither static nor the paint.
+    if (!painted && sampling === "static") {
+      context.clearRect(0, 0, region.width, region.height);
+      panel.backdropRegion = undefined;
     }
     // **The plate is a different surface from the media** (0125). A media-less
     // theme, or a transparent frame, shows the host's background on a rect
@@ -689,6 +711,15 @@ export function createGlass(options: GlassOptions): GlassHandle {
   return {
     sync,
     liveSurfaces: () => [...panels.values()].filter((p) => p.surface).length,
+    samplingSurfaces(): number {
+      let count = 0;
+      for (const [object, panel] of panels) {
+        if (panel.surface === undefined) continue;
+        if ((glassTreatment(object)?.sampling ?? "dynamic") === "dynamic")
+          count += 1;
+      }
+      return count;
+    },
     dispose(): void {
       if (disposed) return;
       disposed = true;

@@ -5129,6 +5129,63 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("answers a removal only once the device is released", async () => {
+      // The release is what the next claim waits for: a route that answered
+      // before it settled let a restart reopen the panel too early and fail
+      // with "failed to open device (error 5)".
+      let release: () => void = () => {};
+      const stopped: Promise<void>[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          stop: () => {
+            const settled = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            stopped.push(settled);
+            return settled;
+          },
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+
+        const removal = request(
+          hosting.server,
+          "DELETE",
+          "/api/displays/strip",
+        );
+        let answered = false;
+        void removal.then(
+          () => {
+            answered = true;
+          },
+          () => {
+            answered = true;
+          },
+        );
+
+        // One turn is enough for the handler to reach the stop, which is where
+        // an unawaited close would already have answered.
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(stopped).toHaveLength(1);
+        expect(answered).toBe(false);
+
+        release();
+        expect((await removal).status).toBe(200);
+      } finally {
+        release();
+        await hosting.close();
+      }
+    });
+
     it("restarts the runner when a different theme is assigned", async () => {
       const refreshed: string[] = [];
       const themes = createThemeStore(dir);

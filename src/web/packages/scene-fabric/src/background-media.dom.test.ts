@@ -596,6 +596,7 @@ describe("background media as a glass backdrop", () => {
         ctx,
         { left: 0, top: 0, width: 200, height: 100 },
         { left: 0, top: 0, width: 200, height: 100 },
+        "dynamic",
       );
     expect(painted).toBe(true);
     expect(calls[0]?.slice(-4)).toEqual([0, -75, 300, 300]);
@@ -628,6 +629,7 @@ describe("background media as a glass backdrop", () => {
           ctx,
           { left: 0, top: 0, width: 200, height: 100 },
           { left: 0, top: 0, width: 200, height: 100 },
+          "dynamic",
         );
       // The placed rect is 0,-50,200,200, so its centre is (100, 50); drawing
       // at the half-size about that centre is the same mirror the DOM child
@@ -661,7 +663,7 @@ describe("background media as a glass backdrop", () => {
     const drawnAt = (width: number, height: number) => {
       const { calls, ctx } = recordingContext();
       const device = { left: 0, top: 0, width, height };
-      handle.backdrop()?.paint(ctx, device, device);
+      handle.backdrop()?.paint(ctx, device, device, "dynamic");
       return calls[0] ?? [];
     };
 
@@ -699,6 +701,7 @@ describe("background media as a glass backdrop", () => {
           ctx,
           { left: regionLeft, top: 0, width: 600, height: 400 },
           { left: 0, top: 0, width: 400, height: 200 },
+          "dynamic",
         );
       return (calls[0] ?? []).slice(-4) as number[];
     };

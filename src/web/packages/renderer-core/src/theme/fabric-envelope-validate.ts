@@ -1536,7 +1536,7 @@ function objectGlass(
       issue(
         "invalid-fabric-scene",
         `${path}/${YUNARI_GLASS_PROPERTY}`,
-        `A glass treatment must be exactly { blurRadius }, a number from 0 to ${MAX_GLASS_BLUR_RADIUS} artboard units.`,
+        `A glass treatment must be { blurRadius } with an optional sampling of "static" or "dynamic"; the radius is 0 to ${MAX_GLASS_BLUR_RADIUS} artboard units.`,
       ),
     );
 }

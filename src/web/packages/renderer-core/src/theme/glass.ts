@@ -14,9 +14,19 @@ export const YUNARI_GLASS_PROPERTY = "yunariGlass";
  */
 export const MAX_GLASS_BLUR_RADIUS = 48;
 
-/** The single authored field. Everything else about a panel stays native. */
+/** Whether a panel samples the background's live picture or its still. */
+export type GlassSampling = "static" | "dynamic";
+
+/**
+ * The single authored field, plus how it samples. Everything else about a panel
+ * stays native.
+ */
 export interface GlassTreatment {
   readonly blurRadius: number;
+  /** `static` samples the background's declared frame — the picture an image
+   *  background or a paint would give it — instead of following a video.
+   *  Absent and `dynamic` are the same thing: the live picture. */
+  readonly sampling?: GlassSampling;
 }
 
 /**
@@ -71,20 +81,34 @@ export function glassTreatment(object: {
 }): GlassTreatment | undefined {
   const value = object.get(YUNARI_GLASS_PROPERTY);
   if (!isGlassTreatment(value)) return undefined;
-  return { blurRadius: value.blurRadius };
+  return {
+    blurRadius: value.blurRadius,
+    ...(value.sampling === undefined ? {} : { sampling: value.sampling }),
+  };
 }
 
-/** Accepts only the exact authored shape: one finite radius inside the bound. */
+/** Accepts only the authored shape: one finite radius inside the bound, and a
+ *  sampling only while it is one of the two names. */
 export function isGlassTreatment(value: unknown): value is GlassTreatment {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return false;
   const treatment = value as Record<string, unknown>;
-  if (Object.keys(treatment).length !== 1) return false;
+  if (
+    Object.keys(treatment).some(
+      (key) => key !== "blurRadius" && key !== "sampling",
+    )
+  )
+    return false;
   const radius = treatment["blurRadius"];
+  if (
+    typeof radius !== "number" ||
+    !Number.isFinite(radius) ||
+    radius < 0 ||
+    radius > MAX_GLASS_BLUR_RADIUS
+  )
+    return false;
+  const sampling = treatment["sampling"];
   return (
-    typeof radius === "number" &&
-    Number.isFinite(radius) &&
-    radius >= 0 &&
-    radius <= MAX_GLASS_BLUR_RADIUS
+    sampling === undefined || sampling === "static" || sampling === "dynamic"
   );
 }

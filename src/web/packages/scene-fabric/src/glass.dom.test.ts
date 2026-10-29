@@ -859,6 +859,34 @@ describe("glass composition", () => {
     expect(filters).not.toContain("blur(8px)");
   });
 
+  it("gives each panel its own sampling, so one theme can mix static and live", () => {
+    const s = stage({ backdrop: () => ({ paint: () => true }) });
+    s.canvas.add(panel());
+    s.canvas.add(
+      panel({ left: 140, yunariGlass: { blurRadius: 24, sampling: "static" } }),
+    );
+    s.canvas.renderAll();
+
+    expect(s.paints.map((paint) => paint.sampling)).toEqual([
+      "dynamic",
+      "static",
+    ]);
+  });
+
+  it("reads the sampling again after a control changes it in place", () => {
+    const s = stage({ backdrop: () => ({ paint: () => true }) });
+    const glassed = panel();
+    s.canvas.add(glassed);
+    s.canvas.renderAll();
+    expect(s.paints.at(-1)?.sampling).toBe("dynamic");
+
+    // What the inspector's sampling control does: the property changes on an
+    // object that is already attached, and no add or remove follows it.
+    glassed.set("yunariGlass", { blurRadius: 24, sampling: "static" });
+    s.canvas.renderAll();
+    expect(s.paints.at(-1)?.sampling).toBe("static");
+  });
+
   it("scales the sample with a toCanvasElement capture multiplier", () => {
     const s = stage({ backdrop: () => ({ paint: () => true }) });
     s.canvas.add(panel());

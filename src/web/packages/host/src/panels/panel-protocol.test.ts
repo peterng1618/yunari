@@ -49,7 +49,12 @@ describe("commandBlock", () => {
       version: 10,
       brightness: 14,
       "frame-rate": 15,
+      rotate: 13,
       "push-jpeg": 101,
+      "push-png": 102,
+      "overlay-layer": 105,
+      "play-block": 121,
+      "stop-play": 123,
       "buffer-level": 122,
     });
   });

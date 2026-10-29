@@ -76,7 +76,8 @@
         "offsetX": { "type": "number", "minimum": -1, "maximum": 1 },
         "offsetY": { "type": "number", "minimum": -1, "maximum": 1 },
         "flipX": { "type": "boolean" },
-        "flipY": { "type": "boolean" }
+        "flipY": { "type": "boolean" },
+        "fallbackFrame": { "type": "integer", "minimum": 0 }
       }
     },
     "globals": {
@@ -201,9 +202,12 @@
       "type": "string", "minLength": 1, "maxLength": 120
     },
     "glassTreatment": {
-      "description": "Authored backdrop blur. Absence means off; 0 means no blur. Artboard units.",
+      "description": "Authored backdrop blur. Absence means off; 0 means no blur. Artboard units. `sampling` picks the live background picture or the declared still frame.",
       "type": "object", "additionalProperties": false, "required": ["blurRadius"],
-      "properties": { "blurRadius": { "type": "number", "minimum": 0, "maximum": 48 } }
+      "properties": {
+        "blurRadius": { "type": "number", "minimum": 0, "maximum": 48 },
+        "sampling": { "enum": ["static", "dynamic"] }
+      }
     },
     "jsonValue": {
       "oneOf": [

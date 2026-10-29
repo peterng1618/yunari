@@ -211,6 +211,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       throw error;
     }
 
+    // A video theme is read before the runner exists: a panel whose assignment
+    // cannot be read is a still panel, not a panel with no runner.
     const runner = createPanelRunner({
       device,
       rasterizer,
