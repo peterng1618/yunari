@@ -33,6 +33,12 @@ the product version lives once in `src/web/package.json`.
 
 ### Boundary rules
 
+- **One concept, one responsible owner.** Consumers import the owner's vocabulary
+  and decisions; they never maintain a parallel list, fallback, persistence path
+  or protocol. Put new behavior behind the seam that already owns its lifecycle.
+- **Registries are extension seams, not shared implementations.** Each provider,
+  panel family or asset source owns its protocol and exports the common contract.
+  Managers schedule and compose through that contract without learning internals.
 - `renderer-core` imports no Fabric and no DOM. It is the semantic boundary both
   the Node host and the browser bundles can share.
 - `scene-fabric` is the only shared layer that constructs Fabric objects. It
@@ -46,7 +52,34 @@ the product version lives once in `src/web/package.json`.
 - `fake-source` is a development dependency of the editor. A shipped bundle that
   contains it is reporting fabricated telemetry.
 
+## USB display panels
+
+USB panels are the host's third display kind, beside paired browsers and local
+monitors. A panel has no URL: the host renders the player's pixels itself and
+drives the hardware. Current driver families cover Lian Li 9.2-inch and Universal
+Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
+
+- `panels/panel-device.ts` defines the seam: geometry, still format and minimum
+  frame interval, optional video and hardware controls, open/present/close.
+- Each driver owns discovery, protocol, transport and its `PanelFamily` rows.
+  `panel-families.ts` only gathers those rows and resolves USB IDs; managers and
+  UI never learn packet formats.
+- `panel-manager.ts` owns one serialized runner per display. It opens attached
+  hardware, coordinates start/stop/refresh, and owns cadence; `panel-raster.ts`
+  captures the host's own player through Chromium.
+- Streaming panels receive frames; storage panels write pixels to the device.
+  The driver declares the minimum interval so a storage write does not become a
+  per-second flash rewrite. Video-capable adapters own conversion and authored
+  placement.
+- Hardware support claims belong in the family's `PanelSupport` record. A new
+  family is a new driver plus a registry spread, not conditionals in the manager.
+
 ## Sample path
+
+Providers acquire only the requested semantic keys. `ProviderRegistry` owns
+scheduling, failure isolation and precedence; the host owns buffering, history
+and transport. A non-`ok` answer does not claim a key, allowing fallback; a key
+nobody measured stays unmapped rather than becoming zero.
 
 1. The host's `ProviderRegistry` takes the union of semantic keys requested by
    connected displays and polls each provider once per distinct device

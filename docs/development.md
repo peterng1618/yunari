@@ -78,6 +78,17 @@ and a `project` input and uploads the PNGs as an artifact.
 
 ## Tooling constraints
 
+- **Mechanism changes require reuse evidence.** Before implementing at a
+  rendering, persistence, scheduling, hardware, media, security or shared
+  lifecycle boundary, complete the seven-rung search in `AGENTS.md`: internal
+  owner, installed dependencies, native platform, public solutions, integration
+  comparison, smallest probe, then build/reuse. Record it in
+  `docs/decisions/NNNN-<slug>.md` with the change. Public searches must inspect
+  actual solutions and constraints, not only package names.
+- **Driver and protocol tests belong at their seam.** Unit-test packet layouts,
+  validation, cadence and failure handling without hardware. Browser-test the
+  real rasterized output when panel rendering changes. Claim support for a
+  hardware/firmware combination only when that combination was exercised.
 - **Vite 8 bundles with Rolldown.** `manualChunks` must be a function; the object
   form fails with `manualChunks is not a function`.
 - **The editor uses `base: "./"`.** Its bundle is mounted both at the preview

@@ -1,8 +1,8 @@
 # Product
 
 Yunari turns one Windows PC into a local hardware-monitoring display system. The
-PC reads its own sensors and serves dashboards; phones and the PC's own monitors
-show them over local Wi-Fi.
+PC reads its own sensors and serves dashboards to paired phones and local
+monitors, and renders dashboards directly to supported USB display panels.
 
 Current release line: pre-release `0.1.0`. Theme documents carry
 `schemaVersion: "2.0.0"`. The npm package is not published yet.
@@ -36,6 +36,10 @@ The host also serves a settings page and a `/pair` page for displays.
   vendored PresentMon. Missing readings stay missing.
 - **Displays and devices.** Several monitors each show a chosen theme. One GPU
   and one disk are chosen for this PC, while a theme may answer a slot itself.
+- **USB display panels.** The host renders and drives supported Lian Li 9.2-inch
+  and Universal Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken
+  Z53/Z63/Z73. Drivers expose stills and optional video; TURZX also exposes
+  brightness, screen, restart and status controls through the common contract.
 - **Wallpaper Engine.** The host reads the local Steam Workshop library and
   serves previews and video assets to the editor.
 - **Steam presence and metadata.** The foreground game is named from the local

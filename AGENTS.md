@@ -18,6 +18,70 @@ display-only player, a desktop editor, and settings.
   before grep or file reads for code questions: `codegraph explore "<symbols or
   question>"`, or the `codegraph_explore` MCP tool. Skip it when no index exists.
 
+## Reuse before build
+
+**Search before designing or writing a mechanism.** Yunari is a product, not a
+reason to rebuild its platform. A problem that looks small has often already
+cost another project its sampling, ordering, invalidation, disposal and ownership
+design. Skipping that search causes rework, not speed.
+
+A **mechanism boundary** is a place where a wrong integration fails quietly:
+rendering, persistence, scheduling, hardware protocols, media, security or shared
+lifecycle ownership. Before changing one, work all seven rungs and record the
+evidence in `docs/decisions/NNNN-<slug>.md` **before implementation**:
+
+1. **Internal owner.** Use CodeGraph and source to find the responsible module,
+   its callers, existing helpers and prior art in this repo. Extend the owner;
+   do not add a parallel mechanism.
+2. **Installed dependencies.** Read the relevant dependency source, types and
+   tests for behavior already donated, including lifecycle and edge cases.
+3. **Native platform.** Check browser, Node, OS, database and runtime APIs.
+   Native availability alone does not settle integration fitness.
+4. **Public solutions.** Search current library docs, upstream source/issues,
+   standards and comparable implementations for this problem shape under similar
+   constraints. Record queries, sources and what each solution actually handles.
+   Do not stop at a package-name list or the first plausible API.
+5. **Integration comparison.** Compare candidates against Yunari's renderer,
+   host, persistence, performance, security and ownership requirements. Name the
+   unsolved parts; a library existing is not proof that the integration work is
+   discharged.
+6. **Smallest probe.** When behavior decides the design, run a disposable
+   executable probe before committing to an adapter or custom implementation.
+7. **Build or reuse decision.** Reuse the first option that fits correctly;
+   otherwise implement the minimum behind the responsible seam. Record why the
+   rejected options do not fit.
+
+The note states current evidence and the decision, not a research diary. Keep it
+with the change. Do not recreate a hook or a second decision register.
+
+## Architecture guardrails
+
+- **One owner per concept.** Before adding a type, key, default, action, route,
+  helper, schema value, registry or persistence path, find its existing owner
+  and consumers. The owner decides membership and invariants; consumers import
+  and use them, never re-spell a subset. One owner must also be the *right*
+  owner: place the rule at the responsible seam, not merely in one place.
+- **Respect extension seams.** Add a provider, panel family, asset source or
+  renderer capability through its existing contract and registry. Do not leak
+  protocol-specific decisions into managers or UI. A new implementation should
+  not force consumers to learn its internals.
+- **Reuse must have consumers.** Creating a canonical module without moving
+  callers leaves duplication intact. Delete the losing path.
+- `renderer-core` stays Fabric/DOM-free. The player may use `scene-fabric`, never
+  editor UI/managers or an interactive `Canvas`.
+- Fabric JSON is the persisted scene. No second simplified scene tree or
+  write-back model.
+- Persist authored state only. Telemetry, built ECharts options, playback,
+  selection and viewport state are runtime/derived/transient; raw ECharts options
+  never enter persisted theme data.
+- Providers acquire; the host owns scheduling, buffering, history and fallback.
+  Missing or non-`ok` telemetry is never fabricated as zero/default data.
+- Validate hostile or invalid input at its trust boundary. Refuse invalid numbers
+  rather than coercing them to zero; reject unsafe package paths, unsupported
+  versions and unbounded input before mutation.
+- Pre-release internal architecture may break cleanly. Do not add compatibility
+  glue solely to preserve a superseded internal design.
+
 ## Commands
 
 Run every npm command from `src/web/`. The repository root has no
