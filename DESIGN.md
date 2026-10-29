@@ -52,24 +52,21 @@ omitted:
 
 # Yunari design language
 
-**Normative.** Every editor surface is built from what is written here, and a
-new surface that needs something absent from it changes this file in the same
-commit rather than inventing a local exception. This file is the design record
-and what later work reads instead of re-deriving.
+**Normative.** Every editor surface is built from what is written here. A new
+surface that needs something absent from this file changes this file in the same
+commit rather than inventing a local exception.
 
 Scope: **the editor**. The player has its own chrome rules, and the canvas —
 inside the artboard — is the author's design, not ours.
 
 ## Overview
 
-<!-- §1 -->
-
 **The editor is quiet so the dashboard is loud.** The themes this product makes
 are dark, saturated and dense with data. Every part of the editor that is not
 the artboard recedes: one accent, used for one thing at a time, and no surface
-of its own competing with the artboard for attention.
+competing with the artboard for attention.
 
-Two consequences that decide most arguments:
+Two consequences decide most arguments:
 
 - **Chrome does not decorate.** If a border, shadow or colour does not
   distinguish one thing from another, it is not there.
@@ -79,12 +76,10 @@ Two consequences that decide most arguments:
 
 ## Colors
 
-<!-- §4 -->
-
-Colour is a **runtime palette**, not a set of literals. Six palettes ship
-(`editorial`, `graphite`, `ember`, `moss`, `plum`, `light`); graphite is the
-default, an OS reporting a light appearance gets `light` instead, and the author
-may override either in Settings.
+Colour is a **runtime palette**, not a set of literals. Six palettes ship:
+`editorial`, `graphite`, `ember`, `moss`, `plum` and `light`. Graphite is the
+default; an OS reporting a light appearance gets `light`; the author may
+override either in Settings.
 
 A surface never writes a hex value. It writes one of these roles, and the
 palette resolves it:
@@ -113,8 +108,6 @@ a disabled destructive control stays `--faint` rather than dimming red.
 
 ## Typography
 
-<!-- §2 -->
-
 Three families, each with one job.
 
 | Family | Job | Where |
@@ -123,10 +116,10 @@ Three families, each with one job.
 | UI mono (`ui-monospace` stack) | Everything a machine produced or will parse | Values, coordinates, token names, chord marks, counts |
 | Theme fonts | The author's typography | Inside the artboard only; never in chrome |
 
-**Values are mono; labels are sans.** This is the single largest difference from
-a form-shaped panel and it is not decorative: a mono value is scannable by
-column and cannot be mistaken for prose. A number a person types is mono. A
-number that is prose ("three parts") is sans.
+**Values are mono; labels are sans.** This is the largest difference from a
+form-shaped panel, and it is not decorative: a mono value is scannable by column
+and cannot be mistaken for prose. A number a person types is mono. A number that
+is prose ("three parts") is sans.
 
 ### The scale
 
@@ -140,10 +133,10 @@ number that is prose ("three parts") is sans.
 | `--text-xl` | 19px | 1.2 | Empty-state headings |
 
 Uppercase is reserved for **section eyebrows** — Content, Position, Layer,
-Paint, and the group headings in the Add pane. An eyebrow is
-`--text-2xs`, `600`, `letter-spacing: .11em`, muted, and it always labels a
-region, never a control. Nothing else is uppercase: a chord is printed as the
-platform prints it, and a menu row is sentence case.
+Paint, and the group headings in the Add pane. An eyebrow is `--text-2xs`, `600`,
+`letter-spacing: .11em`, muted, and it always labels a region, never a control.
+Nothing else is uppercase: a chord is printed as the platform prints it, and a
+menu row is sentence case.
 
 Weights: `400` body, `500` emphasis inside a row, `600` titles and eyebrows,
 `650`–`700` only for the brand mark and a primary button. Nothing is bolder than
@@ -151,13 +144,11 @@ Weights: `400` body, `500` emphasis inside a row, `600` titles and eyebrows,
 
 The persisted model is a **type token** that names a face: family, an optional
 weight and an optional declared face asset. Size, line height and tracking live
-on the run's own style, so one face worn at two sizes needs one token, not two. The three
-roles are the token ids — `heading`, `body`, `mono` — and the theme always
-carries all three.
+on the run's own style, so one face worn at two sizes needs one token, not two.
+The three roles are the token ids — `heading`, `body`, `mono` — and the theme
+always carries all three.
 
 ## Layout
-
-<!-- §7 -->
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -176,8 +167,6 @@ carries all three.
 
 ### The scales
 
-<!-- §3 -->
-
 A 4px base. The named steps are the only ones a surface may use:
 `4, 6, 8, 10, 12, 14, 16, 20, 24, 32`. A one-off `7px` is a signal that the
 layout is being tuned by eye and should be re-derived.
@@ -193,36 +182,29 @@ layout is being tuned by eye and should be re-derived.
 | 32 | Empty-state breathing room |
 
 Row rhythm: a control row is **26px** tall in a panel, **30px** in a dialog,
-**32px** in the settings surface. Density does not vary by taste — it varies by
-which of those three a surface is.
+**32px** in the settings surface. Density varies by which of those three a
+surface is, not by taste.
 
-**The store's gallery grid is 272px minimum per column.** The number is not the
-local half's own: it is derived from the **online** half's busiest facts band —
-its badge, its counts and its four actions — so a person switching halves does
-not watch the grid change shape. Its column width is fixed at 272px, and the
-grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
+**The store's gallery grid is 272px minimum per column.** The number is derived
+from the online half's busiest facts band — its badge, counts and four actions —
+so switching halves does not change the grid's shape. Column width is fixed at
+272px and the grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
 follows the width, so no breakpoint is invented for it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
-panel.** Both numbers are this surface's own. The width is not the settings
-modal's: 560 is a text sheet's box and this one's subject is a picture — 960
-against 560, with the stage flush to the box's edges rather than inset by the
-sheet's padding. **The stage is one height for every item**: the box's height
-less its border, with the panel beside it rather than below, and the theme
-contained in it at its own ratio, letterboxed against a ground darker than the
-modal's own surface. A stage sized to the item would make the modal change
-height as a person steps between items, which is the one thing a viewer must
-not do. **A short viewport caps the box at 90vh**, so the foot stays on screen
-on a laptop.
+panel.** The width is not the settings modal's 560: this surface's subject is a
+picture. The stage is flush to the box's edges, one height for every item, with
+the panel beside it rather than below. The theme is contained at its own ratio,
+letterboxed against a ground darker than the modal's surface. A stage sized to
+the item would change the modal's height between items, which a viewer must not
+do. A short viewport caps the box at 90vh so the foot stays on screen.
 
 **The asset preview is the Finder's box, with the same 270px panel.** Its
 ceiling is `min(1132px, 100vw − 48px) × min(852px, 100vh − 48px)`, because its
-subject is the file at the size it will be used. The panel's width is the store viewer's, so the facts sit where a person
-already looks and only the stage changes between the two surfaces.
+subject is the file at the size it will be used. The facts sit where a person
+already looks, and only the stage changes between the two surfaces.
 
 ### The header
-
-<!-- §7.1 -->
 
 **Document-level and editor-level actions only.** A command that has a rightful
 home elsewhere is not repeated here — Insert lives in the Add pane, so the
@@ -232,27 +214,24 @@ header has no Insert menu.
 - Right: the publish chord, then the **primary button**. `Publish` is the only
   filled, accent-coloured button in the editor.
 - **The header never shows the document's identity** and never shows a
-  per-document readout. Both are on the canvas (§7.5).
+  per-document readout. Both are on the canvas.
 
-**The header carries the shell's mode switch, and there is no bar under it.** The
-shell has three modes — the editor, the theme store and the host — and the switch
-between them is the header's own control, a §5 `Segmented` with the labels
-`Editor`, `Themes` and `Host`. A strip under the header would be the second
-horizontal bar §7.2 forbids, so the header owns the choice and its **right-hand
-region is per-mode**: `File`/`Edit`/`View` and the publish control are the
-editor's, a mode with actions of its own carries them there, and a mode with none
-shows nothing beside the switch. The editor's own body is hidden, not unmounted,
-while another mode shows — a mode switch never loses an unsaved document, and it
-asks before it leaves a dirty one.
+**The header carries the shell's mode switch, and there is no bar under it.**
+The shell has three modes — the editor, the theme store and the host — and the
+switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
+and `Host`. A strip under the header would be a second horizontal bar, so the
+header owns the choice and its **right-hand region is per-mode**: `File`/`Edit`/
+`View` and the publish control belong to the editor; a mode with actions of its
+own carries them there; a mode with none shows nothing beside the switch. The
+editor's own body is hidden, not unmounted, while another mode shows — a mode
+switch never loses an unsaved document, and it asks before leaving a dirty one.
 
-Why `View` stays: the things in it — preview/source, run display — are
-changed *while* designing, many times a session. Settings is for
+`View` stays in the header because its commands — preview/source, run display —
+are changed *while* designing, many times a session. Settings is for
 once-in-a-while choices. A frequently changed control one level deeper is a tax
 paid on every use.
 
 ### The rail
-
-<!-- §7.2 -->
 
 A 46px vertical strip of glyph slots at the window's left edge, with the
 settings gear pinned to the foot. **Five slots:**
@@ -268,45 +247,40 @@ settings gear pinned to the foot. **Five slots:**
 **At most one slot is open at a time.** Asking for the open slot closes it;
 asking for another replaces it. The pane occupies its own layout track beside
 the rail. Opening it may resize the available stage, but never translates
-objects or writes authored coordinates; the viewport owner handles fitting.
-The existing open/close layout behaviour survives the rewrite, rather than
-introducing an overlay that hides artwork or controls. The selected slot carries the accent glyph, an accent
-wash, and a 2px accent bar on the rail's inner edge.
+objects or writes authored coordinates; the viewport owner handles fitting. The
+selected slot carries the accent glyph, an accent wash, and a 2px accent bar on
+the rail's inner edge.
 
-The rail replaces the horizontal pane bar. A second horizontal bar under the
-header is forbidden: two stacked rows of navigation make the first one read as
+The rail replaces a horizontal pane bar. A second horizontal bar under the
+header is forbidden: two stacked rows of navigation make the first read as
 chrome rather than as a choice.
 
 ### Panes
 
-<!-- §7.3 -->
-
 Width 246px by default. Structure, top to bottom:
 
 1. **Title bar** — glyph, title, and the count or a single pane-level action.
-2. **Body** — scrolls. Sections use the §2 eyebrow.
-3. **Footer toolbar** — optional, and present where a pane's items have a set of
+2. **Body** — scrolls. Sections use the eyebrow treatment.
+3. **Footer toolbar** — optional, present where a pane's items have a set of
    actions. Icon buttons at 26px, from the same registries the dock uses.
 
 **A pane footer is bounded by its pane.** The scene tree's footer holds the
 object actions; it is not a place for global commands, and the status bar is not
 a place for tools.
 
-**A row yields its name and its key before it yields a control, and it yields the
-role last.** A Composition row that carries every control it can — the twisty,
-the entry control on a group, the eye and the lock — and a bound key is wider
-than the pane's body, so the row clips rather than dropping a control or taking
-the mark slot below 28px. The name and the key give way first; the role gives way
-only once they have nothing left, and it is *clipped* rather than *covered*,
-because it is the only statement of what a row is on four rows in five: a role
-the slot paints over says nothing at all, where a role that ellipsises still says
-what it can. This is the pane's trade at its default width and not a defect to be
-measured away — the mark slot is already at the floor its own contents set, so
-narrowing it moves the clip rather than removing it.
+**A row yields its name and its key before it yields a control, and it yields
+the role last.** A Composition row that carries every control it can — the
+twisty, the entry control on a group, the eye and the lock — and a bound key is
+wider than the pane's body, so the row clips rather than dropping a control or
+taking the mark slot below 28px. The name and key give way first; the role gives
+way only once they have nothing left, and it is *clipped* rather than *covered*,
+because it is often the only statement of what a row is. A role the slot paints
+over says nothing; a role that ellipsises still says what it can. This is the
+pane's trade at its default width, not a defect to measure away: the mark slot is
+already at the floor its contents set, so narrowing it moves the clip rather than
+removing it.
 
 ### The inspector
-
-<!-- §7.4 -->
 
 Right column, 276px. **The selection's column answers the question the selected
 thing actually raises**, and describes what the thing *is*:
@@ -322,18 +296,15 @@ thing actually raises**, and describes what the thing *is*:
   `--text-md`, and the binding key beneath the row when one is bound — a
   multi-selection, which has no kind of its own, draws the name alone. It does
   not open with a chrome label, and **the kind is that glyph, not a line of its
-  own**: `vg-466`, the user's item 9, took the type label away for the icon.
+  own**.
 - **A section with nothing in it is not rendered** — no header, no zero count.
 - **Every section opens; none starts closed**, with one exception: the
   `advanced` treatment, a disclosure a caller mounts deliberately and that a
-  selection never asks for, so it opens closed and counted. Position used to be
-  closed for the same kind of reason — geometry is set once — but a new object's
-  position is what it is usually selected *for*, so that asymmetry cost more than
-  it saved. The column stops deciding this for the author; a reader may still
-  close a section, and §8 keeps that disclosure.
+  selection never asks for, so it opens closed and counted. A reader may still
+  close a section, and that disclosure survives routine updates.
 - **A property a kind does not have is not shown as a field.** Where the
   capability exists but this selection cannot carry it, the row renders refused
-  with the reason (see §5.3).
+  with the reason.
 - **There is no per-card column.** A card is a `Group`; groups get name,
   transform and opacity. The question "which sensor" is asked on the element
   that carries the binding.
@@ -341,23 +312,20 @@ thing actually raises**, and describes what the thing *is*:
 
 ### The stage
 
-<!-- §7.5 -->
-
-The artboard sits centred on the `--stage` ground and **is never drawn inside
-a device frame**. The stage is the author's whole surface. Preserve the
-reference's artwork-led composition, fine chrome and restrained depth. Subtle
-palette-derived stage texture is permitted when it stays behind the artwork
-and does not obscure controls; neither texture nor a flat ground is mandatory.
-The warm gradient is illustrative authored artwork, not a shell background to
-hard-code into every document. A lens changes the view rectangle, never
-authored artboard dimensions.
+The artboard sits centred on the `--stage` ground and **is never drawn inside a
+device frame**. The stage is the author's whole surface. Composition is
+artwork-led, with fine chrome and restrained depth. Subtle palette-derived stage
+texture is permitted when it stays behind the artwork and does not obscure
+controls; neither texture nor a flat ground is mandatory. Authored artwork is not
+a shell background to hard-code into every document. A lens changes the view
+rectangle, never authored artboard dimensions.
 
 **Three corners, one question each:**
 
 | Corner | Question | Contents |
 |---|---|---|
 | Top-left | *What am I?* | The document's identity chip: record dot, theme name, edited state |
-| Top-right | *How am I shown?* | The display lens chips, and zoom − / value / +, and fit |
+| Top-right | *How am I shown?* | The display lens chips, zoom − / value / +, and fit |
 | Bottom-centre | *What can I do?* | The selection dock |
 
 The separation is not cosmetic: **the dock acts on the selection, the corners
@@ -369,23 +337,19 @@ carries the object half alone, *filtered* — an action this selection cannot ru
 is absent — and asks the registry for eligibility, so the surface never
 re-derives what an action can do.
 
-**The arrange actions are the selection inspector's** (`vg-463`). The column
-leads with them for a selection of two or more, because that column has just
-named the subjects they act on, and shows none at all for a selection that cannot
-arrange — a lone shape is not one. Within the row the actions that need more than
-this selection has are *greyed* rather than withheld: `Distribute` beside two
-objects stays discoverable instead of appearing once a third is added. One
-surface owns them, and it is this one: the dock no longer carries the eight that
-used to sit beside its object half.
+**The arrange actions are the selection inspector's.** The column leads with
+them for a selection of two or more, and shows none at all for a selection that
+cannot arrange — a lone shape is not one. Within the row, actions that need more
+than this selection has are *greyed* rather than withheld: `Distribute` beside
+two objects stays discoverable instead of appearing once a third is added. One
+surface owns them.
 
 Floating clusters are `--radius-xl`, `--panel` at 95%, 1px `--edge`, elevation 1,
 and sit 14–16px in from the stage's edges. **No backdrop blur**: the drawing
-fills a cluster from the same `--panel` the chrome uses and separates it from
-the stage by its elevation shadow alone.
+fills a cluster from the same `--panel` the chrome uses and separates it from the
+stage by its elevation shadow alone.
 
 ### The status bar
-
-<!-- §7.6 -->
 
 26px, mono, `--faint`, readouts only: object and selection counts on the left,
 save state and the live indicator on the right. **No tools, no buttons, no
@@ -393,39 +357,58 @@ menus.** Anything actionable belongs to a region that owns it.
 
 ### Overflow, scrolling and motion
 
-<!-- §7.7 -->
-
 - **Content survives density.** Names may ellipsize in lists, but their full
-  value remains in the accessible name and is available on focus as well as
-  hover. Refusals, validation messages, units and numeric edits never
-  ellipsize. A long name cannot widen a pane or hide its row actions.
+  value remains in the accessible name and on focus as well as hover. Refusals,
+  validation messages, units and numeric edits never ellipsize. A long name
+  cannot widen a pane or hide its row actions.
 - **Chrome stays still.** Pane title and footer stay outside the scrolling body;
   inspector sections share one vertical scroller. Preserve per-pane offsets and
   disclosure state across routine updates. Use native scrollbars and reserve
   their gutter where necessary; no custom scrollbar and no scroll-jacking owner,
   with one exception — the shell's own two scrollers, the pane's body and the
-  inspector, restyle that native bar from the three `--yunari-scrollbar-*`
-  tokens (`vg-458`), which is what those tokens were declared for. No other
-  surface paints a scrollbar, and none is a scroll-jacking owner.
-- **Clusters cannot collide.** Identity may truncate its name; view controls
-  may wrap or use the existing labelled lens chooser. Never omit a lens, zoom
-  command or focused target to fit a screenshot. Pointer events belong to the
-  controls, not an invisible full-stage overlay.
-- **Desktop density has a proof, not a guessed minimum.** Check the full shell
-  at 1280×720 and 1440×900 CSS pixels, then at 200% browser zoom. Keep every
-  control reachable through scrolling or compact composition. The phone
-  layout remains a separately recorded limitation (`vg-172`), not a claim
-  that this desktop pass fixes it.
+  inspector, restyle the native bar from the three `--yunari-scrollbar-*`
+  tokens. No other surface paints a scrollbar.
+- **Clusters cannot collide.** Identity may truncate its name; view controls may
+  wrap or use the labelled lens chooser. Never omit a lens, zoom command or
+  focused target to fit a screenshot. Pointer events belong to the controls, not
+  an invisible full-stage overlay.
+- **Desktop density has a proof, not a guessed minimum.** Check the full shell at
+  1280×720 and 1440×900 CSS pixels, then at 200% browser zoom. Keep every
+  control reachable through scrolling or compact composition. The phone layout
+  remains a separately recorded limitation, not a claim that the desktop pass
+  fixes it.
 - **Motion explains change, never delays it.** No animated pane width, artboard
   travel, hover scaling or automatic smooth scrolling during editing. Optional
   opacity transitions are short and disappear under `prefers-reduced-motion`.
   Saving, validation and focus changes remain immediate.
 
-### Preserve the reference's character
+### Density and disclosure
 
-<!-- §7.8 -->
+- **Every authorable setting is present** — nothing is hidden to make a panel
+  look simpler. Convenience is ordering and grouping, never a smaller surface.
+- **Order and group by what a person needs**, most likely first, obscure last,
+  each field with a hint where the name is not self-evident.
+- **Disclosure is for the once-in-a-while, not the frequent.** A frequently used
+  control stays visible; a collapsed section is for what is adjusted rarely.
+- **A section header says what the section is** — the question it answers.
 
-The original visual direction is a constraint, not disposable presentation.
+### Entering a group
+
+Entering a group is a **view state, not a document change**: it says what the
+author is working inside, and the scene it leaves behind is byte-identical to
+the one it found. The layer list dims the rows the entered group puts out of
+reach, and **the canvas dims what is outside the entered group at the same
+value** — `0.45`, the opacity the unreachable rows already take — so the list
+and the canvas cannot disagree about what the author can currently reach.
+
+**The dim belongs to the view and never to the objects.** The renderer applies it
+at draw time and does not touch any object's `opacity`. Fabric serialises
+`opacity`, so a dim that reached an object would write view state into every
+save. It does not stack: an object that is hidden *and* outside the entered
+group is dimmed once, at `0.45`, not twice.
+
+### Preserve the visual character
+
 Keep artwork dominant, controls compact, glyph tiles quick to scan, dividers
 fine, and floating clusters restrained. Palette choices retain visual swatches.
 Accessibility strengthens that treatment; it does not authorize replacing it
@@ -438,28 +421,7 @@ and chart tiles, with full accessible names and focus/hover descriptions. Lens
 chips remain compact where they fit; overflow composition preserves the full
 choice set without dictating a permanently larger chooser.
 
-### Entering a group
-
-<!-- §7.9 -->
-
-Entering a group is a **view state, not a document change**: it says what the
-author is working inside, and the scene it leaves behind is byte-identical to the
-one it found. Both surfaces say so the same way. The layer list dims the rows the
-entered group puts out of reach, and **the canvas dims what is outside the entered
-group at the same value** — `0.45`, the opacity the unreachable rows already take —
-so the list and the canvas cannot disagree about what the author can currently reach.
-
-**The dim belongs to the view and never to the objects.** The renderer applies it at
-draw time and does not touch any object's `opacity`. That is not a stylistic
-preference: Fabric serialises `opacity`, so a dim that reached an object would write
-view state into every save, which the project's guardrail against persisting anything
-but authored state forbids. It does not stack either — an object that is hidden *and*
-outside the entered group is dimmed once, at `0.45`, not twice, which is the rule the
-layer list already states for a hidden row inside an unreachable one.
-
 ## Elevation & Depth
-
-### Elevation
 
 Four levels, and a surface sits at exactly one.
 
@@ -471,13 +433,11 @@ Four levels, and a surface sits at exactly one.
 | 3 — modal | `0 24px 60px #000000b3` + scrim `#00000073` | Dialogs |
 
 **Floating clusters do not blur their backdrop.** They take the chrome's own
-`--panel` at 95% with no gradient and no filter, and row 1's shadow is the only
-thing that separates them from the chrome and from the stage. The canvas reads
+`--panel` at 95% with no gradient and no filter, and the raised shadow is the
+only thing separating them from the chrome and from the stage. The canvas reads
 *around* a cluster, never through it.
 
 ## Shapes
-
-### Radius
 
 | Token | Value | Use |
 |---|---|---|
@@ -488,8 +448,6 @@ thing that separates them from the chrome and from the stage. The canvas reads
 | full | 999px | Pills and toggles only |
 
 ## Components
-
-<!-- §5 -->
 
 The vocabulary is closed. A control is one of these, or it is not a control.
 
@@ -505,67 +463,66 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Segmented** | A `--panel-2` well holding 2–4 labels, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
 | **Icon button** | A 26–30px square at `--radius-md`, glyph only | An action whose glyph is unambiguous |
 | **Labelled button** | A label in `--text-sm` on the `--yunari-control-bg` fill, 1px `--edge`, `--radius-md`, `6px 12px` padding | You can answer the surface that raised it; it is chrome around an answer, not a control in a panel |
-| **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of §7.2's slots; at most one pane is open |
+| **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of the rail's slots; at most one pane is open |
 | **Choice row** | A `--radius-md` row at `--panel-2` carrying a swatch and a name; the chosen row is lifted to `--stage` with the accent border | One member of a closed set where each member has its own colour |
-| **Preset chip** | A 24px rounded square at `--radius-sm` carrying only a swatch; the chosen one takes the accent border and §4's accent halo, its name staying the programmatic label | One member of a swatch library, where the swatch is what the author recognises |
+| **Preset chip** | A 24px rounded square at `--radius-sm` carrying only a swatch; the chosen one takes the accent border and the accent halo, its name staying the programmatic label | One member of a swatch library, where the swatch is what the author recognises |
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |
-| **2-D colour area** | A 128px-tall `--radius-sm` surface with a 1px `--edge` and the saturation × brightness plane as its fill | A pointer picks both channels; focus paints §4's boundary role |
+| **2-D colour area** | A 128px-tall `--radius-sm` surface with a 1px `--edge` and the saturation × brightness plane as its fill | A pointer picks both channels; focus paints the boundary role |
 | **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
 
-**`Segmented` has a bare form, and the header's mode switch is it.** §7.1's
-switch is the well this table describes — `--panel-2` inside a 1px `--edge` at
+**`Segmented` has a bare form, and the header's mode switch is it.** The switch
+is the well this table describes — `--panel-2` inside a 1px `--edge` at
 `--radius-md`, the chosen name lifted to `--stage` with `--text` — and it carries
-no row label, because the three names inside the well are the whole control and
-the header drawing draws no label beside them. It shares the labelled row's
-primitive but not its component: `components/ui/control-segmented.tsx` is a
-labelled **row**, whose `ControlRow` requires a visible label, so this is the same
-primitive with header-local paint rather than a fourth row shape grown for one
-caller. Rule 5 below is met by the group's own name rather than by a label column,
-and by the group's and each segment's id, derived from the mode the way
-`useControlIds` derives one.
+no row label, because the three names inside the well are the whole control. It
+shares the labelled row's primitive but not its component:
+`components/ui/control-segmented.tsx` is a labelled **row**, whose `ControlRow`
+requires a visible label, so the header uses the same primitive with header-local
+paint rather than a fourth row shape grown for one caller. Rule 5 is met by the
+group's own name rather than a label column, and by the group's and each
+segment's id, derived from the mode the way `useControlIds` derives one.
 
 **The checkbox choice row is rule 7's shape where the set admits more than one
 answer.** Rule 7 gives a set too large for `Segmented` as a list of choice rows,
 each a **radio** in one labelled `radiogroup` — one answer, and the group owns
-which. A set you may choose several of is not that shape: the row's semantics are
-a checkbox, the group is a plain group, and the group therefore owns no single
-checked bit. Everything else is the choice row's — the `--radius-md` row at
-`--panel-2`, the row as the whole target, the chosen row lifted to `--stage`, and
-a mark whose ink is `--text` rather than the accent, because §4 rations accent to
-one filled element per region. The store mode's facet popover is where it is
-drawn; its trigger is the well with chevron, and the count beside a value is how
-many items are behind it.
+which. A set you may choose several of is not that shape: the row's semantics
+are a checkbox, the group is a plain group, and the group owns no single checked
+bit. Everything else is the choice row's — the `--radius-md` row at `--panel-2`,
+the row as the whole target, the chosen row lifted to `--stage`, and a mark whose
+ink is `--text` rather than the accent, because accent is rationed to one filled
+element per region. The store mode's facet popover is where it is drawn; its
+trigger is the well with chevron, and the count beside a value is how many items
+are behind it.
 
-**The colour area and the gradient track take their sizes from §3's panel
+**The colour area and the gradient track take their sizes from the panel
 rhythm; both channels are `role="slider"`.** The keyboard moves one channel at a
 time with arrows 1, Shift/Page 10 and Home/End, and Escape closes and returns
 focus; the focus boundary must measure ≥3:1 in all six palettes.
 
-**The store's search well is 180px.** A well otherwise fills its field row's value
-cell (§5 rule 2), and the store's header row is a bar rather than a field row, so
-this one is sized to that 180px and holds that width while the facet row beside
-it wraps to a second line.
+**The store's search well is 180px.** A well otherwise fills its field row's
+value cell, and the store's header row is a bar rather than a field row, so this
+one is sized to 180px and holds that width while the facet row beside it wraps
+to a second line.
 
-**The store's page-size well is 76px**, for the same reason and from the same
-drawing: the pager is a bar rather than a field row, so the per-page choice is
-sized by what the drawing fixes instead of by a field row's value cell.
+**The store's page-size well is 76px**, for the same reason: the pager is a bar
+rather than a field row, so the per-page choice is sized by the drawing instead
+of by a field row's value cell.
 
-**The store's pager row is 158px wide, and the arithmetic is what fixes it.** The
-drawing draws the per-page label *beside* its well, not above it, so the row is
-§5's 74px label column, §3's 8px gap and the 76px well — 74 + 8 + 76 — and the
-label and the well share the bar's one line, as the drawing's own 43px bar has
-them. A row given only the well's 76px wraps the well to a second line and makes
-the bar 61px (`pager.tsx`).
+**The store's pager row is 158px wide, and the arithmetic is what fixes it.**
+The drawing draws the per-page label *beside* its well, not above it, so the row
+is the 74px label column, the 8px gap and the 76px well — 74 + 8 + 76 — and the
+label and the well share the bar's one line. A row given only the well's 76px
+wraps the well to a second line and makes the bar 61px (`pager.tsx`).
 
-**The slider row's well is 40px and not 36, and the arithmetic is what fixes it.** The well
-carries an editable field now, so the 24×24 target below binds it: the control pads its wells with
-`px-[var(--space-6)]` (`control-well.tsx`'s `wellClasses`, the 6px step at
-`editor-shell.css`'s `--space-6`) and the border 1px, leaving the field `well − 12 − 2` — 22px at
-36 and 24 at 38, which is the floor, so 40 keeps a pixel either side of the box that rule measures.
-**§3's table names the same step**: a well's horizontal padding is 6, which is what both drawings
-draw (`padding:4px 6px`) and what `wellClasses` writes.
+**The slider row's well is 40px and not 36, and the arithmetic is what fixes
+it.** The well carries an editable field, so the 24×24 target below binds it: the
+control pads its wells with `px-[var(--space-6)]` (`control-well.tsx`'s
+`wellClasses`, the 6px step at `editor-shell.css`'s `--space-6`) and the border
+1px, leaving the field `well − 12 − 2` — 22px at 36 and 24 at 38, which is the
+floor, so 40 keeps a pixel either side of the box that rule measures. A well's
+horizontal padding is 6, which is what both drawings draw (`padding:4px 6px`) and
+what `wellClasses` writes.
 
-**Rules that make it readable:**
+### Rules that make it readable
 
 1. **A value inside a well means editable.** Structural borders on panels and
    disclosures do not mean editable: a disclosure says how much the section
@@ -581,22 +538,33 @@ draw (`padding:4px 6px`) and what `wellClasses` writes.
    control spanning the row under its own heading — is not a field row and keeps
    the shape it is drawn with.
 3. **A refused capability renders with its reason.** A property the kind does
-   not have is omitted (§7.4); an existing capability this selection cannot use
-   keeps its row. The reason is visible and connected with `aria-describedby`.
+   not have is omitted; an existing capability this selection cannot use keeps
+   its row. The reason is visible and connected with `aria-describedby`.
    `aria-disabled` alone blocks nothing: pointer, keyboard, scrub and commit
    paths must all refuse mutation. A natively disabled control is acceptable
    only when its reason remains readable without focusing it. The dock's
-   registry-filtered object actions remain the explicit exception (§7.5).
+   registry-filtered object actions remain the explicit exception: an action
+   this selection cannot run is *filtered* — absent from the dock — rather than
+   refused in words.
 4. **Keyboard focus is an accent boundary, not only a translucent halo.** Keep
    the 3px accent-at-18% halo as decoration; the solid focus boundary must have
    at least 3:1 contrast against adjacent colours in all six palettes. Never
    remove the browser outline without a visible replacement. In forced-colours
-   mode use a system-colour outline; a box shadow may disappear. Focus cannot
-   be clipped by a scroller or covered by a floating cluster.
+   mode use a system-colour outline; a box shadow may disappear. Focus cannot be
+   clipped by a scroller or covered by a floating cluster.
 5. **Every control has a label, a programmatic name, and an id.** A control with
    neither `aria-label` nor a `<label for>` is a defect, not a style choice.
-6. **Hover raises `--edge` to `--muted`.** On a control that carries a resting `--edge` — the well, the toggle — the border brightens. On a glyph-only control with no resting border — the icon button — it is the border it acquires on hover. Nothing moves, nothing scales.
-7. **A set too large for `Segmented` is a list of choice rows, each a radio in one labelled `radiogroup`.** The row is the whole target, the group owns which one is chosen, and the group's own keyboard model walks the rows in reading order — a multi-column layout changes the grid and never the arrow keys. **A swatch library is the same set drawn as preset chips**: the swatch alone, the name as the control's programmatic label, wrapped in reading order, with the group's arrow keys unchanged.
+6. **Hover raises `--edge` to `--muted`.** On a control that carries a resting
+   `--edge` — the well, the toggle — the border brightens. On a glyph-only
+   control with no resting border — the icon button — it is the border it
+   acquires on hover. Nothing moves, nothing scales.
+7. **A set too large for `Segmented` is a list of choice rows, each a radio in
+   one labelled `radiogroup`.** The row is the whole target, the group owns which
+   one is chosen, and the group's own keyboard model walks the rows in reading
+   order — a multi-column layout changes the grid and never the arrow keys. **A
+   swatch library is the same set drawn as preset chips**: the swatch alone, the
+   name as the control's programmatic label, wrapped in reading order, with the
+   group's arrow keys unchanged.
 
 ### Asset finder tabs
 
@@ -619,8 +587,8 @@ never a provider**, and it fills the frame rather than drawing its own.
    kinds (`finder-card.tsx`).
 5. **Every control defines rest, hover, focus, selected or disabled, busy and
    outcome.** Hover raises `--edge` to `--muted`; nothing moves or scales.
-6. **One animated skeleton for every wait**, drawn as cards in the grid;
-   an appended page adds skeleton cards rather than replacing the rows
+6. **One animated skeleton for every wait**, drawn as cards in the grid; an
+   appended page adds skeleton cards rather than replacing the rows
    (`skeleton.tsx`).
 7. **Append, don't page.** Reaching the grid's end asks the next page. A source
    that can only page explicitly puts its control in the footer's status slot,
@@ -628,9 +596,9 @@ never a provider**, and it fills the frame rather than drawing its own.
 8. **States live where they are read.** Empty, error and credential sentences
    sit in the content region; an action's outcome sits in the footer's one
    `role="status"` line. The status line never repeats a body sentence.
-9. **Selection is single.** The selected card takes the accent border, a ring
-   and a check; the footer carries its actions; a new question clears it, and
-   each tab keeps its own selection while the finder stays open.
+9. **Selection is single.** The selected card takes the accent border, a ring and
+   a check; the footer carries its actions; a new question clears it, and each
+   tab keeps its own selection while the finder stays open.
 10. **Tab order is fixed:** Fonts, Icons, Images, Videos, Colours, Wallpaper
     Engine. A category the registry adds later appends rather than inserts.
 11. **Double-click opens the media preview**, and the footer's Preview icon
@@ -642,18 +610,18 @@ never a provider**, and it fills the frame rather than drawing its own.
 
 ### Editing and recovery
 
-- **Draft is not authored state.** Text and number fields retain the draft
-  while typing, including an empty string, a minus sign and an incomplete
-  decimal. Enter or blur commits one valid changed value; Enter followed by
-  blur cannot commit twice. Escape restores the last authored value without
-  history. IME composition is not an Enter commit.
+- **Draft is not authored state.** Text and number fields retain the draft while
+  typing, including an empty string, a minus sign and an incomplete decimal.
+  Enter or blur commits one valid changed value; Enter followed by blur cannot
+  commit twice. Escape restores the last authored value without history. IME
+  composition is not an Enter commit.
 - **Validation belongs to the field's owner.** Finite numbers and the owner's
   bounds are required; invalid input is never coerced to zero or silently
   clamped. Show the reason beside the field, mark `aria-invalid`, and preserve
   the rejected draft until corrected or cancelled. Optional numeric fields
   distinguish clearing the authored key from writing zero.
-- **Gestures have one undo boundary.** Sliders and scrubs may preview through
-  the existing imperative write funnel. Release commits one changed value;
+- **Gestures have one undo boundary.** Sliders and scrubs may preview through the
+  existing imperative write funnel. Release commits one changed value;
   cancellation restores the start value and adds no history. A selected object
   disappearing or changing mid-gesture cancels; it never edits its successor.
 - **Stable identity keeps work in place.** A telemetry update cannot replace a
@@ -686,16 +654,13 @@ never a provider**, and it fills the frame rather than drawing its own.
 
 ### Icons
 
-<!-- §6 -->
-
 **Glyphs are stroke-based, `currentColor`, drawn on a 24px grid, at one weight
 rule: the stroke rises as the size falls, so the rendered weight stays optically
 even.** One family, one rule, everywhere — **1.7px at 14px and above, 1.8px at
 11–13px, 2px at 10px and below.** A filled glyph carries one of two things, and
 never a licence for looks: the escape where a stroke would read faint at the
 size (the live check at 12px, the record dot), or the **on/off channel of a
-binary state** — the layer row's locked lock, the font picker's favourited star
-(`vg-024`).
+binary state** — the layer row's locked lock, the font picker's favourited star.
 
 Rules:
 
@@ -709,49 +674,43 @@ Rules:
   are exactly the insertable kinds; a new kind adds one glyph or the set is
   wrong.
 - **A group gets a generic glyph.** A card on the canvas is an arbitrary group of
-  elements, so its row cannot depict it. It gets the stack glyph and its name.
-  A *card unit* in the Add pane is not arbitrary — the card library is a fixed
-  set of eight — so a unit tile may carry a diagram of what it builds.
+  elements, so its row cannot depict it. It gets the stack glyph and its name. A
+  *card unit* in the Add pane is not arbitrary — the card library is a fixed set
+  of eight — so a unit tile may carry a diagram of what it builds.
 - **Destructive actions use `--hot`, never `--accent`.**
 
 ## Do's and Don'ts
 
-<!-- §10 -->
+**Do**
 
-- A hex value in a surface. Colour comes from a role.
-- A second horizontal navigation bar.
-- A tool in the status bar; a global command in a pane footer.
-- A per-card inspector column, or a glyph that claims to depict an arbitrary group.
-- A device frame or notch around the artboard.
-- Hiding an existing capability because this selection cannot use it, instead of refusing it in words; inventing a property its kind does not have is equally wrong. **The dock's registry-filtered object actions are the one exception** (§5 rule 3, §7.5): an action this selection cannot run is *filtered* — absent from the dock — rather than refused in words.
-- Removing a frequently used control to a settings surface.
-- Inventing a control not in §5, or an icon not in §6, without amending this file
-  in the same commit.
+- Present every authorable setting. Convenience is ordering and grouping, never a
+  smaller surface.
+- Order and group by what a person needs, most likely first, each field with a
+  hint where the name is not self-evident.
+- Use disclosure for the once-in-a-while, not the frequent.
+- Make a section header say what the section is — the question it answers.
+- Use sentence case for menu rows; section eyebrows are the only uppercase.
+- Print the platform's mark for a chord and use the platform's name for its
+  announcement: `⌘⇧P` is printed; "Command Shift P" is what a screen reader says.
+- State a refusal in the selected thing's own terms: "Not offered for a group" —
+  not "invalid", not silence.
+- State a missing reading as **a gap, stated once, quietly**. Never a zero, never
+  a dash that could read as data.
 
-## Density and disclosure
+**Don't**
 
-<!-- §8 -->
-
-- **Every authorable setting is present** — nothing is hidden to make a panel
-  look simpler. Convenience is ordering and grouping, never a smaller surface.
-- **Order and group by what a person needs**, most likely first, obscure last,
-  each field with a hint where the name is not self-evident.
-- **Disclosure is for the once-in-a-while, not the frequent.** A frequently used
-  control stays visible; a collapsed section is for what is adjusted rarely.
-  Choosing wrong here is the mistake §7.1 exists to prevent.
-- **A section header says what the section is** — the question it answers.
-
-## Copy
-
-<!-- §9 -->
-
-- **Sentence case** for menu rows, section eyebrows excluded (they are
-  uppercase by §2).
-- **The platform's mark for a chord, the platform's name for its announcement.**
-  `⌘⇧P` is printed; "Command Shift P" is what a screen reader says.
-- **A refusal states the reason in the selected thing's own terms.** "Not
-  offered for a group" — not "invalid", not silence.
-- **Never assert a capability the code does not have.** A control that announces
-  a dismissal it cannot perform is a defect in copy, not a cosmetic one.
-- A missing reading is **a gap, stated once, quietly**. Never a zero, never a
-  dash that could read as data.
+- Put a hex value in a surface. Colour comes from a role.
+- Add a second horizontal navigation bar.
+- Put a tool in the status bar, or a global command in a pane footer.
+- Add a per-card inspector column, or a glyph that claims to depict an arbitrary
+  group.
+- Draw a device frame or notch around the artboard.
+- Hide an existing capability because this selection cannot use it, instead of
+  refusing it in words; inventing a property its kind does not have is equally
+  wrong. The dock's registry-filtered object actions are the one exception: an
+  action this selection cannot run is absent from the dock.
+- Move a frequently used control to a settings surface.
+- Invent a control not in the component table, or an icon outside the icon
+  rules, without amending this file in the same commit.
+- Assert a capability the code does not have. A control that announces a
+  dismissal it cannot perform is a defect in copy, not a cosmetic one.

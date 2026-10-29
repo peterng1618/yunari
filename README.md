@@ -163,24 +163,17 @@ executable exists.
 
 ## Architecture
 
-`renderer-core` is the semantic boundary: types, theme semantics and scene
-planning, with no Fabric or DOM import. `scene-fabric` is the only layer that
-turns a plan into Fabric objects, so browser/Fabric code never reaches the Node
-host. The editor mounts `fabric/es` directly behind its own imperative boundary;
-the player uses `scene-fabric` and may never import editor code. Fabric JSON is
-the persisted scene inside Yunari's versioned envelope — there is no second
-scene model.
+One Node host owns sensor polling, theme storage, TLS and the sample stream.
+Everything a person sees is a built browser bundle it serves: the player at
+`/`, the editor at `/editor` (localhost only), settings at `/settings`, and the
+pairing page at `/pair`.
 
-| Package | Role |
-|---|---|
-| `@yunari/renderer-core` | Shared semantics, theme envelope, planning; Fabric/DOM-free |
-| `@yunari/scene-fabric` | Renders a scene plan onto Fabric; also persistence/Fabric revival |
-| `@yunari/player` | Display-only bundle served to phones; never includes editor controls |
-| `@yunari/editor` | Desktop authoring experience with inspectors and interaction overlays |
-| `@yunari/host` | PC host: CLI launcher, static serving, sample transport and hardware providers |
-| `@yunari/theme-package` | Theme ZIP packages: read, validate, export |
-| `@yunari/store-worker` | Cloudflare Worker: theme catalogue, auth, presigned uploads and R2 delivery |
-| `@yunari/fake-source` | Deterministic synthetic samples for developing and testing the display path |
+`@yunari/renderer-core` holds the shared semantics and imports no Fabric or DOM.
+`@yunari/scene-fabric` is the only shared layer that builds Fabric objects; the
+player uses a `StaticCanvas`, and only the editor constructs an interactive
+`Canvas`. Fabric JSON is the scene inside Yunari's versioned envelope — there is
+no second scene model. See [`docs/architecture.md`](docs/architecture.md) for the
+package table and boundary rules.
 
 ## Development
 
@@ -189,36 +182,20 @@ Run all npm commands from `src/web/`.
 ```bash
 npm install
 npm run build
-npm test            # Vitest unit suites
-npm run gate        # format/lint, self-tests, docs checks, typecheck, unit and Worker suites
+npm run gate        # the one command that means green (offline)
+npm run test:e2e    # Playwright, after build and `npx playwright install chromium`
 ```
 
-`npm run gate` is the one command that means green. It is offline and must exit
-0. `npm run typecheck` and `npm run docs:check` are also runnable alone.
+`docs/development.md` covers the test split, fixed ports, tooling constraints and
+Windows notes. [`AGENTS.md`](AGENTS.md) is the short guide for working in this
+repository.
 
-Browser tests preview the built bundles, so build first and install Chromium:
+## Documentation and licence
 
-```bash
-npx playwright install chromium
-npm run test:e2e
-```
-
-Long-running suites: `npm run test:display` (real host + phone rendering) and
-`npm run test:rebuild` (the reference composition rebuilt by hand in the
-editor).
-
-Visual evidence capture writes PNGs, so it runs one capture at a time:
-
-```bash
-YUNARI_CAPTURE=1 npx playwright test --project=desktop-chromium \
-  --grep "<capture title>" --workers=1
-```
-
-`YUNARI_CAPTURE_DIR` changes the output directory (default
-`test-results/captures`).
-
-## Docs and licence
-
+- [`AGENTS.md`](AGENTS.md) — repository rules, commands and non-obvious
+  invariants.
+- [`docs/README.md`](docs/README.md) — documentation map.
+- [`DESIGN.md`](DESIGN.md) — normative editor visual language and tokens.
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) and
   [`docs/superpowers/plans/`](docs/superpowers/plans/) — feature designs and
   implementation plans.
