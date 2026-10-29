@@ -215,6 +215,7 @@ describe("openTurzxPanel", () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO
       "create_success", // an ack left over from an earlier upload
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_", // a split reply, not an answer
       "1", // GET_FILE_SIZE: the one-byte clip is already stored
@@ -246,6 +247,7 @@ describe("openTurzxPanel", () => {
       "seq_png_init_",
       "0", // GET_FILE_SIZE: nothing stored
       "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success", // START_VIDEO
       "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
     );
@@ -259,6 +261,63 @@ describe("openTurzxPanel", () => {
         offsetX: 0,
         offsetY: 0,
       });
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("does not start the clip before the upload reports the file is written", async () => {
+    // Observed on hardware: START_VIDEO sent between `create_success` and the
+    // transfer's own `file_rev_done` was never answered, and the runner fell
+    // back to full-frame stills until the next start. The clip must not be
+    // started while the panel is still writing it.
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored
+      "create_success", // UPLOAD_FILE opened, not yet finished
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/file_rev_done/);
+      expect(
+        fake.writes.some((bytes) => bytes[0] === 0x78 && bytes[1] === 0xef),
+        "START_VIDEO was written before the upload finished",
+      ).toBe(false);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("accepts the two upload acks in either order", async () => {
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored
+      "file_rev_done", // the transfer's completion lands first
+      "create_success",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).resolves.toBeUndefined();
     } finally {
       await panel.close();
     }
@@ -278,7 +337,7 @@ describe("openTurzxPanel", () => {
           offsetX: 0,
           offsetY: 0,
         }),
-      ).rejects.toThrow(/create_success/);
+      ).rejects.toThrow(/file_rev_done/);
       expect(Date.now() - started).toBeLessThan(1000);
     } finally {
       await panel.close();
@@ -293,6 +352,7 @@ describe("openTurzxPanel", () => {
       "chs_5inch.dev1_rom1.88", // HELLO at open
       "0", // GET_FILE_SIZE: nothing stored
       "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing it
       // START_VIDEO is written; no play_video_success follows.
     );
     const panel = await opened(fake.transport, {
@@ -325,7 +385,12 @@ describe("openTurzxPanel", () => {
   });
 
   it("reports the start failure even when stopping the clip also fails", async () => {
-    const replies = ["chs_5inch.dev1_rom1.88", "0", "create_success"];
+    const replies = [
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "file_rev_done",
+    ];
     let next = 0;
     let started = false;
     const transport: SerialTransport = {
@@ -364,6 +429,7 @@ describe("openTurzxPanel", () => {
       "chs_5inch.dev1_rom1.88", // HELLO
       "0", // GET_FILE_SIZE
       "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success", // START_VIDEO
       "seq_png_init_", // split after the shared prefix: not an answer
       "seq_png_init_failed", // the real one
@@ -609,6 +675,7 @@ describe("a panel's overlay", () => {
       "chs_5inch.dev1_rom1.88", // HELLO
       "0", // GET_FILE_SIZE: nothing stored yet
       "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success", // START_VIDEO
       "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
     );
@@ -696,6 +763,7 @@ describe("a panel's overlay", () => {
       "chs_5inch.dev1_rom1.88", // HELLO
       "0", // GET_FILE_SIZE: nothing stored yet
       "create_success",
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
       "1", // a second init: the one-byte clip is already stored

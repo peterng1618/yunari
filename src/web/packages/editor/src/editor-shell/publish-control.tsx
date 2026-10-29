@@ -1,17 +1,14 @@
 import { Popover } from "@base-ui/react/popover";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { displayUrl } from "../hosting-client.js";
-import type { PublishSwitch } from "../publish-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
   shortcutLabel,
   shortcutSpokenLabel,
 } from "../shortcut-manager/display.js";
 import { uiCopy } from "../ui-copy.js";
-import { documentNameOf } from "./bridge.js";
 import type { HostingStore } from "./hosting-store.js";
 import { QrCode } from "./qr-symbol.js";
-import type { EditorActionFacade } from "./session-facade.js";
 import type { PublishSurfaceStore } from "./shell-stores.js";
 
 /**
@@ -46,16 +43,9 @@ function expiryOf(at: string): string {
 }
 
 export function PublishControl({
-  session,
-  publish,
   hosting,
   surface,
 }: {
-  /** The open document, asked what a display would be shown. */
-  readonly session?: EditorActionFacade | undefined;
-  /** The transport, owned by `editor-main`. The switch turns it on and off; it
-   *  never has to hand over a document to do either. */
-  readonly publish?: PublishSwitch | undefined;
   /** What the host is doing, owned by the shell so the status bar reads it too. */
   readonly hosting: HostingStore;
   /** Whether this popover is showing. The header's chord reaches it from
@@ -77,56 +67,8 @@ export function PublishControl({
   // (`publish.surface`), so a rebind reaches the header too.
   useActiveShortcuts();
   const chord = shortcutLabel("publish.surface");
-  /** What a display is showing: the document that goes out, or nothing when the
-   *  library does not hold this one. */
-  const [showing, setShowing] = useState<{ readonly name: string } | undefined>(
-    undefined,
-  );
-
-  // Publishing follows the LAN, because that is the whole of §145's opt-in: a
-  // host serving loopback has nothing to publish to, and turning the LAN off
-  // takes the document back.
   const known = state.kind === "known" ? state : undefined;
   const open = known?.answer.lan === true;
-  // Both the opt-in and a transport, because either missing means no display is
-  // being served — and the document read below is a serialisation and a library
-  // lookup, so a batch that changes nothing on screen must not pay it.
-  const publishing = open && publish !== undefined;
-
-  useEffect(() => {
-    if (session === undefined) return;
-    if (!publishing) {
-      setShowing(undefined);
-      return;
-    }
-
-    const read = (): void => {
-      const document = session.publishableDocument();
-      setShowing(
-        document === undefined
-          ? undefined
-          : {
-              name: documentNameOf({
-                name: document.envelope.metadata?.name,
-                id: document.id,
-              }),
-            },
-      );
-    };
-    // Once when publishing turns on, so the name is the document open *now*
-    // rather than the one that was open when the surface mounted.
-    read();
-    return session.subscribeDocumentChange(read);
-  }, [session, publishing]);
-
-  useEffect(() => {
-    if (!open || publish === undefined) return;
-
-    publish.start();
-    return () => {
-      void publish.stop();
-    };
-  }, [open, publish]);
 
   // Unknown is a real state, not a blank: until the host has answered the editor
   // has nothing to say. No host at all says the same nothing, for its own
@@ -245,15 +187,6 @@ export function PublishControl({
             {reason === undefined ? null : (
               <span className="editor-shell-publish-reason" role="alert">
                 {reason}
-              </span>
-            )}
-            {/* Only once the shell has a document to read: a control drawn
-                without one would say "save this theme" about no theme. */}
-            {session === undefined || !publishing ? null : (
-              <span className="editor-shell-publish-live">
-                {showing === undefined
-                  ? uiCopy.publish.unsaved
-                  : uiCopy.publish.live(showing.name)}
               </span>
             )}
             {shown === undefined ? null : (

@@ -333,13 +333,54 @@ function HostSettings(props: {
   const selectedRow = displays.find((display) => display.id === selected);
   const fallback = map?.default ?? null;
   const showing = shownTheme(selectedRow, fallback);
-  /** The attached panel this display drives, when the host says one does. The
-   *  section re-checks the match and the command list itself; this only decides
-   *  whether it is drawable at all. */
+  /** The attached panel this display drives, when the host says one does. It
+   *  supplies the hardware record beside the controls; the connection state
+   *  comes from the display map, which has an answer even while the device is
+   *  away. */
   const selectedPanel =
     selected === undefined
       ? undefined
       : panels?.find((panel) => panel.heldId === selected);
+  const hasPanelDisplay = displays.some((display) => display.kind === "panel");
+
+  /** The status and reconnect read the map, so a panel the retry loop brings
+   *  back must reach the surface without a reload. Only a mode with a panel
+   *  display pays for the poll. */
+  useEffect(() => {
+    if (!hasPanelDisplay) return;
+
+    let live = true;
+    const timer = setInterval(() => {
+      client.listDisplays().then(
+        (answer) => {
+          if (live) setMap(answer);
+        },
+        () => {
+          // A failed poll is not a state change: the last answer stands, and
+          // the next attempt asks again.
+        },
+      );
+    }, 3_000);
+
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [client, hasPanelDisplay]);
+
+  /** The manual retake, then the map re-read so the status is the host's own
+   *  answer rather than the press's assumption. */
+  const reconnectPanel = async (id: string): Promise<void> => {
+    await settings.reconnectPanel(id);
+    await client.listDisplays().then(
+      (answer) => {
+        if (mounted.current) setMap(answer);
+      },
+      () => {
+        // The reconnect itself succeeded; the poll above will re-read.
+      },
+    );
+  };
 
   /** **The mode's status line is published, not drawn**: the strip is the
    *  shell's and is the same strip in every mode, so the region hands it the two
@@ -643,8 +684,13 @@ function HostSettings(props: {
           />
 
           {/* Beside the presentation section, because both edit what drives the
-              chosen display's hardware rather than what it shows. */}
-          {selected === undefined || selectedPanel === undefined ? null : (
+              chosen display's hardware rather than what it shows. Drawn from
+              the display record, not from the attached list: a panel that is
+              disconnected is exactly the one whose status and reconnect are
+              needed. */}
+          {selected === undefined ||
+          selectedRow?.kind !== "panel" ||
+          selectedRow.panel === undefined ? null : (
             <PanelControlsSection
               // Keyed by the display, so selecting another one is a different
               // dialog: the draft, last reply and refusal are this panel's
@@ -652,6 +698,8 @@ function HostSettings(props: {
               key={selected}
               displayId={selected}
               panel={selectedPanel}
+              connection={selectedRow.panel}
+              onReconnect={() => reconnectPanel(selected)}
               onCommand={(command) => settings.panelCommand(selected, command)}
             />
           )}

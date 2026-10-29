@@ -188,6 +188,8 @@ interface Written {
     readonly productId: number;
     readonly serial: string;
   }[];
+  /** The displays a reconnect was asked for. */
+  readonly reconnects: string[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -231,6 +233,7 @@ function hostSettings(
     searches: [],
     presentation: [],
     panels: [],
+    reconnects: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -313,6 +316,12 @@ function hostSettings(
       // The controls section has its own test file; no case here sends a
       // command, so this answers the empty reply a silent panel gives.
       panelCommand: async () => "",
+      // The reconnect route answers the status it left the display in; no case
+      // here presses it, so the connected default is the host answering.
+      reconnectPanel: async (id) => {
+        wrote.reconnects.push(id);
+        return "connected";
+      },
     },
   };
 }
@@ -380,6 +389,7 @@ const TWO_DISPLAYS: Fixture = {
     {
       id: "this-pc",
       label: "This PC",
+      kind: "local",
       theme: null,
       shape: "rect",
       rotation: 0,
@@ -387,6 +397,7 @@ const TWO_DISPLAYS: Fixture = {
     {
       id: "hallway",
       label: "Hallway panel",
+      kind: "paired",
       theme: "hallway-clock",
       shape: "rect",
       rotation: 0,
@@ -695,7 +706,14 @@ it("names each display, and the default for the ones with none", async () => {
 it("writes a rect display's quarter-turn rotation", async () => {
   const { container, wrote } = await mountHost({
     displays: [
-      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 0 },
+      {
+        id: "tv",
+        label: "TV",
+        kind: "paired",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
     ],
   });
   await act(async () => displayRow(container, "tv").click());
@@ -725,6 +743,7 @@ it("snaps a circle angle when the shape becomes rect", async () => {
       {
         id: "round",
         label: "Round",
+        kind: "paired",
         theme: null,
         shape: "circle",
         rotation: 37,
@@ -750,7 +769,14 @@ it("keeps the row's previous presentation when the write is refused", async () =
   const refusal = "That angle is not a quarter turn.";
   const { container, published } = await mountHost({
     displays: [
-      { id: "tv", label: "TV", theme: null, shape: "rect", rotation: 90 },
+      {
+        id: "tv",
+        label: "TV",
+        kind: "paired",
+        theme: null,
+        shape: "rect",
+        rotation: 90,
+      },
     ],
     refusePresentation: refusal,
   });
@@ -788,6 +814,7 @@ it("draws no presentation controls for this-pc", async () => {
       {
         id: "this-pc",
         label: "This PC",
+        kind: "local",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -1892,6 +1919,7 @@ const ONE_PANEL: Fixture = {
     {
       id: "this-pc",
       label: "This PC",
+      kind: "local",
       theme: null,
       shape: "rect",
       rotation: 0,
@@ -1960,6 +1988,7 @@ it("states the chosen panel's hardware record and warns on a firmware mismatch",
       {
         id: "panel-1",
         label: 'TURZX 5" Panel',
+        kind: "panel",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -2053,4 +2082,41 @@ it("says a machine with no panel is a machine with no panel", async () => {
 
   expect(container.textContent).toContain(uiCopy.hostSettings.panels.none);
   expect(container.querySelector("[data-yunari-panel-add]")).toBeNull();
+});
+
+it("draws a panel display's connection and asks the host to reconnect it", async () => {
+  const { container, wrote } = await mountHost({
+    fallback: null,
+    displays: [
+      {
+        id: "panel-1",
+        label: 'TURZX 5" Panel',
+        kind: "panel",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+        panel: { status: "disconnected", commands: ["brightness"] },
+      },
+    ],
+  });
+
+  await act(async () => displayRow(container, "panel-1").click());
+
+  // The status is the display record's, not the attached-panel list's: the
+  // device is not attached, and that is exactly the state the owner retakes.
+  expect(
+    must(
+      container.querySelector("[data-yunari-panel-status]"),
+      "the panel's connection state",
+    ).getAttribute("data-yunari-panel-status"),
+  ).toBe("disconnected");
+
+  const reconnect = must(
+    container.querySelector<HTMLButtonElement>(
+      '[data-yunari-panel-reconnect="panel-1"]',
+    ),
+    "the reconnect button",
+  );
+  await act(async () => reconnect.click());
+  expect(wrote.reconnects).toEqual(["panel-1"]);
 });

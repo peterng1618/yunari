@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
+  CircleX,
   Download,
   Ellipse,
   Eye,
@@ -60,6 +62,7 @@ import {
 import type * as React from "react";
 import { createElement } from "react";
 import type { ShapeKind } from "../new-object-defaults.js";
+import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";
 import type { RailSlot } from "./rail.js";
 
@@ -164,6 +167,20 @@ export const CHECK_GLYPH: LucideIcon = Check;
  *  follows the glyph, so this is a mark beside a sentence). */
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
+
+/** A panel display's connection state, from the Host mode's controls section:
+ *  a tick when the device is open, a sweep while it is being opened, a cross
+ *  when the host is retrying it. The word follows the glyph, so this is a mark
+ *  beside a sentence rather than an icon-only control's name. Keyed by the
+ *  status union so a fourth state is a compile error here, not a state with no
+ *  mark. */
+export const PANEL_STATUS_GLYPHS: Readonly<
+  Record<PanelConnectionStatus, LucideIcon>
+> = {
+  connected: CircleCheck,
+  connecting: LoaderCircle,
+  disconnected: CircleX,
+};
 
 /** The Wallpaper Engine cards' one action per kind, and the states it wears
  *  (R5). `FolderInput` says the scene is taken into a local project, which

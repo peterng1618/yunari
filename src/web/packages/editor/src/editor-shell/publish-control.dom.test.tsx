@@ -17,7 +17,6 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import { HostingStore } from "./hosting-store.js";
 import { PublishControl } from "./publish-control.js";
-import type { EditorActionFacade } from "./session-facade.js";
 import { PublishSurfaceStore } from "./shell-stores.js";
 
 const CODE = "ABC234";
@@ -52,78 +51,6 @@ beforeAll(() => {
     return matches.call(this, selector);
   }, matches);
 });
-
-/** What a display would be shown for a stored document, in the envelope shape
- *  `publishableDocument()` answers. */
-function publishableOf(document: {
-  readonly id: string;
-  readonly name: string;
-}): {
-  readonly id: string;
-  readonly envelope: {
-    readonly id: string;
-    readonly artboard: { readonly width: number; readonly height: number };
-    readonly metadata: { readonly name: string };
-  };
-} {
-  return {
-    id: document.id,
-    envelope: {
-      id: document.id,
-      artboard: { width: 1920, height: 1080 },
-      metadata: { name: document.name },
-    },
-  };
-}
-
-/** A session that answers only what the surface asks it. The two methods are
- *  the whole of this control's conversation with the document; the other
- *  twenty are the shell's and are not reachable from here. */
-function sessionShowing(
-  document: { readonly id: string; readonly name: string } | undefined,
-): EditorActionFacade {
-  return {
-    publishableDocument: () =>
-      document === undefined ? undefined : publishableOf(document),
-    subscribeDocumentChange: () => () => undefined,
-  } as unknown as EditorActionFacade;
-}
-
-/** A session whose document changes on demand, and a counter of how often the
- *  control asked what would be published — the whole cost this task removes. */
-function watchedSession(initial: {
-  readonly id: string;
-  readonly name: string;
-}) {
-  let document = initial;
-  const listeners = new Set<() => void>();
-  const read = vi.fn(() => publishableOf(document));
-  const session = {
-    publishableDocument: read,
-    subscribeDocumentChange: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  } as unknown as EditorActionFacade;
-  return {
-    session,
-    read,
-    /** An edit landed: the document moved, and every subscriber is told. */
-    change(next: { readonly id: string; readonly name: string }): void {
-      document = next;
-      for (const listener of listeners) listener();
-    },
-  };
-}
-
-/** The publication transport the header hands in. The control starts and stops
- *  it; neither is this control's subject here. */
-const publishStub = {
-  start: (): void => undefined,
-  stop: async (): Promise<void> => undefined,
-};
 
 /**
  * A host whose state actually **moves**.
@@ -226,12 +153,8 @@ afterEach(() => {
 
 /** The control as the header mounts it. `createRoot` rather than
  *  `@testing-library/react`, which this workspace does not depend on. The store
- *  asks the host on construction, so the fetch stub is already in place. The
- *  transport is a stub unless a case is about its absence. */
-async function mount(
-  session?: EditorActionFacade,
-  withTransport = true,
-): Promise<HTMLDivElement> {
+ *  asks the host on construction, so the fetch stub is already in place. */
+async function mount(): Promise<HTMLDivElement> {
   const mounted = document.createElement("div");
   host = mounted;
   document.body.append(mounted);
@@ -241,14 +164,7 @@ async function mount(
   const opened = new PublishSurfaceStore();
   surface = opened;
   await act(async () =>
-    created.render(
-      <PublishControl
-        session={session}
-        publish={withTransport ? publishStub : undefined}
-        hosting={hosting}
-        surface={opened}
-      />,
-    ),
+    created.render(<PublishControl hosting={hosting} surface={opened} />),
   );
   await vi.waitFor(() =>
     expect(mounted.querySelector("[data-yunari-publish]")).not.toBeNull(),
@@ -559,113 +475,4 @@ it("falls back to the address when the host has no name to offer", async () => {
     expect(popupText()).toContain(`https://${ADDRESS}:${PORT}`),
   );
   expect(popupText()).not.toContain("null");
-});
-
-it("names the document a display is showing, because a live overlay is invisible", async () => {
-  hostServing({ lan: true });
-  const container = await mount(
-    sessionShowing({ id: "living-room", name: "Living room" }),
-  );
-  await openSurface(container);
-
-  await vi.waitFor(() =>
-    expect(popupText()).toContain(uiCopy.publish.live("Living room")),
-  );
-});
-
-it("names a document the theme never named by its id, as the chip and the status line do", async () => {
-  // The reading is `documentNameOf`'s, the one the identity chip and the status
-  // line take. Spelled here as `metadata?.name ?? id` it kept an empty stored
-  // name — the schema refuses one and the loader supplies the id (`vg-221`),
-  // but this reads whatever the document holds — so this line read "Showing "
-  // where the chip beside it read the id (vg-218).
-  hostServing({ lan: true });
-  const container = await mount(
-    sessionShowing({ id: "living-room", name: "" }),
-  );
-  await openSurface(container);
-
-  await vi.waitFor(() =>
-    expect(popupText()).toContain(uiCopy.publish.live("living-room")),
-  );
-});
-
-it("reads no document at all while the LAN is off", async () => {
-  // A paste storm while nothing is publishing used to serialise the whole
-  // publishable document once per flushed batch, to name a display that is not
-  // being served. The opt-in is the LAN: with it off there is nothing to read.
-  hostServing({ lan: false });
-  const watched = watchedSession({ id: "living-room", name: "Living room" });
-  await mount(watched.session);
-
-  await act(async () => watched.change({ id: "den", name: "Den" }));
-
-  expect(watched.read).not.toHaveBeenCalled();
-});
-
-it("reads one document per change while publishing, and names it", async () => {
-  hostServing({ lan: true });
-  const watched = watchedSession({ id: "living-room", name: "Living room" });
-  const container = await mount(watched.session);
-  await openSurface(container);
-  await vi.waitFor(() =>
-    expect(popupText()).toContain(uiCopy.publish.live("Living room")),
-  );
-
-  const before = watched.read.mock.calls.length;
-  await act(async () => watched.change({ id: "den", name: "Den" }));
-
-  // Coalesced by Task 5.1, a flushed batch is one notification, so it is one
-  // read — not one per object that moved in it.
-  expect(watched.read.mock.calls.length).toBe(before + 1);
-  await vi.waitFor(() =>
-    expect(popupText()).toContain(uiCopy.publish.live("Den")),
-  );
-});
-
-it("reads the current document when publishing turns on after edits", async () => {
-  hostServing({ lan: false });
-  const watched = watchedSession({ id: "living-room", name: "Living room" });
-  const container = await mount(watched.session);
-  await act(async () => watched.change({ id: "den", name: "Den" }));
-  expect(watched.read).not.toHaveBeenCalled();
-
-  await openSurface(container);
-  await act(async () => hostSwitch()?.click());
-  await vi.waitFor(() =>
-    expect(hostSwitch()?.getAttribute("aria-pressed")).toBe("true"),
-  );
-
-  // Turning on names what the display now shows, rather than the state the
-  // document had when the surface mounted.
-  expect(watched.read).toHaveBeenCalledTimes(1);
-  await vi.waitFor(() =>
-    expect(popupText()).toContain(uiCopy.publish.live("Den")),
-  );
-});
-
-it("prints no live name without a transport, even while the host is serving", async () => {
-  // The read gate is the honest one: with no `publish` handle nothing is being
-  // followed, and the name a display would show is nothing. A span gated on
-  // `open` alone would print a name for a document nobody is publishing.
-  hostServing({ lan: true });
-  const container = await mount(
-    sessionShowing({ id: "living-room", name: "Living room" }),
-    false,
-  );
-  await openSurface(container);
-
-  expect(popupText()).not.toContain(uiCopy.publish.live("Living room"));
-  expect(popupText()).not.toContain(uiCopy.publish.unsaved);
-});
-
-it("says what is left to do for a theme the library does not hold", async () => {
-  hostServing({ lan: true });
-  const container = await mount(sessionShowing(undefined));
-  await openSurface(container);
-
-  // Publishing carries the document's assets from its own folder, so a theme
-  // that was never saved has nothing to publish — and the surface says so
-  // rather than offering a display a theme with holes in it.
-  await vi.waitFor(() => expect(popupText()).toContain(uiCopy.publish.unsaved));
 });

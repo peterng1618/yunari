@@ -243,13 +243,6 @@ describe("followPublished", () => {
     expect(link.reloads).toBe(0);
     // A link is the person's own instruction for that page, so it says so.
     expect(link.asked).toBe("/api/published?theme-source=link&theme=studio");
-
-    const published = await follow(
-      "http://127.0.0.1:5227/?theme=studio&data=live&theme-source=published",
-    );
-    expect(published.themes).toEqual([]);
-    expect(published.reloads).toBe(0);
-    expect(published.asked).toBe("/api/published?theme-source=published");
   });
 });
 
@@ -510,20 +503,6 @@ describe("reResolveUrl", () => {
     expect(
       reResolveUrl(`${page}?theme=studio&data=live&theme-source=link`),
     ).toBe(`${page}?theme=studio&theme-source=link`);
-
-    // A published display page is the host's answer too: keeping its id would
-    // pin the display to that theme, so a later assignment could never move it.
-    expect(
-      reResolveUrl(
-        `${page}?display=left-screen&theme=studio&data=live&theme-source=published`,
-      ),
-    ).toBe(`${page}?display=left-screen&theme-source=published`);
-
-    // A published page with no display is the person's own preview, and keeps
-    // what it was opened on.
-    expect(
-      reResolveUrl(`${page}?theme=studio&data=live&theme-source=published`),
-    ).toBe(`${page}?theme=studio&theme-source=published`);
   });
 
   it("keeps the display the page names, so the sighting survives the reload", () => {

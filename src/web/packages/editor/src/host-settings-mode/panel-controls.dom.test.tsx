@@ -3,8 +3,9 @@
  * The controls a display's panel accepts: the section's own contract, mounted
  * without the region.
  *
- * **What this file owns.** That the section draws nothing for a panel another
- * display drives; that brightness travels as a whole percent and the panel's
+ * **What this file owns.** That the status and the reconnect are drawn for a
+ * panel whose device is not attached; that the controls answer presses only
+ * while connected; that brightness travels as a whole percent and the panel's
  * answer is shown; that a level outside the range is refused here, before the
  * host is asked; that a restart costs two presses; and that a firmware the
  * driver has not met is warned about, with both versions readable.
@@ -17,7 +18,8 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { PanelHint } from "./client.js";
+import type { PanelConnectionStatus } from "../theme-library-client.js";
+import type { EditorPanelCommand, PanelHint } from "./client.js";
 import { PanelControlsSection } from "./panel-controls-section.js";
 
 const CONTROLLABLE: PanelHint = {
@@ -37,6 +39,8 @@ const CONTROLLABLE: PanelHint = {
     updatedAt: "2026-10-29",
   },
 };
+
+const ALL_COMMANDS = ["brightness", "screen", "restart", "status", "hello"];
 
 globalThis.ResizeObserver ??= class {
   observe(): void {}
@@ -102,6 +106,30 @@ async function rerender(element: ReactElement): Promise<void> {
   });
 }
 
+/** The section with the host's answer filled in, so each test states only the
+ *  part it is about. */
+function section(options: {
+  readonly panel: PanelHint | undefined;
+  readonly onCommand: (command: EditorPanelCommand) => Promise<string>;
+  readonly status?: PanelConnectionStatus;
+  readonly commands?: readonly string[];
+  readonly onReconnect?: () => Promise<void>;
+  readonly displayId?: string;
+}): ReactElement {
+  return (
+    <PanelControlsSection
+      displayId={options.displayId ?? "panel-1"}
+      panel={options.panel}
+      connection={{
+        status: options.status ?? "connected",
+        commands: options.commands ?? ALL_COMMANDS,
+      }}
+      onReconnect={options.onReconnect ?? (async () => undefined)}
+      onCommand={options.onCommand}
+    />
+  );
+}
+
 /** A missing control is a defect this file names, rather than a `null` a later
  *  assertion reports as a wrong value. */
 function must<T extends Element>(found: T | null, what: string): T {
@@ -151,6 +179,15 @@ function replyText(): string | null {
   );
 }
 
+function statusText(): string | null {
+  return (
+    document.querySelector("[data-yunari-panel-status] .sr-only")
+      ?.textContent ??
+    document.querySelector("[data-yunari-panel-status]")?.textContent ??
+    null
+  );
+}
+
 /** A promise the test settles by hand, so a command can be held in flight. */
 function deferred<T>(): {
   readonly promise: Promise<T>;
@@ -163,26 +200,60 @@ function deferred<T>(): {
   return { promise, resolve };
 }
 
-it("renders nothing for a panel another display holds", async () => {
+it("draws the disconnect state and the reconnect without an attached device", async () => {
+  const onReconnect = vi.fn(async () => undefined);
   const container = await mount(
-    <PanelControlsSection
-      displayId="panel-2"
-      panel={CONTROLLABLE}
-      onCommand={async () => "ok"}
-    />,
+    section({
+      panel: undefined,
+      status: "disconnected",
+      commands: [],
+      onCommand: async () => "ok",
+      onReconnect,
+    }),
   );
-  expect(container.innerHTML).toBe("");
+  expect(statusText()).toContain("Disconnected");
+  expect(container.textContent).toContain(
+    "The host tries this panel again every 15 seconds.",
+  );
+  // No device is open, so there is no door whose commands could not work.
+  expect(document.querySelector("[data-yunari-panel-controls]")).toBeNull();
+  await click(buttonNamed(/^reconnect$/i));
+  expect(onReconnect).toHaveBeenCalledTimes(1);
+});
+
+it("disables the reconnect while the host is already connecting", async () => {
+  await mount(
+    section({
+      panel: undefined,
+      status: "connecting",
+      commands: [],
+      onCommand: async () => "ok",
+    }),
+  );
+  expect(statusText()).toContain("Connecting");
+  expect(buttonNamed(/^reconnecting/i).disabled).toBe(true);
+});
+
+it("shows a reconnect failure beside the status it is about", async () => {
+  const container = await mount(
+    section({
+      panel: undefined,
+      status: "disconnected",
+      commands: [],
+      onCommand: async () => "ok",
+      onReconnect: async () => {
+        throw new Error("No such display.");
+      },
+    }),
+  );
+  await click(buttonNamed(/^reconnect$/i));
+  const alert = must(container.querySelector('[role="alert"]'), "alert");
+  expect(alert.textContent).toContain("No such display.");
 });
 
 it("sends brightness as a whole percent and shows the reply", async () => {
   const onCommand = vi.fn(async () => "ok");
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   await click(buttonNamed(/apply/i));
@@ -197,13 +268,7 @@ it("shows a host confirmation, not a reply, for a write-only command", async () 
   // the host confirming the command went, so the live region must not present
   // it as the panel's words.
   const onCommand = vi.fn(async () => "");
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   await click(buttonNamed(/apply/i));
@@ -214,13 +279,7 @@ it("shows a host confirmation, not a reply, for a write-only command", async () 
 
 it("blocks a level above 100 without calling the host", async () => {
   const onCommand = vi.fn(async () => "ok");
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "101");
   await click(buttonNamed(/apply/i));
@@ -242,13 +301,7 @@ it("asks before restarting", async () => {
     async () =>
       "The panel is restarting; it will be unavailable for about 15 seconds.",
   );
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await click(buttonNamed(/^restart$/i));
   expect(onCommand).not.toHaveBeenCalled();
@@ -258,13 +311,7 @@ it("asks before restarting", async () => {
 
 it("shows nothing from a previous panel after the dialog is closed", async () => {
   const onCommand = vi.fn(async () => "ok");
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await click(buttonNamed(/query status/i));
   expect(replyText()).toBe("ok");
@@ -279,13 +326,7 @@ it("shows nothing from a previous panel after the dialog is closed", async () =>
     label: "Second panel",
     heldId: "panel-2",
   };
-  await rerender(
-    <PanelControlsSection
-      displayId="panel-2"
-      panel={second}
-      onCommand={onCommand}
-    />,
-  );
+  await rerender(section({ displayId: "panel-2", panel: second, onCommand }));
   await click(buttonNamed(/controls/i));
   expect(replyText()).toBe("");
   expect(brightnessField().value).toBe("");
@@ -294,13 +335,7 @@ it("shows nothing from a previous panel after the dialog is closed", async () =>
 it("ignores a second press while a command is in flight", async () => {
   const pending = deferred<string>();
   const onCommand = vi.fn(() => pending.promise);
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   const apply = buttonNamed(/apply/i);
@@ -316,13 +351,7 @@ it("ignores a second press while a command is in flight", async () => {
 it("drops a reply to a command the closed dialog abandoned", async () => {
   const pending = deferred<string>();
   const onCommand = vi.fn(() => pending.promise);
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   await click(buttonNamed(/apply/i));
@@ -338,13 +367,7 @@ it("shows the host's refusal in the dialog, in its words", async () => {
   const onCommand = vi.fn(async () => {
     throw new Error("Panel display strip is not running.");
   });
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={onCommand}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   await click(buttonNamed(/apply/i));
@@ -353,13 +376,7 @@ it("shows the host's refusal in the dialog, in its words", async () => {
 });
 
 it("returns focus to its trigger when the dialog closes", async () => {
-  await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={CONTROLLABLE}
-      onCommand={async () => "ok"}
-    />,
-  );
+  await mount(section({ panel: CONTROLLABLE, onCommand: async () => "ok" }));
   const trigger = buttonNamed(/controls/i);
   // jsdom's `click()` does not focus the button the way a browser's does, so
   // the trigger is focused first: the dialog's contract is to return focus to
@@ -382,11 +399,10 @@ it("returns focus to its trigger when the dialog closes", async () => {
 
 it("warns when the firmware is outside the supported set", async () => {
   const container = await mount(
-    <PanelControlsSection
-      displayId="panel-1"
-      panel={{ ...CONTROLLABLE, firmware: "1.90" }}
-      onCommand={async () => "ok"}
-    />,
+    section({
+      panel: { ...CONTROLLABLE, firmware: "1.90" },
+      onCommand: async () => "ok",
+    }),
   );
   expect(container.textContent).toMatch(/1\.90/);
   expect(container.textContent).toMatch(/1\.88/);

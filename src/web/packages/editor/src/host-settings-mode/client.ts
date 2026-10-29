@@ -6,7 +6,10 @@ import {
   normalizeUnitPreferences,
   type UnitPreferences,
 } from "@yunari/renderer-core";
-import { readDisplayPresentation } from "../theme-library-client.js";
+import {
+  type PanelConnectionStatus,
+  readDisplayPresentation,
+} from "../theme-library-client.js";
 
 /**
  * The editor's seam to the host's own settings: which hardware this PC reports,
@@ -181,6 +184,9 @@ export interface HostSettingsClient {
    *  write-only command. A refusal is thrown in the host's words, which is the
    *  only way a stopped or closed port reaches the person. */
   panelCommand(id: string, command: EditorPanelCommand): Promise<string>;
+  /** Stops and opens the panel's device again. Answers the state the host
+   *  reached, so a caller can say what happened without waiting for a poll. */
+  reconnectPanel(id: string): Promise<PanelConnectionStatus>;
 }
 
 /** One command the editor can send a panel, spelled as the host's route takes
@@ -775,6 +781,24 @@ export function createHostSettingsClient(options?: {
       }
       const body = (await response.json()) as { readonly reply?: unknown };
       return typeof body?.reply === "string" ? body.reply : "";
+    },
+
+    async reconnectPanel(id) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}/panel/reconnect`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not reconnect that panel");
+      }
+      const body = (await response.json()) as { readonly status?: unknown };
+      // An answer this build cannot read is the state it just failed to enter;
+      // the caller re-reads the map anyway, so nothing is invented here.
+      return body?.status === "connected" ||
+        body?.status === "connecting" ||
+        body?.status === "disconnected"
+        ? body.status
+        : "disconnected";
     },
   };
 }

@@ -469,6 +469,7 @@ describe("ThemeLibraryClient", () => {
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -476,6 +477,7 @@ describe("ThemeLibraryClient", () => {
         {
           id: "kitchen-tablet",
           label: "Kitchen Tablet",
+          kind: "paired",
           theme: "kitchen-strip",
           shape: "rect",
           rotation: 0,
@@ -483,6 +485,84 @@ describe("ThemeLibraryClient", () => {
       ],
     });
     expect(mockFetch).toHaveBeenCalledWith("/api/themes/active");
+  });
+
+  it("reads a panel display's connection and its command kinds", async () => {
+    const mockFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            default: null,
+            displays: [
+              {
+                id: "panel-1",
+                label: "TURZX 5",
+                kind: "panel",
+                theme: null,
+                shape: "rect",
+                rotation: 0,
+                panel: {
+                  status: "disconnected",
+                  commands: ["brightness", "restart", 7],
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    await expect(client.listDisplays()).resolves.toEqual({
+      default: null,
+      displays: [
+        {
+          id: "panel-1",
+          label: "TURZX 5",
+          kind: "panel",
+          theme: null,
+          shape: "rect",
+          rotation: 0,
+          panel: {
+            status: "disconnected",
+            commands: ["brightness", "restart"],
+          },
+        },
+      ],
+    });
+  });
+
+  it("leaves an unreadable panel state absent rather than inventing one", async () => {
+    // A status this build does not know tells the owner nothing about the
+    // device, so the row has no panel key at all instead of a guessed state.
+    const mockFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            default: null,
+            displays: [
+              {
+                id: "panel-1",
+                label: "TURZX 5",
+                kind: "panel",
+                theme: null,
+                shape: "rect",
+                rotation: 0,
+                panel: { status: "busy", commands: ["restart"] },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    const { displays } = await client.listDisplays();
+    expect(displays[0]).not.toHaveProperty("panel");
   });
 
   it("answers an empty map when the host names neither field", async () => {

@@ -391,7 +391,22 @@ class TurzxPanel implements PanelDevice {
       await this.send(frame(bytes.subarray(start, start + FILE_CHUNK_BYTES)));
     }
 
-    await this.readFor("create_success");
+    // **Both acks, in either order.** `create_success` says the file was
+    // opened; `file_rev_done` says the panel finished writing it. Starting the
+    // clip between them is refused on hardware — START_VIDEO went unanswered
+    // and the last reply was `file_rev_done` — and the runner then fell back to
+    // full-frame stills until the next start, which found the clip already
+    // stored and played smoothly. Accepting both in one loop keeps a firmware
+    // that emits them in the other order working.
+    const pending = new Set(["create_success", "file_rev_done"]);
+
+    await this.readUntil('"create_success" and "file_rev_done"', (text) => {
+      for (const phrase of pending) {
+        if (text.includes(phrase)) pending.delete(phrase);
+      }
+
+      return pending.size === 0 ? true : undefined;
+    });
   }
 
   /**

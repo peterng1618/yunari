@@ -112,6 +112,13 @@ const SETTLE_MS = 20;
 const pause = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Waits for a condition the retry loop reaches on its own timer, so a case
+ *  about reconnection does not guess how many passes it takes. */
+async function until(check: () => boolean, ms = 2_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!check() && Date.now() < deadline) await pause(5);
+}
+
 const SOURCE: PanelVideoSource = {
   bytes: Uint8Array.of(7),
   placement: { offsetX: 0, offsetY: 0 },
@@ -314,6 +321,78 @@ describe("createPanelManager", () => {
     await manager.stop("strip");
   });
 
+  it("leaves the runner alone when a save re-reads the same clip", async () => {
+    let opens = 0;
+    const start = vi.fn(async () => {});
+    const stop = vi.fn(async () => {});
+    h.family = familyOver(async () => {
+      opens += 1;
+      return deviceOver({
+        minimumIntervalMs: 5,
+        video: { start, presentOverlay: async () => {}, stop },
+      });
+    });
+
+    // A fresh object each read, so the comparison cannot pass on identity.
+    const videoFor = vi.fn(async () => ({
+      bytes: Uint8Array.of(7),
+      placement: { offsetX: 0.25, offsetY: 0 },
+    }));
+    const manager = managerOver({ videoFor });
+
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+    await manager.refreshVideo("strip");
+
+    expect(opens).toBe(1);
+    expect(stop).not.toHaveBeenCalled();
+    expect(start).toHaveBeenCalledTimes(1);
+
+    await manager.stop("strip");
+  });
+
+  it("restarts the runner when a save's clip or its pan changed", async () => {
+    let opens = 0;
+    let clip = {
+      bytes: Uint8Array.of(7),
+      placement: { offsetX: 0, offsetY: 0 },
+    };
+    const start = vi.fn(async () => {});
+    h.family = familyOver(async () => {
+      opens += 1;
+      return deviceOver({
+        minimumIntervalMs: 5,
+        video: { start, presentOverlay: async () => {}, stop: async () => {} },
+      });
+    });
+
+    const videoFor = vi.fn(async () => clip);
+    const manager = managerOver({ videoFor });
+
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+
+    // Neither a new placement nor new bytes is "the same clip".
+    clip = { bytes: Uint8Array.of(7), placement: { offsetX: 0.5, offsetY: 0 } };
+    await manager.refreshVideo("strip");
+    expect(opens).toBe(2);
+    expect(start).toHaveBeenCalledTimes(2);
+
+    clip = { bytes: Uint8Array.of(8), placement: { offsetX: 0.5, offsetY: 0 } };
+    await manager.refreshVideo("strip");
+    expect(opens).toBe(3);
+
+    await manager.stop("strip");
+  });
+
+  it("does nothing for a display with no runner", async () => {
+    const videoFor = vi.fn(async () => SOURCE);
+    const manager = managerOver({ videoFor });
+
+    await expect(manager.refreshVideo("strip")).resolves.toBeUndefined();
+    expect(videoFor).not.toHaveBeenCalled();
+  });
+
   it("retries a failed close on the next stop, then removes the entry", async () => {
     let attempts = 0;
     const close = vi.fn(async () => {
@@ -343,7 +422,7 @@ describe("createPanelManager", () => {
     expect(manager.running()).toEqual([]);
   });
 
-  it("does not open again when a refresh's stop failed", async () => {
+  it("drops the entry and tries the open when a refresh's stop failed", async () => {
     const errors: string[] = [];
     let opens = 0;
     const close = vi.fn(async () => {
@@ -368,9 +447,12 @@ describe("createPanelManager", () => {
     await pause(2 * SETTLE_MS);
     await manager.refresh("strip");
 
-    // Opening on a port that is still held would land dark, so it is not
-    // attempted; the panel stays where it was, and the refusal is reported.
-    expect(opens).toBe(1);
+    // A close that failed is the device that went away: keeping its entry would
+    // answer "connecting" forever, because the retry pass opens only an entry
+    // with no runner. Dropping it and attempting the open is what lets the
+    // status become the host's answer. A port that is genuinely still held makes
+    // the open refuse and the retry pass try again.
+    expect(opens).toBe(2);
     expect(errors).toEqual(["the port would not close"]);
     expect(manager.running()).toEqual(["strip"]);
   });
@@ -456,5 +538,205 @@ describe("createPanelManager", () => {
     expect(manager.running()).toEqual(["strip"]);
 
     await manager.stop("strip");
+  });
+
+  it("reports a display as connecting while its device opens, then connected", async () => {
+    let release!: () => void;
+    let opens = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      if (opens === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return deviceOver();
+    });
+
+    const manager = managerOver();
+    expect(manager.status("strip")).toBe("disconnected");
+
+    const starting = manager.start("strip");
+    await pause(5);
+    expect(manager.status("strip")).toBe("connecting");
+
+    release();
+    await starting;
+    expect(manager.status("strip")).toBe("connected");
+
+    await manager.stop("strip");
+    expect(manager.status("strip")).toBe("disconnected");
+  });
+
+  it("reconnects a panel on request", async () => {
+    let opens = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return deviceOver();
+    });
+
+    const manager = managerOver();
+    await manager.reconnect("strip");
+
+    expect(opens).toBe(1);
+    expect(manager.status("strip")).toBe("connected");
+
+    // The press replaces the runner even though this one is still running:
+    // taking the display back is the point, not waiting for it to fail.
+    await manager.reconnect("strip");
+    expect(opens).toBe(2);
+    expect(manager.status("strip")).toBe("connected");
+
+    await manager.stop("strip");
+  });
+
+  it("detaches a lost panel and the retry pass opens it again", async () => {
+    const errors: string[] = [];
+    let opens = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return opens === 1
+        ? deviceOver({
+            minimumIntervalMs: 1,
+            present: async () => {
+              throw new Error("port gone");
+            },
+          })
+        : deviceOver({ minimumIntervalMs: 1 });
+    });
+
+    const manager = managerOver({
+      reconcileIntervalMs: 10,
+      onError: (_displayId, message) => errors.push(message),
+    });
+
+    try {
+      await manager.start("strip");
+      await until(() => opens >= 2 && manager.status("strip") === "connected");
+
+      // Three refused frames is a lost device: the runner goes, the entry goes,
+      // and the retry pass owns the display until it answers again.
+      expect(opens).toBeGreaterThanOrEqual(2);
+      expect(errors).toContain("port gone");
+      expect(errors).toContain("disconnected; retrying.");
+    } finally {
+      await manager.stopAll();
+    }
+  });
+
+  it("lets go of a panel it restarted and reopens it when it returns", async () => {
+    const errors: string[] = [];
+    const run = vi.fn(async () => "restarting");
+    let opens = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return { ...deviceOver(), controls: { commands: ["restart"], run } };
+    });
+
+    const manager = managerOver({
+      reconcileIntervalMs: 10,
+      onError: (_displayId, message) => errors.push(message),
+    });
+
+    try {
+      await manager.start("strip");
+      await expect(manager.command("strip", { kind: "restart" })).resolves.toBe(
+        "restarting",
+      );
+
+      // The interface drops on purpose, so the manager must not keep writing to
+      // it: the runner is detached and the retry pass opens the panel back up.
+      await until(() => opens >= 2 && manager.status("strip") === "connected");
+      expect(run).toHaveBeenCalledWith({ kind: "restart" });
+      expect(errors).toContain(
+        "restarting; reconnecting when the panel returns.",
+      );
+    } finally {
+      await manager.stopAll();
+    }
+  });
+
+  it("reconnects a panel whose close failed instead of leaving it connecting", async () => {
+    let opens = 0;
+    let closes = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return {
+        ...deviceOver(),
+        close: async () => {
+          closes += 1;
+          if (closes === 1) throw new Error("stream was destroyed");
+        },
+      };
+    });
+
+    const manager = managerOver();
+    await manager.start("strip");
+    expect(manager.status("strip")).toBe("connected");
+
+    await manager.reconnect("strip");
+
+    // A device that went away cannot close itself. The retake drops the entry
+    // anyway and opens again, so the surface leaves "connecting" for a state
+    // the host can actually answer.
+    expect(opens).toBe(2);
+    expect(manager.status("strip")).toBe("connected");
+
+    await manager.stop("strip");
+  });
+
+  it("reopens an entry whose stop failed on the next retry pass", async () => {
+    let opens = 0;
+    let closes = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return {
+        ...deviceOver(),
+        close: async () => {
+          closes += 1;
+          if (closes === 1) throw new Error("stream was destroyed");
+        },
+      };
+    });
+
+    const manager = managerOver();
+    await manager.start("strip");
+    await expect(manager.stop("strip")).rejects.toThrow("stream was destroyed");
+    expect(manager.status("strip")).toBe("connecting");
+
+    await manager.reconcile();
+
+    // A stale entry is not a panel with a runner: the retry pass detaches it
+    // and opens the device again rather than skipping it forever.
+    expect(opens).toBe(2);
+    expect(manager.status("strip")).toBe("connected");
+
+    await manager.stop("strip");
+  });
+
+  it("reports the same retry failure once rather than on every pass", async () => {
+    const errors: string[] = [];
+    let attempts = 0;
+    h.family = familyOver(async () => {
+      attempts += 1;
+      throw new Error("no device");
+    });
+
+    const manager = managerOver({
+      reconcileIntervalMs: 10,
+      onError: (_displayId, message) => errors.push(message),
+    });
+
+    try {
+      await manager.reconcile();
+      await until(() => attempts >= 4);
+
+      // An unplugged panel fails identically every pass; a line per pass would
+      // bury the change that matters, and there is none.
+      expect(attempts).toBeGreaterThanOrEqual(4);
+      expect(errors).toEqual(["no device"]);
+    } finally {
+      await manager.stopAll();
+    }
   });
 });

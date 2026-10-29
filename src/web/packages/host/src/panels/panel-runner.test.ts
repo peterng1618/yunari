@@ -115,6 +115,54 @@ describe("createPanelRunner", () => {
     expect(present).toHaveBeenCalledTimes(2);
   });
 
+  it("gives the device up after three failed frames, and says so once", async () => {
+    const { device, rasterizer, present } = fakes([RED, RED, RED, RED]);
+    present.mockRejectedValue(new Error("write after a stream was destroyed"));
+    const lost = vi.fn();
+    const runner = createPanelRunner({
+      device,
+      rasterizer,
+      onLost: (message) => lost(message),
+    });
+
+    await expect(runner.tick()).resolves.toBe(false);
+    await expect(runner.tick()).resolves.toBe(false);
+    expect(lost).not.toHaveBeenCalled();
+    await expect(runner.tick()).resolves.toBe(false);
+
+    // Three refusals in a row is a port that is gone, not a bad frame. The
+    // manager is told once and the runner stops feeding itself, so the retry
+    // pass owns the display rather than a tick loop spinning on a dead handle.
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(lost).toHaveBeenCalledWith("write after a stream was destroyed");
+    expect(runner.running).toBe(false);
+    await expect(runner.tick()).resolves.toBe(false);
+    expect(present).toHaveBeenCalledTimes(3);
+  });
+
+  it("lets one success clear the failures before it", async () => {
+    const { device, rasterizer, present } = fakes([RED, RED, RED, RED]);
+    present
+      .mockRejectedValueOnce(new Error("once"))
+      .mockRejectedValueOnce(new Error("twice"));
+    const lost = vi.fn();
+    const runner = createPanelRunner({
+      device,
+      rasterizer,
+      onLost: (message) => lost(message),
+    });
+
+    await runner.tick();
+    await runner.tick();
+    await expect(runner.tick()).resolves.toBe(true);
+    await runner.tick();
+
+    // A panel that answers again is not lost: the count is consecutive, so the
+    // two refusals before the success cannot add up to one.
+    expect(lost).not.toHaveBeenCalled();
+    expect(runner.running).toBe(true);
+  });
+
   it("reports a capture that threw without sending anything", async () => {
     const { device, present } = fakes([RED]);
     const errors: string[] = [];

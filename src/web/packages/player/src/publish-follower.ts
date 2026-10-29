@@ -1,6 +1,6 @@
 /**
- * Whether what this display is showing is still what the author is publishing,
- * and whether the theme it was assigned has moved.
+ * Whether the theme this display is showing has been saved since the page
+ * loaded, and whether the theme it was assigned has moved.
  *
  * One small number, polled, because the display already holds an SSE connection
  * for readings and adding a second event channel would be a second owner for
@@ -11,9 +11,11 @@
  * The poll names the display it is for, read from the page it is on, and that
  * is what lets the host answer an assignment at all: the page carries the
  * display it was resolved for and where its theme came from, and neither is
- * inferable from `/api/published` alone. It is also the only *repeating*
- * request a local display's window makes, so it is the sighting that keeps a
- * restarted host from opening a second window on a monitor that has one.
+ * inferable from `/api/published` alone. The `id` in the answer is the theme a
+ * save last moved; a page showing it reloads, and every other page stays still.
+ * It is also the only *repeating* request a local display's window makes, so it
+ * is the sighting that keeps a restarted host from opening a second window on a
+ * monitor that has one.
  *
  * `ponytail:` comes back with the document rather than diffing it in place —
  * a flash on a phone that is usually on a wall, for one screenful of code. If
@@ -63,29 +65,20 @@ const PAGE_BASE = "http://yunari.invalid";
  *
  * `GET /` skips its resolution entirely when the URL carries `data`, and its own
  * 302 sets `data=live` — so `location.reload()` re-requests the same URL and
- * re-serves **the same theme id**. A publish survives that, because it keeps the
- * id and changes the document; an assignment changes the id, which is the one
- * thing a reload cannot deliver. So `data` always goes.
+ * re-serves **the same theme id**. An assignment changes the id, which is the
+ * one thing a reload cannot deliver, so `data` always goes.
  *
  * `theme` goes too, but **only for a page the host resolved itself**: that id is
  * the host's own answer and is the one that has to be re-asked, while a link
- * page's id is the person's instruction. A *published* page is the host's answer
- * too when it names a display: keeping the id there would pin the display to the
- * theme once published, so a later assignment could never move it. A published
- * page with no display is the person's preview and keeps its id. `display` and
- * `session` are never touched, so the display still names itself and the sighting
- * survives the reload.
+ * page's id is the person's instruction. `display` and `session` are never
+ * touched, so the display still names itself and the sighting survives the
+ * reload.
  */
 export function reResolveUrl(href: string): string {
   const page = new URL(href, PAGE_BASE);
   page.searchParams.delete("data");
 
-  const source = page.searchParams.get("theme-source");
-  const hostResolved =
-    source === "map" ||
-    (source === "published" && page.searchParams.get("display") !== null);
-
-  if (hostResolved) {
+  if (page.searchParams.get("theme-source") === "map") {
     page.searchParams.delete("theme");
   }
 
@@ -125,22 +118,22 @@ export function followPublished(
   const page = new URL(session.pageUrl, PAGE_BASE);
   const url = pollUrl(page);
   // Only a page the host resolved itself may be moved by an assignment. A link
-  // is the person's own instruction for that page, and a page showing a publish
-  // would reload, re-resolve to the published theme and see the map's entry
-  // again on the next poll — a reload loop. Suppressing costs nothing, because
-  // the revision comparison below reloads a display when the publish moves.
+  // is the person's own instruction for that page, and a page showing one must
+  // not reload into the map's entry — a reload loop. Suppressing costs nothing,
+  // because the revision comparison below reloads a display when its theme is
+  // saved.
   const followsMap = page.searchParams.get("theme-source") === "map";
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: number | undefined;
   let lastTheme: string | null | undefined;
   let lastPresentation: DisplayPresentation | undefined;
-  /** The theme in this page's own URL, and the theme last published. A publish
+  /** The theme in this page's own URL, and the theme a save last moved. A save
    *  of another theme moves the revision too, and this page has nothing to
-   *  reload for: one author's working document must not restart another
-   *  display (2026-10-29). */
+   *  reload for: one author's save must not restart another display
+   *  (2026-10-29). */
   const pageTheme = page.searchParams.get("theme");
-  let lastPublished: string | null | undefined;
+  let lastSaved: string | null | undefined;
 
   const tick = async (): Promise<void> => {
     if (stopped) return;
@@ -189,15 +182,14 @@ export function followPublished(
           }
         }
 
-        const published =
+        const saved =
           body.id === null || typeof body.id === "string" ? body.id : undefined;
-        const wasPublished = lastPublished;
-        lastPublished = published;
-        // A publish of this page's theme is news; so is one clearing it, which
-        // is the page dropping the overlay. Anything else leaves the page be.
+        const wasSaved = lastSaved;
+        lastSaved = saved;
+        // A save of this page's theme is news; so is a clear, which happens
+        // when that theme is deleted. Anything else leaves the page be.
         const concernsThisPage =
-          published === pageTheme ||
-          (published === null && wasPublished === pageTheme);
+          saved === pageTheme || (saved === null && wasSaved === pageTheme);
 
         if (typeof body.revision === "number") {
           // `last` moves even on the reload path. Reloading and returning with

@@ -508,6 +508,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   panels = createPanelManager({
     displays,
     pageFor: (displayId) => panelPageUrl(bound, displayId),
+    // A panel that goes away — a restart, a power cut, a vendor app holding
+    // the port — is opened again on this cadence, the same one the launcher
+    // uses for local monitors.
+    reconcileIntervalMs: 15_000,
     // The clip a panel plays itself, resolved the way the player resolves its
     // theme: the display's own choice, else the default's. Anything that cannot
     // be resolved — no theme, no media, an image rather than a video, a missing

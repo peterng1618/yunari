@@ -1,40 +1,41 @@
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-
 /**
- * The document an author is looking at, held while they are looking at it.
+ * The id of the theme a save last made authoritative, and the revision every
+ * display polls.
  *
- * In memory and nowhere else. It is not a theme — nothing here is written to a
- * folder, nothing survives the host, and a display that asks for it falls back
- * to the stored document the moment it is gone. That is what makes "publishing"
- * different from "saving", and it is why a stop clears rather than reverts.
+ * The stored envelope is deliberately not held here: the theme store owns the
+ * saved document, and a second copy in memory would be a second answer to what
+ * a theme is. This store only answers the two questions a display asks — which
+ * theme moved, and how many times — so a page that shows that theme reloads and
+ * every other page stays still.
  *
  * The revision is the whole subscription mechanism: a display polls one small
  * number and re-reads only when it moves.
  */
 
-interface PublishedDocument {
+interface PublishedTheme {
   readonly id: string;
-  readonly envelope: FabricThemeEnvelope;
-  /** Bumped by every publish and by every stop. A display polls this. */
+  /** Bumped by every publish and by every clear. A display polls this. */
   readonly revision: number;
 }
 
 export interface PublishedStore {
-  read(): PublishedDocument | undefined;
-  publish(id: string, envelope: FabricThemeEnvelope): number;
+  read(): PublishedTheme | undefined;
+  /** Records the theme a save just stored, and moves the revision. */
+  publish(id: string): number;
+  /** Forgets the theme, so no display reloads for it, and moves the revision. */
   clear(): number;
   revision(): number;
 }
 
 export function createPublishedStore(): PublishedStore {
-  let current: PublishedDocument | undefined;
+  let current: PublishedTheme | undefined;
   let revision = 0;
 
   return {
     read: () => current,
-    publish(id, envelope) {
+    publish(id) {
       revision += 1;
-      current = { id, envelope, revision };
+      current = { id, revision };
       return revision;
     },
     clear() {

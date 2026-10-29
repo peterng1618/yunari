@@ -4939,6 +4939,8 @@ describe("A local monitor is specified rather than paired", () => {
       started: string[],
       stopped: string[],
       refreshed: string[] = [],
+      running: readonly string[] = [],
+      compared: string[] = [],
     ): PanelManager {
       return {
         start: (id) => {
@@ -4954,8 +4956,14 @@ describe("A local monitor is specified rather than paired", () => {
           refreshed.push(id);
           return Promise.resolve();
         },
+        refreshVideo: (id) => {
+          compared.push(id);
+          return Promise.resolve();
+        },
         reconcile: () => Promise.resolve(),
-        running: () => [],
+        running: () => running,
+        status: () => "connected",
+        reconnect: () => Promise.resolve(),
         stopAll: () => Promise.resolve(),
       };
     }
@@ -5252,6 +5260,60 @@ describe("A local monitor is specified rather than paired", () => {
         ).toBe(200);
         expect(refreshed).toEqual(["strip"]);
       } finally {
+        await hosting.close();
+      }
+    });
+
+    it("asks every running panel to re-read its clip after a theme save", async () => {
+      const compared: string[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: managerOver([], [], [], ["strip", "dial"], compared),
+      });
+
+      try {
+        const saved = await request(
+          hosting.server,
+          "PUT",
+          "/api/themes/living-room",
+          themeBody(createValidPackage("living-room")),
+        );
+
+        expect(saved.status).toBe(200);
+        // The comparison belongs to the manager, so every running panel is
+        // asked and only the one whose clip changed pays for a restart.
+        expect(compared).toEqual(["strip", "dial"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers a theme save even when a panel cannot compare its clip", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], [], [], ["strip"]),
+          refreshVideo: () => Promise.reject(new Error("the port is gone")),
+        },
+      });
+
+      try {
+        const saved = await request(
+          hosting.server,
+          "PUT",
+          "/api/themes/living-room",
+          themeBody(createValidPackage("living-room")),
+        );
+
+        // The theme is stored either way; a panel that could not compare is a
+        // reported panel, not a save the author has to make again.
+        expect(saved.status).toBe(200);
+        expect(logged).toHaveBeenCalledWith(
+          expect.stringContaining("the port is gone"),
+        );
+      } finally {
+        logged.mockRestore();
         await hosting.close();
       }
     });
@@ -5712,6 +5774,139 @@ describe("A local monitor is specified rather than paired", () => {
           json({ kind: "status" }),
         );
         expect(answer.status).toBe(500);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("reconnects a panel on request and answers the state it left", async () => {
+      const reconnected: string[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          reconnect: (id) => {
+            reconnected.push(id);
+            return Promise.resolve();
+          },
+          status: () => "disconnected",
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/strip/panel/reconnect",
+        );
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({ ok: true, status: "disconnected" });
+        expect(reconnected).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a reconnect for a non-panel record and an unknown display", async () => {
+      const hosting = host({ panels: managerOver([], []) });
+
+      try {
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays",
+          json({
+            label: "Left screen",
+            monitor: { deviceName: "\\\\.\\DISPLAY2" },
+          }),
+        );
+        const local = (added.json() as { display: { id: string } }).display;
+
+        expect(
+          (
+            await request(
+              hosting.server,
+              "POST",
+              `/api/displays/${local.id}/panel/reconnect`,
+            )
+          ).status,
+        ).toBe(400);
+        expect(
+          (
+            await request(
+              hosting.server,
+              "POST",
+              "/api/displays/nope/panel/reconnect",
+            )
+          ).status,
+        ).toBe(404);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("answers 405 for another method on a reconnect path", async () => {
+      const hosting = panelHost();
+
+      try {
+        const answer = await request(
+          hosting.server,
+          "GET",
+          "/api/displays/strip/panel/reconnect",
+        );
+        expect(answer.status).toBe(405);
+        expect(answer.text()).toBe("This path supports POST.");
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("reports a panel display's connection and commands in the display map", async () => {
+      const themes = createThemeStore(dir);
+      await themes.write("night", createValidPackage("night", "Night"));
+      const hosting = host({
+        themeStore: themes,
+        activeTheme: createActiveThemeStore(dir),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: { ...managerOver([], []), status: () => "disconnected" },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const map = await request(hosting.server, "GET", "/api/themes/active");
+        const rows = (
+          map.json() as {
+            displays: readonly {
+              id: string;
+              kind: string;
+              panel?: { status: string; commands: readonly string[] };
+            }[];
+          }
+        ).displays;
+
+        // The panel's state travels even while its device is not attached:
+        // that is the display the surface draws a reconnect for.
+        expect(rows.find((row) => row.id === "strip")?.panel?.status).toBe(
+          "disconnected",
+        );
+        expect(
+          rows.find((row) => row.id === "strip")?.panel?.commands,
+        ).toBeInstanceOf(Array);
+        // This PC is not host-driven, so it carries no panel key at all.
+        expect(rows.find((row) => row.id === "this-pc")).not.toHaveProperty(
+          "panel",
+        );
       } finally {
         await hosting.close();
       }
@@ -9680,377 +9875,7 @@ describe("A LAN move answers before the socket it moves (vg-173)", () => {
   });
 });
 
-describe("The publish route", () => {
-  it("publishes a theme this library has, and says no to everything else", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-    });
-
-    try {
-      // The assets a display fetches come from the theme's own folder, so there
-      // has to be a folder before anything can be published against it.
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(createValidPackage()),
-      );
-      const body = themeBody(createValidPackage());
-
-      // No id at all is the caller's mistake, and it says so.
-      const missing = await request(hosted.server, "PUT", "/api/publish", body);
-      expect(missing.status).toBe(400);
-
-      // A well-formed id this library does not have is a different answer.
-      const unknown = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=kitchen",
-        body,
-      );
-      expect(unknown.status).toBe(404);
-
-      // A document whose own id disagrees with the id it would be served under
-      // is refused, exactly as a save refuses it — publishing bypasses `write`,
-      // so this is the only place that check can live.
-      const mismatched = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        themeBody(createValidPackage("kitchen")),
-      );
-      expect(mismatched.status).toBe(400);
-
-      const published = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        body,
-      );
-      expect(published.status).toBe(200);
-      expect(published.json()).toMatchObject({ ok: true, id: "living-room" });
-
-      // The LAN is refused the whole surface, not just the body.
-      const fromTheLan = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        body,
-        { remoteAddress: "10.0.0.2" },
-      );
-      expect(fromTheLan.status).toBe(403);
-
-      const stop = await request(hosted.server, "DELETE", "/api/publish");
-      expect(stop.json()).toMatchObject({ ok: true, id: null });
-      expect(
-        (await request(hosted.server, "GET", "/api/publish")).json(),
-      ).toMatchObject({ id: null });
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("refuses to publish a theme whose declared asset is missing", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const activeTheme = createActiveThemeStore(dir);
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-      activeTheme,
-    });
-
-    try {
-      const content = createPackageWithAsset("assets/inter-400.woff2", [1, 2]);
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(content),
-      );
-      // The document is still there and still validates; the declared file is
-      // the half that is gone.
-      await fs.rm(path.join(dir, "living-room", "assets", "inter-400.woff2"));
-
-      const refused = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        themeBody(content),
-      );
-      // The same answer an absent theme gets: a display would fetch the missing
-      // file, and publishing is an admin act, so the whole theme is verified.
-      expect(refused.status).toBe(404);
-      expect(refused.text()).toBe(
-        'No theme "living-room" in this library to publish.',
-      );
-
-      // The poll asks `exists`, which reads the document alone by ruling: the
-      // assignment is still reported even though the theme cannot be published.
-      await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
-      const polled = await request(hosted.server, "GET", "/api/published");
-      expect(polled.status).toBe(200);
-      expect((polled.json() as { display: unknown }).display).toEqual({
-        id: LOCAL_DISPLAY_ID,
-        theme: "living-room",
-        shape: "rect",
-        rotation: 0,
-      });
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("refuses a document it cannot validate", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-    });
-
-    try {
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(createValidPackage()),
-      );
-
-      // `decodeThemeSave` accepts this — it checks that the envelope is an
-      // object and nothing more — so it is the overlay's own validator that
-      // must refuse it. That is the point of the case.
-      //
-      // **The envelope keeps the id it is published under, and that is
-      // load-bearing.** The body here used to be `{ schemaVersion: 99 }`, with
-      // no id at all, and that is refused by the id-agreement check a few lines
-      // above — so the case proved the *id* guard worked and said nothing about
-      // the validator. Deleting the validator branch outright still left it
-      // green. Matching ids leave the validator as the only thing that can
-      // refuse this, and the message is asserted for the same reason: the two
-      // guards answer 400 with different words.
-      const wire = JSON.parse(themeBody(createValidPackage())) as {
-        envelope: Record<string, unknown>;
-        assets: unknown;
-      };
-      wire.envelope["schemaVersion"] = "99.0.0";
-
-      const bad = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        JSON.stringify(wire),
-      );
-      expect(bad.status).toBe(400);
-      expect(bad.text()).toContain("schema 99");
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("publishes a document from the previous schema major as the current one", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-    });
-
-    try {
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(createValidPackage()),
-      );
-
-      const wire = JSON.parse(themeBody(createValidPackage())) as {
-        envelope: Record<string, unknown>;
-        assets: unknown;
-      };
-      wire.envelope["schemaVersion"] = 2;
-
-      const published = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        JSON.stringify(wire),
-      );
-      expect(published.status).toBe(200);
-
-      // What a display is served is the migrated envelope, not the bytes that
-      // were posted: the raw integer is a shape no other reader accepts.
-      const served = await request(
-        hosted.server,
-        "GET",
-        "/api/themes/living-room/document",
-      );
-      expect(served.json()).toMatchObject({
-        id: "living-room",
-        schemaVersion: "2.0.0",
-      });
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("refuses a document from a schema major it cannot migrate", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-    });
-
-    try {
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(createValidPackage()),
-      );
-
-      const wire = JSON.parse(themeBody(createValidPackage())) as {
-        envelope: Record<string, unknown>;
-        assets: unknown;
-      };
-      wire.envelope["schemaVersion"] = "1.0.0";
-
-      const bad = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        JSON.stringify(wire),
-      );
-      expect(bad.status).toBe(400);
-      expect(bad.text()).toContain(
-        "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
-      );
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("refuses a paired display, so a phone cannot cause a publish", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-publish-"));
-    const displays = createDisplayStore(dir);
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-      displays,
-    });
-
-    try {
-      // A paired display is the caller that matters here: it is the one the
-      // display guard *lets through*, so this route's own loopback check is the
-      // only thing left between a phone and the publish surface. An unpaired
-      // LAN request never reaches it — that one is refused a few hundred lines
-      // earlier by `This display is not paired with the host.`, which is why a
-      // test using a bare remoteAddress cannot tell the two guards apart.
-      //
-      // No theme is seeded on purpose: the refusal comes before the body is
-      // decoded, so a 404 here would mean the guard had been passed.
-      const token = newToken();
-      await displays.create("phone", token);
-      const fromThePhone = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        themeBody(createValidPackage()),
-        {
-          remoteAddress: "192.168.1.50",
-          headers: { "x-yunari-session": token },
-        },
-      );
-
-      expect(fromThePhone.status).toBe(403);
-      expect(fromThePhone.text()).toContain("this PC only");
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("The published overlay", () => {
-  it("serves the published document to a display that asks for that theme", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: createThemeStore(dir),
-    });
-
-    try {
-      // **The library starts empty**, so a document to publish *over* has to
-      // exist first: without this the read below is a 404 and the assertion
-      // after it compares `undefined` to an artboard.
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/themes/living-room",
-        themeBody(createValidPackage()),
-      );
-
-      const stored = await request(
-        hosted.server,
-        "GET",
-        "/api/themes/living-room/document",
-      );
-      expect(stored.status).toBe(200);
-
-      const publishedBody = JSON.stringify({
-        envelope: {
-          ...(stored.json() as object),
-          artboard: { width: 320, height: 240 },
-        },
-        assets: {},
-      });
-
-      const published = await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        publishedBody,
-      );
-      expect(published.status).toBe(200);
-
-      const shown = await request(
-        hosted.server,
-        "GET",
-        "/api/themes/living-room/document",
-      );
-      expect((shown.json() as { artboard: unknown }).artboard).toEqual({
-        width: 320,
-        height: 240,
-      });
-
-      // The stored document is untouched: publishing is not saving.
-      await request(hosted.server, "DELETE", "/api/publish");
-      const again = await request(
-        hosted.server,
-        "GET",
-        "/api/themes/living-room/document",
-      );
-      expect((again.json() as { artboard: unknown }).artboard).not.toEqual({
-        width: 320,
-        height: 240,
-      });
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
-
+describe("The published endpoint", () => {
   it("hides the revision from an unpaired display", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
     const hosted = createHostServer({
@@ -10085,6 +9910,60 @@ describe("The published overlay", () => {
           rotation: 0,
         },
       });
+    } finally {
+      await hosted.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes a theme on save, and takes it back when that theme is deleted", async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-save-publish-"),
+    );
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: dir, editor: dir },
+      themeStore: createThemeStore(dir),
+    });
+
+    try {
+      const publishedOf = async (): Promise<{
+        id: string | null;
+        revision: number;
+      }> =>
+        (await request(hosted.server, "GET", "/api/published")).json() as {
+          id: string | null;
+          revision: number;
+        };
+
+      expect((await publishedOf()).id).toBeNull();
+
+      const saved = await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage()),
+      );
+      expect(saved.status).toBe(200);
+
+      const first = await publishedOf();
+      expect(first.id).toBe("living-room");
+      expect(first.revision).toBeGreaterThan(0);
+
+      // A second save is news even for the same id: the scene or the clip it
+      // carries may have moved, so the revision has to move with it.
+      await request(
+        hosted.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(createValidPackage("living-room", "Renamed")),
+      );
+      const second = await publishedOf();
+      expect(second.id).toBe("living-room");
+      expect(second.revision).toBeGreaterThan(first.revision);
+
+      await request(hosted.server, "DELETE", "/api/themes/living-room");
+      expect((await publishedOf()).id).toBeNull();
     } finally {
       await hosted.close();
       await fs.rm(dir, { recursive: true, force: true });
@@ -10331,62 +10210,6 @@ describe("The published overlay", () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
-
-  it("lays the published theme over the display that holds it, not the others", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-published-"));
-    const store = createThemeStore(dir);
-    const activeTheme = createActiveThemeStore(dir);
-    const hosted = createHostServer({
-      registry: new ProviderRegistry([]),
-      bundles: { player: dir, editor: dir },
-      themeStore: store,
-      activeTheme,
-    });
-
-    try {
-      await store.write("living-room", createValidPackage());
-      await store.write("studio", createValidPackage("studio", "Studio"));
-      // The consumer chose `studio`, so a `/` with nothing else to go on shows
-      // that.
-      await activeTheme.write(DEFAULT_DISPLAY, "studio");
-
-      const before = await request(hosted.server, "GET", "/");
-      expect(before.headers.location).toBe(
-        "/?theme=studio&data=live&theme-source=map",
-      );
-
-      // A publish of a theme this display does not hold leaves it where it is:
-      // one author's working document must not move another display (2026-10-29).
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=living-room",
-        themeBody(createValidPackage()),
-      );
-
-      const other = await request(hosted.server, "GET", "/");
-      expect(other.headers.location).toBe(
-        "/?theme=studio&data=live&theme-source=map",
-      );
-
-      // The theme it does publish is served as the working document, which is
-      // the whole point of the overlay.
-      await request(
-        hosted.server,
-        "PUT",
-        "/api/publish?id=studio",
-        themeBody(createValidPackage("studio", "Studio")),
-      );
-
-      const after = await request(hosted.server, "GET", "/");
-      expect(after.headers.location).toBe(
-        "/?theme=studio&data=live&theme-source=published",
-      );
-    } finally {
-      await hosted.close();
-      await fs.rm(dir, { recursive: true, force: true });
-    }
-  });
 });
 
 /**
@@ -10582,19 +10405,6 @@ describe("The root page resolves the display that asked", () => {
     expect(await source()).toBe("map");
     // The person's own instruction for that page.
     expect(await source("/?theme=studio")).toBe("link");
-
-    // The publish covers the theme this display holds, so the page showing it
-    // must not be moved by an assignment: reloading there would re-resolve to
-    // the published theme and see the map's entry again on the next poll — a
-    // reload loop.
-    await request(
-      hosted.server,
-      "PUT",
-      "/api/publish?id=living-room",
-      themeBody(createValidPackage()),
-    );
-
-    expect(await source()).toBe("published");
   });
 
   it("resolves a local monitor from loopback", async () => {

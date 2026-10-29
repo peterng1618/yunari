@@ -96,6 +96,7 @@ describe("a panel's video", () => {
       "chs_5inch.dev1_rom1.88", // HELLO
       "0", // GET_FILE_SIZE: nothing stored yet
       "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success", // START_VIDEO
       "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
     );
@@ -159,6 +160,7 @@ describe("a panel's video", () => {
       "status: ready", // QUERY_STATUS reply buffered by openTurzxPanel
       "0", // GET_FILE_SIZE
       "create_success",
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
     );
@@ -187,6 +189,7 @@ describe("a panel's video", () => {
       "0", // GET_FILE_SIZE
       "delete_success", // DELETE_FILE acknowledgement, late
       "create_success",
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
     );
@@ -211,6 +214,7 @@ describe("a panel's video", () => {
       "chs_5inch.dev1_rom1.88",
       "", // GET_FILE_SIZE: an empty read ends the reply wait
       "create_success",
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
     );
@@ -258,6 +262,7 @@ describe("a panel's video", () => {
       "chs_5inch.dev1_rom1.88",
       "0",
       "create_success",
+      "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_failed", // INIT_VIDEO_OVERLAY refused
     );

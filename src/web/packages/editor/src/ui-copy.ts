@@ -492,6 +492,20 @@ export const uiCopy = {
         heading: "Panel controls",
         hint: "Send a command to the panel this display drives.",
         open: "Controls",
+        /** The three states the host reports for this display's device. */
+        connection: {
+          connected: "Connected",
+          connecting: "Connecting…",
+          disconnected: "Disconnected",
+        },
+        /** What happens by itself while disconnected. The interval is the
+         *  host's retry cadence, stated so the owner knows to wait rather than
+         *  unplug anything. */
+        disconnectedHint: "The host tries this panel again every 15 seconds.",
+        reconnect: "Reconnect",
+        reconnecting: "Reconnecting…",
+        reconnectFailed: (reason: string): string =>
+          `The panel could not be reconnected: ${reason}`,
         dialogTitle: (panel: string): string => `Controls — ${panel}`,
         close: "Close",
         brightness: "Brightness",
@@ -1673,12 +1687,6 @@ export const uiCopy = {
       "Plain HTTP on your own network — trusted networks only, never the internet.",
     copy: "Copy link",
     copied: "Copied",
-    /** Which document a display is showing while the author edits it. */
-    live: (name: string): string => `Showing ${name}`,
-    /** Publishing carries the document and its assets from the theme's own
-     *  folder, so a document that has never been saved has nothing to publish
-     *  and the author has one step left. */
-    unsaved: "Save this theme to the library to publish it",
     expires: (at: string): string => `Pairing expires ${at}`,
   },
   /** The View menu. Each setting names itself and its current value; the values

@@ -38,10 +38,26 @@ export interface PanelManagerOptions {
   readonly browser?: string | undefined;
   /** How long shutdown waits for one display before abandoning it. */
   readonly shutdownGraceMs?: number;
+  /**
+   * How often a panel with no runner is opened again. A paired panel is retried
+   * for as long as its record exists: a restarted device, a power cut and a
+   * vendor app that held the port all come back this way. Absent means no
+   * timer, which is what the unit tests want.
+   */
+  readonly reconcileIntervalMs?: number;
 }
 
 /** A command aimed at a display whose device is not being driven now. */
 export class PanelNotRunningError extends Error {}
+
+/**
+ * What the manager is doing with one display.
+ *
+ * `connecting` is an attempt in flight — a start, or a manual reconnect whose
+ * device has not answered yet. A record with no entry at all is `disconnected`:
+ * the retry loop has nothing open for it.
+ */
+export type PanelConnectionStatus = "connected" | "connecting" | "disconnected";
 
 export interface PanelManager {
   /** Starts a panel's runner, or does nothing when one is already running. */
@@ -60,8 +76,17 @@ export interface PanelManager {
   /** Restarts a panel's runner so it reads its theme again. A panel that
    *  started a video keeps playing that clip until its runner is replaced. */
   refresh(displayId: string): Promise<void>;
+  /** Re-reads the clip this display would play and restarts its runner only
+   *  when that clip differs from the one already playing. A saved theme's page
+   *  picks up its document by itself; the device's copy of the video is the one
+   *  part nothing re-reads. */
+  refreshVideo(displayId: string): Promise<void>;
   /** Every attached panel that has a record and no runner yet. */
   reconcile(): Promise<void>;
+  /** What this display's device is doing, for a surface that reports it. */
+  status(displayId: string): PanelConnectionStatus;
+  /** Stops and starts one display now: the manual retake. */
+  reconnect(displayId: string): Promise<void>;
   /** What the manager holds, for a surface that reports it. */
   running(): readonly string[];
   stopAll(): Promise<void>;
@@ -72,6 +97,9 @@ interface Entry {
   runner: PanelRunner | undefined;
   /** The device `runner` drives, kept so a control can reach its `controls`. */
   device: PanelDevice | undefined;
+  /** The clip the runner was started with, so a later read can be compared
+   *  against what is actually playing rather than re-uploading it blindly. */
+  video: PanelVideoSource | undefined;
   timer: ReturnType<typeof setInterval> | undefined;
   /** Set while `open()` runs, so two calls cannot open the interface twice. */
   starting: Promise<void> | undefined;
@@ -85,7 +113,22 @@ const SHUTDOWN_GRACE_MS = 10_000;
 
 export function createPanelManager(options: PanelManagerOptions): PanelManager {
   const entries = new Map<string, Entry>();
-  const report = options.onError ?? (() => {});
+  /** The last message logged for each display, so a retry loop that keeps
+   *  failing the same way says so once rather than every pass. */
+  const lastReported = new Map<string, string>();
+  /**
+   * Logs one panel fact, skipping the same sentence twice in a row.
+   *
+   * The retry loop earns this: an unplugged panel fails identically every 15 s
+   * for as long as it stays unplugged, and a console line per pass would bury
+   * the change that matters. A different message — another failure, or a
+   * reconnect — is always written.
+   */
+  const report = (displayId: string, message: string): void => {
+    if (lastReported.get(displayId) === message) return;
+    lastReported.set(displayId, message);
+    options.onError?.(displayId, message);
+  };
   /**
    * One promise chain per display: start, stop and refresh never overlap.
    *
@@ -127,6 +170,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     const entry: Entry = {
       runner: undefined,
       device: undefined,
+      video: undefined,
       timer: undefined,
       starting: undefined,
     };
@@ -192,6 +236,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       }
     }
 
+    entry.video = video;
+
     let rasterizer: Awaited<ReturnType<typeof createRasterizer>>;
 
     try {
@@ -222,14 +268,16 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       ...(device.minimumIntervalMs === undefined
         ? {}
         : { intervalMs: device.minimumIntervalMs }),
-      // One line per frame that changed: a panel that is quiet is either a
-      // still theme — which is free — or a pipeline that stopped, and an owner
-      // reading a console cannot tell those apart without being told.
-      onFrame: () =>
-        console.log(
-          `Panel ${displayId}: showed a ${device.geometry.width}x${device.geometry.height} image.`,
-        ),
       onError: (message) => report(displayId, message),
+      // The device refused three frames in a row: remove this runner and let
+      // the retry pass open the panel again. Detaching goes through this
+      // display's chain so a concurrent stop cannot race the close.
+      onLost: () => {
+        void enqueue(displayId, () => detachNow(displayId)).then(
+          () => report(displayId, "disconnected; retrying."),
+          () => report(displayId, "disconnected; retrying."),
+        );
+      },
     });
 
     // Shutdown, or a stop queued before this open finished, owns the device
@@ -241,6 +289,16 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     entry.runner = runner;
     entry.device = device;
+    // A runner is connected: the next failure of any kind is news again.
+    lastReported.delete(displayId);
+    // One line per start is the panel's whole progress report: a frame log would
+    // bury the error beside it, and a panel that is quiet is either a still
+    // theme — which is free — or a pipeline that stopped. Errors are reported
+    // as they happen through `onError`.
+    console.log(
+      `Panel ${displayId}: ${video === undefined ? "stills" : "video"} at ` +
+        `${device.geometry.width}x${device.geometry.height}.`,
+    );
     // The panel's first frame is sent at once rather than after an interval: a
     // record the owner just added is a panel showing whatever was there before.
     void runner.tick();
@@ -284,6 +342,31 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
   };
 
   /**
+   * Lets go of a runner whose device is already gone, and removes the entry so
+   * the retry pass owns the display again.
+   *
+   * Unlike {@link stopNow} this answers even when the close fails: a lost port
+   * refusing its own close is the state that made this necessary, and leaving
+   * the entry behind would strand the display forever.
+   */
+  const detachNow = async (displayId: string): Promise<void> => {
+    const entry = entries.get(displayId);
+    if (entry === undefined) return;
+
+    if (entries.get(displayId) === entry) entries.delete(displayId);
+    if (entry.timer !== undefined) {
+      clearInterval(entry.timer);
+      entry.timer = undefined;
+    }
+
+    try {
+      await entry.runner?.stop();
+    } catch {
+      // The device is gone; its close failing is the same fact.
+    }
+  };
+
+  /**
    * Sends one control to the device running now, or refuses.
    *
    * Deliberately not on the display's chain: waiting there would queue the
@@ -314,21 +397,134 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    return controls.run(command);
+    if (command.kind !== "restart") return controls.run(command);
+
+    // **A restart is a planned disconnection.** The interface drops for about
+    // fifteen seconds, so writing to this port again is writing to a stream the
+    // device has already torn down. Detach on purpose — even when the write
+    // failed — and the retry pass opens the panel when it comes back.
+    try {
+      return await controls.run(command);
+    } finally {
+      await enqueue(displayId, () => detachNow(displayId)).catch(
+        () => undefined,
+      );
+      report(displayId, "restarting; reconnecting when the panel returns.");
+    }
   };
 
-  /** Refreshes one display; a stop that failed never reaches the open. */
+  /**
+   * Restarts one display, or opens it when it is not held.
+   *
+   * A close that failed is not a reason to keep the entry: a device that went
+   * away — the vendor app took the port, the panel was restarted — cannot close
+   * itself, and the runner is already not running. Keeping it would answer
+   * "connecting" forever, because the retry pass opens an entry only when it
+   * holds no runner. The entry is dropped and the open attempted; if the port
+   * is genuinely still held, the open fails, the status is `disconnected`, and
+   * the retry pass tries again.
+   */
   const refreshNow = async (displayId: string): Promise<void> => {
     try {
       await stopNow(displayId);
     } catch (error) {
-      // The port is still held, so opening again would land on a device that is
-      // not there. The entry was left in place for the next change to retry.
+      report(displayId, messageOf(error));
+      await detachNow(displayId);
+    }
+
+    await startNow(displayId);
+  };
+
+  /**
+   * Restarts a display only when its clip changed.
+   *
+   * A theme save changes the document the page polls and, when it touches the
+   * background, the bytes a panel plays. The page answers the first by itself;
+   * the device's copy is only replaced by a restart, so a save asks every
+   * running panel here and the comparison decides which one pays for it. A
+   * read that fails leaves the panel playing what it has, which is honest: the
+   * save landed, and the next start will try the new clip again.
+   */
+  const refreshVideoNow = async (displayId: string): Promise<void> => {
+    const entry = entries.get(displayId);
+    if (entry?.runner === undefined || options.videoFor === undefined) return;
+
+    let video: PanelVideoSource | undefined;
+
+    try {
+      video = await options.videoFor(displayId);
+    } catch (error) {
       report(displayId, messageOf(error));
       return;
     }
 
-    await startNow(displayId);
+    if (sameVideo(entry.video, video)) return;
+
+    await refreshNow(displayId);
+  };
+
+  const reconcileNow = async (): Promise<void> => {
+    if (stopping) return;
+
+    const records = await options.displays.list();
+
+    for (const record of records) {
+      if (record.kind !== "panel") continue;
+
+      const entry = entries.get(record.id);
+      if (entry !== undefined) {
+        // A start in flight owns the display until it settles.
+        if (entry.runner === undefined) continue;
+        if (entry.runner.running) continue;
+
+        // A runner that stopped but could not release its device is a stale
+        // entry: the close failed and the entry was left behind. Let go of it
+        // first, or `startNow` would see a runner and skip the display forever.
+        await enqueue(record.id, () => detachNow(record.id));
+      }
+
+      await enqueue(record.id, () => startNow(record.id));
+    }
+
+    // A runner whose record went away is a panel still being fed a theme
+    // nobody assigned it. `remove` stops its own, and this catches the record
+    // deleted by hand. A refusal is reported and left for the next pass.
+    const live = new Set(records.map((record) => record.id));
+    for (const displayId of [...entries.keys()]) {
+      if (live.has(displayId)) continue;
+
+      await enqueue(displayId, () => stopNow(displayId)).catch(
+        (error: unknown) => {
+          report(displayId, messageOf(error));
+        },
+      );
+    }
+  };
+
+  /**
+   * The retry loop: every paired panel without a runner is opened again, for
+   * as long as its record exists.
+   *
+   * The same cadence as `display-launcher`'s monitor reconcile, and the same
+   * unref'd timer: a host that is shutting down must not be kept alive by a
+   * panel it is about to close.
+   */
+  const retry =
+    options.reconcileIntervalMs === undefined
+      ? undefined
+      : setInterval(() => {
+          void reconcileNow().catch((error: unknown) => {
+            console.error(`Panel retry: ${messageOf(error)}`);
+          });
+        }, options.reconcileIntervalMs);
+  retry?.unref();
+
+  const statusNow = (displayId: string): PanelConnectionStatus => {
+    const entry = entries.get(displayId);
+    // A runner is connected until it is given up on: a lost one clears its own
+    // `running` flag, and the detach queued behind it removes the entry.
+    if (entry === undefined) return "disconnected";
+    return entry.runner?.running === true ? "connected" : "connecting";
   };
 
   return {
@@ -340,31 +536,14 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     refresh: (displayId) => enqueue(displayId, () => refreshNow(displayId)),
 
-    async reconcile(): Promise<void> {
-      if (stopping) return;
+    refreshVideo: (displayId) =>
+      enqueue(displayId, () => refreshVideoNow(displayId)),
 
-      const records = await options.displays.list();
+    reconcile: reconcileNow,
 
-      for (const record of records) {
-        if (record.kind !== "panel") continue;
-        if (entries.get(record.id)?.runner !== undefined) continue;
-        await enqueue(record.id, () => startNow(record.id));
-      }
+    status: statusNow,
 
-      // A runner whose record went away is a panel still being fed a theme
-      // nobody assigned it. `remove` stops its own, and this catches the record
-      // deleted by hand. A refusal is reported and left for the next pass.
-      const live = new Set(records.map((record) => record.id));
-      for (const displayId of [...entries.keys()]) {
-        if (live.has(displayId)) continue;
-
-        await enqueue(displayId, () => stopNow(displayId)).catch(
-          (error: unknown) => {
-            report(displayId, messageOf(error));
-          },
-        );
-      }
-    },
+    reconnect: (displayId) => enqueue(displayId, () => refreshNow(displayId)),
 
     running(): readonly string[] {
       return [...entries.entries()]
@@ -374,6 +553,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     async stopAll(): Promise<void> {
       stopping = true;
+      if (retry !== undefined) clearInterval(retry);
       const grace = options.shutdownGraceMs ?? SHUTDOWN_GRACE_MS;
 
       // Work already queued still has to settle first: a start that began
@@ -437,6 +617,30 @@ function within(work: Promise<unknown>, ms: number): Promise<boolean> {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Whether two reads describe the same clip and the same authored pan. */
+function sameVideo(
+  first: PanelVideoSource | undefined,
+  second: PanelVideoSource | undefined,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+
+  return (
+    first.placement.offsetX === second.placement.offsetX &&
+    first.placement.offsetY === second.placement.offsetY &&
+    sameBytes(first.bytes, second.bytes)
+  );
+}
+
+function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] !== second[index]) return false;
+  }
+
+  return true;
 }
 
 function hex(value: number): string {

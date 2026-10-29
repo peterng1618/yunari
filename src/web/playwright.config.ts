@@ -49,7 +49,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
 /**
  * The own-host editor proofs each start their own host on its own port and drive
  * the editor through that host's `/editor/` mount, because `/api/hosting`,
- * `/api/publish` and `/api/published` are only same-origin there — and a theme
+ * `/api/themes` and `/api/published` are only same-origin there — and a theme
  * store on disk is a fixture the preview projects do not provide. Like the host
  * specs they cannot run under the preview projects, and they cannot share their
  * port — `publish-header` owns 4227, `publish-loop` owns 4229,

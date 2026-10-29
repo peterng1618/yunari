@@ -35,6 +35,13 @@ export interface PanelRunnerOptions {
    * path unchanged.
    */
   readonly video?: PanelVideoSource | undefined;
+  /**
+   * Called once when the device has refused three frames in a row — a lost
+   * port, an unplugged cable, a re-enumerated interface. The runner stops
+   * feeding itself; reopening is the manager's, because only it can start a
+   * new runner and a new page.
+   */
+  readonly onLost?: (message: string) => void;
 }
 
 export interface PanelRunner {
@@ -53,6 +60,15 @@ export interface PanelRunner {
 
 /** The panel's refresh cadence. A wall screen costs the machine it reports on. */
 export const DEFAULT_PANEL_INTERVAL_MS = 1_000;
+
+/**
+ * Consecutive failures that mean the device is gone rather than one bad frame.
+ *
+ * A lost port fails every write, so three ticks (about 3 s at the default
+ * cadence) is long enough to outlast a single hiccup and short enough that the
+ * owner sees the panel come back soon after the manager's retry pass.
+ */
+const FAILURES_BEFORE_LOST = 3;
 
 export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const intervalMs = options.intervalMs ?? DEFAULT_PANEL_INTERVAL_MS;
@@ -74,6 +90,27 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   let clipStopped = false;
   /** The overlay path still works; a refused overlay drops the panel to stills. */
   let overlay = false;
+  /** Consecutive failed captures or sends; a success clears the count. */
+  let failures = 0;
+  /** The device was given up on, so no further tick may read or write it. */
+  let lost = false;
+
+  /**
+   * Counts one failed capture or send, and gives the device up after the
+   * threshold. `onLost` runs once; the message is the failure that tripped it,
+   * so the manager's log names the cause rather than a status sentence.
+   */
+  const failed = (error: unknown): void => {
+    report(exactly(error));
+    failures += 1;
+    if (lost || failures < FAILURES_BEFORE_LOST) return;
+
+    lost = true;
+    // The same flag a stop clears, so a status read answers "not connected"
+    // before the manager's detach lands rather than after it.
+    running = false;
+    options.onLost?.(exactly(error));
+  };
 
   /**
    * One capture and one send, if the pixels moved.
@@ -93,7 +130,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     try {
       frame = await capture();
     } catch (error) {
-      report(exactly(error));
+      failed(error);
       return false;
     }
 
@@ -104,11 +141,12 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     } catch (error) {
       // A send that failed did not put these pixels on the panel, so the last
       // frame is not this one: keeping it would suppress the retry.
-      report(exactly(error));
+      failed(error);
       presentFailed?.();
       return false;
     }
 
+    failures = 0;
     last = frame;
     options.onFrame?.();
     return true;
@@ -161,8 +199,9 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     tick(): Promise<boolean> {
       // A tick asked for after the stop began must not open a capture: the
-      // device is on its way to closed.
-      if (!running) return Promise.resolve(false);
+      // device is on its way to closed. Neither may one after the device was
+      // given up on: the manager is already tearing this runner down.
+      if (!running || lost) return Promise.resolve(false);
       // A capture that is slow enough to still be running when the timer
       // fires again is not a reason to start a second one: two sends racing
       // for the same wire is worse than a skipped frame.

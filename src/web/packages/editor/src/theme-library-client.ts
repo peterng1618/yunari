@@ -136,6 +136,9 @@ export const DEFAULT_DISPLAY_KEY = "default";
 export interface ThemedDisplay {
   readonly id: string;
   readonly label: string;
+  /** What the host says this display is. The Host mode reads it to draw the
+   *  panel state for a panel even when its device is not attached. */
+  readonly kind: "paired" | "local" | "panel";
   /** The theme this display holds, or `null` for one holding none of its own —
    *  which is not the same as showing the default. */
   readonly theme: string | null;
@@ -144,7 +147,21 @@ export interface ThemedDisplay {
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; the host answers `0` for an absent record value. */
   readonly rotation: number;
+  /** Present only for a panel display this host drives: whether its device is
+   *  open, and the commands its driver accepts. Absent for a paired browser and
+   *  for a local monitor, which the host does not open. */
+  readonly panel?: ThemedPanel;
 }
+
+/** What the host says about one panel display's device. */
+export interface ThemedPanel {
+  readonly status: PanelConnectionStatus;
+  /** The command kinds the family accepts. Spelled as strings here because this
+   *  seam reads the wire; the controls surface filters them. */
+  readonly commands: readonly string[];
+}
+
+export type PanelConnectionStatus = "connected" | "connecting" | "disconnected";
 
 export interface ThemeLibraryClient {
   list(): Promise<readonly ThemeLibraryEntry[]>;
@@ -240,6 +257,49 @@ export function readDisplayPresentation(
   return {
     shape,
     rotation: shape === "rect" && rotationValue % 90 !== 0 ? 0 : rotationValue,
+  };
+}
+
+/**
+ * The host's display kind, read defensively.
+ *
+ * An older host that named none is read as a paired browser: the panel surface
+ * gates on `panel`, so an unknown kind must not offer panel controls for a
+ * device nothing said was one.
+ */
+function readDisplayKind(value: unknown): ThemedDisplay["kind"] {
+  return value === "panel" || value === "local" ? value : "paired";
+}
+
+/**
+ * The panel state the host reports, or nothing.
+ *
+ * A host before this field sends no `panel`, and a shape this build cannot read
+ * is absent rather than defaulted: a status invented here would tell the owner
+ * a device is connected when nothing said so.
+ */
+function readPanelState(value: unknown): { readonly panel?: ThemedPanel } {
+  if (typeof value !== "object" || value === null) return {};
+
+  const { status, commands } = value as {
+    readonly status?: unknown;
+    readonly commands?: unknown;
+  };
+  if (
+    status !== "connected" &&
+    status !== "connecting" &&
+    status !== "disconnected"
+  ) {
+    return {};
+  }
+
+  return {
+    panel: {
+      status,
+      commands: Array.isArray(commands)
+        ? commands.filter((kind): kind is string => typeof kind === "string")
+        : [],
+    },
   };
 }
 
@@ -439,11 +499,13 @@ export function createThemeLibraryClient(options?: {
         default: typeof body?.default === "string" ? body.default : null,
         displays: Array.isArray(body?.displays)
           ? (body.displays as readonly ThemedDisplay[]).map(
-              ({ id, label, theme, shape, rotation }) => ({
+              ({ id, label, kind, theme, shape, rotation, panel }) => ({
                 id,
                 label,
+                kind: readDisplayKind(kind),
                 theme,
                 ...readDisplayPresentation(shape, rotation),
+                ...readPanelState(panel),
               }),
             )
           : [],

@@ -1169,6 +1169,7 @@ function twoDisplays(): ActiveThemeHost {
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1176,6 +1177,7 @@ function twoDisplays(): ActiveThemeHost {
         {
           id: "kitchen-tablet",
           label: "Kitchen tablet",
+          kind: "paired",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1226,6 +1228,7 @@ it("offers the default beside the displays rather than as one of them", async ()
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1233,6 +1236,7 @@ it("offers the default beside the displays rather than as one of them", async ()
         {
           id: "kitchen-tablet",
           label: "Kitchen tablet",
+          kind: "paired",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1268,6 +1272,7 @@ it("reports the host's refusal in the host's own words", async () => {
         {
           id: "kitchen-tablet",
           label: "Kitchen tablet",
+          kind: "paired",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1330,6 +1335,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1354,6 +1360,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
       {
         id: "this-pc",
         label: "This PC",
+        kind: "local",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -1361,6 +1368,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
       {
         id: "kitchen-tablet",
         label: "Kitchen tablet",
+        kind: "paired",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -1392,6 +1400,7 @@ it("reports where the theme already is as the choice's own value", async () => {
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: "porch-strip",
           shape: "rect",
           rotation: 0,
@@ -1399,6 +1408,7 @@ it("reports where the theme already is as the choice's own value", async () => {
         {
           id: "kitchen-tablet",
           label: "Kitchen tablet",
+          kind: "paired",
           theme: "living-room",
           shape: "rect",
           rotation: 0,
@@ -1432,6 +1442,7 @@ it("tells a theme no display holds apart from the theme that is the default", as
         {
           id: "this-pc",
           label: "This PC",
+          kind: "local",
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -1456,6 +1467,7 @@ it("tells a theme no display holds apart from the theme that is the default", as
       {
         id: "this-pc",
         label: "This PC",
+        kind: "local",
         theme: null,
         shape: "rect",
         rotation: 0,

@@ -5,6 +5,8 @@ import {
   wellClasses,
 } from "../components/ui/control-well.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
+import { Glyph, PANEL_STATUS_GLYPHS } from "../editor-shell/icons.js";
+import type { PanelConnectionStatus } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import type {
   EditorPanelCommand,
@@ -22,28 +24,33 @@ const BRIGHTNESS_ID = "yunari-panel-brightness";
 const LEVEL_ERROR_ID = "yunari-panel-brightness-error";
 
 /**
- * The commands a display's panel accepts, behind a door.
+ * One panel display's connection and commands.
  *
- * **Nothing renders unless this panel is the one that display drives** and the
- * host says it takes at least one command — the section's own contract, so it
- * can be mounted and tested without the region, and so a picture-only panel
- * draws no controls it could not answer.
+ * **The status and the reconnect are drawn whether or not the device is
+ * attached.** A panel that lost power, was restarted, or was taken by the
+ * vendor app is exactly the one whose owner needs the state and the retake, and
+ * the host reports both from the display record rather than from the attached
+ * list.
  *
- * **A restart is two presses.** It drops the panel for about fifteen seconds,
- * which is not something a stray click should do, so the first press only
- * asks and the warning is the words beside the confirm.
- *
- * **The level is refused here, not sent and refused by the host.** The panel's
- * range is a whole percent, so a value outside it is a typo the person can fix
- * without a round trip; a refusal that does come back — a closing port is a
- * 409 with the host's own sentence — is shown inline in those words and not
- * retried.
+ * **The commands stay behind a door, and only while connected.** A restart is
+ * two presses because it drops the panel for about fifteen seconds; a command
+ * to a device the host does not hold would be a refusal for a press that could
+ * not have worked.
  */
 export function PanelControlsSection(props: {
   readonly displayId: string;
-  readonly panel: PanelHint;
+  /** The attached device's hint, when it is attached now: the hardware record
+   *  beside the controls. Absent for a panel the host is retrying. */
+  readonly panel: PanelHint | undefined;
+  /** What the host says this display's device is doing, and what it accepts. */
+  readonly connection: {
+    readonly status: PanelConnectionStatus;
+    readonly commands: readonly string[];
+  };
+  /** Stops and opens the device again. The caller re-reads the map afterwards. */
+  readonly onReconnect: () => Promise<void>;
   readonly onCommand: (command: EditorPanelCommand) => Promise<string>;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const copy = uiCopy.hostSettings.panels.controls;
   const [open, setOpen] = useState(false);
   /** The field's draft rather than a parsed value: an empty field and a typed
@@ -58,6 +65,10 @@ export function PanelControlsSection(props: {
   /** True while a command runs. A second press would be a second command, and
    *  two answers settling out of order would leave the earlier one standing. */
   const [inFlight, setInFlight] = useState(false);
+  /** True while this surface's own reconnect is in flight. The poll's
+   *  `connecting` state catches the retry loop's attempts; this one covers the
+   *  press before the host answers. */
+  const [reconnecting, setReconnecting] = useState(false);
 
   /** The newest command's number. A reply carrying an older number belongs to
    *  a command something has overtaken, or to one this dialog abandoned, and is
@@ -67,12 +78,8 @@ export function PanelControlsSection(props: {
    *  one frame would both see the state as it was before the first. */
   const busy = useRef(false);
 
-  if (
-    props.panel.heldId !== props.displayId ||
-    props.panel.commands.length === 0
-  ) {
-    return null;
-  }
+  const status = props.connection.status;
+  const connected = status === "connected";
 
   /** **Closing abandons what the visit showed.** The draft, the last reply and
    *  a refusal are this dialog's, not the panel's, so the door must not reopen
@@ -92,7 +99,24 @@ export function PanelControlsSection(props: {
   };
 
   const holds = (kind: PanelCommandKind): boolean =>
-    props.panel.commands.includes(kind);
+    props.connection.commands.includes(kind);
+
+  const reconnect = (): void => {
+    if (reconnecting) return;
+    setReconnecting(true);
+    setFailure(undefined);
+    void props.onReconnect().then(
+      () => setReconnecting(false),
+      (reason: unknown) => {
+        setReconnecting(false);
+        setFailure(
+          copy.reconnectFailed(
+            reason instanceof Error ? reason.message : String(reason),
+          ),
+        );
+      },
+    );
+  };
 
   const send = (command: EditorPanelCommand): void => {
     if (busy.current) return;
@@ -139,185 +163,240 @@ export function PanelControlsSection(props: {
 
   return (
     <Group testId="panel-controls" name={copy.heading} hint={copy.hint}>
+      <div className="flex items-center gap-[var(--space-8)]">
+        <span
+          data-yunari-panel-status={status}
+          className={`flex items-center gap-[var(--space-4)] text-xs ${
+            connected
+              ? "text-text"
+              : status === "connecting"
+                ? "text-muted"
+                : "text-warn"
+          }`}
+        >
+          <span
+            className={`flex-none ${status === "connecting" ? "animate-spin" : ""}`}
+          >
+            <Glyph icon={PANEL_STATUS_GLYPHS[status]} size={14} />
+          </span>
+          {copy.connection[status]}
+        </span>
+        <button
+          type="button"
+          data-yunari-panel-reconnect={props.displayId}
+          className={plainButtonClasses}
+          disabled={reconnecting || status === "connecting"}
+          onClick={reconnect}
+        >
+          {reconnecting || status === "connecting"
+            ? copy.reconnecting
+            : copy.reconnect}
+        </button>
+      </div>
+      {status === "disconnected" ? (
+        <p className="m-0 text-2xs text-faint">{copy.disconnectedHint}</p>
+      ) : null}
+
       {/* The record is a fact about the hardware rather than about a command,
           so it stands beside the door as well as inside it: a firmware the
           driver has not met is what a person needs *before* pressing. */}
-      <PanelFacts panel={props.panel} />
-      <button
-        type="button"
-        data-yunari-panel-controls={props.displayId}
-        aria-expanded={open}
-        className={plainButtonClasses}
-        onClick={() => changeOpen(true)}
-      >
-        {copy.open}
-      </button>
-      <Dialog
-        open={open}
-        onOpenChange={changeOpen}
-        label={copy.dialogTitle(props.panel.label)}
-        closeLabel={copy.close}
-      >
-        <div className="flex flex-col gap-[var(--space-12)]">
-          {holds("brightness") ? (
-            <div className="flex flex-col gap-[var(--space-6)]">
-              <label htmlFor={BRIGHTNESS_ID} className="text-xs text-muted">
-                {copy.brightness}
-              </label>
-              <p className="m-0 text-2xs text-faint">{copy.brightnessHint}</p>
-              <div className="flex items-center gap-[var(--space-6)]">
-                <div className={wellClasses("dialog")}>
-                  <input
-                    id={BRIGHTNESS_ID}
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={level}
-                    onChange={(event) => {
-                      setLevel(event.target.value);
-                      setLevelError(undefined);
-                    }}
-                    aria-invalid={levelError === undefined ? undefined : true}
-                    {...(levelError === undefined
-                      ? {}
-                      : { "aria-describedby": LEVEL_ERROR_ID })}
-                    className="h-full w-full min-w-0 bg-transparent text-xs text-text outline-none"
-                  />
-                </div>
-                <button
-                  type="button"
-                  className={ACTION_BUTTON}
-                  disabled={inFlight}
-                  onClick={applyLevel}
-                >
-                  {copy.apply}
-                </button>
-              </div>
-              {/* Beside the field, because the refusal is about the value
+      {props.panel === undefined ? null : <PanelFacts panel={props.panel} />}
+
+      {connected &&
+      props.panel !== undefined &&
+      props.connection.commands.length > 0 ? (
+        <>
+          <button
+            type="button"
+            data-yunari-panel-controls={props.displayId}
+            aria-expanded={open}
+            className={plainButtonClasses}
+            onClick={() => changeOpen(true)}
+          >
+            {copy.open}
+          </button>
+          <Dialog
+            open={open}
+            onOpenChange={changeOpen}
+            label={copy.dialogTitle(props.panel.label)}
+            closeLabel={copy.close}
+          >
+            <div className="flex flex-col gap-[var(--space-12)]">
+              {holds("brightness") ? (
+                <div className="flex flex-col gap-[var(--space-6)]">
+                  <label htmlFor={BRIGHTNESS_ID} className="text-xs text-muted">
+                    {copy.brightness}
+                  </label>
+                  <p className="m-0 text-2xs text-faint">
+                    {copy.brightnessHint}
+                  </p>
+                  <div className="flex items-center gap-[var(--space-6)]">
+                    <div className={wellClasses("dialog")}>
+                      <input
+                        id={BRIGHTNESS_ID}
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={level}
+                        onChange={(event) => {
+                          setLevel(event.target.value);
+                          setLevelError(undefined);
+                        }}
+                        aria-invalid={
+                          levelError === undefined ? undefined : true
+                        }
+                        {...(levelError === undefined
+                          ? {}
+                          : { "aria-describedby": LEVEL_ERROR_ID })}
+                        className="h-full w-full min-w-0 bg-transparent text-xs text-text outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className={ACTION_BUTTON}
+                      disabled={inFlight}
+                      onClick={applyLevel}
+                    >
+                      {copy.apply}
+                    </button>
+                  </div>
+                  {/* Beside the field, because the refusal is about the value
                   typed in it: a sentence at the dialog's foot would be read
                   after every other control. */}
-              {levelError === undefined ? null : (
-                <p
-                  id={LEVEL_ERROR_ID}
-                  role="alert"
-                  className="m-0 text-xs text-warn"
-                >
-                  {levelError}
-                </p>
-              )}
-            </div>
-          ) : null}
+                  {levelError === undefined ? null : (
+                    <p
+                      id={LEVEL_ERROR_ID}
+                      role="alert"
+                      className="m-0 text-xs text-warn"
+                    >
+                      {levelError}
+                    </p>
+                  )}
+                </div>
+              ) : null}
 
-          {holds("screen") ? (
-            <div className="flex gap-[var(--space-6)]">
-              <button
-                type="button"
-                className={ACTION_BUTTON}
-                disabled={inFlight}
-                onClick={() => send({ kind: "screen", on: true })}
-              >
-                {copy.screenOn}
-              </button>
-              <button
-                type="button"
-                className={ACTION_BUTTON}
-                disabled={inFlight}
-                onClick={() => send({ kind: "screen", on: false })}
-              >
-                {copy.screenOff}
-              </button>
-            </div>
-          ) : null}
-
-          {holds("restart") ? (
-            confirmingRestart ? (
-              <div className="flex flex-col gap-[var(--space-6)]">
-                <p className="m-0 text-xs text-muted">{copy.restartWarning}</p>
+              {holds("screen") ? (
                 <div className="flex gap-[var(--space-6)]">
                   <button
                     type="button"
                     className={ACTION_BUTTON}
                     disabled={inFlight}
-                    onClick={() => {
-                      setConfirmingRestart(false);
-                      send({ kind: "restart" });
-                    }}
+                    onClick={() => send({ kind: "screen", on: true })}
                   >
-                    {copy.confirmRestart}
+                    {copy.screenOn}
                   </button>
                   <button
                     type="button"
                     className={ACTION_BUTTON}
-                    onClick={() => setConfirmingRestart(false)}
+                    disabled={inFlight}
+                    onClick={() => send({ kind: "screen", on: false })}
                   >
-                    {copy.cancel}
+                    {copy.screenOff}
                   </button>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={ACTION_BUTTON}
-                onClick={() => setConfirmingRestart(true)}
-              >
-                {copy.restart}
-              </button>
-            )
-          ) : null}
-
-          {holds("status") || holds("hello") ? (
-            <div className="flex gap-[var(--space-6)]">
-              {holds("status") ? (
-                <button
-                  type="button"
-                  className={ACTION_BUTTON}
-                  disabled={inFlight}
-                  onClick={() => send({ kind: "status" })}
-                >
-                  {copy.status}
-                </button>
               ) : null}
-              {holds("hello") ? (
-                <button
-                  type="button"
-                  className={ACTION_BUTTON}
-                  disabled={inFlight}
-                  onClick={() => send({ kind: "hello" })}
-                >
-                  {copy.hello}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
 
-          {/* One live region that is always mounted: a node inserted with its
+              {holds("restart") ? (
+                confirmingRestart ? (
+                  <div className="flex flex-col gap-[var(--space-6)]">
+                    <p className="m-0 text-xs text-muted">
+                      {copy.restartWarning}
+                    </p>
+                    <div className="flex gap-[var(--space-6)]">
+                      <button
+                        type="button"
+                        className={ACTION_BUTTON}
+                        disabled={inFlight}
+                        onClick={() => {
+                          setConfirmingRestart(false);
+                          send({ kind: "restart" });
+                        }}
+                      >
+                        {copy.confirmRestart}
+                      </button>
+                      <button
+                        type="button"
+                        className={ACTION_BUTTON}
+                        onClick={() => setConfirmingRestart(false)}
+                      >
+                        {copy.cancel}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={ACTION_BUTTON}
+                    onClick={() => setConfirmingRestart(true)}
+                  >
+                    {copy.restart}
+                  </button>
+                )
+              ) : null}
+
+              {holds("status") || holds("hello") ? (
+                <div className="flex gap-[var(--space-6)]">
+                  {holds("status") ? (
+                    <button
+                      type="button"
+                      className={ACTION_BUTTON}
+                      disabled={inFlight}
+                      onClick={() => send({ kind: "status" })}
+                    >
+                      {copy.status}
+                    </button>
+                  ) : null}
+                  {holds("hello") ? (
+                    <button
+                      type="button"
+                      className={ACTION_BUTTON}
+                      disabled={inFlight}
+                      onClick={() => send({ kind: "hello" })}
+                    >
+                      {copy.hello}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* One live region that is always mounted: a node inserted with its
               text announces nothing, and what the device says back is the one
               thing here nobody can infer. A write-only command has no reply —
               "Sent" is the host confirming the bytes went, not the panel
               talking — so the label names which of the two is showing. */}
-          <div className="flex flex-col gap-[var(--space-2)]">
-            <span className="text-2xs text-faint">
-              {reply === undefined || reply === ""
-                ? copy.commandLabel
-                : copy.replyLabel}
-            </span>
-            <p
-              data-yunari-panel-reply=""
-              aria-live="polite"
-              className="m-0 text-xs text-text"
-            >
-              {reply === undefined ? "" : reply === "" ? copy.sent : reply}
-            </p>
-          </div>
+              <div className="flex flex-col gap-[var(--space-2)]">
+                <span className="text-2xs text-faint">
+                  {reply === undefined || reply === ""
+                    ? copy.commandLabel
+                    : copy.replyLabel}
+                </span>
+                <p
+                  data-yunari-panel-reply=""
+                  aria-live="polite"
+                  className="m-0 text-xs text-text"
+                >
+                  {reply === undefined ? "" : reply === "" ? copy.sent : reply}
+                </p>
+              </div>
 
-          {failure === undefined ? null : (
-            <p role="alert" className="m-0 text-xs text-warn">
-              {failure}
-            </p>
-          )}
-        </div>
-      </Dialog>
+              {failure === undefined ? null : (
+                <p role="alert" className="m-0 text-xs text-warn">
+                  {failure}
+                </p>
+              )}
+            </div>
+          </Dialog>
+        </>
+      ) : null}
+
+      {/* A reconnect failure is drawn outside the door, because the door does
+          not exist while disconnected — the state this press is about. */}
+      {connected || failure === undefined ? null : (
+        <p role="alert" className="m-0 text-xs text-warn">
+          {failure}
+        </p>
+      )}
     </Group>
   );
 }

@@ -17,7 +17,6 @@ import {
 } from "../host-settings-mode/region.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import { confirmDocumentReplacement } from "../persistence-manager/index.js";
-import type { PublishSwitch } from "../publish-client.js";
 import {
   readShortcutOverrides,
   resolveShortcuts,
@@ -193,9 +192,6 @@ export interface ShellLayout {
   setBridge(
     bridge: EditorShellBridge | undefined,
     view: EditorViewControls | undefined,
-    /** What the publish surface's switch drives. Owned by `editor-main`, so the
-     *  surface decides whether publishing is on and never holds a document. */
-    publish?: PublishSwitch,
   ): void;
   /** Opens the reference sheet. The session owns the `?` dispatcher and never
    *  sees React, so `editor-main` routes the gesture here. */
@@ -293,7 +289,6 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
   hosts.status.id = "status-message";
 
   let view: EditorViewControls | undefined;
-  let publish: PublishSwitch | undefined;
   let reactRoot: Root | undefined;
   const store = new SelectionStore();
   // Beside the selection it follows, and never disposed: the shell outlives
@@ -503,12 +498,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 getView={getView}
                 onFindAssets={() => finder.set(true)}
               />
-              <PublishControl
-                session={store.bridge?.session}
-                publish={publish}
-                hosting={hosting}
-                surface={publishSurface}
-              />
+              <PublishControl hosting={hosting} surface={publishSurface} />
             </>
           )}
         </header>
@@ -897,12 +887,11 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     dock,
     selection: store,
     tokenSelection,
-    setBridge(nextBridge, nextView, nextPublish) {
+    setBridge(nextBridge, nextView) {
       // The store notifies subscribers, so React re-renders the inspector and
       // menus without a manual root re-render — and it keeps working when the
       // bridge is replaced by a later document mount.
       view = nextView;
-      publish = nextPublish;
       store.set(nextBridge);
       flushSync(() => {
         dockRoot.render(<CanvasDock bridge={nextBridge} />);

@@ -11,7 +11,6 @@ import {
   type DisplayShape,
   formatSseEvent,
   knownTimeZones,
-  readFabricThemeEnvelope,
   SAMPLE_EVENT,
   SAMPLE_STREAM_PATH,
   themeAssetContentType,
@@ -196,6 +195,13 @@ interface ActiveDisplay {
   /** The glass and mounting angle; `this-pc` answers rect/0. */
   readonly shape: DisplayShape;
   readonly rotation: number;
+  /** Present for a display this host drives over a panel's own cable: what its
+   *  device is doing, and the commands its driver accepts. Absent for a paired
+   *  browser and for a local monitor, which the host does not open. */
+  readonly panel?: {
+    readonly status: "connected" | "connecting" | "disconnected";
+    readonly commands: readonly string[];
+  };
 }
 
 /**
@@ -1593,14 +1599,33 @@ export function createHostServer(options: HostServerOptions): HostServer {
           shape: "rect",
           rotation: 0,
         },
-        ...records.map((record) => ({
-          id: record.id,
-          label: record.label,
-          kind: record.kind,
-          theme: holds[record.id] ?? null,
-          shape: record.shape,
-          rotation: record.rotation ?? 0,
-        })),
+        ...records.map((record) => {
+          const family =
+            record.panel === undefined
+              ? undefined
+              : familyFor(record.panel.vendorId, record.panel.productId);
+
+          return {
+            id: record.id,
+            label: record.label,
+            kind: record.kind,
+            theme: holds[record.id] ?? null,
+            shape: record.shape,
+            rotation: record.rotation ?? 0,
+            // A panel is the one display whose state this host owns: the
+            // surface reads whether the device is open and which commands its
+            // driver takes, so it can draw a status and a reconnect for a panel
+            // that is not attached at all.
+            ...(options.panels === undefined || record.kind !== "panel"
+              ? {}
+              : {
+                  panel: {
+                    status: options.panels.status(record.id),
+                    commands: family?.commands ?? [],
+                  },
+                }),
+          };
+        }),
       ],
     };
   }
@@ -2471,6 +2496,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
       const commandMatch = url.pathname.match(
         /^\/api\/displays\/([^/]+)\/panel\/command$/,
       );
+      const reconnectMatch = url.pathname.match(
+        /^\/api\/displays\/([^/]+)\/panel\/reconnect$/,
+      );
 
       if (commandMatch !== null && request.method === "POST") {
         if (options.panels === undefined) {
@@ -2553,6 +2581,59 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // The manual retake: close what this host holds and open the device
+      // again. A panel the retry loop is already reopening joins the same
+      // per-display chain, so the two cannot open the port twice.
+      if (reconnectMatch !== null && request.method === "POST") {
+        if (options.panels === undefined) {
+          sendText(
+            response,
+            404,
+            "Panel management is not enabled on this host.",
+          );
+          return;
+        }
+
+        const reconnectId = decodeURIComponent(reconnectMatch[1] ?? "");
+        const display = await displays.find(reconnectId);
+
+        if (display === undefined) {
+          sendText(response, 404, "No such display.");
+          return;
+        }
+
+        if (display.kind !== "panel") {
+          sendText(response, 400, "That display is not a panel.");
+          return;
+        }
+
+        try {
+          await options.panels.reconnect(reconnectId);
+        } catch (error) {
+          if (isPortFailure(error)) {
+            sendText(
+              response,
+              409,
+              error instanceof Error ? error.message : String(error),
+            );
+            return;
+          }
+
+          sendText(
+            response,
+            500,
+            error instanceof Error ? error.message : String(error),
+          );
+          return;
+        }
+
+        sendJson(response, 200, {
+          ok: true,
+          status: options.panels.status(reconnectId),
+        });
+        return;
+      }
+
       // Named by the path it answered rather than by the block: a caller told
       // that GET is supported on a path without it is told nothing true.
       const supported =
@@ -2564,7 +2645,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
               ? "GET and POST"
               : url.pathname === "/api/displays"
                 ? "POST"
-                : commandMatch !== null
+                : commandMatch !== null || reconnectMatch !== null
                   ? "POST"
                   : id === undefined
                     ? undefined
@@ -2876,11 +2957,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // One number, so a display can tell whether what it is showing is still
-    // what the author is publishing — and the theme it was assigned, so an
-    // assignment made at the host reaches a display nobody walks to. A display
-    // read, so it is behind the same guard: what this PC is holding is not
-    // something the network enumerates.
+    // One number, so a display can tell that the theme it shows was saved — and
+    // the theme it was assigned, so an assignment made at the host reaches a
+    // display nobody walks to. A display read, so it is behind the same guard:
+    // what this PC is holding is not something the network enumerates.
     if (url.pathname === "/api/published") {
       if (
         !isLoopbackRemote(request.socket.remoteAddress) &&
@@ -4603,19 +4683,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
-      // A display showing the theme an author is editing shows the document as
-      // it stands, not as it was last saved. The folder it came from is
-      // unchanged: this is the display's view, and it lasts as long as the
-      // publish does.
-      const live = published.read();
-      if (live !== undefined && live.id === rawId) {
-        sendJson(response, 200, live.envelope);
-        return;
-      }
-
       // A display's view of the document: a theme that does not validate is
       // one it cannot serve, which is the same answer as a theme that is not
-      // there — not the 422 the editor's own open gets.
+      // there — not the 422 the editor's own open gets. The stored document is
+      // the only source: what a display follows moves when a save moves it.
       const envelope = await themeStore.readEnvelope(rawId);
       if (envelope === undefined) {
         sendText(response, 404, "Theme not found.");
@@ -4722,6 +4793,32 @@ export function createHostServer(options: HostServerOptions): HostServer {
             ...(decoded.base === undefined ? {} : { base: decoded.base }),
             overwrite: decoded.overwrite,
           });
+
+          // A save is the only moment a theme becomes authoritative, so it is
+          // also the only moment a display is told to re-read it. The revision
+          // moves and every page showing this theme reloads once — scene and
+          // background together. Editing sends nothing.
+          published.publish(rawId);
+
+          // A panel's page polls its document, so a save reaches its UI by
+          // itself; the clip on the device was uploaded when the runner started
+          // and nothing re-reads it. Every running panel compares what it would
+          // play with what it is playing, and only a changed clip restarts it.
+          const panels = options.panels;
+          if (panels !== undefined) {
+            for (const displayId of panels.running()) {
+              try {
+                await panels.refreshVideo(displayId);
+              } catch (error) {
+                console.error(
+                  `Panel ${displayId}: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                );
+              }
+            }
+          }
+
           sendJson(response, 200, { ok: true, ...saved });
         } catch (error) {
           // A refusal is not a malformed theme: nothing was written, the
@@ -4811,6 +4908,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           } catch (error) {
             console.error(error);
           }
+
+          // A display must not be told to reload a document that no longer
+          // exists. Clearing moves the revision, so a page showing it falls
+          // back to its assignment.
+          if (published.read()?.id === rawId) published.clear();
         }
 
         sendJson(
@@ -4820,134 +4922,6 @@ export function createHostServer(options: HostServerOptions): HostServer {
             ? { ok: true }
             : { error: `No theme "${rawId}" in this library.` },
         );
-        return;
-      }
-
-      sendText(response, 405, "Only GET, PUT and DELETE are supported.");
-      return;
-    }
-
-    // Publishing is admin, like a save: it decides what every display shows, and
-    // it holds a copy of the author's document in memory. The id rides in the
-    // query because the save wire is the editor's existing document and carries
-    // none of its own.
-    if (url.pathname === "/api/publish") {
-      if (!isLoopbackRemote(request.socket.remoteAddress)) {
-        sendText(response, 403, "Publishing is available on this PC only.");
-        return;
-      }
-
-      if (request.method === "PUT") {
-        let raw: string;
-        try {
-          raw = await largeBody.run(() =>
-            readBody(request, MAX_THEME_UPLOAD_BYTES),
-          );
-        } catch (error) {
-          if (error instanceof LargeBodyBusyError) {
-            sendText(response, 429, LARGE_BODY_BUSY);
-            return;
-          }
-          sendText(response, 413, "That theme is too large to publish.");
-          return;
-        }
-
-        let decoded: DecodedThemeSave;
-        try {
-          decoded = decodeThemeSave(raw);
-        } catch (error) {
-          sendText(
-            response,
-            400,
-            error instanceof Error ? error.message : String(error),
-          );
-          return;
-        }
-
-        const id = url.searchParams.get("id") ?? "";
-        // A malformed id and an unknown one are different answers, and the save
-        // route already draws this line: the first is the caller's mistake, the
-        // second is a fact about this library.
-        if (!isValidThemeId(id)) {
-          sendText(response, 400, "Invalid theme id.");
-          return;
-        }
-
-        // Every declared asset a display fetches comes from the theme's own
-        // folder, so a theme whose document is readable but whose declared file
-        // is missing or past its bound would render a hole. `exists` reads the
-        // document alone, which is right for the two-second poll and not for
-        // this admin route: publishing verifies the whole theme.
-        let stored: ThemeRecord;
-        try {
-          stored = await themeStore.read(id);
-        } catch (error) {
-          // A document that is present and unreadable is the same 404 an absent
-          // one gets, as it was before the scoped reads.
-          if (
-            error instanceof ThemeValidationError ||
-            error instanceof ThemeTooLargeError
-          ) {
-            stored = undefined;
-          } else {
-            throw error;
-          }
-        }
-        if (stored === undefined) {
-          // 404, the same answer `/api/themes/:id` gives for the same fact.
-          sendText(
-            response,
-            404,
-            `No theme "${id}" in this library to publish.`,
-          );
-          return;
-        }
-
-        // A publish bypasses `themeStore.write`, so nothing else checks the
-        // document, and a display serves whatever it is given.
-        const checked = readFabricThemeEnvelope(decoded.content.envelope);
-        if (!checked.ok) {
-          sendText(
-            response,
-            400,
-            checked.issues[0]?.message ?? "That document is not a theme.",
-          );
-          return;
-        }
-
-        // A save refuses a document whose own id disagrees with the folder it
-        // is written to. Publishing bypasses that too, so the invariant has to
-        // be kept here or a display is served an id carrying a document that
-        // says it is something else.
-        if (checked.envelope.id !== id) {
-          sendText(
-            response,
-            400,
-            `That document is "${checked.envelope.id}", not "${id}".`,
-          );
-          return;
-        }
-
-        const revision = published.publish(id, checked.envelope);
-        sendJson(response, 200, { ok: true, id, revision });
-        return;
-      }
-
-      if (request.method === "DELETE") {
-        sendJson(response, 200, {
-          ok: true,
-          id: null,
-          revision: published.clear(),
-        });
-        return;
-      }
-
-      if (request.method === "GET") {
-        const current = published.read();
-        sendJson(response, 200, {
-          id: current?.id ?? null,
-          revision: published.revision(),
-        });
         return;
       }
 
@@ -5020,11 +4994,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
     // Host-served player uses a stored theme and live data; standalone preview stays deterministic.
     if (url.pathname === "/" && !url.searchParams.has("data")) {
-      // Resolution order, in the consumer's terms: what the author is
-      // publishing now, then an explicit link, then the theme this display was
-      // assigned, then the default this PC holds, then the only theme if there
-      // is exactly one. Several themes and no choice means the library is the
-      // right next step.
+      // Resolution order, in the consumer's terms: an explicit link, then the
+      // theme this display was assigned, then the default this PC holds, then
+      // the only theme if there is exactly one. Several themes and no choice
+      // means the library is the right next step.
+      //
+      // **A saved theme needs no overlay here.** The publish revision only
+      // tells a page that the theme it already resolved has been saved, so the
+      // document it reads and the theme it resolved cannot disagree; a display
+      // is served what its assignment says and an assignment can still move it.
       const available = await themeStore.list();
       const requested = url.searchParams.get("theme");
       const exists = async (id: string): Promise<boolean> =>
@@ -5036,27 +5014,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
               exists,
             )
           : undefined;
-      const live = published.read()?.id;
-      // A publish is an overlay on the theme it publishes, not on every
-      // display: it wins where this display holds that same theme, or holds
-      // none at all. Letting it lead unconditionally moved a panel assigned to
-      // another theme onto the author's working document (2026-10-29).
-      const overlaid =
-        live !== undefined && (stored === undefined || stored === live);
-      const theme = overlaid
-        ? live
-        : (requested ??
-          stored ??
-          (available.length === 1 ? available[0]?.id : undefined));
+      const theme =
+        requested ??
+        stored ??
+        (available.length === 1 ? available[0]?.id : undefined);
       // Where the theme came from, because every display arrives carrying one:
       // the player reads this to know whether an assignment may move it at all.
       // Without it, the person's own link and the host's own resolution are the
       // same URL, and the display's poll would be answered `null` for ever.
-      const source = overlaid
-        ? "published"
-        : requested !== null
-          ? "link"
-          : "map";
+      const source = requested === null ? "map" : "link";
 
       if (theme === undefined) {
         // Nothing to show: either a first run, or a choice to make. Both lead
