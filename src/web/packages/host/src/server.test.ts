@@ -5039,6 +5039,32 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("takes the model from the family table, not the body", async () => {
+      // The editor posts the identity a discovery hint carries — ids and a
+      // serial, no model — because the table is the one owner of which model an
+      // id is. Requiring one here refused every Add from the UI with "A panel
+      // display needs the device it drives." (2026-10-29).
+      const hosting = panelHost();
+
+      try {
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({
+            label: "Strip",
+            panel: { vendorId: 0x1cbe, productId: 0xa092 },
+          }),
+        );
+        expect(added.status).toBe(201);
+        expect(await listed(hosting)).toEqual([
+          expect.objectContaining({ panel: STRIP }),
+        ]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("refuses a model no driver claims, before writing a record", async () => {
       // A record nothing can open would be a row in the list that never shows
       // anything and cannot say why.

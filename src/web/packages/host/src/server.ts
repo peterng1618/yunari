@@ -108,7 +108,7 @@ import {
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
-  normalizePanel,
+  normalizePanelIdentity,
   normalizePatch,
   PanelAlreadyHeldError,
   samePanel,
@@ -2389,8 +2389,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        // The record's own rule, from the store that has to read it back.
-        const panel = normalizePanel(body.panel);
+        // The record's own rule, from the store that has to read it back. The
+        // identity only: the model is the family table's answer, below.
+        const panel = normalizePanelIdentity(body.panel);
 
         if (panel === undefined) {
           sendText(

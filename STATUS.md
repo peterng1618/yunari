@@ -17,11 +17,9 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the h
 
 ## Last completed change
 
-- **The panel's UI is dithered before 4-bit packing:** `overlayUpdate` adds a 4x4 Bayer fraction of one step before rounding, so a smooth still is no longer 16 flat bands (seen on the panel 2026-10-29).
-- **The wire gains nothing:** changed pixels are chosen on the source frame, before quantising; solid black and white stay byte-identical.
-- **Red-proved:** dropping the threshold term flattens a 128 grey to one level and fails "dithers a mid tone instead of flat-banding it".
-- **Applied to the device:** `@yunari/host` rebuilt and restarted; the panel repaints from the dithered encoder.
-- **Confirmed on the panel:** the user sees no colour banding; a fine grain is visible only up close, which is the dither doing its job.
+- **Adding a panel from the editor works again:** the route demanded a `model` the editor never sends, so every Add was refused; it now takes the identity (`normalizePanelIdentity`) and fills the model from the family table, which was already the owner of it.
+- **Red-proved:** restoring `normalizePanel` on the route fails "takes the model from the family table, not the body" with 400.
+- **Live check on the user's host:** POST of the TURZX identity answered 201, minted `turzx-5-panel`, which is held and painting the Turzx demo theme.
 
 ## Next
 

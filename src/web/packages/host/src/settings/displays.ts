@@ -287,6 +287,34 @@ function sameHint(first: MonitorHint, second: MonitorHint): boolean {
 }
 
 /**
+ * A panel's identity, or nothing when either id is unusable.
+ *
+ * The model is not part of it: the family table owns which model an id is, so
+ * the route that adds a panel takes the identity and fills the model itself.
+ * A record read back needs `normalizePanel`, which requires both.
+ */
+export function normalizePanelIdentity(
+  input: unknown,
+): PanelIdentity | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
+
+  const raw = input as Record<string, unknown>;
+  const vendorId = raw["vendorId"];
+  const productId = raw["productId"];
+
+  if (!isUsbId(vendorId) || !isUsbId(productId)) return undefined;
+
+  const rawSerial = raw["serial"];
+  const serial = reportedSerial(
+    typeof rawSerial === "string" ? rawSerial : undefined,
+  );
+
+  return { vendorId, productId, ...(serial === undefined ? {} : { serial }) };
+}
+
+/**
  * A panel's hardware identity, or nothing when any half is unusable.
  *
  * Refused rather than repaired: an id of zero, a model name nothing knows and a
@@ -295,29 +323,15 @@ function sameHint(first: MonitorHint, second: MonitorHint): boolean {
  * explain (`vg-616`'s class).
  */
 export function normalizePanel(input: unknown): PanelHardware | undefined {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    return undefined;
-  }
+  const identity = normalizePanelIdentity(input);
 
-  const raw = input as Record<string, unknown>;
-  const vendorId = raw["vendorId"];
-  const productId = raw["productId"];
-  const model = raw["model"];
+  if (identity === undefined) return undefined;
 
-  if (!isUsbId(vendorId) || !isUsbId(productId)) return undefined;
+  const model = (input as Record<string, unknown>)["model"];
+
   if (typeof model !== "string" || model.length === 0) return undefined;
 
-  const rawSerial = raw["serial"];
-  const serial = reportedSerial(
-    typeof rawSerial === "string" ? rawSerial : undefined,
-  );
-
-  return {
-    vendorId,
-    productId,
-    model,
-    ...(serial === undefined ? {} : { serial }),
-  };
+  return { ...identity, model };
 }
 
 /** A USB id is a whole number in 16 bits, and 0 is no id at all. */
