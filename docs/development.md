@@ -83,8 +83,10 @@ and a `project` input and uploads the PNGs as an artifact.
   lifecycle boundary, complete the seven-rung search in `AGENTS.md`: internal
   owner, installed dependencies, native platform, public solutions, integration
   comparison, smallest probe, then build/reuse. Record it in
-  `docs/decisions/NNNN-<slug>.md` with the change. Public searches must inspect
-  actual solutions and constraints, not only package names.
+  `docs/decisions/NNNN-<slug>.md` before implementation. The pre-edit hook
+  refuses watched files without an exact `Paths:` claim; the template is in
+  `docs/decisions/README.md`. Public searches must inspect actual solutions and
+  constraints, not only package names.
 - **Driver and protocol tests belong at their seam.** Unit-test packet layouts,
   validation, cadence and failure handling without hardware. Browser-test the
   real rasterized output when panel rendering changes. Claim support for a

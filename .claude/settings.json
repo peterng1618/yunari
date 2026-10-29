@@ -1,0 +1,18 @@
+{
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "Edit|Write|MultiEdit",
+				"hooks": [
+					{
+						"type": "command",
+						"shell": "powershell",
+						"timeout": 10,
+						"onFailure": "block",
+						"command": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD }; node \"$p/scripts/reuse-gate.mjs\""
+					}
+				]
+			}
+		]
+	}
+}

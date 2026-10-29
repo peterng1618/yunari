@@ -52,7 +52,9 @@ evidence in `docs/decisions/NNNN-<slug>.md` **before implementation**:
    rejected options do not fit.
 
 The note states current evidence and the decision, not a research diary. Keep it
-with the change. Do not recreate a hook or a second decision register.
+with the change. `scripts/reuse-gate.mjs` enforces exact-file claims before
+watched writes; `docs/decisions/README.md` is the template. The hook checks
+presence, not evidence quality. Do not create a second decision register.
 
 ## Architecture guardrails
 

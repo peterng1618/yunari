@@ -49,10 +49,10 @@ assets-store/
 secrets.local.json
 
 # ---------- Agent environment ----------
-# Harness state (settings overrides, plans, worktrees) is never repository
-# content. A bare pattern matches at any depth, so a nested config home is
-# covered too.
-.claude/
+# Harness state (local overrides, plans, worktrees) is never repository content.
+# The shared reuse hook is repository content.
+.claude/*
+!.claude/settings.json
 .worktrees/
 # Playwright MCP scratch: screenshots, snapshots and console logs from an
 # interactive browser session. Regenerated at will, never evidence.
