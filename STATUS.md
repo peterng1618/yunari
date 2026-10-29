@@ -17,9 +17,10 @@ Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the h
 
 ## Last completed change
 
-- **Adding a panel from the editor works again:** the route demanded a `model` the editor never sends, so every Add was refused; it now takes the identity (`normalizePanelIdentity`) and fills the model from the family table, which was already the owner of it.
-- **Red-proved:** restoring `normalizePanel` on the route fails "takes the model from the family table, not the body" with 400.
-- **Live check on the user's host:** POST of the TURZX identity answered 201, minted `turzx-5-panel`, which is held and painting the Turzx demo theme.
+- **A changed still frame re-extracts:** `setBackground` compared only the asset id, so setting `fallbackFrame` in the editor left the glass standing on the previous frame; it now remounts when the frame value changes.
+- **Red-proved:** dropping the frame comparison fails "re-extracts the still when the declared frame changes".
+- **An unchanged frame is a no-op:** the same background again does not restart the clip, so an unrelated edit costs nothing.
+- **A swapped video already remounts:** `setBackgroundMedia` destroys and re-mounts the layer, so a replaced asset resolves its own bytes and its own first frame.
 
 ## Next
 

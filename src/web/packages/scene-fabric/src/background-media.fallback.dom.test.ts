@@ -197,6 +197,59 @@ describe("a video background's declared frame", () => {
     }
   });
 
+  it("re-extracts the still when the declared frame changes", () => {
+    // The editor hands `setBackground` a new object on every edit, so the frame
+    // is compared by value: matching the object, or only the asset id, left the
+    // glass on the previous frame after the author changed it (2026-10-29).
+    const media = stubProbeMedia();
+    const background = (frame?: number) => ({
+      media: {
+        assetId: "loop",
+        bounds: "theme" as const,
+        ...(frame === undefined ? {} : { fallbackFrame: frame }),
+      },
+    });
+
+    try {
+      const host = document.createElement("div");
+      const handle = mountBackgroundMedia({
+        host,
+        background: background(),
+        artboard: ARTBOARD,
+        assets: [LOOP],
+        resolveAsset: () => ({ url: "blob:loop" }),
+      });
+      const mounted = (): HTMLVideoElement | undefined => {
+        const videos = host.querySelectorAll("video");
+        return videos[videos.length - 1];
+      };
+
+      mounted()?.dispatchEvent(new Event("loadedmetadata"));
+      measureFrameRate(media);
+      expect(media.time()).toBeCloseTo(0, 3);
+
+      handle.setBackground(background(12));
+      expect(
+        host.querySelectorAll("video"),
+        "a new frame remounts",
+      ).toHaveLength(2);
+      mounted()?.dispatchEvent(new Event("loadedmetadata"));
+      measureFrameRate(media);
+      expect(media.time(), "frame 12 at 25 fps").toBeCloseTo(0.48, 3);
+      expect(media.drawn, "one still per declared frame").toHaveLength(2);
+
+      // The same background again is not a remount: an unchanged frame must not
+      // restart the clip on every unrelated edit. The probe is gone by now, so
+      // the live video alone is the picture.
+      handle.setBackground(background(12));
+      expect(host.querySelectorAll("video")).toHaveLength(1);
+      expect(media.drawn).toHaveLength(2);
+      handle.destroy();
+    } finally {
+      media.restore();
+    }
+  });
+
   it("stands a video with no declared frame on its first frame", () => {
     // A static panel with no picture paints nothing, and glass over a video
     // becomes a bare grey tint (seen on the TURZX panel, 2026-10-29). With no

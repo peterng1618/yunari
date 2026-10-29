@@ -179,6 +179,9 @@ export function mountBackgroundMedia(
   let bounds: MediaBounds | undefined;
   let element: HTMLImageElement | HTMLVideoElement | undefined;
   let mountedAssetId: string | undefined;
+  /** The declared frame the mounted still was extracted at. An author changing
+   *  the frame is a different picture, not a placement tweak. */
+  let mountedFrame: number | undefined;
   let disposeSource: (() => void) | undefined;
   let frames: FrameFollower | undefined;
   let stopDecoded: (() => void) | undefined;
@@ -258,6 +261,7 @@ export function mountBackgroundMedia(
     stopFallback?.();
     stopFallback = undefined;
     fallback = undefined;
+    mountedFrame = undefined;
     failed = false;
   };
 
@@ -333,6 +337,7 @@ export function mountBackgroundMedia(
     // that has no picture paints nothing, and a glass card over a video would
     // turn into a bare grey tint (observed on the TURZX panel 2026-10-29).
     const frame = media.fallbackFrame ?? 0;
+    mountedFrame = frame;
 
     if (child instanceof HTMLVideoElement) {
       child.addEventListener("error", () => {
@@ -368,7 +373,17 @@ export function mountBackgroundMedia(
   const setBackground = (next: Background | undefined): void => {
     background = next;
     const media = next?.media;
-    if (media?.assetId !== mountedAssetId) {
+    // A frame the author changed is a different still, and the mounted element
+    // keeps the old one: `setBackground` used to compare only the asset id, so
+    // editing the frame in the editor re-placed a video whose glass still stood
+    // on the previous frame (2026-10-29).
+    const frame = media === undefined ? undefined : (media.fallbackFrame ?? 0);
+    const changed =
+      media === undefined
+        ? mountedAssetId !== undefined
+        : media.assetId !== mountedAssetId || frame !== mountedFrame;
+
+    if (changed) {
       stop();
       layer.replaceChildren();
       element = undefined;
