@@ -28,7 +28,7 @@ const HOST = `http://127.0.0.1:${HOST_PORT}`;
 /** Every store sits in the app folder's settings directory, so each state below
  * is reachable by writing the same file the host reads — including after a
  * recycled server left state behind. They left the themes directory so that a
- * theme folder is only ever a theme (ADR-0017). */
+ * theme folder is only ever a theme. */
 const ACTIVE_FILE = path.join(HOST_SETTINGS_DIR, "active-theme.json");
 const ANSWERS_FILE = path.join(HOST_SETTINGS_DIR, "theme-answers.json");
 
@@ -635,7 +635,7 @@ test.describe("the settings page in a screenshot", () => {
     await expect(questions(page)).toBeVisible();
 
     const directory =
-      process.env["YUNARI_CAPTURE_DIR"] ?? "../../docs/evidence/screenshots";
+      process.env["YUNARI_CAPTURE_DIR"] ?? "../../test-results/captures";
     const name = `settings-theme-question-${testInfo.project.name}.png`;
     const screenshot = await page.screenshot({
       fullPage: true,

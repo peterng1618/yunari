@@ -59,7 +59,7 @@ describe("the live mark", () => {
   }
 
   it("shows no live mark when the host's state is unknown", () => {
-    // The failure DESIGN.md §9's last line forbids: an unread host rendered as a
+    // The failure the design forbids: an unread host rendered as a
     // claim. Red if the mark is drawn without asking the store first.
     const mounted = mount(stubStore({ kind: "unknown" }));
     expect(mounted.querySelector(".editor-shell-live")).toBeNull();

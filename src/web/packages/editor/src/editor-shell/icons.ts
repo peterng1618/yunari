@@ -69,7 +69,7 @@ import type { RailSlot } from "./rail.js";
 export type { LucideIcon };
 
 /**
- * The chrome's one icon vocabulary (DESIGN.md §6): one family (lucide), one weight
+ * The chrome's one icon vocabulary: one family (lucide), one weight
  * rule, and one place that decides either.
  *
  * **This is the vocabulary, and the one place a chrome glyph's family and
@@ -87,8 +87,8 @@ export type { LucideIcon };
  * rather than the React components.
  */
 
-/** §6's weight rule: the stroke rises as the glyph shrinks, so the rendered
- *  weight stays optically even. The tiers are the drawing's own. */
+/** The weight rule: the stroke rises as the glyph shrinks, so the rendered
+ *  weight stays optically even. The tiers are its own. */
 export function glyphStrokeWidth(size: number): number {
   if (size <= 10) return 2;
   if (size <= 13) return 1.8;
@@ -98,8 +98,8 @@ export function glyphStrokeWidth(size: number): number {
 /**
  * A chrome glyph, and the one place its weight is set.
  *
- * `filled` carries **two** things §6 separates, and neither is a stroke weight:
- * §6's own escape where a stroke would be illegible at 12px (the record dot, the
+ * `filled` carries **two** things the icon set separates, and neither is a stroke weight:
+ * Its own escape where a stroke would be illegible at 12px (the record dot, the
  * live check), and the **on/off channel of a binary state** — the font
  * picker's favourited star, the layer row's locked lock (`vg-024`, "locked is a
  * filled lock"). The second is not a licence to fill a glyph for looks; it is
@@ -107,7 +107,7 @@ export function glyphStrokeWidth(size: number): number {
  * second glyph or a second weight.
  *
  * Every glyph is `aria-hidden`: an icon-only control carries its name on the
- * button (§6), and a decorative mark beside a word is not read twice.
+ * button, and a decorative mark beside a word is not read twice.
  */
 export function Glyph(props: {
   readonly icon: LucideIcon;
@@ -123,11 +123,11 @@ export function Glyph(props: {
   });
 }
 
-/** DESIGN.md §7.2's stack: a card on the canvas is an arbitrary group of elements,
+/** The design's stack: a card on the canvas is an arbitrary group of elements,
  *  so its row cannot depict it and gets the stack glyph and its name. One glyph
  *  in one place — the rail's Composition slot, the layer row's group mark and
  *  Task 3's `KIND_GLYPHS.group` are all this constant. `Layers2`, not `Layers`:
- *  three planes smudge at 13px, the layer row's size, and the drawing stacks
+ *  three planes smudge at 13px, the layer row's size, and the glyph stacks
  *  two. */
 export const STACK_GLYPH: LucideIcon = Layers2;
 
@@ -140,7 +140,7 @@ export const BACKGROUND_GLYPH: LucideIcon = Wallpaper;
  *  carries. */
 export const VIDEO_GLYPH: LucideIcon = Play;
 
-/** §7.2's page, the Document slot. */
+/** The page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
 export const PALETTE_GLYPH: LucideIcon = Palette;
@@ -160,13 +160,13 @@ export const SETTINGS_GLYPH: LucideIcon = Settings;
 /** A menu's tick. */
 export const CHECK_GLYPH: LucideIcon = Check;
 
-/** The two diagnostic severities (§6's icon-only rule does not apply — the word
+/** The two diagnostic severities (the icon-only rule does not apply — the word
  *  follows the glyph, so this is a mark beside a sentence). */
 export const ERROR_GLYPH: LucideIcon = OctagonAlert;
 export const WARNING_GLYPH: LucideIcon = TriangleAlert;
 
 /** The Wallpaper Engine cards' one action per kind, and the states it wears
- *  (spec R5). `FolderInput` says the scene is taken into a local project, which
+ *  (R5). `FolderInput` says the scene is taken into a local project, which
  *  is an import rather than the store's plain `Folder` for opening one. */
 export const CONVERT_SCENE_GLYPH: LucideIcon = FolderInput;
 export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;
@@ -240,33 +240,32 @@ export const PREVIEW_GLYPH: LucideIcon = Maximize2;
 
 /** The Assets pane's two card actions that have no other surface: putting a
  *  file on the canvas, and swapping the bytes of the asset already chosen. The
- *  pair is the drawing's (`assets-pane.html`) — a square with a plus, and the
- *  refresh arrows. */
+ *  pair is a square with a plus and the refresh arrows. */
 export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
 export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
 
-/** The store cell's four actions, from the drawing's facts band
- *  (`mockups/current/store-themes.html`): a folder for opening the item, a
- *  monitor for assigning it to a display, a download for exporting it as a
- *  package, and the bin for deleting it — the last is the one the mark in §4
- *  paints `--hot`, which the control's own `destructive` flag carries. */
+/** The store cell's four actions, from the facts band: a folder for
+ *  opening the item, a monitor for assigning it to a display, a download for
+ *  exporting it as a package, and the bin for deleting it — the last is the one
+ *  the mark in the palette paints `--hot`, which the control's own `destructive` flag
+ *  carries. */
 export const OPEN_ITEM_GLYPH: LucideIcon = Folder;
 export const ASSIGN_ITEM_GLYPH: LucideIcon = Monitor;
 export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
 export const DELETE_ITEM_GLYPH: LucideIcon = Trash2;
 
-/** The online cell's *Install* control, which the drawing marks with an upload
- *  into a tray (`store-browse.html`). *Update* wears the download arrow, the
- *  same `EXPORT_ITEM_GLYPH` the export action does — the drawing draws one mark
- *  for "take this in" whichever surface it is on. */
+/** The online cell's *Install* control, which the copy marks with an upload
+ *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`
+ *  the export action does — one mark for "take this in" whichever surface it is
+ *  on. */
 export const INSTALL_ITEM_GLYPH: LucideIcon = Upload;
 
 /** The way out of a surface that draws no title bar to put one in: the item
- *  modal floats it over the stage's corner (`store-detail.html`), where an × is
- *  the only mark that says "this closes" without a word beside it. */
+ *  modal floats it over the stage's corner, where an × is the only mark that
+ *  says "this closes" without a word beside it. */
 export const CLOSE_GLYPH: LucideIcon = X;
 
-/** The rail's five slot glyphs, from §7.2's table. Keyed by the rail's own slot
+/** The rail's five slot glyphs, from the table. Keyed by the rail's own slot
  *  union so a new slot is a compile error here rather than a slot with no
  *  mark. Exported because the pane each slot opens wears the same glyph in its
  *  title bar — two owners of "which glyph names this pane" would be two places
@@ -286,7 +285,7 @@ export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
  * half sees the other's failure — a type-level totality is invisible to a
  * focused run, which is what a plan executes.
  *
- * **§6's own rule for the group arm**: a group is an arbitrary set of elements,
+ * **its own rule for the group arm**: a group is an arbitrary set of elements,
  * so it cannot be depicted — it gets the stack glyph and its name. That is why
  * `group` is `STACK_GLYPH` and nothing else, and why no entry here may be
  * derived from what a row happens to hold.
@@ -332,15 +331,14 @@ export const TWISTY_GLYPHS: Readonly<
   expanded: ChevronDown,
 };
 
-/** The pager's two steps, from the drawing's own chevrons
- *  (`mockups/current/store-themes.html`): each points the way the press goes,
- *  and the step that would leave the listing is the disabled one rather than a
- *  missing glyph. */
+/** The pager's two steps, from its own chevrons: each points the way
+ *  the press goes, and the step that would leave the listing is the disabled
+ *  one rather than a missing glyph. */
 export const PREVIOUS_PAGE_GLYPH: LucideIcon = ChevronLeft;
 export const NEXT_PAGE_GLYPH: LucideIcon = ChevronRight;
 
 /** Locked is a filled lock, unlocked an outline one: at this size the outlines
- *  differ only by a gap in the shackle, so the state rides the fill (§6) rather
+ *  differ only by a gap in the shackle, so the state rides the fill rather
  *  than a second glyph or a second weight. */
 export const LOCK_GLYPH: Readonly<
   Record<

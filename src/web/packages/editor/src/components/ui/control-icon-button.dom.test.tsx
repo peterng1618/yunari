@@ -46,8 +46,8 @@ beforeAll(() => {
  * An icon-only control's name and its tooltip are one string, by construction
  * rather than by hand.
  *
- * DESIGN.md §6 makes it a defect for a glyph button's tooltip and accessible name to
- * disagree, and §6 rule 2 says the tooltip **is** the label. The defect this
+ * The design makes it a defect for a glyph button's tooltip and accessible name to
+ * disagree, and the icon-label rule says the tooltip **is** the label. The defect this
  * file catches is a call site that wires the two by hand, so the assertions run
  * over **mounted surfaces** rather than over `ControlIconButton` alone — a sweep
  * of the component would say nothing about the dock, the rail or a layer row,
@@ -90,7 +90,7 @@ function visibleText(control: Element): string {
 }
 
 /**
- * §6's icon-only control: a focusable thing whose whole content is a glyph and
+ * The icon-only control: a focusable thing whose whole content is a glyph and
  * which shows no word of its own.
  *
  * The `svg` clause draws that line. Drop it and the population grows by the
@@ -103,7 +103,7 @@ function visibleText(control: Element): string {
  *
  * **Not every control with no text is one.** The gradient editor's stop dots
  * are focusable, carry an accessible name and draw no word — and they are drag
- * handles on a track, not glyph buttons, so §6 rule 1 does not reach them and
+ * handles on a track, not glyph buttons, so the icon-choice rule does not reach them and
  * neither does this census. They *are* mounted in the fleet below; the clause
  * is why they are not counted. A glyph is what makes a control icon-only; the
  * dots draw none, and rule 2's tooltip there would be a box opening in the
@@ -186,7 +186,7 @@ describe("an icon-only control's name and its tooltip", () => {
   });
 
   it("says how many icon-only controls carry no tooltip at all", () => {
-    // **Not an assertion of a rule; the record.** §6 rule 1 decides per glyph,
+    // **Not an assertion of a rule; the record.** the icon-choice rule decides per glyph,
     // so the number is whatever the adjudication settled, and this case exists
     // so it cannot change unnoticed. It is read over the whole mounted tree
     // rather than over `reachable`, because the first case is about what a
@@ -194,7 +194,7 @@ describe("an icon-only control's name and its tooltip", () => {
     //
     // **Settled at 0.** The tree's twisty and its group-entry button gained the
     // tooltip that is their label, each through the control set's one owner of
-    // the pairing (§6 rule 1: a twisty is unambiguous, and the door glyph is
+    // the pairing (the icon-choice rule: a twisty is unambiguous, and the door glyph is
     // made unambiguous *by* the tooltip). The gradient editor's stop dots are
     // mounted in the fleet below and carry no tooltip **by ruling**: a drag
     // handle is not a glyph, so rule 1 never applied to it. What keeps them out

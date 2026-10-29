@@ -234,12 +234,12 @@ describe("the Keyboard tab", () => {
     expect(readShortcutOverrides(localStorage)).not.toHaveProperty(
       "publish.surface",
     );
-    // §9: the refusal states its reason, and names the action it belongs to.
+    // the refusal rule: the refusal states its reason, and names the action it belongs to.
     expect(reason(mounting), "the refusal is in words").not.toBe("");
     expect(reason(mounting)).toContain(SHORTCUT_LABELS["file.save"]);
     // **And it renders in the row that refused, not at the tab's foot.** The
     // foot node sat up to twenty scrollable rows from the row the author is
-    // on — a refusal nobody can see is a refusal not stated (§9). Put it back
+    // on — a refusal nobody can see is a refusal not stated. Put it back
     // at the foot and this line is the one that fails.
     expect(
       row(mounting, "publish.surface").querySelector(
@@ -247,7 +247,7 @@ describe("the Keyboard tab", () => {
       ),
       "the refusal renders in the armed row",
     ).not.toBeNull();
-    // §5.3: the row is still there, carrying its old chord rather than gone,
+    // the refusal rule: the row is still there, carrying its old chord rather than gone,
     // and it is still the row the next press will be recorded into.
     expect(armed(mounting)).toBe(true);
     // **The capture's press and nothing else's.** Without this the manager
@@ -314,7 +314,7 @@ describe("the Keyboard tab", () => {
 
     expect(reason(mounting)).toBe(uiCopy.settings.keyboardAltQualified);
     expect(readShortcutOverrides(localStorage)).toEqual({});
-    // §5.3: refused, not vanished — the row is still armed and still says it is
+    // the refusal rule: refused, not vanished — the row is still armed and still says it is
     // listening, so the author can press the chord they meant.
     expect(armed(mounting)).toBe(true);
     expect(printed(mounting, "help.shortcuts")).toBe(
@@ -383,7 +383,7 @@ describe("the Keyboard tab", () => {
   it("refuses a chord the action cannot honour, in words", async () => {
     const mounting = mount(localStorage);
     // `file.save` fires while a text field has focus by design, so a bare
-    // letter would make it stop — the §2.3 change a preference may not spell.
+    // letter would make it stop — the missing-reading rule: a preference may not spell it.
     await click(armControl(mounting, "file.save"));
 
     await press(row(mounting, "file.save"), { key: "s" });

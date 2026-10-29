@@ -227,7 +227,7 @@ describe("the Assets pane", () => {
   it("groups cards by kind and marks the chosen row's actions", async () => {
     const { host } = mount([IMAGE, OTHER_IMAGE, FONT]);
 
-    // The mockup's order: Fonts, then Images. The font is declared even though
+    // The pane's order: Fonts, then Images. The font is declared even though
     // no object can hold it, which is the list-is-declarations rule.
     expect(headings(host)).toEqual([
       uiCopy.assets.category.font,
@@ -236,7 +236,7 @@ describe("the Assets pane", () => {
 
     await selectCard(host, "photo.jpg");
 
-    // Five actions on the chosen image, in the drawing's order, and none on the
+    // Five actions on the chosen image, in the pane's order, and none on the
     // row the author moved off. A font's own row draws Create type preset
     // instead of the two canvas writes it cannot perform.
     expect(actionNames(host, "photo.jpg")).toEqual([

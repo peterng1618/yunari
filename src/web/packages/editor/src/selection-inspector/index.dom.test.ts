@@ -528,10 +528,10 @@ describe("the selection inspector", () => {
       "[data-yunari-opacity]",
     )!;
 
-    // A bounded number is DESIGN.md's slider (§5) — Fabric's own 0–1, projected
+    // A bounded number is the design's slider — Fabric's own 0–1, projected
     // here as 0–100 — so the control is a track and the well reads the
-    // percentage. `inspector-controls.html` names opacity as its example, and
-    // the glass blur drew the same conclusion one directory away.
+    // percentage. Opacity is the example, and the glass blur drew the same
+    // conclusion one directory away.
     expect(opacity.type).toBe("range");
     expect(opacity.getAttribute("min")).toBe("0");
     expect(opacity.getAttribute("max")).toBe("100");
@@ -706,7 +706,7 @@ describe("the selection inspector", () => {
   });
 
   /** The two ways a selection can go away, which the column must treat
-   *  differently — spec §541 and §552's "the right column empties on deselect".
+   *  differently — the right column empties on deselect.
    *
    *  The previous version of this test never dropped the selection, so it
    *  passed whichever branch `target()` took; these two fail if the branch is
@@ -1167,7 +1167,7 @@ describe("the column's sections", () => {
     // rebuilding it: focus is kept by the element surviving, the same way the
     // name field keeps its caret. The imperative body deliberately did not
     // restore focus here, because doing so re-opened the glass control's reason
-    // popup — but the reason is words in the row now (DESIGN.md §5.3), owned by plan
+    // popup — but the reason is words in the row now, owned by plan
     // 1's `ControlRow`, so there is no popup left to re-open.
     const after = host.querySelector<HTMLElement>(
       "[data-yunari-glass-enabled]",
@@ -1312,7 +1312,7 @@ describe("the column's sections", () => {
     // ask and none of them stands a header over nothing. **An inspector may be
     // empty**: until item 17 removed the read-only section, a locked object kept
     // one and this column never showed zero sections, so the empty answer is the
-    // one §7.4's rule and the removed section together produce. The lead block
+    // one the rule and the removed section together produce. The lead block
     // above the sections still names the lock.
     expect(locked.get("locked")).toBe(true);
     expect(host.querySelector("[data-yunari-locked]")).not.toBeNull();
@@ -1344,7 +1344,7 @@ describe("the column's sections", () => {
     expect(inSection("layer", '[data-yunari-geometry="width"]')).toBeNull();
     // The deliberate bleed toggle left Position with its mark, and the user
     // ruled it out of every surface rather than only the display
-    // (`docs/decisions/0069`, `vg-578`). Asserted rather than left to the
+    // (`vg-578`). Asserted rather than left to the
     // absence of a symbol, because this row is where it used to be.
     expect(inSection("position", "[data-yunari-bleeds]")).toBeNull();
   });
@@ -2145,7 +2145,7 @@ describe("the column a kind gets", () => {
    * (`EVERY_OBJECT` and `text`'s Type-preset row) and
    * `data-yunari-reveal-type-presets` (`text`). It named 17 until Task 25.7,
    * which removed `data-yunari-bleeds` from `EVERY_OBJECT` with the deliberate
-   * bleed control (`docs/decisions/0069`). The pre-plan inspector at
+   * bleed control. The pre-plan inspector at
    * `190dc1a4` rendered **46** distinct `data-yunari-*` names. The census
    * (`git grep -oh 'data-yunari-[a-zA-Z-]*' 190dc1a4 --
    * src/web/packages/editor/src/selection-inspector | sort -u | wc -l`) prints
@@ -2352,8 +2352,7 @@ describe("the column a kind gets", () => {
         // that offered one would write a clip nothing there can hold.
         expect(host.querySelector("[data-yunari-crop]")).toBeNull();
         // The toggle used to be offered for every selection, containers included,
-        // because every object can overhang. Nothing is marked any more
-        // (`docs/decisions/0069`).
+        // because every object can overhang. Nothing is marked any more.
         expect(host.querySelector("[data-yunari-bleeds]")).toBeNull();
       },
     );

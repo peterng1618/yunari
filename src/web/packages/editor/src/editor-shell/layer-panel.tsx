@@ -10,11 +10,11 @@ import { Glyph } from "./icons.js";
 
 /**
  * The Composition pane's footer toolbar: the object commands the registry holds
- * for this pane (§7.3, "a pane footer is bounded by its pane"). It is a Pane
+ * for this pane (the pane rule, "a pane footer is bounded by its pane"). It is a Pane
  * footer rather than a row of the tree, so it belongs to the pane and not to the
  * list. The pane still scrolls as one — the scroll box is
  * `aside.editor-shell-panel`, which holds header, body and this footer — so it
- * does not stay pinned while the list moves under it. That gap against §7.7 is
+ * does not stay pinned while the list moves under it. That gap against the overflow rule is
  * filed as `vg-208`; the aside is deliberately the single scroller.
  *
  * **With nothing selected the registry's whole command set is drawn, disabled**

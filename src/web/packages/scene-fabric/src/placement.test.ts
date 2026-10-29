@@ -8,7 +8,7 @@ import { placementFor, withinGroup } from "./placement.js";
  * Small, and the most consequential arithmetic in the package: every object in
  * every scene goes through it, and getting it wrong displaces content by half
  * its own size — which looks like a layout bug in the document rather than a
- * renderer bug, and is why spec 0013 insists there is exactly one copy.
+ * renderer bug, and is why there is exactly one copy.
  */
 
 function box(overrides: Partial<PlanBox> = {}): PlanBox {

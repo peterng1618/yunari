@@ -25,7 +25,7 @@ import {
 /**
  * What each run control writes.
  *
- * The editor is React now ([ADR-0039]), so these drive the real controls — a
+ * The editor is React now, so these drive the real controls — a
  * select's trigger, a segmented option, a field's blur — through the same write
  * functions `index.ts`'s port calls. The two cases that need the editor to keep
  * its own state across a re-publish live in `runs.dom.test.tsx`.

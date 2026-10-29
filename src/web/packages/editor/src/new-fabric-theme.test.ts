@@ -37,11 +37,10 @@ import { STARTER_BACKDROP_PATH } from "./starter-backdrop.js";
 type ObjectJson = Readonly<Record<string, unknown>>;
 
 /**
- * The reference artboard and the box of every card on it, measured off
- * `docs/superpowers/specs/2026-09-26-reference-theme-target.png`: the card
- * borders were located by the transition of its two-pixel outline. Stated here
- * rather than imported from the builder, so the assertion is against the
- * measurement and not against whatever the builder happens to emit.
+ * The starter's authored artboard and the box of every card on it: the card
+ * borders come from the starter's two-pixel outline. Stated here rather than
+ * imported from the builder, so the assertion is against the authored geometry
+ * and not against whatever the builder happens to emit.
  *
  * The id is the card's **group**, because the group is the card and carries the
  * panel's measured box; the frosted rectangle inside it is one part.
@@ -166,7 +165,7 @@ describe("the new Fabric document", () => {
       mono: { family: "Consolas, monospace", weight: "400" },
     });
     // Every run carries its own size; a run without one would fall to the
-    // artboard default, which is not what the reference measured.
+    // artboard default, which is not the starter's authored size.
     for (const run of nodesOf(document_).flatMap(
       (object) =>
         (
@@ -542,7 +541,7 @@ describe("the new Fabric document", () => {
     await canvas.dispose();
   });
 
-  it("gives every card the radius and border width measured off the reference", () => {
+  it("gives every card the starter's radius and border width", () => {
     const theme = createNewFabricTheme();
     // A card is a stroked Rect; the background is a Rect too, so the match set
     // is filtered rather than assumed. The frosted rectangle is inside its card
@@ -553,9 +552,9 @@ describe("the new Fabric document", () => {
     expect(cards.map((card) => card["id"]).sort()).toEqual(
       CARDS.map((card) => card.id.replace("group-", "")).sort(),
     );
-    // Measured off docs/superpowers/specs/2026-09-26-reference-theme-target.png:
+    // The starter's authored geometry:
     // the top border occupies rows 187-188 and the left border columns 40-41 of
-    // the 1672-wide reference, and first appears 10px in from the corner.
+    // the 1672-wide artboard, and first appears 10px in from the corner.
     for (const card of cards) {
       expect(card["strokeWidth"], String(card["id"])).toBe(2);
       expect(card["rx"], String(card["id"])).toBe(10);
@@ -611,8 +610,8 @@ describe("the new Fabric document", () => {
       (object) => trackingOf(runsOf(object)[0]) !== undefined,
     );
 
-    // Tracked: the wordmark and the overline under it. Both values are measured
-    // off the reference image — see `starterTracking`.
+    // Tracked: the wordmark and the overline under it. Both values are the
+    // starter's authored tracking — see `starterTracking`.
     expect(trackedObjects.map((object) => object["id"])).toEqual([
       "wordmark",
       "strapline",
@@ -784,7 +783,7 @@ describe("the new Fabric document", () => {
     // The authored radius itself, not just "some radius": 40 is the value that
     // dissolves the sunset's structure behind the card, and a round trip that
     // quietly fell back to a default would leave a panel that blurs without
-    // diffusing — see `docs/decisions/0013-frost-is-diffusion-grain-saturation-and-an-edge.md`.
+    // diffusing — see the round-trip case.
     const authored = childrenOf(cpuCard()).find(
       (object) => object["id"] === "cpu-card",
     )?.["yunariGlass"];

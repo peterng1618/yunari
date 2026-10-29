@@ -175,7 +175,7 @@ describe("SnapManager", () => {
     const { canvas, snapping } = setup();
     // `IGNORED_IDS` is the authority on which id is the plate, and the rule
     // still holds for a plate an author draws: the starter no longer authors
-    // one (its backdrop is packaged media below the canvas, `0011`), so this
+    // one (its backdrop is packaged media below the canvas), so this
     // can no longer be derived from the starter's own scene.
     const plateId = IGNORED_IDS[0];
     expect(plateId).toBeTypeOf("string");

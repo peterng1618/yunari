@@ -427,7 +427,7 @@ test.describe("hosted player over the real host", () => {
   //
   // The number in the comment used to be the failing value. It is now the
   // authored one: `yunariText.box` is the owner, and Fabric's own width is a
-  // cache it re-asserts. See `docs/decisions/0003`.
+  // cache it re-asserts.
   //
   // The starter is saved through the host's own store rather than a fixture,
   // because the three objects are the starter's own and no fixture has them.
@@ -677,8 +677,8 @@ test.describe("hosted player over the real host", () => {
     // data-diff `update` callback and only assigns it after a render that drew
     // an arc. The display's first render happens before telemetry arrives, so
     // the first sample crossed that read with the flag flipping under a datum
-    // that had been there all along. A gauge with no arc now carries no datum
-    // (`0008`), which turns the crossing into an `add` — and the editor, which
+    // that had been there all along. A gauge with no arc now carries no datum,
+    // which turns the crossing into an `add` — and the editor, which
     // mounts with a sample in hand, never took that path at all.
     await saveStarterThroughTheHost(page);
     await openDisplayWithLiveData(page);
@@ -771,7 +771,7 @@ test.describe("hosted player over the real host", () => {
     //
     // **A host without that sensor is the other half of the claim.** Linux CI
     // has no LHM and no GPU name, so `gpu.name` never reports; the rule there is
-    // the product's own — a missing reading is not fabricated (§ providers), so
+    // the product's own — a missing reading is not fabricated (providers), so
     // the caption must stay the gap. Requiring a reading made this case a
     // statement about the runner's hardware rather than about the wiring.
     await expect
@@ -1411,7 +1411,7 @@ test.describe("a display fed by the real host", () => {
       );
       await page.waitForTimeout(400);
       await page.screenshot({
-        path: "../../docs/evidence/screenshots/host-theme-thumbnail-desktop-chromium.png",
+        path: "../../test-results/captures/host-theme-thumbnail-desktop-chromium.png",
         fullPage: true,
       });
     }
@@ -1549,7 +1549,7 @@ test.describe("a display fed by the real host", () => {
     // **The panel blurs the photograph, at this mount's scale.** The band is a
     // rectangle in artboard units and `object-fit: cover` puts the whole file
     // over the artboard, so the backdrop under the panel must measure what
-    // that rectangle of the photograph measures. Before 0012 the sampler took
+    // that rectangle of the photograph measures. The sampler used to take
     // a pixel-for-pixel crop of the middle of the file sized by the device
     // rect — the middle 71.8 % here where the element shows all of it — and
     // this read 5.08 against the 7.45 below. The editor, at its 0.3744
@@ -2388,7 +2388,7 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
           "vram-gauge": ratio("vram-gauge", "chroma"),
         },
         // **A gauge without a datum draws no arc, and that is the rule, not a
-        // failure** (`0008`): the reading's text is the gap `—%` until the host
+        // failure**: the reading's text is the gap `—%` until the host
         // reports one. Linux CI has no VRAM provider, so the floor below is
         // asserted only where a datum exists.
         datum: {
@@ -2694,8 +2694,8 @@ function setGroupCaching(page: Page, caching: boolean): Promise<boolean> {
  * and both APIs the controls want are gated on one — but `localhost` IS one, so
  * a run at `http://127.0.0.1:4175` sees the wake lock present and proves
  * nothing about the phone the control is for. The host does serve https beside
- * http on that same port now, from a root it issues itself (`vg-580`,
- * `docs/decisions/0070`), and since `docs/decisions/0076` https is the address
+ * http on that same port now, from a root it issues itself (`vg-580`),
+ * and since https is the address
  * printed first — so the cases here run at the plain origin deliberately: that
  * is the fallback a device without the root certificate still gets, and the
  * last case reads this browser's answer about exactly that origin.
@@ -2975,7 +2975,7 @@ test.describe("the display's own controls", () => {
     // bundle is served here over plain http on the LAN address, so the reading is
     // the browser's answer about the origin rather than a claim about it.
     //
-    // **Which shape that is, since `docs/decisions/0076`.** The printed address
+    // **Which shape that is, since then.** The printed address
     // is https and the plain one beside it is the *fallback*, for a device that
     // has not installed the host's root certificate — so what this case reads is
     // the fallback's answer, and it is still worth reading: the fallback is what
@@ -4662,7 +4662,7 @@ const PLAYER_CONTENT_TYPES: Readonly<Record<string, string>> = {
 /**
  * The built player, over plain http on the LAN address — the origin a display
  * still reaches by opening the address the host prints, which the host answers
- * on the same port as its secure one (`vg-580`, `docs/decisions/0070`). Served
+ * on the same port as its secure one (`vg-580`). Served
  * from the spec rather than by a second host so that the only thing under test
  * is the origin: the display cannot load a theme from here, and does not need
  * to for a reading that is a property of the origin.

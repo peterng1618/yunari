@@ -110,7 +110,7 @@ const MODE_ORDER = [
   "this-pc",
 ] as const satisfies readonly ShellMode[];
 
-/** The switch's id, and the stem of each segment's. §5 rule 5 wants every
+/** The switch's id, and the stem of each segment's. The control-id rule wants every
  *  control to carry an id; the segment's is derived from the mode the way
  *  `useControlIds` derives one from the control it names. */
 const MODE_SWITCH_ID = "yunari-shell-modes";
@@ -118,17 +118,17 @@ const MODE_SWITCH_ID = "yunari-shell-modes";
 const modeSegmentId = (mode: ShellMode): string => `${MODE_SWITCH_ID}-${mode}`;
 
 /**
- * DESIGN.md §5's Segmented, in the header's **bare** form (see 0074).
+ * The design's Segmented, in the header's **bare** form.
  *
  * The one Segmented component (`components/ui/control-segmented.tsx`) is a
- * labelled *row* — §5's 74px label column beside a value cell — and the header
- * drawing (`docs/design/mockups/current/shell.html`) draws this one as a well
+ * labelled *row* — the 74px label column beside a value cell — and the header
+ * draws this one as a well
  * with the three names in it and no label at all, so the group is its own
  * label and the primitive is composed here rather than the row vocabulary
  * growing a fourth shape for one caller.
  *
  * The chosen item is lifted to `--stage` with `--text` — the shared chosen
- * treatment, never an accent fill: §4 allows one accent-filled element per
+ * treatment, never an accent fill: the palette allows one accent-filled element per
  * region and the header's is the publish control.
  */
 function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
@@ -166,7 +166,7 @@ interface ShellHosts {
   /** The Add pane's body: shapes, text and the card library. */
   readonly add: HTMLElement;
   /** The Assets pane: every declared file, its import and placement, and the
-      finder link (DESIGN.md §7.2). */
+      finder link. */
   readonly assets: HTMLElement;
   /** The Tokens pane: the theme's paints and type presets. */
   readonly tokens: HTMLElement;
@@ -197,7 +197,7 @@ export interface ShellLayout {
      *  surface decides whether publishing is on and never holds a document. */
     publish?: PublishSwitch,
   ): void;
-  /** Opens §7's reference sheet. The session owns the `?` dispatcher and never
+  /** Opens the reference sheet. The session owns the `?` dispatcher and never
    *  sees React, so `editor-main` routes the gesture here. */
   showShortcuts(): void;
   /** Opens the asset finder. The chord and the menu row reach the same store
@@ -320,7 +320,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     );
     const [slot, setSlot] = useState<RailSlot>("composition");
     const [collapsed, setCollapsed] = useState(false);
-    /** §7's settings modal, opened by the rail's gear. Local state, like the
+    /** The settings modal, opened by the rail's gear. Local state, like the
      *  palette above: it is a shell surface, not document state, and it is
      *  never serialized. */
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -334,7 +334,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      *  `createShellLayout` made for the live table — and moved from there by
      *  the Keyboard tab, which asks for a new set and writes storage itself. */
     const [overrides, setOverrides] = useState(initialOverrides);
-    /** **The Host mode's status line, as its region publishes it.** §7.6's strip
+    /** **The Host mode's status line, as its region publishes it.** The strip
      *  is the shell's in every mode, so the content is the region's and the
      *  placement is this strip's — the shell draws these two strings rather than
      *  reading the host a second time. `undefined` until the region answers, and
@@ -389,7 +389,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      * your place again after a glance at the assets is the whole cost of it. */
     const scrollOf = useRef(new Map<RailSlot, number>());
     /** The box that scrolls, which is the showing pane's **body** and not the
-     *  column around it (§7.7, `vg-208`): the column clips, so its own
+     *  column around it (the overflow rule, `vg-208`): the column clips, so its own
      *  `scrollTop` is always 0 and the offset has to come off the body inside
      *  it. Only the showing pane's body carries this — the other four are
      *  `hidden`, so their bodies are not scrollable boxes at all. */
@@ -477,20 +477,20 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     return (
       <div className="editor-shell">
         {/* A full-width strip, not a floating card: the header is the window's
-            top edge, and §7.1 gives it document- and editor-level actions only.
+            top edge, and the header rule gives it document- and editor-level actions only.
             The brand and the three menus sit left; the publish control is the
             editor's one filled accent button, on the right. No tagline and no
-            document readout — a per-document fact belongs on the canvas (§7.5),
+            document readout — a per-document fact belongs on the canvas,
             and the readout only grew with the LAN. The shell palette is not
-            here either: §7 makes it a set-once choice and it lives in
+            here either: the shell layout makes it a set-once choice and it lives in
             Settings, at the accepted cost of no at-a-glance readout. */}
         <header className="editor-shell-header">
           <strong>{uiCopy.brand}</strong>
-          {/* §7.1's mode switch, in the header rather than in a strip under it:
-              §7.2 forbids a second horizontal bar, and two stacked rows of
+          {/* The mode switch, in the header rather than in a strip under it:
+              the rail rule forbids a second horizontal bar, and two stacked rows of
               navigation make the first read as chrome rather than a choice. */}
           <ModeSwitch mode={mode} onModeChange={onModeChange} />
-          {/* §7.1: the right-hand region is **per-mode**. The menus and the
+          {/* the header rule: the right-hand region is **per-mode**. The menus and the
               publish chord are the editor's own actions — they act on the open
               document, and neither of the other two modes has one — so a mode
               that has brought no actions of its own shows the switch and
@@ -546,17 +546,17 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 visible title is the slot's own word, as the other four are;
                 the `layers` name is only the DOM handle.
 
-                **Each title bar carries its own list's count (§7.3), and the
+                **Each title bar carries its own list's count, and the
                 list is named at the mount rather than in the pane.** Four of
                 the five panes are imperative hosts, so no React component
                 inside one owns its list and the count has to be sourced here.
                 The source of each:
                 - Composition — the scene's objects, through the bridge's own
-                  `objectCount`, which §7.6's strip reads too. One number, two
+                  `objectCount`, which the strip reads too. One number, two
                   chrome surfaces, and deliberately not a second spelling of it.
                 - Add — the card library's entry count, `CARD_LIBRARY`, not
                   `insertGroups()`'s objects: the pane's insert grid adds
-                  primitives and a text object to the library, and the drawing's
+                  primitives and a text object to the library, and the Add pane's
                   title bar counts the library.
                 - Tokens — the theme's paints, through the bridge's
                   `tokenCount`, whose membership rule `PaintList` shares.
@@ -586,8 +586,8 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               <CompositionPane bridge={store.bridge} />
             </Pane>
             {/* The Add pane's body is one host and one React tree: shapes,
-                text and the card library. Local files belong to the Assets slot
-                (DESIGN.md §7.2). */}
+                text and the card library. Local files belong to the Assets slot.
+                */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}
@@ -644,13 +644,13 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             aria-label={uiCopy.stage.label}
           >
             <Host node={hosts.canvas} />
-            {/* §7.5's two top corners in one row, which is what keeps §7.7's
+            {/* The two top corners in one row, which is what keeps the overflow rule's
                 "clusters cannot collide" true without either knowing the
                 other's width. The row is `pointer-events: none`; the two
                 clusters take it back, so the band between them is still the
                 canvas's. */}
             <div className="editor-shell-stage-top">
-              {/* What the author is editing, in the corner §7.5 gives identity.
+              {/* What the author is editing, in the corner the stage rule gives identity.
                   It reads the store rather than a prop, so a bridge set after
                   the shell mounted — and a rename after that — reaches it too. */}
               <DocumentIdentity store={store} />
@@ -669,7 +669,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             {/* Renders no DOM of its own: it only binds the canvas's own
                 `contextmenu` listener, so it sits with the stage it listens to. */}
             <CanvasContextMenu bridge={store.bridge} />
-            {/* §7's reference, driven by the session's `?` dispatcher through
+            {/* The reference, driven by the session's `?` dispatcher through
                 this external store. Rendering it in the shell rather than a
                 local `useEffect` listener keeps the manager the sole
                 window-level dispatcher. */}
@@ -677,7 +677,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               open={sheetOpen}
               onOpenChange={(next) => sheet.set(next)}
             />
-            {/* §7's settings modal. The gear's route is the rail's
+            {/* The settings modal. The gear's route is the rail's
                 `onOpenSettings`; the modal returns focus to the gear itself.
                 `storage` is the browser-local store the palette already uses. */}
             {/* The one place the finder is mounted. Its chord and its two menu
@@ -744,7 +744,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             the mode rather than the shell choosing between them, so the two
             below mount together and one of them draws — and a mode with no
             surface yet renders an empty section rather than a placeholder
-            standing in for one (§9). */}
+            standing in for one. */}
         {mode === "editor" ? null : (
           <section className="editor-shell-mode" data-yunari-mode-region={mode}>
             {/* **The session is read at the moment the action fires, not at
@@ -772,7 +772,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
             <HostSettingsRegion mode={mode} onStatus={setHostStatus} />
           </section>
         )}
-        {/* §7.6's strip: readouts only, the counts on the left and the save
+        {/* The strip: readouts only, the counts on the left and the save
             state and live mark on the right. The message span sits between the
             counts and the diagnostic, so a report is added to the left's
             reading rather than replacing it — the counts are what the author

@@ -28,8 +28,8 @@ body,
    a bare `:root` and `[data-shell-palette="x"]` are the same node at equal
    specificity, so nothing but order picks between them. `palette.ts` owns the
    resolution rule and this mirrors its outcome for the one paint CSS reaches
-   before `applyShellPalette` writes the attribute; decision 0035 rejected a
-   second owner of the mapping, which is what an inline script resolving the
+   before `applyShellPalette` writes the attribute; a second owner of the
+   mapping was rejected, which is what an inline script resolving the
    palette ahead of the bundle would have been. */
 :root {
   --shell-surface: #eff9f2bf;
@@ -91,7 +91,7 @@ body,
    Four tokens, down from fifteen (`vg-552`). The eleven that went —
    `--yunari-text`, `-panel-bg`, `-panel-border`, `-control-border`,
    `-input-bg`, `-muted`, `-selection-bg`, `-accent`, `-accent-dim` and
-   `-guide` — each named a job the React control set now holds through §4's
+   `-guide` — each named a job the React control set now holds through the palette's
    roles, so every one was a declaration no rule read: the knob that lies
    `--shell-flat` was (`vg-312`). `--yunari-canvas-bg` went with the stage's
    own background: the stage paints `--stage`, and nothing else read the
@@ -131,7 +131,7 @@ body,
 
 /* The dark half of the base frame: a dark-reporting OS resolves `graphite`, the
    shell's default. A media query cannot share a selector list with the palette
-   block it mirrors, so graphite's colours and §4 roles are written a second
+   block it mirrors, so graphite's colours and the palette roles are written a second
    time here, and `editor-shell.tokens.test.ts` compares the two token for
    token. Both base rules precede every palette block, whose values must win at
    equal specificity — the dark one included: it matches the root with a palette
@@ -212,25 +212,25 @@ body,
      token above and at the value `:root` already gave it, so the dark base can
      carry graphite's. */
   --yunari-control-bg: #f5f1e8;
-  /* DESIGN.md §4's role vocabulary, aliased per palette and never once at `:root`:
+  /* The design's role vocabulary, aliased per palette and never once at `:root`:
      an alias is substituted where it is declared, so a root-only declaration
      would pin a subtree that re-declares `--shell-*` — the swatch chip — to
      the live palette. Nothing is renamed and no `--shell-*` is removed; this
      block's thirteen lines are repeated in each palette below for that reason.
-     All thirteen of §4's roles are declared though three of them have no
+     All thirteen of the roles are declared though three of them have no
      consumer yet, on the user's instruction: a DESIGN.md-named token the code
      lacks gets declared rather than worked around, which reverses the earlier
      "nothing declared for nothing" ruling recorded here.
      `--bg` and `--stage` are `background` values and not `color`s: light makes
      them a gradient, the other five a flat colour (graphite's three-layer
-     gradient retired with plan 7 Task 4, the drawing's ground being flat — §7.5
+     gradient retired with plan 7 Task 4, the ground being flat — the stage rule
      permits either). A surface paints either with the `background` shorthand,
      never with a `bg-*` utility, which sets a *colour* and fails silent on a
      gradient.
      `--faint` and `--edge-2` are derived rather than hand-tuned six times,
      because "tertiary" is a relationship to `--muted` and a fainter boundary
      one to `--edge`, not seventh and eighth colours. Graphite is the exception
-     and declares both as the drawing's literals, since graphite is the source
+     and declares both as the literals, since graphite is the source
      the derivation runs from. */
   --bg: var(--shell-backdrop);
   --panel: var(--shell-surface);
@@ -248,32 +248,32 @@ body,
 }
 
 /* ── One source, five derivations ──────────────────────────────────────────
-   **Graphite is the source.** Its values are the drawn shell's own token table
-   (`docs/design/mockups/current/shell.html:17-18`), transcribed role for role
+   **Graphite is the source.** Its values are the drawn shell's own token table,
+   transcribed role for role
    and never tuned here. **Every other palette is derived from graphite**: it
    keeps its own hue for the two roles that carry identity — `--accent`, and the
    edge's own tint — and takes from graphite the *relationships* between the
    rest: the luminance separation of `--bg` → `--panel` → `--panel-2`, where
    `--text`, `--muted` and `--faint` sit on that ladder, and the edge's weight
    against its surface. The primary button is the accent in every palette (the
-   drawing's publish chip is `background:var(--accent); color:#06131a`, `:32`),
-   with a text colour held at §5's 4.5:1 against it. A derived value is computed
+   publish chip is `background:var(--accent); color:#06131a`, `:32`),
+   with a text colour held at the 4.5:1 against it. A derived value is computed
    where CSS can express it — `color-mix` over the palette's own roles — and a
    literal carries its derivation in the comment beside it.
 
-   **What the drawing does not name is not invented.** `--warn`
+   **What no rule names is not invented.** `--warn`
    (`--shell-warm`), `--shell-display` and graphite's one
-   `--yunari-control-bg` override have no drawing token: they are the product's
+   `--yunari-control-bg` override have no palette token: they are the product's
    own roles and the report says so rather than this block inventing a value. */
 [data-shell-palette="graphite"] {
   --shell-backdrop: #0b0e12; /* --bg: the drawn ground is flat */
-  --shell-surface: #12161c; /* --hdr and --panel, one value in the drawing */
+  --shell-surface: #12161c; /* --hdr and --panel, one value across the shell */
   --shell-surface-strong: #171c23; /* --panel2 */
   --shell-edge: #242b34; /* --edge */
   --shell-text: #e8ecf3; /* --text */
   --shell-muted: #8a97ab; /* --muted */
   --shell-accent: #72e0c0; /* --accent */
-  --shell-warm: #f3aa64; /* no drawing token: --warn is the product's own */
+  --shell-warm: #f3aa64; /* no palette token: --warn is the product's own */
   --shell-danger: #ff7e6e; /* --hot */
   --shell-primary-bg: var(--shell-accent); /* the chip's `background` */
   --shell-primary-text: #06131a; /* the chip's `color`, `:32` */
@@ -288,13 +288,13 @@ body,
   --edge: var(--shell-edge);
   --text: var(--shell-text);
   --muted: var(--shell-muted);
-  --faint: #5a6675; /* --faint, the drawing's literal */
+  --faint: #5a6675; /* --faint, the literal */
   --accent: var(--shell-accent);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
   --hdr: var(--shell-surface);
-  --edge-2: #1b212a; /* --edge2, the drawing's literal */
+  --edge-2: #1b212a; /* --edge2, the literal */
 }
 /* `ember`, `moss` and `plum` used to declare an accent and nothing else, so
    their surface, edge and text were editorial's byte for byte — a picker
@@ -317,7 +317,7 @@ body,
    out of it** (`vg-201`): it stayed the pastel it was named for, so a rejected
    draft's reason — the first `text-warn` in the product — read at 1.98, 1.40
    and 1.39:1 on these three papers. The hue is held and the lightness taken
-   down until the value clears §5's 4.5:1, which also moves `--warn`, the role
+   down until the value clears the 4.5:1, which also moves `--warn`, the role
    that aliases it. */
 [data-shell-palette="ember"] {
   --shell-backdrop: #e9cdb4;
@@ -327,11 +327,11 @@ body,
   --shell-text: #2e1a0f;
   --shell-muted: #6d5138;
   --shell-accent: #8f4208;
-  /* §5's 4.5:1 rather than the pastel: `#ff7e6e` read at 1.98:1 on this paper.
+  /* The 4.5:1 rather than the pastel: `#ff7e6e` read at 1.98:1 on this paper.
      The hue is held and the lightness deepened; `#b81400` measures 5.34:1 on
      `--shell-surface` and 4.88:1 on the cluster's 95% fill over the canvas. */
   --shell-warm: #b81400;
-  /* Derived: graphite's `--hot` held at §5's ratio on this palette's own paper.
+  /* Derived: graphite's `--hot` held at the ratio on this palette's own paper.
      40% `#ff7e6e` mixed into ember's `--shell-text` measures 5.7:1 against
      `--shell-accent`'s paper and clears 4.5:1 on it — the mix is what carries
      the derivation, not the number. */
@@ -454,7 +454,7 @@ body,
   --edge-2: color-mix(in srgb, var(--edge) 55%, transparent);
 }
 
-/* The scale, name for name from `DESIGN.md` §2–§4, which
+/* The scale, name for name from the design, which
    is normative: a surface picks a step from here or it is off-scale, and
    `scripts/design-tokens.mjs` is what refuses the literal instead.
 
@@ -508,22 +508,21 @@ body,
   --elev-1: 0 8px 20px #00000059;
   --elev-2: 0 18px 44px #00000099;
   --elev-3: 0 24px 60px #000000b3;
-  /* §3's elevation 3 carries a scrim as well as a shadow,
-     and this is it. A token rather than a §4 role
-     because §4 names no scrim role, and a token rather than the literal the
-     overlay wrote because §10 forbids a hex value in a surface. */
+  /* The elevation 3 carries a scrim as well as a shadow,
+     and this is it. A token rather than a palette role
+     because the palette names no scrim role, and a token rather than the literal
+     the overlay wrote because the palette rule forbids a hex value in a surface. */
   --elev-scrim: #00000073;
-  /* §3's step table is the spacing scale, not the layout one: a region's own
+  /* The step table is the spacing scale, not the layout one: a region's own
      height, a dialog's bounds and the compact-viewport breakpoint are
-     dimensions no step can spell, and DESIGN.md leaves them to §7's diagram and
-     to the drawings. Each is a token rather than a literal because
+     dimensions no step can spell, so each is a token rather than a literal because
      `scripts/design-tokens.mjs` holds this file to the same scale it holds
      every surface consuming it (`vg-274`), so a dimension written here needs a
      name and one owner like any other value. */
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
-  /* The finder's window (spec R1): a centred 1180 x 800 box over the whole
+  /* The finder's window (R1): a centred 1180 x 800 box over the whole
      viewport, and the width below which it becomes the whole window. */
   --finder-width: 1180px;
   --finder-height: 800px;
@@ -531,18 +530,18 @@ body,
   --finder-footer-height: 52px;
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
   --finder-card-min-width: 168px;
-  /* The asset preview's box and right panel are the drawing's own
-     (`assets-preview.html`): the finder's inset-24 size, a 270px facts column,
-     and a fixed stage ground a picture is judged against under every palette.
+  /* The asset preview's box and right panel: the finder's inset-24 size, a
+     270px facts column, and a fixed stage ground a picture is judged against
+     under every palette.
      The header gutter clears the 26px close control. */
   --asset-preview-width: 1132px;
   --asset-preview-height: 852px;
   --asset-preview-panel-width: 270px;
   --asset-preview-header-gutter: 48px;
   --asset-preview-stage: #080a0d;
-  /* The store item's own surface (`store-detail.html`): a 960 x 760 box with a
-     270px facts column. The stage takes every pixel the panel leaves, so the
-     box keeps one height as a person steps between items, and its ground is the
+  /* The store item's own surface: a 960 x 760 box with a 270px facts
+     column. The stage takes every pixel the panel leaves, so the box keeps
+     one height as a person steps between items, and its ground is the
      viewer's fixed dark rather than the canvas paint. */
   --store-item-height: 760px;
   --store-item-panel-width: 270px;
@@ -562,13 +561,11 @@ body,
   --compact-layer-panel-width: 280px;
   /* How wide the Host mode's sections run. A settings form is read, not
      scanned, and its rows are label-and-well pairs that a 2560px window would
-     stretch past reading. The measure is the drawing's own
-     (`docs/design/mockups/current/host-settings.html:43`). */
+     stretch past reading. The measure is its own. */
   --host-settings-measure: 640px;
-  /* The finder's dimensions and the Assets card's mark are the drawings'
-     (`asset-finder-fonts.html`, `assets-pane.html`); the specimen glyph sizes
-     are the two panels' own. The specimen backdrop is fixed on purpose: a font
-     preview has to read the same under every palette, so it cannot be a §4
+  /* The finder's dimensions and the Assets card's mark are the panels' own;
+     the specimen glyph sizes are the two panels' own. The specimen backdrop is fixed on purpose: a font
+     preview has to read the same under every palette, so it cannot be a palette
      role. */
   --font-preview-width: 336px;
   --font-tile-min-height: 152px;
@@ -591,8 +588,7 @@ body,
    `var(--color-shell-surface)` and the browser resolves that at `:root`, which
    loses every subtree that declares `--shell-*` for itself. One does:
    `.editor-shell-palette-swatch` above, a preview bar naming a palette it is
-   not rendering under, which `tests/e2e/shell-appearance.spec.ts` holds.
-   Decision: docs/decisions/0035. */
+   not rendering under, which `tests/e2e/shell-appearance.spec.ts` holds. */
 @theme inline {
   --color-shell-backdrop: var(--shell-backdrop);
   --color-shell-surface: var(--shell-surface);
@@ -605,7 +601,7 @@ body,
   --color-shell-danger: var(--shell-danger);
   --color-shell-primary-bg: var(--shell-primary-bg);
   --color-shell-primary-text: var(--shell-primary-text);
-  /* DESIGN.md §4's roles, so a React surface writes `bg-panel-2`, `text-muted` or
+  /* The design's roles, so a React surface writes `bg-panel-2`, `text-muted` or
      `border-edge` and the utility carries the palette in force. `--color-bg` and
      `--color-stage` are omitted on purpose, and for the same reason: both alias
      `--shell-backdrop`, which light makes a gradient stack, and a colour utility
@@ -639,7 +635,7 @@ body,
    blaming the cascade. */
 @source inline("bg-shell-surface");
 
-/* §4: `--hot` marks destructive affordances, and delete is the only one. This is
+/* the palette: `--hot` marks destructive affordances, and delete is the only one. This is
    the **one** rule that paints the mark, so it is keyed on the shared
    `data-yunari-destructive` (`objectActions.ts`'s `destructiveMarker` owns both
    the attribute name and which actions carry it) and on nothing a surface owns.
@@ -678,31 +674,31 @@ body,
    (`vg-570`), which is no longer hypothetical: measured in the built editor, the
    idle Delete computed the same colour as the live one until this selector
    refused it. A blocked destructive control therefore keeps its own tone, and
-   §4's "a disabled destructive control stays `--faint`" is held by the rule
+   the "a disabled destructive control stays `--faint`" is held by the rule
    rather than by no surface happening to pass `disabled`. */
 [data-yunari-destructive]:not([disabled]):not([aria-disabled="true"]) {
   color: var(--hot);
 }
 
 /* ── One treatment; elevation is the whole difference. ──────────────────────
-   §3's elevation table gives row 0 — no shadow, a 1px `--edge` hairline — to
+   the elevation table gives row 0 — no shadow, a 1px `--edge` hairline — to
    the panels, the rail, the header and the inspector, and row 1
    (`0 8px 20px #00000059`) to the "floating clusters over the canvas". Nothing
-   blurs and nothing lets the canvas read through itself: the drawing paints a
+   blurs and nothing lets the canvas read through itself: the surface paints a
    cluster as a 95% fill of the same charcoal the chrome uses, with no gradient
    and no backdrop filter, so the gradient sheen and the blur the product
-   carried were its own invention rather than the drawing's. **The split is per
+   carried were its own invention rather than the surface's. **The split is per
    element, not per palette**, and every palette paints the same two rows.
 
    - **chrome** — the rail, both panes, the inspector, and the header and status
      strips that declare their own surface — paints the palette's own `--panel`,
      with no gradient and no shadow. `--panel` is opaque in five palettes
-     (Task 4 made graphite's the drawing's `#12161c`); `light` declares
+     (Task 4 made graphite's `#12161c`); `light` declares
      `--shell-surface: #eff9f2bf`, so its chrome is still 75% and still
      composites against the mint ground. That is a derivation Task 4 did not
      reach rather than a literal to invent here, and `vg-310` owns it.
    - a **floating cluster over the canvas** — the dock and the view cluster —
-     adds row 1's shadow and a 95% fill. The 95% is §7.5's derivation for a
+     adds row 1's shadow and a 95% fill. The 95% is the derivation for a
      cluster's fill and the same one `.editor-shell-identity` declares in its
      own rule.
 
@@ -716,7 +712,7 @@ body,
   border: 1px solid var(--shell-edge);
   box-shadow: none;
 }
-/* §3 row 1, and the drawing's own `#0d1116f2`: a 95% fill and the elevation
+/* the spacing scale row 1, and its own `#0d1116f2`: a 95% fill and the elevation
    shadow, with no gradient, no inner sheen and no backdrop filter. The two
    clusters are separated from the chrome by elevation alone. */
 .editor-shell-dock.editor-glass,
@@ -738,14 +734,13 @@ body,
    (`.editor-shell-stage` carries no border). The regions' outer edges carry
    none either: the drawn shell's outer frame is the *window*, and the product
    **is** the window, so no product element carries it (the census records it
-   `no-counterpart`). The two horizontal hairlines are the header's foot (§7.1)
-   and the status bar's head (§7.6), each its own.
+   `no-counterpart`). The two horizontal hairlines are the header's foot
+   and the status bar's head, each its own.
 
    **Every region is square**, and that is a decision rather than an omission
-   (plan 7 Task 3). §7's diagram abuts the four inside one boundary, and §3's
+   (plan 7 Task 3). The diagram abuts the four inside one boundary, and the spacing scale's
    radius scale answers only a surface that is rounded: a radius against a
-   neighbour shows the ground through its corners, which is the island the
-   drawing does not have. So a flush region of the shell consults no radius
+   neighbour shows the ground through its corners, which is the island a flush boundary does not have. So a flush region of the shell consults no radius
    entry, and the four `12px` regions here (`rail`, `panel`/`inspector`,
    `stage`) lost theirs; the one surface that *floats* over the shell — the
    dialog — keeps a scale entry (`--radius-lg`). */
@@ -779,7 +774,7 @@ body,
     var(--text-md) / 1.4 system-ui,
     sans-serif;
 }
-/* §7.1: the header is the window's top edge. A full-width 42px strip at
+/* the header rule: the header is the window's top edge. A full-width 42px strip at
    elevation 0 with a hairline along its foot, rather than the floating glass
    card it was: the chrome's surfaces start flat, and the header is chrome. It
    owns that hairline: the body carries no top border, so the head of the body's
@@ -794,14 +789,14 @@ body,
   border-bottom: 1px solid var(--shell-edge);
   background: var(--shell-surface);
 }
-/* §7.6: the status bar is the window's bottom edge — a full-width strip at
+/* the status-bar rule: the status bar is the window's bottom edge — a full-width strip at
    elevation 0 with a hairline along its head, the twin of the header above the
    stage and the other owner of a body boundary: the body carries no bottom
    border, so the foot of its last row is drawn once, here. It carries readings
    only: the counts the status host is handed, the last diagnostic, save state
    and the live mark. No tools, no commands.
 
-   `min-height`, not `height`: §7.7 forbids ellipsizing a refusal, so a long
+   `min-height`, not `height`: the overflow rule forbids ellipsizing a refusal, so a long
    diagnostic wraps and the strip grows a line rather than cutting the message or
    spilling over the stage. The 26px is the resting height. */
 .editor-shell-status {
@@ -821,7 +816,7 @@ body,
 }
 /* The Host mode's own status line, which its region publishes and the strip
    above places: the display count on the left, the last write's answer held at
-   the right edge, which is where the drawing puts it. §7.6 carries readings
+   the right edge, which is where the surface puts it. The status-bar rule carries readings
    only, and in this mode the readings are the host's. */
 .editor-shell-status-host {
   margin: 0 0 0 auto;
@@ -831,12 +826,12 @@ body,
   letter-spacing: 0.18em;
   color: var(--shell-accent);
 }
-/* §7.1's mode switch: §5's Segmented, in the header's bare form (0074). The
+/* The mode switch: the Segmented, in the header's bare form. The
    well is the control's own — `--panel-2` inside a 1px `--edge` at
    `--radius-md` — and it is the group that carries the three labels, with no
-   row label beside it, because the drawing draws none. The chosen item is
+   row label beside it, because the surface draws none. The chosen item is
    lifted to `--stage` with `--text`: the shared chosen treatment, never an
-   accent fill (§4 — the header's one accent-filled control is the publish
+   accent fill (the palette — the header's one accent-filled control is the publish
    button). The 22px label inside 4px of padding is a 32px box with the border,
    which is what keeps the switch inside the 42px strip. */
 .editor-shell-mode-switch {
@@ -850,7 +845,7 @@ body,
 /* Both colours are on the segment, not on the well it sits in: a `<button>`
    takes its ink from the UA's own rule rather than by inheritance, which is the
    same reason `.editor-shell-rail button` states its own. Neither is reachable
-   by §4's destructive mark — the mode switch renders no registry action — so
+   by the destructive mark — the mode switch renders no registry action — so
    both are in `editor-shell.control-rules.test.ts`'s allowlist. */
 .editor-shell-mode-switch button {
   border: 0;
@@ -884,7 +879,7 @@ body,
 }
 /* The publish facts, in the popover the one button opens. A column, because it
    stacks a sentence, a line of code and a code symbol — and what keeps the
-   header itself one row that never grows with the LAN. `--elev-2` is §3's row
+   header itself one row that never grows with the LAN. `--elev-2` is the row
    for menus and popovers, which is the menu popup's own lift too, so the two
    portalled surfaces float the same way. */
 .editor-shell-publish-popup {
@@ -893,7 +888,7 @@ body,
   gap: 8px;
   /* **Never wider than the window it opened in.** `34ch` is the reading width;
      a narrow window is the harder limit, because the surface anchors to a
-     trigger the header can push past the right edge (§7.1's row does not fit
+     trigger the header can push past the right edge (the row does not fit
      at 390px), and a popup wider than the window is one nobody can read. */
   max-width: min(34ch, calc(100vw - 16px));
   padding: 12px;
@@ -912,7 +907,7 @@ body,
 /* The host switch, inside the surface it belongs to: the header's button opens
    this, and a press that only meant "show me the address" must not stop a
    session. A secondary button, because the header already owns the one filled
-   accent control (§7.1). */
+   accent control. */
 .editor-shell-publish-toggle {
   border: 1px solid var(--shell-edge);
   background: var(--shell-surface-strong);
@@ -1019,7 +1014,7 @@ body,
      No `color` here, deliberately: an item inherits the popup's `--shell-text`
      already, and the declaration that used to restate that (`color: inherit`)
      outranked a bare `[data-yunari-destructive]` at (0,2,0) — which is what
-     kept the menu's Delete from painting §4's `--hot`. */
+     kept the menu's Delete from painting the `--hot`. */
   display: flex;
   align-items: center;
   width: 100%;
@@ -1087,18 +1082,17 @@ body,
    the ground bar beside it fell back to editorial — two bars of one preview
    disagreeing, with no gate able to see it.
 
-   **Two bars, the palette's ground and its accent** — the drawing
-   (`current/settings.html:44-87`) draws both, and one bar cannot show a palette
-   §4 gives two roles. The row that reads the preview's height
-   (`tests/e2e/mockup-parity.ts`) addresses `.editor-shell-palette-swatch`, which
-   is the ground bar; the accent bar is its next sibling. */
+   **Two bars, the palette's ground and its accent** — one bar cannot show a
+   palette the palette gives two roles. The row that reads the preview's height addresses
+   `.editor-shell-palette-swatch`, which is the ground bar; the accent bar is its
+   next sibling. */
 .editor-shell-palette-swatch,
 .editor-shell-palette-swatch-accent {
   flex: 1;
   height: 16px;
   border-radius: var(--radius-sm);
 }
-/* §4's `--bg`, "the window behind everything", as the drawing draws it: the
+/* The `--bg`, "the window behind everything", as the surface draws it: the
    ground has a 1px `--edge` and the accent beside it does not. */
 .editor-shell-palette-swatch {
   border: 1px solid var(--shell-edge);
@@ -1122,24 +1116,24 @@ body,
    than the pane bar's two areas, because the rail is a column beside the pane,
    not a header over it.
 
-   **No gap and no inset.** §7's diagram draws the four regions abutting inside
-   one outer boundary and the drawing draws them flush, so the body carries
+   **No gap and no inset.** The diagram draws the four regions abutting inside
+   one outer boundary and the surface draws them flush, so the body carries
    neither `gap` nor `padding`: a hairline, not a gutter, is what separates
    them. Each interior boundary is owned by exactly one region's own border —
    the rail draws the rail|pane hairline, the pane draws the pane|stage one, the
    inspector draws the stage|inspector one, and the stage draws none — declared
-   where the regions' treatment is (see the §3 elevation-0 block above). Two
+   where the regions' treatment is (see the spacing scale elevation-0 block above). Two
    regions each drawing a border against the other would draw one hairline
-   twice, which is the double line the drawing does not have. */
+   twice, which is the double line the surface does not have. */
 .editor-shell-body {
   display: grid;
   grid-template-areas: "rail panel stage inspector";
-  /* The layer panel is DESIGN.md's 246px (§7.3, "width 246px by default"). The
+  /* The layer panel is 246px wide by default. The
      360px this column carried before was plan 2's own measurement, taken when a
      row carried four things it had not: a 40px kind specimen, the name, and two
      columns naming it — what it *is* (`.yunari-layer-role`) and the key it
      reads (`.yunari-layer-bound`). That 360px was a budget this pane chose, and
-     §7.3 supersedes it, so the pane is re-cut to 246px rather than re-argued.
+     the pane rule supersedes it, so the pane is re-cut to 246px rather than re-argued.
 
      The cost was measured rather than assumed, the same way the 360px was: on
      canvas at 1600×900, every group open, the scrollbar in place, counting
@@ -1169,13 +1163,13 @@ body,
   grid-template-areas: "rail stage inspector";
   grid-template-columns: 46px minmax(0, 1fr) 276px;
 }
-/* The rail: a 46px column of glyph slots, one per pane (DESIGN.md §7.2). It draws
+/* The rail: a 46px column of glyph slots, one per pane. It draws
    no pane content and decides nothing — the shell turns a press into open,
-   swap or collapse. It owns the rail|pane hairline, carried by the §3
+   swap or collapse. It owns the rail|pane hairline, carried by the spacing scale
    elevation-0 block that selects the three body regions.
 
    The 1px `padding-left` is the arithmetic of that hairline, not a second
-   boundary. §7.2 fixes the strip at 46px and the hairline is drawn *inside* it,
+   boundary. The rail rule fixes the strip at 46px and the hairline is drawn *inside* it,
    so the rail DESIGN.md describes keeps 45px of content and the other 1px *is*
    the boundary. A one-sided border with no inset would move the centred slots
    half a pixel left of the box's centre, and the selected slot's accent bar —
@@ -1183,13 +1177,11 @@ body,
    pixel short of that edge. The inset holds the slots where the centre puts
    them, so the hairline draws a boundary without moving the rail's contents.
 
-   The drawing is the one that was over, and plan 7 Task 3 Step 1 corrected it.
-   `shell.html`'s rail is a **46px border-box** — the drawing's own `*` rule sets
-   `box-sizing: border-box`, so the brief's "47px content-box" premise was wrong —
-   but with no left inset its slots sat half a pixel left of the strip's centre
-   and its accent bar half a pixel short of the strip's inner edge. The drawing
-   now carries the same 1px left inset the product does, so the two centre their
-   slots the same way. The product's 46px is DESIGN.md's. */
+   The rail is a **46px border-box** — a `*` rule sets
+   `box-sizing: border-box`, so a "47px content-box" premise would be wrong — but
+   with no left inset its slots would sit half a pixel left of the strip's centre
+   and its accent bar half a pixel short of the strip's inner edge. The 1px left
+   inset below keeps both centred. The product's 46px is DESIGN.md's. */
 .editor-shell-rail {
   grid-area: rail;
   display: flex;
@@ -1201,21 +1193,21 @@ body,
 .editor-shell-rail button {
   position: relative;
   display: flex;
-  /* §5's rail slot: a 36px square, and the one control larger than §5's 26–30px
+  /* The rail slot: a 36px square, and the one control larger than the 26–30px
      icon button. The slot carries the size rather than the glyph, which stays
      the 17px the rest of the chrome uses. */
   width: 36px;
   height: 36px;
   align-items: center;
   justify-content: center;
-  /* §5 rule 6: a slot is glyph-only, so hover is the border it acquires rather
+  /* the glyph-only hover rule: a slot is glyph-only, so hover is the border it acquires rather
      than a wash. The transparent resting border is what keeps the 36px slot the
      same size, so "nothing moves" holds. */
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   /* Closed slots are `--faint`; the selected one lifts to `--accent` with a
-     wash and a 2px bar on the rail's inner edge (DESIGN.md §7.2). */
+     wash and a 2px bar on the rail's inner edge. */
   color: var(--faint);
   cursor: pointer;
 }
@@ -1231,18 +1223,18 @@ body,
    strip's 1px right hairline and its 1px left inset leave 44px of content, and a
    36px slot centred in that sits at 5…41.
 
-   **`-6px`, and not the drawing's `-5px`, because the slot carries §5 rule 6's
+   **`-6px`, and not the earlier `-5px`, because the slot carries the glyph-only hover rule's
    1px transparent resting border.** An absolutely positioned child resolves
    `right` against its containing block's *padding* box, which the border insets
    by its own width: the slot's border box ends at 41 and its padding box at 40,
-   so 46 − 40 is 6. The drawing's spans have no border, which is the whole of the
+   so 46 − 40 is 6. The spans have no border, which is the whole of the
    difference between the two numbers. **Measured on the built bundle**: the slot
    reads 5…41 in a 46px rail and the bar 44…46, its outer edge on the rail's inner
    edge. The value moved with the slot — at 34px the same arithmetic wanted
    `-7px`, and `-6px` there put the bar's outer edge at 44.
 
    The `2px` radius is a **degenerate mark**: its value *is* the bar's own
-   thickness (a 2px bar rounded to half its width), not a step on §3's closed
+   thickness (a 2px bar rounded to half its width), not a step on the closed
    scale, so Task 6's ratchet must exempt it by name rather than by value. */
 .editor-shell-rail button[aria-pressed="true"]::before {
   content: "";
@@ -1254,7 +1246,7 @@ body,
   border-radius: 2px;
   background: var(--accent);
 }
-/* The settings gear, pinned to the foot (DESIGN.md §7.2). `margin-top: auto` is the
+/* The settings gear, pinned to the foot. `margin-top: auto` is the
    whole of the pin: it takes the slack between the slots and the gear, so
    the gear sits on the rail's bottom edge without a spacer element. It is
    `--muted` rather than a closed slot's `--faint`, because it is a real control
@@ -1267,8 +1259,8 @@ body,
   margin-top: auto;
   color: var(--muted);
 }
-/* The pane's own column, and the owner of the pane|stage hairline (the §3
-   elevation-0 block above draws it). It **clips and does not scroll**: §7.7's
+/* The pane's own column, and the owner of the pane|stage hairline (the spacing scale
+   elevation-0 block above draws it). It **clips and does not scroll**: the overflow rule's
    scroll belongs to the pane's body, so the title bar and the footer stay
    outside the box that moves (`vg-208`). The 12px padding stays on the column
    rather than moving onto the body, so the title bar and the footer keep the
@@ -1289,7 +1281,7 @@ body,
 }
 /* `min-height: 0` is the height model both columns need as grid items, so
    neither grows past the row it was given. **The scroll is no longer shared
-   between them** (`vg-208`): §7.7 gives the pane's column no scrollbar at all —
+   between them** (`vg-208`): the overflow rule gives the pane's column no scrollbar at all —
    the pane's *body* owns it, which is what keeps the title bar and the footer
    still — and the inspector's sections are the one scroller they always were. */
 .editor-shell-panel,
@@ -1332,7 +1324,7 @@ body,
    the **only** thing this rule may say about an inspector button. The rest of
    what it used to say — a transparent border and background, a 7px radius, a
    `--shell-text` colour — is a *treatment* of a control, and since the React
-   vocabulary moved into this column the control set owns it (DESIGN.md §5: the well
+   vocabulary moved into this column the control set owns it (the well
    is `--panel-2` inside a 1px `--edge`). Unlayered, the old rule beat the
    utilities and repainted a well in the shell's own colours, which is the second
    owner `vg-298` records; the dock still needs its own. */
@@ -1341,7 +1333,7 @@ body,
 }
 /* The dock's buttons take their *shape* here and their **colour from the dock
    below**, not from a declaration of their own. A `color:` on the button applies
-   directly to it, so it outranks §4's bare `[data-yunari-destructive]` marker
+   directly to it, so it outranks the bare `[data-yunari-destructive]` marker
    rule at (0,1,1) against (0,1,0) — both unlayered author styles, so specificity
    decides. That is exactly how the dock's Delete stopped painting `--hot` when
    the mark's rule stopped being dock-scoped. On the container the buttons
@@ -1353,7 +1345,7 @@ body,
   border-radius: var(--radius-md);
   cursor: pointer;
 }
-/* §5 rule 6: on a glyph-only control the border is what hover raises, not a
+/* the glyph-only hover rule: on a glyph-only control the border is what hover raises, not a
    background wash. The dock's controls carry a 1px transparent resting border
    (set with the 26px square below), so hovering acquires `--muted`. The rail and
    the layer row take the same shape since `vg-224`; a dialog's own button is a
@@ -1416,7 +1408,7 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
-/* The Add pane's insert surface (DESIGN.md §5.2). The group is an eyebrow over a
+/* The Add pane's insert surface. The group is an eyebrow over a
    grid, not a box: the panel-wide `fieldset` above draws a border and a legend
    padding, and both are taken back here rather than left to be out-specified
    per tile. The `fieldset` stays, because a group is what tells the shape Line
@@ -1428,7 +1420,7 @@ body,
   border: 0;
   min-inline-size: 0;
 }
-/* §2's eyebrow, exactly: `--text-2xs`, 600, .11em, muted, uppercase, and it
+/* The eyebrow, exactly: `--text-2xs`, 600, .11em, muted, uppercase, and it
    labels a region rather than a control. */
 .editor-shell-panel .yunari-add-eyebrow {
   display: block;
@@ -1442,7 +1434,7 @@ body,
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
-/* §5.2's four-column diagram grid: `--radius-lg` wells, `--panel-2` inside a
+/* The four-column diagram grid: `--radius-lg` wells, `--panel-2` inside a
    1px `--edge`, at the reference's 4-up density. Four columns is the baseline
    the tiles were measured at in the 246px pane, and density is not itself a
    defect — the card labels are what would overflow, and they ellipsise. */
@@ -1451,7 +1443,7 @@ body,
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-6);
 }
-/* §5's tile. A tile is not a form row: `padding`, `margin`, `min-height` and
+/* The tile. A tile is not a form row: `padding`, `margin`, `min-height` and
    `border-radius` are the control set's, declared here. The panel-wide `button`
    box this used to have to outrank no longer exists (see `.editor-shell-panel`
    below), so these are the tile's own values rather than a neutralisation. */
@@ -1471,7 +1463,7 @@ body,
   color: var(--muted);
   cursor: pointer;
 }
-/* §5 rule 6: hover raises the resting `--edge` to `--muted`. The chart tiles'
+/* the glyph-only hover rule: hover raises the resting `--edge` to `--muted`. The chart tiles'
    lucide glyphs carry `currentColor`, so the tile's colour change reaches them;
    nothing moves and nothing scales. */
 .editor-shell-panel .yunari-add-tile:hover,
@@ -1517,7 +1509,7 @@ body,
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
 }
-/* §5.2's file path at the pane's foot. The preview is bounded rather than
+/* The file path at the pane's foot. The preview is bounded rather than
    sized: an asset's intrinsic dimensions are the author's, so the picture is
    contained inside a fixed height and never stretches the pane to its own
    aspect. */
@@ -1534,7 +1526,7 @@ body,
    `ControlText`), and an unlayered ancestor-wide rule beat the control set's own
    utilities — a 30px bordered input inside a 26px bordered well, the same double
    box the inspector had, and a 4px right margin pulling a well off the column
-   the drawing draws. What is left that still needs a box is one surface's own
+   the surface draws. What is left that still needs a box is one surface's own
    DOM: the Add pane's asset buttons, which no control in the set draws.
    Add a hook rather than widening the selector back to the ancestor. */
 .editor-shell-panel [data-yunari-asset-import],
@@ -1547,9 +1539,8 @@ body,
   padding: 4px 8px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* the type scale — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1565,9 +1556,8 @@ body,
   padding: 4px 6px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* the type scale — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1578,8 +1568,8 @@ body,
    `vg-298`: unlayered, it beat the control set's utilities and drew a second
    border inside a well that already draws one, gave the input a 30px
    `min-height` inside a 26px row and a 4px right margin that pulled a select's
-   well 4px off the column the drawing draws. The React column owns its own
-   treatment now (DESIGN.md §5 — the well *is* the box), and what is left here is the
+   well 4px off the column the surface draws. The React column owns its own
+   treatment now (the well *is* the box), and what is left here is the
    handful of buttons the inspector still renders as plain DOM: the runs'
    add/remove, the chart's remove-series and the crop row — the type-preset
    reveal went with item 17's read-only section (`vg-474`). Add a hook here
@@ -1597,9 +1587,8 @@ body,
   padding: 4px 8px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* the type scale — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1648,7 +1637,7 @@ body,
    **A control that declares its own focus treatment keeps it**, so this is the
    fallback and it sits in a layer *below* the utilities rather than beside them.
    The well `control-well.tsx` draws is that treatment for a field — rounded to
-   the control's own radius, with §5's halo beside it — and the field inside it
+   the control's own radius, with the halo beside it — and the field inside it
    says `outline-none`. Unlayered, this rule beat both and every field in a well
    wore a second, square outline inside the rounded one (`vg-464`); layered, the
    field's own declaration wins and the well is the boundary's one owner. What
@@ -1718,9 +1707,9 @@ body,
   position: fixed;
   inset: 0;
   z-index: 70;
-  /* §3's modal scrim, through the token rather than the `#0009` literal that
-     stood here: fifteen points darker than DESIGN.md's value, and a hex value in
-     a surface, which §10 forbids. Both dialogs render this one rule. */
+  /* The modal scrim, through the token rather than the `#0009` literal that
+     stood here: fifteen points darker than the design's value, and a hex value
+     in a surface, which the design forbids. Both dialogs render this one rule. */
   background: var(--elev-scrim);
 }
 .editor-shell-dialog {
@@ -1729,7 +1718,7 @@ body,
   left: 50%;
   z-index: 71;
   transform: translate(-50%, -50%);
-  /* The scroll cap §7's sheet rides on: sized so the whole table clears a 720px
+  /* The scroll cap the sheet rides on: sized so the whole table clears a 720px
      viewport without scrolling — the reference's last row lands inside it
      rather than moving it — and scrolls rather than running off a shorter one.
      The row is named rather than counted: the count moved twice in this plan
@@ -1743,7 +1732,7 @@ body,
   border-radius: var(--radius-lg);
   background: var(--shell-surface);
   color: var(--shell-text);
-  /* §2's `--text-sm` 12px, "Control text, menu items, list rows" (`vg-317`). A
+  /* The `--text-sm` 12px, "Control text, menu items, list rows" (`vg-317`). A
      dialog is portalled, so without a role of its own every surface inside it
      that declares no size inherits the host document's 13px — the `?` sheet's
      rows landed on `--text-md` for the wrong reason, and the day the host's base
@@ -1752,7 +1741,7 @@ body,
      heading at 11px, the button at `--text-sm`. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
-  /* §3's overlay elevation, the token every floating surface rides on: the
+  /* The overlay elevation, the token every floating surface rides on: the
      scrim is the overlay's, and the popup itself is `--elev-3`. */
   box-shadow: var(--elev-3);
 }
@@ -1802,8 +1791,8 @@ body,
   padding: 0;
 }
 
-/* The asset preview (`assets-preview.html`): the finder's inset-24 box, no title
-   bar, and a fixed stage taking every pixel the 270px panel leaves. It is a
+/* The asset preview: the finder's inset-24 box, no title bar, and a fixed
+   stage taking every pixel the 270px panel leaves. It is a
    viewer rather than a sheet, so it overrides the sheet's width cap, padding
    and scroll: the stage clips and the panel's body scrolls. The way out is the
    panel header's corner, not a title bar's. */
@@ -1843,7 +1832,7 @@ body,
    table, the action on the left and its chord pushed to the right edge as the
    menu rows already read.
 
-   **The lead is the dialog's visible name, and §2
+   **The lead is the dialog's visible name, and the type scale
    gives that `--text-lg` (15px): "Dialog titles".** It is one rule for one role
    across seven sites: two `<h2>`s (`settings.tsx`, `shortcut-reference.tsx`) and
    five `<p>`s — the theme library's chooser lead and its conflict lead
@@ -1851,7 +1840,7 @@ body,
    replace-document prompt — and each of those five `<p>`s renders the **same
    string the dialog already passes as its `label`**, so Base UI's `aria-label`
    carries the name and the `<p>` is its visible half, not body copy. None is
-   uppercase now: §2 — "Nothing else is uppercase: a chord is printed as
+   uppercase now: the type scale — "Nothing else is uppercase: a chord is printed as
    the platform prints it, and a menu row is sentence case" — and all seven sites
    were uppercase at 13px before, so the eyebrow treatment went with the size.
 
@@ -1865,7 +1854,7 @@ body,
   line-height: var(--text-lg--line-height);
   color: var(--shell-text);
 }
-/* A dialog's announced status, on §2's smallest reading step
+/* A dialog's announced status, on the smallest reading step
    (`--text-xs` 11px, "Panel rows, hints, status bar"),
    muted so it reads as an aside beside the dialog's name rather than as a
    second one. The node is present while empty so a screen reader hears it fill
@@ -1879,9 +1868,8 @@ body,
 .editor-shell-dialog section + section {
   margin-top: 14px;
 }
-/* §2's eyebrow, exactly — `--text-2xs`, 600, `.11em`, muted, uppercase, and it
-   labels a region rather than a control. The drawing is
-   `current/settings-keyboard.html:54`. */
+/* The eyebrow, exactly — `--text-2xs`, 600, `.11em`, muted, uppercase, and it
+   labels a region rather than a control. */
 .editor-shell-dialog h3 {
   margin: 0 0 4px;
   font-size: var(--text-2xs);
@@ -1894,19 +1882,19 @@ body,
 .editor-shell-dialog dl {
   margin: 0;
 }
-/* The `dl`'s shared rhythm. The drawings' 16px gap stays: §5 rule 2 moves the
+/* The `dl`'s shared rhythm. The 16px gap stays: the control set rule 2 moves the
    label's *track*, not the space between the label and its value. */
 .editor-shell-dialog dl > div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  /* §3 has no 3 step; the drawing takes 4 (`current/settings-about.html`). */
+  /* the spacing scale has no 3 step, so this takes 4. */
   padding: 4px 0;
 }
-/* §5 rule 2's read-only rows — the About pane's and the `?` sheet's. The
-   Keyboard tab's rebind row is excluded: it is interactive, and keeps the flex
-   row its drawing gives it (`current/settings-keyboard.html:56`). */
+/* the read-only rows — the About pane's and the `?` sheet's. The
+   Keyboard tab's rebind row is excluded: it is interactive, and keeps its flex
+   row. */
 .editor-shell-dialog dl > div:not([data-yunari-shortcut-row]) {
   display: grid;
   grid-template-columns: 74px 1fr;
@@ -1914,7 +1902,7 @@ body,
 .editor-shell-dialog dt {
   color: var(--shell-text);
 }
-/* §5 rule 2 — the label wraps inside the 74px column rather than widening it.
+/* the control set rule 2 — the label wraps inside the 74px column rather than widening it.
    `anywhere` and not `break-word`: only `anywhere` counts the break in the
    element's min-content size, so only it keeps a long word inside the track. */
 .editor-shell-dialog dl > div:not([data-yunari-shortcut-row]) > dt {
@@ -1923,14 +1911,14 @@ body,
 .editor-shell-dialog dd {
   margin: 0;
 }
-/* §5 rule 2 — the value cell is right-aligned. */
+/* the control set rule 2 — the value cell is right-aligned. */
 .editor-shell-dialog dl > div:not([data-yunari-shortcut-row]) > dd {
   text-align: right;
 }
 .editor-shell-dialog kbd {
   font-family: ui-monospace, monospace;
-  /* §2 — `--text-xs` 11px, the reading a hint or a
-     panel row has. A chord mark is mono by §2 and this size is the one
+  /* the type scale — `--text-xs` 11px, the reading a hint or a
+     panel row has. A chord mark is mono by the type scale and this size is the one
      every other chord mark in the shell already takes
      (`.editor-shell-menu-key`, `.editor-shell-primary-key`). */
   font-size: var(--text-xs);
@@ -1944,7 +1932,7 @@ body,
   border-radius: 6px;
   background: var(--yunari-control-bg);
   color: var(--shell-text);
-  /* §2 — `--text-sm` 12px, "Control text": a dialog's own button is a
+  /* the type scale — `--text-sm` 12px, "Control text": a dialog's own button is a
      control, and this rule reaches the two dialogs that draw one directly (the
      settings modal's Close and the `?` sheet's) rather than letting them inherit
      the portalled document's 13px. The three dialogs that wrap their buttons in
@@ -1958,22 +1946,18 @@ body,
   color: var(--shell-accent);
 }
 
-/* The settings modal's own navigation and body (§7). The drawing
-   (`current/settings.html:22-39`) draws a `150px` column of three glyph+label
-   rows beside the panel, the active row lifted and marked with a 2px accent bar
-   on its leading edge; the horizontal word strip this replaces is a control the
-   drawing does not draw.
+/* The settings modal's own navigation and body. A `150px` column of three
+   glyph+label rows beside the panel, the active row lifted and marked with a
+   2px accent bar on its leading edge; the horizontal word strip this replaces is
+   not drawn.
 
-   **The axis is the drawing's because DESIGN.md is silent about it, and §13
-   makes that the drawing's jurisdiction.** §5 opens the vocabulary with
+   **The axis is this surface's rule because the written rules leave it open.**
+   The vocabulary opens with
    "The vocabulary is closed. A control is one of these, or it is not a control."
-   and no *tab* control is in it, so no rule requires the horizontal form; §7
-   fixes the three tabs and what each holds, never their direction; and spec §13
-   (`docs/superpowers/specs/2026-10-08-editor-design-language-design.md:451-454`)
-   says "The mockup governs wherever the written rules are silent. Silence is not
-   permission — it is the drawing's jurisdiction", naming this very strip at
-   `:458-459` ("D1 kept a horizontal tab strip because '§7 fixes the three tabs
-   and what each holds, not their axis'"). The primitive stays Base UI's (`0038`)
+   and no *tab* control is in it, so no rule requires the horizontal form; the design
+   fixes the three tabs and what each holds, never their direction. The column
+   keeps the three rows beside the panel instead of adding a second strip above
+   it. The primitive stays Base UI's
    and only its orientation and treatment change: `data-active` is still the
    primitive's own selected marker, not a second class to keep in step.
 
@@ -1982,8 +1966,8 @@ body,
    row reads (`settings nav — column width`); the nav's inset lives on its rows
    and the hairline between it and the panel is the panel's own `border-left`.
 
-   **The drawing's column ground (`#0e1217`) is not painted.** It is the hex
-   `vg-217` already records: §10 forbids it in a surface and no palette token is
+   **The column ground (`#0e1217`) is not painted.** It is the hex
+   `vg-217` already records: the palette rule forbids it in a surface and no palette token is
    that tone — `--shell-backdrop` is a *gradient* under `light`, so it is a
    ground rather than a column's fill, and every other surface role is lighter
    than the panel, the wrong direction. The column therefore reads on the frame's
@@ -2021,7 +2005,7 @@ body,
 .editor-shell-settings-tab:hover {
   color: var(--shell-text);
 }
-/* The active row's marks are the drawing's: the leading accent bar, a lift, and
+/* The active row's marks: the leading accent bar, a lift, and
    the glyph stroked in the accent while the word keeps the shell's text. The
    lift is a wash of the shell's own text role rather than a hex, the same shape
    the rail's hover uses, so it reads on all six palettes. */
@@ -2050,9 +2034,8 @@ body,
   outline-offset: 2px;
 }
 
-/* The panel's own header, as the Keyboard drawing draws it
-   (`current/settings-keyboard.html`): the tab's glyph in the accent, the panel's
-   name, and the return-to-default action at the trailing edge. The action's own
+/* The panel's own header: the tab's glyph in the accent, the panel's name, and
+   the return-to-default action at the trailing edge. The action's own
    rules are the shared `.editor-shell-keyboard-action` ones; `margin-left: auto`
    is what puts it at that edge. */
 .editor-shell-keyboard-header {
@@ -2075,7 +2058,7 @@ body,
   margin-left: auto;
 }
 
-/* The settings modal's Keyboard tab (§7). The rows reuse the dialog's `dl`
+/* The settings modal's Keyboard tab. The rows reuse the dialog's `dl`
    rhythm — the tab renders the same reference the `?` sheet does — and add the
    three things the sheet has no use for: the armed row's ring, the chip that
    says it is listening, and the two return-to-default buttons.
@@ -2087,15 +2070,15 @@ body,
   align-items: center;
   gap: var(--space-6);
 }
-/* The chord mark, as the Keyboard drawing draws it: a bordered chip at
+/* The chord mark, as the Keyboard tab draws it: a bordered chip at
    `--radius-sm`, inset `4px` on **all four sides**.
 
    **Scoped to this panel, not on the shared `.editor-shell-dialog kbd`.** The
-   `?` sheet renders that rule too and no drawing in `current/` draws the sheet,
+   `?` sheet renders that rule too and no written rule draws the sheet,
    so the sheet's bare mark keeps Task 3's reading rather than being moved by a
-   surface nothing governs. §2 — "Values are mono …
+   surface nothing governs. The type scale — "Values are mono …
    chord marks" — is the predating rule that a chord is a value; the chip is the
-   drawing's, and the class is §5's icon button beside it, not this.
+   surface's, and the class is the icon button beside it, not this.
 
    **The inset is one value, not `4px 6px`.** The parity row reads the element's
    computed `padding` *shorthand*, and `lengthInPx` answers `null` for a mixed
@@ -2109,22 +2092,21 @@ body,
 .editor-shell-keyboard [data-yunari-shortcut-row] {
   /* Centred rather than the sheet's baseline: a row here carries a 26px
      control, and baselining the label against it drops the label. Wrapped,
-     because an armed row also carries §9's refusal and it belongs under the
+     because an armed row also carries the refusal and it belongs under the
      binding rather than beside it. */
   align-items: center;
   flex-wrap: wrap;
   padding: var(--space-4) var(--space-6);
-  /* §3 radius table — `--radius-sm` 4px is
+  /* the spacing scale radius table — `--radius-sm` 4px is
      "Swatches, inline chips, the slider thumb's container" and `--radius-md` 6px
      is "Controls, menu rows, small tiles". **A binding row is a row**, so it
-     takes `--radius-md`, the value the drawing gives it
-     (`current/settings-keyboard.html:56`). It also shapes this row's own ring:
-     the armed row's `outline` follows `border-radius`. */
+     takes `--radius-md`. It also shapes this row's own ring: the armed row's
+     `outline` follows `border-radius`. */
   border-radius: var(--radius-md);
 }
-/* §5.4's boundary, as the row's own ring. The accent is the palette's own
+/* The boundary, as the row's own ring. The accent is the palette's own
    token, the one the tab strip's focus ring already uses, so this clears the
-   contrast §5.4 asks for on every palette rather than only on `graphite`. */
+   contrast the focus rule asks for on every palette rather than only on `graphite`. */
 .editor-shell-keyboard [data-armed] {
   outline: 2px solid var(--shell-accent);
   outline-offset: -2px;
@@ -2135,9 +2117,9 @@ body,
 .editor-shell-keyboard-action {
   padding: var(--space-4) var(--space-8);
   border: 1px solid var(--shell-edge);
-  /* §3 radius table — `--radius-md` 6px is "Controls",
-     and a button is a control; the drawing draws both return-to-default actions
-     at 6px (`current/settings-keyboard.html`), one act being one control. */
+  /* the spacing scale radius table — `--radius-md` 6px is "Controls",
+     and a button is a control; both return-to-default actions draw at 6px, one
+     act being one control. */
   border-radius: var(--radius-md);
   background: var(--yunari-control-bg);
   color: var(--shell-muted);
@@ -2150,8 +2132,8 @@ body,
   border-color: var(--shell-accent);
   color: var(--shell-accent);
 }
-/* §9's refusal, rendered in the armed row rather than spoken in a tooltip
-   (§5.3) or left at the tab's foot, which on a twenty-row table is where the
+/* The refusal, rendered in the armed row rather than spoken in a tooltip
+   or left at the tab's foot, which on a twenty-row table is where the
    author is not looking. It takes its own line under the binding. The node is
    present while the row is armed even when empty, so a screen reader hears the
    alert when it fills, and empty it takes no space. */
@@ -2171,7 +2153,7 @@ body,
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
 }
-/* §7.1's chord on the header's one filled control. It inherits that button's
+/* The chord on the header's one filled control. It inherits that button's
    own text colour rather than taking a shell role: the primary button's text is
    the colour chosen against its accent fill, so the mark keeps the contrast the
    word beside it has. */
@@ -2272,11 +2254,11 @@ body,
   gap: 4px;
   padding-left: calc(6px + var(--layer-depth, 0) * 13px);
   padding-right: 4px;
-  /* The control set's panel rhythm (§3), and the half of `ROW_HEIGHT` in
+  /* The control set's panel rhythm, and the half of `ROW_HEIGHT` in
      `composition-pane.tsx` that CSS owns: the drop-line's `top` is
      `index * ROW_HEIGHT`, so a row that is a different height than that
      constant puts the line half a row off the slot it promises. */
-  /* §3: a row takes `--radius-md` — the scale's entry for menu rows and small
+  /* the spacing scale: a row takes `--radius-md` — the scale's entry for menu rows and small
      tiles — rather than the off-scale `5px` it carried (plan 7 Task 3). */
   height: 26px;
   overflow: hidden;
@@ -2351,7 +2333,7 @@ body,
    so a moved row can never leave a second marker behind.
 
    The `1px` radius is a **degenerate mark**: the line is 2px and its radius is
-   half that, so the value *is* its own thickness rather than a step on §3's
+   half that, so the value *is* its own thickness rather than a step on the spacing scale's
    closed scale. Task 6's ratchet exempts it by name. */
 .yunari-layer-dropline {
   position: absolute;
@@ -2363,12 +2345,12 @@ body,
   background: var(--shell-accent);
   pointer-events: none;
 }
-/* Every pane's chrome (DESIGN.md §7.3): a title bar, a body and an optional footer
+/* Every pane's chrome: a title bar, a body and an optional footer
    toolbar. The section is the pane itself, so `data-yunari-panel` names it.
 
    The pane's own name overrides the panel-wide `h2` rule above it. That rule is
    for a *section* heading inside a pane — uppercase, display serif, a hairline
-   under it — and a pane's name is neither: DESIGN.md §2 reserves uppercase for
+   under it — and a pane's name is neither: the design reserves uppercase for
    section eyebrows and gives a panel title `--text-md` in the UI sans. The
    selector is long because it has to out-rank
    `[data-shell-palette="editorial"] .editor-shell-panel h2`. */
@@ -2387,7 +2369,7 @@ body,
   border-bottom: 0;
   padding-bottom: 0;
 }
-/* **The frame is a column and the body owns the scroll** (`vg-208`, §7.7's
+/* **The frame is a column and the body owns the scroll** (`vg-208`, the overflow rule's
    "Chrome stays still"): the title bar and the footer are `flex: none`, so a
    tall body's shrink cannot squeeze them, and the body takes `min-height: 0`
    because a flex child's `min-height` is `auto` — without it the body refuses to
@@ -2420,7 +2402,7 @@ body,
   line-height: var(--text-2xs--line-height);
   color: var(--faint);
 }
-/* The footer toolbar: `ControlIconButton`s at §5's 26px, flat, over §3's
+/* The footer toolbar: `ControlIconButton`s at the 26px, flat, over the spacing scale's
    hairline. The footer's own layout is here; the buttons' box is the control
    set's, which draws its size, border and background itself. The one button
    property still declared is the padding: the UA gives a `<button>` `1px 6px`,
@@ -2449,7 +2431,7 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* §5 rule 6's glyph-only clause, the same shape the dock, the view steps and
+  /* the glyph-only clause, the same shape the dock, the view steps and
      the rail take: no resting edge, so the 1px transparent border is what hover
      raises and the 20px box does not move. */
   border: 1px solid transparent;
@@ -2474,7 +2456,7 @@ body,
    name starts on the same left edge — which is what makes a column of them
    scannable at all.
 
-   28px, re-cut for DESIGN.md's 246px pane (§7.3). The 40px this column carried
+   28px, re-cut for the design's 246px pane. The 40px this column carried
    was the budget a 360px pane allowed, and it stopped fitting when the pane
    narrowed: measured on canvas at 1600×900 with every group open, the row
    `group-trends-card` ran its role `Performance trends` 11px past its own right
@@ -2502,13 +2484,13 @@ body,
   overflow: hidden;
 }
 /* The name is the row's identity and it is the first column to yield, because
-   DESIGN.md §7.3 orders the whole row: "A row yields its name and its key before
+   the design orders the whole row: "A row yields its name and its key before
    it yields a control, and it yields the role last." **No width floor here**,
    rest row or attended: a floor is still a width the row may not have, and the
    role is the column that never gives up a glyph — so a name that kept 6ch
    while the role had nowhere to go pushed the role past the row's own edge on
    a font whose glyphs run wider than the one this was measured in. The name
-   gives up width first and completely, which is what §7.3 orders. */
+   gives up width first and completely, which is what the pane rule orders. */
 .yunari-layer-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -2525,10 +2507,10 @@ body,
 .yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-name {
   min-width: 0;
 }
-/* §7.3's order is a precedence, and these two declarations are what make it one
+/* The order is a precedence, and these two declarations are what make it one
    rather than a hope. Flexbox charges each column `flex-shrink × its base size`,
    and the name and the role are both around 95px on the starter's worst row — so
-   at the default shrink of `1` the name would keep roughly half of what §7.3 says
+   at the default shrink of `1` the name would keep roughly half of what the pane rule says
    it must give up whole, and the role would clip while a name was still readable.
    `999` is not a measurement: it is a weight large enough that the two columns
    which yield first take the whole violation and freeze at their zero minimum,
@@ -2537,7 +2519,7 @@ body,
 .yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-bound {
   flex-shrink: 999;
 }
-/* **And the role yields last, and it clips rather than being covered** — §7.3's
+/* **And the role yields last, and it clips rather than being covered** — the pane rule's
    other amended half. On a row whose role is wider than the pane can hold beside
    the strip, every column that may yield has already yielded, and a role the slot
    paints over says nothing at all where one that ellipsises says what it can.
@@ -2566,7 +2548,7 @@ body,
 
    These words are the measured ones. In the 340px this panel shipped before
    the role existed, the short form costs the starter's names 4 of 60 against
-   2 with the role taken out, where the spec's illustrated `chart · line ×3` in
+   2 with the role taken out, where the illustrated `chart · line ×3` in
    place of `Line ×3` costs 7 of 60. So a chart says the family and the count,
    and does not repeat the word the family already carries. */
 .yunari-layer-role {
@@ -2611,7 +2593,7 @@ body,
   border-radius: 4px;
   padding-left: 6px;
 }
-/* §5 makes an icon control a 26px square, and the row is 26px so the two agree.
+/* the control set makes an icon control a 26px square, and the row is 26px so the two agree.
    Every button in the slot, the entry control included: the `:has` count below
    is `6 + 26n + 4(n - 1)`, so a 20px entry button would make every row's
    reservation wrong. The entry's glyph and its `data-yunari-layer-entry`
@@ -2627,7 +2609,7 @@ body,
 /* What the row reads. Muted so a name still leads the row, and flexible so a
    three-key chart gives way before the layer's own name does — the one thing a
    layer list must never ellipsise. On the attended row the two shrink together,
-   §7.3 ordering the key against the controls and never against the name. */
+   the pane rule ordering the key against the controls and never against the name. */
 .yunari-layer-bound {
   flex: 0 1 auto;
   min-width: 0;
@@ -2670,7 +2652,7 @@ body,
    not taking it from every row in every theme, and it is charged to the one row
    the author is looking at. */
 /* The three arms carry the reasons the record used to: the reason is the only
-   thing that stops a later pass "correcting" a reservation to a §3 step. 36 is
+   thing that stops a later pass "correcting" a reservation to a spacing scale step. 36 is
    the slot's own 4px offset from the row's right edge plus its footprint for
    one control — 6px of lead-in, a 26px square, and a 4px gap per further
    control — so the sum is off the step table by construction, and moving it to
@@ -2711,12 +2693,12 @@ body,
      `isolation` creates the context without the side effects of a `z-index`
      on a flush region of the shell. */
   /* No border: the pane's `border-right` and the inspector's `border-left`
-     already draw the two hairlines beside it (see the §3 elevation-0 block),
+     already draw the two hairlines beside it (see the spacing scale elevation-0 block),
      so a border here would be the same hairline drawn twice. No radius either:
      it is a flush region of the shell, square like the other three (plan 7
      Task 3). */
   /* The stage belongs to the shell, not the theme: `--stage` is the palette's
-     own ground and the mockup's texture sits over it. The final layer stays
+     own ground and the theme's texture sits over it. The final layer stays
      `--stage`, so five palettes keep a flat colour there and `light` keeps the
      gradient it declares. */
   background:
@@ -2731,7 +2713,7 @@ body,
     ),
     var(--stage);
 }
-/* §7.5's two top corners in one row, so §7.7's "clusters cannot collide" is a
+/* The two top corners in one row, so the "clusters cannot collide" is a
    layout fact rather than a number reserved against the other cluster's width:
    the identity chip gives up width and ellipsises, the view cluster keeps its
    own, and neither has to know how wide the other is.
@@ -2754,12 +2736,12 @@ body,
 .editor-shell-stage-top > * {
   pointer-events: auto;
 }
-/* §7.5's top-left corner: the document's identity. A floating cluster at
-   §7's `--radius-xl`, `--panel` at 95%, hairline `--edge` and elevation 1,
+/* The top-left corner: the document's identity. A floating cluster at
+   the `--radius-xl`, `--panel` at 95%, hairline `--edge` and elevation 1,
    14px in from the stage's own edges — the inset the row above gives it.
    The `backdrop-filter` this rule used to declare is gone with the other two
    clusters': the user's 2026-10-13 ruling flattened all six palettes and the
-   drawing never blurred anything, so elevation is the whole difference between
+   design never blurred anything, so elevation is the whole difference between
    chrome and a cluster, and the declaration was dead in the build anyway
    (`vg-311`, `vg-430`).
    `min-width: 0` is the chip's half of "clusters cannot collide": it can shrink
@@ -2782,10 +2764,10 @@ body,
   background: color-mix(in srgb, var(--panel) 95%, transparent);
   box-shadow: var(--elev-1);
 }
-/* The record dot (§6): filled, because a stroke at this size is not a stroke.
+/* The record dot: filled, because a stroke at this size is not a stroke.
    Warn while the document differs from what was saved, faint when it does not —
    the same isDirty() the status bar's save state reads, never a second source
-   (§7.5). The 8px is §3's own step: §3 names a one-off `7px` as the mark of a
+  . The 8px is its own step: the spacing scale names a one-off `7px` as the mark of a
    layout tuned by eye, and a bare mark is still a size on the base. */
 .editor-shell-identity-dot {
   flex: none;
@@ -2827,11 +2809,11 @@ body,
   left: 50%;
   transform: translateX(-50%);
   /* The cluster's colour, inherited by every control in it. It is here rather
-     than on `.editor-shell-dock button` so that §4's bare
+     than on `.editor-shell-dock button` so that the bare
      `[data-yunari-destructive]` rule is the only declaration applying directly
      to Delete — see the note on the button rule above. */
   color: var(--shell-text);
-  /* §7.5: a cluster sits 14–16px in from the stage's edges, so the dock is
+  /* the stage rule: a cluster sits 14–16px in from the stage's edges, so the dock is
      `stage − 32px` at most. `max-content` rather than `100%` because the dock
      is a bottom-centre corner, not a bar: with three actions it is a pill, and
      it only grows to the inset when the actions need the room. Without the
@@ -2839,16 +2821,16 @@ body,
      `overflow: hidden` clipped it, which put `Duplicate` 20px outside the
      stage where nothing could click it. */
   width: max-content;
-  /* The dock's own 32px of insets (16 each side, §7.5) and nothing more: the
+  /* The dock's own 32px of insets (16 each side, the stage rule) and nothing more: the
      view cluster that used to hold the stage's bottom-right now holds the
      top-right (Task 6), so the 68px reservation made against it is gone and the
-     row is only bounded by §7.5's inset. */
+     row is only bounded by the inset. */
   max-width: calc(100% - 32px);
-  /* §7.7, "clusters cannot collide" and "keep every control reachable through
+  /* the overflow rule, "clusters cannot collide" and "keep every control reachable through
      scrolling or compact composition". The full row is wider than the stage at
      1280, so it wraps rather than overrunning: a scroller would hide an action
      behind a scroll in the one cluster whose whole purpose is that its actions
-     are at hand, and §7.7 forbids a second scrollbar owner. */
+     are at hand, and the overflow rule forbids a second scrollbar owner. */
   flex-wrap: wrap;
   justify-content: center;
   display: none;
@@ -2859,10 +2841,10 @@ body,
 .editor-shell-dock[data-visible="true"] {
   display: flex;
 }
-/* §5's icon button, square: 26px at `--radius-md`, glyph only. Square rather
-   than the 32x30 it carried, because §7.5 wants the three corners to read as
+/* The icon button, square: 26px at `--radius-md`, glyph only. Square rather
+   than the 32x30 it carried, because the stage rule wants the three corners to read as
    one treatment and the view cluster's steps are already 26px squares.
-   §5 rule 6: a glyph-only control has no resting border, so it acquires one on
+   the glyph-only hover rule: a glyph-only control has no resting border, so it acquires one on
    hover — the transparent resting border is what keeps the box the same size
    and makes "nothing moves" true. `border-radius` is set here rather than in
    the shared `button` rule above, which the inspector's buttons also read. */
@@ -2876,7 +2858,7 @@ body,
   align-items: center;
   justify-content: center;
 }
-/* §7.5's top-right corner: how the stage is shown. One floating cluster holding
+/* The top-right corner: how the stage is shown. One floating cluster holding
    the display chooser and its zoom readout, at the identity chip's treatment —
    `--radius-xl`, a hairline `--edge`, 14px in from the stage's own edges — so
    the two corners read as one treatment. The glass itself is `.editor-glass`,
@@ -2901,10 +2883,10 @@ body,
    Wide enough for the widest readout the camera can reach (`6400 %` at
    MAX_ZOOM), so zooming does not resize it under the pointer that is zooming.
    The trigger shows a percentage and never a display name.
-   §5's **bare readout** is the entry this control is: the closed vocabulary's one
+   the **bare readout** is the entry this control is: the closed vocabulary's one
    member that is a value display and opens a list, which is why the zoom keeps no
    well and no chevron — it is named rather than an unnamed exception, and what
-   separates it from §5 rule 2's read-only row is that it opens the menu rather
+   separates it from the read-only row is that it opens the menu rather
    than that it looks like a control. */
 .editor-shell-view-readout {
   min-width: var(--view-readout-min-width);
@@ -2919,8 +2901,8 @@ body,
   line-height: var(--text-sm--line-height);
   text-align: center;
 }
-/* The cluster's three camera controls: −, + and fit. Square at DESIGN.md's 26px
-   icon button, transparent inside the cluster's own glass, and §5 rule 6's
+/* The cluster's three camera controls: −, + and fit. Square at the design's 26px
+   icon button, transparent inside the cluster's own glass, and the hover rule's
    glyph-only hover — a resting 1px transparent border raised to `--muted`, so
    the control acquires its edge on hover and "nothing moves" holds (the
    transparent resting border is what keeps the box the same size; with
@@ -3016,7 +2998,7 @@ body,
 /* The live mark: the host is serving this document on the LAN. Accent, because
    it reads the host's own state rather than a message about the last edit, and
    `PublishIndicator` draws it only when the host reports the LAN on — an
-   unknown host renders no claim (§9). */
+   unknown host renders no claim. */
 .editor-shell-live {
   flex: none;
   margin: 0;
@@ -3066,12 +3048,12 @@ body,
    feature value cannot be a custom property — the query is resolved from
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
-  /* §7.1's row does not fit a phone-width window — the brand, the three-label
+  /* The row does not fit a phone-width window — the brand, the three-label
      mode switch, the menubar and the publish control are wider together than
      the glass — and `overflow: hidden` is what keeps that fact inside the
      header: without it the whole document widens, `documentElement.scrollWidth`
      exceeds the viewport, and every popup positioned against the viewport then
-     believes there is room past the edge. Which of §7.1's four regions a
+     believes there is room past the edge. Which of the four regions a
      compact header keeps is a ruling this file does not make; the row's own
      reachability is tracked on vg-707. */
   .editor-shell-header {

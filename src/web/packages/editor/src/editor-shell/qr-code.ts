@@ -8,7 +8,7 @@ import encodeQR from "qr";
  * `dangerouslySetInnerHTML`, and the ink and paper stay the header's decision
  * rather than the encoder's.
  *
- * The encoder is a dependency for a reason recorded in `docs/decisions/0032`:
+ * The encoder is a dependency for a reason:
  * every way a hand-written encoder can be wrong — Reed–Solomon, mask penalty
  * scoring, BCH format information — produces a matrix that looks right and
  * never scans, and the only instrument that would catch it is a camera this

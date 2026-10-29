@@ -21,8 +21,8 @@ import {
  * The column as a value.
  *
  * Every leaf is a primitive, an array or a plain object, so a test can round-trip
- * it through JSON and a renderer can diff it. A Fabric object here would be the
- * one thing [ADR-0039] forbids — React holds this view and never the object it
+ * it through JSON and a renderer can diff it. A Fabric object here is
+ * forbidden — React holds this view and never the object it
  * describes, and the imperative edit port below is the only way back.
  */
 
@@ -193,7 +193,7 @@ export type FieldView =
       readonly options: readonly FieldOption[];
     })
   /**
-   * A paint reference, as DESIGN.md §5's *swatch well*: the list is still the only
+   * A paint reference, as the design's *swatch well*: the list is still the only
    * way to change the value and the swatch is a picture of it, resolved by the
    * caller so nothing here is a second resolver. `colour` is that picture — the
    * selected token's colour, or `transparent` when the value is empty or no
@@ -253,9 +253,9 @@ export interface RunRowView {
   readonly tracking: number | undefined;
   /**
    * The binding this run names, for the note's `data-yunari-run-binding` — the
-   * key `run.bindingId` carried before the column was React, and what a spec
-   * reads to learn *which* binding a value run failed to resolve. `""` for
-   * prose, which names no binding. It is not the row's ordinal: that is
+   * key `run.bindingId` carried before the column was React, and what a
+   * consumer reads to learn *which* binding a value run failed to resolve. `""`
+   * for prose, which names no binding. It is not the row's ordinal: that is
    * `index`, and it rides the row's own `data-yunari-run` hook.
    */
   readonly bindingId: string;
@@ -448,7 +448,7 @@ export type ProjectionPorts = Pick<
  * flight previews through `preview` — the same write as `commit`, with no
  * history entry and no re-publish — so the canvas shows what the author is
  * choosing while the column's own value stays the last committed one. `commit`
- * is the release: one changed value, one entry (§5's one undo boundary).
+ * is the release: one changed value, one entry (the one undo boundary).
  * `cancelPreview` puts the value the gesture started from back, through the same
  * writer, and records nothing, because nothing was recorded to undo.
  */

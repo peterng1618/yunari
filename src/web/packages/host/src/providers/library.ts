@@ -26,7 +26,7 @@ import { descriptorFieldsOf, redactForBrowser } from "./provider.js";
  * One device answers a group, and this provider names that same device: the
  * assigned one, or the one the machine reports. Every GPU, VRAM and disk figure
  * and every caption comes out of one selection, so a name can never sit over
- * another device's readings. See `docs/decisions/0004`.
+ * another device's readings.
  */
 
 /** Identity text, not measurements: read on demand, never per sample. */

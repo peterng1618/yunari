@@ -152,8 +152,7 @@ const MIN_REGION_PX = 2;
  * hides the diffusion is worse than none, because the eye reads noise as
  * "not blurred". The tile is the same; the level comes from the reading.
  *
- * Not a dial. Grain is a property of the material — see
- * `docs/decisions/0013-frost-is-diffusion-grain-saturation-and-an-edge.md`.
+ * Not a dial. Grain is a property of the material.
  */
 const GRAIN_ALPHA = 0.015;
 
@@ -184,7 +183,7 @@ interface Panel {
   context: CanvasRenderingContext2D | undefined;
   /** The media **alone**, as it last painted, kept apart from the scratch so a
    *  frame the media cannot paint reuses it instead of compositing the panel
-   *  over transparency (0079). */
+   *  over transparency. */
   backdrop: HTMLCanvasElement | undefined;
   backdropContext: CanvasRenderingContext2D | undefined;
   /** The region `backdrop` was painted for. A region that has moved puts the
@@ -444,7 +443,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     if (treatment === undefined) return;
     const own = deviceMatrix(object, canvas);
     const plane = planeMatrix(canvas);
-    // **The equal-area scale of the two axes, not one of them** (0053). A
+    // **The equal-area scale of the two axes, not one of them**. A
     // filter takes one length and this draw is at identity, so the panel's two
     // scales have to become one number here; the determinant's root is the only
     // rotation-independent one that is unchanged whenever the scale is uniform.
@@ -469,7 +468,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     // The media is a DOM sibling below the canvas, so the canvas alone misses
     // the wallpaper; it goes down first and the scene composites over it. It
     // lands in a surface of its own rather than straight into the scratch, so
-    // that a frame it cannot paint reuses the last one it did (0079). The
+    // that a frame it cannot paint reuses the last one it did. The
     // scratch is still rebuilt from nothing every frame, which is what keeps
     // the canvas half fresh.
     const backdrop = backdropFor(
@@ -672,7 +671,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
       context.clearRect(0, 0, region.width, region.height);
       panel.backdropRegion = undefined;
     }
-    // **The plate is a different surface from the media** (0125). A media-less
+    // **The plate is a different surface from the media**. A media-less
     // theme, or a transparent frame, shows the host's background on a rect
     // display and the disc on a circle — both DOM boxes the composition turns
     // *inside*, never with. It goes under whatever the media painted, so a kept
@@ -878,7 +877,7 @@ function sampleRegion(
  * One branch per shape the product can prove is closed, and no fallback: the
  * frosted treatment needs a closed path to sample the backdrop through, so a
  * kind with no branch here is refused rather than clipped to a rectangle it
- * does not have. See `docs/decisions/0015-glass-clips-any-closed-path-not-only-rects.md`.
+ * does not have.
  */
 function localPath(
   ctx: CanvasRenderingContext2D,

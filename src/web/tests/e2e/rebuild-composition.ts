@@ -31,7 +31,7 @@ import {
  * on a display. The composition is the same in both, and it lives here so the
  * two cannot drift into testing different things.
  *
- * The target is `docs/superpowers/specs/2026-09-26-reference-theme-target.png`.
+ * The target is the reference theme target.
  * **The image is the reference.** No coordinate or value is taken from the
  * shipped theme: the whole point is to find what the authoring surface cannot
  * express, and copying the answer hides exactly that. Everything here is
@@ -166,7 +166,7 @@ export async function buildWordmarkAndClock(page: Page): Promise<void> {
   //
   // `text`, not `dim`: this line sits directly on the photograph with no card
   // behind it, and measured there `#a8bed0` reads **2.11:1** against the sky —
-  // the same ink-versus-field pricing `0013` did for the frosted cards, on a
+  // the same ink-versus-field pricing used for the frosted cards, on a
   // field the frosted cards were protecting. `text` takes it to 3.53:1, which
   // is the most any token in this palette can do on a saturated mid-cyan and is
   // still short of AA. The remaining gap is the photograph, not the ink.

@@ -15,7 +15,7 @@
  * it, and the canvas context menu dispatched through a façade typed
  * `insertCard(cardId): void`, which **discarded** the rejecting promise. One of
  * two surfaces swallowed the refusal. That surface list was three until the
- * header's Insert menu was deleted (§7.1: Insert lives in the Add pane), which
+ * header's Insert menu was deleted (the header rule: Insert lives in the Add pane), which
  * removed one swallowed refusal rather than one case.
  *
  * Every surface here is the real one — the real panel, the real context menu —

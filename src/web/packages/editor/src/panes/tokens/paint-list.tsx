@@ -16,8 +16,8 @@ import { type TokenUsage, usageFigure } from "./token-use.js";
  *
  * **A row is a selector, not a control.** Pressing it selects the token for the
  * inspector, where the fields live; nothing here edits the document. The row's
- * shape is unchanged from the pane's field-set days — the spec keeps paint rows
- * as they were — and what left is the chooser, the fields and the users list.
+ * shape is unchanged from the pane's field-set days, when paint rows were the
+ * same, and what left is the chooser, the fields and the users list.
  *
  * **The membership is not re-derived here.** The list is `paletteTokenIds`,
  * which the pane's title-bar count also reads, so the rows drawn and the number
@@ -56,7 +56,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
   // moves are one walk of one scene.
   const uses = usage?.();
   // The pane's own list, from the module the bridge's count also reads, so the
-  // rows drawn and the number in the title bar cannot disagree (§7.3).
+  // rows drawn and the number in the title bar cannot disagree.
   const ids = paletteTokenIds(palette);
   // A preset ref is not this list's selection: `aria-pressed` would otherwise
   // mark a paint row whose id happened to match.

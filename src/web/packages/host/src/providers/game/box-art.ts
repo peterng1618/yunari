@@ -11,8 +11,8 @@ import {
  *
  * The file lives at `<steam>/appcache/librarycache/<appId>/library_600x900.jpg`.
  * Only that name is served: the same folder holds a header, a hero and a logo,
- * and a route keyed by app id must not become a listing of Steam's cache
- * (decision 0108). The bytes never leave this machine, so a display's library
+ * and a route keyed by app id must not become a listing of Steam's cache.
+ * The bytes never leave this machine, so a display's library
  * membership is not told to Steam's CDN.
  */
 
@@ -174,7 +174,7 @@ async function resolveInCoverCache(
 /**
  * A cover the store provider already downloaded, or undefined. The route serves
  * bytes only: a miss never starts a fetch, so the provider stays the one owner
- * of Valve's CDN (decision 0109). The id is validated before any path work, and
+ * of Valve's CDN. The id is validated before any path work, and
  * the bytes must match the extension they are served under.
  */
 export async function readCachedCover(

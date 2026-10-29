@@ -137,8 +137,8 @@ export async function run(argv: readonly string[]): Promise<number> {
     return outcome.ok ? 0 : 1;
   }
 
-  // One app folder is one host (§ "Two hosts on one network"), and the lock is
-  // taken before anything reads the folder: a second host against a held folder
+  // One app folder is one host, and the lock is taken before anything reads the
+  // folder: a second host against a held folder
   // would answer the same display ids and the same active theme as the first,
   // and the port fallback would let it start looking like a second machine.
   const held = await acquireHostLock(settingsDir, wanted);
@@ -192,7 +192,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   await customProvider.reload();
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
-  // registry's cycle (docs/decisions/0099).
+  // registry's cycle.
   const weatherSettings = createWeatherSettingsStore(settingsDir);
   const weatherProvider = new WeatherProvider({
     settings: weatherSettings,
@@ -226,7 +226,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // helper only while a display binds game.*. A named root lets a portable
   // install — or a test fixture — point at its own library; absent, the
   // registry's SteamPath is the answer. A game outside Steam is named by the
-  // store's cached lookup, kept beside the other caches (decision 0109).
+  // store's cached lookup, kept beside the other caches.
   const namedSteamRoot = process.env.YUNARI_STEAM_ROOT;
   const steamRoot =
     namedSteamRoot === undefined || namedSteamRoot === ""
@@ -239,7 +239,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   );
   // Two test seams, each honoured only when non-empty: a store fixture for the
   // searched metadata, and a fixed foreground so a browser proof needs no
-  // running game. Unset changes nothing (docs/engineering/gotchas.md).
+  // running game. Unset changes nothing.
   const storeBaseUrl = process.env.YUNARI_STEAM_STORE;
   const fixedForeground = process.env.YUNARI_FOREGROUND_EXE;
   const gameStore = createSteamStore({
@@ -285,7 +285,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const hosting = createHostingSettingsStore(settingsDir);
   const storedHosting = await hosting.read();
   // Everything the host knows about *this* machine lives in one settings
-  // folder, so a theme folder is only ever a theme (ADR-0017).
+  // folder, so a theme folder is only ever a theme.
   const deviceSettings = createDeviceSettingsStore(settingsDir);
   // The consumer's display preferences, read by the provider that acquires the
   // readings they apply to.
@@ -303,13 +303,13 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Which host this app folder is, read or minted after the lock so a second
   // host cannot answer with the same identity: `GET /api/host` gives it to
   // anyone who asks, and it is what a display stores to re-find this host after
-  // its address changes (§ "Finding the host after its address changes").
+  // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
   // The certificate is not optional, and the reason is the origin rather than
   // any route: a phone at `http://<lan-ip>:<port>` is not a secure context, so
   // it can neither hold a screen wake lock nor register the service worker an
-  // installable app needs (`vg-580`, `docs/decisions/0070`). Serving plain http
+  // installable app needs (`vg-580`). Serving plain http
   // would fail on the display and pass on this PC, which is the trap the row
   // exists to remove — so a host that cannot produce a certificate refuses to
   // start and says which directory it could not write, rather than starting
@@ -372,7 +372,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     caCertificate: origin.certificate,
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
-    // The host's own windows on its local monitors (§ "The host's own monitors").
+    // The host's own windows on its local monitors.
     get launcher() {
       return launcher;
     },
@@ -547,14 +547,14 @@ export async function run(argv: readonly string[]): Promise<number> {
       : initialHost;
   /** https first, http beside it: a display is a secure context only at the
    *  https origin, and the plain address is what a device that has not
-   *  installed the root certificate can still open (`docs/decisions/0076`). */
+   * installed the root certificate can still open. */
   const localSecure = `https://${displayHost}:${bound}`;
   const localPlain = `http://${displayHost}:${bound}`;
   /** The address a display would use, whether or not the LAN is open — the
    *  certificate covers it either way, and the console names it. */
   const lan = await lanAddress();
   /** And the name it dials instead where the platform answers one: it survives
-   *  a DHCP lease where the address does not (`docs/decisions/0132`). */
+   * a DHCP lease where the address does not. */
   const name = stableName();
 
   console.log(`\nYunari v${VERSION}`);
@@ -646,7 +646,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     // **The name where there is one**, because this is the link a display
     // pairs on and the origin its cookie and storage are then scoped to: a
     // dotted quad there is a phone that must pair again the moment DHCP moves
-    // the host (`docs/decisions/0132`). The address is printed beside it, for a
+    // the host. The address is printed beside it, for a
     // device that cannot resolve the name and for the one without the root.
     const dial = name ?? hostPart;
     const networkSecure = `https://${dial}:${bound}`;
@@ -729,7 +729,7 @@ export async function run(argv: readonly string[]): Promise<number> {
         // Stop only the LHM this run started; one the owner already ran is theirs.
         externalApps.stopOwnedLhm();
         // The media helper is a child process this run started; leaving it
-        // polling after the host exits is the orphan decision 0102 prevents.
+        // polling after the host exits would orphan it.
         mediaProvider.stop();
         // Same for the RTSS helper: a PowerShell left polling outlives the host.
         frameProvider.stop();

@@ -23,7 +23,7 @@ import { isDesktopSurface } from "./surface.js";
 /**
  * The reference composition, rebuilt from a blank theme by hand.
  *
- * The target is `docs/superpowers/specs/2026-09-26-reference-theme-target.png`
+ * The target is the reference theme target
  * at 1672 × 941. **The image is the reference.** No coordinate or value is taken
  * from the shipped theme: the whole point is to find what the authoring surface
  * cannot express, and copying the answer hides exactly that. Everything below

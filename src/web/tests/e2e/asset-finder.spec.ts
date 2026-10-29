@@ -21,7 +21,7 @@ import { isDesktopSurface } from "./surface.js";
  * The host is routed, not real: every source's answer is a fixture, so the
  * proof is the modal's own behaviour — the mixed grid, the chip that stops a
  * source, the pager, a failure beside a survivor, the notice's one appearance,
- * and the font field that opens the finder on Fonts. Spec §12's claims are
+ * and the font field that opens the finder on Fonts. The finder's claims are
  * asserted here against those fixtures.
  */
 

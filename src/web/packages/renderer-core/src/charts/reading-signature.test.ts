@@ -35,7 +35,7 @@ describe("chartReadingSignature", () => {
 
   it("moves a line only when its newest reading moves", () => {
     // The line is drawn from its data clock, so no wall clock can move what is
-    // drawn; the newest reading is the whole trigger (0124).
+    // drawn; the newest reading is the whole trigger.
     const chart = { family: "line", settings: defaultLineSettings } as const;
     const bindings = [{ id: "b", semanticKey: "cpu.load.total" }];
     const moved: SampleSource = {

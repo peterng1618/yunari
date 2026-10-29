@@ -193,7 +193,7 @@ interface ActiveDisplay {
   readonly label: string;
   readonly kind: DisplayKind;
   readonly theme: string | null;
-  /** The glass and mounting angle; `this-pc` answers rect/0, as the spec says. */
+  /** The glass and mounting angle; `this-pc` answers rect/0. */
   readonly shape: DisplayShape;
   readonly rotation: number;
 }
@@ -308,8 +308,8 @@ export interface HostServerOptions {
   /** The running Steam game's local box art. Omitted when this host reads no
    *  Steam library; the route then answers 404 rather than inventing a picture. */
   readonly gameArtwork?: GameArtworkSource;
-  /** Where the store provider caches covers it looked up for a non-Steam game
-   *  (decision 0109). The route only reads it; the provider owns every download,
+  /** Where the store provider caches covers it looked up for a non-Steam game.
+   *  The route only reads it; the provider owns every download,
    *  so a request never starts a fetch. Omitted keeps the route local-art only. */
   readonly gameCoverCacheDir?: string;
   /** The Wallpaper Engine library on this PC. Omitted when this host serves
@@ -322,7 +322,7 @@ export interface HostServerOptions {
     readonly gpus: readonly { readonly id: string; readonly name: string }[];
     readonly disks: readonly { readonly id: string; readonly name: string }[];
   }>;
-  /** What is attached to this PC right now (§ "The host's own monitors"), for
+  /** What is attached to this PC right now, for
    *  the owner to point a local display at. Omitted uses the real `graphics()`
    *  probe; supplied so a case can hold a fixture rather than this machine's
    *  screens, and so a host that enumerates its own way can say so. */
@@ -370,7 +370,7 @@ export interface HostServerOptions {
   /** The leaf and its key. Omitted only by the unit suite: the launcher always
    *  brings one, because a display that cannot hold a wake lock or register a
    *  service worker is the failure `vg-580` exists to remove, and it is the
-   *  origin rather than any route that decides it. See `docs/decisions/0070`. */
+   * origin rather than any route that decides it. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when
    *  the host has none to offer, and the route then says so. Only the PEM is
@@ -378,10 +378,10 @@ export interface HostServerOptions {
    *  a caller cannot get wrong is the pair it never supplies. `RootPem` rather
    *  than a string, so a chain or a leaf is a compile error here. */
   readonly caCertificate?: RootPem;
-  /** Which host this app folder is (§ "Finding the host after its address
-   *  changes"), answered by `GET /api/host`. Omitted when this host has no
-   *  identity: the route is then not registered at all, because an id minted to
-   *  fill the answer is one no display could have stored. */
+  /** Which host this app folder is, answered by `GET /api/host`. Omitted when
+   *  this host has no identity: the route is then not registered at all,
+   *  because an id minted to fill the answer is one no display could have
+   *  stored. */
   readonly host?: HostRecord;
 }
 
@@ -403,7 +403,7 @@ export interface HostingState {
    *  hostname. **Beside the address, not instead of it**: a device that cannot
    *  resolve `.local` still has a dotted quad to type, and an owner has one to
    *  read aloud. The name is what survives a DHCP lease, which is why the
-   *  pairing symbol dials it (`docs/decisions/0132`). */
+   * pairing symbol dials it. */
   readonly name: string | null;
   /** The port this host is bound to, or null when it is not bound. */
   readonly port: number | null;
@@ -559,7 +559,7 @@ export function resolveStoreOrigin(
  * A browser lured to another name can resolve that name to 127.0.0.1, so the
  * peer is loopback while the request is not this machine's page. `Host` and
  * `Origin` are what such a page cannot forge, so the existing same-origin rule
- * answers once here rather than route by route, which missed some (ADR-0116).
+ * answers once here rather than route by route, which missed some.
  * A non-loopback peer is untouched.
  *
  * `/api/host` is the one exemption, because a re-find sweep is cross-origin.
@@ -692,7 +692,7 @@ function usbId(value: number): string {
  * a request becomes a display, so the credential is checked once.
  *
  * **Loopback answers `undefined` on purpose.** It is trusted admin and never
- * paired, and the reserved `this-pc` has no record to return (spec § "One map"):
+ * paired, and the reserved `this-pc` has no record to return:
  * the *key* is minted where a key is needed, not fabricated here with a
  * `createdAt` nobody wrote. A credential matching no display is `undefined`
  * too, and the caller refuses it as it refuses a missing credential.
@@ -811,7 +811,7 @@ function streamLanguage(url: URL): string | undefined {
  * The glass and mounting angle of the display behind a key.
  *
  * `this-pc` and `default` are not records, so each answers the upright
- * rectangle the spec gives them, and every other key is a record whose own
+ * rectangle it is given, and every other key is a record whose own
  * presentation wins. A stored upright angle is answered as `0` because the
  * record omits it.
  */
@@ -1231,7 +1231,7 @@ async function serveStatic(
 
   // The hint is only true when the bundle itself is missing its entry; a file
   // that simply is not in a built bundle must not send the reader rebuilding
-  // one they already built. See ADR-0018.
+  // one they already built.
   const built = await fs
     .stat(path.join(root, "index.html"))
     .then(() => true)
@@ -1265,9 +1265,9 @@ const MAX_SOCKET_CONNECTIONS = 256;
  * **Plain http is a cost here, not a feature.** On a LAN it is an origin with
  * no wake lock and no service worker — the state `vg-580` exists to remove —
  * and it is kept only because the pairing link that points at it belongs to the
- * per-display-themes spec, which owns what that link should carry. A display
+ * per-display-themes work, which owns what that link should carry. A display
  * reaches the secure origin by typing `https` in front of the address until
- * then. Recorded in `docs/decisions/0070`.
+ * then.
  */
 export function createPortListener(
   plain: http.Server,
@@ -1644,7 +1644,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       : https.createServer(options.tls, route);
 
   // One port, and both protocols when a certificate is present. The launcher
-  // always brings one (0070); the unit suite does not, and a route answers the
+  // always brings one; the unit suite does not, and a route answers the
   // same either way.
   const server: ListenableServer =
     secure === undefined ? plain : createPortListener(plain, secure);
@@ -3502,7 +3502,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // probe. A display reads it through the same credential as media artwork;
     // loopback is this PC. The name is not content-addressed, so the cache is
     // bounded rather than immutable. The downloaded cover is read only, never
-    // fetched: the provider is the one owner of the store's CDN (decision 0109).
+    // fetched: the provider is the one owner of the store's CDN.
     if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -3741,7 +3741,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // is the same bytes any loopback visitor already has: no reading, no theme,
     // no device in it. Everything this guard exists to protect stays behind it —
     // `/api/themes/**`, the sample stream, `/api/display` — and `/editor` keeps
-    // its own loopback guard. See `docs/decisions/0019`.
+    // its own loopback guard.
     const isBundleAsset =
       url.pathname.startsWith("/assets/") ||
       // The browser probes this unprompted and without a token, and the repo
@@ -3752,7 +3752,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // rel="manifest">` fetch carries none either, so a paired phone was
       // refused the manifest and the worker script and the player would not
       // install. Same rule as the assets beside them — bundle bytes, no
-      // reading, no theme, no device (docs/decisions/0019, 0071).
+      // reading, no theme, no device.
       url.pathname === "/manifest.webmanifest" ||
       url.pathname === "/sw.js";
 
@@ -3833,8 +3833,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     // The Wallpaper Engine library this PC holds, and one item's bytes. The
-    // browser names an item by its `workshopId`; every path stays in the host
-    // (docs/decisions/0097).
+    // browser names an item by its `workshopId`; every path stays in the host.
     if (url.pathname === "/api/wallpaper-engine") {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -3948,7 +3947,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // A mobile export the author saved by hand (decision 0124): the host reads
+    // A mobile export the author saved by hand: the host reads
     // the package, extracts its video and normalizes it. Needs no install.
     if (url.pathname === "/api/wallpaper-engine/mpkg") {
       if (request.method !== "POST") {
@@ -4393,8 +4392,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // bytes land in the folder and the answer is the id they landed under, so
     // the theme survives the editor closing and appears in the local list. The
     // host reads the package — the browser posts bytes and maps the answer —
-    // because the id rule and the no-overwrite rule are the folder's rules
-    // (docs/decisions/0078).
+    // because the id rule and the no-overwrite rule are the folder's rules.
     //
     // Matched before `/api/themes/:id`, which would otherwise read `import` as
     // a theme id — the same reason `/api/themes/active` is answered above.
@@ -4499,7 +4497,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     // The catalogue's Install action. The host fetches the package because the
-    // editor's browser cannot (docs/decisions/0089), and the operation records
+    // editor's browser cannot, and the operation records
     // the origin after the write so the listing can say where a theme came from.
     // Matched here, before `/api/themes/:id`, for the same reason `import` is.
     if (url.pathname === "/api/themes/install") {
@@ -4617,7 +4615,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       // A display's view of the document: a theme that does not validate is
       // one it cannot serve, which is the same answer as a theme that is not
-      // there — not the 422 the editor's own open gets (ADR-0043).
+      // there — not the 422 the editor's own open gets.
       const envelope = await themeStore.readEnvelope(rawId);
       if (envelope === undefined) {
         sendText(response, 404, "Theme not found.");
@@ -4650,8 +4648,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // its semantics are invalid, which is exactly 422 — RFC 9110
           // §15.5.21. Not the 404 an absent id gets, and not a 400 that would
           // blame the request: the validator's own issues travel with it, so
-          // the editor can report the reason instead of a status number
-          // (ADR-0043).
+          // the editor can report the reason instead of a status number.
           if (error instanceof ThemeValidationError) {
             sendJson(response, 422, {
               error: `Theme "${rawId}" is stored but does not validate.`,
@@ -4662,12 +4659,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // A stored document past the size the store will read is understood
           // and too large to serve, which is the same 413 every other themes
           // route answers an over-large thing with — and the author is told the
-          // theme is there, which is the half a 404 got wrong (vg-409,
-          // decisions/0043). RFC 9110 §15.5.14 frames 413 around *request*
+          // theme is there, which is the half a 404 got wrong (vg-409).
+          // RFC 9110 §15.5.14 frames 413 around *request*
           // content and this is a stored document on a GET; the stretch is
           // taken deliberately, because inventing a second size-ish status
-          // would be worse vocabulary than reusing this codebase's own
-          // (decisions/0084).
+          // would be worse vocabulary than reusing this codebase's own.
           if (error instanceof ThemeTooLargeError) {
             sendText(response, 413, error.message);
             return;
@@ -4778,7 +4774,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
-        // The store moves the folder to the OS trash (docs/decisions/0021) and
+        // The store moves the folder to the OS trash and
         // answers false for anything it would not have listed, so a 404 here
         // means the same "no such theme" an open would have said.
         let removed: boolean;
@@ -4887,7 +4883,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           stored = await themeStore.read(id);
         } catch (error) {
           // A document that is present and unreadable is the same 404 an absent
-          // one gets, as it was before the scoped reads (ADR-0043).
+          // one gets, as it was before the scoped reads.
           if (
             error instanceof ThemeValidationError ||
             error instanceof ThemeTooLargeError

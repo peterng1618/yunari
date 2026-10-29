@@ -59,8 +59,8 @@ describe("the status bar's counts", () => {
 
   it("draws nothing where there is no scene to count", () => {
     // The fabrication this refuses: `0 objects` over a canvas that has not
-    // mounted its document is a reading the product does not have (DESIGN.md
-    // §9). The shell hands the readout its no-scene snapshot before a bridge is
+    // mounted its document is a reading the product does not have.
+    // The shell hands the readout its no-scene snapshot before a bridge is
     // set, so that state is this component's own case.
     const store = new SelectionStore();
     store.set(undefined);

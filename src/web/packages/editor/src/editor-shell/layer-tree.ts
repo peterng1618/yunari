@@ -31,7 +31,7 @@ export const BACKGROUND_LAYER_ID = "$background";
  * the picture mark, a group the stack. Two arms carry a fact the kind alone does
  * not name: a chart says which *family* it is and a shape which primitive,
  * because eight rows all saying "chart" is the one word an author scanning for
- * the ring cannot use. A group carries nothing — §5.1: it is an arbitrary set of
+ * the ring cannot use. A group carries nothing — the control set: it is an arbitrary set of
  * elements, so its mark is generic by construction.
  *
  * Nothing here is the object's own data any more. A row that printed the text's

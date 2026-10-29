@@ -194,7 +194,7 @@ async function press(
   });
 }
 
-/** Types into the field and presses Enter, the way §5's text control commits. */
+/** Types into the field and presses Enter, the way the text control commits. */
 async function typeAndEnter(
   input: HTMLInputElement,
   value: string,
@@ -716,7 +716,7 @@ it("stops a preset row's Delete from reaching the canvas dispatcher", async () =
   }
 });
 
-it("rings a stop with §4's `--edge` boundary token, not a raw colour", async () => {
+it("rings a stop with the `--edge` boundary token, not a raw colour", async () => {
   const mounted = await mount({
     // `hsl()` rather than a hex, so this case is about the ring alone.
     stops: [
@@ -726,7 +726,7 @@ it("rings a stop with §4's `--edge` boundary token, not a raw colour", async ()
     angle: 90,
   });
 
-  // §4 names `--edge`/`--edge-2` the boundary role, and the 1px ring separates
+  // the palette names `--edge`/`--edge-2` the boundary role, and the 1px ring separates
   // the dot from the track under it — separation, not altitude, so it is not an
   // `--elev-*` depth. The assertion reads the *rendered* dot's own style: a
   // token that does not resolve at the element is the failure a text-level check

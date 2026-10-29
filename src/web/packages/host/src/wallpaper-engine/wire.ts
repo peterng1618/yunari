@@ -3,7 +3,7 @@ import type { LibraryItem } from "./library.js";
 import type { ItemPayload } from "./resolve.js";
 
 /**
- * The JSON the browser receives (§5.2): what the list needs and nothing more.
+ * The JSON the browser receives: what the list needs and nothing more.
  * The payload's absolute path stays in the host — the browser addresses an
  * item by its `workshopId`.
  */

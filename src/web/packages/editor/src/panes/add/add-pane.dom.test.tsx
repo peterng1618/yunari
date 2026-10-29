@@ -10,7 +10,7 @@
  *
  * **A card unit may be depicted; a primitive may not be depicted beyond its
  * kind.** The library is a fixed set of eight, so a unit's tile is honest; a
- * shape is a kind, so its tile is the kind and nothing more (DESIGN.md §6).
+ * shape is a kind, so its tile is the kind and nothing more.
  */
 import { describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
@@ -133,7 +133,7 @@ describe("the Add pane's insert surface", () => {
   it("depicts a card unit and does not depict a primitive beyond its kind", () => {
     const { pane } = mount();
 
-    // §5.2: the library is a fixed set of eight, so a unit tile may be drawn.
+    // the control set: the library is a fixed set of eight, so a unit tile may be drawn.
     // A primitive's tile is its kind — a shape glyph, never a card diagram.
     expect(cardTile(pane, CPU_CARD).querySelector("svg")).not.toBeNull();
     expect(
@@ -144,7 +144,7 @@ describe("the Add pane's insert surface", () => {
   it("draws a glyph on every tile that is not the Text row, so none is blank", () => {
     const { pane } = mount();
 
-    // §6: shapes and charts stay glyph-led rather than becoming text-only button
+    // the icon set: shapes and charts stay glyph-led rather than becoming text-only button
     // grids. The case above proves a shape does not wear a *card's* diagram;
     // this one proves every one of them wears something, which an assertion of
     // absence cannot — a tile drawing nothing at all passed it.

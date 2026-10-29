@@ -8,7 +8,7 @@ describe("chartAnimationFor", () => {
   );
   it("leaves the line static", () => {
     // A line moves with its data, so an engine transition would animate the
-    // jump itself (0124).
+    // jump itself.
     expect(chartAnimationFor("line")).toBe(false);
   });
 });

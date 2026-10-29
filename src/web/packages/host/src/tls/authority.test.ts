@@ -25,7 +25,7 @@ import {
 /**
  * The chain is checked by **Node's own X.509 verifier**, never by the library
  * that produced it: `node-forge` carries an advisory in its signature
- * *verification* path (GHSA-86w9-cpqp-85rv, `docs/decisions/0070`), and this
+ * *verification* path (GHSA-86w9-cpqp-85rv), and this
  * host's answer to that is that it never calls it. A case that verified with
  * forge would be testing the half of the package the decision excludes.
  */
@@ -228,7 +228,7 @@ describe("the host's own certificate authority", () => {
     // root they had not installed.
     expect(leaf.checkIP("192.168.2.56")).toBe("192.168.2.56");
     // **And the name a display dials**, which is the form that survives a DHCP
-    // lease (`docs/decisions/0132`). It is a DNS SAN rather than an IP one, so
+    // lease. It is a DNS SAN rather than an IP one, so
     // it is checked as a host; a leaf covering only the bare hostname fails
     // here, and the owner reads that failure as a root they had not installed.
     expect(leaf.checkHost("study-pc.local")).toBe("study-pc.local");

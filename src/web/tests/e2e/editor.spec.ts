@@ -1640,8 +1640,8 @@ test.describe("Fabric editor route", () => {
     // Both arrived at the quarter turn the Add pane hands over, and they are
     // not the same shape: an open sweep has no interior to fill, so it is
     // stroked, while the sector is a region and takes the fill. A filled arc
-    // closes with a chord and draws a circular segment — refused at revival
-    // (ADR-0026) — so this is what makes the two pictures mean different things.
+    // closes with a chord and draws a circular segment — refused at revival —
+    // so this is what makes the two pictures mean different things.
     //
     // Read from the **saved document**, not from the live objects: Fabric gives
     // every shape a runtime default `fill`, so a live read cannot tell an
@@ -1838,8 +1838,8 @@ test.describe("Fabric editor route", () => {
     // By id rather than by Fabric's class tag, and through the card rather than
     // around it: the starter's icons are paths *inside* their cards, so a search
     // of `getObjects()` never saw one and threw "the starter has no Path" for a
-    // shape the author can click. Entering the card is also the gesture the spec
-    // defines for reaching a part, and it opens the card in the layer tree on
+    // shape the author can click. Entering the card is also the gesture for
+    // reaching a part, and it opens the card in the layer tree on
     // the way — so the icon is selected the way an author selects it.
     await enterLayer(page, "group-cpu-card");
     await page.locator('[data-yunari-layer="cpu-card-icon"]').click();
@@ -2195,8 +2195,8 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     // The type-token library is a list now; a row press hands the token to
-    // the token inspector, which is the field set's new home (spec, Tokens
-    // pane). `heading` is the starter theme's wordmark face.
+    // the token inspector, which is the field set's new home. `heading` is the
+    // starter theme's wordmark face.
     await openPane(page, "Design tokens");
     await page.locator('[data-yunari-type-preset-row="heading"]').click();
     const family = page.locator("[data-yunari-token-family]");
@@ -2275,7 +2275,7 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // Tracking is the run's own value (0128), not the token's: the row lives in
+    // Tracking is the run's own value, not the token's: the row lives in
     // the selection inspector's runs section, so the case selects the object
     // that wears it. The wordmark is the starter's first run.
     await selectLayer(page, "wordmark");
@@ -3706,7 +3706,7 @@ test.describe("Fabric editor route", () => {
       .poll(async () => (await pixelAtObjectCentre(page, "outside"))[3])
       .toBe(115);
 
-    // **A capture reads the document, not the screen** (0053, `vg-527`).
+    // **A capture reads the document, not the screen** (`vg-527`).
     // `bridge.capture` is the product's own capture — the one a theme package's
     // thumbnail and the library card both come from — so this reads the
     // artifact an author would hand somebody rather than the mechanism under
@@ -4804,7 +4804,7 @@ test.describe("Fabric editor route", () => {
     // entry set — and since `vg-463` it is not in the toolbar to leak from.
     expect(itemNames).not.toContain("Align left");
 
-    // §4's mark has to **paint**, not merely be present. `vg-226`'s failure was
+    // The mark has to **paint**, not merely be present. `vg-226`'s failure was
     // exactly that gap: both surfaces carried `data-yunari-destructive` and only
     // the dock resolved to `--hot`, because the colour came from a rule scoped to
     // the dock and the popup is portalled outside it. No vitest case can settle
@@ -4837,7 +4837,7 @@ test.describe("Fabric editor route", () => {
     ).not.toBeNull();
     expect(
       colours.menuDelete,
-      "Delete is §4's `--hot` in the dock and ordinary in the canvas menu",
+      "Delete is the `--hot` in the dock and ordinary in the canvas menu",
     ).toBe(colours.dockDelete);
     expect(
       colours.footerDelete,
@@ -5701,7 +5701,7 @@ async function clientOfStarterGauge(
 /**
  * Selects the RAM card's gauge, by entering the card and picking its row.
  *
- * **Two gestures, because the spec says they are two** (§3): a click *selects*
+ * **Two gestures, because they are two**: a click *selects*
  * and gives the card's settings; entering gives the parts. The RAM gauge is a
  * part, so it is reached by entering — `bridge.selectLayer` takes
  * `owner ?? target`, so with the card merely open a click on the gauge's row

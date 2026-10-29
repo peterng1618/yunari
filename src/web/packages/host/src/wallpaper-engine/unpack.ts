@@ -7,7 +7,7 @@ import { memberBytes, readPackage } from "./pkg.js";
 import { insideOf } from "./resolve.js";
 
 /**
- * A subscribed `scene.pkg` written out as an editable project (§8, step 2).
+ * A subscribed `scene.pkg` written out as an editable project (the pane order, step 2).
  * The package is a table walk and a byte copy — no decompression, no `.tex`
  * decoding — and the descriptor is the item's own with `file` switched to the
  * member the editor opens.

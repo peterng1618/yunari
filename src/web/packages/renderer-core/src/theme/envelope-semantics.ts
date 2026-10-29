@@ -416,7 +416,7 @@ function validateBackground(
       }
     }
     // A still has no frame to stand for, so the key is refused rather than
-    // stored and ignored (0135).
+    // stored and ignored.
     if (isRecord(asset) && asset["kind"] !== "video") {
       issues.add(
         "wrong-type",

@@ -184,13 +184,13 @@ it("offers the vocabulary as choices", async () => {
   );
 });
 
-it("gives a pill the target §5 asks of a button, from the set's own owner", async () => {
+it("gives a pill the target the control set asks of a button, from the set's own owner", async () => {
   await mount();
 
-  // The pill's own box is 22px, below §5's 24×24. A pill is a button rather
+  // The pill's own box is 22px, below the 24×24. A pill is a button rather
   // than a replaced element, so it takes the shared `::before` target — the
   // same token `control-segmented.tsx` uses at identical padding — instead of a
-  // taller box the drawing does not give it.
+  // taller box the surface does not give it.
   expect(pill("retro").className).toContain(hitTargetClasses);
 });
 
@@ -287,8 +287,8 @@ it("keeps the committed order the author's, not the vocabulary's", async () => {
 it("draws a proposed tag as a proposal rather than as a picked one", async () => {
   await mount(["retro-diner"]);
 
-  // The drawing's own reading (`store-detail.html`): a dashed pill saying so, so
-  // a reader knows the word is new rather than that the facet failed to match.
+  // The drawn reading: a dashed pill saying so, so a reader knows the word is
+  // new rather than that the facet failed to match.
   const drawn = pill("retro-diner");
   expect(drawn.textContent).toBe(uiCopy.panels.tagsProposed("retro-diner"));
   expect(drawn.className).toContain("border-dashed");

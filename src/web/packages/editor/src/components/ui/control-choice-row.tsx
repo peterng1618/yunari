@@ -7,12 +7,12 @@ import {
 } from "./control-well.js";
 
 /**
- * The shapes a drawing gives a choice. `row` is §5's **choice row** and the
+ * The shapes a surface gives a choice. `row` is the **choice row** and the
  * default; `card` is the settings modal's palette tile, which
- * `mockups/current/settings.html:44-87` draws as a `--radius-lg` card at
+ * the settings surface draws as a `--radius-lg` card at
  * `--panel-2` carrying the caller's swatch *above* the name, the chosen one
  * marked by the accent border and its 3px glow rather than by a lift. `chip` is
- * §5's **preset chip**: a 24px rounded square carrying the swatch alone, its
+ * The **preset chip**: a 24px rounded square carrying the swatch alone, its
  * name staying the programmatic label — the shape a swatch library takes when
  * the swatch is what the author recognises. All three are shapes of this
  * control rather than separate controls: the radio, the group's ownership of
@@ -24,8 +24,8 @@ type ChoiceShape = "row" | "card" | "chip";
 /**
  * One member of a closed set where every member has its own colour: a
  * `--radius-md` row at `--panel-2` carrying an adornment and a name, the chosen
- * one lifted to `--stage` behind an accent border (DESIGN.md §5) — or, where the
- * surface's own drawing shapes the choice as a tile, a `--radius-lg` card with
+ * one lifted to `--stage` behind an accent border — or, where the
+ * surface shapes the choice as a tile, a `--radius-lg` card with
  * the adornment above the name (`ChoiceShape`).
  *
  * It is a **radio**, and the group owns which one is checked: `Radio.Root`
@@ -51,15 +51,15 @@ export function ControlChoiceRow(
     props;
   const ids = useControlIds(id);
   // The two shapes share everything but their geometry: the same 1px `--edge`
-  // at `--panel-2`, the same §5 rule 6 hover, the same §5.4 focus outline and
+  // at `--panel-2`, the same glyph-only hover rule, the same focus outline and
   // the same accent boundary when chosen. What differs is the axis — the card
   // stacks — and what *chosen* adds: the row lifts to `--stage`, the card keeps
-  // its `--panel-2` ground and takes the drawing's glow.
+  // its `--panel-2` ground and takes the glow.
   const shapeClasses = {
     row: "flex min-h-[32px] w-full flex-row items-center gap-[var(--space-8)] rounded-md px-[var(--space-10)] py-[var(--space-6)] text-muted data-[checked]:text-text data-[checked]:[background:var(--stage)]",
     card: "flex w-full flex-col gap-[var(--space-6)] rounded-lg p-[var(--space-8)] text-text data-[checked]:ring-3 data-[checked]:ring-accent/18",
     // The chip's own edge is the swatch's boundary; the chosen one takes the
-    // accent border and §4's translucent accent halo, the same chosen marker
+    // accent border and the translucent accent halo, the same chosen marker
     // the card uses. The swatch fills it, so there is no padding to lose height.
     chip: "relative size-6 flex-none overflow-hidden rounded-sm p-0 data-[checked]:ring-2 data-[checked]:ring-accent/18",
   }[shape ?? "row"];
@@ -74,7 +74,7 @@ export function ControlChoiceRow(
         value={value}
         aria-label={label}
         disabled={disabled}
-        // A refusal blocks the choice without leaving the tab order, which §5.3
+        // A refusal blocks the choice without leaving the tab order, which the refusal rule
         // requires: a natively disabled radio is announced by nobody who is not
         // already holding a pointer.
         readOnly={refused !== undefined}

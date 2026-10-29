@@ -44,7 +44,7 @@ function SaveCleanupDialog({
   readonly settle: ModalSettle<SaveCleanupAnswer>;
 }): React.JSX.Element {
   // Off by default: a theme in progress may still want the file it has not
-  // wired yet, and the drawing's own caption says the theme is saved either way.
+  // wired yet, and the dialog's caption says the theme is saved either way.
   const [remove, setRemove] = useState(false);
   const unusedBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
 

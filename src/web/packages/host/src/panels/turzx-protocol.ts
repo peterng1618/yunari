@@ -4,7 +4,7 @@
  * panel.
  *
  * Pure, so the verified probe bytes are testable without hardware. Nothing here
- * opens a port; the adapter owns the transport (decision 0133).
+ * opens a port; the adapter owns the transport.
  */
 
 /** The frame size every write is padded to; a shorter command is ignored. */
@@ -113,7 +113,7 @@ function joinChunks(bytes: Uint8Array, size: number): Uint8Array {
 }
 
 /**
- * The verified command table (probe recorded in the spec and decision 0133).
+ * The verified command table.
  *
  * `startBitmap` is already the full padded frame, so `frame` passes it through.
  * `brightness` is a prefix because the level byte is the caller's.

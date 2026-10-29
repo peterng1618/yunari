@@ -152,7 +152,7 @@ export type AddGroup = "card" | "text" | "shape" | "chart";
  *  in the group the caller names.
  *
  *  Read as the accessible name rather than as the text inside the button: the
- *  pane's shape and chart tiles are glyph-led (DESIGN.md §6), so a `Path` or a
+ *  pane's shape and chart tiles are glyph-led, so a `Path` or a
  *  `Gauge` tile draws a glyph and carries its word in its name, not on it. The
  *  cards and Text show their word, and a name is what a reader is told for
  *  either.

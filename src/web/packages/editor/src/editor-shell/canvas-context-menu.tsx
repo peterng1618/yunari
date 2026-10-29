@@ -24,7 +24,7 @@ interface MenuEntry {
   readonly id: string;
   readonly label: string;
   readonly run: () => void;
-  /** §4's destructive mark for a registry action, spread onto the item; empty
+  /** The destructive mark for a registry action, spread onto the item; empty
    *  for a creation entry, which is not an object action. */
   readonly mark: Readonly<Record<`data-${string}`, string>>;
   /** The *action* the row's chord belongs to — the registry's own answer, never

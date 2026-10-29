@@ -4,7 +4,7 @@ import path from "node:path";
 
 /**
  * Where Wallpaper Engine is, and every Steam library that holds workshop items
- * for it (§1.1). Nothing here is Windows-only by intent, but the install is:
+ * for it. Nothing here is Windows-only by intent, but the install is:
  * the registry is the only offline way to find Steam, and `wallpaperui.exe` is
  * the install's own proof that it is there.
  */

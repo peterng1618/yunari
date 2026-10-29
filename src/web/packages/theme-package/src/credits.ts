@@ -1,8 +1,8 @@
 /**
  * `credits.json`, the package's attribution member.
  *
- * An imported asset is not imported until it carries its credit (finder spec
- * R7). The member is a package file beside the manifest and the document, and
+ * An imported asset is not imported until it carries its credit (R7). The member
+ * is a package file beside the manifest and the document, and
  * this module is its one reader.
  */
 export const CREDITS = "credits.json";

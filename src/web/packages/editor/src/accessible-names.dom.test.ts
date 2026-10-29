@@ -244,8 +244,8 @@ describe("editor panels", () => {
       // The selected type token's inspector, mounted after the palette pane:
       // its family and weight choosers, each a `ControlSelect`'s value carrier.
       // Its reassignment chooser is not here because it is not on screen: the
-      // box is revealed by the first Delete press and starts empty
-      // (`decisions/0130`), so nothing before that point can reach it.
+      // box is revealed by the first Delete press and starts empty,
+      // so nothing before that point can reach it.
       "INPUT[type=][aria-hidden]", // Family (token)
       "INPUT[type=][aria-hidden]", // Weight (token)
       // The paint section of the same inspector, after the preset section: its
@@ -281,7 +281,7 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Stroke
       "INPUT[type=][aria-hidden]", // Shadow
       // The inspector's one toggle. It was three: deliberate bleed on both
-      // mounts, which went with its mark (`docs/decisions/0069`), and frosted
+      // mounts, which went with its mark, and frosted
       // glass on the shape alone. The text run's frost toggle is gone with its
       // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
       // section at all rather than a switch that writes nothing.
@@ -393,7 +393,7 @@ describe("editor panels", () => {
  * The panels this file audits, mounted at once: the artboard panel, the palette
  * panel, the type preset panel, the token inspector's two sections (a preset and
  * a paint), the selection inspector on two disjoint field
- * sets, the Add pane, the new-theme chooser and §7's Settings modal — and, since
+ * sets, the Add pane, the new-theme chooser and the Settings modal — and, since
  * plan 6 Task 4, the shell's own React chrome: the rail, the pane's chrome with
  * its action footer, and the canvas dock (`mountShellChrome`, which is also
  * where the reason the Composition tree is *not* among them is written down).
@@ -626,7 +626,7 @@ let chromeRoot: Root | undefined;
 let settingsRoot: Root | undefined;
 
 /**
- * §7's Settings modal, open on the Keyboard tab.
+ * The Settings modal, open on the Keyboard tab.
  *
  * The modal is a `Dialog`, so it is portalled to `body` and is audited through
  * the body the caller returns. Base UI mounts only the *active* tab panel, so

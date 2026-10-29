@@ -12,7 +12,7 @@ import { type EngineColor, resolveFlatColor } from "./fill.js";
 /**
  * Radar adapter. One polygon over the bound latest readings on one shared
  * scale: with a single data item ECharts would scale every spoke to full, so
- * the settings' `min`/`max` is the only honest geometry (§D2).
+ * the settings' `min`/`max` is the only honest geometry.
  */
 
 export type RadarShape = "polygon" | "circle";
@@ -73,7 +73,7 @@ export interface RadarOption extends EngineAnimation {
 /**
  * A polygon needs three spokes and every reading: with fewer, or with one gap,
  * the frame is drawn and the polygon is not. A missing reading is never drawn
- * as zero (§D1, §D3).
+ * as zero.
  */
 export function buildRadarOption(
   settings: RadarSettings,

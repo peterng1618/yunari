@@ -1,11 +1,11 @@
 /**
- * A real Open-Meteo capture for Berlin, 2026-10-24 — the probe recorded in
- * `docs/decisions/0099`. No test reaches the network.
+ * A real Open-Meteo capture for Berlin, 2026-10-24 — the probe recorded in the
+ * commit that added this file. No test reaches the network.
  *
- * The current conditions are the values in the task's ruling 3 and the daily
- * figures are from the same request. `pressure_msl` is the one field the
- * original probe did not request: `weather.pressure` has no other source, so a
- * second capture of the same endpoint on the same day supplied it (1006.7 hPa).
+ * The current conditions and the daily figures are from the same request.
+ * `pressure_msl` is the one field the original probe did not request:
+ * `weather.pressure` has no other source, so a second capture of the same
+ * endpoint on the same day supplied it (1006.7 hPa).
  */
 export const OPEN_METEO_BERLIN_CAPTURE = {
   latitude: 52.512604,

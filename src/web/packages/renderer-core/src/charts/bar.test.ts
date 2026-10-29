@@ -633,7 +633,7 @@ describe("category order", () => {
   });
 });
 
-// 0007: a value the renderer cannot colour is a gap, not a transparent bar
+// A value the renderer cannot colour is a gap, not a transparent bar
 // carrying a live number. `noValue` is the same datum shape a missing sample
 // produces, so the two absences stay distinguishable only through the issue
 // `buildChartPlan` reports.

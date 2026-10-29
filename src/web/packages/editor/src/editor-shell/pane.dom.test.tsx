@@ -152,7 +152,7 @@ it("asks the registry for eligibility and decides nothing itself", () => {
 it("marks delete destructive in the footer too, from the registry", () => {
   const { host, root } = render(bridge(object()));
 
-  // The footer is the second surface of the registry, and the mark is §4's own:
+  // The footer is the second surface of the registry, and the mark is its own:
   // read off the rendered controls, so a footer that stopped reading the flag
   // reddens. `delete` and only `delete` carries it.
   //

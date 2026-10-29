@@ -6,8 +6,7 @@ import { crc32, deflateSync } from "node:zlib";
  * L-Connect composites its sensor dashboard on a PNG layer over the JPEG
  * background, and that layer keeps its last picture after L-Connect exits — a
  * Yunari theme renders underneath it. A fully transparent PNG over the same
- * geometry replaces it, which is how L-Connect itself clears a theme's widgets
- * (see docs/decisions/0133-panel-overlay-layer.md).
+ * geometry replaces it, which is how L-Connect itself clears a theme's widgets.
  */
 
 const SIGNATURE = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);

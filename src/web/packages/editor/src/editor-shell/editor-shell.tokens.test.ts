@@ -72,7 +72,7 @@ function declarationBlock(palette: string): string {
 }
 
 /** The `--shell-*` tokens a palette block must declare: every *source* a
- *  `--shell-*` role or its §4 alias can name. The eleven colours plus the
+ *  `--shell-*` role or its the palette alias can name. The eleven colours plus the
  *  primary button's pair.
  *
  *  `--shell-display` is deliberately absent: it is declared once on the
@@ -316,7 +316,7 @@ describe("shell token stylesheet", () => {
 
   /** The values themselves, asserted rather than merely present.
    *
-   *  `DESIGN.md` §2–§3 is normative for these, and these
+   *  The design is normative for these, and these
    *  are the values it names. Asserting only that a token exists would let a
    *  change to `text-sm` land as a silent shift — which is how `--radius-md` sat
    *  at 8px against DESIGN.md's 6px with nothing to catch it; asserting the
@@ -344,25 +344,25 @@ describe("shell token stylesheet", () => {
       "--text-xs": "11px",
       "--text-sm": "12px",
       "--text-md": "13px",
-      // §2's 10, 15 and 19, pinned for
+      // The 10, 15 and 19, pinned for
       // the reason the scrim below gives: the `settings modal — lead type` parity
       // row's expected value *is* `--text-lg`, so that row is green for whatever
-      // the token holds — a dialog title at `16px` violates §2 with every
+      // the token holds — a dialog title at `16px` violates the type scale with every
       // gate green. These are the assertions that such a change is deliberate.
       "--text-2xs": "10px",
       "--text-lg": "15px",
       "--text-xl": "19px",
-      // §3's modal scrim. Pinned here and not only read from `:root` by
-      // `design-language.spec.ts`'s colour row: that row compares the token
-      // against the overlay and is green for whatever value the token holds, so
-      // this is the assertion that a changed scrim is a deliberate edit.
+      // The modal scrim. Pinned by a literal rather than read from `:root`:
+      // a comparison that reads the token on both sides is green for whatever
+      // value it holds, so this is the assertion that a changed scrim is a
+      // deliberate edit.
       "--elev-scrim": "#00000073",
     });
 
     // Tailwind writes each `--text-*` companion for its own size — `--text-sm`
     // ships `calc(1.25 / .875)`, computed for 14px — so a size changed without
     // its companion inherits a ratio belonging to a size the token no longer
-    // has. These are DESIGN.md §2's ratios; every size states its own.
+    // has. These are the design's ratios; every size states its own.
     for (const [size, lineHeight] of [
       ["2xs", "1.2"],
       ["xs", "1.3"],
@@ -387,7 +387,7 @@ describe("shell token stylesheet", () => {
    *  writing `font-size: var(--text-sm)` takes the size alone and leaves the
    *  element on preflight's `1.5`, a ratio nothing in this repo chose. Measured
    *  2026-10-13: 22 rules stated a size, one stated its companion, and the
-   *  browser showed the dialog at 18px where §2's `--text-sm` is 16.8px. The
+   *  browser showed the dialog at 18px where the `--text-sm` is 16.8px. The
    *  resolved value is asserted in a browser by `shell-appearance.spec.ts`; this
    *  is the source contract that keeps a new rule from reopening the gap. */
   it("pairs every stated size with that token's own line-height", () => {
@@ -465,7 +465,7 @@ describe("shell token stylesheet", () => {
     }
   });
 
-  /** DESIGN.md §4's role vocabulary is what a *surface* writes, and today only the
+  /** The design's role vocabulary is what a *surface* writes, and today only the
    *  `--shell-*` layer exists. An alias is substituted where it is declared, so
    *  a role declared once at `:root` would resolve the root's palette and pin a
    *  subtree that re-declares `--shell-*` — the swatch chip — to it. Every
@@ -476,11 +476,11 @@ describe("shell token stylesheet", () => {
    *
    *  `--stage`, `--hdr` and `--edge-2` were declared ahead of their consumers
    *  on the user's instruction, reversing the earlier "nothing declared for
-   *  nothing" ruling recorded here: §4 names all thirteen roles, and the gap
+   *  nothing" ruling recorded here: the palette names all thirteen roles, and the gap
    *  was the detail pass every later plan composes from. A colour declared for
    *  nothing is still the defect this plan exists to remove — the reversal is
    *  the user's, and the three now have a named consumer path. */
-  it("declares every §4 colour role in every palette block", () => {
+  it("declares every palette colour role in every palette block", () => {
     const roles = [
       "--bg",
       "--stage",
@@ -535,7 +535,7 @@ describe("shell token stylesheet", () => {
   /** The defect this test exists to prevent, and the reason the one above could
    *  not see it (`vg-307`).
    *
-   *  Each palette block writes §4's role *aliases* — `--hot: var(--shell-danger)`,
+   *  Each palette block writes the role *aliases* — `--hot: var(--shell-danger)`,
    *  `--warn: var(--shell-warm)` — and the test above asserts those aliases are
    *  present. An alias is substituted where it is declared, so an alias naming a
    *  `--shell-*` the block does not declare resolves to whatever the baseline
@@ -560,7 +560,7 @@ describe("shell token stylesheet", () => {
   });
 
   /** Ruling of 2026-10-10 (plan 7 Task 4): **every palette's primary button is
-   *  its own accent**, with a text colour that clears §5's 4.5:1 against it.
+   *  its own accent**, with a text colour that clears the 4.5:1 against it.
    *  That is the derivation rule the five non-source palettes inherit rather
    *  than six hand-picked pairs, and it is stated as `--shell-primary-bg:
    *  var(--shell-accent)` so a palette that moves its accent moves the button
@@ -568,9 +568,8 @@ describe("shell token stylesheet", () => {
    *
    *  The ratio is read from the declared values rather than from the browser:
    *  both sides are literals in the palette block, so the arithmetic is the
-   *  same arithmetic and it can run beside the stylesheet. The rendered result
-   *  is `tests/e2e/design-language.spec.ts`'s. */
-  it("holds the primary button's text above §5's ratio in every palette", () => {
+   *  same arithmetic and it can run beside the stylesheet. */
+  it("holds the primary button's text above the ratio in every palette", () => {
     /** A `#rgb`/`#rrggbb` literal, which is every value this pair declares. */
     const rgb = (value: string): readonly [number, number, number] => {
       const hex = /^#([0-9a-f]{6})$/i.exec(value.trim());
@@ -631,7 +630,7 @@ describe("shell token stylesheet", () => {
    *
    *  The granularity is a list rather than an exhaustive assertion over a whole
    *  block: `@theme static` also carries the type scale and the `--color-*`
-   *  aliases, and the `:root` control block carries the §4 roles, so a
+   *  aliases, and the `:root` control block carries the palette roles, so a
    *  closed-set assertion over either would redden on every legitimate addition.
    *  A name joins this list when it is retired, and the list is the vocabulary
    *  the phase has closed. */

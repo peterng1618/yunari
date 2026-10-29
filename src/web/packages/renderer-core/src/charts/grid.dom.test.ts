@@ -31,7 +31,7 @@ import {
  * to assert the layout rather than the key.
  *
  * Measured here 2026-09-15, one 400x240 line chart, plot-area left edge in
- * pixels — and note the first two rows, because spec 0013's review predicted
+ * pixels — and note the first two rows, because the review predicted
  * otherwise:
  *
  * | grid | plot left | plot bottom |

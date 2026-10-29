@@ -34,7 +34,7 @@ name: Publish
 # takes effect from the SECOND publish on, and `publish.yml` must exist on the
 # default branch for that binding to be offered. Provenance needs a public
 # repository, `id-token: write`, and npm >= 11.5.1 (the Node 24 pinned here
-# resolves an npm newer than that). The full runbook is docs/engineering/releases.md.
+# resolves an npm newer than that).
 #
 # `/editor` is a 302 to `/editor/` (relative asset base), so the smoke request
 # follows redirects and still requires a final 200.

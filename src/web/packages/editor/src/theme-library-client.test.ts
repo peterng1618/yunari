@@ -310,7 +310,7 @@ describe("ThemeLibraryClient", () => {
     // vg-110: the host answers 422 for a theme that is there and does not
     // validate, where the 404 stays for one that is not — and the client has to
     // keep the two apart, because `openQuietly` cannot tell a document worth
-    // reporting from a dead bookmark otherwise (ADR-0043).
+    // reporting from a dead bookmark otherwise.
     const mockFetch = vi.fn(
       async () =>
         new Response(
@@ -356,7 +356,7 @@ describe("ThemeLibraryClient", () => {
     // vg-409: the host answers 413 for a theme that is there and too large to
     // read, where the 404 stays for one that is not. Its own error rather than
     // the validation one above, because nothing about the document is invalid —
-    // the validator never sees it (decisions/0043, 0084).
+    // the validator never sees it.
     const mockFetch = vi.fn(
       async () =>
         new Response('"huge" is stored but larger than 32 MB.', {

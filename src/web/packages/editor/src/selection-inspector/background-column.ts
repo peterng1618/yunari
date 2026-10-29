@@ -163,7 +163,7 @@ function offsetField(media: BackgroundMedia | undefined): FieldView {
 
 /** The frame a video stands on when motion is unavailable, and the still the
     glass material samples. Only a video has frames, so the row exists only for
-    one (`0135`). */
+    one. */
 function fallbackFrameField(media: BackgroundMedia | undefined): FieldView {
   return {
     id: "background.fallbackFrame",
@@ -246,7 +246,7 @@ export function writeBackgroundField(
       }
       // A new picture keeps the box and transform the author set for the last
       // one: changing which picture is shown is not a reset of how. Its frame
-      // is the one exception — only a video has frames (`0135`).
+      // is the one exception — only a video has frames.
       const carried: BackgroundMedia = media ?? {
         assetId: value,
         bounds: "theme",

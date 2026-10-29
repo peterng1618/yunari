@@ -26,7 +26,7 @@ import { isDesktopSurface } from "./surface.js";
  * **Open in editor** control, and a real host serves the same document to the
  * player. The claim is
  * not "both clip at the artboard". That was `host-bleed.spec.ts`'s, and it went
- * with the crop notice (`docs/decisions/0069`); the cases below read it on both
+ * with the crop notice; the cases below read it on both
  * surfaces' own pixels now, and the player's mount of the clip is
  * `packages/player/src/artboard-clip.dom.test.ts`. It is the narrower one the
  * row asks for: the artboard clip does not
@@ -125,7 +125,7 @@ function textBox(
     fontFamily: "Segoe UI, system-ui, sans-serif",
     lineHeight: 1,
     // Resolved paint, with the authored token beside it: a display resolves no
-    // palette paints of its own (ADR-0026), and the validator refuses a
+    // palette paints of its own, and the validator refuses a
     // resolved colour with no token behind it. The value is the palette
     // entry's own, read from the one place both spell.
     fill: CLIP_INK,

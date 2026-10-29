@@ -136,7 +136,7 @@ function closeControl(): HTMLElement {
  *
  *  jsdom resolves no custom property (`editor-shell.tokens.test.ts` records the
  *  same), so a value a rule states as a token comes back as the token's name;
- *  `token()` turns that back into the value §2 declares, and `resolved()` is
+ *  `token()` turns that back into the value the type scale declares, and `resolved()` is
  *  the substitution. */
 const shellCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "editor-shell.css"),
@@ -475,7 +475,7 @@ afterEach(() => {
 });
 
 describe("Settings", () => {
-  it("opens the settings modal from the gear, and offers exactly the five tabs the spec names", async () => {
+  it("opens the settings modal from the gear, and offers exactly the five tabs", async () => {
     const host = mount();
     await press(gear(host));
 
@@ -650,7 +650,7 @@ describe("Settings", () => {
   });
 
   it("applies the palette where the chip applied it — the attribute, and the storage", async () => {
-    // The defect `0035` exists to prevent is a palette applied to React state
+    // The defect this exists to prevent is a palette applied to React state
     // alone, which leaves every portalled popup painting the old one.
     // A palette other than the one already in force: picking the current value
     // is a no-op the primitive does not report, so it could not fail.
@@ -903,7 +903,7 @@ describe("Connections", () => {
   });
 });
 
-/** §7's About tab. The rule that matters is that every string is traceable to
+/** The About tab. The rule that matters is that every string is traceable to
  *  an owner — the product version to the workspace manifest's `version`, the
  *  schema version to `SUPPORTED_SCHEMA_VERSION`, the release version to the open
  *  document — and the tab invents none. The harness drives the prop the shell
@@ -1002,7 +1002,7 @@ describe("About", () => {
   });
 });
 
-/** §7's Previews tab. The catalogue is the author's, and the tab is the only
+/** The Previews tab. The catalogue is the author's, and the tab is the only
  *  surface that edits it: the list it prints is the derived lens ids, one row
  *  per stored token, so a twin is offered by the row that owns it rather than
  *  becoming a second, independently removable ratio. */
@@ -1041,7 +1041,7 @@ describe("Previews", () => {
     await pressAdd(tab);
 
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
-    // A refusal a screen reader never hears is a refusal not stated (§9).
+    // A refusal a screen reader never hears is a refusal not stated.
     expect(
       tab
         .querySelector("[data-yunari-preview-ratio-reason]")
@@ -1255,10 +1255,9 @@ describe("Previews", () => {
   });
 });
 
-/** §2's eyebrow and §5 rule 2's read-only row, read off the rendered modal
+/** The eyebrow and the read-only row, read off the rendered modal
  *  rather than off the sheet: a value a rule states is a rendered outcome, and
- *  this is the half that reddens in `vitest` when the rule is reverted. The
- *  rendered half is the browser (`design-language.spec.ts`). */
+ *  this is the half that reddens in `vitest` when the rule is reverted. */
 describe("the modal's own language", () => {
   let injected: HTMLStyleElement;
 
@@ -1272,7 +1271,7 @@ describe("the modal's own language", () => {
     injected.remove();
   });
 
-  it("takes §2's eyebrow for the group heading — --text-2xs, 600, .11em", async () => {
+  it("takes the eyebrow for the group heading — --text-2xs, 600, .11em", async () => {
     const host = mount();
     await press(gear(host));
 
@@ -1282,12 +1281,12 @@ describe("the modal's own language", () => {
     if (heading === null) throw new Error("no group heading in the modal.");
     const style = getComputedStyle(heading);
 
-    expect(resolved(style.fontSize), "§2's --text-2xs is 10px").toBe("10px");
+    expect(resolved(style.fontSize), "the --text-2xs is 10px").toBe("10px");
     expect(style.fontWeight).toBe("600");
     expect(style.letterSpacing).toBe("0.11em");
   });
 
-  it("gives the About row §5 rule 2's 74px label column and right-aligned value", async () => {
+  it("gives the About row the 74px label column and right-aligned value", async () => {
     const host = mount("2.5.1");
     await press(gear(host));
     await openTab(uiCopy.settings.about);
@@ -1305,8 +1304,8 @@ describe("the modal's own language", () => {
     expect(getComputedStyle(value).textAlign).toBe("right");
   });
 
-  it("leaves the Keyboard tab's rebind row the flex row its drawing draws", async () => {
-    // §5 rule 2's escape clause: this row's `dd` carries a rebind and a Reset
+  it("leaves the Keyboard tab's rebind row the flex row it draws", async () => {
+    // the escape clause: this row's `dd` carries a rebind and a Reset
     // button, so it is not read-only and the 74px column is not its track.
     // `display` is the declaration the grid would take, because the row's own
     // rule declares none of its own.

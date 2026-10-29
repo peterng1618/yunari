@@ -25,8 +25,8 @@ import { decodeStill } from "./panel-image.js";
  * class driver, so it is opened through `node-hid` rather than claimed through
  * libusb — claiming it fails with "incompatible driver is installed".
  *
- * **The bytes here were measured, not guessed** (firmware 5.11.0, decision
- * 0131): firmware answers `11 01` with 5.11.0, LCD info answers `31 01` with
+ * **The bytes here were measured, not guessed** against firmware 5.11.0:
+ * firmware answers `11 01` with 5.11.0, LCD info answers `31 01` with
  * brightness and orientation, and the 16-bucket table answers `31 04` with a
  * start/size pair each.
  */

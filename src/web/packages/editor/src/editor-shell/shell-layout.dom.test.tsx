@@ -252,7 +252,7 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   // saying the rest existed. Asserting its absence is the point — a test that
   // only checked the toolbar would not have noticed it return.
   expect(root.textContent).not.toContain("Arrange");
-  // The palette chip left the header for Settings (§7), and the header is not
+  // The palette chip left the header for Settings, and the header is not
   // allowed to grow a second route back to it: the gear is the only one. The
   // attribute it used to write is still what paints the shell, asserted above.
   expect(
@@ -299,7 +299,7 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
 });
 
 /**
- * §7.3's count, one per pane's own list, and the absences it takes.
+ * The count, one per pane's own list, and the absences it takes.
  *
  * The row ruled per pane rather than per editor: the Add pane counts the card
  * library, the Composition pane the scene's objects, the Tokens pane the
@@ -314,7 +314,7 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * holds no manager, so `assetCount` arrives through the store and a `0` before
  * that would be the same fabrication. And **before a bridge is set the
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
- * mounted its document is a claim the product does not have (DESIGN.md §9). The
+ * mounted its document is a claim the product does not have. The
  * Add pane's count is the exception, and it proves the rule rather than
  * breaking it: `CARD_LIBRARY` is a module constant, so eight units is a reading
  * at every moment the pane exists, never a default standing in for one.
@@ -823,7 +823,7 @@ it("keeps the diagnostic surface in the footer, and it still reports a refusal",
   // The footer keeps its readings — the counts, the status host's message, the
   // diagnostic and the save state — and the live mark joins them only when the
   // host reports the LAN on. No host is behind this shell, so no mark is drawn
-  // rather than "not live" (§9).
+  // rather than "not live".
   expect(line?.contains(layout.hosts.status)).toBe(true);
   expect(line?.querySelector(".editor-shell-save-state")).not.toBeNull();
   expect(line?.querySelector(".editor-shell-live")).toBeNull();
@@ -849,7 +849,7 @@ it("reads the scene's counts on the left, and draws none before a bridge is set"
 
   // No scene has mounted, so there is no total to read. The left is empty
   // rather than reading `0 objects` over a canvas the editor has not built —
-  // that reading is a claim the product does not have (§9).
+  // that reading is a claim the product does not have.
   expect(root.querySelector("[data-yunari-status-objects]")).toBeNull();
   expect(root.querySelector("#status")?.textContent).toBe("");
 
@@ -902,7 +902,7 @@ it("puts the document's identity in the stage's top-left corner", async () => {
   });
 
   // No document is open until `setBridge`, so the corner is empty rather than
-  // holding a chip for a theme nobody opened (§9).
+  // holding a chip for a theme nobody opened.
   expect(root.querySelector(".editor-shell-identity")).toBeNull();
 
   layout.setBridge(bridge, undefined);
@@ -1191,7 +1191,7 @@ function pickRadio(submenu: HTMLElement, text: string): void {
 }
 
 /** The two readings answer for the theme's sensors and for what this machine
- *  reports (§6), and each is proven by picking it: the refresh case above only
+ *  reports, and each is proven by picking it: the refresh case above only
  *  ever opened one setting, so `setSourceMode` reached its owner with nothing
  *  asserting it (`vg-339`). */
 it("routes the readings submenu's choice to setSourceMode", async () => {
@@ -1236,7 +1236,7 @@ it("has no Insert menu, and every insertable group is still reachable from the A
   );
   await Promise.resolve();
 
-  // §7.1: Insert lives in the Add pane, so the header has no Insert menu. The
+  // the header rule: Insert lives in the Add pane, so the header has no Insert menu. The
   // three that remain are the three DESIGN.md names — a fourth coming back is
   // the second rendering this plan exists to prevent.
   expect(
@@ -1472,7 +1472,7 @@ function chosen(root: HTMLElement): readonly (string | null)[] {
 }
 
 /**
- * §7.1's mode switch: three surfaces, one showing, in the header.
+ * The mode switch: three surfaces, one showing, in the header.
  *
  * The shell opens on the editor, so the first read is also the resting state:
  * the body is laid out and no other mode's region is in the tree. The switch
@@ -1494,7 +1494,7 @@ it("offers the three modes and marks the active one", async () => {
     "the header does not offer the three modes, in order",
   ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.thisPc]);
   expect(chosen(root)).toEqual(["true", "false", "false"]);
-  // §5 rule 5: every control carries an id, the group's and each segment's.
+  // the control-id rule: every control carries an id, the group's and each segment's.
   expect(
     root.querySelector(".editor-shell-mode-switch")?.id,
     "the switch carries no id",
@@ -1626,7 +1626,7 @@ it("moves the shell only when the open's replacement is accepted", async () => {
 });
 
 /**
- * §7.2's "a second horizontal bar under the header is forbidden".
+ * The "a second horizontal bar under the header is forbidden".
  *
  * A mode strip under the header would satisfy the first case above and be the
  * exact thing the section rules out, so where the switch is drawn is its own
@@ -1655,7 +1655,7 @@ it("does not render a second horizontal bar", () => {
 });
 
 /**
- * §7.1's per-mode action region, read in all three modes.
+ * The per-mode action region, read in all three modes.
  *
  * The menus and the publish chord act on the open document, so a mode with no
  * document of its own draws neither: the switch is the whole of what the header
@@ -1932,7 +1932,7 @@ it("shows the Host mode's own region, and the store's only in Themes", async () 
 });
 
 /**
- * **§7.6's strip is the shell's and it is one strip in every mode**, so the Host
+ * **the strip is the shell's and it is one strip in every mode**, so the Host
  * mode's line is placed here rather than drawn as a second bar inside the
  * region. Its two halves are the host's: the count of displays the host holds
  * and the last write's answer — not a document's object and selection counts,

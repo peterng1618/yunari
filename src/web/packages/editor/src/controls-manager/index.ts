@@ -104,7 +104,7 @@ const SHIFT_ANGLE_STEP = 15;
  * Each endpoint therefore reads its own corner rather than assuming one, and
  * the action handler writes the four scalars `Line` keeps. Fabric's polyline
  * controls solve the same problem for a class this editor does not use, and
- * `docs/decisions/0020` records the search that settled on this instead.
+ * records the search that settled on this instead.
  */
 function createLineControls(): Record<string, Control> {
   const endpoint = (which: "x1" | "x2"): Control => {

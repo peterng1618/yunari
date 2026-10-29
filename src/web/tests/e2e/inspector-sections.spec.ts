@@ -37,7 +37,7 @@ import { isDesktopSurface } from "./surface.js";
  * built bundle.
  *
  * Task 10 of the per-kind inspector plan. Every claim here is about a rendered
- * surface, and `AGENTS.md` is explicit that visible behaviour needs browser
+ * surface, and the rule is explicit that visible behaviour needs browser
  * inspection rather than object counts. The numbers and strings are the
  * assertions; the screenshots are for a human.
  */
@@ -110,7 +110,7 @@ async function sectionIds(page: Page): Promise<string[]> {
 
 async function isOpen(page: Page, id: string): Promise<boolean> {
   // The section is a disclosure whose header is a button carrying
-  // `aria-expanded` (DESIGN.md §5), not a native `<details>` with an `.open`.
+  // `aria-expanded`, not a native `<details>` with an `.open`.
   return sectionExpanded(page, id);
 }
 
@@ -133,7 +133,7 @@ async function controlCount(
  * Whether the subject leads the column.
  *
  * The column's host mounts the subject in its first child and the sections in
- * the sibling after it (DESIGN.md §7.4: "The column opens with the subject … not a
+ * the sibling after it ("The column opens with the subject … not a
  * chrome label"), so "the subject leads" is a document-order fact rather than a
  * presentation class: the subject's host carries copy and the first section
  * follows it. A projection that rendered the sections first, or no subject at
@@ -839,7 +839,7 @@ test.describe("the per-kind inspector column", () => {
   });
 
   /**
-   * §5's other half: "cancellation restores the start value and adds no
+   * The other half: "cancellation restores the start value and adds no
    * history". The gesture is abandoned mid-drag, so the preview has already
    * written the document — what the restore has to reach is the document, not
    * just the control. The typed edit before it is what makes "no entry" tellable
@@ -888,7 +888,7 @@ test.describe("the per-kind inspector column", () => {
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
     // The typed route the well owns (item 10). A bound typed past is **kept
-    // with its reason rather than coerced** (§5): the field that lands the
+    // with its reason rather than coerced**: the field that lands the
     // value the author typed is the one that teaches nothing about the bound,
     // and an invalid `aria-invalid` does not raise `blur`.
     const track = page.locator('input[type="range"][data-yunari-opacity]');
@@ -1418,7 +1418,7 @@ test.describe("the per-kind inspector column", () => {
     expect(radar.series[0]?.data[0]?.value).toHaveLength(4);
 
     // Fewer than three spokes leaves the frame and draws no polygon: never a
-    // polygon closed on a reading nobody took (§D1).
+    // polygon closed on a reading nobody took.
     const fewer = (await builtOption(page, "radar-fewer")) as {
       series: { data: readonly unknown[] }[];
     };
@@ -1812,7 +1812,7 @@ test.describe("the per-kind inspector column", () => {
     await expect(endpoint).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  test("the section header takes the drawing's rule, §2's mono count and §4's faint, and the subject name §2's 600", async ({
+  test("the section header takes the trailing rule, the mono count and the faint, and the subject name the 600", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1829,11 +1829,11 @@ test.describe("the per-kind inspector column", () => {
       series: ["cpu.load"],
     });
 
-    // Plan 1's parity census (`vg-390`) re-derived these two from
-    // `docs/design/mockups/current/controls.html`: `:30` draws the header's
-    // count in `ui-monospace` and `var(--faint)`, and `:24` draws the subject's
-    // name at weight 600. §2 gives counts to UI mono (`DESIGN.md:124`) and
-    // titles 600 (`:149`); §4 gives `--faint` to counts (`:103`). Both were
+    // Plan 1's parity census (`vg-390`) re-derived these two from the header:
+    // its count is
+    // `ui-monospace` in `var(--faint)`, and the subject's
+    // name is weight 600. The type scale gives counts to UI mono and titles 600; the palette gives
+    // `--faint` to counts. Both were
     // inherited before this case existed — the count took the heading's sans
     // and `--muted`, the name the shell's 400.
     const count = page.locator("[data-yunari-section-count]").first();
@@ -1841,7 +1841,7 @@ test.describe("the per-kind inspector column", () => {
     expect(
       await count.evaluate((el) => getComputedStyle(el).fontFamily),
     ).toMatch(/mono/i);
-    // Read against the header's own chevron, which §5 already draws in
+    // Read against the header's own chevron, which the control set already draws in
     // `--faint`, so this holds in every palette rather than in one. The rule
     // span beside it is `aria-hidden` too, so it is excluded by name.
     const chevron = page
@@ -1858,11 +1858,11 @@ test.describe("the per-kind inspector column", () => {
       "600",
     );
 
-    // The header's trailing rule, which every current drawing draws between the
-    // count and the chevron (`controls.html:31` and five siblings). Nothing
-    // argued against it, so it is a difference the drawing wins. Its neighbouring
+    // The header's trailing rule, which the section header draws between the
+    // count and the chevron. Nothing
+    // argued against it, so the header keeps it. Its neighbouring
     // case — the read-only rows' omitted dashed divider, where `column.tsx`'s
-    // §5.1 note won instead — left with the read-only section (item 17).
+    // note won instead — left with the read-only section (item 17).
     const rule = page.locator(
       '[data-yunari-section="position"] [data-yunari-section-rule]',
     );
@@ -1955,7 +1955,7 @@ test.describe("the per-kind inspector column", () => {
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
 
-    // §7.4's requirement is a property of the line, not its spelling: "the
+    // The requirement is a property of the line, not its spelling: "the
     // column is empty and says where to choose from" (`DESIGN.md:279`). A pin
     // on the literal passes whatever the literal says, so the case named for
     // the clause could not fail while the line named no place — `vg-446`.
@@ -1989,7 +1989,7 @@ test.describe("the per-kind inspector column", () => {
 
     // Everything that writes is gone, so no question has anything left under it
     // and none of them stands a header over nothing. **An inspector may be
-    // empty**: while the read-only section stood it kept one, and §7.4's
+    // empty**: while the read-only section stood it kept one, and the inspector rule's
     // empty-section rule is what says the column shows nothing rather than a
     // header over a locked object's absent rows. The lead block still names the
     // lock, which is the surface that says why.
@@ -2175,8 +2175,8 @@ test.describe("the per-kind inspector column", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
-    // The dark half of the comparison: `inspector-controls.html` is drawn on
-    // graphite, and a capture of one palette cannot show a hard-coded hex. The
+    // The dark half of the comparison: a capture of one palette cannot show a
+    // hard-coded hex. The
     // same real selection — the starter's gauge child — is read in both.
     await choosePalette(page, "graphite");
     await selectStarterGauge(page);

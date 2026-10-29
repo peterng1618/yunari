@@ -6,7 +6,7 @@ import type { CustomSource } from "../../settings/sources.js";
  *  redirect and address cases can use them without duplicating or importing a
  *  file that registers tests. */
 
-/** 1 MiB: the spec's cap, not a tuning knob. */
+/** 1 MiB: the cap, not a tuning knob. */
 export const MiB = 1024 * 1024;
 
 export interface SourcePatch {

@@ -178,7 +178,7 @@ it("keeps every choice the old control offered reachable, inside one view cluste
   expect(reset).toHaveBeenCalled();
 });
 
-/** The camera commands §7.5's top-right row names, beside the readout and not
+/** The camera commands the top-right row names, beside the readout and not
  *  instead of it. `−` and `+` step by the keys' own `ZOOM_STEP` — read from its
  *  one owner rather than restated, because two literals would be two answers to
  *  "what is one step" and the mouse and the keyboard would drift apart. */

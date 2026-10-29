@@ -13,7 +13,7 @@ import { chartPaintReferences } from "./chart-paint.js";
  * sample that arrived late with an older timestamp.
  *
  * **A line's picture is placed by its data, so only the data moves it.** Its
- * axis ends at its newest reading; no frame clock is an input (0124). Value
+ * axis ends at its newest reading; no frame clock is an input. Value
  * families read `latest` and move with their newest reading too.
  *
  * A chart with no bindings draws a fixed placeholder, so its reading never

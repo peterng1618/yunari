@@ -506,7 +506,7 @@ describe("bindingRefusal", () => {
 
   it("refuses a modifier-less letter for an action that does not defer to a text field", () => {
     // `file.save` deliberately fires while a text field has focus; binding it to
-    // a bare letter would make it stop, which is the §2.3 behaviour change a
+    // a bare letter would make it stop, which is the behaviour change the missing-reading rule forbids: a
     // preference may not dress up as one.
     expect(
       bindingRefusal(

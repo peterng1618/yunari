@@ -60,7 +60,7 @@ export function chartFamilyGlyph(family: string | undefined): LucideIcon {
  * mark, `group` the stack glyph, `shape` the primitive's own glyph and `chart`
  * its family's. The four marks this replaced — the text object's own words in
  * its own face, a paint swatch, an image thumbnail, a family glyph — were four
- * drawings in one column, and three of them said nothing at 13px that the row's
+ * marks in one column, and three of them said nothing at 13px that the row's
  * name, role and bound key do not already say in words.
  *
  * A row whose kind this build cannot name still draws rather than printing

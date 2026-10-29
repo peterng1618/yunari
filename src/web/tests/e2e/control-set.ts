@@ -232,7 +232,7 @@ export async function typeIntoControl(
   await page.keyboard.press("Tab");
 }
 
-/** A section's disclosure header: the button §5 makes it. */
+/** A section's disclosure header: the button the control set makes it. */
 function sectionHeader(page: Page, id: string): Locator {
   return page
     .locator(`[data-yunari-section="${id}"] button[aria-expanded]`)

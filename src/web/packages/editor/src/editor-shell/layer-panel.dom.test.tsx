@@ -181,7 +181,7 @@ it("indents a group child and carries the row's controls once it is selected", a
   expect(rows[1]?.querySelectorAll("button")).toHaveLength(2);
   expect(rows[1]?.querySelector('[aria-label="Unlock"]')).not.toBeNull();
   // The group row is marked as a group for the stylesheet, which bolds its name,
-  // and it carries the generic stack glyph the kind arm draws (§5.1).
+  // and it carries the generic stack glyph the kind arm draws.
   expect(rows[0]?.getAttribute("data-kind")).toBe("group");
   expect(
     rows[0]?.querySelector('[data-yunari-layer-mark="group"]'),

@@ -8,13 +8,13 @@ import { glyphStrokeWidth } from "../../editor-shell/icons.js";
  * or a renamed diagram — fails to compile here until it is drawn, which is what
  * makes "the library is a fixed set of eight" a fact rather than a promise.
  *
- * The drawing lives here rather than in `card-library.ts` because that module
+ * The surface lives here rather than in `card-library.ts` because that module
  * is data (a card's parts, its readings, how a copy is minted) and this is a
- * React surface. **The library owns the name; the pane owns the drawing.**
+ * React surface. **The library owns the name; the pane owns the rendering.**
  *
- * Stroke paths at DESIGN.md §6's weight on the 24px grid, taken from the reference's
+ * Stroke paths at the design's weight on the 24px grid, taken from the starter's
  * own tile artwork, so no icon family and no dependency arrives with them. That
- * is exactly §6's own escape from the library — a card unit tile may carry a
+ * is exactly its own escape from the library — a card unit tile may carry a
  * diagram of what it builds because the library is a fixed set of eight — while
  * the weight still comes from the one chrome vocabulary (`icons.ts`), so these
  * sit inside the band with every chrome glyph.
@@ -23,7 +23,7 @@ import { glyphStrokeWidth } from "../../editor-shell/icons.js";
  * for each pair and **a diagram that two units share identifies neither**.
  * `storage` is the reference's drive outline without its half-filled bar: a
  * partial fill is a reading, and a diagram that shows a reading is exactly the
- * fabricated telemetry §5.2 forbids.
+ * fabricated telemetry the control set forbids.
  */
 
 interface CardDiagramProps {

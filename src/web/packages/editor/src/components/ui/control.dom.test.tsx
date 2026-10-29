@@ -21,7 +21,7 @@ import { wellClasses } from "./control-well.js";
 import { InspectorSection } from "./inspector-section.js";
 
 /** `DESIGN.md`, seven levels above this file — the same way `design-md.test.ts`
- *  reaches the root `scripts/`. §3's spacing table is normative for the control
+ *  reaches the root `scripts/`. The spacing table is normative for the control
  *  set, and nothing compared it to what the set writes (`vg-498`).
  *
  *  `dirname` on the file's own path rather than `new URL(relative, …)`: under
@@ -170,7 +170,7 @@ const EXEMPT: readonly (readonly [string, string])[] = [
 /**
  * The shared rules of the one control set — the two that are defects rather
  * than style (a control with no programmatic name, a refusal that omits the
- * row), plus the editing and recovery contract DESIGN.md §5 makes normative.
+ * row), plus the editing and recovery contract the design makes normative.
  *
  * The styles are not asserted here: jsdom resolves no custom properties, so a
  * computed-style assertion would pass whatever the cascade does. The rendered
@@ -1156,7 +1156,7 @@ it("commits a value typed into the slider's well, refusing one past the bound", 
   expect(onCommit).toHaveBeenCalledTimes(1);
   expect(onCommit).toHaveBeenCalledWith(8);
 
-  // A draft past the bound is kept with its reason rather than clamped: §5's
+  // A draft past the bound is kept with its reason rather than clamped: the control set's
   // rule, and the same one the control's own number field keeps.
   await type(well, "60");
   await press(well, "Enter");
@@ -1416,7 +1416,7 @@ it("names a section with data-yunari-section from its own id", async () => {
 });
 
 it("raises the well's edge on hover, except when the control is blocked", () => {
-  // DESIGN.md §5 rule 6: hover raises the resting `--edge` to `--muted`. jsdom
+  // The hover rule: hover raises the resting `--edge` to `--muted`. jsdom
   // resolves no custom property, so the pin is the class the cascade is built
   // from — it fails if the hover rule is removed.
   expect(wellClasses("panel")).toContain("hover:border-muted");
@@ -1425,18 +1425,17 @@ it("raises the well's edge on hover, except when the control is blocked", () => 
   expect(wellClasses("panel", true)).not.toContain("hover:border-muted");
 });
 
-it("pads a well with the step §3's table names for it", () => {
-  // `vg-498`. Code padded 6, both current drawings draw `padding:4px 6px`, and
-  // §3's table gave the 4px step to well padding — three sources against one
+it("pads a well with the step the table names for it", () => {
+  // `vg-498`. Code padded 6, both current surfaces write `padding:4px 6px`, and
+  // The table gave the 4px step to well padding — three sources against one
   // table cell, with no case reading either side of the split, so nothing ever
-  // reddened on it. `design-tokens.mjs` holds a surface to §3's *steps* and
-  // never compares that list to the table's own assignment, and
-  // `design-language-controls.spec.ts` reads the well's right edge against the
-  // row, which passes at either width. This is the missing read: the table's
-  // assignment and the class the well is built from, against each other.
+  // reddened on it. `design-tokens.mjs` holds a surface to the *steps* and
+  // never compares that list to the table's own assignment. This is the missing
+  // read: the table's assignment and the class the well is built from, against
+  // each other.
   //
   // The table moves rather than the pad, and that is the row's own ruling: the
-  // code and *both* drawings write 6 horizontally, so the cell is the odd one
+  // code and *both* surfaces write 6 horizontally, so the cell is the odd one
   // out. The read is anchored on the table row's own words rather than on a
   // line, because a line number here rots and this one has already moved.
   const row =
@@ -1445,12 +1444,12 @@ it("pads a well with the step §3's table names for it", () => {
     );
   expect(
     row,
-    "§3's table names no step for a well's horizontal padding, so the padding " +
+    "the table names no step for a well's horizontal padding, so the padding " +
       "the wells write is sanctioned by nothing",
   ).not.toBeNull();
   expect(
     wellClasses("panel"),
-    `§3's table names the ${row?.[1]}px step for a well's horizontal padding, ` +
+    `the table names the ${row?.[1]}px step for a well's horizontal padding, ` +
       "which the well does not write",
   ).toContain(`px-[var(--space-${row?.[1]})]`);
 });

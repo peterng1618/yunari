@@ -11,7 +11,7 @@ import {
  *
  * The geometry lines are pairs — `X`/`Y` on one line, `W`/`H` on another, a
  * line's two ends — and a pair is a layout, not a control: it is two wells on
- * one line, which is what DESIGN.md §5 already draws. `ControlPair` owns the row and
+ * one line, which is what the design already draws. `ControlPair` owns the row and
  * the row's label; each half is a `ControlNumber` in its `inline` form, so the
  * draft, the validation and the commit rule stay in the one control that owns
  * them rather than being re-derived here.

@@ -260,7 +260,7 @@ function bitrateCap(longEdge: number): number {
  * artboard" press, so it derives the box from the theme's declared artboard
  * aspect and crops the centre: an explicit request is the one crop that is not
  * a silent bake, and the author can re-normalize after an artboard edit
- * (spec rule 1 rules out the implicit version of this).
+ * (the implicit version of this is ruled out).
  */
 function scaleFilter(
   facts: VideoFacts,

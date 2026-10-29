@@ -28,7 +28,7 @@ function reason(error: unknown): string {
 }
 
 /**
- * The display choice a cell's **Assign to display** opens: §5's select, whose
+ * The display choice a cell's **Assign to display** opens: the select, whose
  * value is the display a theme is put on.
  *
  * **The list is the host's answer, read when the choice opens and kept
@@ -53,7 +53,7 @@ function reason(error: unknown): string {
  *
  * **Nothing warns about the cost here.** The user narrowed the cost warning to
  * the host's own pages on 2026-10-18, so the per-display plan's own surface
- * raises it and this one says nothing (spec, "What the assignment warns about").
+ * raises it and this one says nothing.
  */
 export function AssignDisplay(props: {
   readonly item: StoreItem;

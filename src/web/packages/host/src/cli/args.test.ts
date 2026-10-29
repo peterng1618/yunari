@@ -34,7 +34,7 @@ describe("parseArgs", () => {
     });
   });
 
-  it("is loopback by default, not a wildcard bind (§7)", () => {
+  it("is loopback by default, not a wildcard bind", () => {
     const result = run();
 
     expect(result).toMatchObject({ options: { host: "127.0.0.1" } });
@@ -145,7 +145,7 @@ describe("parseArgs", () => {
   });
 
   /**
-   * The settings moved out of the themes directory (ADR-0017), so `--app-dir`
+   * The settings moved out of the themes directory, so `--app-dir`
    * is how a private install is made: one flag relocates the library *and* the
    * state, rather than a library that writes into the real settings.
    */

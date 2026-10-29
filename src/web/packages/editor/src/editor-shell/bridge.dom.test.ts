@@ -258,7 +258,7 @@ it("carries the document's name, and republishes it when the theme is renamed", 
 
 it("names a document that reports no name by its id, never by nothing", () => {
   // The field's contract says `documentName` is never `""` — a chip rendering
-  // an empty name is the nameless claim §9 forbids, and `DocumentIdentity`
+  // an empty name is the nameless claim the refusal rule forbids, and `DocumentIdentity`
   // hides only on `undefined`, so `""` would render one. An envelope can still
   // hold one: the schema refuses an empty `metadata.name` and the loader
   // supplies the id (`vg-221`), but this reads whatever the document holds,
@@ -591,7 +591,7 @@ it("resolves a range across one group's children to a single member", () => {
 });
 
 it("carries the scene's object total beside the selection", () => {
-  // §7.6's left readout, and the one fact the strip carries that is not a
+  // The left readout, and the one fact the strip carries that is not a
   // message. Counted off the canvas, so it is the scene the layer list projects
   // from rather than a second tally that could drift from it.
   const rect = new Rect({ id: "header", width: 10, height: 10 });
@@ -614,7 +614,7 @@ it("counts a scene that holds nothing as zero, and follows it as it changes", ()
 });
 
 it("counts the theme's paints, and leaves the reserved `none` out of the count", () => {
-  // §7.3's Tokens count. The membership rule is `paletteTokenIds` — the module
+  // The Tokens count. The membership rule is `paletteTokenIds` — the module
   // `PaintList` draws its rows from — so the number beside the title is the
   // number of rows under it: `none` is a reassignment target with no row of its
   // own, and counting it would put the title one above the list it names.
@@ -995,7 +995,7 @@ it("moves a layer across a group boundary, in and out", () => {
   // vg-461: the refusal was by construction rather than by a rule. The anchor
   // names the container — its own parent — so one operation covers both
   // directions, and what the author gets is the object in a different place in
-  // the tree: 0044's rung 6 measured that nothing moves on the screen either
+  // the tree: rung 6 measured that nothing moves on the screen either
   // way, because the transform bake is Fabric's own.
   const canvas = new Canvas(document.createElement("canvas"));
   const child = new Rect({ left: 0, top: 0, width: 10, height: 10 });
@@ -1236,7 +1236,7 @@ it("leaves the canvas in the state a removal leaves, except the object itself", 
 
   // The reference: what a deletion leaves, which is the path `moveLayer` took
   // before `detachFromRoot` existed. The dispose is the remover's own since
-  // `vg-486` (ADR-0052) — the scene adapter used to dispose whatever anyone
+  // `vg-486` — the scene adapter used to dispose whatever anyone
   // removed, and no longer does — so a bare `canvas.remove` is now the *detach*
   // half of a deletion and the deleting owner says the other half.
   const removed = build();

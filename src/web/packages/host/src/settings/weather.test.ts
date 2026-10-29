@@ -110,7 +110,7 @@ describe("weather settings", () => {
     ).toThrow(/pollIntervalMs/);
   });
 
-  it("defaults the provider and keeps the boundaries the spec allows", () => {
+  it("defaults the provider and keeps the allowed boundaries", () => {
     expect(
       normalizeWeatherSettings({
         label: "Berlin",

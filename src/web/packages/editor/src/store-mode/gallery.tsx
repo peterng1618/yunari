@@ -19,15 +19,15 @@ import type { CellAction, StoreItem } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
 
 /**
- * The gallery: the drawing's cell, and the grid of them.
+ * The gallery: the cell, and the grid of them.
  *
  * It is handed its items and narrows nothing — A.5 owns what a query and a
  * facet selection filter, A.6 mounts it in the region and owns the empty states,
  * and the source it reads is A.4's. What is here is the cell's own geometry,
- * taken from `docs/design/mockups/current/store-themes.html`.
+ * taken from the store-themes region.
  */
 
-/** The four actions in the drawing's own order: open, assign, export, delete. */
+/** The four actions in its own order: open, assign, export, delete. */
 const CELL_ACTIONS = [
   "open",
   "assign",
@@ -52,7 +52,7 @@ const CELL_ACTION_GLYPHS: Readonly<Record<CellAction, LucideIcon>> = {
 
 /** The download count's reader. `en-US` because `uiCopy` is one English table,
  *  and `Intl` rather than `toLocaleString` so the separator is the build's
- *  rather than the machine's — the drawing's `1,204`. When the UI gains locales
+ *  rather than the machine's — the `1,204`. When the UI gains locales
  *  this follows `uiCopy`. */
 const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
 
@@ -62,7 +62,7 @@ const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
  * **`repeat(auto-fill, minmax(272px, 1fr))`, and the 272 is not this half's
  * number.** It is derived from the *online* half's busiest facts band — its
  * badge, its counts and its actions — so a person switching halves does not
- * watch the grid change shape; the drawing states it and DESIGN.md's Layout
+ * watch the grid change shape; the layout states it and DESIGN.md's Layout
  * section carries it as a design-language value. `auto-fill` answers the column
  * count from the width, so there is no measured count and no breakpoint to keep
  * in step with the window.
@@ -101,7 +101,7 @@ export function Gallery(props: {
 /**
  * One item: its picture, its name, its byline and its facts band.
  *
- * The bands are the drawing's exactly — the picture at `2/1` with `object-fit:
+ * The bands are fixed exactly — the picture at `2/1` with `object-fit:
  * cover`, the name, the mono byline, and the 26px band. **The band's left slot
  * has one occupant per half, and they are exclusive**: an online item draws the
  * kind badge and the download count, and a library item draws the origin pill
@@ -127,10 +127,9 @@ function Cell(props: {
       data-yunari-store-cell={item.id}
       className="flex flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
-      {/* **The cell's own surface is a control** (spec, "The item's own
-          surface": *so a cell opens a modal*). A button rather than a handler
+      {/* **The cell's own surface is a control**. A button rather than a handler
           on the `li`, because the item's modal must be reachable without a
-          mouse (§5's keyboard section) — and because a press on one of the four
+          mouse (the keyboard section) — and because a press on one of the four
           actions below must not open the item as well.
 
           **It is the picture and the name, and the byline is its sibling.** A
@@ -139,7 +138,7 @@ function Cell(props: {
           author and the date are still read, and the button's own name is the
           theme's.
 
-          **The padding is the drawing's own arithmetic, kept exactly** now that
+          **The padding is the surface's own arithmetic, kept exactly** now that
           the surface, the byline and the facts band are three elements: the
           name's box pads the picture on three sides and stops 6px short of the
           byline, the byline stops 6 short of the band, and the band's wrapper
@@ -156,7 +155,7 @@ function Cell(props: {
             name without leaving the padded column: **the badge belongs to the
             name's line**, not to the facts band, which is one occupant per half
             and nothing about the author's store row. The padding is the
-            drawing's own arithmetic, kept on the wrapper. */}
+            surface's own arithmetic, kept on the wrapper. */}
         <span className="flex items-center gap-[var(--space-6)] p-[var(--space-10)] pb-[var(--space-6)]">
           <span
             data-yunari-store-cell-name=""
@@ -175,9 +174,9 @@ function Cell(props: {
       </span>
       <div className="px-[var(--space-10)] pb-[var(--space-10)]">
         {/* The band's own hook, because **what the badge sits in is the claim**:
-            the drawing puts it here rather than beside the name, so a case that
+            the layout puts it here rather than beside the name, so a case that
             only asked whether the badge exists would stay green through a move
-            that changed the grid (`store-themes.html`). */}
+            that changed the grid. */}
         <span
           data-yunari-store-cell-band=""
           className="flex h-[26px] items-center gap-[var(--space-6)]"
@@ -205,14 +204,14 @@ function Cell(props: {
                 className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
               >
                 {/* A kind this build does not know prints its identifier, which
-                    is the spec's rule for a client older than the kind. */}
+                    is the rule for a client older than the kind. */}
                 {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
               </span>
               <span
                 data-yunari-store-cell-downloads=""
                 className="flex flex-none items-center gap-[var(--space-4)] font-mono text-xs text-muted"
               >
-                {/* The drawing's download mark, the same glyph the export
+                {/* The download mark, the same glyph the export
                     action wears: one arrow for "taken from the store". The
                     mark is `--faint`, one step below the number's `--muted`. */}
                 <span className="flex-none text-faint">
@@ -229,7 +228,7 @@ function Cell(props: {
           <span className="flex-1" />
           {installState === "none" ? (
             /* **All four are drawn and the two a build does not run are
-               disabled** (R164): the drawing gives every cell four, and a
+               disabled** (R164): the surface gives every cell four, and a
                control that looks live and answers a press with nothing is the
                defect the ruling answers. The reason travels beside the button
                rather than in a tooltip, because a disabled control is one the
@@ -288,11 +287,11 @@ function Cell(props: {
 }
 
 /**
- * The online cell's action slot: one of the drawing's three readings, never the
- * library's four actions (`store-browse.html`).
+ * The online cell's action slot: one of the three readings, never the
+ * library's four actions.
  *
  * **Installed is a mark, not a control** — there is nothing to do, and the
- * drawing draws no button there. **Install and Update post the item to the
+ * cell draws no button there. **Install and Update post the item to the
  * host**, and the control disables itself while that press is in flight so a
  * double press cannot install twice; the region re-lists on success, so the
  * word this draws comes from the listing rather than from a copy kept here.
@@ -311,7 +310,7 @@ function InstallAction(props: {
         className="flex flex-none items-center gap-[var(--space-6)] text-xs text-muted"
       >
         {/* The word is muted like every other reading in the band; only the
-            check carries the rationed accent (`store-browse.html`). */}
+            check carries the rationed accent. */}
         <span className="flex-none text-accent">
           <Glyph icon={CHECK_GLYPH} size={13} />
         </span>
@@ -397,12 +396,12 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
 }
 
 /**
- * The mono line under the name: `@mira-k · 2026-10-15`, or the drawing's own
+ * The mono line under the name: `@mira-k · 2026-10-15`, or its own
  * *No author* in the same slot — a fact about the theme rather than a missing
  * reading.
  *
  * The date is `updatedAt`'s day. The host sends an ISO-8601 instant and the
- * drawing prints a day, and the first ten characters of ISO-8601 *are* that day
+ * UI prints a day, and the first ten characters of ISO-8601 *are* that day
  * in UTC — so no reader sees a different one, which a locale-formatted date
  * would give them. An entry with no time at all (a template) prints the author
  * alone rather than a separator with nothing after it.

@@ -3,7 +3,7 @@
  * `weather.json`'s `provider`.
  *
  * There is no fallback between them: spending a different account's quota
- * because this one's key is missing is the failure the spec names, so a
+ * because this one's key is missing is the failure this avoids, so a
  * missing key is an error naming that credential.
  */
 

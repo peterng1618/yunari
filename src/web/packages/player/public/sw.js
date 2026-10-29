@@ -2,7 +2,7 @@
  * The player's service worker — the shell offline, never a reading.
  *
  * Served at the host's root, so its scope is `/` with no
- * `Service-Worker-Allowed` header (docs/decisions/0071). The host refuses an
+ * `Service-Worker-Allowed` header. The host refuses an
  * unpaired reader everything else, which is why this path is on the
  * bundle-asset allowlist: the browser fetches this file itself, before a
  * document exists to carry the session cookie, so it cannot be gated on one.

@@ -34,7 +34,7 @@ describe("clampRenderScale", () => {
 
   it("agrees with the factor ceiling on the chart that was measured", () => {
     // The area ceiling is the factor ceiling restated in the unit that bounds
-    // memory, derived from the 300x180 chart spec 0013 measured. On that chart
+    // memory, derived from the 300x180 chart that was measured. On that chart
     // the two must give the same answer, or the restatement changed the policy.
     expect(clampRenderScale(MAX_RENDER_SCALE, 300, 180)).toBe(MAX_RENDER_SCALE);
   });

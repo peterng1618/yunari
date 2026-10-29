@@ -41,7 +41,7 @@ describe("device assignment", () => {
 
     // Unassigned: the first card the machine reports answers, and every key
     // comes from it. This used to assert the opposite — that the highest
-    // reading won — which is the defect `docs/decisions/0004` removes: a
+    // reading won — which is the defect the assignment rule removes: a
     // maximum could pair one card's load with another's temperature under a
     // single caption.
     const unassigned = new Map(

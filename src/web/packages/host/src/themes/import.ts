@@ -78,7 +78,7 @@ export async function importThemePackage(
 }
 
 /**
- * The ids an import will try, in the spec's order: the package's own when the
+ * The ids an import will try, in this order: the package's own when the
  * library's shape admits it, otherwise the next free id derived from the
  * theme's name, otherwise a suffixed one.
  *
@@ -89,7 +89,7 @@ export async function importThemePackage(
  * **The shape arm is the rule's, not the reader's.** `readThemePackage` will
  * not hand over a document whose own id is out of shape — the envelope
  * validator refuses it — so the first arm is unreachable through a package
- * today. It is kept because the id rule is the spec's and the host's: an import
+ * today. It is kept because the id rule is the host's: an import
  * that fell back to a name because the shape was *unusable* must not depend on
  * another package's validator to notice.
  */

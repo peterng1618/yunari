@@ -14,7 +14,7 @@ import { validateFabricThemeEnvelope } from "./fabric-envelope-validate.js";
 /**
  * The two registries, asked the same question about the same document.
  *
- * `envelope-keys.ts` decides (docs/decisions/0023); `schema/theme-document.schema.json`
+ * `envelope-keys.ts` decides; `schema/theme-document.schema.json`
  * is published for tools outside this repo. Nothing generates either from the
  * other, so the two can drift — and the schema is the stricter reader, so a
  * drift is a theme the editor opens and every published tool refuses, silently

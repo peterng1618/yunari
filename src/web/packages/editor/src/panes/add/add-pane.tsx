@@ -9,14 +9,14 @@ import { CARD_DIAGRAMS } from "./card-diagrams.js";
  * The Add pane's body: `insertGroups()`, drawn as tiles.
  *
  * **The list is not re-derived here.** The pane renders the groups it is given,
- * in the order it is given them, and the shape of the drawing follows from that
+ * in the order it is given them, and the shape of the surface follows from that
  * alone: Cards, then Text (which the owner leaves ungrouped), then Shapes, then
  * Charts. A group added to the owner appears here the day it is added, and one
  * this pane invented could not be reached at all — the construction routes back
  * through the owner's own `insertObject`, which is what keeps the eligibility
  * gates and the refusals in one place.
  *
- * **A card unit is depicted; a primitive is its kind.** §5.2's distinction: the
+ * **A card unit is depicted; a primitive is its kind.** The distinction: the
  * library is a fixed set of eight, so a unit's tile may carry a diagram of what
  * it builds; a primitive's tile is the kind and nothing more. A card on the
  * canvas is still arbitrary, so nothing here licenses a diagram in the layer
@@ -89,7 +89,7 @@ function InsertTile({
   // are not. The *disclosure* follows the surface rather than the label's
   // presence, because a grid tile's label can clip — "Performance trends" is
   // 86px of text in a 41px box — and the tile that truncates is exactly the one
-  // that must still be able to say its whole name (§6). The Text row is exempt:
+  // that must still be able to say its whole name. The Text row is exempt:
   // it is full width, so its name never clips and a tooltip would repeat a word
   // already on screen.
   const named = object.kind === "card" || object.kind === "text";

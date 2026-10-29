@@ -362,7 +362,7 @@ describe("a display whose page is hidden", () => {
     }
   }
 
-  /** Mounts a line display. Its line redraws with its data (0124), so a
+  /** Mounts a line display. Its line redraws with its data, so a
    *  visible repaint is the text pass on the loop's clock. Returns the handle's
    *  media calls as spies: `main.ts` holds the same handle object. */
   async function mountLine(envelope: unknown = lineEnvelope()): Promise<{
@@ -411,8 +411,7 @@ describe("a display whose page is hidden", () => {
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
     // The synthetic frame clock is the wall clock: a line redraws with its
-    // data, so the repaint that proves the loop is alive is the text pass
-    // (0124).
+    // data, so the repaint that proves the loop is alive is the text pass.
     vi.spyOn(Date, "now").mockImplementation(() => frameTime);
 
     await import("./main.js");
@@ -447,7 +446,7 @@ describe("a display whose page is hidden", () => {
   it("stops the loop and pauses media while hidden, and restores both", async () => {
     const { pause, resume } = await mountLine();
     // The loop's wake is a requested frame at 30 fps, not a repaint: a line
-    // draws with its data and no sample arrives here (0124).
+    // draws with its data and no sample arrives here.
     driveFrames(1);
     expect(frames.size, "the loop is armed while visible").toBeGreaterThan(0);
 

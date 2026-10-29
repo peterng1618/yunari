@@ -5,7 +5,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
 /**
  * Which settings each chart family accepts, as editable field descriptors.
  *
- * The **one owner** of that question (AGENTS.md's one-owner rule). It previously had four
+ * The **one owner** of that question. It previously had four
  * encodings that nothing related: the settings interfaces in `types.ts` and
  * `charts/*.ts`, the `default*Settings` objects, `validate.ts`'s `KNOWN_KEYS`
  * plus its `validateSettingsRange`, and the JSON schema. The editor had a
@@ -17,7 +17,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * Scalar settings only: numbers, booleans and enumerations. **Paint is not
  * here.** `track`, `progress`, `stroke`, `fill`, `area`, `remainderFill` and
  * the two `palette` arrays are all `Fill` — `solid | thresholds | gradient` —
- * and spec 0011 puts colour at the theme level. Persisted chart paint now
+ * and colour belongs at the theme level. Persisted chart paint now
  * references palette tokens; its control still needs to author those references
  * and threshold-band offsets without writing literal colours onto a chart.
  *
@@ -40,7 +40,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * `path` names where a field writes when it is not the top-level `property`, and
  * `visibleWhen` asks it only in the state it applies to. Both exist for exactly
  * two settings — `PieSettings.total.value` and the optional `AnimationSettings`
- * block on every family — which is why ADR-0028 chose a path over a nested
+ * block on every family — which is why a path was chosen over a nested
  * descriptor tree. A surface reads and writes them through `settings-path.ts`,
  * so the write path is the renderer's read path.
  *
@@ -67,7 +67,7 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  *
  * `min`/`max` below are **the document's bounds**, not only the control's: the
  * envelope loader refuses a present value outside them, and refuses a family's
- * crossed `min`/`max` pair where both halves are present (decision 0082, from
+ * crossed `min`/`max` pair where both halves are present (per
  * `vg-348`'s ruling of 2026-10-12). A change to a number here therefore changes
  * what loads, not only what a control offers — the table is the one owner of
  * that question, which is why the loader reads it instead of keeping a second
@@ -81,10 +81,9 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * This reverses an earlier position recorded in this header, that driving
  * validation from the table was decided against because the range a control
  * offers and the invariants an adapter cannot recover from were held to be
- * different questions. That equivalence was never measured — ADR-0028's own
- * probe says so — and it is the reason the table rather than a second list owns
- * the numbers. ADR-0028 carries the superseding pointer; the `validate.ts` /
- * `validateSettingsRange` validator this header used to lean on was deleted
+ * different questions. That equivalence was never measured, and it is the
+ * reason the table rather than a second list owns the numbers. The `validate.ts`
+ * / `validateSettingsRange` validator this header used to lean on was deleted
  * before `vg-348` was filed.
  */
 
@@ -104,7 +103,7 @@ export interface SettingsSectionDefinition {
  * The four questions, ordered — **the one place section order is decided**.
  *
  * Position and Layer stay separate because moving a thing and scaling it are
- * different mistakes (§4). A field's own place inside its section is its order
+ * different mistakes. A field's own place inside its section is its order
  * in the family array below, so this list orders the sections and nothing else.
  *
  * It carried a fifth, `spends`, until item 17 removed the read-only section that
@@ -229,7 +228,7 @@ export interface ChartPaintFieldDescriptor {
 }
 
 /** `smooth` is authored geometry: a smoothed segment bends once when a sample
-    lands, which the data clock makes the only reshape (0127). */
+    lands, which the data clock makes the only reshape. */
 const INTERPOLATION = [
   { value: "linear", label: "Linear" },
   { value: "step", label: "Step" },
@@ -279,7 +278,7 @@ const EASING = ANIMATION_EASINGS.map((value) => ({
  * into it materialises the block from its own owner (`charts/animation.ts`) and
  * the table still declares no default. There is deliberately no on/off field:
  * absence means the defaults apply, not that the chart is static — `animate` is
- * supplied by the build (ADR-0028, *Why no animation toggle*).
+ * supplied by the build.
  */
 const ANIMATION_FIELDS: readonly SettingsFieldDescriptor[] = [
   {

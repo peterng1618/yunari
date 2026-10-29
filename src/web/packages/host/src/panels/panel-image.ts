@@ -17,8 +17,7 @@ import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
  *
  * **ffmpeg is reused rather than added.** The host already ships it, already
  * verifies its digest before running it (`ffmpeg-hash.mjs`), and already spawns
- * it for theme video; a second decoder would be a second binary to trust. The
- * search that produced this is decision `0131`.
+ * it for theme video; a second decoder would be a second binary to trust.
  */
 
 /** The bundled ffmpeg's own version; the hash file is keyed by it. */

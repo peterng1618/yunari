@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One root for agent scratch, and a refusal anywhere else (0081).
+ * One root for agent scratch, and a refusal anywhere else.
  *
  * The question this answers, in the user's words: *"How do we prevent agents
  * from saving scratch files & folders from all over the places?"* — asked after a
@@ -158,7 +158,7 @@ function refuse(path) {
     return `"${scratchSegment}" is a scratch segment. Deliverables live under docs/, src/, scripts/, schema/ or tests/; scratch goes outside the tree.`;
   }
   if (SCRATCH_NAMES.some((pattern) => pattern.test(name))) {
-    return `"${name}" is a scratch-shaped file name. If it is evidence, it belongs in docs/evidence/ or in the SDD workspace, not in the working tree.`;
+    return `"${name}" is a scratch-shaped file name. If it is evidence, it belongs in test-results/captures/ or in the SDD workspace, not in the working tree.`;
   }
   return undefined;
 }
@@ -209,7 +209,7 @@ function decide(input) {
  * legitimate store, so the segment rule allows the whole subtree and would never
  * see the skeletons inside it. `git worktree list` is the registry that tells a
  * live seat from its leftovers, and the leftovers are the git-shaped cleanup's
- * own signature (0081).
+ * own signature.
  */
 function sweep() {
   const ignored = git([
@@ -260,7 +260,7 @@ function selfTest() {
   const cases = [
     // [path, expected to be refused]
     ["src/web/packages/player/src/chrome.ts", false],
-    ["docs/evidence/screenshots/README.md", false],
+    ["docs/superpowers/plans/example.md", false], // doc-ref-ok: self-test fixture
     ["src/web/vitest-080.json", true],
     ["src/web/.agent-scratch/p1-repro.mjs", true],
     [".claude/worktrees/agent-abc/notes.md", false],
@@ -368,7 +368,7 @@ try {
     process.stderr.write(
       [
         "",
-        "SCRATCH GATE — the tree holds scratch (0081).",
+        "SCRATCH GATE — the tree holds scratch.",
         "",
         ...stray.map((entry) => `  ignored, not a store:  ${entry}`),
         ...tracked.map((entry) => `  tracked, scratch-shaped: ${entry}`),
@@ -400,7 +400,7 @@ try {
   process.stderr.write(
     [
       "",
-      "SCRATCH GATE — refused (0081).",
+      "SCRATCH GATE — refused.",
       "",
       `  ${verdict.target}`,
       "",

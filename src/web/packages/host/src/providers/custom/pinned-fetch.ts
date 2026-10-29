@@ -17,7 +17,7 @@ import {
 /**
  * A fetch whose socket reaches the address the policy checked for that one
  * request. Pinning is per call: a shared agent or a hostname-keyed map would
- * let one request's answer decide another request's connection (decision 0116).
+ * let one request's answer decide another request's connection.
  */
 
 export interface PinnedFetchOptions {

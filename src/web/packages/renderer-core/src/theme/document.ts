@@ -212,7 +212,7 @@ export interface BackgroundMedia {
   readonly flipY?: boolean;
   /**
    * The 0-based frame, at the clip's own frame rate, that stands for this video
-   * when motion is unavailable or unhelpful (`0135`). Written only for a video
+   * when motion is unavailable or unhelpful. Written only for a video
    * asset: it is the picture a display without video support shows, and the
    * still the glass material samples instead of a blur per video frame.
    */
@@ -377,14 +377,14 @@ export interface ThemeMetadata {
    *
    * Named for the language rather than the locale: the value is a bare language
    * tag from the curated list, and it states a fact about this theme rather than
-   * the runtime's formatting preferences. See docs/decisions/0022.
+   * the runtime's formatting preferences.
    */
   readonly themeLanguage?: string;
   /**
    * Style tags the author picked from the catalogue's vocabulary. The shape and
    * the count are the format's whole rule: membership is unchecked, because a tag
    * the vocabulary does not yet know has to be writable before it can join it, and
-   * duplicates are the facet's to collapse. See docs/decisions/0087.
+   * duplicates are the facet's to collapse.
    */
   readonly tags?: readonly string[];
   /** The catalogue item this theme was remixed from, if any. */

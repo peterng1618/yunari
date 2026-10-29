@@ -33,7 +33,7 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
   let trapProved = false;
 
   for (const palette of PALETTES) {
-    // The product's own route to a palette (`0035`): the Appearance tab's radio,
+    // The product's own route to a palette: the Appearance tab's radio,
     // so what is measured is a palette the editor can really be in, and the
     // ring is measured where the author would see it.
     await dialog.getByRole("tab", { name: uiCopy.settings.appearance }).click();
@@ -90,7 +90,7 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
       probe.ownBackground,
       "the row paints its own background, so the pixel beside it is not the surface the ring sits on",
     ).toBe("rgba(0, 0, 0, 0)");
-    // §5.4's boundary is a solid ring, not the browser's `auto` one.
+    // The boundary is a solid ring, not the browser's `auto` one.
     expect(probe.outlineStyle, palette).toBe("solid");
     expect(probe.outlineWidth, palette).toBeGreaterThanOrEqual(2);
 
@@ -118,8 +118,8 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
   await captureVisualReview(page, testInfo, "keyboard-armed-row");
 });
 
-/** §5.4's boundary minimum, the same 3:1 `design-language.spec.ts` gates the
- *  control set's own focus boundaries at. */
+/** The boundary minimum: 3:1, the ratio the control set's own focus
+ *  boundaries are gated at. */
 const BOUNDARY_MIN = 3;
 
 type Rgba = readonly [number, number, number, number];
@@ -154,8 +154,8 @@ function contrast(a: Rgba, b: Rgba): number {
 
 /** The rendered pixels at each point, from one viewport screenshot.
  *
- * The same shape `design-language.spec.ts` measures the control set's rings
- * with: a computed colour cannot answer what a surface with alpha over a
+ * The shape a ring measurement needs: a computed colour cannot answer what a
+ * surface with alpha over a
  * backdrop paints, so the pixel is the evidence and the arithmetic is over two
  * of them. The points are viewport CSS pixels from `getBoundingClientRect`, and
  * the screenshot is scaled by its own ratio to the viewport so a device pixel
@@ -202,7 +202,7 @@ async function pixelsAt(
 test("the Keyboard tab's four states, and the sheet's chord mark that did not move", async ({
   page,
 }, testInfo) => {
-  // Spec §13.1: a screenshot proves one rendered state, not the behaviour behind
+  // A screenshot proves one rendered state, not the behaviour behind
   // it, and every surface owner also proves its applicable states. The armed
   // row is the one the `keyboard-armed-row` capture shows (the test above); the
   // four here are **driven**, and the capture is not read as proving any of
@@ -224,7 +224,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   const refusal = row.locator('[data-yunari-shortcut-reason][role="alert"]');
 
   // ── 1. Empty overrides ───────────────────────────────────────────────────
-  // Proves the panel renders the drawing's own state: every chord is its
+  // Proves the panel renders the default state: every chord is its
   // default, and the header's return-to-default action is offered with nothing
   // to return. The store is read too, because "no row is rebound" is a claim
   // about what was stored and the marks alone cannot say it.
@@ -253,7 +253,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   );
 
   // ── 3. A refusal in the armed row ────────────────────────────────────────
-  // §9's reason and role: the sentence lands in the row that refused, names the
+  // The reason and role: the sentence lands in the row that refused, names the
   // action that holds the chord, and the row stays armed so the author can press
   // the chord they meant. Ctrl+O is `file.open`'s default.
   await page.keyboard.press("Control+o");
@@ -265,8 +265,8 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
 
   // ── The `?` sheet's chord mark, which Step 3 of the task must not move ────
   // The panel's chip is scoped to `.editor-shell-keyboard`, and the sheet
-  // renders the shared `.editor-shell-dialog kbd` rule with no drawing behind
-  // it. Read as a computed style rather than inspected: the shared rule is what
+  // renders the shared `.editor-shell-dialog kbd` rule with no dedicated rule
+  // behind it. Read as a computed style rather than inspected: the shared rule is what
   // a change made for the modal would have moved by accident.
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
@@ -286,7 +286,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
     });
   expect(
     sheetChip,
-    "the sheet's chord mark moved with the modal's chip, and no drawing governs the sheet",
+    "the sheet's chord mark moved with the modal's chip, and no other rule governs the sheet",
   ).toEqual({ padding: "0px", borderWidth: "0px", borderRadius: "0px" });
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
@@ -436,7 +436,7 @@ test("? opens the sheet, and the document behind it does not change", async ({
     name: uiCopy.shortcuts.reference,
   });
   await expect(sheet).toBeVisible();
-  // Every action is listed, which is the sheet's whole promise: §7's figure for
+  // Every action is listed, which is the sheet's whole promise: the figure for
   // the table is eighteen, Task 3.3's `?` row makes it nineteen, Task 3.1's
   // `publish.surface` row makes it twenty, and the asset finder's
   // `file.findAssets` row makes it twenty-one. The row count is a property of
@@ -501,7 +501,7 @@ test("the palette picker lands beside its trigger, and its tracks answer the arr
   // `Positioner`; a `Popup` placed straight in the portal renders unpositioned,
   // and the same class of mistake put this control's popover in the top-left
   // corner of the window once before (`panel.dom.test.ts:187-192`). The trigger
-  // fills its §5 well since Task 6 removed the swatch wrapper, so the anchor is
+  // fills its the control set well since Task 6 removed the swatch wrapper, so the anchor is
   // the well's own box and the positioner's 6px offset is measured from it.
   const [well, popup] = await Promise.all([
     trigger.boundingBox(),

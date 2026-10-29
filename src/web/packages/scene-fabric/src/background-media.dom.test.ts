@@ -588,7 +588,7 @@ describe("background media as a glass backdrop", () => {
 
     const { calls, ctx } = recordingContext();
     // 200×100 box, 100×100 source: cover is 200×200, and the quarter-box offsets
-    // ask for a 50 px horizontal pan, which needs the 1.5× rect (300×300) 0095
+    // ask for a 50 px horizontal pan, which needs the 1.5× rect (300×300)
     // describes; the 25 px vertical pan then sits inside the extra overhang.
     const painted = handle
       .backdrop()
@@ -647,7 +647,7 @@ describe("background media as a glass backdrop", () => {
   });
 
   it("draws the whole source at every device scale, not a window of it", () => {
-    // The defect (0012): a source window sized by the *device* rect is a
+    // The defect: a source window sized by the *device* rect is a
     // pixel-for-pixel crop of the middle of the file. Drawing without a source
     // rect makes the whole file the only thing `drawImage` can show.
     const host = document.createElement("div");

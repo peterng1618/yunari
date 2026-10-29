@@ -8,14 +8,14 @@ import { isDesktopSurface } from "./surface.js";
  * The Add pane, now the one surface the insertable list is reached from.
  *
  * These two journeys were `insert-popover.spec.ts`'s, carried over when the
- * header's Insert menu and the pane bar's `+` were deleted (§7.1: Insert lives
+ * header's Insert menu and the pane bar's `+` were deleted (the header rule: Insert lives
  * in the Add pane). Neither lost anything by the move — both already drove the
  * pane — and what the deleted file proved is kept: the pane offers the whole
  * `insertGroups()` list, and a card inserted from it arrives as a unit the tree
  * can name.
  *
  * The third case came here from the Add pane's deleted file section: local files
- * belong to the Assets pane (DESIGN.md §7.2), so the control it measures is
+ * belong to the Assets pane, so the control it measures is
  * opened where it now lives.
  */
 
@@ -68,15 +68,14 @@ test(`the Assets pane's import control takes control text, not the shell's ${the
   await page.goto(EDITOR);
   await openPane(page, "Assets");
 
-  // Plan 8's census measured these boxes' text as *inherited*, not stated
-  // (D9), so they took the shell root's `--text-md`. §2 gives control text
-  // `--text-sm`, and the box `controls.html:112` draws for both plain-DOM
-  // groups states it — as does `shell.html:137`/`:140` for this pane's own
-  // instances. The expected pair is the stylesheet's own declaration, so the
-  // row moves with §2 rather than restating it.
+  // These boxes' text was *inherited*, not stated, so they took the shell
+  // root's `--text-md`. The type scale gives control text `--text-sm`, and both plain-DOM
+  // groups state it — as does this pane's own instances. The expected pair is
+  // the stylesheet's own declaration, so the
+  // row moves with the type scale rather than restating it.
   //
   // The import button is the Assets pane's now; the Add pane's file section
-  // that used to carry it is deleted (§7.2).
+  // that used to carry it is deleted.
   const importButton = page.locator(
     '[data-yunari-panel="assets"] [data-yunari-asset-import]',
   );
@@ -85,7 +84,7 @@ test(`the Assets pane's import control takes control text, not the shell's ${the
     "font-size",
     typeStep("--text-sm")["font-size"],
   );
-  // §2's companion ratio for `--text-sm`, resolved the way the browser does.
+  // The companion ratio for `--text-sm`, resolved the way the browser does.
   await expect(importButton).toHaveCSS(
     "line-height",
     typeStep("--text-sm")["line-height"],

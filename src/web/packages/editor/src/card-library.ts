@@ -61,9 +61,9 @@ import { uiCopy } from "./ui-copy.js";
  * The name of the diagram a card unit's tile draws.
  *
  * A closed union, so the **library** owns the name and a ninth card cannot be
- * added without one; the pane owns the drawing, because it is a React surface
+ * added without one; the pane owns the rendering, because it is a React surface
  * and this module is not. Named for the reading the card shows rather than for
- * the card's title, so it is the unit that is identified (DESIGN.md §6).
+ * the card's title, so it is the unit that is identified.
  */
 export type CardDiagram =
   | "time"

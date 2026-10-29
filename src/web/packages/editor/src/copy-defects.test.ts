@@ -7,8 +7,8 @@
  * be *wrong* rather than unowned, and it lives apart from that file because
  * adding it there took the walk past the 800-line stop (783 before this file).
  *
- * **A missing reading is a gap, never a placeholder.** DESIGN.md §9, and the
- * architecture guardrail `AGENTS.md` names: a reading that has not arrived is
+ * **A missing reading is a gap, never a placeholder.** The design and the
+ * architecture guardrail: a reading that has not arrived is
  * never fabricated as a zero or a default. A surface may draw nothing (that is
  * the truth) or the gap's own word; it may never draw `0`, `-`, `--` or `—`,
  * which an author reads as data.
@@ -307,7 +307,7 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * asserted by `diagnostic-message.dom.test.tsx`.
  *
  * **One reading, proven.** The View menu carries `dataSource`, and the chart
- * rate row is gone with the setting itself (0129). `shell-layout.dom.test.tsx`
+ * rate row is gone with the setting itself. `shell-layout.dom.test.tsx`
  * opens the submenu, picks the other value and asserts the owner was called, so
  * this case does not open the menu again
  * (50–90s per jsdom open, `vg-135`). The value-runs setting is gone: a value

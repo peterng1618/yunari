@@ -3,7 +3,7 @@
  *
  * The envelope's shape is declared twice: here, and in
  * `schema/theme-document.schema.json`. This is the decider
- * (docs/decisions/0023) and the schema is the hand-written contract held to it
+ * and the schema is the hand-written contract held to it
  * by `envelope-keys-disagreement.test.ts`, which derives the schema's own key
  * sets from the file and compares them here. It lives apart from the checks
  * that consume it so the drift test has one thing to hold: the vocabulary.
@@ -12,7 +12,7 @@
 /**
  * Known keys mirror schema shapes with `additionalProperties: false`.
  *
- * This module is the decider (docs/decisions/0023). The published schema is a
+ * This module is the decider. The published schema is a
  * hand-written contract held to it by `envelope-keys-disagreement.test.ts`,
  * which derives the schema's own key sets from the file and compares them here.
  */
@@ -26,7 +26,7 @@ const KNOWN_KEYS = {
     "updatedAt",
     "themeLanguage",
     // The key only. A tag's *value* has no enum anywhere, deliberately: the
-    // vocabulary is the catalogue's and has to be able to grow (docs/decisions/0087).
+    // vocabulary is the catalogue's and has to be able to grow.
     "tags",
     "remixOf",
   ],
@@ -62,7 +62,7 @@ const KNOWN_KEYS = {
   ],
   globalEntry: ["name", "value"],
   // A token names a face only. Size, leading, tracking and role belong to the
-  // run that wears it (docs/decisions/0128).
+  // run that wears it.
   typeToken: ["family", "weight", "face"],
   fontFaceReference: ["assetId"],
 } as const satisfies Record<string, readonly string[]>;

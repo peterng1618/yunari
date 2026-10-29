@@ -879,8 +879,8 @@ describe("placing a text by click or drag", () => {
   });
 
   it("suppresses the canvas context menu for a non-primary press", () => {
-    // The spec's "a non-primary press does not also open the canvas context
-    // menu". The app's menu listener shares `upperCanvasEl` and is registered
+    // A non-primary press does not also open the canvas context menu. The app's
+    // menu listener shares `upperCanvasEl` and is registered
     // after this manager, so stopping immediate propagation here is the only
     // thing that keeps it closed.
     const { canvas, manager, port, save } = placementScene({ arm: false });
@@ -1087,7 +1087,7 @@ describe("what a text object an author inserts can do", () => {
     // box that is told to contain them, and the canvas shows the title cut off,
     // while the inspector's Height field keeps reporting the box truthfully.
     //
-    // The box staying put is not the bug: ADR 0003 makes it the owner precisely
+    // The box staying put is not the bug: a fixed box owns its size precisely
     // so a type change cannot move it, and §89 wants fixed boxes so a reading
     // cannot jitter. The defect is that nothing ever told the box it no longer
     // fits — an author who picks a larger face is left with text they cannot

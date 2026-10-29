@@ -491,7 +491,7 @@ describe("text (§89)", () => {
     expect(result.issues).toEqual([]);
   });
 
-  it("reads a GHz conversion at the spec's precision", () => {
+  it("reads a GHz conversion at the stated precision", () => {
     const source = storeWith({
       "cpu.clock": ok(3845, "MHz", "cpu.clock"),
       "gpu.clock": ok(12000, "MHz", "gpu.clock"),
@@ -1076,7 +1076,7 @@ describe("charts", () => {
 
     if (chart.family === "line") {
       // The reading's own clock, not the browser's receive time: the axis and
-      // the points both end at `timestamp` (0124).
+      // the points both end at `timestamp`.
       expect(chart.option.xAxis.max).toBe(NOW - 1_000);
       expect("renderOverscanRightMs" in chart.option).toBe(false);
       expect(chart.option.series[0]!.data.at(-1)).toEqual([NOW - 1_000, 30]);
@@ -1103,7 +1103,7 @@ describe("charts", () => {
     );
 
     // The source returns the sample before the cutoff as well, so the request
-    // is the axis window and nothing more (0124).
+    // is the axis window and nothing more.
     expect(windows).toEqual([defaultLineSettings.windowSeconds]);
   });
 
@@ -1111,7 +1111,7 @@ describe("charts", () => {
    * **The picture is the data's, not the frame's.** A source answers a trailing
    * window at its own cadence, so the oldest sample it returns sits inside the
    * first cadence above the cutoff it was handed. The axis is placed by the
-   * newest reading (0124), so every frame between two batches must draw exactly
+   * newest reading, so every frame between two batches must draw exactly
    * the same picture — and still reach its window's left edge (`vg-571`).
    */
   it.each([700, 950, 1_018])(
@@ -1299,7 +1299,7 @@ describe("formatUnit", () => {
   });
 });
 
-// 0007: a chart's paint references resolve from the document's palette, and one
+// A chart's paint references resolve from the document's palette, and one
 // that cannot is reported with the code `resolveStyleValue` already uses.
 describe("chart paint references", () => {
   const palette = {
@@ -1343,7 +1343,7 @@ describe("chart paint references", () => {
   });
 
   it("leaves a bar whose paint reference the document does not define unpainted", () => {
-    // The datum is absent, not a transparent bar on a live number (0007).
+    // The datum is absent, not a transparent bar on a live number.
     const { chart, issues } = storageBar(false);
 
     if (chart.family === "bar") {

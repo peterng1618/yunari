@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mountBackgroundMedia } from "./background-media.js";
 
 /**
- * The frame a video background declares, and the panel that reads it (0135).
+ * The frame a video background declares, and the panel that reads it.
  *
  * Split from `background-media.dom.test.ts`, which is past the size the project
  * treats as a stop: this is one feature's browser behaviour and its own stubs.
@@ -129,7 +129,7 @@ const measureFrameRate = (media: ReturnType<typeof stubProbeMedia>): void => {
 
 describe("a video background's declared frame", () => {
   it("samples a video's declared frame and shows it when the video cannot play", () => {
-    // 0135: a moving background is re-blurred for the glass on every frame.
+    // A moving background is re-blurred for the glass on every frame.
     // The declared frame is the picture instead — measured, not assumed:
     // `currentTime = frame / fps`, with the fps taken from two callbacks.
     const media = stubProbeMedia();

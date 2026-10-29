@@ -3,8 +3,8 @@
 // **The URL above is the whole reason this file exists.** `main.dom.test.ts`
 // runs the same harness at an http URL, so every case there is green whether
 // `main.ts` reads the page's scheme or hard-codes `"http"` — and hard-coding it
-// is `vg-623` re-created on every display served over https
-// (`docs/decisions/0076`). This file is that page: https, paired, its host gone.
+// is `vg-623` re-created on every display served over https.
+// This file is that page: https, paired, its host gone.
 // A LAN address rather than a name, because `sweepAddresses("localhost")` is
 // empty and a sweep that never runs asserts nothing.
 

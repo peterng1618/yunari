@@ -93,7 +93,7 @@ describe("reviving a hosted scene keeps the artboard", () => {
     // The premise the crop notice is built on. If this is not true, the notice
     // is describing a clip that is not there.
     expect(scene.canvas.clipPath).toBeTruthy();
-    // 0080: the board's paint is the host's, which puts it behind the media
+    // The board's paint is the host's, which puts it behind the media
     // layer; a fill on the canvas sits above that layer and hides it. A glass
     // panel samples the backdrop instead, which composes the same paint.
     expect(String(scene.canvas.backgroundColor)).toBe("");

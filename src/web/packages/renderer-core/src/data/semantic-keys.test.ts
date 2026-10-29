@@ -55,7 +55,7 @@ describe("the semantic key vocabulary", () => {
   });
 
   it("declares no indexed multi-device form, which is still undecided", () => {
-    // Spec 0010 sketches `gpu.0.load`. Guessing at it here would let a real
+    // The reference sketches `gpu.0.load`. Guessing at it here would let a real
     // provider contradict the vocabulary later.
     expect(SEMANTIC_KEYS.filter((d) => /\.\d+\./.test(d.key))).toEqual([]);
   });

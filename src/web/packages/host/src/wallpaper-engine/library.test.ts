@@ -9,7 +9,7 @@ const HTML = "<html><body>web</body></html>";
 
 /**
  * Five workshop directories, as fifteen of them look on disk: three wallpapers,
- * a preset for another wallpaper (§1.2), and one whose `project.json` does not
+ * a preset for another wallpaper, and one whose `project.json` does not
  * parse. The cache covers the scene and the video; the web item has no row, so
  * its attribution stays absent rather than being invented.
  */

@@ -118,7 +118,7 @@ export function copy(): string[] {
  * Every string the landed React surfaces say: a field's own label, a control's
  * accessible name, a button's words, a heading's words and a definition term's
  * — minus the three whose content is not copy. A section header is excluded
- * because its text is an uppercase eyebrow (§2) and a count, neither a word the
+ * because its text is an uppercase eyebrow and a count, neither a word the
  * table owns; a converted select's trigger is excluded because it prints the
  * chosen value; and a token well is excluded as the panel net excludes it,
  * because it prints the document's own name.

@@ -148,7 +148,7 @@ test.describe("the player as an installed app", () => {
       // Headed: the installability check is Chrome's own and this is the
       // client a phone is being stood in for. The certificate is allowlisted
       // rather than bypassed — a bypassed chain is refused for
-      // `serviceWorker.register` with `SecurityError` (0070).
+      // `serviceWorker.register` with `SecurityError`.
       headless: false,
       args: [
         `--ignore-certificate-errors-spki-list=${spkiHash(authority)}`,

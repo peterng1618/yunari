@@ -27,8 +27,8 @@ export interface InstallControl {
 }
 
 /**
- * Posts one catalogue item to the host, which fetches and writes the package
- * (`docs/decisions/0089`). The browser posts four facts and reads no bytes: the
+ * Posts one catalogue item to the host, which fetches and writes the package.
+ * The browser posts four facts and reads no bytes: the
  * host owns the download, the validation and the folder, so a client that
  * downloaded here would be a second owner of the same install.
  *

@@ -16,7 +16,7 @@ export const SSE_FRAME_QUEUE_LIMIT = 120;
  *
  * Each frame is a batch of measurements, so backpressure queues rather than
  * replaces them: losing a frame loses that tick's readings from the display's
- * history for good (0124). The queue is bounded, so a client that never drains
+ * history for good. The queue is bounded, so a client that never drains
  * cannot grow the host without limit.
  */
 export class SseConnection {

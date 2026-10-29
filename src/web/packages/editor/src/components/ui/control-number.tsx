@@ -15,7 +15,7 @@ import {
 /**
  * A finite number, or nothing at all — never a zero nobody typed.
  *
- * DESIGN.md §5's validation rule belongs to the field's owner: bounds, integrality
+ * The design's validation rule belongs to the field's owner: bounds, integrality
  * and optionality are props, not a global minimum, and a rejected draft is kept
  * with its reason rather than coerced or silently clamped. Clearing an
  * authored key is a different act from writing zero, so it is a different

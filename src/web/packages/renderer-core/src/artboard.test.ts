@@ -386,7 +386,7 @@ describe("computeArtboardTransform — rotation and shape", () => {
     expect(t.matrix[3]).toBeCloseTo(0, 9);
     expect(t.matrix[5]).toBeCloseTo(0, 9);
     // 900x1600 rotated box scaled to 450x800 in a 600x800 viewport: the
-    // letterbox is left and right, as the spec's acceptance case states.
+    // letterbox is left and right, as the acceptance case states.
     expect(t.bars.x).toBeCloseTo(75, 9);
     expect(t.bars.y).toBeCloseTo(0, 9);
   });

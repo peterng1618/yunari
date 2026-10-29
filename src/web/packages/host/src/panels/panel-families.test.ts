@@ -5,7 +5,7 @@ import type { PanelDevice, PanelHint } from "./panel-device.js";
 import { familyFor, PANEL_FAMILIES } from "./panel-families.js";
 
 /**
- * The registry is the claim `0130` made and could not test: that a panel family
+ * The registry is the claim that was not previously testable: that a panel family
  * this code has never seen is a row, not an edit. These cases hold that claim
  * to something a future change can break.
  */

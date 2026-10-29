@@ -121,7 +121,7 @@ describe("the editor on a URL that names a theme", () => {
     // validation was answered as though it were not there, so the editor
     // mounted the template and said "Fabric editor ready" over a document it
     // never opened. The outcome is `invalid`, carrying the validator's own
-    // issues, and never `undefined` (ADR-0043).
+    // issues, and never `undefined`.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),
       open: vi.fn(async () => {
@@ -153,8 +153,7 @@ describe("the editor on a URL that names a theme", () => {
     // `theme.json` past the host's size bound was answered as absence, so the
     // editor mounted the template and wrote "Editor ready" over a document the
     // author has on disk. The outcome is its own kind, not `none` — the caller
-    // must say the theme is too large rather than that nothing was asked for
-    // (decisions/0043, 0084).
+    // must say the theme is too large rather than that nothing was asked for.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),
       open: vi.fn(async () => {

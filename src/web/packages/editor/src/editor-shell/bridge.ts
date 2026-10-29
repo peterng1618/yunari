@@ -39,18 +39,18 @@ export type ActiveKind = "none" | "object" | "group" | "chart" | "background";
 type ShellAction = ObjectActionId;
 
 export interface EditorShellSnapshot {
-  /** The scene's own object total — §7.6's left readout, and the one fact the
+  /** The scene's own object total — the left readout, and the one fact the
    *  strip carries that is not a message. The scene is the canvas, so this is
    *  counted there rather than held here.
    *
    *  `undefined` where there is no scene to count. A strip reading `0 objects`
    *  over a canvas that has not mounted its document is a claim the product
-   *  does not have (DESIGN.md §9), and the absence is what says so — the same
+   *  does not have, and the absence is what says so — the same
    *  shape `documentName` takes for the document it names. A document that
    *  really holds nothing reports `0`, which is a reading rather than a
    *  default, and the two are different answers. */
   readonly objectCount: number | undefined;
-  /** The Tokens pane's own list, as §7.3's title bar counts it: the theme's
+  /** The Tokens pane's own list, as the title bar counts it: the theme's
    *  paints, minus the reserved `none` (`paletteTokenIds`, the same module
    *  `PaintList` draws its rows from — one membership rule, so the number beside
    *  the title and the rows under it cannot disagree).
@@ -60,12 +60,12 @@ export interface EditorShellSnapshot {
    *  declare no palette really holds none — `0 tokens` there is a reading, the
    *  same way `0 objects` is for an empty document. The `undefined` case is the
    *  shell's own no-document state, stated by `SelectionStore` before a bridge
-   *  is set, where the pane draws no count at all (DESIGN.md §9). */
+   *  is set, where the pane draws no count at all. */
   readonly tokenCount: number | undefined;
   readonly selectedCount: number;
   readonly locked: boolean;
   readonly activeKind: ActiveKind;
-  /** The document's identity, as the session reports it (§7.5): the theme's own
+  /** The document's identity, as the session reports it: the theme's own
    *  name, or its id where the theme carries no name. `undefined` only while no
    *  document is open — never `""`, because a chip that named nothing is a
    *  claim the product does not have. The reading is `documentNameOf`, the same
@@ -148,7 +148,7 @@ export interface EditorShellBridge {
   /**
    * The product's own library picture, as a data URL. e2e measures this rather
    * than re-deriving `toCanvasElement`, which is how a change to the capture
-   * would otherwise stop being measured (0007).
+   * would otherwise stop being measured.
    */
   capture(): string | undefined;
   readonly session: EditorActionFacade;
@@ -674,7 +674,7 @@ export function createEditorShellBridge(input: {
     const { moved, from, to, target } = move;
     // A live `ActiveSelection` repoints each member's `group` at the selection
     // itself, so a `remove` issued against the tree's own parent would bake the
-    // child against a matrix it no longer belongs to (0044, rung 6). Releasing
+    // child against a matrix it no longer belongs to (rung 6). Releasing
     // the selection puts every member back under its real parent first.
     const active = canvas.getActiveObject();
     if (active instanceof ActiveSelection && active.contains(moved))
@@ -688,7 +688,7 @@ export function createEditorShellBridge(input: {
       // serialization arrays one object each.
       if (!(from ?? canvas).moveObjectTo(moved, target)) return false;
     } else {
-      // The two structural writes are Fabric's, and they are the point of 0044:
+      // The two structural writes are Fabric's, and they are the point:
       // `remove` bakes the child out of the plane it leaves (`exitGroup`),
       // `insertAt` bakes it into the plane it enters (`enterGroup`) — the
       // symmetric pair Fabric's own `loadFromJSON` depends on. Nothing moves on

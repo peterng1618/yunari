@@ -166,7 +166,7 @@ test("a refused transport leaves the whole phone to the artboard", async ({
 }) => {
   // **The ceiling's case, and the one that would catch a strip laid out in the
   // band.** It was built on a pair — a composition gap and a transport gap —
-  // and the composition half is gone (`docs/decisions/0069`, `vg-578`): the
+  // and the composition half is gone (`vg-578`): the
   // crop strip was the last one that took room, so every strip a display can
   // raise now overlays. What is left to assert is the stronger claim the pair
   // was there to make, that a notice costs the composition nothing at all.

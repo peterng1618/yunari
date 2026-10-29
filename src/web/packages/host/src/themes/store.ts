@@ -20,7 +20,7 @@ import { readContainedFile } from "./contained-read.js";
 import { moveToTrash } from "./trash.js";
 
 /**
- * A theme is a directory, read and written in place (ADR-0017). The archive
+ * A theme is a directory, read and written in place. The archive
  * format is only what an author exports, so nothing on this working path
  * compresses and re-expands: `list()` reads one small JSON file per theme
  * instead of inflating a package, and a save writes the bytes the author typed.
@@ -161,7 +161,7 @@ export class ThemeAssetLimitError extends Error {
  * locale key, a stray `media.rotation`. The read-side sibling of the two
  * refusals above: the file is there, the validator's own diagnosis already
  * exists, and answering the `undefined` an absent theme answers with is what
- * throws that diagnosis away one layer below the reader (vg-110, ADR-0043).
+ * throws that diagnosis away one layer below the reader (vg-110).
  *
  * `issues` is the validator's own list rather than one flattened sentence, so a
  * reader can point at the fault. `list()` still skips such a theme: an
@@ -187,7 +187,7 @@ export class ThemeValidationError extends Error {
  * bound is the store's own, not the schema's — so dressing it as one would
  * report a fault that does not exist. What it must not be either is the
  * `undefined` an absent theme answers with, which is what told a reader a theme
- * they can see on disk was not there (vg-409, decisions/0043).
+ * they can see on disk was not there (vg-409).
  *
  * It carries no `issues`: there is no diagnosis to hand over, only the fact
  * that the document is too large to open. The bound is named because shrinking
@@ -641,7 +641,7 @@ function parseThemeDocument(id: string, bytes: Buffer): unknown {
  * standing where `theme.json` belongs is not this theme's document. A file that
  * *is* there and cannot be read throws rather than answering `undefined`: the
  * two facts were indistinguishable to every reader, and only the open path
- * wants them apart (vg-110, vg-409, decisions/0043).
+ * wants them apart (vg-110, vg-409).
  *
  * Both refusals are typed and neither is the other: a document that does not
  * validate is a {@link ThemeValidationError} carrying the validator's issues,
@@ -1098,9 +1098,9 @@ export function createThemeStore(
      * Moves the theme's folder to the operating system's trash, and does
      * nothing else to anything.
      *
-     * A theme is a folder of authored work (ADR-0017), so this is the one
+     * A theme is a folder of authored work, so this is the one
      * destructive act the store has, and the trash is what makes it
-     * recoverable — the ruling that put it there, and `docs/decisions/0021` for
+     * recoverable — the ruling that put it there, and the reason for
      * how each platform's own trash is reached. There is no fallback to an
      * unlink: a refused delete is recoverable and a silent one is not.
      *

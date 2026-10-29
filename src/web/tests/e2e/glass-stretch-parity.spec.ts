@@ -14,7 +14,7 @@ import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
  * the browser renders: two panels of the **same area** at the **same authored
  * value**, one stretched 4x horizontally and one 4x vertically, must diffuse the
  * backdrop by the same amount. Before the ruling the radius followed `scaleX`
- * alone, so the first blurred four times as far as the second (0053).
+ * alone, so the first blurred four times as far as the second.
  *
  * **The statistic is the stripe pattern's own contrast.** The backdrop is the
  * glass fixture's 64 source px bars, which are uniform across the media — so two

@@ -5,7 +5,7 @@ import path from "node:path";
 import type { WallpaperEngineInstall } from "./locate.js";
 
 /**
- * The workshop library as a list (§1.2, §1.4). Two files disagree with the
+ * The workshop library as a list. Two files disagree with the
  * disk and neither is trusted over it: `type` casing varies, and the cache can
  * lag, so an item with no row is listed with its attribution absent rather
  * than guessed. Every refusal is counted, never silently dropped.
@@ -26,7 +26,7 @@ export interface LibraryItem {
   readonly authorSteamId: string | undefined;
   readonly workshopUrl: string | undefined;
   /** The descriptor's own `properties` schema, passed through unread. The user's
-   *  chosen values live in Wallpaper Engine's root `config.json` (§1.3) and are
+   *  chosen values live in Wallpaper Engine's root `config.json` and are
    *  never written by anything here (R1). */
   readonly properties: unknown;
 }
@@ -130,7 +130,7 @@ async function readItem(
   }
 
   // A preset for another wallpaper carries no `type` and a `preset` object
-  // (§1.2), so it is refused here along with every other unknown shape — the
+  // with no payload, so it is refused here along with every other unknown shape — the
   // point is that it never reaches a list with no payload behind it.
   const type = typeOf(project.type);
   if (type === undefined) {
@@ -138,7 +138,7 @@ async function readItem(
   }
 
   // Workshop directories are named by their id. Anything else has to carry one
-  // in the descriptor, because the browser addresses an item by that id (§5.2).
+  // in the descriptor, because the browser addresses an item by that id.
   const numeric = /^\d+$/.test(name);
   const declared = isRecord(project.package)
     ? idOf(project.package.workshopId)

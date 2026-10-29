@@ -277,7 +277,7 @@ export async function lanAddress(
  *  **The name survives a DHCP lease; an address does not.** A browser scopes a
  *  display's cookie and storage to an origin, so a host whose address moved
  *  leaves a paired phone holding a credential for nobody — the defect
- *  `docs/decisions/0132` rules on. The name is not ours to publish: the OS
+ * rules on. The name is not ours to publish: the OS
  *  responder already answers it, and `host-refind.ts` already prefers it.
  *
  *  Absent when the platform gives no hostname, because `.local` alone is a name
@@ -305,7 +305,7 @@ export function localNames(): readonly string[] {
   const names = new Set<string>(["localhost", os.hostname()]);
 
   // The mDNS form the re-find ladder already prefers (`host-refind.ts`) and the
-  // one the editor's QR dials (`docs/decisions/0132`). Without it here the leaf
+  // one the editor's QR dials. Without it here the leaf
   // covers the bare hostname but not `hostname.local`, so https by the name is
   // a mismatch the owner cannot tell from a root they had not installed.
   const stable = stableName();

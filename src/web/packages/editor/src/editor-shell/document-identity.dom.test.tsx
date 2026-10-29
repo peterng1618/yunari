@@ -83,7 +83,7 @@ describe("the document's identity", () => {
   }
 
   it("renders nothing rather than a placeholder when no document is open", () => {
-    // The failure §9 forbids: a chip for a document that is not there. Red if
+    // The failure the refusal rule forbids: a chip for a document that is not there. Red if
     // the cluster draws its frame before it has a name to put in it.
     const store = new SelectionStore();
     const mounted = mount(<DocumentIdentity store={store} />);

@@ -19,7 +19,7 @@ import type { PlanTextObject } from "./fabric-text.js";
  * re-enters that. `yunariText.box` is therefore the owner, and everything that
  * reads the box — the width guard, the placement, the line capacity and the clip
  * — lives here rather than in the text pass that drives them.
- * See `docs/decisions/0003`.
+ *
  */
 
 /** Marks an object whose `set` has been guarded; a revived object is fresh. */

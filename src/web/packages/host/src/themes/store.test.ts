@@ -247,7 +247,7 @@ describe("ThemeStore", () => {
   });
 
   /**
-   * The regression that motivated ADR-0017: `list()` used to inflate every
+   * The regression that motivated this design: `list()` used to inflate every
    * package in the library to print one line each. It now reads only
    * `theme.json`, so an asset it cannot read costs the theme nothing in the
    * list — under the archive this theme would simply have vanished from it.
@@ -761,7 +761,7 @@ describe("ThemeStore", () => {
     // vg-110: a `theme.json` that exists and fails validation answered the same
     // `undefined` a missing file gets, so the store threw the validator's own
     // diagnosis away one layer below the reader. It is the typed error now,
-    // carrying the issues (ADR-0043) — the read-side sibling of the `409`/`413`
+    // carrying the issues — the read-side sibling of the `409`/`413`
     // refusals, not a sentence flattened into a bare failure.
     const store = createThemeStore(tmpDir);
     await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
@@ -798,7 +798,7 @@ describe("ThemeStore", () => {
     // editor mounted the template under "Editor ready" — over a document the
     // author has on disk. It is the typed error now, its own member of the
     // family above rather than a validation failure: the validator never sees
-    // this document, and the bound is the store's own (decisions/0043, 0084).
+    // this document, and the bound is the store's own.
     const store = createThemeStore(tmpDir);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     const document = JSON.stringify(envelopeFor("oversized", "Oversized"));
@@ -921,7 +921,7 @@ describe("ThemeStore", () => {
   });
 
   it("keeps an invalid theme out of the listing, and answers a save over it", async () => {
-    // The listing half is a different decision (ADR-0043): an unreadable
+    // The listing half is a different answer: an unreadable
     // document is not a library line, and `list()` skips it exactly as before.
     // The write path also reads the stored document, and an invalid one is "no
     // previous to compare against" there — otherwise an author could never save
@@ -2435,7 +2435,7 @@ describe("ThemeStore remove", () => {
     // A real `~/.yunari/themes/` is not a folder of themes and nothing else.
     // Measured on this machine before the change: three theme folders, a
     // `.retired-` scratch folder, three `.yunari-theme` archives left by the
-    // pre-ADR-0017 store, and `active-theme.json` — settings, in the library.
+    // older store, and `active-theme.json` — settings, in the library.
     await store.write("living-room", save("living-room", "Living Room"));
     await store.write("cpu-only", save("cpu-only", "CPU only"));
     await fs.writeFile(

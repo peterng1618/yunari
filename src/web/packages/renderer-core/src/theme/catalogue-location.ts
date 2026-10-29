@@ -8,7 +8,7 @@
 
 export const CATALOGUE_ORIGIN = "https://yunari-store.workers.dev";
 
-/** The storefront listing the browser reads (`docs/decisions/0088`). */
+/** The storefront listing the browser reads. */
 export function catalogueIndexUrl(): string {
   return `${CATALOGUE_ORIGIN}/index.json`;
 }

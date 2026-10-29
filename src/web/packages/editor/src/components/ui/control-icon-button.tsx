@@ -11,7 +11,7 @@ import {
 /**
  * One string, two consumers: a control hands this its `label` and gets the
  * tooltip that is that label, so nothing here can drift from the `aria-label`
- * the control also sets (DESIGN.md §6, "a glyph button whose tooltip and accessible
+ * the control also sets ("a glyph button whose tooltip and accessible
  * name can disagree is a defect").
  *
  * It is `ControlIconButton`'s own pairing, extracted so the icon-only controls
@@ -46,14 +46,14 @@ export function useControlTooltip(
 
 /**
  * An action whose glyph is unambiguous: a 26px square at `--radius-md`, the
- * glyph and nothing else (DESIGN.md §5).
+ * glyph and nothing else.
  *
  * The name and the tooltip are one string here: the button declares one
  * `label`, sets it as the `aria-label` and mounts {@link useControlTooltip} on
  * it, so neither can be changed without the other.
  *
  * `--hot` marks the destructive ones and only those; a destructive control
- * whose action is refused goes `--faint` rather than dimming red (§4).
+ * whose action is refused goes `--faint` rather than dimming red.
  */
 export function ControlIconButton(
   props: ControlProps & {

@@ -19,7 +19,7 @@ const ITEM: LibraryItem = {
 
 const SCENE: ItemPayload = { kind: "scene", path: ITEM.payload };
 
-describe("the JSON the browser receives (§5.2)", () => {
+describe("the JSON the browser receives", () => {
   it("takes the kind from the resolved payload", () => {
     const stored = toStoredItem(ITEM, { kind: "web" });
 

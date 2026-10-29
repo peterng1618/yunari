@@ -56,7 +56,7 @@ describe("object action registry", () => {
   });
 
   it("marks delete, and only delete, destructive — the registry's own fact", () => {
-    // §4: `--hot` marks destructive affordances, and delete is the only one. The
+    // the palette: `--hot` marks destructive affordances, and delete is the only one. The
     // owner is this entry, not a second list inside a surface: the surfaces read
     // this flag through `destructiveMarker`, so a surface cannot re-decide it.
     const destructive = [...OBJECT_ACTIONS, ...arrangeActions()]

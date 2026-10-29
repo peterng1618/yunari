@@ -17,7 +17,7 @@
  *
  * **The family case reads the source**, because "hand-authored path" is a
  * property of a file rather than of a render: it names every file that draws a
- * glyph without going through the vocabulary, and every entry there needs §6's
+ * glyph without going through the vocabulary, and every entry there needs the icon set's
  * reason beside it. The case forbids an unaccounted source, not a particular
  * list.
  *
@@ -79,10 +79,10 @@ import { Rail } from "./rail.js";
 
 /**
  * The sources allowed to draw a glyph without going through `icons.ts`, each
- * with §6's reason. `icons.ts` is the vocabulary itself and the one chrome
+ * with the reason. `icons.ts` is the vocabulary itself and the one chrome
  * reader of `lucide-react`; the theme icons are authored scene geometry rather
- * than chrome; the registry is §6's own authority on action icons; and the card
- * diagrams are §6's unit-tile escape — "a card unit in the Add pane is not
+ * than chrome; the registry is its own authority on action icons; and the card
+ * diagrams are the unit-tile escape — "a card unit in the Add pane is not
  * arbitrary … so a unit tile may carry a diagram of what it builds". The Add
  * pane is *not* here: its shape, chart and text tiles are the vocabulary's own
  * glyphs, so a tile that went back to drawing its own path would arrive in this
@@ -91,8 +91,8 @@ import { Rail } from "./rail.js";
 const EXEMPT_SOURCES: readonly string[] = [
   "editor-shell/icons.ts", // the vocabulary: one family, one weight, and the one place both are decided
   "new-fabric-theme-icons.ts", // authored scene icons — lucide geometry turned into Fabric paths, not chrome
-  "object-actions.ts", // §6: the registry owns which action wears which icon
-  "panes/add/card-diagrams.tsx", // §6: "a unit tile may carry a diagram of what it builds"
+  "object-actions.ts", // the icon set: the registry owns which action wears which icon
+  "panes/add/card-diagrams.tsx", // the icon set: "a unit tile may carry a diagram of what it builds"
 ];
 
 /** Where the editor's own sources live, from this file's directory. */
@@ -149,7 +149,7 @@ it("keeps the family one, so no chrome glyph is a hand-authored path", () => {
   expect(glyphSources()).toEqual(EXEMPT_SOURCES);
 });
 
-/** One glyph drawn at a size, and whether it takes §6's fill. */
+/** One glyph drawn at a size, and whether it takes the fill. */
 type Drawn = {
   readonly icon: LucideIcon;
   readonly size: number;
@@ -168,7 +168,7 @@ const VOCABULARY: readonly Drawn[] = [
   { icon: FIT_GLYPH, size: 15 },
   { icon: SETTINGS_GLYPH, size: 17 },
   { icon: CHECK_GLYPH, size: 12 },
-  { icon: CHECK_GLYPH, size: 12, filled: true }, // the live check, §6's filled escape
+  { icon: CHECK_GLYPH, size: 12, filled: true }, // the live check, the filled escape
   { icon: ERROR_GLYPH, size: 13 },
   { icon: WARNING_GLYPH, size: 13 },
   { icon: CHART_GAUGE_GLYPH, size: 13 },
@@ -288,7 +288,7 @@ function renderedGlyphs(): readonly SVGSVGElement[] {
   return [...document.querySelectorAll("svg")];
 }
 
-it("draws every chrome glyph at its own size's weight, in §6's tiers", () => {
+it("draws every chrome glyph at its own size's weight, in the tiers", () => {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -301,7 +301,7 @@ it("draws every chrome glyph at its own size's weight, in §6's tiers", () => {
   // Pair each rendered glyph's weight with the size it was given — the `<svg>`'s
   // own `width` is that size — and require the rule's own answer. A case that
   // only asserted one value would pass over a flat weight, which is the defect
-  // the drawing's tiers replaced.
+  // the tiers replaced.
   const sizes = new Set<string>();
   for (const svg of glyphs) {
     const size = Number(svg.getAttribute("width"));
@@ -316,7 +316,7 @@ it("draws every chrome glyph at its own size's weight, in §6's tiers", () => {
   expect(sizes.has("17")).toBe(true);
 });
 
-it("rises the stroke as the glyph shrinks, in §6's tiers", () => {
+it("rises the stroke as the glyph shrinks, in the tiers", () => {
   // The 10px tier is the `--faint` disclosure chevron, which the fleet above
   // does not mount, so the boundaries are checked on the pure rule.
   expect(glyphStrokeWidth(10)).toBe(2);
@@ -343,7 +343,7 @@ it("gives every kind a glyph, so a new kind cannot arrive without one", () => {
 });
 
 it("draws a group with the generic glyph rather than a diagram of it", () => {
-  // §6's own rule: a group is an arbitrary set of elements, so it cannot be
+  // Its own rule: a group is an arbitrary set of elements, so it cannot be
   // depicted — it gets the stack glyph and its name. The kind vocabulary reads
   // the *constant* the row's group arm reads, so the two cannot grow two marks
   // for one kind.
@@ -369,7 +369,7 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
 
   const tiles = [...host.querySelectorAll("button")];
   expect(tiles).toHaveLength(offered.length);
-  // A card's tile is §6's depicted unit and a primitive's is the object it
+  // A card's tile is the depicted unit and a primitive's is the object it
   // builds; what this asks is only that each one is drawn, because a kind
   // offered with no mark is a tile an author cannot choose.
   for (const tile of tiles) {

@@ -183,7 +183,7 @@ interface EditorSessionOptions {
    *  document**: the theme lands where it survives the editor closing, so
    *  nothing is confirmed and nothing is forgotten on the way. */
   readonly onImportPackage?: () => void;
-  /** §7's `?` reference. The sheet is chrome and belongs to `createShellLayout`,
+  /** The `?` reference. The sheet is chrome and belongs to `createShellLayout`,
    *  and the dispatcher belongs to this session, so the gesture crosses back
    *  through the same door every other modal prompt uses. Optional, so the four
    *  existing construction sites — and every test that builds a session — keep
@@ -196,7 +196,7 @@ interface EditorSessionOptions {
   /** Opens the finder already on Fonts, which is where the catalogue browsed
    *  from the selection inspector's face field now lives. */
   readonly onFindFontPicker?: () => void;
-  /** §7.1's `⌘⇧P`. The chord opens the publish surface and moves nothing: the
+  /** The `⌘⇧P`. The chord opens the publish surface and moves nothing: the
    *  host's switch is inside that surface, and reaching it is the author's
    *  second, deliberate press. Optional, like the one above, so a session built
    *  without a shell's chrome simply has no publish chord. */
@@ -717,7 +717,7 @@ export class EditorSession {
     this.#shortcuts.register("view.exit-group", () => {
       options.shell.editor.groupingManager.exitGroup();
     });
-    // §7's `?` reference. The manager dispatches; the sheet is chrome and lives
+    // The `?` reference. The manager dispatches; the sheet is chrome and lives
     // in the shell, so the gesture leaves through the session's own callback.
     this.#shortcuts.register("help.shortcuts", () => {
       options.onShowShortcuts?.();

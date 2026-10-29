@@ -371,7 +371,7 @@ describe("a gauge crossing from no value to a value", () => {
   }
 
   it("survives the transition the engine cannot survive with a datum", () => {
-    // **0008, and the throw it removes.** ECharts 6.1.0's
+    // **The throw it removes.** ECharts 6.1.0's
     // `GaugeView._renderPointer` reads its own `_progressEls` inside the
     // data-diff `update` callback, and only assigns it after a render that
     // actually drew a progress arc. `DataDiffer` only calls `update` for a

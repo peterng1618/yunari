@@ -42,7 +42,7 @@ describe("createPreviewSource", () => {
 
   it("draws a line straight, the same as the player", () => {
     // The editor must show what the player will draw. Smoothing is not an
-    // authorable choice, so neither surface can disagree about it (0116).
+    // authorable choice, so neither surface can disagree about it.
     const now = 60_000;
     const preview = createPreviewSource({ keys: ["cpu.load"], now: () => now });
     const chart = buildChartPlan(

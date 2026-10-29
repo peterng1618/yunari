@@ -11,7 +11,7 @@ import {
 
 /**
  * Every game launcher's installed apps, read through injected seams so the
- * catalogue is testable without this machine's stores (decision 0110).
+ * catalogue is testable without this machine's stores.
  *
  * Each reader is local and read-only: a missing directory or malformed file is
  * an empty list, never an error, because an absent launcher must not take the
@@ -38,7 +38,7 @@ const POWERSHELL_TIMEOUT_MS = 10_000;
 
 /**
  * One-shot PowerShell: runs a script and parses its JSON stdout. Long-running
- * helpers belong to the 0102 supervisor; a catalogue read is a single call.
+ * helpers belong to the supervisor; a catalogue read is a single call.
  */
 async function runPowerShellJson(script: string): Promise<unknown> {
   const executable = powershellPath();

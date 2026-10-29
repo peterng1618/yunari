@@ -3,7 +3,7 @@ import { HELPER_LINE_CAP } from "../helpers/supervisor.js";
 
 /**
  * Windows Now Playing through the SMTC session manager, read by one embedded
- * PowerShell script under the 0102 supervisor.
+ * PowerShell script under the supervisor.
  *
  * Two things in that script are not guessable and are pinned by tests: the
  * WinRT awaits go through the *generic* `AsTask` overload (the non-generic

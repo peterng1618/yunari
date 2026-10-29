@@ -159,7 +159,7 @@ export class YunariChart extends FabricObject {
    * series *model*, which is what lets the engine's data differ see an update
    * and animate the value; `replaceMerge` matches a series only by `id`, and
    * the builders give none, so every reading arrived as a brand-new series and
-   * replayed its appear animation (0126). `replace` is for an authored change:
+   * replayed its appear animation. `replace` is for an authored change:
    * it is the only path that can change the series shape, and a merge never
    * deletes a key the new option omits, such as `visualMap` or `yAxis.min`.
    */
@@ -273,7 +273,7 @@ export class YunariChart extends FabricObject {
    * refresh loop driving `setOption` that was every chart, every frame (vg-107).
    * `set` is what propagates the invalidation to an enclosing group's cache.
    *
-   * The one exception is a transition the reader should see (0129): while one
+   * The one exception is a transition the reader should see: while one
    * is running, each frame is blitted — at most one per `TRANSITION_FRAME_MS` —
    * because an option's transition paints frames the `setOption` call cannot.
    */

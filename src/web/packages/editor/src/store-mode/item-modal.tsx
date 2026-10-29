@@ -22,7 +22,7 @@ import { StoreStatusBadge } from "./status-badge.js";
 import type { SubmitControl } from "./use-submit.js";
 
 /**
- * The item's own surface: the modal a cell opens (`store-detail.html`).
+ * The item's own surface: the modal a cell opens.
  *
  * **It is a viewer first.** The box is 960 × 760 against the settings sheet's
  * 560, with no title bar: the stage takes every pixel the 270px facts panel does
@@ -43,10 +43,10 @@ import type { SubmitControl } from "./use-submit.js";
  */
 
 /**
- * The panel foot's four commands, in the drawing's order. Each is one glyph and
+ * The panel foot's four commands, in the order. Each is one glyph and
  * one word, and the words are this surface's short set
  * (`uiCopy.store.item.actions`): four boxes share 270px, and the cell keeps its
- * longer words. Delete is the one that destroys; §4's mark paints its glyph and
+ * longer words. Delete is the one that destroys; the mark paints its glyph and
  * word `--hot` and the shell's own selector refuses to paint it when disabled.
  *
  * **`open` leaves this surface alone.** It loads the stored theme as the editor's
@@ -64,17 +64,17 @@ const ACTION_BOXES = [
   readonly destructive: boolean;
 }[];
 
-/** §5's dialog button, for the foot's wider controls (Install, Submit, the
+/** The dialog button, for the foot's wider controls (Install, Submit, the
  *  author's command). The four boxes are `ActionBox`. */
 const FOOTER_BUTTON = `${ACTION_BUTTON} disabled:text-faint`;
 
 /** The counts' reader: `en-US` because `uiCopy` is one English table — the
- *  drawing's `1,204`, not the machine's. */
+ *  UI's `1,204`, not the machine's. */
 const CATALOGUE_COUNT = new Intl.NumberFormat("en-US");
 
-/** One pill: the drawing's `--panel-2` inside a 1px `--edge` at a full radius.
+/** One pill: the `--panel-2` inside a 1px `--edge` at a full radius.
  *  `mono` is the size's own treatment, and **a proposed pill is that same box
- *  dashed and in `--muted`** (`store-detail.html`). */
+ *  dashed and in `--muted`**. */
 function Pill(props: {
   readonly id: string;
   readonly name: string;
@@ -95,8 +95,8 @@ function Pill(props: {
   );
 }
 
-/** One group: §2's eyebrow over its pills. A group with no pills is not drawn at
- *  all — a heading over nothing is a word that says nothing (§9). */
+/** One group: the eyebrow over its pills. A group with no pills is not drawn at
+ *  all — a heading over nothing is a word that says nothing. */
 function PillGroup(props: {
   readonly id: string;
   readonly name: string;
@@ -142,7 +142,7 @@ interface Reading {
   readonly proposed: boolean;
 }
 
-/** The Shape group's readings, in the drawing's order. **An unclassified theme
+/** The Shape group's readings, in the order. **An unclassified theme
  *  draws no colour-mode pill**: `unclassified` is the absence of an answer
  *  rather than an answer (R117). */
 function shapeReadings(item: StoreItem): readonly Reading[] {
@@ -198,9 +198,9 @@ function styleReadings(
   });
 }
 
-/** The stage's own reading: the size the theme is drawn at, then the fit verb
- *  (`store-detail.html`). A size this record cannot read draws **no caption**, not
- *  `0 × 0` — a measurement of nothing is not a reading. */
+/** The stage's own reading: the size the theme is drawn at, then the fit verb.
+ *  A size this record cannot read draws **no caption**, not `0 × 0` — a
+ *  measurement of nothing is not a reading. */
 function stageReading(item: StoreItem): string | undefined {
   const { width, height } = item.facets;
   if (!(width > 0 && height > 0)) return undefined;
@@ -418,8 +418,8 @@ function PanelBody(props: {
 }
 
 /**
- * The online half's foot reading: one of the drawing's three answers in place of
- * the library's four boxes (`store-detail.html`).
+ * The online half's foot reading: one of the three answers in place of
+ * the library's four boxes.
  *
  * **Installed is a mark, not a control** — there is nothing to do. The check
  * carries the rationed accent and the word stays `--muted`, as the cell draws

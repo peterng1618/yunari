@@ -9,7 +9,7 @@ import { powershellPath } from "../helpers/supervisor.js";
  *
  * `libraryfolders.vdf` and `appmanifest_*.acf` are Valve KeyValues text. Only a
  * handful of fields are read, so the reader below owns the grammar rather than
- * adding a dependency (decision 0108). The Steam root comes from HKCU through
+ * adding a dependency. The Steam root comes from HKCU through
  * PowerShell: Node has no registry API and a native addon is not allowed.
  */
 

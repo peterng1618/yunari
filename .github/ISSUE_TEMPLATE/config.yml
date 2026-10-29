@@ -1,8 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Is this about planned work, or a defect in shipped work?
-    url: https://github.com/peterng1618/yunari/blob/main/docs/README.md
+    url: https://github.com/peterng1618/yunari/issues
     about: >-
-      The documentation map names where plans and the register live. A defect in
-      already-shipped work belongs in the bug form; planned work has an owner
-      already.
+      GitHub Issues tracks planned work and defects. A defect in already-shipped
+      work belongs in the bug form; planned work is an existing issue.

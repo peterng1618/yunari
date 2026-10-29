@@ -1033,7 +1033,7 @@ describe("a line chart's data clock", () => {
   const pinned = Date.UTC(2026, 8, 15, 12, 0, 0);
 
   it("is not redrawn while its newest reading is unchanged", () => {
-    // **The claim under test.** A line is placed by its data (0124): the axis
+    // **The claim under test.** A line is placed by its data: the axis
     // ends at the newest reading, so no clock advance changes the picture. The
     // old wall-clock placement redrew every frame; that is what made the right
     // edge revise itself.
@@ -1339,7 +1339,7 @@ describe("a chart control's commit", () => {
     manager.edits.onSettings("trends", defaultLineSettings);
 
     const [withBounds, withoutBounds] = applied.mock.calls.slice(-2);
-    // The control: the drawing that carried the bounds really had them, so the
+    // The control: the settings object that carried the bounds really had them, so the
     // omission below is the author's clear rather than a worse bug.
     expect(withBounds?.[0]).toMatchObject({ yAxis: { min: 0, max: 100 } });
     expect(withoutBounds?.[0]).not.toHaveProperty("yAxis.min");
@@ -1398,7 +1398,7 @@ describe("a chart control's commit", () => {
     manager.edits.onSettings("trends", solid);
 
     const [withBands, withoutBands] = applied.mock.calls.slice(-2);
-    // The control: the threshold drawing really carried a `visualMap`, so its
+    // The control: the threshold settings really carried a `visualMap`, so its
     // absence below is the author's paint change rather than a worse bug.
     expect(withBands?.[0]).toHaveProperty("visualMap");
     expect(withoutBands?.[0]).not.toHaveProperty("visualMap");

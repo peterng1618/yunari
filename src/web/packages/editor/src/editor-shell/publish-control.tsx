@@ -18,7 +18,7 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
  * The editor's one filled accent button, and behind it everything publishing
  * has to say.
  *
- * **The button opens the surface; it is not the host switch.** §7.1 gives the
+ * **The button opens the surface; it is not the host switch.** the header rule gives the
  * header one primary control and the facts live behind a press — but a control
  * that turned the LAN off when an author pressed it to read the phone address
  * would lose the fact the address exists to carry, mid-presentation. So the
@@ -141,8 +141,8 @@ export function PublishControl({
   //
   // **The name is dialled where the host has one**, because a display's cookie
   // and storage are scoped to the origin it paired on: a dotted quad that DHCP
-  // moves is a phone that has to pair again, while the name does not move
-  // (`docs/decisions/0132`). The address is still what gates this block and is
+  // moves is a phone that has to pair again, while the name does not move.
+  // The address is still what gates this block and is
   // still printed, because a device that cannot resolve the name — Android 11
   // and earlier, or one on Private DNS — is exactly the device an address is
   // for.
@@ -172,7 +172,7 @@ export function PublishControl({
         data-yunari-publish=""
       >
         {uiCopy.publish.start}
-        {/* §7.1's mark, and plan 2 left it off because there was nothing to
+        {/* The mark, and plan 2 left it off because there was nothing to
             run. It is the same action id the press answers to through the
             chord, so the mark and the act cannot disagree — a printed chord
             that ran nothing is the state this row exists to end. */}
@@ -265,8 +265,7 @@ export function PublishControl({
                 {/* https is what makes the display a secure context — the wake
                     lock and fullscreen are gated on it — so it is the address
                     printed. The plain one is what a device that has not
-                    installed the root certificate can still open
-                    (`docs/decisions/0076`). */}
+                    installed the root certificate can still open. */}
                 <span className="editor-shell-publish-note">
                   {`Fallback http://${shown.address}:${shown.port}`}
                 </span>

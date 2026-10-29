@@ -97,7 +97,7 @@ it("marks exactly the one row the group holds, and one of them takes the Tab sto
 
   expect(checked()).toEqual(["editorial:true", "graphite:false"]);
   // One Tab stop for the group rather than one per row: the composite gives the
-  // checked row the tabindex and the arrows move within it, which is what §5
+  // checked row the tabindex and the arrows move within it, which is what the control set
   // means by "the installed primitive's keyboard model".
   const stops = Array.from(
     group().querySelectorAll<HTMLElement>('[role="radio"]'),
@@ -132,7 +132,7 @@ it("a refused row keeps its place and its reason, and cannot be chosen", async (
   expect(document.body.textContent).toContain(reason);
   const refused = row("editorial");
   expect(refused.getAttribute("aria-disabled")).toBe("true");
-  // Reachable, which §5.3 requires: a natively disabled radio leaves the tab
+  // Reachable, which the refusal rule requires: a natively disabled radio leaves the tab
   // order, and the reason would then reach nobody not holding a pointer.
   expect(refused.hasAttribute("disabled")).toBe(false);
   expect(refused.getAttribute("aria-describedby")).not.toBeNull();

@@ -94,11 +94,9 @@ export default defineConfig({
   // clear the other's traces, which the survivor reports as test failures (vg-216).
   outputDir: "test-results/main",
   // Every Playwright spec is a `.spec.ts`. The default (`spec` **or** `test`)
-  // would also collect a Vitest unit test that lives beside the harness —
-  // `tests/e2e/mockup-values.test.ts` is one, because the reader it proves is
-  // pure and belongs to no browser (see `vitest.config.ts`). Playwright collecting
-  // it would be an import of `vitest`'s `test` and a hard error for the whole
-  // suite, not one skipped file.
+  // would also collect a Vitest unit test that lives beside the harness, and an
+  // import of `vitest`'s `test` is a hard error for the whole suite, not one
+  // skipped file.
   testMatch: "**/*.spec.ts",
   // Seeds the host fixture once; the config itself runs in every worker.
   globalSetup: "./tests/e2e/global-setup.ts",
@@ -136,10 +134,10 @@ export default defineConfig({
       // The real Node host, not a preview server: hosted theme loading, package
       // asset serving and the SSE stream are otherwise never browser-tested.
       command: `node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
-      // http, which the host still serves beside https on the same port
-      // (0070). The pairing link these specs drive is the one the host prints,
-      // and what that link should carry belongs to the per-display-themes
-      // spec; the secure origin is read by `host-secure-origin.spec.ts`, which
+      // http, which the host still serves beside https on the same port.
+      // The pairing link these specs drive is the one the host prints, and
+      // what that link should carry belongs to the per-display-themes work;
+      // the secure origin is read by `host-secure-origin.spec.ts`, which
       // starts its own host on the LAN and launches its own browser.
       url: `http://127.0.0.1:${HOST_PORT}/api/health`,
       reuseExistingServer: true,

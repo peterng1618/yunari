@@ -19,7 +19,7 @@ function panel(root: HTMLElement): HTMLElement {
   return root.querySelector<HTMLElement>("aside.editor-shell-panel")!;
 }
 
-/** The box §7.7 leaves the scroll to: the showing pane's body. `choosePane`
+/** The box the overflow rule leaves the scroll to: the showing pane's body. `choosePane`
  *  reads and writes each pane's offset through it. */
 function scroller(root: HTMLElement): HTMLElement {
   return root.querySelector<HTMLElement>(
@@ -87,7 +87,7 @@ function mount(): { readonly layout: ShellLayout; readonly root: HTMLElement } {
  * the Starter's 52 rows — more in a theme an author has built — finding your
  * place again is the whole cost of glancing at the assets.
  *
- * The offset lives on the showing pane's **body** (§7.7, `vg-208`), so each
+ * The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), so each
  * case reads and writes it there rather than on the column around it.
  */
 describe("the rail keeps each pane where you left it", () => {

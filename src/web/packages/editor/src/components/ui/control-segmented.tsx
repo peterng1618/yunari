@@ -12,8 +12,7 @@ import {
 
 /**
  * A 2–4 way exclusive choice where every option has to stay readable: a
- * `--panel-2` well holding the labels, the active one lifted to `--stage`
- * (DESIGN.md §5).
+ * `--panel-2` well holding the labels, the active one lifted to `--stage`.
  *
  * The arrow keys are the primitive's roving focus rather than one Tab stop per
  * label, and the group carries the row's label as its accessible name — the
@@ -22,7 +21,7 @@ import {
  * press, so the reason stays readable where a disabled group would take it out
  * of the tab order.
  *
- * Each label is a target in its own right, so each carries §5's 24×24 hit area
+ * Each label is a target in its own right, so each carries the 24×24 hit area
  * through `hitTargetClasses`; the label's own box is 22px tall, and the rows'
  * 4px gap keeps the two expanded targets from meeting.
  *

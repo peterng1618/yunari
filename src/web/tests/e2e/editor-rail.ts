@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** §7.7's scroller, and `vg-208`'s ruling: the showing pane's **body**, not the
+/** The scroller, and `vg-208`'s ruling: the showing pane's **body**, not the
  *  column around it — the column clips, so reading it would pass whatever the
  *  pane drew. Scoped to the pane's column so a `Pane` elsewhere in the shell
  *  cannot answer. */

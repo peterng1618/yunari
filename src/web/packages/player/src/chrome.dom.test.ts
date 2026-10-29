@@ -161,7 +161,7 @@ describe("the strips the display is told by", () => {
     // leaves (vg-028). Every strip left here is a transport or availability
     // notice, which can flash on any reconnect, so each is fixed to the
     // display's edge instead of laid out in the band. The one strip that took
-    // room was the crop notice, and it is gone (`docs/decisions/0069`).
+    // room was the crop notice, and it is gone.
     showConnectionState("reconnecting", 3);
     expect(document.getElementById("yunari-connection")?.style.position).toBe(
       "fixed",

@@ -12,7 +12,7 @@ import {
 
 /**
  * A bounded number: a 3px track with an accent fill, a 10px thumb, and a well
- * showing the value (DESIGN.md §5).
+ * showing the value.
  *
  * A gesture has one undo boundary, so preview and history are separate calls:
  * `onPreview` fires while the gesture is moving and writes nothing, one changed
@@ -32,10 +32,10 @@ import {
  * is a `ControlNumber` in its inline form, so the draft, the validation and the
  * commit rule stay in the one control that owns them (the reasoning
  * `control-pair.tsx` states for its halves) — a readout beside a track would put
- * a second copy of §5's rules three lines away from the first. It is named by
+ * a second copy of the rules three lines away from the first. It is named by
  * the row's own label rather than printing that label a second time, and it is
  * 40px wide because the track takes the rest of the row — the narrowest well
- * whose own input still measures §5's 24×24.
+ * whose own input still measures the 24×24.
  *
  * A wheel over the control moves it by **the slider's own step**, read back off
  * the range input, so the gesture and the drag cannot step differently. The
@@ -79,13 +79,13 @@ export function ControlSlider(
      * and **the well reads the document alone**, rendering empty until something
      * is stored. An unauthored `0` and an authored one are different documents
      * and must not read alike (`vg-497`); the well's empty draft is the route
-     * back, as it is for every other optional field (`0049`).
+     * back, as it is for every other optional field.
      */
     readonly unauthored?: boolean;
     readonly onPreview?: (value: number) => void;
     /**
      * The gesture abandoned: it takes the value the press started from, because
-     * §5's cancellation *restores the start value* and the prop cannot carry it
+     * The cancellation *restores the start value* and the prop cannot carry it
      * — a re-publish mid-gesture moves `value` onto the previewed number. The
      * owner writes it back through the funnel and records nothing.
      */
@@ -341,7 +341,7 @@ export function ControlSlider(
           </Slider.Track>
           {/* Two parts, because one cannot do it: the fill half is the accent
               and the rest half is `--edge`, and in graphite and light those sit
-              far enough apart that no single colour clears §5's 3:1 against
+              far enough apart that no single colour clears the 3:1 against
               both. The interior answers to the fill, the ring to the rest, and
               the parity gate measures each against the half it has to beat. */}
           <Slider.Thumb
@@ -354,7 +354,7 @@ export function ControlSlider(
               : { "aria-valuetext": spoken })}
             // The hint and the refusal are the two notes the row owns, and the
             // range input is the element a screen reader reaches: a hint that
-            // stayed on the wrapper would reach nobody (§5.3 keeps a refusal out
+            // stayed on the wrapper would reach nobody (the refusal rule keeps a refusal out
             // of a tooltip for the same reason). The out-of-range note joins
             // them because it is a statement about *this* element's value, and
             // the thumb is the element that cannot report it.
@@ -371,7 +371,7 @@ export function ControlSlider(
             That width is 40px and not the 36px the readout used, because **the
             well's own input is a target** and `hitTargetClasses` cannot widen a
             replaced element: `well − 2(--space-6) − 2(1px border)` is the input's
-            box, which §5 asks to be 24×24 — a floor of 38px, with a pixel either
+            box, which the control set asks to be 24×24 — a floor of 38px, with a pixel either
             side of the box the design-language case samples at ±11. The narrow
             well gave a 22px field, which that case hit-tests and fails; `vg-469`'s
             item 10 is what put a field where a readout used to be. */}

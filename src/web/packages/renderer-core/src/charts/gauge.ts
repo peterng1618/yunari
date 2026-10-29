@@ -75,7 +75,7 @@ export function buildGaugeOption(
 
   // One condition for the whole arc. Missing samples show only the track,
   // never a false zero (§83); a paint that resolves to nothing is the same
-  // absence, an arc the author cannot see the value in (0007).
+  // absence, an arc the author cannot see the value in.
   const arcDrawn = plottable && progress !== undefined;
 
   // Clamp only the drawn arc; preserve the raw reading elsewhere (§83).
@@ -130,7 +130,7 @@ export function buildGaugeOption(
         // No arc, no datum. ECharts reads its own previous progress element
         // inside the data-diff update callback and only fills it after a render
         // that drew an arc, so a datum outliving `progress.show: false` throws
-        // inside its renderer (0008).
+        // inside its renderer.
         data: bands === undefined && arcDrawn ? [{ value: displayValue }] : [],
         silent: true,
         ...toEngineAnimation(settings.animation, animate),

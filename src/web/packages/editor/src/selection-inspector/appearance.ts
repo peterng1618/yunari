@@ -80,8 +80,8 @@ export function resolveTypeToken(
  * Opacity, shown as a percentage and stored as Fabric's 0–1.
  *
  * A bounded number — Fabric's own 0–1, projected here as 0–100 — so it is a
- * slider: DESIGN.md §5's vocabulary says a bounded number gets a track, and
- * `inspector-controls.html` names opacity as its example. The glass blur drew
+ * slider: the design's vocabulary says a bounded number gets a track, and
+ * opacity is the example. The glass blur drew
  * the same conclusion one directory away. The percentage conversion is the
  * projection's, so the number an author reads is the number the row commits,
  * and `writeOpacity` still refuses a value outside 0–100 before it writes — the

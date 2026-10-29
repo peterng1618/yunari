@@ -65,7 +65,7 @@ export type ObjectCommandId =
 export type ConstructionActionId = "new-text" | `new-shape:${ShapeKind}`;
 
 /** What every entry carries, whichever half of the registry it is in: the word
- *  it is called, the glyph it wears, and §4's mark. */
+ *  it is called, the glyph it wears, and the mark. */
 interface ActionIdentity {
   readonly id: ObjectActionId;
   readonly label: string;
@@ -77,7 +77,7 @@ interface ActionIdentity {
    *  per `exactOptionalPropertyTypes`; the absence is the fact that the product
    *  binds nothing. */
   readonly shortcut?: ProductShortcutId;
-  /** §4: this action destroys, so a surface marks its control `--hot`. Omitted
+  /** the palette: this action destroys, so a surface marks its control `--hot`. Omitted
    *  rather than `false`, per `exactOptionalPropertyTypes`; the absence is the
    *  fact that it does not, and the registry is the one owner of the decision. */
   readonly destructive?: true;
@@ -159,7 +159,7 @@ export function objectActionsFor(gate: ActionGate): readonly ObjectAction[] {
 }
 
 /**
- * §4's destructive mark, as the attributes a surface spreads onto the control
+ * The destructive mark, as the attributes a surface spreads onto the control
  * it draws for an action: `data-yunari-destructive` when the registry says the
  * action destroys, and nothing otherwise. One owner for the attribute name and
  * the decision, so a surface that renders the registry cannot re-decide which

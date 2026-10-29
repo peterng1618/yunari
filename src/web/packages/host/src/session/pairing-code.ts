@@ -7,8 +7,8 @@ import { sameToken } from "./pairing.js";
  *
  * **One code is live at a time**, which is why a mismatch never burns it: there
  * is no second code for a wrong guess to name, so consuming on a mismatch would
- * hand anyone on the LAN a way to close the window a person is typing into
- * (spec § "Pairing a display that has no camera"). Only a successful claim
+ * hand anyone on the LAN a way to close the window a person is typing into.
+ * Only a successful claim
  * consumes it, and the defence against guessing is the penalty below rather
  * than the window closing.
  */

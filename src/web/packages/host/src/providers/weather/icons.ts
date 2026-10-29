@@ -2,8 +2,8 @@
  * WMO code → vendored Meteocons `fill` slug, one entry per canonical code.
  *
  * The allow-list is also the route's allow-list: a name that is not one of
- * these is a 404, never a neighbouring picture. Decision 0099 records why the
- * set is vendored rather than fetched.
+ * these is a 404, never a neighbouring picture. The set is vendored rather
+ * than fetched.
  *
  * A slug is present here only because the bytes were committed; the vendor
  * script fails if the tarball no longer carries it.

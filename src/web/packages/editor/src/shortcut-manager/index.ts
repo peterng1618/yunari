@@ -142,7 +142,7 @@ const MODIFIED_KEY_DEFERRED_ACTION_IDS: ReadonlySet<ProductShortcutId> =
  *
  *  A capture asks this, because a modifier-less letter bound to an action that
  *  does *not* defer would make that action stop reaching the author while they
- *  type — the opposite of what the action promises, and a §2.3 behaviour change
+ *  type — the opposite of what the action promises, and a missing-reading rule behaviour change
  *  dressed as a preference. */
 export function defersToTextEntry(action: ProductShortcutId): boolean {
   if (MODIFIED_KEY_DEFERRED_ACTION_IDS.has(action)) return true;
@@ -161,13 +161,13 @@ export function defersToTextEntry(action: ProductShortcutId): boolean {
  *
  * Both shapes, because the editor has both: the three native modals
  * (`new-document-chooser.ts`, `persistence-manager`, `theme-library-dialog`)
- * and the library `Dialog` decision `0038` puts on Base UI.
+ * and the library `Dialog` on Base UI.
  *
  * **`[role='dialog']` alone, with no `aria-modal` clause.** `@base-ui/react`
  * 1.8.0's dialog sets `role: 'dialog'` on the popup and hides the content's
- * siblings instead, so `aria-modal` appears nowhere in the package — the
- * mechanism decision `0038` records as the reason the library `Dialog` is Base
- * UI's. A selector requiring `aria-modal='true'` therefore matches no dialog
+ * siblings instead, so `aria-modal` appears nowhere in the package — which is
+ * why the library `Dialog` is Base UI's. A selector requiring
+ * `aria-modal='true'` therefore matches no dialog
  * this app can render: the guard would not defer while the sheet is open, and
  * `Ctrl+Z` would edit the document the author is reading about. `dialog[open]`
  * and `[role='dialog']` between them cover every modal in the tree — this editor
@@ -321,7 +321,7 @@ function consumesKey(
 /**
  * The distinct actions the table binds, in the table's own order.
  *
- * §7's reference is a list of *actions*, so the four actions bound twice
+ * The reference is a list of *actions*, so the four actions bound twice
  * (`edit.redo`, `edit.delete`, `canvas.front`, `canvas.back`) appear once — the
  * second chord is a property of the action, not a second row. The order is the
  * table's rather than sorted, because the table is grouped by where the action

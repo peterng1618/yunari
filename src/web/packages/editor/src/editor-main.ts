@@ -404,10 +404,10 @@ async function start(): Promise<void> {
           shell.backdrop(),
           undefined,
           // The bridge's own picture is a read of the document too: the
-          // entered-group dim is lifted for it (0053, `vg-527`).
+          // entered-group dim is lifted for it (`vg-527`).
           () => shell.editor.groupingManager.suspendDim(),
         )?.toDataURL("image/png"),
-      // The theme's paints, for the Tokens pane's title-bar count (§7.3). The
+      // The theme's paints, for the Tokens pane's title-bar count. The
       // session owns the document, so this is pulled at each snapshot rather
       // than copied: a token added, renamed or deleted moves the number, and
       // `subscribeDocumentChange` is what republishes it.
@@ -557,7 +557,7 @@ async function start(): Promise<void> {
     }
     // A theme the URL named that is stored and does not validate is not a
     // blank success: the author is told why, over the template that stands in
-    // for the document they asked for (vg-110, ADR-0043).
+    // for the document they asked for (vg-110).
     case "invalid": {
       const theme = createNewFabricTheme();
       await mount({
@@ -573,7 +573,7 @@ async function start(): Promise<void> {
     // A theme the URL named that is stored but past the size the host will read
     // is not a blank success either: the author is told the saved theme is too
     // large to open, over the template that stands in for the document they
-    // asked for (vg-409, decisions/0084).
+    // asked for (vg-409).
     case "too-large": {
       const theme = createNewFabricTheme();
       await mount({
@@ -612,7 +612,7 @@ async function start(): Promise<void> {
  * a broken theme: the media layer would report it unreadable and the artboard
  * would show nothing behind the glass. A package opened from disk brings its
  * own, which is why this is only wired into the two paths that *build* the
- * starter. `docs/decisions/0011`.
+ * starter.
  */
 let starterBytes: Promise<Readonly<Record<string, Uint8Array>>> | undefined;
 function starterAssets(): Promise<Readonly<Record<string, Uint8Array>>> {

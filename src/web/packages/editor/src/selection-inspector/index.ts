@@ -82,7 +82,7 @@ import {
  * commit path. Reads the live Fabric object and writes through the canvas,
  * saving history once per committed edit (§67). Whole artboard units (§57).
  *
- * The column renders through React now ([ADR-0039]): `render` projects a
+ * The column renders through React now: `render` projects a
  * serializable `SelectionView` from Fabric and publishes it to the React root.
  * React holds that value and never the object it describes, which is what keeps
  * Fabric out of React and one writer of the scene.
@@ -322,10 +322,9 @@ export function createSelectionInspector(
 
   /**
    * The object to describe: the live selection, or the re-bound one across a
-   * history restore. **A deselect is neither**, and the column empties for it —
-   * `2026-10-03-dashboard-authoring-design.md:558`, "with nothing selected the
-   * right column is empty and names where to choose from", and its `:574` ruling
-   * that the column empties on deselect.
+   * history restore. **A deselect is neither**, and the column empties for it:
+   * with nothing selected the right column is empty and names where to choose
+   * from, and it empties on deselect.
    *
    * A crop session is the exception: it makes its own frame the active object,
    * so following the selection would describe that frame rather than the image
@@ -661,7 +660,7 @@ export function createSelectionInspector(
   /**
    * The column's three write routes, on one funnel.
    *
-   * A preview and its cancel are the gesture's own halves (§5): the preview
+   * A preview and its cancel are the gesture's own halves: the preview
    * writes the field and repaints without re-publishing the column, so the
    * control's moving value stays its own state; the cancel writes the start
    * value back and re-publishes once. Neither records a history entry.

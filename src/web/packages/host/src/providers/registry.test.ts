@@ -347,7 +347,7 @@ describe("ProviderRegistry", () => {
 
   describe("ownership precedence", () => {
     it("gives an overlapping key to the earlier provider", async () => {
-      // The spec's mapping table: the OS owns cpu.load even when LHM offers it.
+      // The mapping table: the OS owns cpu.load even when LHM offers it.
       const registry = new ProviderRegistry([
         stubProvider("os", { "cpu.load": 10 }),
         stubProvider("lhm", { "cpu.load": 99 }),

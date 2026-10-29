@@ -5,7 +5,7 @@
  * A document's colours are its author's, not the shell's, so they are fixture
  * data rather than styling — the same reason `glass-fixture.ts` holds its own.
  * The resolved `fill` a scene object carries and the `palette` entry behind it
- * are one authored fact in Fabric's two representations (ADR-0026), so both
+ * are one authored fact in Fabric's two representations, so both
  * read their value from here rather than each spelling it.
  */
 

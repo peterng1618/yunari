@@ -4,7 +4,7 @@ import type { FabricPalette, TypeToken } from "@yunari/renderer-core";
  * The starter theme's palette, type tokens and the two lookups the scene
  * helpers need from them.
  *
- * Its own module because `new-fabric-theme.ts` outgrew `AGENTS.md`'s 800-line
+ * Its own module because `new-fabric-theme.ts` outgrew the 800-line
  * stop, and the globals are a separable responsibility: they are the document's
  * vocabulary, and every object in the scene is written against them rather than
  * against the scene body.
@@ -182,7 +182,7 @@ export const solidOf: Readonly<Record<string, string>> = {
  * Body first because `createNewTextDefaults` and the chart defaults take the
  * first token as a new object's, so the order here is the editor's default face.
  * A token names a face only: the size, leading and tracking a run wears are the
- * run's own `style` (docs/decisions/0128).
+ * run's own `style`.
  */
 export const starterTypeTokens = {
   body: { family: "Segoe UI, sans-serif", weight: "400" },
@@ -205,9 +205,9 @@ export function starterRoleForSize(size: number): StarterTypeRole {
 }
 
 /**
- * The reference's tracking, in px at its authored size.
+ * The starter's tracking, in px at its authored size.
  *
- * Measured off the reference, not judged by eye: "SYSTEM" advances 6px at 17px
+ * The starter's own letterforms fix them: "SYSTEM" advances 6px at 17px
  * and "YUNARI" 28px at 36px. Only those two sizes track; a numeral's advance is
  * a grid cell, so readings and the clock stay untracked.
  */

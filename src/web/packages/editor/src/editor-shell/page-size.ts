@@ -8,7 +8,7 @@ export const pageSizes = [12, 24, 48, "all"] as const;
 
 export type PageSize = (typeof pageSizes)[number];
 
-/** The drawing's own size, and what a viewer who has never chosen reads. */
+/** Its own size, and what a viewer who has never chosen reads. */
 export const DEFAULT_PAGE_SIZE: PageSize = 12;
 
 /** Browser-local, like the shell's palette choice: never serialized into a

@@ -105,13 +105,13 @@ export function DisplaySwitch({
   const percent = `${Math.round(zoom * 100)}%`;
 
   return (
-    // §7.5's top-right corner, as one floating cluster. The readout is the
+    // The top-right corner, as one floating cluster. The readout is the
     // cluster's control and its own treatment lives on the cluster, so a reader
     // of the cluster's computed style (`shell-appearance.spec.ts`) sees the
     // surface the author sees. The chooser stays a portal, so the cluster holds
     // only what is drawn until it is opened.
     <div className="editor-shell-zoom editor-glass">
-      {/* §7.5's camera commands, in DESIGN.md's order — − / value / +, and fit —
+      {/* The camera commands, in this order — − / value / +, and fit —
           as siblings of the readout rather than replacements for it: the
           readout is still the display chooser's trigger, and the three act on
           the camera the way the `+/−/Shift+1` keys already do. */}

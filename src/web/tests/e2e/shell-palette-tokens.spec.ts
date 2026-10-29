@@ -75,7 +75,7 @@ test.describe("shell palettes", () => {
    *  the shell's own scrollers and read by nothing, so the pane's column and the
    *  inspector painted the OS default.
    *
-   *  **`vg-208` moved the pane's scroller off the column.** §7.7 puts the scroll
+   *  **`vg-208` moved the pane's scroller off the column.** the overflow rule puts the scroll
    *  on the pane's *body*, so the shell's two scrollers are that body and the
    *  inspector, and the column is read no more: a computed style on a box with no
    *  scrollbar to paint is a reading that would pass whatever the pane drew.
@@ -130,7 +130,7 @@ test.describe("shell palettes", () => {
     });
     await page.keyboard.press("Escape");
 
-    // §7's modal, portalled the same way and asserted to be by the case above
+    // The modal, portalled the same way and asserted to be by the case above
     // ("a portalled surface carries the palette in force").
     await openAppearance(page);
     const sheet = await scrollbarReading(page, [".editor-shell-dialog"]);
@@ -270,7 +270,7 @@ test.describe("shell palettes", () => {
     await expect(group).toBeVisible();
 
     /** **Both bars of every card**, because the preview is two of them (plan 8
-     *  Task 5, `docs/design/mockups/current/settings.html:44-87`): the ground
+     * Task 5): the ground
      *  bar carries the class the parity table's height row addresses and the
      *  accent bar is its next sibling, each with its own `data-shell-palette`.
      *  Reading the ground alone would call two palettes identical where only
@@ -297,7 +297,7 @@ test.describe("shell palettes", () => {
       previews
         .filter((preview) => preview.accent === "")
         .map((preview) => preview.palette),
-      "these previews have no accent bar, so the card is not the two-bar preview the drawing draws",
+      "these previews have no accent bar, so the card is not the two-bar preview",
     ).toEqual([]);
 
     // No preview shows the *live* palette's ground or accent while naming a
@@ -485,7 +485,7 @@ test.describe("shell palettes", () => {
       "rounded-sm": { "border-radius": themeToken("--radius-sm") },
       "rounded-md": { "border-radius": themeToken("--radius-md") },
     });
-    // §2's ratio for each token, resolved on the rule that states it.
+    // The ratio for each token, resolved on the rule that states it.
     expect(probe.rules).toEqual({
       "editor-shell-status": typeStep("--text-xs"),
       "editor-shell-view-readout": typeStep("--text-sm"),
@@ -505,18 +505,18 @@ test.describe("shell palettes", () => {
   });
 
   /** The one treatment boundary: chrome is flat and opaque, and a floating
-   *  cluster over the canvas is that same fill lifted by §3's elevation-1 shadow.
+   *  cluster over the canvas is that same fill lifted by the elevation-1 shadow.
    *
    *  **This assertion changed shape twice, deliberately**, and the shapes it had
    *  are why they are named here rather than quietly rewritten. It first read
    *  "editorial is flat and the other five are glass" — a `flat` describing a
-   *  whole *palette* rather than an element, which is not the boundary §3 draws.
+   *  whole *palette* rather than an element, which is not the boundary the spacing scale draws.
    *  Task 5 moved the gradient and the blur onto the clusters by name and gave the
    *  chrome the palette's own `--panel`. The clusters' glass was then removed
-   *  outright: the drawing never blurred anything and filled a cluster from the
+   *  outright: the theme never blurred anything and filled a cluster from the
    *  same charcoal at 95%, so the gradient, the two inner highlights and the blur
    *  were the product's own invention. **Elevation is now the whole difference**
-   *  between §3's two rows, and it is what this assertion discriminates on.
+   *  between the two rows, and it is what this assertion discriminates on.
    *
    *  Both halves are read as a **set, not a sample** (review round 1): a boundary
    *  stated per element is not held by one element a side, and the two surfaces
@@ -525,13 +525,13 @@ test.describe("shell palettes", () => {
    *  built bundle, in all six palettes:
    *
    *  - **chrome** — every surface that declares its own fill: the rail, the pane,
-   *    the inspector, and §3's two elevation-0 strips, the header and the status
+   *    the inspector, and the two elevation-0 strips, the header and the status
    *    bar. Each paints the palette's own `--panel` and nothing on top of it, so
    *    the **whole colour** it renders equals the fill that token declares — not
    *    only its alpha, because a hover-tint or a second surface under the same
    *    alpha is what "paints `--panel`" is meant to rule out — and it carries no
    *    gradient, no blur and no shadow.
-   *  - a **floating cluster** — §7.5's three: the dock, the view cluster and the
+   *  - a **floating cluster** — the three: the dock, the view cluster and the
    *    identity chip. Each is translucent and lifted, and **none of them blurs or
    *    paints a gradient**.
    *
@@ -549,7 +549,7 @@ test.describe("shell palettes", () => {
    *  "every cluster computes `none`" was green over a stylesheet that still
    *  asked to blur. A computed read cannot see a declaration the toolchain
    *  drops, which is exactly the state `vg-311` was filed from; the source scan
-   *  below is what holds §3's "floating clusters do not blur their backdrop"
+   *  below is what holds the "floating clusters do not blur their backdrop"
    *  against the rule text rather than against the build's treatment of it. */
 });
 

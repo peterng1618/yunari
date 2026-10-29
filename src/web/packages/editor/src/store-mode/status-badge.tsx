@@ -7,10 +7,10 @@ import { uiCopy } from "../ui-copy.js";
  *
  * **Two of the six states have no word.** `published` needs none because the
  * public listing is its badge, and `draft` is not a state this surface explains
- * yet — a word nothing accounts for is worse than none (§9).
+ * yet — a word nothing accounts for is worse than none.
  *
  * **The word is the signal rather than a colour**, so the badge reads aloud and
- * to a person who cannot tell two tints apart (§5); the element carries the
+ * to a person who cannot tell two tints apart; the element carries the
  * state itself in `data-yunari-store-status` for the surfaces that read it.
  */
 const BADGED: Readonly<

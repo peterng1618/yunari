@@ -48,16 +48,11 @@ src/web/packages/host/vendor/*
 assets-store/
 secrets.local.json
 
-# ---------- Screenshot evidence ----------
-# Commit the written results; keep raw captures local.
-docs/evidence/screenshots/**/raw/
-
 # ---------- Agent environment ----------
-# Personal overrides; the committed .claude/settings.json is the shared one.
-.claude/settings.local.json
-# Throwaway implementation plans are not repository content. Tracked specs live
-# in docs/superpowers/specs/ instead.
-.claude/plans/
+# Harness state (settings overrides, plans, worktrees) is never repository
+# content. A bare pattern matches at any depth, so a nested config home is
+# covered too.
+.claude/
 .worktrees/
 # Playwright MCP scratch: screenshots, snapshots and console logs from an
 # interactive browser session. Regenerated at will, never evidence.
@@ -70,10 +65,6 @@ docs/evidence/screenshots/**/raw/
 # revision recorded this as fixed when it was not. A convention with no hook
 # behind it is not a control.
 **/.credentials.json
-# A nested .claude/ is always a stray config home. Anchored with a leading
-# directory so the repo's OWN root .claude/ — twelve tracked plugin files —
-# stays tracked.
-**/*/.claude/
 
 # ---------- Editors / OS ----------
 .idea/
@@ -94,7 +85,6 @@ src/web/.agent-scratch/
 # asserted the tracked half. Both are now one answer.
 #
 # **The consequence, stated plainly:** a ruling recorded only in a ledger under
-# this tree does not survive a fresh clone. Durable decisions belong in
-# `docs/decisions/`, which is what AGENTS.md already says; the ledger is how a
-# session remembers, not how the project does.
+# this tree does not survive a fresh clone. Durable findings belong in GitHub
+# Issues; the ledger is how a session remembers, not how the project does.
 .superpowers/

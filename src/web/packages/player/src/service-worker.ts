@@ -1,6 +1,6 @@
 /**
  * Registers the display's own service worker, which is what makes the player
- * installable and its shell available offline. See `docs/decisions/0071`.
+ * installable and its shell available offline.
  *
  * **Failure is reported and swallowed.** The display is a wall screen, and a
  * browser that refuses the registration — an insecure origin, a policy, a

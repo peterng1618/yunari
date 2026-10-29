@@ -1,7 +1,7 @@
 import { memberBytes, readPackage } from "./pkg.js";
 
 /**
- * "Still at rest" (§4.1): a scene whose picture does not change without input.
+ * "Still at rest": a scene whose picture does not change without input.
  * Text, sound, parallax and LED content are part of a still theme; anything
  * that moves by itself is not. A keyframed property is the exception that
  * matters — it sits under `origin`, `alpha`, shader constants and even inside a

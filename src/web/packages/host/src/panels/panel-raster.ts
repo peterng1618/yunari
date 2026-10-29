@@ -9,7 +9,7 @@ import type { PanelGeometry } from "./panel-device.js";
  * still of the artboard.
  *
  * **It renders the product's own player rather than a second scene tree.** That
- * is the whole decision (`0130`): glass sampling a video backdrop, ECharts
+ * is the whole point: glass sampling a video backdrop, ECharts
  * charts and packaged fonts already work in the player, and are exactly the
  * pieces a Node reimplementation would have to rebuild and then keep in step.
  * A screenshot is the cheapest correct answer to "what does this theme look

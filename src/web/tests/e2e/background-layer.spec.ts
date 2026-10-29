@@ -113,8 +113,8 @@ function readGeometry(page: Page): Promise<Geometry> {
 
 /** The cover placement oracle, written from the contract rather than imported: a
  *  test that called the renderer's own `placement()` could agree with it while
- *  both were wrong. An offset zooms the picture until the pan it asks for fits
- *  (0095), and the pan is then bounded by the rect's own overhang, which is what
+ *  both were wrong. An offset zooms the picture until the pan it asks for fits,
+ *  and the pan is then bounded by the rect's own overhang, which is what
  *  stops an offset from uncovering the box. */
 function coveredPlacement(
   box: { readonly width: number; readonly height: number },

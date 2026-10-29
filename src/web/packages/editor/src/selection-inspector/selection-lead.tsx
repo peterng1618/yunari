@@ -17,8 +17,8 @@ import { type ObjectActionId, objectAction } from "../object-actions.js";
  * advertise an action `applyArrange` would refuse.
  *
  * Values in, a callback out: `index.ts` projects the buttons from the live
- * selection and hands the run back, so React holds no Fabric object (ADR-0039)
- * and decides no eligibility of its own.
+ * selection and hands the run back, so React holds no Fabric object and
+ * decides no eligibility of its own.
  */
 
 /**
@@ -29,7 +29,7 @@ import { type ObjectActionId, objectAction } from "../object-actions.js";
  *
  * The glyph is deliberately not here: a React component is not a value, so
  * {@link ArrangeRow} asks the registry for it by id and which family and weight
- * a chrome icon is drawn in stays decided in one place (§6).
+ * a chrome icon is drawn in stays decided in one place.
  */
 export interface ArrangeButtonView {
   readonly id: ObjectActionId;
@@ -46,7 +46,7 @@ export interface SelectionLeadProps extends SelectionLeadView {
 }
 
 /**
- * The eight, in the registry's order. Each is a §5 icon button carrying its
+ * The eight, in the registry's order. Each is a control icon button carrying its
  * action's own label, so the glyph and the accessible name cannot disagree.
  *
  * **No group name.** A labelled group here would repeat the dock's own

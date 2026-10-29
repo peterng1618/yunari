@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * The Host mode's region: the four sections `settings.html` is, rebuilt in the
+ * The Host mode's region: the four sections `packages/host/public/settings.html`
+ * is, rebuilt in the
  * shell's own React — and the two facts about them the plan names, plus the
  * decisions behind the writes.
  *
@@ -11,15 +12,14 @@
  * fields, the whole answer map — with a refusal reaching the person in the
  * host's own words.
  *
- * **And that the mode's status line is published rather than drawn.** §7.6's
+ * **And that the mode's status line is published rather than drawn.** the status-bar rule's
  * strip is the shell's, so this region hands it the two strings and the shell
  * places them; the line the strip shows is asserted in
  * `shell-layout.dom.test.tsx`, and what this file reads is what the region said.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out and paints
- * nothing, so nothing here is a claim about how the region looks. The drawing it
- * follows (`docs/design/mockups/current/host-settings.html`) is read by its own
- * gate, not by this file.
+ * nothing, so nothing here is a claim about how the region looks. The layout it
+ * follows is read by its own gate, not by this file.
  */
 import type { DisplayShape } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
@@ -409,7 +409,7 @@ const DEVICES: DeviceSettings = {
 };
 
 /** The region over one run's answers, with both seams handed in. `published` is
- *  every status line the region handed the shell, in order: §7.6's strip is the
+ *  every status line the region handed the shell, in order: the strip is the
  *  shell's, so this is what the region *says* about the run rather than a bar it
  *  draws. A `undefined` entry is the region withdrawing the line as it leaves. */
 async function mountHost(
@@ -552,7 +552,7 @@ function answerRows(container: HTMLElement): readonly string[] {
   ).map((row) => row.getAttribute("data-yunari-host-answer") ?? "");
 }
 
-/** What a §5 select's well prints as its value — the hook the control itself
+/** What a select's well prints as its value — the hook the control itself
  *  publishes, rather than the `font-mono` beside it. */
 function selectValue(container: HTMLElement, hook: string): string {
   const trigger = must(container.querySelector<HTMLElement>(hook), hook);
@@ -1286,8 +1286,8 @@ it("draws no display when the display map cannot be read", async () => {
 });
 
 /**
- * **§7.6's strip is the shell's, and this region draws none of its own.** The
- * drawing puts the host page's status line in the shell's bar, outside the
+ * **the strip is the shell's, and this region draws none of its own.** The
+ * shell puts the host page's status line in the shell's bar, outside the
  * content region and outside it by construction; a strip here was a second bar
  * stacked on the shell's, and a live region inside a mode that unmounts is not
  * the one the person is reading.

@@ -15,8 +15,7 @@
  * Exit 0 = no finding. Exit 1 = findings. Exit 2 = a stylesheet this cannot read,
  * which is a finding rather than a silent pass. Anything else is fail-open: this
  * is a report, and an instrument that blocks on its own breakage is worse than
- * one that says so. See docs/decisions/0062 and
- * docs/architecture/dead-selectors.md.
+ * one that says so.
  *
  * ponytail: whole string literals and one level of brace nesting, not a parse.
  * Upgrade to a parser or to Tailwind's `__unstable__loadDesignSystem` when a
@@ -114,7 +113,7 @@ const isTest = (rel) =>
  * stage or a fixture. `.css` and `.svg` are STYLE — another stylesheet, or an
  * asset, naming a class does not prove the product applies it — and `.html` is
  * PRODUCT, because a host page writing `class="hint"` *is* the product applying
- * it. See docs/decisions/0062.
+ * it.
  */
 function bucket(rel) {
   if (rel.startsWith("docs/") || rel.includes("/docs/")) return "DOC";
@@ -161,7 +160,7 @@ function expressionLiterals(text, openBrace) {
 
 /**
  * class -> Set of the production files that write it, for every whole literal.
- * Only PRODUCT: a test, a script or a drawing writing a class is not the product
+ * Only PRODUCT: a test or a script writing a class is not the product
  * applying it, and reading them makes this script's own fixtures findings.
  */
 function classWrites(root, files) {
@@ -226,7 +225,7 @@ function forward(root, sheets, files, writes) {
     // A class is applied when the product writes it; a spelling in a comment is
     // not an application. The attribute half keeps the spelling reading: an
     // attribute is written through `dataset`'s camelCase form as often as through
-    // its kebab spelling, so a write reading needs its own design. See 0062.
+    // its kebab spelling, so a write reading needs its own design.
     const applied = item.kind === "class" ? writes.has(item.name) : where.PRODUCT > 0;
     if (!applied) findings.push({ ...item, where });
   }

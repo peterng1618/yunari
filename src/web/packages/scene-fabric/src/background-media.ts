@@ -71,7 +71,7 @@ const size = (value: number): number =>
  * offsets pan within the overhang the placed rect leaves. The result may extend
  * outside the box; the box is the caller's clip.
  *
- * **An offset implies the zoom it needs** (0095). A pan of `|o|·box` needs an
+ * **An offset implies the zoom it needs**. A pan of `|o|·box` needs an
  * overhang of `|o|·box`, so that axis needs a rect of `box·(1 + 2|o|)`; the
  * factor is the largest of the cover factor and those per-axis floors. Without
  * it a picture whose aspect matches the box covers it exactly, leaves no
@@ -186,7 +186,7 @@ export function mountBackgroundMedia(
   let frames: FrameFollower | undefined;
   let stopDecoded: (() => void) | undefined;
   let stopIntrinsic: (() => void) | undefined;
-  /** The declared frame of this video, once extracted (`0135`). It replaces the
+  /** The declared frame of this video, once extracted. It replaces the
    *  live picture for the glass sampler, and stands in for the video when it
    *  cannot play. */
   let fallback: HTMLCanvasElement | undefined;
@@ -267,8 +267,8 @@ export function mountBackgroundMedia(
 
   /**
    * Puts the extracted still where the video was. A display that cannot play
-   * the clip shows the frame the author chose rather than the bare board
-   * (`0135`); the placement, pan and flips are the same as the video's.
+   * the clip shows the frame the author chose rather than the bare board;
+   * the placement, pan and flips are the same as the video's.
    */
   const showFallback = (): void => {
     const canvas = fallback;
@@ -465,7 +465,7 @@ export function mountBackgroundMedia(
         paint(ctx, region, device, sampling) {
           // A static panel stands on the declared frame — or the video's first
           // frame when it declares none — the picture an image background or a
-          // paint would give it (`0135`).
+          // paint would give it.
           const drawSource: CanvasImageSource | undefined =
             sampling === "static" ? fallback : mounted;
           if (drawSource === undefined) return false;
@@ -490,7 +490,7 @@ export function mountBackgroundMedia(
           const width = placed.width * scaleX;
           const height = placed.height * scaleY;
           // Five arguments: the whole source, placed. A source window is the
-          // defect 0012 cropped the file with.
+          // defect cropped the file with.
           if (media?.flipX === true || media?.flipY === true) {
             // `drawImage` does not flip a negative destination width, so the
             // mirror is the same context transform the DOM child carries:
@@ -624,7 +624,7 @@ const FRAME_MAX_EDGE = 1280;
 const FRAME_PROBE_TIMEOUT_MS = 10_000;
 
 /**
- * A video's declared frame, drawn into a canvas (`0135`).
+ * A video's declared frame, drawn into a canvas.
  *
  * A frame has no index to seek to: `currentTime = frame / fps` is the only
  * address, so the clip's frame rate is measured from two consecutive

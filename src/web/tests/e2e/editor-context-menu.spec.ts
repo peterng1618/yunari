@@ -431,7 +431,7 @@ test("the last entry is reachable in a window too short to hold the menu", async
 
 /**
  * The canvas menu is anchored to the **pointer**, and that is the behaviour the
- * library ruling rests on (0038).
+ * library ruling rests on.
  *
  * The case above proves the menu scrolls and its last entry is reachable in a
  * window too short to hold it — all of which passes on a menu anchored to the

@@ -118,7 +118,7 @@ describe("readPairingCode", () => {
 describe("displayUrl", () => {
   it("opens the page a camera-less display would have typed at, code and all", () => {
     // https, which is the origin the display is a secure context at — the wake
-    // lock and fullscreen are gated on it (`docs/decisions/0076`).
+    // lock and fullscreen are gated on it.
     expect(displayUrl("192.168.1.42", 5227, "ABC234")).toBe(
       "https://192.168.1.42:5227/pair?code=ABC234",
     );
@@ -127,7 +127,7 @@ describe("displayUrl", () => {
   it("dials the stable name when the host named one, because an address moves", () => {
     // The credential and the storage a display keeps are scoped to the origin it
     // paired on, so a symbol that carried a dotted quad would make every DHCP
-    // lease a re-pair (`docs/decisions/0132`). The host decides which host is
+    // lease a re-pair. The host decides which host is
     // dialled; this only refuses to put the address back.
     expect(displayUrl("study-pc.local", 5227, "ABC234")).toBe(
       "https://study-pc.local:5227/pair?code=ABC234",

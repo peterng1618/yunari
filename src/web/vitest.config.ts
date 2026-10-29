@@ -24,9 +24,8 @@ export default defineConfig({
     // behaviour is covered by Playwright (tests/e2e), not here.
     //
     // Two namespaces under `tests/` are pure readers of a file — no DOM, no
-    // server — and are collected here on purpose. `tests/e2e/mockup-values.test.ts`
-    // parses the checked design drawing, and `tests/scripts/design-md.test.ts`
-    // drives the root `scripts/design-md.mjs` checks; each is the reader's own
+    // server — and are collected here on purpose. `tests/scripts/design-md.test.ts`
+    // drives the root `scripts/design-md.mjs` checks; it is the reader's own
     // proof that it reads the artefact rather than a transcription of it.
     // Playwright's own suite is `.spec.ts` only (`playwright.config.ts`), so the
     // two runners do not collect each other's files.

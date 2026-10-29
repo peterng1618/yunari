@@ -525,7 +525,7 @@ export class ChartManager {
   #applyCharts(force: boolean): void {
     let drawn = false;
     // One clock reading per pass, shared by the signature and the draw. A line
-    // no longer uses it for placement (0124); it is the empty-chart fallback,
+    // no longer uses it for placement; it is the empty-chart fallback,
     // and value charts read their latest sample instead.
     const nowMs = Date.now();
     const visit = (objects: readonly object[]): void => {

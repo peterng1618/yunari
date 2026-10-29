@@ -19,7 +19,7 @@ const ITEM = fixtureItem(
 );
 
 /**
- * **The browser posts the four facts and reads no bytes** (`docs/decisions/0089`):
+ * **The browser posts the four facts and reads no bytes**:
  * the host owns the download, so the request carries only what names the item —
  * the package address, the catalogue's id, the version and the kind.
  */

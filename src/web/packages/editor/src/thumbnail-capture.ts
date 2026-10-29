@@ -10,7 +10,7 @@ import type { Canvas } from "fabric/es";
  *
  * The artboard's background media is a DOM sibling the canvas cannot see, so it
  * is composited underneath through the same `BackdropMedia.paint` contract the
- * glass sampler already uses (0007).
+ * glass sampler already uses.
  */
 
 /** Longest edge of the stored picture; a library card needs no more. */
@@ -22,7 +22,7 @@ export function captureCanvas(
   maxEdge = MAX_EDGE,
   /**
    * Suspends the canvas's view state — the entered-group dim — for the shot and
-   * restores it after. **A capture reads the document, not the screen** (0053),
+   * restores it after. **A capture reads the document, not the screen**,
    * and lifting the view state is the canvas's own mechanism rather than a
    * second renderer's: the caller passes the suspension it wants, and the
    * default no-op is what a canvas with no view state to lift needs.

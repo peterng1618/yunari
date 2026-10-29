@@ -35,7 +35,7 @@ import {
  * **The address is printed exactly as authored.** The host refuses a URL with a
  * username or password, and a key referenced through `auth` travels in a header
  * or a query the host adds at fetch time — this page never composes one into the
- * address it shows (`docs/decisions`, the sources routes' own rule).
+ * address it shows (the sources routes' own rule).
  */
 
 /** A message a person can act on: the host's own words where it sent any. */

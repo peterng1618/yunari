@@ -34,7 +34,7 @@ function Action({
   readonly shortcut:
     | { readonly printed: string; readonly spoken: string }
     | undefined;
-  /** §4's destructive mark the registry hands the surface; empty for an action
+  /** The destructive mark the registry hands the surface; empty for an action
    *  that does not destroy. */
   readonly mark: Readonly<Record<`data-${string}`, string>>;
   readonly children: React.ReactNode;

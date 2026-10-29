@@ -54,7 +54,7 @@ export function optionRuns<T extends { readonly group?: string }>(
  *
  * Base UI's Select is the keyboard model and the popup; what this adds is
  * DESIGN.md's treatment and its refusal rule. A refused select uses the primitive's
- * `readOnly` rather than `disabled`: §5.3 wants the row present, the reason
+ * `readOnly` rather than `disabled`: the refusal rule wants the row present, the reason
  * readable and the tab order unchanged, and browsing a list you cannot choose
  * from is exactly what `readOnly` means here. `aria-disabled` is announced as
  * well, because the reason is a refusal and not an alternative meaning.
@@ -69,9 +69,9 @@ export function ControlSelect(
     /** What the trigger prints while `value` is empty. Absent reads as blank,
      *  which is what a select whose value is always a real id wants. */
     readonly placeholder?: string;
-    /** The row's shape, where the surface's drawing draws this picker as
+    /** The row's shape, where the surface draws this picker as
      *  something other than the labelled row — the Add pane's asset picker is
-     *  `headed` (`shell.html:128-132`). */
+     *  `headed`. */
     readonly shape?: ControlShape;
   },
 ): React.JSX.Element {

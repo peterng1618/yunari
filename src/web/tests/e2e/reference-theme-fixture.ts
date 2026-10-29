@@ -11,8 +11,8 @@
  * The shared envelope's `edge` entry declares `rgba(255, 255, 255, 0.35)`; the
  * fixture writes the opaque spelling, and the validator accepts the reference
  * either way. Recorded as the fixture has it rather than reconciled here, which
- * would be a change to what the spec renders rather than to where the value
- * lives.
+ * would be a change to what the reference renders rather than to where the
+ * value lives.
  */
 export const EDGE_OBJECT_FILL = "#ffffff";
 

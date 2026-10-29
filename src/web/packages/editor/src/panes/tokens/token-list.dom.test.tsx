@@ -185,7 +185,7 @@ const withRoles: TypeTokens = {
 };
 
 it("draws each token as a row with a specimen and its computed name, and no input controls", async () => {
-  // DESIGN.md §5.1–§5.3: a row with a well would read as editable. This row is
+  // A row with a well would read as editable. This row is
   // a selector — one pressable line, nothing to type in.
   const { host } = await mount(withRoles);
   const row = host.querySelector<HTMLButtonElement>(

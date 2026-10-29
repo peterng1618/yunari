@@ -9,7 +9,7 @@ describe("productShortcutIds", () => {
   it("names each action once, in the table's own order", () => {
     const ids = productShortcutIds();
     // Derived from the table, so a binding added to one and not the other fails
-    // here rather than silently shortening §7's sheet.
+    // here rather than silently shortening the sheet.
     expect(new Set(ids)).toEqual(
       new Set(PRODUCT_SHORTCUTS.map((binding) => binding.action)),
     );
@@ -29,7 +29,7 @@ describe("productShortcutIds", () => {
     expect(ids.at(-1)).toBe("help.shortcuts");
   });
 
-  it("keeps the context-only bindings out of the list §7 renders", () => {
+  it("keeps the context-only bindings out of the list the shell layout renders", () => {
     // `Escape` is dispatched by the same manager but the file's own comment
     // (`index.ts:67-68`) says it is never displayed by a menu or tooltip.
     expect(productShortcutIds()).not.toContain("view.exit-group");

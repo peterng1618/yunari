@@ -55,8 +55,8 @@ import {
  * ruling puts it in), a test for each interaction proved on its own page state,
  * and the **assembled walk** at the end — the nine interactions in §13.1's own
  * order, ending at the round trip, with both of §13.1's other invariants swept in
- * the state the walk leaves. That last test is what the spec's Acceptance item
- * for keyboard and contrast is read from.
+ * the state the walk leaves. That last test is what the Acceptance item for
+ * keyboard and contrast is read from.
  *
  * **The census was red, and the red was its result — not a broken test.** The
  * walk reached the rail, the pane and the stage and never the inspector, because
@@ -74,7 +74,7 @@ import {
  * **The primitives are `walkthrough-focus.ts`'s, the shell's vocabulary is
  * `walkthrough-shell.ts`'s and the settings modal's is
  * `walkthrough-settings.ts`'s** (Ruling L): the split is by responsibility
- * because the file had passed AGENTS.md's 800-line stop, and the second split is
+ * because the file had passed the 800-line stop, and the second split is
  * the same rule applied again when Task 4's helpers took the shell module past
  * it. What is left here is the tests, which is what the walkthrough's acceptance
  * is read from.
@@ -370,7 +370,7 @@ test.describe("the shell, reached by keyboard alone", () => {
    * and what is asserted is where focus landed — a popup that opened with focus
    * left behind on its trigger fails here.
    *
-   * The palette is DESIGN.md §4's shell palette, chosen in Settings, and it is
+   * The palette is the design's shell palette, chosen in Settings, and it is
    * a choice rather than a re-press: `paletteNotInForce` owns that decision,
    * including why the palette already in force would assert nothing.
    *

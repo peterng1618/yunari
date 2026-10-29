@@ -55,16 +55,15 @@ function rect(
 /**
  * The card, and the only place that says a panel is made of glass.
  *
- * The box and the outline are measured off the reference theme, not chosen: its
- * card border occupies two pixels and first appears ten pixels in from the
- * top-left corner on both axes. The outline token is already the right value —
- * a translucent cool line of that alpha composites to about the border the
- * reference shows.
+ * The box and the outline are the starter theme's own: its card border occupies
+ * two pixels and first appears ten pixels in from the top-left corner on both
+ * axes. The outline token is already the right value — a translucent cool line
+ * of that alpha composites to about that border.
  *
  * The fill is `frost` and the treatment is what makes the panel transmit what
  * is behind it, because at `panel`'s 85 % alpha a blur is a blur of nothing.
  * The authored radius is the one the theme's cards share, and it is inside both
- * the published bound of 48 and Task 1's measured-flat 0-64 px band.
+ * the published bound of 48 and the theme's flat-blur band (0-64 px).
  */
 const FROST_RADIUS = 40;
 
@@ -179,7 +178,7 @@ export interface Run {
 
 /**
  * How a run is worn: size, leading and the measured tracking, authored on the
- * run rather than on the token it names (docs/decisions/0128).
+ * run rather than on the token it names.
  */
 function runStyle(run: Run): Record<string, unknown> {
   const letterSpacing = starterTracking[run.size];
@@ -255,8 +254,7 @@ export function text(
       // `updateText` restores that width on every refresh. That is the
       // difference between a centred reading landing in its card and rendering
       // flush-left and overflowing out of it.
-      // The author's box, and the copy that survives a save. See
-      // `docs/decisions/0003`.
+      // The author's box, and the copy that survives a save.
       box: { width, height },
       ...(options?.align === undefined ? {} : { align: options.align }),
       ...(options?.verticalAlign === undefined

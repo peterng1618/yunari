@@ -370,7 +370,7 @@ describe("panel fields in the selection inspector", () => {
     const track = field<HTMLInputElement>("[data-yunari-panel-radius]");
     expect(track.max).toBe("100");
 
-    // A draft past the bound is kept with its reason rather than clamped (§5),
+    // A draft past the bound is kept with its reason rather than clamped,
     // which is the rule every other bounded number in the column keeps.
     rect.set({ rx: 8, ry: 8 });
     const well = field<HTMLInputElement>("[data-yunari-panel-radius-well]");
@@ -403,7 +403,7 @@ describe("panel fields in the selection inspector", () => {
     await edit(width, "-4");
 
     // The field refuses the draft with its reason rather than clamping it: the
-    // track cannot reach below zero either, and §5's validation belongs to the
+    // track cannot reach below zero either, and the validation belongs to the
     // one number control, which says why rather than coercing.
     expect(rect.get("strokeWidth")).toBe(before);
     expect(history.saveState).not.toHaveBeenCalled();
@@ -797,7 +797,7 @@ describe("shape material and a shape's own fields", () => {
     const { field } = setup(polygon);
     const sides = field<HTMLInputElement>("[data-yunari-shape-sides]");
 
-    // A bounded number is DESIGN.md's slider (§5), and the pre-plan field drew
+    // A bounded number is the design's slider, and the pre-plan field drew
     // one because both bounds were present. The bound is the control's now, so
     // a two-sided polygon is unreachable rather than landed on.
     expect(sides.type).toBe("range");
@@ -952,7 +952,7 @@ describe("a shape whose geometry the author retypes", () => {
    * Measured on the surface while drawing the device icons: a path sized to
    * 28 × 28 and then given 14 × 14 of new data drew **1 × 3 units**. Its
    * commands are absolute coordinates in its own space, so the scale the
-   * earlier size wrote belonged to a drawing that no longer exists — and
+   * earlier size wrote belonged to a surface that no longer exists — and
    * insert-then-size-then-draw is the order every icon in a dashboard is built
    * in.
    */
@@ -1037,8 +1037,8 @@ describe("the angles of a swept shape", () => {
     const { field } = setup(swept(kind));
     const end = field<HTMLInputElement>(ANGLE.end);
 
-    // Both bounds were present pre-plan, so the field drew a slider; DESIGN.md
-    // calls a bounded number a slider (§5), so the converted field is one too.
+    // Both bounds were present pre-plan, so the field drew a slider; a bounded
+    // number is a slider, so the converted field is one too.
     expect(end.type, kind).toBe("range");
     expect(end.getAttribute("min"), kind).toBe("0");
     expect(end.getAttribute("max"), kind).toBe("360");

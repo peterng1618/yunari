@@ -316,7 +316,7 @@ export function panelMaterialFields(
  * `numberField` clamped an out-of-range value to the bound it crossed, and this
  * writer still does, because a commit can reach it without the control. The
  * control is the stricter of the two — a draft past a bound is kept with its
- * reason rather than coerced (§5) — so the clamp is the copy that holds for a
+ * reason rather than coerced — so the clamp is the copy that holds for a
  * bypassed one, and the fraction rule is the control's `integer` flag and
  * `editRefusal`'s, not this writer's.
  */
@@ -394,7 +394,7 @@ function writePaint(
  * A colour alone draws nothing, so the committed edit must leave something to
  * see and tune — falling below the panel rather than glowing evenly around it.
  * A shadow already there keeps its own blur and offsets; only its colour is
- * re-resolved from the reference just written.
+ * re-resolved from the colour just written.
  */
 function writeShadow(
   object: FabricObject,
@@ -481,7 +481,7 @@ const MAX_SWEEP_DEGREES = 360;
  * **absolute coordinates in the object's own space**, so any `scaleX`/`scaleY`
  * on the object is a scale from a different drawing. Measured: a path sized to
  * 28 × 28 and then given 14 × 14 of new data drew **1 × 3 units** — the new
- * data multiplied by the old drawing's scale, which is the order every icon in
+ * data multiplied by the old geometry's scale, which is the order every icon in
  * a dashboard is built in (insert, size, then draw).
  *
  * So the data wins and the scale goes back to 1, which leaves the object at the
@@ -571,8 +571,8 @@ function createShapeFields(object: FabricObject): readonly FieldView[] {
     // what a sweep means, held here as well as in the geometry. What is bounded
     // is a value outside 0–360, by the field's own bounds and the write funnel.
     // A slider, not a plain number: the pre-plan field drew one because both
-    // bounds were present, and DESIGN.md's vocabulary says a bounded number is a
-    // slider (§5).
+    // bounds were present, and the design's vocabulary says a bounded number is
+    // a slider.
     for (const key of ["startAngle", "endAngle"] as const) {
       fields.push({
         id: `shape-angle-${key}`,

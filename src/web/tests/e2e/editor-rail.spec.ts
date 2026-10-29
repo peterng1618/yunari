@@ -27,13 +27,13 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
 
-/** DESIGN.md §7.2's rail accent bar, in px. A bare number rather than a `px`
+/** The design's rail accent bar, in px. A bare number rather than a `px`
  *  string so the one value is written once and the assertion's message spells
- *  it from here — §3's step table has no entry for it. */
+ *  it from here — the step table has no entry for it. */
 const RAIL_ACCENT_BAR_PX = 2;
 
-/** §7.1's header strip, in px, for the same reason: `--header-height` is a
- *  density rather than one of §3's steps, so the one value is written here and
+/** The header strip, in px, for the same reason: `--header-height` is a
+ *  density rather than one of the steps, so the one value is written here and
  *  the mode-switch case spells its message from this. */
 const HEADER_STRIP_PX = 42;
 
@@ -47,7 +47,7 @@ const HEADER_STRIP_PX = 42;
  * whatever the network says that day, not what the case is measuring.
  *
  * The default is the honest state — "there is no catalogue here" — and a 404
- * keeps it distinguishable from an empty catalogue, which decision 0088 says
+ * keeps it distinguishable from an empty catalogue, which
  * must not be drawn when the read failed.
  *
  * A case that needs a catalogue registers `**\/index.json` itself in its body.
@@ -140,7 +140,7 @@ test("shows the theme's own panel in the left column, and swaps away from it", a
   await expect(page.locator("[data-yunari-artboard-width]")).toBeVisible();
 });
 
-/** §7.7's "Chrome stays still", and the ruling `vg-208` carries, on a real box.
+/** The "Chrome stays still", and the ruling `vg-208` carries, on a real box.
  *
  *  The rule the row is about put the pane's one `overflow: auto` on the *column*,
  *  so the column scrolled the title bar and the footer along with the list. The
@@ -226,7 +226,7 @@ test("a pane's title bar and footer stay put while its body scrolls", async ({
   ).toBeGreaterThan(0);
   expect(
     measured.columnScrolled.offset,
-    "the pane's column is still a scroller, so §7.7's rule is still on the wrong box",
+    "the pane's column is still a scroller, so the rule is still on the wrong box",
   ).toBe(0);
   expect(
     measured.bodyScrolled.offset,
@@ -274,7 +274,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   // stopped laying out rows at all still fails this.
   await openEveryGroup(page);
 
-  // The offset lives on the showing pane's **body** (§7.7, `vg-208`), so the
+  // The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), so the
   // scroll is taken there. The column is what goes `hidden` on a collapse and
   // the body is hidden with it, which is what makes the restore below the pin
   // it is: a real browser discards a `display: none` box's scroll position, so
@@ -301,7 +301,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
 });
 
-/** §7.7's per-pane offsets, on every pane that can hold one. The rule is one
+/** The per-pane offsets, on every pane that can hold one. The rule is one
  *  sentence — "preserve per-pane offsets and disclosure state across routine
  *  updates" — and `choosePane` implements it once, over a map keyed by the
  *  rail's slot. The case above pins it for the Composition pane; a proof of one
@@ -325,7 +325,7 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
  *  they move with font loading — and the guard above is the load-bearing claim,
  *  not the sizes.
  *
- *  The offset lives on the showing pane's **body** (§7.7, `vg-208`), and a
+ *  The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), and a
  *  browser discards a `display: none` box's scroll position — the swap hides
  *  the pane it leaves — so what the read-back finds after the return is the
  *  shell's own restore and not the box remembering.
@@ -376,7 +376,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   testInfo.annotations.push({ type: "pane-offsets", description: report });
 });
 
-/** §7.7's desktop-density proof, for the one cluster the rail's column can
+/** The desktop-density proof, for the one cluster the rail's column can
  *  starve. **Reachability, not visibility.**
  *
  *  The dock is a fixed 639px row of every object and arrange action, centred on
@@ -388,7 +388,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
  *  a bounding box: a control drawn outside its stage is `visible` to Playwright
  *  and unclickable to an author.
  *
- *  The three configurations are §7.7's own. The third is a viewport rather than
+ *  The three configurations are its own. The third is a viewport rather than
  *  a root `zoom`, because 200% browser zoom halves the CSS viewport — that is
  *  what the shell's media queries answer, and a `zoom` on the root leaves the
  *  layout viewport at 1280 while the fixed 46/246/280 columns stop adapting. */
@@ -440,7 +440,7 @@ test("every dock control stays reachable with the rail's column in place", async
       `${view.name}: a dock control is drawn where nothing can click it`,
     ).toEqual([]);
 
-    // And the cluster sits inside the stage at all: §7.5's 14px is the least a
+    // And the cluster sits inside the stage at all: the 14px is the least a
     // cluster clears its stage's edges by, and the overrun this pinned is what
     // put the row outside them.
     const insets = await page.evaluate(() => {
@@ -557,7 +557,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
  * rendered offset.
  *
  * The last two assertions are F2's invariant. `min-height`, not `height`, is
- * what §7.7 requires — a refusal may not be ellipsized, so a long diagnostic
+ * what the overflow rule requires — a refusal may not be ellipsized, so a long diagnostic
  * wraps and the strip grows a line rather than cutting the message or spilling
  * over the stage. **No refusal reachable at this width is long enough to wrap**:
  * the editor's own refusals are short fixed strings, and the one long message,
@@ -598,7 +598,7 @@ test("the status bar is the window's full-width bottom edge", async ({
   });
 
   // The measurement is the report's evidence, so it is printed as well as
-  // asserted — the fixture-read pattern `design-language.spec.ts` uses.
+  // asserted — the number the assertion checks is printed as evidence.
   const measured = JSON.stringify(box);
   console.log(`status-bar ${measured}`);
   testInfo.annotations.push({ type: "status-bar", description: measured });
@@ -626,7 +626,7 @@ test("the status bar is the window's full-width bottom edge", async ({
 });
 
 /**
- * §7.6's left readouts, as the strip draws them, and the report beside them.
+ * The left readouts, as the strip draws them, and the report beside them.
  *
  * The counts are the strip's *resting* content: nothing has to happen for them
  * to be there. What they read is the scene's own — compared against the
@@ -715,13 +715,13 @@ test("the status bar reads the scene's counts, and still carries its message", a
 });
 
 /**
- * §7.3's count, in each pane's title bar, read where an author reads it.
+ * The count, in each pane's title bar, read where an author reads it.
  *
  * The row ruled it per pane, so this walks all four slots and reads each title
  * bar against **the list that pane draws** rather than against a number this
  * test remembers: the Add pane's count is the tiles under it, the Tokens pane's
  * is the token rows under it, and the Composition pane's is the scene's own
- * total, which is also what §7.6's strip prints — the duplication the row
+ * total, which is also what the strip prints — the duplication the row
  * accepted and named, asserted here as one string in two surfaces so a pane
  * that drifted to a different number fails.
  *
@@ -791,14 +791,14 @@ test("every pane's title bar carries the count of its own list, and Document car
 });
 
 /**
- * The selected slot's accent bar is on the rail's **inner** edge (DESIGN.md §7.2),
+ * The selected slot's accent bar is on the rail's **inner** edge,
  * and only a rendered box can show which edge that is.
  *
  * jsdom has no layout and no cascade, so a `*.dom.test.tsx` case cannot see a
  * rendered side — the bar lived at `left: -8px`, painting outside the rail's
  * outer edge (the window's left edge), with a comment eight lines above it
- * stating the rule it broke. The parity gate could not catch it either: the
- * mockup drew the same bar in the same wrong place, so the two agreed. This is
+ * stating the rule it broke. A parity gate could not catch it either: both
+ * sides drew the same bar in the same wrong place, so the two agreed. This is
  * the assertion that can see it — the bar's own edges measured against the
  * rail's — and the measurement is printed as the report's evidence.
  *
@@ -834,7 +834,7 @@ test("the selected slot's accent bar sits on the rail's inner edge", async ({
     // resolves against its containing block's padding box, and this Chromium
     // hands back the *used* `left`, so composing it against the slot's
     // border-box rect counts the slot's border a second time. The slot carries
-    // §5 rule 6's 1px transparent resting border, which is exactly that 1px.
+    // the 1px transparent resting border, which is exactly that 1px.
     const borderLeft = Number.parseFloat(slotStyle.borderLeftWidth) || 0;
     const borderRight = Number.parseFloat(slotStyle.borderRightWidth) || 0;
     const left =
@@ -856,13 +856,13 @@ test("the selected slot's accent bar sits on the rail's inner edge", async ({
   console.log(`accent-bar ${report}`);
   testInfo.annotations.push({ type: "accent-bar", description: report });
 
-  // §5's rail slot, which is the size the bar's offset is derived from: at 34px
+  // The rail slot, which is the size the bar's offset is derived from: at 34px
   // the same `-6px` lands the bar's outer edge 1px short of the rail. Read here
   // rather than by a geometry case of its own, because the two numbers are one
   // decision — `vg-227` moved the slot and the bar together.
   expect(
     measured.slotRight - measured.slotLeft,
-    "the slot is §5's 36px rail slot",
+    "the slot is the 36px rail slot",
   ).toBe(36);
   expect(
     measured.barWidth,
@@ -976,19 +976,19 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   await expect(dialog).toBeHidden();
   await expect(gear).toBeFocused();
 
-  // ── §7.7's constrained proof, in this same procedure ───────────────────────
+  // ── the constrained proof, in this same procedure ───────────────────────
   //
   // DESIGN.md asks for "the full shell at 1280×720 and 1440×900 CSS pixels,
   // then at 200% browser zoom", with every control reachable through scrolling
-  // or compact composition. The two sizes are `design-language.spec.ts`'s loop;
-  // what was never taken is the modal under the zoom.
+  // or compact composition. The two sizes are read here; what was never taken
+  // is the modal under the zoom.
   //
   // **200% zoom is modelled as the CSS-pixel viewport it produces** — 640×360,
   // which is what a browser zoom does: it halves the layout viewport in CSS
-  // pixels, and `80vh` and every other length in §7's modal then resolve
+  // pixels, and `80vh` and every other length in the modal then resolve
   // against the halved box, exactly as they do at a real 200%. CSS `zoom` on the
-  // root, which `design-language.spec.ts` uses for its own width assertions, is
-  // *not* faithful here and measurably so: it scales a `vh`-capped fixed dialog
+  // root, which is the cheap way to widen a capture, is *not* faithful here and
+  // measurably so: it scales a `vh`-capped fixed dialog
   // to twice its computed height while the window stays 720 device pixels, so
   // the modal runs off the screen at a size a real browser zoom never gives it.
   // What this still does not reproduce is the device scale factor, so text
@@ -1012,7 +1012,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   }
 
   // (2) The panel scrolls rather than clipping. Read on the Keyboard tab, which
-  // holds the twenty-row table: this is the case §7.7's sentence is about, and
+  // holds the twenty-row table: this is the case the sentence is about, and
   // it is the tab left selected for (3).
   await dialog.getByRole("tab", { name: uiCopy.settings.keyboard }).click();
   const scroller = await dialog.evaluate((element) => ({
@@ -1048,7 +1048,7 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
 });
 
 /**
- * §7.1's mode switch, as a rendered box and as the guard in front of it.
+ * The mode switch, as a rendered box and as the guard in front of it.
  *
  * Two facts live only in a browser. The first is the switch's geometry: it is
  * the header's own control, so it has to fit the 42px strip rather than grow it,
@@ -1151,7 +1151,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toBeLessThan(paint.header);
   // The chosen treatment, measured rather than assumed: a lifted ground and
   // `--text` that differ from an unchosen segment's — and neither is the
-  // region's accent, because §4 spends the header's one accent-filled control
+  // region's accent, because the palette spends the header's one accent-filled control
   // on the publish button.
   expect(
     paint.chosenFill,
@@ -1235,7 +1235,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toHaveAttribute("aria-pressed", "true");
 
   // The question, discarded: the mode moves, and the editor's own header actions
-  // do not follow it — §7.1's right-hand region is per-mode.
+  // do not follow it — the right-hand region is per-mode.
   await segment(uiCopy.modes.themes).click();
   await prompt
     .getByRole("button", { name: uiCopy.replaceDocument.discard, exact: true })
@@ -1300,7 +1300,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
 /**
  * The store mode's own header row, as a rendered row.
  *
- * §7.2 forbids a second bar under the header, so what the store draws is the
+ * the rail rule forbids a second bar under the header, so what the store draws is the
  * *region's* first row rather than a strip between the header and the content.
  * This case reads the row really drawn — both halves, the search well, five
  * facet buttons and the sort well, all inside the region — and reads the
@@ -1346,7 +1346,7 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   const header = region.locator("[data-yunari-store-header]");
   await expect(header, "the region draws no header row").toBeVisible();
 
-  // The two halves, named and opening on Local — §5's Segmented, which is what
+  // The two halves, named and opening on Local — the Segmented, which is what
   // the region's own header row carries rather than a second mode switch.
   const halves = header.locator("[data-yunari-store-halves] button");
   await expect(halves).toHaveCount(2);
@@ -1603,7 +1603,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   //
   // **The popup caps itself at `90vh`, and the project's 720px viewport caps the
   // box at 648** — a height any declaration at or above 648 would satisfy, so
-  // the drawing's 760 would never be exercised. Read the geometry at a viewport
+  // the box's 760 would never be exercised. Read the geometry at a viewport
   // tall enough for the box, then restore the project's own size for the rest of
   // the case (the page is this test's own, but later steps read the layout too).
   const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
@@ -1613,7 +1613,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await page.setViewportSize(projectViewport);
   // **The popup's own cap, which the tall read cannot exercise.** At the
   // project's 720px viewport `90vh` is 648, so the 760 box is capped there —
-  // the drawing's height would otherwise run past the fold and clip the foot.
+  // the box's height would otherwise run past the fold and clip the foot.
   const capped = await drawn("store-01");
   expect(
     capped.height,
@@ -1630,12 +1630,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
     portrait.stage,
     `the stage follows the item instead of holding one height (${itemReading})`,
   ).toBe(landscape.stage);
-  // The drawing's own numbers, read where the box can reach them; the stage is
+  // The box's own numbers, read where the box can reach them; the stage is
   // the box's content height — the 1px border twice.
-  expect(
-    landscape.height,
-    `the modal is not the drawing's 760px (${itemReading})`,
-  ).toBe(760);
+  expect(landscape.height, `the modal is not 760px (${itemReading})`).toBe(760);
   // 760 less the popup's 1px border twice; written as the subtraction so the
   // test does not mint a second design-language number for a derived height.
   expect(
@@ -1741,9 +1738,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
     bar.rowWidth,
     `the per-page row is not the 158px its label and well need (${barReading})`,
   ).toBe(158);
-  // **The label and the well are one line**, which is what the drawing draws and
+  // **The label and the well are one line**, which is what the row draws and
   // what the row's own width buys: a row given only the well's 76px wraps the
-  // well to a second line, and the bar grows from the drawing's 43px to 61. The
+  // well to a second line, and the bar grows from the row's 43px to 61. The
   // two boxes are read against each other rather than against a `top`, because
   // one line means the label's own middle falls inside the well's box — the well
   // is 27px tall and the label 14, so their tops differ by 6 with nothing wrong.
@@ -1811,7 +1808,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await page.keyboard.press("Escape");
 
   // **The Shape popover's groups, as a rendered popover** (R115). The three
-  // headings are the drawing's, the sentence above them is the one that says why
+  // headings are the item's own, the sentence above them is the one that says why
   // they matter, and the values are the items' own readings — none of which a
   // flat list would show.
   await region.locator("[data-yunari-facet='shape']").click();
@@ -1834,19 +1831,19 @@ test("the store lists a library, opens an item, and comes back to the same page"
   });
   expect(
     groups.hint,
-    `the Shape popover does not carry the drawing's sentence (${groupReading})`,
+    `the Shape popover does not carry the facet's sentence (${groupReading})`,
   ).toBe(uiCopy.store.facets.shapeHint);
   const headings = uiCopy.store.facets.shapeGroups;
   expect(
     groups.headings,
-    `the Shape popover does not draw the drawing's three labelled groups (${groupReading})`,
+    `the Shape popover does not draw the three labelled groups (${groupReading})`,
   ).toEqual([headings.orientation, headings.aspect, headings.size]);
   expect(
     groups.values,
     `the Shape values are not the items' own readings (${groupReading})`,
   ).toEqual([
     // Both orientations, because two of the thirty themes are portrait: an
-    // option is offered for what the listing holds and not for what a drawing
+    // option is offered for what the listing holds and not for what a fixture
     // imagines.
     uiCopy.store.orientations.landscape,
     uiCopy.store.orientations.portrait,
@@ -1871,9 +1868,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
  *    reads labels, buttons, headings and paragraphs, so **this case is the only
  *    check of that word in the repo** (`vg-685`). Asserting it from
  *    `uiCopy.store.fromStore` would make the case green through the rename it
- *    exists to catch, which is how *Installed* shipped here twice: the drawing
- *    badges every local cell *From the store* (`store-themes.html`) and
- *    *Installed* is the **online** half's own footer verb (`store-detail.html`).
+ *    exists to catch, which is how *Installed* shipped here twice: every local
+ *    cell is badged *From the store* and *Installed* is the **online** half's
+ *    own footer verb.
  * 2. **The region's vocabulary reaches the modal.** `settledTags` is built by
  *    the region and handed to `ItemModal`; replacing that prop with `[]` leaves
  *    every jsdom case green, because each hands the modal its own set. The pill
@@ -2040,7 +2037,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   ).toHaveText(badgeWord);
   record("store-origin-badge", `badge "${badgeWord}"`);
 
-  // **What the badge sits in is the claim** (`gallery.tsx`): the drawing puts it
+  // **What the badge sits in is the claim** (`gallery.tsx`): the gallery puts it
   // in the facts band rather than beside the name, so a badge that moved would
   // change the grid while a bare existence check stayed green.
   expect(
@@ -2052,7 +2049,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
     "the origin badge is not drawn in the cell's own facts band",
   ).toBe(true);
 
-  // **A theme the host holds no record of came from nowhere.** Drawing the
+  // **A theme the host holds no record of came from nowhere.** Showing the
   // badge for it is a fact no record carries, which is what this reading is for.
   await expect(
     badgeOf("boundary-plain"),
@@ -2080,8 +2077,8 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
 
   const pillOf = (tag: string) =>
     styleGroup.locator(`[data-yunari-store-item-pill='${tag}']`);
-  // The drawing's own words for a word the vocabulary does not hold yet, as a
-  // literal for the reason the badge's word is one (`store-detail.html`).
+  // The store's own words for a word the vocabulary does not hold yet, as a
+  // literal for the reason the badge's word is one.
   await expect(
     pillOf("warm-lantern"),
     "the tag no other theme and no seed holds is not marked as proposed",
@@ -2117,7 +2114,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   }
   expect(
     pills.proposed.edge,
-    `the proposed pill is not drawn on the drawing's dashed edge (${pillReading})`,
+    `the proposed pill is not drawn on the dashed edge (${pillReading})`,
   ).toBe("dashed");
   expect(
     pills.settled.edge,
@@ -2802,7 +2799,7 @@ test("the line for a skipped kind names the identifier the catalogue declared", 
   ).toHaveCount(1);
   // **The identifier, as a literal** — `widget-preset` is a kind this build has
   // no word for, and a display word invented here would be a name nothing
-  // declared (§9). The rest of the sentence is the surface's own.
+  // declared. The rest of the sentence is the surface's own.
   await expect(
     line,
     "the skipped-kind line does not name the wire identifier",
@@ -3234,9 +3231,8 @@ async function settled(page: Page): Promise<void> {
 /**
  * **The store's `open` action loads a library theme as the editor's document**
  * (R134), from the cell and from the item's own footer alike — the label the
- * drawing gives it is *Open in editor* — while **the cell's own surface is what
- * opens the item's** (spec, "The item's own surface": *so a cell opens a
- * modal*).
+ * store gives it is *Open in editor* — while **the cell's own surface is what
+ * opens the item's**, so a cell opens a modal.
  *
  * **Nothing serves `/api/themes` at the editor preview**, so both routes are
  * stubbed here: the case proves the route the store takes, not the host's store,
@@ -3373,19 +3369,19 @@ test("the store opens a library theme as the document, from the cell and its foo
   const surfaceOf = (id: string) =>
     cellOf(id).locator("[data-yunari-store-cell-surface]");
 
-  // **The cell's own bands are where the drawing puts them, and this is the
+  // **The cell's own bands are where the cell puts them, and this is the
   // reading that says so** (A.7b). The surface, the byline and the facts band
   // are three elements now where they were one padded column, so the spacing
   // between them is arithmetic a later edit can move without anything failing:
-  // the drawing's 10px inside the cell and 6px between the bands, which §3's
+  // the cell's 10px inset and 6px between the bands, which the spacing scale's
   // step table owns as `--space-10` and `--space-6`. The 26px band is the third
-  // band's own height and is read here too, because it is what the drawing
+  // band's own height and is read here too, because it is what the band
   // fixes and a wrapper that padded it would squash it.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
   // puts between their text, and measuring the rects would report 0 for every
-  // gap — passing with the drawing's spacing deleted. The content box (the rect
+  // gap — passing with the cell's spacing deleted. The content box (the rect
   // inside the border and the padding) is where the line really sits, so the
   // padding is the gap again; and since every box here abuts the next, the
   // arithmetic is the whole of it: a margin a later edit added would move a gap
@@ -3416,7 +3412,7 @@ test("the store opens a library theme as the document, from the cell and its foo
     );
     // The 26px band itself, not the wrapper that pads it and not one action
     // inside it: the four controls are centred in the band, so a shorter one
-    // would read as a band that is shorter than the 26px the drawing fixes.
+    // would read as a band that is shorter than the 26px the band fixes.
     const band = cell
       .querySelector("[data-yunari-store-cell-action]")
       ?.parentElement?.getBoundingClientRect();
@@ -3425,7 +3421,7 @@ test("the store opens a library theme as the document, from the cell and its foo
       ?.getBoundingClientRect();
     const cellRect = cell.getBoundingClientRect();
     return {
-      // The cell's own 1px edge is inside its box, so the 10px the drawing puts
+      // The cell's own 1px edge is inside its box, so the 10px the cell puts
       // above it is measured from the border's inner edge.
       cellInnerBottom:
         cellRect.bottom -
@@ -3454,23 +3450,23 @@ test("the store opens a library theme as the document, from the cell and its foo
   };
   expect(
     gapOf(bands.pictureBottom, bands.nameTop, "name under the picture"),
-    `the name is not the drawing's 10px under the picture (${bandReading})`,
+    `the name is not 10px under the picture (${bandReading})`,
   ).toBe(10);
   expect(
     gapOf(bands.nameBottom, bands.bylineTop, "byline"),
-    `the byline is not the drawing's 6px under the name (${bandReading})`,
+    `the byline is not 6px under the name (${bandReading})`,
   ).toBe(6);
   expect(
     gapOf(bands.bylineBottom, bands.bandTop, "facts band"),
-    `the facts band is not the drawing's 6px under the byline (${bandReading})`,
+    `the facts band is not 6px under the byline (${bandReading})`,
   ).toBe(6);
   expect(
     gapOf(bands.bandBottom, bands.cellInnerBottom, "band's own foot"),
-    `the facts band does not sit the drawing's 10px above the cell's edge (${bandReading})`,
+    `the facts band does not sit 10px above the cell's edge (${bandReading})`,
   ).toBe(10);
   expect(
     gapOf(bands.bandTop, bands.bandBottom, "band"),
-    `the facts band is not the 26px the drawing fixes (${bandReading})`,
+    `the facts band is not the 26px the band fixes (${bandReading})`,
   ).toBe(26);
 
   // **The cell's own surface opens the item's**, and the open control below is
@@ -3482,7 +3478,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   ).toBeVisible();
   await expect(
     page.locator("[data-yunari-store-item-action='open']"),
-    "the item's own surface does not print the short word the drawing gives the open action",
+    "the item's own surface does not print the short word the store gives the open action",
   ).toHaveText(uiCopy.store.item.actions.open);
   await page.locator("[data-yunari-store-item-close]").click();
   await expect(modal, "the item's own surface does not close").toBeHidden();

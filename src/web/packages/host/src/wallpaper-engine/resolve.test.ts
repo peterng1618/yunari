@@ -26,7 +26,7 @@ function itemAt(
   };
 }
 
-describe("resolving an item to its outcome (§4)", () => {
+describe("resolving an item to its outcome", () => {
   let directory: string;
 
   beforeEach(async () => {

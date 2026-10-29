@@ -4,7 +4,7 @@
  * The asset preview: one surface for a picture and a video, opened through
  * `openModal`.
  *
- * **The drawing is the target, but jsdom does not lay out.** The fourth case
+ * **The layout is the target, but jsdom does not lay out.** The fourth case
  * asserts the classes that carry the fixed 270px panel and the unwrapped labels;
  * the measured geometry is the browser sweep's, not this test's.
  *
@@ -121,7 +121,7 @@ it("draws the stage and a 270px right panel", async () => {
   const panel = modal.querySelector<HTMLElement>(
     "[data-yunari-asset-preview-panel]",
   );
-  // jsdom computes no width; the class carries the drawing's 270px token.
+  // jsdom computes no width; the class carries the 270px token.
   expect(panel?.className).toContain("w-[var(--asset-preview-panel-width)]");
   expect(modal.closest(".editor-shell-dialog")?.className).toContain(
     "editor-shell-dialog--asset-preview",
@@ -180,7 +180,7 @@ it("drops Place and draws a player for a video", async () => {
       "[data-yunari-asset-preview-action='background']",
     )?.className,
   ).toContain("border-accent");
-  // Remove carries §4's destructive mark, which `ActionBox` now owns.
+  // Remove carries the destructive mark, which `ActionBox` now owns.
   expect(
     modal
       .querySelector<HTMLElement>("[data-yunari-asset-preview-action='remove']")
@@ -217,7 +217,7 @@ it("draws Place as an image's one primary command", async () => {
       "[data-yunari-asset-preview-action='background']",
     )?.className,
   ).not.toContain("border-accent");
-  // Remove carries §4's destructive mark, which `ActionBox` now owns.
+  // Remove carries the destructive mark, which `ActionBox` now owns.
   expect(
     modal
       .querySelector<HTMLElement>("[data-yunari-asset-preview-action='remove']")

@@ -41,7 +41,7 @@ import { isDesktopSurface } from "./surface.js";
  *   two acts (both read back through the bridge), the right column's three
  *   states, and the two-hundred-row re-measurement — one document, one viewport,
  *   one machine, which is what the case says of its own numbers. Three of these
- *   cases carry the captures registered in `docs/evidence/screenshots/README.md`.
+ *   cases carry captures under `test-results/captures/`.
  * - **Plan 5's Task 6** owns the two cases at the end of this file: the role
  *   column saying what the document says a card is, on the starter and on a copy
  *   inserted beside it.
@@ -67,10 +67,9 @@ const THREE_CONTROL_ARM =
 const LAYER_ROW_PADDING_PX = 4;
 
 /** The slot's own footprint with three controls: 6px of padding, three
- *  §3-rhythm 26px squares and two 4px gaps — the arm's reservation less the
- *  row's own padding. The four-control figures this replaces are the closed
- *  plan `2026-10-08-the-panes` report's, taken while the rename pen existed,
- *  and `vg-260` carries the measurement. */
+ *  26px squares on the spacing rhythm and two 4px gaps — the arm's reservation less the
+ *  row's own padding. The four-control figures this replaces were taken while
+ *  the rename pen existed, and `vg-260` carries the measurement. */
 const THREE_CONTROL_SLOT_PX =
   rulePx(THREE_CONTROL_ARM, "padding-right") - LAYER_ROW_PADDING_PX;
 
@@ -79,7 +78,7 @@ const MARK_SLOT_PX = rulePx(".yunari-layer-mark", "flex");
 
 /**
  * The column this plan supersedes: plan 2 shipped a 360px pane, and the design
- * language's §7.3 fixes the pane at 246px, so this is the width the shipped one
+ * language's the pane rule fixes the pane at 246px, so this is the width the shipped one
  * is now compared against. It is a comparison point for this case, never an
  * assertion about what ships — the shipped width is whatever `editor-shell.css`
  * says, and the case reads it rather than restating it.
@@ -184,7 +183,7 @@ test("every row carries a role and a mark, and the role adds no height", async (
   expect(overflowing, "roles pushed out of their own row").toEqual([]);
 
   // One line per row: the role added a column and not a second line, and the
-  // row is the control set's 26px panel rhythm (§3) because the controls it
+  // row is the control set's 26px panel rhythm because the controls it
   // draws on hover are 26px squares.
   const heights = await rows.evaluateAll((elements) =>
     elements.map((row) => Math.round(row.getBoundingClientRect().height)),
@@ -265,7 +264,7 @@ test("the state slot does not cover the role, at rest or with the row attended",
   // width floor at rest or attended — a floor is still a width the row may not
   // have, and on a font whose glyphs run wider than the one it was measured in
   // it pushed the role past the row's edge — so the name ellipsises while the
-  // role keeps its glyphs (DESIGN.md §7.3: "A row yields its name and its key
+  // role keeps its glyphs ("A row yields its name and its key
   // before it yields a control, and it yields the role last").
   //
   // Every row is walked rather than a hand-picked sample, because which row is
@@ -287,7 +286,7 @@ test("the state slot does not cover the role, at rest or with the row attended",
       `rows whose role the slot paints over while "${id}" is attended`,
     ).toEqual([]);
 
-    // **And §7.3's order, which the outcome above cannot see.** A role that
+    // **And the order, which the outcome above cannot see.** A role that
     // clips is only legitimate once the name and the key have nothing left, and
     // a proportional shrink would leave the name readable while the role
     // clipped while still fitting the line — the outcome would pass and the
@@ -564,7 +563,7 @@ async function authoredBox(
  * still visible in the CSS sense.
  *
  * The scrolling box is the pane's **body** since `vg-208` moved the scroll off
- * the column (§7.7). Read on the column it would answer for the wrong box: the
+ * the column. Read on the column it would answer for the wrong box: the
  * column clips, so a row scrolled past the body's end is still inside the
  * column's own rect and would read as on screen.
  */
@@ -1197,7 +1196,7 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
 
   // **The row that draws the whole state slot**, which nothing before Task 2
   // ever put on a row: the entry control, the eye and the lock — three controls
-  // at §5's 26px square, and three is the most a row can draw since `vg-462`
+  // at the 26px square, and three is the most a row can draw since `vg-462`
   // took the rename pen off it. The stylesheet asks for the room they need out
   // of the *bound* column, one `:has` arm per control count.
   await selectLayer(page, "group-large");
@@ -1246,7 +1245,7 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
       // whole would assert a defect as a pass condition, which is a red proof
       // against its own fix. **`vg-462` took 26px of the reservation away and
       // did not end the overrun**: the four-control figures this replaces are
-      // 122px on a 205px row, in the closed plan `2026-10-08-the-panes` report.
+      // 122px on a 205px row.
       rowWidth: Math.round(row.getBoundingClientRect().width),
       roomKept: Math.round(
         row.getBoundingClientRect().right - bound.getBoundingClientRect().right,

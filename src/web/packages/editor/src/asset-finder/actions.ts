@@ -108,7 +108,7 @@ export function applyPreset(
   };
 }
 
-/** The attribution an imported result carries (spec R7). An image's subtitle
+/** The attribution an imported result carries (R7). An image's subtitle
  *  is its photographer; an icon's is a style, which is not an author. */
 export function creditOf(result: AssetResult): ThemeCreditsEntry {
   return {

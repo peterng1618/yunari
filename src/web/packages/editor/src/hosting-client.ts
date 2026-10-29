@@ -20,7 +20,7 @@ export interface HostingAnswer {
   readonly lan: boolean;
   readonly address: string | null;
   /** The host's mDNS name, which is what a pairing symbol dials: it survives a
-   *  DHCP lease where the address does not (`docs/decisions/0132`). `null` when
+   * DHCP lease where the address does not. `null` when
    *  the host has no name to offer, and then `address` is all there is. */
   readonly name: string | null;
   readonly port: number | null;
@@ -165,13 +165,13 @@ export async function setLan(
  *  **`host` is the stable name when the host has one**, and that choice is what
  *  makes a pairing survive a DHCP lease: the credential and the storage a
  *  display keeps are scoped to this origin, so dialling a dotted quad is what
- *  turns a moved address into a phone that must pair again
- *  (`docs/decisions/0132`). The caller decides the host, because it also prints
+ *  turns a moved address into a phone that must pair again.
+ * The caller decides the host, because it also prints
  *  the address beside this symbol for a device that cannot resolve the name.
  *
  *  **https, because a display is a secure context only there** — that is what
  *  the wake lock and arbitrary-element fullscreen are gated on, and the host
- *  serves it on this same port from its own root (`docs/decisions/0076`). A
+ * serves it on this same port from its own root. A
  *  device that has not installed the root is warned and carries on; the plain
  *  address is printed beside this one for it. */
 export function displayUrl(host: string, port: number, code: string): string {

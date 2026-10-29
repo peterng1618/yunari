@@ -11,9 +11,9 @@ import {
 } from "../settings/monitors.js";
 
 /**
- * The host's own windows on its local monitors (§ "The host's own monitors",
- * ruling 13): one per attached local display, and a host that starts again finds
- * the window already up rather than opening a second one.
+ * The host's own windows on its local monitors: one per attached local display,
+ * and a host that starts again finds the window already up rather than opening
+ * a second one.
  *
  * `lhm-launcher.ts`'s shape with a browser where LHM was. The child is the
  * host's own — never detached — which is what makes `close` unambiguous: a

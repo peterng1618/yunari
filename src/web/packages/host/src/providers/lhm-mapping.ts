@@ -163,7 +163,7 @@ const BINDINGS: readonly LhmBinding[] = [
     ],
   },
   // The super-I/O headers answered `cpu.fan` before the board got its own
-  // group, so they still do: an aggregate key keeps its precedence (0004).
+  // group, so they still do: an aggregate key keeps its precedence.
   {
     semanticKey: "cpu.fan",
     group: "motherboard",
@@ -382,7 +382,7 @@ const DYNAMIC_BINDINGS: readonly LhmDynamicBinding[] = [
   {
     group: "cpu",
     type: "Load",
-    // The vocabulary's per-core Load sensor, named directly by the spec's table.
+    // The vocabulary's per-core Load sensor, named directly by the mapping table.
     pattern: /^CPU Core #(\d+)$/,
     key: (match) => `cpu.core.${match[1]}.load`,
   },
@@ -906,7 +906,7 @@ function selectReading(
  *
  * That is the rule for whatever set reaches it. Which devices are in that set
  * is `matchLhmSensorsAssigned`'s decision, and it is a selection, not a maximum
- * (0004) — so an unassigned group here is one device's reading, not the
+ * — so an unassigned group here is one device's reading, not the
  * busiest one's.
  */
 export function matchLhmSensors(
@@ -1076,7 +1076,7 @@ export interface DeviceAssignment {
  * Readings limited to the assigned devices, so a two-GPU machine can show the
  * GPU the consumer chose under the theme's single `gpu.*` keys. An unassigned
  * group answers from the first device the machine reports, not the busiest one
- * (0004) — a caption that changes text every sample cannot be read.
+ * — a caption that changes text every sample cannot be read.
  */
 /** The data-disk slot's keys. */
 const DATA_DISK_KEYS = [

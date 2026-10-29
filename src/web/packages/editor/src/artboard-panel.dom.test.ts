@@ -281,7 +281,7 @@ describe("artboard panel", () => {
 
   it("refuses a dimension the document cannot hold, and says why", async () => {
     // Was a refusal restoring 1280, then a clamp onto the bound of 1. The
-    // control set's rule is the third answer and the one §5 states: a value the
+    // control set's rule is the third answer and the one the control set states: a value the
     // owner rejects is refused with its reason, never coerced into a number
     // nobody typed — so a width of 0 commits nothing and the box says so.
     const { change } = await mount();
@@ -367,7 +367,7 @@ describe("artboard panel", () => {
       themeLanguage: "vi",
     });
 
-    // The spec's "resolved names shown live": the author sees the words the
+    // The resolved names are shown live: the author sees the words the
     // language actually spells, not only its English label. Read after the
     // choice, because the sample follows the control rather than the render.
     const sample =

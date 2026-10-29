@@ -7,8 +7,7 @@
  * `npm audit` is a network read and its exit code is 1 whenever findings exist,
  * so the gate must not inherit either. The policy parses the JSON and returns
  * its own code — 0 clean, 1 finding, 2 unreadable input — and `--self-test`
- * proves the rules offline inside `npm run gate` (plan 2026-10-25, D5; decision
- * 0111).
+ * proves the rules offline inside `npm run gate`.
  *
  * Matching is per vulnerability entry in the report: the report's package name
  * plus each of its `via` entries. A `via` object contributes the GHSA id in its
@@ -25,7 +24,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const DEFAULT_ALLOWLIST = resolve(ROOT, "docs/engineering/audit-allowlist.json");
+const DEFAULT_ALLOWLIST = resolve(ROOT, "schema/audit-allowlist.json");
 const GHSA = /GHSA(-[0-9a-z]{4}){3}/i;
 const REQUIRED = ["package", "advisory", "reason", "reviewed"];
 

@@ -34,7 +34,7 @@ import { describe, expect, it } from "vitest";
  *   player inherits the editor's canvas through a shared module and the size
  *   gate absorbs it in silence.
  *
- * Spec 0013 records the measurements.
+ * The measurements are recorded here.
  */
 
 const PACKAGES_ROOT = resolve(
@@ -148,9 +148,9 @@ describe("the display bundle imports Fabric the cheap way", () => {
     // gradient controls, all of which need the interactive `Canvas`. A display
     // has no use for any of it, and its files import from bare `fabric`, so it
     // would also breach the rule above. That makes it wrong *here*; it is not
-    // wrong in `packages/editor`, which this test does not scan, and spec 0013
-    // stage 4 adopts `AligningGuidelines` from it rather than reimplementing
-    // snapping. Do not read this rule as a ban on the subpath.
+    // wrong in `packages/editor`, which this test does not scan; that package
+    // adopts `AligningGuidelines` from it rather than reimplementing snapping.
+    // Do not read this rule as a ban on the subpath.
     expect(
       offenders,
       `unexpected Fabric entry point:\n${offenders.join("\n")}`,

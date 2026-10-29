@@ -422,7 +422,7 @@ describe("EditorSession", () => {
   });
 
   it("binds the chord the header prints to the shell's own publish surface", () => {
-    // §7.1. The header prints this chord beside the publish control, so the
+    // The header prints this chord beside the publish control, so the
     // gesture does what that control does — it opens the surface — and owns no
     // publish path of its own. The manager is a stub here (the mock above),
     // which is what lets this case read back the handler the session registered
@@ -1190,7 +1190,7 @@ describe("EditorSession", () => {
   });
 
   it("gives the selected token its own column, and gives the object column back", async () => {
-    // The right column has one owner at a time (spec, Tokens pane). The session
+    // The right column has one owner at a time. The session
     // owns both halves — the token panel's mounts and the suppression — because
     // it already owns the document the token fields write through; a panel built
     // by `shell-layout` would need a second copy of it.

@@ -114,7 +114,7 @@ function ViewSetting<T extends string | number>({
  *  unlike File and View the list cannot be an `Object.values` of the table.
  *  `ShellMenuBar` maps over this to render them and `ui-copy.test.ts`'s
  *  sentence-case case reads the same const, so a row added to the menu enters
- *  §9's net instead of escaping it silently. */
+ *  the net instead of escaping it silently. */
 export const EDIT_MENU_ROWS: readonly {
   readonly label: string;
   readonly shortcut: ProductShortcutId;

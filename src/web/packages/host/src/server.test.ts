@@ -135,8 +135,8 @@ vi.mock("@yunari/renderer-core", async (importOriginal) => {
   };
 });
 
-/** The library is a folder, so a save is the document and its bytes (ADR-0017),
- *  plus what the client says the save is based on. */
+/** The library is a folder, so a save is the document and its bytes, plus what
+ *  the client says the save is based on. */
 function themeBody(
   content: ThemeContent,
   save?: { readonly base?: string; readonly overwrite?: boolean },
@@ -780,7 +780,7 @@ describe("Host theme routes", () => {
     // there and one that is there and does not validate, so both were a 404 and
     // the author was told a theme they can see on disk does not exist. The two
     // facts are different answers now — 422 carrying the validator's issues,
-    // 404 for the id that is not there (ADR-0043).
+    // 404 for the id that is not there.
     await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
     await fs.writeFile(
       path.join(tmpDir, "broken", "theme.json"),
@@ -817,7 +817,7 @@ describe("Host theme routes", () => {
     // was told a theme they can see on disk does not exist and the editor
     // reported success over it. The size refusal is its own answer now — 413,
     // the status every other themes route gives an over-large thing — while
-    // every reader that can serve neither still sees the absence (0043, 0084).
+    // every reader that can serve neither still sees the absence.
     const document = JSON.stringify(validEmptyAssetTheme.envelope);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     await fs.writeFile(
@@ -1296,7 +1296,7 @@ describe("Host theme routes", () => {
     }
   });
 
-  it("forbids PUT from non-loopback addresses (§7)", async () => {
+  it("forbids PUT from non-loopback addresses", async () => {
     const res = await request(
       hosted.server,
       "PUT",
@@ -1348,7 +1348,7 @@ describe("Host theme routes", () => {
 
       expect(res.status).toBe(200);
       // The route hands the folder to the trash and does nothing else itself,
-      // which is the whole recovery claim (docs/decisions/0021).
+      // which is the whole recovery claim.
       expect(trashed).toEqual([path.join(dir, "living-room")]);
       const list = await request(deleting.server, "GET", "/api/themes");
       expect(
@@ -4528,7 +4528,7 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
 });
 
 /**
- * Spec § "The host's own monitors": a second kind of display, *specified* rather
+ * A local monitor is a second kind of display, *specified* rather
  * than paired. It is the host's own screen, so it carries no credential, and the
  * list it is chosen from is a probe of this PC rather than anything stored.
  */
@@ -5964,9 +5964,8 @@ describe("A local monitor is specified rather than paired", () => {
 });
 
 /**
- * The other route reachable unpaired (spec § "Pairing a display that has no
- * camera"): a device with no camera types the one-time code the host is showing
- * and gets a durable credential back.
+ * The other route reachable unpaired: a device with no camera types the one-time
+ * code the host is showing and gets a durable credential back.
  *
  * The code is the only short-lived secret in the exchange, so what these cases
  * pin is the window — one code at a time, a mismatch that never burns it, a
@@ -6310,7 +6309,7 @@ describe("A display with no camera pairs by typing the one-time code", () => {
   });
 });
 
-describe("A loopback admin request must prove it is same-origin (§0116)", () => {
+describe("A loopback admin request must prove it is same-origin", () => {
   let dir: string;
   let hosted: ReturnType<typeof createHostServer>;
 
@@ -6551,8 +6550,7 @@ describe("The templates the host serves", () => {
  * with no entry of its own falls to.
  *
  * One route reads the map and writes one entry of it, and the write's authority
- * is derived from the caller rather than claimed in the body (spec § "A display
- * may change its own theme").
+ * is derived from the caller rather than claimed in the body.
  */
 describe("The display map", () => {
   let dir: string;
@@ -7220,7 +7218,7 @@ describe("Credential routes", () => {
     );
 
     expect(put.status).toBe(403);
-    // The same-origin guard ahead of dispatch answers first (ADR-0116); the
+    // The same-origin guard ahead of dispatch answers first; the
     // route keeps its own refusal behind it.
     expect(put.text()).toBe("That request is from another origin.");
     const read = await rows();
@@ -8756,7 +8754,7 @@ describe("A bundle 404 names the cause it can prove", () => {
       const res = await request(hosted.server, "GET", "/assets/missing.js");
       expect(res.status).toBe(404);
       // The build hint is right exactly when there is no build. Sending it here
-      // is the loop ADR-0018 describes: rebuild, ask again, same answer.
+      // is the loop: rebuild, ask again, same answer.
       expect(res.text()).not.toContain("is not built");
     } finally {
       await hosted.close();
@@ -10393,7 +10391,7 @@ describe("The published overlay", () => {
 
 /**
  * Every display holds its own theme, so `/` has to answer the display that
- * asked rather than this PC (spec § "One map"). `?display=` names a local
+ * asked rather than this PC. `?display=` names a local
  * monitor, and that is the one caller loopback is trusted for.
  */
 describe("The root page resolves the display that asked", () => {
@@ -10856,7 +10854,7 @@ describe("The host's secure origin", () => {
     // **The case that fails if the listener is made https-only.** The host
     // prints its display addresses https-first, with the plain address beside
     // each one as the fallback a device that has not installed the root
-    // certificate opens (`docs/decisions/0076`) — so a port that stopped
+    // certificate opens — so a port that stopped
     // answering http would leave that device with no way in at all, the pairing
     // link and the certificate fetch both being http until the root is on it.
     // Both protocols on one port is what makes the fallback true, and nothing
@@ -11445,7 +11443,7 @@ describe("Host Wallpaper Engine routes", () => {
   });
 
   it("answers the removed export routes as unknown paths", async () => {
-    // The engine is never driven (docs/decisions/0124): no route starts it, and
+    // The engine is never driven: no route starts it, and
     // no route serves what it would have written.
     const hosted = host(fakeSource());
 

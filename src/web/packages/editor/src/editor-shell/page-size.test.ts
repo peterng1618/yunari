@@ -58,7 +58,7 @@ describe("page size preference", () => {
     expect(preferenceOver(localStorage).read()).toBe(24);
     expect(localStorage.getItem(KEY)).toBe("24");
     // One key, one value: a preference that also stored a page number, a filter
-    // or a timestamp would be storing a query the spec keeps in the surface.
+    // or a timestamp would be storing a query the surface keeps in memory.
     expect(localStorage.length).toBe(1);
   });
 
@@ -73,7 +73,7 @@ describe("page size preference", () => {
 
   it("answers the default when nothing has been chosen", () => {
     expect(preferenceOver(localStorage).read()).toBe(DEFAULT_PAGE_SIZE);
-    // The default is the drawing's own size, and a separate fact from the
+    // The default is its own size, and a separate fact from the
     // reader's answer above.
     expect(DEFAULT_PAGE_SIZE).toBe(12);
   });
@@ -132,9 +132,9 @@ describe("page size preference", () => {
     }).not.toThrow();
   });
 
-  /** The sizes are the spec's four, in the order the well lists them, and the
+  /** The four sizes, in the order the well lists them, and the
    *  union is what the well, the reader and the pager all agree by. */
-  it("offers the four sizes in the drawing's order", () => {
+  it("offers the four sizes in the order", () => {
     const offered: readonly PageSize[] = pageSizes;
     expect(offered).toEqual([12, 24, 48, "all"]);
   });

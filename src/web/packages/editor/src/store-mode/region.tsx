@@ -51,7 +51,7 @@ import { useSubmit } from "./use-submit.js";
  *
  * A half is **not** a shell mode and not a second bar: it is the region's own
  * control over what the region lists, the way a pane's title bar sits inside its
- * pane. The shell's navigation is the header, and §7.2 forbids a horizontal bar
+ * pane. The shell's navigation is the header, and the rail rule forbids a horizontal bar
  * under it — which is why the halves sit in the region's *first row* beside the
  * filter and the sort rather than in a strip of their own.
  */
@@ -69,7 +69,7 @@ const TAB_NAMES: Record<StoreTab, string> = {
   online: uiCopy.store.halves.online,
 };
 
-/** The halves' group id, and the stem of each segment's — §5 rule 5 wants every
+/** The halves' group id, and the stem of each segment's — the control-id rule wants every
  *  control to carry an id, derived from the half the way `useControlIds` derives
  *  one from the control it names. */
 const HALVES_ID = "yunari-store-halves";
@@ -167,8 +167,8 @@ function colourModeOptions(
 
 /** The sensors the items bind, labelled by the record's own `label` — the
  *  descriptor's word and not the `key` the selection carries — and **grouped by
- *  the family the vocabulary already files each key under**, which is the
- *  grouping the spec asks for rather than a second reading of the key here.
+ *  the family the vocabulary already files each key under**, which is one
+ *  grouping rather than a second reading of the key here.
  *
  *  **One pass per family, so the count order cannot interleave two headings**,
  *  and the families come in the vocabulary's own order
@@ -177,7 +177,7 @@ function colourModeOptions(
  *
  *  A key this build does not know carries no family, so it is offered under no
  *  heading and last: an invented heading would be a word for something nothing
- *  declared (§9). */
+ *  declared. */
 const familyWord = (family: string): string | undefined =>
   (uiCopy.store.facets.sensorFamilies as Readonly<Record<string, string>>)[
     family
@@ -215,9 +215,9 @@ function sensorOptions(items: readonly StoreItem[]): readonly FacetOption[] {
   ];
 }
 
-/** The three shape groups the drawing's Shape popover offers, in its own order:
+/** The three shape groups the Shape popover offers, in its own order:
  *  the orientation words, the aspect buckets, and the exact sizes — each run
- *  under the drawing's own heading, because the three are AND with each other
+ *  under its own heading, because the three are AND with each other
  *  (R115) and a flat list is what hides it. */
 function shapeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
   const headings = uiCopy.store.facets.shapeGroups;
@@ -258,9 +258,8 @@ function styleOptions(items: readonly StoreItem[]): readonly FacetOption[] {
 /**
  * The sizes the facet offers: **those more than one theme declares**, largest
  * first. A size exactly one theme declares is a theme wearing a filter's
- * clothes, and every other size is reachable under `Other` (spec, "Finding a
- * theme: the five facets"); the exact size is on the item's own modal either
- * way, which is what makes that acceptable.
+ * clothes, and every other size is reachable under `Other`; the exact size is on
+ * the item's own modal either way, which is what makes that acceptable.
  */
 function sizeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
   const counts = new Map<
@@ -319,7 +318,7 @@ function storeFacets(items: readonly StoreItem[]): readonly Facet[] {
     {
       id: "shape",
       name: uiCopy.store.facets.shape,
-      // The drawing's own sentence, above the three groups it explains: a theme
+      // Its own sentence, above the three groups it explains: a theme
       // must match every group, which is what makes the headings worth drawing.
       hint: uiCopy.store.facets.shapeHint,
       options: shapeOptions(items),
@@ -373,14 +372,14 @@ type Body =
   | { readonly kind: "items"; readonly items: readonly StoreItem[] };
 
 /**
- * The two halves, as §5's `Segmented` in its **bare** form — the well holding
+ * The two halves, as the `Segmented` in its **bare** form — the well holding
  * the labels, the chosen one lifted to `--stage` with `--text`, and no row label
- * beside it (`docs/decisions/0074`). The header's mode switch is the same
+ * beside it. The header's mode switch is the same
  * control in the same kind of strip, composed the same way for the same reason:
  * the region's header row is a bar rather than a field row, so there is no label
  * column to fill, and the set's one `ControlSegmented` is a labelled row.
  *
- * The group is its own name (§5 rule 5): a screen reader reaching two segments
+ * The group is its own name (the control-id rule): a screen reader reaching two segments
  * is told what is being chosen, and each segment carries an id.
  */
 function Halves(props: {
@@ -413,7 +412,7 @@ function Halves(props: {
   );
 }
 
-/** One of the two empty sentences, as a centred pair of lines at §3's
+/** One of the two empty sentences, as a centred pair of lines at the spacing scale's
  *  empty-state breathing room. */
 function Empty(props: {
   readonly lead: string;
@@ -438,7 +437,7 @@ function Empty(props: {
  *
  * **It renders its own header row and nothing above it.** The shell's header
  * carries the mode switch and the mode's own actions; this row is the region's
- * first row, so §7.2's forbidden second bar does not appear between them. What
+ * first row, so the forbidden second bar does not appear between them. What
  * the row holds is the region's controls over what the region lists: which half,
  * a search, the five facets and a sort.
  *
@@ -475,8 +474,7 @@ export function StoreModeRegion(props: {
  *  holds none of it: the half, the search, the sort and the facet selection are
  *  the surface's, and none of them is persisted — leaving the mode and coming
  *  back opens on the same row a fresh mount does. The **page size** is the one
- *  exception, because it is a view preference rather than a query (spec, "The
- *  gallery, and paging"). */
+ *  exception, because it is a view preference rather than a query. */
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
@@ -599,7 +597,7 @@ function StoreRegion(props: {
    *
    * **`open` and `assign` are the two a build runs.** Export and delete are
    * drawn on every cell and in the item's footer and **no task in this plan and
-   * no phase in the spec's landing order owns either**, so they are drawn
+   * no phase owns either**, so they are drawn
    * disabled with their reason rather than reaching this callback at all
    * (`cell-actions.ts`, R164). A phase that takes one up moves it out of that
    * map, and wires it here in the same change.
@@ -644,9 +642,9 @@ function StoreRegion(props: {
         className="flex flex-none flex-wrap items-center gap-[var(--space-16)] px-[var(--space-16)] pt-[var(--space-12)]"
       >
         <Halves tab={tab} onTab={setTab} />
-        {/* §5's well with the query in it, and no magnifier glyph: the well is
+        {/* The well with the query in it, and no magnifier glyph: the well is
             the control, the placeholder is the word, and a mark beside a word
-            is read twice (§6). */}
+            is read twice. */}
         <ControlWell widthClassName="w-[180px] flex-none">
           <input
             type="search"
@@ -682,12 +680,12 @@ function StoreRegion(props: {
             {uiCopy.store.mine.label}
           </Toggle>
         ) : null}
-        {/* §5's select, which is a **labelled row** and stays one here: the set
+        {/* The select, which is a **labelled row** and stays one here: the set
             has one select and this is it, and a bare well with a chevron would
             be a second copy of its popup, its keyboard model and its `readOnly`
-            refusal to keep in step. §5 rule 5's label is the row's own rather
-            than a name only a screen reader hears, which is what the drawing's
-            unlabelled well would leave it with. */}
+            refusal to keep in step. The label is the row's own rather
+            than a name only a screen reader hears, which an unlabelled well would
+            leave it with. */}
         <ControlSelect
           id={SORT_ID}
           label={uiCopy.store.sort.label}
@@ -705,7 +703,7 @@ function StoreRegion(props: {
       </div>
 
       {/* The gallery's own scroller, so the header and the pager stay still
-          while the grid moves — the pane body's model (§7.3). */}
+          while the grid moves — the pane body's model. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[var(--space-16)]">
         {body.kind === "empty-library" ? (
           <Empty

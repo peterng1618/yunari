@@ -1,6 +1,6 @@
 /**
  * The rule that decides a local game name is the same game as a store
- * candidate (decision 0109, spec "Remote game metadata").
+ * candidate.
  *
  * Only two tiers accept: equal normalised base titles, or equal token sets
  * after case, symbols, punctuation, a leading article and edition qualifiers

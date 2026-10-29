@@ -450,13 +450,13 @@ test.describe("the stage looks through a display", () => {
     ).toHaveAttribute("aria-checked", "false");
   });
 
-  test("the zoom readout is §5's bare readout, and it is still the trigger", async ({
+  test("the zoom readout is the bare readout, and it is still the trigger", async ({
     page,
   }) => {
     // The vocabulary is closed and this is the entry the 2026-10-12 ruling added
     // rather than an exception to rule 1: a value display that opens a list.
     // What the shape has to hold is that it stays *bare* — no well, no chevron,
-    // because §5 draws the chevron on a well and the readout has none — while
+    // because the control set draws the chevron on a well and the readout has none — while
     // staying the control, which is what the click at the end says.
     const readout = page.locator("[data-yunari-zoom]");
     const shape = await readout.evaluate((node) => {
@@ -561,7 +561,7 @@ test.describe("the stage looks through a display", () => {
     expect(await scene(), "a real edit does change it").not.toBe(before);
   });
 
-  /** §7.7's "clusters cannot collide" and "desktop density has a proof, not a
+  /** The "clusters cannot collide" and "desktop density has a proof, not a
    *  guessed minimum", asserted rather than measured once by hand. This is the
    *  change that made collision possible: before it the stage had one corner
    *  cluster and the view control sat at the bottom-right, so nothing could
@@ -571,7 +571,7 @@ test.describe("the stage looks through a display", () => {
    *  wide as the product lets it get and a collision would have the room to
    *  happen. The point between the corners is read as well as the two boxes:
    *  two clusters that do not overlap can still be spanned by a transparent
-   *  wrapper that eats the stage's own pan, which is the other half of §7.7. */
+   *  wrapper that eats the stage's own pan, which is the other half of the overflow rule. */
   test("the display cluster and the identity chip cannot collide on the stage", async ({
     page,
   }, testInfo) => {
@@ -629,7 +629,7 @@ test.describe("the stage looks through a display", () => {
       ).toBeLessThan(measured.cluster.left);
       expect(
         measured.stage.right - measured.cluster.right,
-        "and the cluster clears the stage's edge by §7.5's inset",
+        "and the cluster clears the stage's edge by the inset",
       ).toBeGreaterThanOrEqual(14);
       expect(
         measured.betweenClass,
@@ -663,7 +663,7 @@ test.describe("the stage looks through a display", () => {
     assertNoCollision(await measureCorners());
   });
 
-  /** §5 rule 6, on the one glyph-only control this task adds: hover *acquires*
+  /** the glyph-only hover rule, on the one glyph-only control this task adds: hover *acquires*
    *  the border rather than washing the background, and acquires it without
    *  moving anything.
    *

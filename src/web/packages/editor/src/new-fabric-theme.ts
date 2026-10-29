@@ -246,8 +246,8 @@ const BLANK_PALETTE_IDS = [
  * decided, and the two would drift.
  *
  * The palette is narrowed **by token id**, never by restating a colour. A
- * second copy of `#ecf5ff` is how the frosted tint once reached three literals
- * (`docs/decisions/0013`); taking the starter's own entry means a change to the
+ * second copy of `#ecf5ff` is how the frosted tint once reached three literals;
+ * taking the starter's own entry means a change to the
  * starter's palette reaches a blank theme and there is no copy left to forget.
  */
 export function createBlankFabricTheme(

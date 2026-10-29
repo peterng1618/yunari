@@ -22,7 +22,7 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
  * separates.
  *
  * At 100 the empty space is as wide as the painted segment; 10 is the look the
- * owner approved on the reference gauge (`ADR 0121`). Measured against the
+ * owner approved on the reference gauge. Measured against the
  * segment rather than the chart edge, the relationship survives every count and
  * size: a smaller band gets a proportionally smaller gap, and the rounded caps
  * no longer eat the first part of every gap.

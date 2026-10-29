@@ -45,7 +45,7 @@ import { textShapeFor } from "./text-runs.js";
  * unbreakable run and never narrows (`fabric/dist/index.mjs:18453`), and
  * `width` is one of its `textLayoutProperties` (`:18760`), so every width write
  * re-enters that. The author's box therefore lives on the object as authored
- * content and is re-asserted here; see `docs/decisions/0003`.
+ * content and is re-asserted here.
  */
 
 /** Fabric's typings make `Textbox` incompatible with `FabricText` under exact optional types. */
@@ -490,7 +490,7 @@ export function refreshBoundText(
           // second paints its seconds once a second, but a minutes or days clock
           // paints only when its own text moves — the sample cadence is the
           // host's, not the author's. The run's type is compared too: a role
-          // default can change while the string stays the same (0128).
+          // default can change while the string stays the same.
           if (
             object.text === shape.text &&
             (authored.align === undefined ||

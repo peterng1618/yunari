@@ -17,14 +17,13 @@ import { uiCopy } from "../../ui-copy.js";
  * The style tags a theme declares: **picked from the vocabulary, proposed only
  * when nothing in it fits.**
  *
- * That ordering is the whole mechanism (spec, "Style tags are … picked, not
- * typed"). Free text as the *first* affordance puts `sci-fi`, `scifi` and
- * `science fiction` into the catalogue as three tags with one theme each, so the
- * vocabulary is a row of toggle buttons and the propose field below it is the
- * only path to a word the vocabulary does not hold. A word that arrives that way
- * is drawn as a proposal rather than as a picked tag
- * (`store-detail.html`'s dashed `retro-diner · proposed`), so a reader can tell
- * a new word from a facet that failed to match.
+ * That ordering is the whole mechanism. Free text as the *first* affordance puts
+ * `sci-fi`, `scifi` and `science fiction` into the catalogue as three tags with
+ * one theme each, so the vocabulary is a row of toggle buttons and the propose
+ * field below it is the only path to a word the vocabulary does not hold. A word
+ * that arrives that way is drawn as a proposal rather than as a picked tag (a
+ * dashed `retro-diner · proposed`), so a reader can tell a new word from a facet
+ * that failed to match.
  *
  * **A refusal never commits.** The value is checked against the same rule the
  * validator applies — `TAG_PATTERN` and `MAX_TAGS`, imported rather than
@@ -91,7 +90,7 @@ export function TagsField(props: TagsFieldProps): React.JSX.Element {
 
   /** What a draft becomes. **Only a draft commits**, which is what makes the
    *  Enter's own blur a no-op rather than a second write: a successful commit
-   *  empties the box, and a refused one keeps its word to be corrected (§5).
+   *  empties the box, and a refused one keeps its word to be corrected.
    *  A word the author never typed is not a proposal, so there is nothing to
    *  refuse and nothing to say. */
   const commit = (): void => {
@@ -137,10 +136,10 @@ export function TagsField(props: TagsFieldProps): React.JSX.Element {
                 data-yunari-tag={tag}
                 aria-pressed={picked}
                 onClick={() => toggle(tag)}
-                // `hitTargetClasses` carries §5's 24×24 target the way it does
+                // `hitTargetClasses` carries the 24×24 target the way it does
                 // for a segment: a pill is a button, so it can take the
                 // `::before` a replaced element cannot, and its own box stays
-                // the 22px the drawing gives it.
+                // the 22px the surface gives it.
                 className={`${hitTargetClasses} rounded-full border px-[var(--space-10)] py-[var(--space-4)] text-2xs ${
                   picked
                     ? // `--stage` through the shorthand: `bg-stage` is the

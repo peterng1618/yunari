@@ -48,7 +48,7 @@ import type { TokenUsage } from "./token-use.js";
  * requires all three in every theme, so the reassignment-and-delete row is
  * drawn only for an unroled token. The name is computed and read-only; the
  * editable name, role select and the old size/leading/tracking fields are gone
- * with the stored fields (ruling 0128).
+ * with the stored fields.
  *
  * **Usage is listed for both kinds.** Each reads a live walk of the scene
  * (`paletteTokenUsage` / `typeTokenUsage`) through the port below, so the layers

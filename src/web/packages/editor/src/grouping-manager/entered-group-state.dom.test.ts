@@ -237,7 +237,7 @@ describe("entering a group", () => {
   });
 
   it("lifts the dim for a capture and puts it back", () => {
-    // A capture reads the document, not the screen (0053, `vg-527`): a package
+    // A capture reads the document, not the screen (`vg-527`): a package
     // saved from inside an entered group ships a thumbnail, and a view state
     // must not reach an artifact that outlives the session.
     const { canvas, group, outsider } = scene();

@@ -19,21 +19,20 @@ import {
 import { uiCopy } from "./ui-copy.js";
 
 /**
- * The reference composition, one builder per card.
+ * The starter composition, one builder per card.
  *
- * Every builder returns one Fabric group over the card's parts, and every
- * position and size below is still a measurement off
- * `docs/superpowers/specs/2026-09-26-reference-theme-target.png` at 1672 × 941:
- * the card borders were located by the transition of the two-pixel outline, the
- * text and icons by connected components of bright ink inside each card, and the
- * rings by their saturated strokes. `cardGroup` is what turns those artboard
- * numbers into the group-local ones the document stores, so nothing here has to
- * be re-measured. Two departures are named in the report — the trends card spans
- * the full left column rather than the reference's 254-unit gap for the coffee
- * mug, and both ring labels share one offset rather than the mockup's 15-unit
- * disagreement between the two cards.
+ * Every builder returns one Fabric group over the card's parts. The positions
+ * and sizes below are the starter's authored artboard geometry at 1672 × 941:
+ * the card borders are two-pixel outlines, the text and icons sit inside each
+ * card, and the rings are stroked shapes. `cardGroup` is what turns those
+ * artboard numbers into the group-local ones the document stores, so nothing
+ * here has to be re-measured. Two deliberate departures from a literal
+ * three-column layout are named here — the trends card spans the full left
+ * column rather than leaving a 254-unit gap for the coffee mug, and both ring
+ * labels share one offset rather than disagreeing by 15 units between the two
+ * cards.
  *
- * What is not here is anything no provider supplies. The reference names its
+ * What is not here is anything no provider supplies. The starter names its
  * CPU and GPU models and its storage volume; those three captions are bindings
  * like any other reading, so a machine that cannot say one shows a gap instead
  * of a stand-in name, and a card's name always describes the figures beside it.

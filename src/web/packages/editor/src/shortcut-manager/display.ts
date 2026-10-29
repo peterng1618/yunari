@@ -1,6 +1,6 @@
 /**
  * How a shortcut reads: the platform's caps, the words for the keys that have
- * none, and the projection §7's tooltips and its `?` sheet both render.
+ * none, and the projection the tooltips and its `?` sheet both render.
  *
  * The table's *membership* is `index.ts`'s and stays there. This module only
  * reads it, which is why nothing here re-spells a `ProductShortcutId` — a
