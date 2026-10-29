@@ -67,7 +67,7 @@ const HOST = `http://127.0.0.1:${HOST_PORT}`;
  * Seeds the library from the package the editor exported.
  *
  * **Both halves are the point, and they are different formats.** The library
- * is a folder (ADR-0017), so the exported archive is unpacked here to make
+ * is a folder, so the exported archive is unpacked here to make
  * one — the host's own route, which the displays below read through; the same
  * archive is read back by the editor through a stubbed library, so the editor
  * frame is the product's own reading of the saved document. A change that broke

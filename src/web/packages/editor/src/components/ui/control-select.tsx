@@ -71,7 +71,7 @@ export function ControlSelect(
     readonly placeholder?: string;
     /** The row's shape, where the surface's drawing draws this picker as
      *  something other than the labelled row — the Add pane's asset picker is
-     *  `headed` (`shell.html:128-132`). */
+     *  `headed`. */
     readonly shape?: ControlShape;
   },
 ): React.JSX.Element {

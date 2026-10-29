@@ -79,7 +79,7 @@ export function ControlSlider(
      * and **the well reads the document alone**, rendering empty until something
      * is stored. An unauthored `0` and an authored one are different documents
      * and must not read alike (`vg-497`); the well's empty draft is the route
-     * back, as it is for every other optional field (`0049`).
+     * back, as it is for every other optional field.
      */
     readonly unauthored?: boolean;
     readonly onPreview?: (value: number) => void;

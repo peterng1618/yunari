@@ -152,8 +152,8 @@ function attributionReadings(
 }
 
 /**
- * The asset preview (`assets-preview.html`): the declared file at the size it
- * will be used, with the facts and the eligible commands on a 270px panel.
+ * The asset preview: the declared file at the size it will be used, with the
+ * facts and the eligible commands on a 270px panel.
  *
  * **The pane opens it, and the pane acts.** Every command here is a callback
  * the pane supplied, so Remove runs through the pane's `submit()` and the

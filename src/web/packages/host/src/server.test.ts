@@ -135,8 +135,8 @@ vi.mock("@yunari/renderer-core", async (importOriginal) => {
   };
 });
 
-/** The library is a folder, so a save is the document and its bytes (ADR-0017),
- *  plus what the client says the save is based on. */
+/** The library is a folder, so a save is the document and its bytes, plus what
+ *  the client says the save is based on. */
 function themeBody(
   content: ThemeContent,
   save?: { readonly base?: string; readonly overwrite?: boolean },
@@ -780,7 +780,7 @@ describe("Host theme routes", () => {
     // there and one that is there and does not validate, so both were a 404 and
     // the author was told a theme they can see on disk does not exist. The two
     // facts are different answers now — 422 carrying the validator's issues,
-    // 404 for the id that is not there (ADR-0043).
+    // 404 for the id that is not there.
     await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
     await fs.writeFile(
       path.join(tmpDir, "broken", "theme.json"),
@@ -817,7 +817,7 @@ describe("Host theme routes", () => {
     // was told a theme they can see on disk does not exist and the editor
     // reported success over it. The size refusal is its own answer now — 413,
     // the status every other themes route gives an over-large thing — while
-    // every reader that can serve neither still sees the absence (0043, 0084).
+    // every reader that can serve neither still sees the absence.
     const document = JSON.stringify(validEmptyAssetTheme.envelope);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     await fs.writeFile(
@@ -6310,7 +6310,7 @@ describe("A display with no camera pairs by typing the one-time code", () => {
   });
 });
 
-describe("A loopback admin request must prove it is same-origin (§0116)", () => {
+describe("A loopback admin request must prove it is same-origin", () => {
   let dir: string;
   let hosted: ReturnType<typeof createHostServer>;
 
@@ -7220,7 +7220,7 @@ describe("Credential routes", () => {
     );
 
     expect(put.status).toBe(403);
-    // The same-origin guard ahead of dispatch answers first (ADR-0116); the
+    // The same-origin guard ahead of dispatch answers first; the
     // route keeps its own refusal behind it.
     expect(put.text()).toBe("That request is from another origin.");
     const read = await rows();
@@ -8756,7 +8756,7 @@ describe("A bundle 404 names the cause it can prove", () => {
       const res = await request(hosted.server, "GET", "/assets/missing.js");
       expect(res.status).toBe(404);
       // The build hint is right exactly when there is no build. Sending it here
-      // is the loop ADR-0018 describes: rebuild, ask again, same answer.
+      // is the loop: rebuild, ask again, same answer.
       expect(res.text()).not.toContain("is not built");
     } finally {
       await hosted.close();

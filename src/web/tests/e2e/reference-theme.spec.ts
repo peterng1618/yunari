@@ -998,7 +998,7 @@ function captureOf(page: Page): Promise<{
     bridge.editor.canvas.renderAll();
     // The product's own call, not a re-derivation of it. This file used to
     // restate `toCanvasElement(min(1, 640 / max(w, h)))` here, which is how
-    // a change to the capture path stops being measured at all (0007).
+    // a change to the capture path stops being measured at all.
     const png = bridge.capture();
     if (png === undefined) throw new Error("the capture produced no picture");
     const image = new Image();
@@ -1032,7 +1032,7 @@ function captureOf(page: Page): Promise<{
  * export multiplier, so the artboard's corners are mapped the way the capture
  * actually drew them rather than assumed to be its corners.
  *
- * `core` is the same measure over the middle half of the artboard. Since 0075
+ * `core` is the same measure over the middle half of the artboard. Since then
  * the media layer is `object-fit: cover` on the theme's own box, so it covers
  * the board whole and no fit can leave a letterbox inside it: the middle half
  * is covered exactly when the media reached the capture, which is what makes
@@ -1441,7 +1441,7 @@ test.describe("the reference composition, captured", () => {
   }, testInfo) => {
     desktop(testInfo);
     // **The gap this pins is closed** (`thumbnail-capture.ts` composites the
-    // media through `BackdropMedia.paint`, 0007), so the marker is gone and the
+    // media through `BackdropMedia.paint`), so the marker is gone and the
     // requirement is asserted. Background media is still a DOM sibling below
     // the canvas; the capture now draws it underneath the scene it re-renders,
     // rather than relying on Fabric to see it.
@@ -1725,8 +1725,8 @@ test.describe("the reference composition, captured", () => {
     // a rectangle in artboard units and `object-fit: cover` puts the whole
     // file over the artboard, so the band addresses one rectangle of the
     // photograph — and the backdrop under the panel must measure what that
-    // rectangle measures. This is the assertion 0012 exists for: before the
-    // fix the sampler took a pixel-for-pixel crop of the middle of the file
+    // rectangle measures. This is the assertion behind it: the sampler
+    // used to take a pixel-for-pixel crop of the middle of the file
     // sized by the device rect, which at a 0.3744 camera is the middle 26.9 %
     // of the photograph where the element shows all of it, and this read
     // **16.54** against the 7.45 below.
@@ -2169,7 +2169,7 @@ function starterBackdropBands(page: Page): Promise<{
     //
     // This is the control that makes the rest of the reading mean something:
     // it says what is *behind the panel*, independently of anything Yunari
-    // does. Before 0012 the sampler took a pixel-for-pixel crop of the middle
+    // does. The sampler used to take a pixel-for-pixel crop of the middle
     // of the file sized by the device rect, so at this mount's 0.3744 camera
     // it showed the middle 26.9 % of the photograph where the element showed
     // all of it, and read 16.54 of contrast against this 7.45.

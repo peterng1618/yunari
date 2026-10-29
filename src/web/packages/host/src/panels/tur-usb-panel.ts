@@ -36,7 +36,7 @@ const MAX_QUEUED_REPLIES = 16;
  * The panel's own quarter turn. **It is sticky**: whatever L-Connect left
  * persists across power cycles, so a host that does not pin it inherits a
  * picture that is upside down for reasons nothing records. Mode 2 is the one
- * measured upright with the display record's 90° rotation (`0134`).
+ * measured upright with the display record's 90° rotation.
  */
 const ROTATE_MODE = 2;
 /** The vendor's pause between H.264 blocks. Shorter overruns the decoder's

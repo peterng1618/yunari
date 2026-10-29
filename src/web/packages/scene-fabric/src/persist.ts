@@ -137,7 +137,7 @@ export async function reviveScene(
   // the artboard paints over the letterbox bars. Restored after the load, from
   // the canvas's own pre-revival values.
   //
-  // The background fill is restored for the opposite reason (0080): nothing
+  // The background fill is restored for the opposite reason: nothing
   // paints the artboard on the canvas any more — the host carries it, and the
   // glass backdrop carries it — so a fill can only have arrived *from* the
   // document, and left standing it covers the media layer all over again. The

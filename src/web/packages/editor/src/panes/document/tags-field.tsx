@@ -22,8 +22,8 @@ import { uiCopy } from "../../ui-copy.js";
  * `science fiction` into the catalogue as three tags with one theme each, so the
  * vocabulary is a row of toggle buttons and the propose field below it is the
  * only path to a word the vocabulary does not hold. A word that arrives that way
- * is drawn as a proposal rather than as a picked tag
- * (`store-detail.html`'s dashed `retro-diner · proposed`), so a reader can tell
+ * is drawn as a proposal rather than as a picked tag (a dashed
+ * `retro-diner · proposed`), so a reader can tell
  * a new word from a facet that failed to match.
  *
  * **A refusal never commits.** The value is checked against the same rule the

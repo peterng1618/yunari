@@ -16,8 +16,7 @@ import type { SelectionEdits, SelectionView } from "./view.js";
  *
  * `index.ts` projects a `SelectionView` from Fabric on demand and publishes it
  * here; React subscribes and re-renders. Nothing but the serializable view and
- * the imperative edit port crosses this line — no Fabric object, no DOM node
- * (ADR-0039).
+ * the imperative edit port crosses this line — no Fabric object, no DOM node.
  */
 
 interface PublishedSelection {

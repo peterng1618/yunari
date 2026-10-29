@@ -168,7 +168,7 @@ export function mountFabricScene(
   // Glass is not a plan feature: it is a property on revived Fabric objects, so
   // the owner re-resolves them from the canvas rather than from `update()`.
   //
-  // **The backdrop carries the board's paint as well as the media (0080).** It
+  // **The backdrop carries the board's paint as well as the media.** It
   // is wired whether or not a media layer exists, because the paint is the whole
   // backdrop for a theme that declares none, and the canvas is no longer allowed
   // to hold it: a fill there sits above the media and hides it.
@@ -308,11 +308,11 @@ export function mountFabricScene(
     // The one artboard paint is the board's fill and the bars behind it (§53).
     // It is the **host's**, which puts it behind the media layer, so a
     // `"theme"`-fitted layer covers the board and the host's colour is what the
-    // reader sees in the letterbox (0080).
+    // reader sees in the letterbox.
     applyPresentation(cssArtboardPaint(plan.artboard.background) ?? "#000");
     // **The canvas paints nothing at all.** It sits above the media layer, so a
     // fill on it hides the media completely; what a glass panel samples instead
-    // is the backdrop, which carries the paint (0080). Cleared rather than left
+    // is the backdrop, which carries the paint. Cleared rather than left
     // alone, because a revived document can bring a fill of its own.
     canvas.backgroundColor = "";
     element.style.visibility = transform.isDegenerate ? "hidden" : "visible";

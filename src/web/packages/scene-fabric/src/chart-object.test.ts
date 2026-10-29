@@ -191,7 +191,7 @@ describe("how an option reaches the engine", () => {
     // `notMerge: true` threw away every component the previous option carried,
     // so a repaint rebuilt the whole chart. `replaceMerge` was meant to keep the
     // axes while replacing the series, but it matches a series only by `id` —
-    // and the builders give none — so every update was a rebuild too (0126). A
+    // and the builders give none — so every update was a rebuild too. A
     // plain merge keeps the series model and with it the update transition.
     const { instance, calls } = recording();
 

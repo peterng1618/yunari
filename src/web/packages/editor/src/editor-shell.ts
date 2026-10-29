@@ -111,7 +111,7 @@ export interface EditorShell {
   /**
    * The artboard's background media, for the capture path. The layer is a DOM
    * sibling the canvas cannot see, so the only thing that can put it in a
-   * picture is something holding the handle (0007).
+   * picture is something holding the handle.
    */
   backdrop(): BackdropMedia | undefined;
   destroy(): void;
@@ -242,7 +242,7 @@ function applyArtboardPaint(
   // same memo the player keeps. The plate is rebuilt whenever it is missing,
   // because `loadFromJSON` clears the canvas it lived on.
   const paintKey = `${artboardPaintKey(paint)}:${artboard.width}x${artboard.height}`;
-  // **With background media declared there is no plate at all (0080).** The
+  // **With background media declared there is no plate at all.** The
   // plate is on the canvas, which sits above the media layer, so it covers the
   // media exactly as the player's canvas fill did; the display's letterbox,
   // painted from the same resolved colour, is the board's colour instead — and
@@ -504,7 +504,7 @@ export async function mountEditorShell({
     });
     (window as unknown as Record<string, unknown>)[debugKey] = editor;
     // The resolved artboard paint, kept because the glass backdrop composes it
-    // under the media (0080) and re-resolving it there would be a second owner
+    // under the media and re-resolving it there would be a second owner
     // of the paint. Every paint pass goes through here so it cannot go stale.
     let artboardPaint: unknown;
     /** The display's screen, painted from the board's own paint. Declared before
@@ -562,7 +562,7 @@ export async function mountEditorShell({
 
     // After the plan, so the shell's own clip is the one left on the canvas:
     // the adapter applies the plan's artboard too, and it paints no background
-    // of its own any more (0080).
+    // of its own any more.
     if (plan !== undefined) {
       scene?.apply(plan);
     }
@@ -693,7 +693,7 @@ export async function mountEditorShell({
     // even when the theme has a background. Omitting the option left the editor
     // sampling nothing at all.
     //
-    // The backdrop composes the board's paint under the media (0080), which is
+    // The backdrop composes the board's paint under the media, which is
     // what the plate used to do for the sampler — and it has to, because the
     // plate is not drawn at all once the board declares media.
     const glass = createGlass({

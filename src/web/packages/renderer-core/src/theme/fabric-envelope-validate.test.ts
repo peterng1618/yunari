@@ -772,9 +772,9 @@ describe("Fabric theme envelope validation", () => {
   });
 
   it("accepts the interpolations the line offers and refuses a stranger", () => {
-    // `smooth` is an authored curve again (0127). An unknown value is still
+    // `smooth` is an authored curve again. An unknown value is still
     // authored data the renderer cannot honour, so it is refused at load time
-    // rather than silently straightened (0116's enforcement, kept).
+    // rather than silently straightened (enforced, kept).
     for (const interpolation of ["linear", "step", "smooth"] as const) {
       expect(
         validateFabricThemeEnvelope(chartEnvelope("line", { interpolation })),

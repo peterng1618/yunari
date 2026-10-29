@@ -12,7 +12,7 @@
 // live on trio faces only: both describe a pairing's request rather than the
 // face.
 //
-// Deliberately past the 800-line stop in AGENTS.md, and the exception is
+// Deliberately past the 800-line stop, and the exception is
 // recorded rather than assumed: 1.1 MB raw is 31 KB brotli, the file is
 // read once and never hand-edited, and `npm run size` gates the player
 // rather than the host.

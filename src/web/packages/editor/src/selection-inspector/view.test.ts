@@ -20,8 +20,8 @@ import {
 } from "./view.js";
 
 /**
- * The projection is a value: the whole of [ADR-0039] is that React holds this
- * and never a Fabric object. A JSON round-trip is one check and not the guard —
+ * The projection is a value: the whole point is that React holds this and
+ * never a Fabric object. A JSON round-trip is one check and not the guard —
  * it cannot tell a Fabric object from a plain one that happens to serialise — so
  * the walk below rejects by prototype, and rejects a function, a DOM node and a
  * non-finite number where it finds them.
@@ -178,7 +178,7 @@ describe("projectSelection", () => {
     assertPlainValue(view, "view");
 
     // And the walk is not vacuous on those arms: a Fabric object smuggled into
-    // one is what the guard exists to catch (ADR-0039), so it must throw.
+    // one is what the guard exists to catch, so it must throw.
     const planted = chartSection([
       {
         kind: "chartContent",

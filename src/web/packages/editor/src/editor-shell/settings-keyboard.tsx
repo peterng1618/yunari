@@ -148,9 +148,8 @@ export function SettingsKeyboard(props: {
 
   return (
     <div className="editor-shell-keyboard" data-yunari-keyboard="">
-      {/* The panel's header, as the drawing draws it
-          (`current/settings-keyboard.html`): the glyph, the name, and "Reset all"
-          at the trailing edge. **The action moved here from the tab's foot**,
+      {/* The panel's header: the glyph, the name, and "Reset all" at the
+          trailing edge. **The action moved here from the tab's foot**,
           which put the one act that is about every row after the twentieth row,
           so an author had to scroll past the whole table to reach it. */}
       <div className="editor-shell-keyboard-header">

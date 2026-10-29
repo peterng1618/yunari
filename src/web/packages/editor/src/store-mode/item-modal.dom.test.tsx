@@ -487,7 +487,7 @@ it("draws the Style group, and marks the tag the vocabulary does not hold", asyn
 
   // The drawing's `font:500` belongs to the pill's own box, not to the mark, so
   // both pills carry it: a settled pill and a proposed one differ in edge and
-  // colour, and in nothing else (`store-detail.html`).
+  // colour, and in nothing else.
   for (const id of ["retro", "retro-diner"]) {
     expect(pillClass(id), `${id}: not the drawing's weight`).toContain(
       "font-medium",
@@ -769,7 +769,7 @@ it("reports its own close rather than closing itself", async () => {
  * **The catalogue's counts are facts about the item rather than about a facet**,
  * so they join the caption's right-hand end — the drawing's `1.4.0 · 2026-10-14`
  * plus the cell's two numbers — rather than taking a row or a pill group of
- * their own (`store-browse.html:126-128`). `1,204` rather than `1204` is the
+ * their own. `1,204` rather than `1204` is the
  * formatter's, and both are counted against the literal because the separator
  * alone would pass either.
  *
@@ -824,11 +824,11 @@ it("joins the catalogue's counts to the caption's right-hand end", async () => {
 /**
  * **The online footer carries the same install reading the cell does** — the
  * drawing's *Install*, *Installed* or *Update* in place of the library's four
- * actions (`store-detail.html:42`).
+ * actions.
  *
  * Installed is a **mark**, not a control, because there is nothing to do; the
  * check carries the rationed accent and the word stays `--muted`, exactly as
- * the cell draws it (`store-browse.html:128-131`). Install and Update are
+ * the cell draws it. Install and Update are
  * controls that report the item they press, and the region owns what that
  * press does.
  */

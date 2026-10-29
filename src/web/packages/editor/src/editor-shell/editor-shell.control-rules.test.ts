@@ -189,7 +189,7 @@ function colourBearingMarkableControls(): readonly string[] {
  *
  * The first six were measured at `d9f81f1f` by parsing every rule body in the
  * stylesheet, which is how that set was reproduced rather than copied; the last
- * two arrived with the mode switch (0074).
+ * two arrived with the mode switch.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   ".editor-shell-dialog > button",

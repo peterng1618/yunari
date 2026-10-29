@@ -190,7 +190,7 @@ export function buildPieOption(
       itemStyle: {
         // A slice whose colour failed to resolve keeps its share: dropping it
         // would renumber the composition around a paint failure, which §83
-        // forbids. The face shows no ink, so it shows no number either (0007).
+        // forbids. The face shows no ink, so it shows no number either.
         color:
           fill === undefined ? NO_INK : resolveFlatColor(fill, slice.share),
         borderRadius,

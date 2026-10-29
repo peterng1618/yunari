@@ -316,7 +316,7 @@ describe("glass lifecycle", () => {
   it("keeps the last backdrop across a frame the media cannot paint", () => {
     // A looping video's `readyState` drops below `HAVE_CURRENT_DATA` at every
     // wrap and `drawImage` refuses it there, so the media paints nothing for
-    // 20-35 ms every few seconds (0079, measured). Clearing the scratch first
+    // 20-35 ms every few seconds (measured). Clearing the scratch first
     // would composite the panel over transparency for that frame - and because
     // the media is a DOM sibling *below* the canvas, the reader sees the raw
     // video through the tint where they normally see the blurred one.
@@ -365,7 +365,7 @@ describe("glass lifecycle", () => {
   });
 
   it("releases the kept backdrop with the scratch", () => {
-    // The backdrop is a second surface per panel (0079), so it is held to the
+    // The backdrop is a second surface per panel, so it is held to the
     // same release contract: a reference dropped without zeroing leaves its
     // backing store alive until the element is collected.
     const created: HTMLCanvasElement[] = [];

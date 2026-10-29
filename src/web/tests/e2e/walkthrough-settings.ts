@@ -8,7 +8,7 @@ import { focusedWithin, tabToMark } from "./walkthrough-focus.js";
  * route that reaches them.
  *
  * Split out of `walkthrough-shell.ts` on Ruling L's own principle, when Task 4's
- * helpers took that module past AGENTS.md's 800-line stop: this is one surface,
+ * helpers took that module past the 800-line stop: this is one surface,
  * a modal opened from the rail's gear, with a primitive of its own (a tab list
  * whose inactive panels unmount, a radio group with roving focus, an armed row),
  * where `walkthrough-shell.ts` holds the shell's panes and the gestures an author

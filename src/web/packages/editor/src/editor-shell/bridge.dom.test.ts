@@ -995,7 +995,7 @@ it("moves a layer across a group boundary, in and out", () => {
   // vg-461: the refusal was by construction rather than by a rule. The anchor
   // names the container — its own parent — so one operation covers both
   // directions, and what the author gets is the object in a different place in
-  // the tree: 0044's rung 6 measured that nothing moves on the screen either
+  // the tree: rung 6 measured that nothing moves on the screen either
   // way, because the transform bake is Fabric's own.
   const canvas = new Canvas(document.createElement("canvas"));
   const child = new Rect({ left: 0, top: 0, width: 10, height: 10 });
@@ -1236,7 +1236,7 @@ it("leaves the canvas in the state a removal leaves, except the object itself", 
 
   // The reference: what a deletion leaves, which is the path `moveLayer` took
   // before `detachFromRoot` existed. The dispose is the remover's own since
-  // `vg-486` (ADR-0052) — the scene adapter used to dispose whatever anyone
+  // `vg-486` — the scene adapter used to dispose whatever anyone
   // removed, and no longer does — so a bare `canvas.remove` is now the *detach*
   // half of a deletion and the deleting owner says the other half.
   const removed = build();

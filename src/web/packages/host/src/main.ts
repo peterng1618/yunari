@@ -285,7 +285,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const hosting = createHostingSettingsStore(settingsDir);
   const storedHosting = await hosting.read();
   // Everything the host knows about *this* machine lives in one settings
-  // folder, so a theme folder is only ever a theme (ADR-0017).
+  // folder, so a theme folder is only ever a theme.
   const deviceSettings = createDeviceSettingsStore(settingsDir);
   // The consumer's display preferences, read by the provider that acquires the
   // readings they apply to.

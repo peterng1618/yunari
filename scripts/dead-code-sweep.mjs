@@ -62,8 +62,7 @@
  *                  lives in. The self-test's fixture run is the only caller: it
  *                  writes a small tree to a temp directory and runs this script
  *                  again against it, so the kind-fires checks name a file the
- *                  test owns rather than one the product may legitimately change
- *                  (decision `0067`).
+ *                  test owns rather than one the product may legitimately change.
  *   --self-test    run the checks below and exit non-zero on any failure. Both
  *                  this file and the `--json` one are overwritten with an
  *                  incomplete marker before the run starts (see below), and the
@@ -85,7 +84,7 @@ const SELF_TEST = argv.includes("--self-test");
 
 /**
  * The tree to scan. `--root` exists for the self-test's fixture run and is the
- * whole of its fixture mechanism (decision `0067`): the checks that a kind fires
+ * whole of its fixture mechanism: the checks that a kind fires
  * are asserted against a tree the test owns, and that tree is analysed by *this
  * program run again* rather than by a second classifier that could drift from it.
  */
@@ -556,7 +555,7 @@ const usesIn = (text, name) =>
   (text.match(new RegExp(`\\b${escapeRe(name)}\\b`, "g")) ?? []).length;
 
 /**
- * A declaration is not a use (`vg-382`, decision `0063`). These are the shapes
+ * A declaration is not a use (`vg-382`). These are the shapes
  * that NAME a symbol without reaching it: its own declaration site, a specifier
  * in an import or an export list — `declaredExports` reads `export { x }` as a
  * declared export, so counting that line made a re-export evidence that the name
@@ -772,7 +771,7 @@ for (const file of all) {
     const consumers = [...new Set([...direct.map((e) => e.from), ...through])];
     // The file's own barrel is the one production consumer this tier looks
     // past — a barrel is a door a name is reached through, not a consumer — and
-    // counting it skipped every input the tier exists to report (`0064`).
+    // counting it skipped every input the tier exists to report.
     const prodConsumers = consumers.filter((file_) => !isTestFile(file_) && file_ !== barrel);
     if (prodConsumers.length > 0) continue;
 
@@ -976,14 +975,14 @@ if (!SELF_TEST) process.stdout.write(renderReport(report));
  *
  * What these checks establish, and the two halves are separate: the
  * `barrel-only-export` tier is reachable and fires on this tree (the gate
- * excludes the file's own barrel, `0064`), and a barrel's re-export is followed
+ * excludes the file's own barrel), and a barrel's re-export is followed
  * as a route — so an export consumed through its own package barrel is not
  * reported as unused. The route case proves the following, not the firing.
  */
 if (SELF_TEST) {
   /**
    * The kind-fires checks run against a fixture tree this self-test writes, not
-   * against live source files (`vg-550`, decision `0067`). Two of the four files
+   * against live source files (`vg-550`). Two of the four files
    * they used to name were invalidated by work the product wanted:
    * `font-picker.tsx` by the mount that closed `vg-268`/`vg-283`, and
    * `boot-theme.ts`, the *negative* fixture, by an export that reddened the whole
@@ -1215,7 +1214,7 @@ if (SELF_TEST) {
      * barrel is not reported as unused — for the real case of `settingsFieldsFor`
      * through `renderer-core/src/index.ts`. It does NOT exercise the branch that
      * emits a `barrel-only-export` candidate; that branch has its own check, and
-     * this one would still pass with the tier switched off (`0064`).
+     * this one would still pass with the tier switched off.
      */
     [
       "a barrel's re-export is followed as a route (an import is not)",
@@ -1225,7 +1224,7 @@ if (SELF_TEST) {
     ],
     /**
      * The tier's reachability, asserted directly rather than through a pinned
-     * file: before `0064` this was zero and could never be anything else, and the
+     * file: before this guard this was zero and could never be anything else, and the
      * only way to reach zero again is to count the file's own barrel as a
      * production consumer. A count rather than a file, so Task 21.8 can move the
      * kind-fires checks to a fixture tree without this one going stale.

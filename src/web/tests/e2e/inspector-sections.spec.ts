@@ -37,7 +37,7 @@ import { isDesktopSurface } from "./surface.js";
  * built bundle.
  *
  * Task 10 of the per-kind inspector plan. Every claim here is about a rendered
- * surface, and `AGENTS.md` is explicit that visible behaviour needs browser
+ * surface, and the rule is explicit that visible behaviour needs browser
  * inspection rather than object counts. The numbers and strings are the
  * assertions; the screenshots are for a human.
  */
@@ -1859,7 +1859,7 @@ test.describe("the per-kind inspector column", () => {
     );
 
     // The header's trailing rule, which every current drawing draws between the
-    // count and the chevron (`controls.html:31` and five siblings). Nothing
+    // count and the chevron. Nothing
     // argued against it, so it is a difference the drawing wins. Its neighbouring
     // case — the read-only rows' omitted dashed divider, where `column.tsx`'s
     // §5.1 note won instead — left with the read-only section (item 17).
@@ -2175,8 +2175,8 @@ test.describe("the per-kind inspector column", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
-    // The dark half of the comparison: `inspector-controls.html` is drawn on
-    // graphite, and a capture of one palette cannot show a hard-coded hex. The
+    // The dark half of the comparison: a capture of one palette cannot show a
+    // hard-coded hex. The
     // same real selection — the starter's gauge child — is read in both.
     await choosePalette(page, "graphite");
     await selectStarterGauge(page);

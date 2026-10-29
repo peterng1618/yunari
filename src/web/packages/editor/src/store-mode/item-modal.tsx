@@ -22,7 +22,7 @@ import { StoreStatusBadge } from "./status-badge.js";
 import type { SubmitControl } from "./use-submit.js";
 
 /**
- * The item's own surface: the modal a cell opens (`store-detail.html`).
+ * The item's own surface: the modal a cell opens.
  *
  * **It is a viewer first.** The box is 960 × 760 against the settings sheet's
  * 560, with no title bar: the stage takes every pixel the 270px facts panel does
@@ -74,7 +74,7 @@ const CATALOGUE_COUNT = new Intl.NumberFormat("en-US");
 
 /** One pill: the drawing's `--panel-2` inside a 1px `--edge` at a full radius.
  *  `mono` is the size's own treatment, and **a proposed pill is that same box
- *  dashed and in `--muted`** (`store-detail.html`). */
+ *  dashed and in `--muted`**. */
 function Pill(props: {
   readonly id: string;
   readonly name: string;
@@ -198,9 +198,9 @@ function styleReadings(
   });
 }
 
-/** The stage's own reading: the size the theme is drawn at, then the fit verb
- *  (`store-detail.html`). A size this record cannot read draws **no caption**, not
- *  `0 × 0` — a measurement of nothing is not a reading. */
+/** The stage's own reading: the size the theme is drawn at, then the fit verb.
+ *  A size this record cannot read draws **no caption**, not `0 × 0` — a
+ *  measurement of nothing is not a reading. */
 function stageReading(item: StoreItem): string | undefined {
   const { width, height } = item.facets;
   if (!(width > 0 && height > 0)) return undefined;
@@ -419,7 +419,7 @@ function PanelBody(props: {
 
 /**
  * The online half's foot reading: one of the drawing's three answers in place of
- * the library's four boxes (`store-detail.html`).
+ * the library's four boxes.
  *
  * **Installed is a mark, not a control** — there is nothing to do. The check
  * carries the rationed accent and the word stays `--muted`, as the cell draws

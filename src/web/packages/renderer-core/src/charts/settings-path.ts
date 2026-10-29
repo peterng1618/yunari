@@ -9,7 +9,7 @@ import { defaultAnimationSettings } from "./animation.js";
  * `{...settings, [property]: value}` writes a shape the renderer never reads
  * while the validator shrugs: the author's choice survives the click and dies on
  * reopen. These two helpers are the write path, and their two exceptions are
- * exactly the two nested settings, named rather than generalised (ADR-0028).
+ * exactly the two nested settings, named rather than generalised.
  *
  * Both build new objects and never touch the argument, so a commit can diff the
  * settings it was handed.

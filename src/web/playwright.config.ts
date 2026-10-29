@@ -135,7 +135,7 @@ export default defineConfig({
       // asset serving and the SSE stream are otherwise never browser-tested.
       command: `node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
       // http, which the host still serves beside https on the same port
-      // (0070). The pairing link these specs drive is the one the host prints,
+      //. The pairing link these specs drive is the one the host prints,
       // and what that link should carry belongs to the per-display-themes
       // spec; the secure origin is read by `host-secure-origin.spec.ts`, which
       // starts its own host on the LAN and launches its own browser.

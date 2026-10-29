@@ -43,7 +43,7 @@ import {
  * gets, so the editor mounted the template and reported success over a document
  * it never opened (`vg-110`); `Content | undefined` let every later reader drop
  * the report again. `invalid` carries the validator's own issues, and a caller
- * that ignores it will not compile (ADR-0043). `too-large` is the same defect
+ * that ignores it will not compile. `too-large` is the same defect
  * one trigger over — a stored document past the store's size bound — and it is
  * its own kind rather than `none` for the same reason (`vg-409`).
  */

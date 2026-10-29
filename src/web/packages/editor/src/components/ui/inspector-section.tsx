@@ -82,10 +82,9 @@ export function InspectorSection(props: {
               {count}
             </span>
           )}
-          {/* The header's trailing rule, drawn in every current mockup
-              (`controls.html:31`, `:43`, `:119`, `:126`, `:152`, `:171` as
-              `flex:1;height:1px;background:var(--edge2)`). Nothing in the
-              product or in DESIGN.md argued against it. */}
+          {/* The header's trailing rule,
+              `flex:1;height:1px;background:var(--edge2)`. Nothing in the product
+              or in DESIGN.md argued against it. */}
           <span
             aria-hidden
             className="h-px flex-1 bg-edge-2"

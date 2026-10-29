@@ -28,7 +28,7 @@ const HOST = `http://127.0.0.1:${HOST_PORT}`;
 /** Every store sits in the app folder's settings directory, so each state below
  * is reachable by writing the same file the host reads — including after a
  * recycled server left state behind. They left the themes directory so that a
- * theme folder is only ever a theme (ADR-0017). */
+ * theme folder is only ever a theme. */
 const ACTIVE_FILE = path.join(HOST_SETTINGS_DIR, "active-theme.json");
 const ANSWERS_FILE = path.join(HOST_SETTINGS_DIR, "theme-answers.json");
 

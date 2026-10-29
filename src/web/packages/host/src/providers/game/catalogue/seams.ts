@@ -38,7 +38,7 @@ const POWERSHELL_TIMEOUT_MS = 10_000;
 
 /**
  * One-shot PowerShell: runs a script and parses its JSON stdout. Long-running
- * helpers belong to the 0102 supervisor; a catalogue read is a single call.
+ * helpers belong to the supervisor; a catalogue read is a single call.
  */
 async function runPowerShellJson(script: string): Promise<unknown> {
   const executable = powershellPath();

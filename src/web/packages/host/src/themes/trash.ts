@@ -6,7 +6,7 @@ import path from "node:path";
 
 /**
  * Moving a theme to the operating system's trash, which is the recovery the
- * delete is built on: a theme is a folder of authored work on disk (ADR-0017),
+ * delete is built on: a theme is a folder of authored work on disk,
  * so removing it is not a cleanup. The searches behind each route are why
  * nothing here is `fs.rm`.
  *

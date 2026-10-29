@@ -32,7 +32,7 @@ export function ControlToggle(
     readonly onChange: (value: boolean) => void;
     /** The row's shape, where the surface's drawing draws this switch as
      *  something other than the inspector's labelled row — the settings modal
-     *  draws it `boxed` (`settings.html:89-93`). */
+     *  draws it `boxed`. */
     readonly shape?: ControlShape;
   },
 ): React.JSX.Element {

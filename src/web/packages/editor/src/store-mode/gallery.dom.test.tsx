@@ -552,7 +552,7 @@ it("badges the cell whose theme came from the store, and leaves the other unbadg
 
 /**
  * **The online half's left slot is the drawing's, in the same band**: the kind
- * badge and the download count (`store-browse.html`). The count is pinned as the
+ * badge and the download count. The count is pinned as the
  * literal `1,204` because the thousands separator is the assertion — a bare
  * `1204` would pass on any locale and is what the red proof breaks — and the
  * badge as the drawing's `Theme`, which is also the copy case's value.
@@ -742,10 +742,9 @@ it("decides the install state from the catalogue and the item", () => {
 });
 
 /**
- * **The installed state is a mark, not a control** (the drawing's own comment at
- * `store-browse.html:112`): a check in `--accent` beside the word in `--muted`,
- * with no button, because there is nothing to do. A disabled button here would
- * be a control drawn where the drawing draws none.
+ * **The installed state is a mark, not a control**: a check in `--accent` beside
+ * the word in `--muted`, with no button, because there is nothing to do. A
+ * disabled button here would be a control drawn where the drawing draws none.
  */
 it("marks an installed online item without drawing a control", async () => {
   const container = await mount(

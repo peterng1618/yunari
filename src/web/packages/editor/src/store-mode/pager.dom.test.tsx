@@ -233,7 +233,7 @@ it("numbers nothing when there is nothing to page", () => {
 
 /**
  * A page count that is not a whole number is refused rather than truncated
- * (`AGENTS.md`: refuse invalid numeric input rather than coercing it). Half a
+ * (refuse invalid numeric input rather than coercing it). Half a
  * page is not a page, and answering 12 for 12.5 hides the caller's bug behind a
  * numeral nothing could draw.
  */

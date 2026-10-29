@@ -287,8 +287,8 @@ it("keeps the committed order the author's, not the vocabulary's", async () => {
 it("draws a proposed tag as a proposal rather than as a picked one", async () => {
   await mount(["retro-diner"]);
 
-  // The drawing's own reading (`store-detail.html`): a dashed pill saying so, so
-  // a reader knows the word is new rather than that the facet failed to match.
+  // The drawn reading: a dashed pill saying so, so a reader knows the word is
+  // new rather than that the facet failed to match.
   const drawn = pill("retro-diner");
   expect(drawn.textContent).toBe(uiCopy.panels.tagsProposed("retro-diner"));
   expect(drawn.className).toContain("border-dashed");

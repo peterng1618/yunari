@@ -22,8 +22,8 @@ import { resolvePointer } from "./pointer.js";
  * `sample()` is a cache read: a display asking for one of a source's keys
  * records demand, and one timer per source fetches at that source's own
  * interval. A source is never fetched while nothing asks for it, and a failing
- * source costs only its own keys. Decision 0099 records why providers own their
- * clocks rather than the host's poll cycle.
+ * source costs only its own keys. Providers own their clocks rather than the
+ * host's poll cycle.
  */
 
 const PROVIDER_ID = "custom";

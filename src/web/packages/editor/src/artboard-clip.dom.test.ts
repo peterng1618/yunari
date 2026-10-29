@@ -393,7 +393,7 @@ describe("the stage's artboard paint", () => {
   }
 
   it("drops the plate once the board declares background media", async () => {
-    // 0080. The plate is a `Rect` on the canvas, and the canvas sits above the
+    // The plate is a `Rect` on the canvas, and the canvas sits above the
     // media layer, so a plate covers the media exactly as the player's canvas
     // fill did. The letterbox — which the shell paints from the board's own
     // resolved colour — is behind the layer instead, so it is the board's colour

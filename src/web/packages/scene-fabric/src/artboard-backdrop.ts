@@ -34,14 +34,14 @@ export interface ArtboardBackdropOptions {
 
 /**
  * What is actually behind a glass panel: **the artboard's own paint, with its
- * media over it** (0080).
+ * media over it**.
  *
  * The paint is here rather than on the canvas because the canvas sits above the
  * media layer, where a fill of it would hide the media completely and leave the
  * reader no letterbox. It cannot simply be dropped, though: the glass samples
  * the canvas's own pixels, so a board whose paint only reached the host would
  * leave every panel sampling nothing — measured as alpha 130, the tint over
- * transparency — which is that defect in another costume.
+ * transparency — which is the same defect in another costume.
  *
  * The two are composed rather than listed because they are one surface: the
  * paint is what shows wherever the media is not, and a theme with no media (or
@@ -74,7 +74,7 @@ export function artboardBackdrop(
       : { plate: surfacePlate(surface, background) }),
     paint(ctx, region, device, sampling) {
       // The media first and the paint **underneath** it, so a frame the media
-      // could not paint is left where it was (0079): clearing to the colour
+      // could not paint is left where it was: clearing to the colour
       // first would throw away the one frame the reader would otherwise keep.
       if (media !== undefined)
         media.paint(
@@ -85,7 +85,7 @@ export function artboardBackdrop(
             : device,
           sampling,
         );
-      // **A display surface paints the paint, not this paint** (0125). The plate
+      // **A display surface paints the paint, not this paint**. The plate
       // is the host/disc box a panel actually sees, and it must not be turned
       // with the composition; the board-mapped fill below would be.
       if (surface !== undefined) return true;

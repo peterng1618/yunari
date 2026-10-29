@@ -33,7 +33,7 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
   let trapProved = false;
 
   for (const palette of PALETTES) {
-    // The product's own route to a palette (`0035`): the Appearance tab's radio,
+    // The product's own route to a palette: the Appearance tab's radio,
     // so what is measured is a palette the editor can really be in, and the
     // ring is measured where the author would see it.
     await dialog.getByRole("tab", { name: uiCopy.settings.appearance }).click();

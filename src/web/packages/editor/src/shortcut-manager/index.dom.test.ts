@@ -524,7 +524,7 @@ describe("ShortcutManager and a modal", () => {
 
   it("refuses every binding while a dialog is open, and answers again once it closes", () => {
     // Both shapes, because the editor has both: the three native modals and the
-    // library one, which decision `0038` puts on Base UI. A predicate that knew
+    // library one on Base UI. A predicate that knew
     // only one of them would let an author edit the document they are reading
     // about.
     const manager = new ShortcutManager();

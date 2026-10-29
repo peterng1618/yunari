@@ -404,7 +404,7 @@ async function start(): Promise<void> {
           shell.backdrop(),
           undefined,
           // The bridge's own picture is a read of the document too: the
-          // entered-group dim is lifted for it (0053, `vg-527`).
+          // entered-group dim is lifted for it (`vg-527`).
           () => shell.editor.groupingManager.suspendDim(),
         )?.toDataURL("image/png"),
       // The theme's paints, for the Tokens pane's title-bar count (§7.3). The
@@ -557,7 +557,7 @@ async function start(): Promise<void> {
     }
     // A theme the URL named that is stored and does not validate is not a
     // blank success: the author is told why, over the template that stands in
-    // for the document they asked for (vg-110, ADR-0043).
+    // for the document they asked for (vg-110).
     case "invalid": {
       const theme = createNewFabricTheme();
       await mount({

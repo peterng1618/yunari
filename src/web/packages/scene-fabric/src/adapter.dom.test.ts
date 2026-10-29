@@ -333,7 +333,7 @@ describe("creating a scene", () => {
     // §53: content outside the artboard must not paint over the letterbox
     // bars, which are the host's background showing where the design is not.
     //
-    // **The paint is deliberately absent here (0080).** This canvas sits above
+    // **The paint is deliberately absent here.** This canvas sits above
     // the media layer, so a fill on it hides the media and leaves the reader no
     // letterbox; `scene.ts` owns the paint and applies it only when the theme
     // declares no background media. Asserted as empty rather than left alone,
@@ -651,7 +651,7 @@ describe("updating a scene", () => {
     expect(adapter.objectFor("drop")).toBeUndefined();
     expect(canvas.getObjects()).toHaveLength(1);
     // `canvas.remove()` does not dispose, so the adapter — the party removing a
-    // node the document dropped — says so itself (`vg-486`, ADR-0052). Without
+    // node the document dropped — says so itself (`vg-486`). Without
     // it a chart leaks its ECharts instance and its backing store: 196x the heap
     // over 100 cycles, measured.
     expect(chart.disposed).toBe(true);

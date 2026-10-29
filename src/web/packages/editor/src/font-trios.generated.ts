@@ -12,7 +12,7 @@
 // a standalone entry carries whichever pairing reached that face first, and
 // the same `(family, weight)` is a clamp for one pairing and not for another.
 //
-// Deliberately past the 800-line stop in AGENTS.md, and the exception is
+// Deliberately past the 800-line stop, and the exception is
 // recorded rather than assumed: 807 KB raw is 28.5 KB brotli, the file is
 // read once and never hand-edited, and `npm run size` gates the player
 // rather than the editor.

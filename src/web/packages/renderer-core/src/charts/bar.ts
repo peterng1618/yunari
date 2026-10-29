@@ -300,7 +300,7 @@ export function buildSegmentedBarOption(
   const count = segmentCount(segmentDivisorOf(settings));
   const data: SegmentedBarDatum[] = inputs.map((input, index) => {
     if (!hasPlottableValue(input.sample)) return [index, null];
-    // A bar whose paint resolved to nothing carries no value either (0007).
+    // A bar whose paint resolved to nothing carries no value either.
     if (resolveChartPaint(settings.fill, palette) === undefined) {
       return [index, null];
     }
@@ -471,7 +471,7 @@ export function toBarDataItem(
 
   // A bar whose paint resolved to nothing carries no value either: a bar of
   // transparent ink over a live number is the one rendering that looks like
-  // data and is not (0007).
+  // data and is not.
   return {
     value: color === undefined ? null : display,
     itemStyle: { color: color ?? NO_INK, borderRadius },

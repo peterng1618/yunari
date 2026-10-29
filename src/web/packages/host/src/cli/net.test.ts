@@ -268,7 +268,7 @@ describe("localNames", () => {
 
     // The leaf's SANs are built from exactly this list (`tls/authority.ts`), so
     // an https dial by the name is a name mismatch the owner cannot tell from a
-    // root they had not installed — the trap `0070` exists to remove. Asserted
+    // root they had not installed — the trap this check removes. Asserted
     // here rather than through a certificate because this is the whole of the
     // host's half; the leaf is `authority.test.ts`'s.
     expect(names).toContain("study-pc.local");

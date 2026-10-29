@@ -45,11 +45,10 @@ import "./editor-shell/editor-shell.css";
  * backdrop treatment of the column, and the root already stands in for the
  * surface the chrome is composited over.
  *
- * The pane column also mounts the two row shapes the drawings give a row and the
- * field row does not: the settings modal's `boxed` switch row
- * (`settings.html:89-93`) and the Add pane's `headed` asset picker
- * (`shell.html:128-132`). Both are drawn by a surface's own drawing rather than
- * by the control set's default, so the fixture is where they are measured.
+ * The pane column also mounts the two row shapes a surface gives a row that the
+ * field row does not: the settings modal's `boxed` switch row and the Add pane's
+ * `headed` asset picker. Both come from a surface's own drawing rather than from
+ * the control set's default, so the fixture is where they are measured.
  *
  * Every class here is a role or a scale step. A literal would be the defect the
  * fixture exists to catch, so the fixture is held to the same ratchet
@@ -257,10 +256,9 @@ function Fixture(): React.JSX.Element {
               <ControlText label="Author" value="Yunari" onCommit={noop} />
             </div>
             {/* The two shapes a row takes when a drawing shapes it differently.
-                The boxed switch is the settings modal's (`settings.html:89-93`)
-                and the headed picker is the Add pane's (`shell.html:128-132`);
-                both are here because the fixture is where a shape is measured,
-                and neither is a labelled field row. */}
+                The boxed switch is the settings modal's and the headed picker is
+                the Add pane's; both are here because the fixture is where a
+                shape is measured, and neither is a labelled field row. */}
             <div data-fixture="boxed">
               <ControlToggle
                 label="Follow the system"

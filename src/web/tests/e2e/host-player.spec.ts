@@ -677,8 +677,8 @@ test.describe("hosted player over the real host", () => {
     // data-diff `update` callback and only assigns it after a render that drew
     // an arc. The display's first render happens before telemetry arrives, so
     // the first sample crossed that read with the flag flipping under a datum
-    // that had been there all along. A gauge with no arc now carries no datum
-    // (`0008`), which turns the crossing into an `add` — and the editor, which
+    // that had been there all along. A gauge with no arc now carries no datum,
+    // which turns the crossing into an `add` — and the editor, which
     // mounts with a sample in hand, never took that path at all.
     await saveStarterThroughTheHost(page);
     await openDisplayWithLiveData(page);
@@ -1549,7 +1549,7 @@ test.describe("a display fed by the real host", () => {
     // **The panel blurs the photograph, at this mount's scale.** The band is a
     // rectangle in artboard units and `object-fit: cover` puts the whole file
     // over the artboard, so the backdrop under the panel must measure what
-    // that rectangle of the photograph measures. Before 0012 the sampler took
+    // that rectangle of the photograph measures. The sampler used to take
     // a pixel-for-pixel crop of the middle of the file sized by the device
     // rect — the middle 71.8 % here where the element shows all of it — and
     // this read 5.08 against the 7.45 below. The editor, at its 0.3744
@@ -2388,7 +2388,7 @@ test.describe("the real player at the sizes and shapes it is read at", () => {
           "vram-gauge": ratio("vram-gauge", "chroma"),
         },
         // **A gauge without a datum draws no arc, and that is the rule, not a
-        // failure** (`0008`): the reading's text is the gap `—%` until the host
+        // failure**: the reading's text is the gap `—%` until the host
         // reports one. Linux CI has no VRAM provider, so the floor below is
         // asserted only where a datum exists.
         datum: {

@@ -19,7 +19,7 @@ import { tooltip } from "../../editor-shell/controls/tooltip.js";
  * refusal, which is words in the row instead). It renders here rather than at
  * the caller, because the id `aria-describedby` points at is minted inside the
  * control — a caller-side description would be an imperative DOM write, the
- * ADR-0039 violation this set exists to remove.
+ * violation this set exists to remove.
  */
 export type ControlProps = {
   readonly label: string;
@@ -189,11 +189,11 @@ export function isBlocked(props: {
  *   `--panel-2` inside a 1px `--edge` at `--radius-lg`, the label at `flex:1`
  *   and the switch at the right, with no label column at all. A surface whose
  *   drawing draws that owns it — the settings modal — and the inspector's own
- *   switch row (`shell.html:333`) is a `column` row, which is why this is a
- *   choice of the caller rather than a property of the toggle.
+ *   switch row is a `column` row, which is why this is a choice of the caller
+ *   rather than a property of the toggle.
  * - `headed` — the label is the region's own heading, drawn above a control that
- *   spans the row: `shell.html:128-132` draws the Add pane's asset picker under
- *   an `Asset` eyebrow, the trigger spanning the pane with the file name at
+ *   spans the row: the Add pane's asset picker sits under an `Asset` eyebrow,
+ *   the trigger spanning the pane with the file name at
  *   `flex:1`. Not a labelled row, and the heading is what names the control.
  *
  * What each shape's classes declare is not free: the drawing's `border-radius`

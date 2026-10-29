@@ -68,11 +68,10 @@ test(`the Assets pane's import control takes control text, not the shell's ${the
   await page.goto(EDITOR);
   await openPane(page, "Assets");
 
-  // Plan 8's census measured these boxes' text as *inherited*, not stated
-  // (D9), so they took the shell root's `--text-md`. §2 gives control text
-  // `--text-sm`, and the box `controls.html:112` draws for both plain-DOM
-  // groups states it — as does `shell.html:137`/`:140` for this pane's own
-  // instances. The expected pair is the stylesheet's own declaration, so the
+  // These boxes' text was *inherited*, not stated, so they took the shell
+  // root's `--text-md`. §2 gives control text `--text-sm`, and both plain-DOM
+  // groups state it — as does this pane's own instances. The expected pair is
+  // the stylesheet's own declaration, so the
   // row moves with §2 rather than restating it.
   //
   // The import button is the Assets pane's now; the Add pane's file section

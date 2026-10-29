@@ -76,9 +76,9 @@ it("names each reading for the question it answers", () => {
  * and this table is not.** Every surface that prints it reads
  * `uiCopy.store.fromStore`, so a case asserting the badge says *that key* stays
  * green if the key's own value changes — and it did change once: *Installed* is
- * the **online** half's footer verb (`store-detail.html`), where a theme is read
- * against the catalogue rather than against this machine's copy, while the local
- * half badges its cells *From the store* (`store-themes.html`). One fact, two
+ * the **online** half's footer verb, where a theme is read against the catalogue
+ * rather than against this machine's copy, while the local half badges its cells
+ * *From the store*. One fact, two
  * views, two words; this is the only assertion that tells them apart.
  */
 it("words the local origin badge the way the drawing does", () => {
@@ -88,9 +88,8 @@ it("words the local origin badge the way the drawing does", () => {
 /**
  * **The two store words the drawings settle, pinned as literals because the
  * drawings own them and this table does not.** Both were drift: the tabs read
- * `Local`/`Online` where both drawings label them `Your themes`/`Store`
- * (`store-browse.html:65-69`), and the kind badge read `Dashboard theme` where
- * both drawings draw `Theme` (`store-browse.html:122`, `store-detail.html:79`).
+ * `Local`/`Online` where both drawings label them `Your themes`/`Store`, and
+ * the kind badge read `Dashboard theme` where both drawings draw `Theme`.
  * A case asserting the key would stay green through the value changing again.
  */
 it("names the store's two halves the way the drawings label the tabs", () => {
@@ -255,7 +254,7 @@ it("prints every menu row in sentence case", () => {
 
 /**
  * The digit arm of the first-word rule, on the shapes that reach it. A menu row
- * may begin with a number (`30 FPS` did until the chart rate row went, 0129),
+ * may begin with a number (`30 FPS` did until the chart rate row went),
  * and `^[A-Z0-9]` alone admitted any such row — `3d view` included, which is
  * how `2d mode` would have slipped through a sentence-case net unnoticed.
  */

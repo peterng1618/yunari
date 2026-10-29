@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One root for agent scratch, and a refusal anywhere else (0081).
+ * One root for agent scratch, and a refusal anywhere else.
  *
  * The question this answers, in the user's words: *"How do we prevent agents
  * from saving scratch files & folders from all over the places?"* — asked after a
@@ -209,7 +209,7 @@ function decide(input) {
  * legitimate store, so the segment rule allows the whole subtree and would never
  * see the skeletons inside it. `git worktree list` is the registry that tells a
  * live seat from its leftovers, and the leftovers are the git-shaped cleanup's
- * own signature (0081).
+ * own signature.
  */
 function sweep() {
   const ignored = git([
@@ -368,7 +368,7 @@ try {
     process.stderr.write(
       [
         "",
-        "SCRATCH GATE — the tree holds scratch (0081).",
+        "SCRATCH GATE — the tree holds scratch.",
         "",
         ...stray.map((entry) => `  ignored, not a store:  ${entry}`),
         ...tracked.map((entry) => `  tracked, scratch-shaped: ${entry}`),
@@ -400,7 +400,7 @@ try {
   process.stderr.write(
     [
       "",
-      "SCRATCH GATE — refused (0081).",
+      "SCRATCH GATE — refused.",
       "",
       `  ${verdict.target}`,
       "",

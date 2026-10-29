@@ -650,7 +650,7 @@ describe("Settings", () => {
   });
 
   it("applies the palette where the chip applied it — the attribute, and the storage", async () => {
-    // The defect `0035` exists to prevent is a palette applied to React state
+    // The defect this exists to prevent is a palette applied to React state
     // alone, which leaves every portalled popup painting the old one.
     // A palette other than the one already in force: picking the current value
     // is a no-op the primitive does not report, so it could not fail.

@@ -7,7 +7,7 @@ import type {
 } from "@yunari/renderer-core";
 
 /**
- * The host's library is a folder (ADR-0017), so a save carries the document
+ * The host's library is a folder, so a save carries the document
  * and its declared bytes rather than an archive the host would only unpack
  * again. The archive is still the export; this is the working path.
  */
@@ -92,7 +92,7 @@ export class ThemeConflictError extends Error {
  * The host holds the theme and its document does not validate — a different
  * answer from "no such theme", which is what the host used to give for both.
  * `issues` is the validator's own list, carried through the `422` the host
- * answers (ADR-0043), so a caller can tell this from the 404 a dead id gets and
+ * answers, so a caller can tell this from the 404 a dead id gets and
  * say why rather than reporting a bare status.
  */
 export class ThemeValidationError extends Error {
@@ -287,7 +287,7 @@ export function createThemeLibraryClient(options?: {
       // Its own error, because the theme is there and the reason is a document
       // the author can fix — not the not-found a dead id gets. Without this the
       // two collapsed into one failure and the editor reported success over a
-      // document it never opened (vg-110, ADR-0043).
+      // document it never opened (vg-110).
       if (response.status === 422) {
         const body = (await response.json().catch(() => undefined)) as
           | { readonly issues?: unknown }

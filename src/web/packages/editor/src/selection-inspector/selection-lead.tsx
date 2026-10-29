@@ -17,8 +17,8 @@ import { type ObjectActionId, objectAction } from "../object-actions.js";
  * advertise an action `applyArrange` would refuse.
  *
  * Values in, a callback out: `index.ts` projects the buttons from the live
- * selection and hands the run back, so React holds no Fabric object (ADR-0039)
- * and decides no eligibility of its own.
+ * selection and hands the run back, so React holds no Fabric object and
+ * decides no eligibility of its own.
  */
 
 /**

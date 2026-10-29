@@ -1640,8 +1640,8 @@ test.describe("Fabric editor route", () => {
     // Both arrived at the quarter turn the Add pane hands over, and they are
     // not the same shape: an open sweep has no interior to fill, so it is
     // stroked, while the sector is a region and takes the fill. A filled arc
-    // closes with a chord and draws a circular segment — refused at revival
-    // (ADR-0026) — so this is what makes the two pictures mean different things.
+    // closes with a chord and draws a circular segment — refused at revival —
+    // so this is what makes the two pictures mean different things.
     //
     // Read from the **saved document**, not from the live objects: Fabric gives
     // every shape a runtime default `fill`, so a live read cannot tell an
@@ -2275,7 +2275,7 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.goto(EDITOR);
-    // Tracking is the run's own value (0128), not the token's: the row lives in
+    // Tracking is the run's own value, not the token's: the row lives in
     // the selection inspector's runs section, so the case selects the object
     // that wears it. The wordmark is the starter's first run.
     await selectLayer(page, "wordmark");
@@ -3706,7 +3706,7 @@ test.describe("Fabric editor route", () => {
       .poll(async () => (await pixelAtObjectCentre(page, "outside"))[3])
       .toBe(115);
 
-    // **A capture reads the document, not the screen** (0053, `vg-527`).
+    // **A capture reads the document, not the screen** (`vg-527`).
     // `bridge.capture` is the product's own capture — the one a theme package's
     // thumbnail and the library card both come from — so this reads the
     // artifact an author would hand somebody rather than the mechanism under

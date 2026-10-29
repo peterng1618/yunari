@@ -160,7 +160,7 @@ interface ThemeLibraryManagerOptions {
 }
 
 /**
- * Saves a document into the host's library (ADR-0017), reads one back, and
+ * Saves a document into the host's library, reads one back, and
  * holds the base every such save is checked against.
  *
  * The base is the reason this is an owner and not a helper: it is the claim

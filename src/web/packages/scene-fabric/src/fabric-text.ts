@@ -490,7 +490,7 @@ export function refreshBoundText(
           // second paints its seconds once a second, but a minutes or days clock
           // paints only when its own text moves — the sample cadence is the
           // host's, not the author's. The run's type is compared too: a role
-          // default can change while the string stays the same (0128).
+          // default can change while the string stays the same.
           if (
             object.text === shape.text &&
             (authored.align === undefined ||

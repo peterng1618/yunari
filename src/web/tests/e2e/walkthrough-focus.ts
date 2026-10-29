@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
  * Observing and moving focus: the §13.1 census's own primitives.
  *
  * Split out of `host-walkthrough.spec.ts` under Ruling L, which is the size
- * AGENTS.md's 800-line stop forces and the responsibility the split is by: this
+ * 800-line stop forces and the responsibility the split is by: this
  * module knows where focus *is* and how a keyboard makes it move, and nothing
  * about the shell's own vocabulary. What a particular control means — a group,
  * a pane, a popup — belongs to `walkthrough-shell.ts`, and the spec holds the

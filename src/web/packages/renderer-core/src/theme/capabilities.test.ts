@@ -41,7 +41,7 @@ describe("the capability matrix", () => {
   });
 });
 
-describe("a group is an editor entity, not a drawable (spec 0011 D2)", () => {
+describe("a group is an editor entity, not a drawable", () => {
   it("presents no geometry at all", () => {
     // Its transform IS its children's values, so a row would restate something
     // the group does not own. Moving and rotating a group is still done — on

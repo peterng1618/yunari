@@ -45,7 +45,7 @@ typography:         # --text-* with their stated line-height companions
     lineHeight: 1.2
 omitted:
   - section: colors
-    reason: The palette resolves per theme at runtime (ADR-0035); one YAML value per role would be false. The roles and their per-theme values are normative in the Colors section below.
+    reason: The palette resolves per theme at runtime; one YAML value per role would be false. The roles and their per-theme values are normative in the Colors section below.
   - section: components
     reason: The control vocabulary is normative as prose and implemented in packages/editor/src/components/ui/; tokens would be a second owner of it.
 ---
@@ -54,10 +54,8 @@ omitted:
 
 **Normative.** Every editor surface is built from what is written here, and a
 new surface that needs something absent from it changes this file in the same
-commit rather than inventing a local exception. The design record for *why* is
-[`docs/superpowers/specs/2026-10-08-editor-design-language-design.md`](docs/superpowers/specs/2026-10-08-editor-design-language-design.md);
-this file is what that spec produced and what later work reads instead of
-re-deriving.
+commit rather than inventing a local exception. This file is the design record
+and what later work reads instead of re-deriving.
 
 Scope: **the editor**. The player has its own chrome rules, and the canvas —
 inside the artboard — is the author's design, not ours.
@@ -155,7 +153,7 @@ The persisted model is a **type token** that names a face: family, an optional
 weight and an optional declared face asset. Size, line height and tracking live
 on the run's own style, so one face worn at two sizes needs one token, not two. The three
 roles are the token ids — `heading`, `body`, `mono` — and the theme always
-carries all three (`docs/decisions/0128`).
+carries all three.
 
 ## Layout
 
@@ -201,14 +199,12 @@ which of those three a surface is.
 **The store's gallery grid is 272px minimum per column.** The number is not the
 local half's own: it is derived from the **online** half's busiest facts band —
 its badge, its counts and its four actions — so a person switching halves does
-not watch the grid change shape. It is fixed by the drawing
-(`docs/design/mockups/current/store-themes.html`), which states where it comes
-from, and the grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
+not watch the grid change shape. Its column width is fixed at 272px, and the
+grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
 follows the width, so no breakpoint is invented for it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
-panel.** Both numbers are the drawing's
-(`docs/design/mockups/current/store-detail.html`). The width is not the settings
+panel.** Both numbers are this surface's own. The width is not the settings
 modal's: 560 is a text sheet's box and this one's subject is a picture — 960
 against 560, with the stage flush to the box's edges rather than inset by the
 sheet's padding. **The stage is one height for every item**: the box's height
@@ -220,9 +216,8 @@ not do. **A short viewport caps the box at 90vh**, so the foot stays on screen
 on a laptop.
 
 **The asset preview is the Finder's box, with the same 270px panel.** Its
-ceiling is `min(1132px, 100vw − 48px) × min(852px, 100vh − 48px)` from
-`assets-preview.html`, because its subject is the file at the size it will be
-used. The panel's width is the store viewer's, so the facts sit where a person
+ceiling is `min(1132px, 100vw − 48px) × min(852px, 100vh − 48px)`, because its
+subject is the file at the size it will be used. The panel's width is the store viewer's, so the facts sit where a person
 already looks and only the stage changes between the two surfaces.
 
 ### The header
@@ -248,7 +243,7 @@ region is per-mode**: `File`/`Edit`/`View` and the publish control are the
 editor's, a mode with actions of its own carries them there, and a mode with none
 shows nothing beside the switch. The editor's own body is hidden, not unmounted,
 while another mode shows — a mode switch never loses an unsaved document, and it
-asks before it leaves a dirty one (`docs/decisions/0074`).
+asks before it leaves a dirty one.
 
 Why `View` stays: the things in it — preview/source, run display — are
 changed *while* designing, many times a session. Settings is for
@@ -527,7 +522,7 @@ labelled **row**, whose `ControlRow` requires a visible label, so this is the sa
 primitive with header-local paint rather than a fourth row shape grown for one
 caller. Rule 5 below is met by the group's own name rather than by a label column,
 and by the group's and each segment's id, derived from the mode the way
-`useControlIds` derives one (`docs/decisions/0074`).
+`useControlIds` derives one.
 
 **The checkbox choice row is rule 7's shape where the set admits more than one
 answer.** Rule 7 gives a set too large for `Segmented` as a list of choice rows,
@@ -548,9 +543,8 @@ focus; the focus boundary must measure ≥3:1 in all six palettes.
 
 **The store's search well is 180px.** A well otherwise fills its field row's value
 cell (§5 rule 2), and the store's header row is a bar rather than a field row, so
-this one is sized by the drawing that fixes it
-(`docs/design/mockups/current/store-themes.html`) and holds that width while the
-facet row beside it wraps to a second line.
+this one is sized to that 180px and holds that width while the facet row beside
+it wraps to a second line.
 
 **The store's page-size well is 76px**, for the same reason and from the same
 drawing: the pager is a bar rather than a field row, so the per-page choice is

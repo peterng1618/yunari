@@ -35,7 +35,7 @@ import {
  *
  * `sample()` is a cache read: it records demand, starts or restarts the helper
  * when the demand shape changed, and answers from the last line. The helper is
- * what owns the one-second cadence (0103); this provider owns its lifetime and
+ * what owns the one-second cadence; this provider owns its lifetime and
  * the artwork cache.
  */
 

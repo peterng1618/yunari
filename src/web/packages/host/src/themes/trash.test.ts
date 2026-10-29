@@ -11,9 +11,9 @@ import {
 } from "./trash.js";
 
 /**
- * What each platform's trash is reached by, without running any of them. The
- * decision note records why there is no dependency and
- * no native binary; these are the claims that note makes, as assertions.
+ * What each platform's trash is reached by, without running any of them. There
+ * is no dependency and no native binary, and these cases are the assertions
+ * behind that.
  */
 describe("trashPlan", () => {
   const folder = "/home/ada/.yunari/themes/living-room";

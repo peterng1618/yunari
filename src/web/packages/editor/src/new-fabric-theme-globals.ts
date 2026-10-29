@@ -4,7 +4,7 @@ import type { FabricPalette, TypeToken } from "@yunari/renderer-core";
  * The starter theme's palette, type tokens and the two lookups the scene
  * helpers need from them.
  *
- * Its own module because `new-fabric-theme.ts` outgrew `AGENTS.md`'s 800-line
+ * Its own module because `new-fabric-theme.ts` outgrew the 800-line
  * stop, and the globals are a separable responsibility: they are the document's
  * vocabulary, and every object in the scene is written against them rather than
  * against the scene body.

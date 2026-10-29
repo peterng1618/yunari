@@ -530,8 +530,8 @@ describe("the selection inspector", () => {
 
     // A bounded number is DESIGN.md's slider (§5) — Fabric's own 0–1, projected
     // here as 0–100 — so the control is a track and the well reads the
-    // percentage. `inspector-controls.html` names opacity as its example, and
-    // the glass blur drew the same conclusion one directory away.
+    // percentage. Opacity is the example, and the glass blur drew the same
+    // conclusion one directory away.
     expect(opacity.type).toBe("range");
     expect(opacity.getAttribute("min")).toBe("0");
     expect(opacity.getAttribute("max")).toBe("100");

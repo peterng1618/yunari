@@ -32,7 +32,6 @@ import { type WeatherReading, weatherKey } from "./open-meteo.js";
  * and gets whatever the last acquisition produced. One timer per provider
  * fetches on the consumer's cadence, backs off on failure, and stops once no
  * display has asked for longer than the window that makes a reading stale.
- * Decision 0099 records why weather owns its clock.
  */
 
 const WEATHER_PROVIDER_ID = "weather";

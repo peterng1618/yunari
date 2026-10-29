@@ -21,7 +21,7 @@ import type { PanelGeometry } from "./panel-device.js";
  * - The wire frame is the panel's portrait geometry (464×1920 for the 9.2"),
  *   and the glass is a landscape strip. A picture is upright when the frame
  *   holds the landscape composition turned **90° clockwise** (`transpose=1`);
- *   measured on the attached panel in `0134`, whose probe found the opposite
+ *   measured on the attached panel, where the probe found the opposite
  *   turn for a hand-made clip and was corrected by the first integrated run.
  * - The vendor's own clips use `bframes=0` and `ultrafast`. A stream with
  *   B-frames leaves the panel's decoder waiting for frames it has not
@@ -97,7 +97,7 @@ export function panelH264Args(
  * **The pan is `scene-fabric`'s `placement`, in ffmpeg expressions.** The same
  * rule applies here because the device, not the player page, is drawing: cover,
  * then pan within the overhang, and zoom first when the source's own aspect
- * leaves no overhang to pan through (`0095`). The box is the landscape view
+ * leaves no overhang to pan through. The box is the landscape view
  * (`height × width`), because the turn comes after the crop.
  */
 function panelFilter(

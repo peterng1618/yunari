@@ -126,7 +126,7 @@ describe("the artboard backdrop", () => {
   it("paints the board's colour when the theme declares no media", () => {
     // The case the canvas used to cover: a colour-only theme has no media layer
     // for a panel to sample, so without this the panel composites over
-    // transparency — alpha 130, measured, which is the defect 0079 closed.
+    // transparency — alpha 130, measured, which is the defect this prevents.
     const context = scratch();
     const painted = artboardBackdrop({
       background: COLOUR,
@@ -158,7 +158,7 @@ describe("the artboard backdrop", () => {
   });
 
   it("keeps the media's last frame across one it cannot paint", () => {
-    // 0079 in one assertion: the colour is painted *under* what is already in
+    // In one assertion: the colour is painted *under* what is already in
     // the surface, so a video's loop wrap — where `drawImage` refuses the
     // source — does not blank the frame the reader would otherwise keep.
     const context = scratch();

@@ -147,7 +147,7 @@ export class LiveRuntime {
    * The refresh loop's own call.
    *
    * Separate from `refresh` only in *when* it runs, never in what it does. The
-   * scene loop is a fixed 30 fps (0129), and a chart that is animating does not
+   * scene loop is a fixed 30 fps, and a chart that is animating does not
    * make a clock's seconds change any faster, so the repaint is on the reading's
    * cadence instead, and the canvas is not asked to render at all until then: an
    * unchanged scene re-rendered is thirty identical pictures a second, and the

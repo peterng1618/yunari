@@ -34,7 +34,7 @@ export const DEFAULT_HOST = "127.0.0.1";
 /** Stable Yunari data location across platforms; the app folder. */
 const DEFAULT_APP_DIR = path.join(os.homedir(), ".yunari");
 
-/** One directory per theme, read and written in place (ADR-0017). */
+/** One directory per theme, read and written in place. */
 export const DEFAULT_THEMES_DIR = path.join(DEFAULT_APP_DIR, "themes");
 
 /** Host state, kept out of the library so a theme folder is only ever a theme. */

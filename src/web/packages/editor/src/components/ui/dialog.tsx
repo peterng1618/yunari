@@ -24,7 +24,7 @@ export const ACTION_BUTTON =
 
 /**
  * One command in a viewer's panel foot: a bordered box holding a 12px glyph and
- * one word (`store-detail.html`, `assets-preview.html`).
+ * one word.
  *
  * The store's item panel and the asset preview draw the same foot, so they draw
  * this one control rather than two copies that drift. `tone` is the only
@@ -80,8 +80,8 @@ export function ActionBox(props: {
 
 /** shadcn's Dialog, hand-owned and reduced to what the one sheet needs.
  *
- * Decision `0038` rules Base UI the editor's one primitive library, and
- * decision `0033` is why this plan has a Dialog and not a Tooltip. The scrim
+ * Base UI is the editor's one primitive library, and this sheet is a Dialog
+ * rather than a Tooltip. The scrim
  * and the popup are portalled to `body` and styled by the shell's own classes,
  * and `applyShellPalette` writes `data-shell-palette` on `documentElement`
  * precisely so a surface portalled there still recolours (`palette.ts:35-49`)

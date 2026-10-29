@@ -531,18 +531,18 @@ body,
   --finder-footer-height: 52px;
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
   --finder-card-min-width: 168px;
-  /* The asset preview's box and right panel are the drawing's own
-     (`assets-preview.html`): the finder's inset-24 size, a 270px facts column,
-     and a fixed stage ground a picture is judged against under every palette.
+  /* The asset preview's box and right panel: the finder's inset-24 size, a
+     270px facts column, and a fixed stage ground a picture is judged against
+     under every palette.
      The header gutter clears the 26px close control. */
   --asset-preview-width: 1132px;
   --asset-preview-height: 852px;
   --asset-preview-panel-width: 270px;
   --asset-preview-header-gutter: 48px;
   --asset-preview-stage: #080a0d;
-  /* The store item's own surface (`store-detail.html`): a 960 x 760 box with a
-     270px facts column. The stage takes every pixel the panel leaves, so the
-     box keeps one height as a person steps between items, and its ground is the
+  /* The store item's own surface: a 960 x 760 box with a 270px facts
+     column. The stage takes every pixel the panel leaves, so the box keeps
+     one height as a person steps between items, and its ground is the
      viewer's fixed dark rather than the canvas paint. */
   --store-item-height: 760px;
   --store-item-panel-width: 270px;
@@ -564,9 +564,8 @@ body,
      scanned, and its rows are label-and-well pairs that a 2560px window would
      stretch past reading. The measure is the drawing's own. */
   --host-settings-measure: 640px;
-  /* The finder's dimensions and the Assets card's mark are the drawings'
-     (`asset-finder-fonts.html`, `assets-pane.html`); the specimen glyph sizes
-     are the two panels' own. The specimen backdrop is fixed on purpose: a font
+  /* The finder's dimensions and the Assets card's mark are the panels' own;
+     the specimen glyph sizes are the two panels' own. The specimen backdrop is fixed on purpose: a font
      preview has to read the same under every palette, so it cannot be a §4
      role. */
   --font-preview-width: 336px;
@@ -829,7 +828,7 @@ body,
   letter-spacing: 0.18em;
   color: var(--shell-accent);
 }
-/* §7.1's mode switch: §5's Segmented, in the header's bare form (0074). The
+/* §7.1's mode switch: §5's Segmented, in the header's bare form. The
    well is the control's own — `--panel-2` inside a 1px `--edge` at
    `--radius-md` — and it is the group that carries the three labels, with no
    row label beside it, because the drawing draws none. The chosen item is
@@ -1085,9 +1084,8 @@ body,
    the ground bar beside it fell back to editorial — two bars of one preview
    disagreeing, with no gate able to see it.
 
-   **Two bars, the palette's ground and its accent** — the drawing
-   (`current/settings.html:44-87`) draws both, and one bar cannot show a palette
-   §4 gives two roles. The row that reads the preview's height addresses
+   **Two bars, the palette's ground and its accent** — one bar cannot show a
+   palette §4 gives two roles. The row that reads the preview's height addresses
    `.editor-shell-palette-swatch`, which is the ground bar; the accent bar is its
    next sibling. */
 .editor-shell-palette-swatch,
@@ -1181,13 +1179,11 @@ body,
    pixel short of that edge. The inset holds the slots where the centre puts
    them, so the hairline draws a boundary without moving the rail's contents.
 
-   The drawing is the one that was over, and plan 7 Task 3 Step 1 corrected it.
-   `shell.html`'s rail is a **46px border-box** — the drawing's own `*` rule sets
-   `box-sizing: border-box`, so the brief's "47px content-box" premise was wrong —
-   but with no left inset its slots sat half a pixel left of the strip's centre
-   and its accent bar half a pixel short of the strip's inner edge. The drawing
-   now carries the same 1px left inset the product does, so the two centre their
-   slots the same way. The product's 46px is DESIGN.md's. */
+   The rail is a **46px border-box** — a `*` rule sets
+   `box-sizing: border-box`, so a "47px content-box" premise would be wrong — but
+   with no left inset its slots would sit half a pixel left of the strip's centre
+   and its accent bar half a pixel short of the strip's inner edge. The 1px left
+   inset below keeps both centred. The product's 46px is DESIGN.md's. */
 .editor-shell-rail {
   grid-area: rail;
   display: flex;
@@ -1545,9 +1541,8 @@ body,
   padding: 4px 8px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* §2 — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1563,9 +1558,8 @@ body,
   padding: 4px 6px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* §2 — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1595,9 +1589,8 @@ body,
   padding: 4px 8px;
   border: 1px solid var(--shell-edge);
   border-radius: 6px;
-  /* §2 — the box `controls.html:112` draws for both plain-DOM groups states
-     control text, and this rule stated no type at all, so it took the shell
-     root's `--text-md` 13px instead (plan 8's D9). */
+  /* §2 — both plain-DOM groups state control text, and this rule stated no
+     type at all, so it took the shell root's `--text-md` 13px instead. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   background: var(--yunari-control-bg);
@@ -1800,8 +1793,8 @@ body,
   padding: 0;
 }
 
-/* The asset preview (`assets-preview.html`): the finder's inset-24 box, no title
-   bar, and a fixed stage taking every pixel the 270px panel leaves. It is a
+/* The asset preview: the finder's inset-24 box, no title bar, and a fixed
+   stage taking every pixel the 270px panel leaves. It is a
    viewer rather than a sheet, so it overrides the sheet's width cap, padding
    and scroll: the stage clips and the panel's body scrolls. The way out is the
    panel header's corner, not a title bar's. */
@@ -1878,8 +1871,7 @@ body,
   margin-top: 14px;
 }
 /* §2's eyebrow, exactly — `--text-2xs`, 600, `.11em`, muted, uppercase, and it
-   labels a region rather than a control. The drawing is
-   `current/settings-keyboard.html:54`. */
+   labels a region rather than a control. */
 .editor-shell-dialog h3 {
   margin: 0 0 4px;
   font-size: var(--text-2xs);
@@ -1899,12 +1891,12 @@ body,
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  /* §3 has no 3 step; the drawing takes 4 (`current/settings-about.html`). */
+  /* §3 has no 3 step, so this takes 4. */
   padding: 4px 0;
 }
 /* §5 rule 2's read-only rows — the About pane's and the `?` sheet's. The
-   Keyboard tab's rebind row is excluded: it is interactive, and keeps the flex
-   row its drawing gives it (`current/settings-keyboard.html:56`). */
+   Keyboard tab's rebind row is excluded: it is interactive, and keeps its flex
+   row. */
 .editor-shell-dialog dl > div:not([data-yunari-shortcut-row]) {
   display: grid;
   grid-template-columns: 74px 1fr;
@@ -1956,11 +1948,10 @@ body,
   color: var(--shell-accent);
 }
 
-/* The settings modal's own navigation and body (§7). The drawing
-   (`current/settings.html:22-39`) draws a `150px` column of three glyph+label
-   rows beside the panel, the active row lifted and marked with a 2px accent bar
-   on its leading edge; the horizontal word strip this replaces is a control the
-   drawing does not draw.
+/* The settings modal's own navigation and body (§7). A `150px` column of three
+   glyph+label rows beside the panel, the active row lifted and marked with a
+   2px accent bar on its leading edge; the horizontal word strip this replaces is
+   not drawn.
 
    **The axis is the drawing's because DESIGN.md is silent about it, and §13
    makes that the drawing's jurisdiction.** §5 opens the vocabulary with
@@ -1970,7 +1961,7 @@ body,
    says "The mockup governs wherever the written rules are silent. Silence is not
    permission — it is the drawing's jurisdiction", naming this very strip at
    `:458-459` ("D1 kept a horizontal tab strip because '§7 fixes the three tabs
-   and what each holds, not their axis'"). The primitive stays Base UI's (`0038`)
+   and what each holds, not their axis'"). The primitive stays Base UI's
    and only its orientation and treatment change: `data-active` is still the
    primitive's own selected marker, not a second class to keep in step.
 
@@ -2047,9 +2038,8 @@ body,
   outline-offset: 2px;
 }
 
-/* The panel's own header, as the Keyboard drawing draws it
-   (`current/settings-keyboard.html`): the tab's glyph in the accent, the panel's
-   name, and the return-to-default action at the trailing edge. The action's own
+/* The panel's own header: the tab's glyph in the accent, the panel's name, and
+   the return-to-default action at the trailing edge. The action's own
    rules are the shared `.editor-shell-keyboard-action` ones; `margin-left: auto`
    is what puts it at that edge. */
 .editor-shell-keyboard-header {
@@ -2114,9 +2104,8 @@ body,
   /* §3 radius table — `--radius-sm` 4px is
      "Swatches, inline chips, the slider thumb's container" and `--radius-md` 6px
      is "Controls, menu rows, small tiles". **A binding row is a row**, so it
-     takes `--radius-md`, the value the drawing gives it
-     (`current/settings-keyboard.html:56`). It also shapes this row's own ring:
-     the armed row's `outline` follows `border-radius`. */
+     takes `--radius-md`. It also shapes this row's own ring: the armed row's
+     `outline` follows `border-radius`. */
   border-radius: var(--radius-md);
 }
 /* §5.4's boundary, as the row's own ring. The accent is the palette's own
@@ -2133,8 +2122,8 @@ body,
   padding: var(--space-4) var(--space-8);
   border: 1px solid var(--shell-edge);
   /* §3 radius table — `--radius-md` 6px is "Controls",
-     and a button is a control; the drawing draws both return-to-default actions
-     at 6px (`current/settings-keyboard.html`), one act being one control. */
+     and a button is a control; both return-to-default actions draw at 6px, one
+     act being one control. */
   border-radius: var(--radius-md);
   background: var(--yunari-control-bg);
   color: var(--shell-muted);

@@ -17,7 +17,7 @@ import {
  * a document, a rail pane, a selected row, a field — is this module's, and the
  * spec holds the tests and nothing else. The settings modal's own vocabulary
  * (§4's palette, the shortcut capture) is `walkthrough-settings.ts`'s, split out
- * of here when it passed AGENTS.md's 800-line stop.
+ * of here when it passed the 800-line stop.
  */
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`;

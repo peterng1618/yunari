@@ -58,7 +58,7 @@ function drawnValueAt(
   return null;
 }
 
-describe("the axis is placed by the data (0124)", () => {
+describe("the axis is placed by the data", () => {
   it("ends the axis at the newest plottable reading", () => {
     // The wall clock is five seconds past the newest batch; the axis must end
     // on the reading, not on the clock, or the right edge is blank.
@@ -159,9 +159,9 @@ describe("the axis is placed by the data (0124)", () => {
   });
 
   it("smooths only when the author asks for it", () => {
-    // 0116 removed the choice because a wall-clock edge kept extending the last
-    // segment, so a held stretch bent while the reader was looking at it. 0124
-    // deleted that edge: the line moves only when a sample arrives, so the
+    // The choice was removed because a wall-clock edge kept extending the last
+    // segment, so a held stretch bent while the reader was looking at it. That
+    // edge is gone: the line moves only when a sample arrives, so the
     // remaining cost is one reshape per sample — the authored curve's own.
     const samples = Array.from({ length: 5 }, (_, index) =>
       at(index, 40 + index),
@@ -179,7 +179,7 @@ describe("the axis is placed by the data (0124)", () => {
   });
 });
 
-describe("toSeriesPoints — the line-only gap rule (§83, 0124)", () => {
+describe("toSeriesPoints — the line-only gap rule (§83)", () => {
   it.each(["missing", "error", "unavailable", "stale"] as const)(
     "skips a %s reading and joins the readings either side",
     (status) => {

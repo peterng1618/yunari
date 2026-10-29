@@ -125,7 +125,7 @@ function textBox(
     fontFamily: "Segoe UI, system-ui, sans-serif",
     lineHeight: 1,
     // Resolved paint, with the authored token beside it: a display resolves no
-    // palette paints of its own (ADR-0026), and the validator refuses a
+    // palette paints of its own, and the validator refuses a
     // resolved colour with no token behind it. The value is the palette
     // entry's own, read from the one place both spell.
     fill: CLIP_INK,

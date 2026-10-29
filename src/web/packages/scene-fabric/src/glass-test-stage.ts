@@ -99,7 +99,7 @@ export function bars(
 export interface PaintCall {
   readonly region: DeviceRect;
   readonly device: DeviceRect;
-  /** Which picture the panel asked the media to stand on (`0135`). */
+  /** Which picture the panel asked the media to stand on. */
   readonly sampling: GlassSampling;
 }
 

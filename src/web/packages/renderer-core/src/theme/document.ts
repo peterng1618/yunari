@@ -212,7 +212,7 @@ export interface BackgroundMedia {
   readonly flipY?: boolean;
   /**
    * The 0-based frame, at the clip's own frame rate, that stands for this video
-   * when motion is unavailable or unhelpful (`0135`). Written only for a video
+   * when motion is unavailable or unhelpful. Written only for a video
    * asset: it is the picture a display without video support shows, and the
    * still the glass material samples instead of a blur per video frame.
    */

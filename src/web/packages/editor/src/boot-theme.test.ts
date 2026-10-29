@@ -121,7 +121,7 @@ describe("the editor on a URL that names a theme", () => {
     // validation was answered as though it were not there, so the editor
     // mounted the template and said "Fabric editor ready" over a document it
     // never opened. The outcome is `invalid`, carrying the validator's own
-    // issues, and never `undefined` (ADR-0043).
+    // issues, and never `undefined`.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),
       open: vi.fn(async () => {

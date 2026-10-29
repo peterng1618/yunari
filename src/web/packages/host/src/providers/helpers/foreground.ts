@@ -3,7 +3,7 @@ import { powershellPath } from "./supervisor.js";
 
 /**
  * The foreground window's owning process, read by one embedded PowerShell
- * script under the 0102 supervisor, plus a one-shot version-info read of the
+ * script under the supervisor, plus a one-shot version-info read of the
  * name a store lookup searches for.
  *
  * `GetForegroundWindow` and `GetWindowThreadProcessId` need no elevation and

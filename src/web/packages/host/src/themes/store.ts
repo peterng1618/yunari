@@ -20,7 +20,7 @@ import { readContainedFile } from "./contained-read.js";
 import { moveToTrash } from "./trash.js";
 
 /**
- * A theme is a directory, read and written in place (ADR-0017). The archive
+ * A theme is a directory, read and written in place. The archive
  * format is only what an author exports, so nothing on this working path
  * compresses and re-expands: `list()` reads one small JSON file per theme
  * instead of inflating a package, and a save writes the bytes the author typed.
@@ -161,7 +161,7 @@ export class ThemeAssetLimitError extends Error {
  * locale key, a stray `media.rotation`. The read-side sibling of the two
  * refusals above: the file is there, the validator's own diagnosis already
  * exists, and answering the `undefined` an absent theme answers with is what
- * throws that diagnosis away one layer below the reader (vg-110, ADR-0043).
+ * throws that diagnosis away one layer below the reader (vg-110).
  *
  * `issues` is the validator's own list rather than one flattened sentence, so a
  * reader can point at the fault. `list()` still skips such a theme: an
@@ -1098,7 +1098,7 @@ export function createThemeStore(
      * Moves the theme's folder to the operating system's trash, and does
      * nothing else to anything.
      *
-     * A theme is a folder of authored work (ADR-0017), so this is the one
+     * A theme is a folder of authored work, so this is the one
      * destructive act the store has, and the trash is what makes it
      * recoverable — the ruling that put it there, and the reason for
      * how each platform's own trash is reached. There is no fallback to an

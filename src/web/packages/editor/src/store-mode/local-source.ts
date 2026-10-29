@@ -311,7 +311,7 @@ export function matchesQuery(item: StoreItem, query: string): boolean {
  * is one of its entries, so its own tag is always among them — nothing would
  * ever read as proposed. A tag is settled when the vocabulary holds it, from the
  * seed or from another theme's use, and proposed only when this theme is its
- * first use, which is the drawing's own phrase (`store-detail.html`).
+ * first use, which is the surface's own phrase.
  */
 export function settledTags(
   items: readonly StoreItem[],

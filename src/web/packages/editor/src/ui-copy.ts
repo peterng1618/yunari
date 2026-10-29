@@ -1,7 +1,7 @@
 /** Typed package-local visible editor copy (§35). Authored theme text,
  * telemetry values and developer errors stay outside this module.
  *
- * Exempt from AGENTS.md's 800-line stop, which is written for source files:
+ * Exempt from the 800-line stop, which is written for source files:
  * this is a flat string table whose bulk is the reason each word is the word,
  * so splitting it by namespace would file the same words across five tables
  * and buy the count nothing but a fifth owner of one convention. */
@@ -845,7 +845,7 @@ export const uiCopy = {
    */
   store: {
     /** The store's two halves, which the region's own `Segmented` names. The
-     *  two labels are the drawings' tab words (`store-browse.html`), and
+     *  two labels are the surfaces' tab words, and
      *  `label` is the group's name: the two labels inside are the options, so a
      *  group with no name announces "Your themes, pressed" with nothing saying
      *  what is being chosen. The host's own library comes first, because it is
@@ -931,8 +931,8 @@ export const uiCopy = {
         time: "Time",
         date: "Date",
       } as const satisfies Record<SemanticFamily, string>,
-      /** The Shape facet's three headings, in the drawing's own order
-       *  (`store-facets.html`): the orientation words, the aspect buckets and
+      /** The Shape facet's three headings, in the surface's own order: the
+       *  orientation words, the aspect buckets and
        *  the exact pixel sizes. */
       shapeGroups: {
         orientation: "Orientation",
@@ -980,10 +980,10 @@ export const uiCopy = {
      *  the first clause of the item's provenance line, so the two surfaces say
      *  one fact in one way.
      *
-     *  **It is *From the store* and never *Installed*.** The drawing badges every
-     *  local cell with this word (`store-themes.html`) and *Installed* is the
-     *  **online** half's own footer verb (`store-detail.html`), where a theme is
-     *  read against the catalogue rather than against this machine's copy. The
+     *  **It is *From the store* and never *Installed*.** Every local cell is
+     *  badged with this word and *Installed* is the **online** half's own footer
+     *  verb, where a theme is read against the catalogue rather than against this
+     *  machine's copy. The
      *  two halves show one fact two ways; renaming this one to *Installed* is the
      *  change that collapses them. */
     fromStore: "From the store",
@@ -1085,7 +1085,7 @@ export const uiCopy = {
       close: "Close",
       /** The four commands' short words, **for this surface only**: the panel
        *  foot is four boxes a little over 100px wide, and the cell's long words
-       *  (`cell.actions`) do not fit (`store-detail.html`). Keyed by
+       *  (`cell.actions`) do not fit. Keyed by
        *  `CellAction`, so an action added to the union fails to compile. */
       actions: {
         open: "Edit",
@@ -1179,8 +1179,8 @@ export const uiCopy = {
         install: "Install",
       } satisfies Record<Exclude<InstallState, "none">, string>,
       /** What each kind is called, keyed by its wire identifier. The online
-       *  cell draws this badge in its facts band (`store-browse.html`), and the
-       *  item's own surface draws the same word (`store-detail.html`). A kind
+       *  cell draws this badge in its facts band, and the item's own surface
+       *  draws the same word. A kind
        *  this build does not know prints its own identifier, which is what the
        *  spec requires of a client older than the kind. */
       kinds: { [DASHBOARD_THEME_KIND]: "Theme" } as Readonly<
@@ -1445,7 +1445,7 @@ export const uiCopy = {
     /** An image's second action: the theme's background is one thing an author
      *  wants, a picture on the canvas is another, and both are one press. */
     placeOnCanvas: "Place on canvas",
-    /** The asset preview (`assets-preview.html`), opened from a card's Preview.
+    /** The asset preview, opened from a card's Preview.
      *  One surface for an image, an SVG and a video; a font has no preview here
      *  because the finder owns a face's specimen. Its kind and In use words are
      *  the card's own, so the two surfaces cannot disagree. */
@@ -2058,8 +2058,8 @@ export const uiCopy = {
     /** The style-tag field: the vocabulary an author picks from, and the one
      *  path to a word it does not hold (spec, "Style tags are … picked, not
      *  typed"). `tagsProposed` composes the pill a proposal is drawn as — the
-     *  drawing's own reading, `<tag> · proposed` on a dashed pill
-     *  (`store-detail.html`), so a reader knows the word is new rather than that
+     *  drawing's own reading, `<tag> · proposed` on a dashed pill, so a reader
+     *  knows the word is new rather than that
      *  the facet failed to match. Each refusal names the word it refused,
      *  because the author has to see which one.
      *
@@ -2093,7 +2093,7 @@ export const uiCopy = {
     backgroundFlipX: "Flip horizontally",
     backgroundFlipY: "Flip vertically",
     /** The frame a video background shows where it cannot play, and the still
-        the glass material samples (`0135`). */
+        the glass material samples. */
     backgroundFallbackFrame: "Fallback frame",
     /** A paint's own colour, as against the token it is chosen from. */
     colour: "Colour",

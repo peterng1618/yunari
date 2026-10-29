@@ -17,7 +17,7 @@ export type ChartPaint =
  * Resolve token references at the renderer boundary; persisted settings retain
  * refs. `undefined` is a `palette.` reference with no entry: the paint is
  * unavailable, and no builder may substitute a colour it did not resolve
- * (`resolveStyleValue` already rules for the rest of the document — 0007).
+ * (`resolveStyleValue` already rules for the rest of the document).
  */
 export function resolveChartPaint(
   paint: ChartPaint,
@@ -48,7 +48,7 @@ export function resolveChartPaint(
 /**
  * The engine's own "draw nothing", for a paint that is not the value — a track,
  * a remainder, a slice whose colour failed to resolve. A value mark never uses
- * it: it drops the value instead (0007).
+ * it: it drops the value instead.
  */
 export const NO_INK = "transparent";
 export const NO_PAINT: Fill = { kind: "solid", color: NO_INK };

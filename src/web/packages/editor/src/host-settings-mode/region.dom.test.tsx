@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * The Host mode's region: the four sections `settings.html` is, rebuilt in the
+ * The Host mode's region: the four sections `packages/host/public/settings.html`
+ * is, rebuilt in the
  * shell's own React — and the two facts about them the plan names, plus the
  * decisions behind the writes.
  *

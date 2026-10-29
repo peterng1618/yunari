@@ -72,10 +72,10 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
 ];
 
 /** Each tab's glyph, from the one icon family the shell already draws with
- *  (DESIGN.md §6: stroke-based, `currentColor`, on a 24px grid). The drawing's
- *  navigation column carries a glyph per row (`current/settings.html:26-37`);
- *  its three are a palette, a keyboard and an info mark, all of which the
- *  installed set has, so no glyph is invented and §6 needs no addition. The
+ *  (DESIGN.md §6: stroke-based, `currentColor`, on a 24px grid). The
+ *  navigation column carries a glyph per row; its three are a palette, a
+ *  keyboard and an info mark, all of which the installed set has, so no glyph
+ *  is invented and §6 needs no addition. The
  *  word stays beside the glyph, so the tab's accessible name is the label. */
 const SETTINGS_TAB_GLYPHS: Readonly<Record<SettingsTab, LucideIcon>> = {
   appearance: PALETTE_GLYPH,
@@ -137,15 +137,14 @@ export function versionFacts(
  *
  *  The six are **cards in one radio group** rather than a `Segmented`, which
  *  DESIGN.md §5 sizes at 2–4 labels: six lifted segments is a control DESIGN.md
- *  does not draw. The drawing gives the group §5 rule 7's grid
- *  (`current/settings.html:44-87`, `repeat(3,1fr)` of `--radius-lg` cards), so
- *  the columns are the drawing's; the group's own keyboard model still walks the
- *  six in reading order, and a narrower dialog changing the columns would not
- *  change the arrow keys.
+ *  does not draw. The group takes §5 rule 7's grid (`repeat(3,1fr)` of
+ *  `--radius-lg` cards), so the columns follow it; the group's own keyboard
+ *  model still walks the six in reading order, and a narrower dialog changing
+ *  the columns would not change the arrow keys.
  *
  *  The preview is the shell's, not the control set's: each bar carries the
  *  `data-shell-palette` of the palette it NAMES, which is what makes a bar paint
- *  its own palette rather than inherit the one in force (`0035`).
+ *  its own palette rather than inherit the one in force.
  *  `ControlChoiceRow` takes it as a node for exactly that reason.
  *
  *  The write is here, in the tab, exactly where the header menu that this
@@ -167,12 +166,12 @@ function AppearanceTab({
   readonly onPalette: (next: ShellPalette) => void;
   readonly onFollowing: (next: boolean) => void;
 }): React.JSX.Element {
-  /** The three steps the choice has always taken, in the order `0035` settled:
+  /** The three steps the choice has always taken, in a fixed order:
    *  storage first (it is what stops the OS having a vote), then the attribute
    *  every palette block and every portalled surface reads, then the shell's
    *  live state. `applyShellPalette` is deliberately not optional — a palette
    *  applied to React state alone leaves a portalled popup painting the old one,
-   *  which is the defect `0035` closed. */
+   *  which is the defect this ordering prevents. */
   const choose = (next: ShellPalette): void => {
     if (storage !== undefined) writeShellChoice(storage, next);
     applyShellPalette(next);
@@ -218,7 +217,7 @@ function AppearanceTab({
             data={{ "data-yunari-palette-choice": entry }}
             swatch={
               // Two bars, each resolving a role **of the palette this card
-              // names** rather than of the one in force (`0035`): the ground
+              // names** rather than of the one in force: the ground
               // (§4's `--bg`, "the window behind everything") and the accent.
               // The attribute is on each bar and not on the wrapper — a bar
               // that inherited it would be repainted by the baseline
@@ -238,10 +237,9 @@ function AppearanceTab({
           />
         ))}
       </RadioGroup>
-      {/* The modal's own drawing makes this row a box rather than a labelled
-          field row: `settings.html:89-93` draws the label at `flex:1` inside a
-          `--panel-2` panel at `--radius-lg`, with no label column, so the
-          switch's label fills the row and stays on one line. */}
+      {/* This row is a box rather than a labelled field row: the label sits at
+          `flex:1` inside a `--panel-2` panel at `--radius-lg`, with no label
+          column, so the switch's label fills the row and stays on one line. */}
       <div className="mt-[var(--space-14)]">
         <ControlToggle
           shape="boxed"
@@ -632,7 +630,7 @@ function ConnectionsTab(): React.JSX.Element {
  *  focus to the gear — there is no `Dialog.Trigger` to register — so the close
  *  restores it from the gear's id. The tabs are `@base-ui/react/tabs` rather
  *  than a hand-rolled `role="tablist"`, because the arrow-key navigation and
- *  the `aria-selected`/`aria-controls` wiring are the primitive's job (0038).
+ *  the `aria-selected`/`aria-controls` wiring are the primitive's job.
  *
  *  Appearance, Keyboard and About are each filled here. The
  *  palette is the shell's own state rather than the tab's, because the shell
@@ -722,12 +720,12 @@ export function Settings(props: {
           panel, not a row of words above it. §5
           opens the control vocabulary — "The vocabulary is closed. A control is
           one of these, or it is not a control." — and no *tab* is in it, so
-          DESIGN.md requires nothing about the axis; spec §13 (`:451-454`) then makes
-          the drawing the authority: "The mockup governs wherever the written
-          rules are silent. Silence is not permission — it is the drawing's
-          jurisdiction." The primitive stays Base UI's (`0038`) and only its
-          orientation and treatment change; `orientation` is what points the
-          arrow keys up and down the three rows rather than across. */}
+          DESIGN.md requires nothing about the axis, and the drawing is the
+          authority: "The mockup governs wherever the written rules are silent.
+          Silence is not permission — it is the drawing's jurisdiction." The
+          primitive stays Base UI's and only its orientation and treatment
+          change; `orientation` is what points the arrow keys up and down the
+          three rows rather than across. */}
       <Tabs.Root
         value={tab}
         onValueChange={(value) => setTab(value as SettingsTab)}

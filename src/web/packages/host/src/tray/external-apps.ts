@@ -1,8 +1,8 @@
 /**
  * Presence and Start for the two external programs the tray can offer. Both are
  * Windows-only; everywhere else the rows are absent and Start explains why.
- * RTSS starts only on an explicit request and is never stopped (ADR 0110);
- * LHM is stopped only when this module started it (ADR 0111).
+ * RTSS starts only on an explicit request and is never stopped;
+ * LHM is stopped only when this module started it.
  */
 
 import { execFile, spawn } from "node:child_process";

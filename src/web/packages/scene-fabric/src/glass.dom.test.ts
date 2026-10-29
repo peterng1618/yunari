@@ -412,7 +412,7 @@ describe("glass composition", () => {
   });
 
   it("maps a display-filled backdrop's own rect, not the artboard, onto the surface", () => {
-    // 0075's case, and the one nothing else here reaches: under
+    // The case, and the one nothing else here reaches: under
     // `bounds: "display"` the layer covers the display box, which is larger
     // than the artboard and starts outside it, so `media.rect.left`/`top` are
     // non-zero. Every other case on this stage builds a theme rect
@@ -666,7 +666,7 @@ describe("glass composition", () => {
   });
 
   it("walks a display-filled layer from its own box to the device rect", () => {
-    // 0075's three numbers in one place: the box the layer sits on, the rect the
+    // Three numbers in one place: the box the layer sits on, the rect the
     // media reports for it in artboard units, and the device rect the sampler
     // computes from that rect. Each half is asserted elsewhere — the box and the
     // rect in `background-media.dom.test.ts`, rect→device above with a hand-made
@@ -788,7 +788,7 @@ describe("glass composition", () => {
     scaled.canvas.renderAll();
     expect(scaled.draws[0]?.filter).toBe("blur(48px) saturate(1.6)");
     // **A non-uniform scale takes the equal-area factor of the two axes**, not
-    // `scaleX` (`vg-515`, 0053). These two panels cover the same area — one
+    // `scaleX` (`vg-515`). These two panels cover the same area — one
     // stretched horizontally, one vertically — so they must blur by the same
     // amount; before the ruling the first read 96 device px and the second 24.
     const wide = stage({});

@@ -24,7 +24,7 @@ export interface GroupingManager {
   /**
    * Lifts the artboard's dim for the duration of a capture and puts it back.
    * The dim is a view state, and a capture is the one reader that outlives the
-   * view: it reads the document, not the screen (0053).
+   * view: it reads the document, not the screen.
    */
   suspendDim(): () => void;
   readonly groupContext: () => readonly FabricObject[];
@@ -196,7 +196,7 @@ export function createGroupingManager(
   };
 
   /**
-   * Lifts the dim for a capture and puts it back (0053). The dim is *painted* —
+   * Lifts the dim for a capture and puts it back. The dim is *painted* —
    * a cached object carries it in its own cache — so lifting it is a repaint
    * rather than an unsubscribe: `restoreDim` marks the caches dirty, the
    * capture's frame repaints them clean, and the re-apply leaves the next live
@@ -332,7 +332,7 @@ export function createGroupingManager(
         canvas.remove(active);
         // The `Group` object leaves the document, so it is disposed here —
         // the scene adapter no longer disposes whatever anyone removes
-        // (`vg-486`, ADR-0052). Safe because `removeAll` emptied it first:
+        // (`vg-486`). Safe because `removeAll` emptied it first:
         // `Group.dispose` would otherwise cascade into the members below.
         active.dispose();
         for (const member of members) {

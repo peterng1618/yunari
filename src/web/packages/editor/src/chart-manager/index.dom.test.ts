@@ -1033,7 +1033,7 @@ describe("a line chart's data clock", () => {
   const pinned = Date.UTC(2026, 8, 15, 12, 0, 0);
 
   it("is not redrawn while its newest reading is unchanged", () => {
-    // **The claim under test.** A line is placed by its data (0124): the axis
+    // **The claim under test.** A line is placed by its data: the axis
     // ends at the newest reading, so no clock advance changes the picture. The
     // old wall-clock placement redrew every frame; that is what made the right
     // edge revise itself.

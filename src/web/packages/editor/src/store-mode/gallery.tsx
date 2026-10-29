@@ -177,7 +177,7 @@ function Cell(props: {
         {/* The band's own hook, because **what the badge sits in is the claim**:
             the drawing puts it here rather than beside the name, so a case that
             only asked whether the badge exists would stay green through a move
-            that changed the grid (`store-themes.html`). */}
+            that changed the grid. */}
         <span
           data-yunari-store-cell-band=""
           className="flex h-[26px] items-center gap-[var(--space-6)]"
@@ -289,7 +289,7 @@ function Cell(props: {
 
 /**
  * The online cell's action slot: one of the drawing's three readings, never the
- * library's four actions (`store-browse.html`).
+ * library's four actions.
  *
  * **Installed is a mark, not a control** — there is nothing to do, and the
  * drawing draws no button there. **Install and Update post the item to the
@@ -311,7 +311,7 @@ function InstallAction(props: {
         className="flex flex-none items-center gap-[var(--space-6)] text-xs text-muted"
       >
         {/* The word is muted like every other reading in the band; only the
-            check carries the rationed accent (`store-browse.html`). */}
+            check carries the rationed accent. */}
         <span className="flex-none text-accent">
           <Glyph icon={CHECK_GLYPH} size={13} />
         </span>

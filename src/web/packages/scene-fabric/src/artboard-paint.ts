@@ -61,7 +61,7 @@ export function cssArtboardPaint(value: unknown): string | undefined {
 /**
  * Paints the same paint into a **2D context** — the form the glass backdrop
  * needs, because neither a Fabric `Gradient` nor CSS's `linear-gradient(...)`
- * string is a legal `fillStyle` (0080).
+ * string is a legal `fillStyle`.
  *
  * `region` is the box to cover and `device` is the artboard's rect in that
  * context's own pixels, which is what a gradient is mapped to: a board's paint

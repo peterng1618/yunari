@@ -82,7 +82,7 @@ import {
  * commit path. Reads the live Fabric object and writes through the canvas,
  * saving history once per committed edit (§67). Whole artboard units (§57).
  *
- * The column renders through React now ([ADR-0039]): `render` projects a
+ * The column renders through React now: `render` projects a
  * serializable `SelectionView` from Fabric and publishes it to the React root.
  * React holds that value and never the object it describes, which is what keeps
  * Fabric out of React and one writer of the scene.

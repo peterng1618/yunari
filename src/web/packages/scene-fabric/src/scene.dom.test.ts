@@ -122,7 +122,7 @@ describe("mountFabricScene's artboard paint", () => {
   });
 
   it("leaves the board's paint to the host, with or without media", () => {
-    // 0080. The host is behind the media layer, so its paint is the board's fill
+    // The host is behind the media layer, so its paint is the board's fill
     // and the letterbox the reader sees around a `"theme"`-fitted layer; the
     // canvas is *above* the media, so the same paint on it hides the media
     // completely. Both arms are asserted because the rule is the same in both:

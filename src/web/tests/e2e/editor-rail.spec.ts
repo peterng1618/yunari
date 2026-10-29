@@ -1871,9 +1871,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
  *    reads labels, buttons, headings and paragraphs, so **this case is the only
  *    check of that word in the repo** (`vg-685`). Asserting it from
  *    `uiCopy.store.fromStore` would make the case green through the rename it
- *    exists to catch, which is how *Installed* shipped here twice: the drawing
- *    badges every local cell *From the store* (`store-themes.html`) and
- *    *Installed* is the **online** half's own footer verb (`store-detail.html`).
+ *    exists to catch, which is how *Installed* shipped here twice: every local
+ *    cell is badged *From the store* and *Installed* is the **online** half's
+ *    own footer verb.
  * 2. **The region's vocabulary reaches the modal.** `settledTags` is built by
  *    the region and handed to `ItemModal`; replacing that prop with `[]` leaves
  *    every jsdom case green, because each hands the modal its own set. The pill
@@ -2081,7 +2081,7 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   const pillOf = (tag: string) =>
     styleGroup.locator(`[data-yunari-store-item-pill='${tag}']`);
   // The drawing's own words for a word the vocabulary does not hold yet, as a
-  // literal for the reason the badge's word is one (`store-detail.html`).
+  // literal for the reason the badge's word is one.
   await expect(
     pillOf("warm-lantern"),
     "the tag no other theme and no seed holds is not marked as proposed",

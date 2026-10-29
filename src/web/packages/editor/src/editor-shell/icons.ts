@@ -240,8 +240,7 @@ export const PREVIEW_GLYPH: LucideIcon = Maximize2;
 
 /** The Assets pane's two card actions that have no other surface: putting a
  *  file on the canvas, and swapping the bytes of the asset already chosen. The
- *  pair is the drawing's (`assets-pane.html`) — a square with a plus, and the
- *  refresh arrows. */
+ *  pair is a square with a plus and the refresh arrows. */
 export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
 export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
 
@@ -256,14 +255,14 @@ export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
 export const DELETE_ITEM_GLYPH: LucideIcon = Trash2;
 
 /** The online cell's *Install* control, which the drawing marks with an upload
- *  into a tray (`store-browse.html`). *Update* wears the download arrow, the
- *  same `EXPORT_ITEM_GLYPH` the export action does — the drawing draws one mark
- *  for "take this in" whichever surface it is on. */
+ *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`
+ *  the export action does — one mark for "take this in" whichever surface it is
+ *  on. */
 export const INSTALL_ITEM_GLYPH: LucideIcon = Upload;
 
 /** The way out of a surface that draws no title bar to put one in: the item
- *  modal floats it over the stage's corner (`store-detail.html`), where an × is
- *  the only mark that says "this closes" without a word beside it. */
+ *  modal floats it over the stage's corner, where an × is the only mark that
+ *  says "this closes" without a word beside it. */
 export const CLOSE_GLYPH: LucideIcon = X;
 
 /** The rail's five slot glyphs, from §7.2's table. Keyed by the rail's own slot

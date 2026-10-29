@@ -22,7 +22,7 @@ interface SceneRefreshOptions {
  * Repaints the scene at 30 fps without changing telemetry cadence.
  *
  * There is no rate to set. A chart asks for its own repaint when its pixels
- * change (0129), and this loop is the ceiling on how often the scene as a whole
+ * change, and this loop is the ceiling on how often the scene as a whole
  * may be redrawn: a sample pass that finds nothing new does no work, and a
  * minute clock paints once a minute however often this wakes.
  */

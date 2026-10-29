@@ -47,7 +47,7 @@ describe("chart paint", () => {
   });
 
   // A gap and a transparent fill look identical on screen and are not the same
-  // fact, so the resolver has to say which one it produced (0007).
+  // fact, so the resolver has to say which one it produced.
   it("resolves a reference with no palette entry to no paint at all", () => {
     expect(
       resolveChartPaint({ ref: "palette.absent" }, palette),

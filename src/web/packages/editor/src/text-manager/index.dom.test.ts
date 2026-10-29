@@ -1087,7 +1087,7 @@ describe("what a text object an author inserts can do", () => {
     // box that is told to contain them, and the canvas shows the title cut off,
     // while the inspector's Height field keeps reporting the box truthfully.
     //
-    // The box staying put is not the bug: ADR 0003 makes it the owner precisely
+    // The box staying put is not the bug: a fixed box owns its size precisely
     // so a type change cannot move it, and §89 wants fixed boxes so a reading
     // cannot jitter. The defect is that nothing ever told the box it no longer
     // fits — an author who picks a larger face is left with text they cannot

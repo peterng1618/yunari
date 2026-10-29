@@ -359,7 +359,7 @@ describe("Fabric’s own keys are held to the same rule", () => {
   });
 
   it("strips them again when a save happens while the editor has group entry on", () => {
-    // Spec 0013 stage 4 arms `subTargetCheck` + `interactive` on the group an
+    // Stage 4 arms `subTargetCheck` + `interactive` on the group an
     // author entered, which makes them non-default and therefore serialized.
     // Saving from inside a group is a third path out of that state, beside
     // exit and history reload, so serialization strips them rather than letting
@@ -1479,7 +1479,7 @@ describe("a refusal both surfaces apply", () => {
 /**
  * The refusal is reported **once**, from whichever site raised it.
  *
- * Two sites refuse, and both are load-bearing for the render (ADR-0026): revival
+ * Two sites refuse, and both are load-bearing for the render: revival
  * withholds what Fabric restored, and the editor's paint pass declines to
  * re-resolve the reference afterwards. Only one of them can be the one that
  * speaks for a given arc, because otherwise a single load says the same

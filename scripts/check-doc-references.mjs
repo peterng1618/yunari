@@ -6,8 +6,8 @@
  * `archive/` exists so a moved plan stays readable. Nothing resolved a reference
  * to one, so a reference pointing at the right name in the wrong place made a
  * reader conclude the document was deleted — and the next six-plan move
- * re-broke the same references silently. `vg-434` is this check; decision `0048`
- * is why it is a script rather than a dependency.
+ * re-broke the same references silently. `vg-434` is this check, and it is a
+ * script rather than a dependency so it needs no install to run.
  *
  * Three parts a generic link checker does not carry, and they are the whole
  * rule: the reference may sit in a code span or in prose rather than in a link;

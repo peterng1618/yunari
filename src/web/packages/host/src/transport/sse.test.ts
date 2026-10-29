@@ -96,7 +96,7 @@ describe("SseConnection", () => {
 
     // The socket refused "first" and has not drained, so the other two wait
     // rather than replacing each other: each frame carries its own batch of
-    // readings (0124).
+    // readings.
     expect(fake.writes.at(-1)).toBe("first");
     expect(connection.droppedCount).toBe(0);
 

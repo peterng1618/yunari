@@ -58,7 +58,7 @@ export function createSceneAdapter(options: SceneAdapterOptions): SceneAdapter {
   );
 
   /**
-   * **The party that removes an object disposes it** (`vg-486`, ADR-0052).
+   * **The party that removes an object disposes it** (`vg-486`).
    *
    * This used to subscribe `canvas.on("object:removed", ({ target }) =>
    * target.dispose())`, because `canvas.remove()` disposes nothing and a chart
@@ -270,7 +270,7 @@ export function createSceneAdapter(options: SceneAdapterOptions): SceneAdapter {
 /** Apply the artboard **clip**; both the viewport transform and the board's
  * paint belong elsewhere.
  *
- * **The paint is deliberately not applied here (0080).** This canvas sits above
+ * **The paint is deliberately not applied here.** This canvas sits above
  * the media layer, so a fill on it hides the media completely and leaves the
  * reader no letterbox. `scene.ts` owns the paint and applies it only when there
  * is no media layer for it to cover. */

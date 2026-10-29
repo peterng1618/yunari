@@ -161,13 +161,13 @@ export function defersToTextEntry(action: ProductShortcutId): boolean {
  *
  * Both shapes, because the editor has both: the three native modals
  * (`new-document-chooser.ts`, `persistence-manager`, `theme-library-dialog`)
- * and the library `Dialog` decision `0038` puts on Base UI.
+ * and the library `Dialog` on Base UI.
  *
  * **`[role='dialog']` alone, with no `aria-modal` clause.** `@base-ui/react`
  * 1.8.0's dialog sets `role: 'dialog'` on the popup and hides the content's
- * siblings instead, so `aria-modal` appears nowhere in the package — the
- * mechanism decision `0038` records as the reason the library `Dialog` is Base
- * UI's. A selector requiring `aria-modal='true'` therefore matches no dialog
+ * siblings instead, so `aria-modal` appears nowhere in the package — which is
+ * why the library `Dialog` is Base UI's. A selector requiring
+ * `aria-modal='true'` therefore matches no dialog
  * this app can render: the guard would not defer while the sheet is open, and
  * `Ctrl+Z` would edit the document the author is reading about. `dialog[open]`
  * and `[role='dialog']` between them cover every modal in the tree — this editor

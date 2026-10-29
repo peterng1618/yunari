@@ -145,7 +145,7 @@ describe("parseArgs", () => {
   });
 
   /**
-   * The settings moved out of the themes directory (ADR-0017), so `--app-dir`
+   * The settings moved out of the themes directory, so `--app-dir`
    * is how a private install is made: one flag relocates the library *and* the
    * state, rather than a library that writes into the real settings.
    */

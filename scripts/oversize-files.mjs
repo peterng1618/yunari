@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `AGENTS.md`'s two numbers for a source file — 500 is a signal, 800 is a stop —
+ * The two numbers for a source file — 500 is a signal, 800 is a stop —
  * and nothing in the repo computed either (`vg-536`). This reports the set and
  * ratchets it: a tracked `src/web` file over the stop that the ceiling does not
  * name fails, and a file that has left the set (a split) is reported and never
@@ -35,7 +35,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DEFAULT_CEILING = "scripts/oversize-files.ceiling.json";
-/** `AGENTS.md`, *Code and files*: 500 is a signal and 800 is a stop. */
+/** The size policy: 500 is a signal and 800 is a stop. */
 const SIGNAL = 500;
 const STOP = 800;
 const EXTENSIONS = /\.(ts|tsx|mjs|css)$/;

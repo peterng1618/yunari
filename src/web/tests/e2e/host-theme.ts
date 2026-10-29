@@ -154,7 +154,7 @@ export const HOST_OVERHANG_THEME_ID = "e2e-overhang";
 
 /** The host's app folder; it owns both the library and the settings beside it. */
 export const HOST_APP_DIR = path.join(here, "..", "..", ".e2e-host-app");
-/** The library itself, where each theme is one folder (ADR-0017). */
+/** The library itself, where each theme is one folder. */
 export const HOST_THEMES_DIR = path.join(HOST_APP_DIR, "themes");
 /** Host state, out of the library so a theme folder is only ever a theme. */
 export const HOST_SETTINGS_DIR = path.join(HOST_APP_DIR, "settings");
@@ -1067,7 +1067,7 @@ const overhangEnvelope = {
         // Resolved paint is a cache; the authored owner is a palette token, and
         // the validator refuses a resolved colour with no token behind it. The
         // literal is what a display draws, since the player resolves no palette
-        // paints of its own (ADR-0026).
+        // paints of its own.
         yunariPaint: { fill: "palette.ink" },
       },
       {
@@ -1087,7 +1087,7 @@ const overhangEnvelope = {
       {
         // An arc is an **open sweep**: no interior, so no fill, and it draws as
         // a curve. A fill would close it with a chord and make it a circular
-        // segment, which is why the treatment is refused at revival (ADR-0026).
+        // segment, which is why the treatment is refused at revival.
         type: "Arc" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
@@ -1539,8 +1539,8 @@ export async function seedHostTheme(): Promise<void> {
       throw new Error(`E2E host fixture is invalid: ${result.message}`);
     }
 
-    // The library is a folder: the document beside the bytes it declares
-    // (ADR-0017). The archive above is only ever what an author exports.
+    // The library is a folder: the document beside the bytes it declares. The
+    // archive above is only ever what an author exports.
     const folder = path.join(HOST_THEMES_DIR, envelope.id);
     mkdirSync(path.join(folder, "assets"), { recursive: true });
     writeFileSync(path.join(folder, "theme.json"), JSON.stringify(envelope));

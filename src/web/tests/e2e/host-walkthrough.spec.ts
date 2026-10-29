@@ -74,7 +74,7 @@ import {
  * **The primitives are `walkthrough-focus.ts`'s, the shell's vocabulary is
  * `walkthrough-shell.ts`'s and the settings modal's is
  * `walkthrough-settings.ts`'s** (Ruling L): the split is by responsibility
- * because the file had passed AGENTS.md's 800-line stop, and the second split is
+ * because the file had passed the 800-line stop, and the second split is
  * the same rule applied again when Task 4's helpers took the shell module past
  * it. What is left here is the tests, which is what the walkthrough's acceptance
  * is read from.

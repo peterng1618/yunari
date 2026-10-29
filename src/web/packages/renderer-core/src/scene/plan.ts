@@ -692,7 +692,7 @@ export function buildChartPlan(
 /**
  * A paint reference the document does not define draws no ink, which on the
  * display is indistinguishable from no reading. Reported under the code
- * `resolveStyleValue` already uses, so the two absences stay two facts (0007).
+ * `resolveStyleValue` already uses, so the two absences stay two facts.
  */
 function reportUnresolvedChartPaint(
   nodeId: string,
@@ -725,7 +725,7 @@ function reportUnresolvedChartPaint(
 /**
  * The line branch's history read, transformed per binding.
  *
- * The axis is placed by the newest reading (0124), so the source is asked for
+ * The axis is placed by the newest reading, so the source is asked for
  * the chart's own window; it returns the sample before that window as well, so
  * the line still reaches its left edge (`vg-571`).
  */

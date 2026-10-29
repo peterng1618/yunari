@@ -73,7 +73,7 @@ export interface SemanticKeyDescriptor {
   /**
    * The family a display's measurement preference converts, when it converts
    * this key. Absent means the reported unit is the only sensible one: a unit
-   * preference must not pretend to cover families it cannot (spec 2026-09-24).
+   * preference must not pretend to cover families it cannot.
    */
   readonly converts?: "temperature";
   /**

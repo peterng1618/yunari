@@ -148,7 +148,7 @@ export interface EditorShellBridge {
   /**
    * The product's own library picture, as a data URL. e2e measures this rather
    * than re-deriving `toCanvasElement`, which is how a change to the capture
-   * would otherwise stop being measured (0007).
+   * would otherwise stop being measured.
    */
   capture(): string | undefined;
   readonly session: EditorActionFacade;
@@ -674,7 +674,7 @@ export function createEditorShellBridge(input: {
     const { moved, from, to, target } = move;
     // A live `ActiveSelection` repoints each member's `group` at the selection
     // itself, so a `remove` issued against the tree's own parent would bake the
-    // child against a matrix it no longer belongs to (0044, rung 6). Releasing
+    // child against a matrix it no longer belongs to (rung 6). Releasing
     // the selection puts every member back under its real parent first.
     const active = canvas.getActiveObject();
     if (active instanceof ActiveSelection && active.contains(moved))
@@ -688,7 +688,7 @@ export function createEditorShellBridge(input: {
       // serialization arrays one object each.
       if (!(from ?? canvas).moveObjectTo(moved, target)) return false;
     } else {
-      // The two structural writes are Fabric's, and they are the point of 0044:
+      // The two structural writes are Fabric's, and they are the point:
       // `remove` bakes the child out of the plane it leaves (`exitGroup`),
       // `insertAt` bakes it into the plane it enters (`enterGroup`) — the
       // symmetric pair Fabric's own `loadFromJSON` depends on. Nothing moves on

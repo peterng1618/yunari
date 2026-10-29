@@ -559,7 +559,7 @@ export function resolveStoreOrigin(
  * A browser lured to another name can resolve that name to 127.0.0.1, so the
  * peer is loopback while the request is not this machine's page. `Host` and
  * `Origin` are what such a page cannot forge, so the existing same-origin rule
- * answers once here rather than route by route, which missed some (ADR-0116).
+ * answers once here rather than route by route, which missed some.
  * A non-loopback peer is untouched.
  *
  * `/api/host` is the one exemption, because a re-find sweep is cross-origin.
@@ -1231,7 +1231,7 @@ async function serveStatic(
 
   // The hint is only true when the bundle itself is missing its entry; a file
   // that simply is not in a built bundle must not send the reader rebuilding
-  // one they already built. See ADR-0018.
+  // one they already built.
   const built = await fs
     .stat(path.join(root, "index.html"))
     .then(() => true)
@@ -1644,7 +1644,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       : https.createServer(options.tls, route);
 
   // One port, and both protocols when a certificate is present. The launcher
-  // always brings one (0070); the unit suite does not, and a route answers the
+  // always brings one; the unit suite does not, and a route answers the
   // same either way.
   const server: ListenableServer =
     secure === undefined ? plain : createPortListener(plain, secure);
@@ -4615,7 +4615,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       // A display's view of the document: a theme that does not validate is
       // one it cannot serve, which is the same answer as a theme that is not
-      // there — not the 422 the editor's own open gets (ADR-0043).
+      // there — not the 422 the editor's own open gets.
       const envelope = await themeStore.readEnvelope(rawId);
       if (envelope === undefined) {
         sendText(response, 404, "Theme not found.");
@@ -4648,8 +4648,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           // its semantics are invalid, which is exactly 422 — RFC 9110
           // §15.5.21. Not the 404 an absent id gets, and not a 400 that would
           // blame the request: the validator's own issues travel with it, so
-          // the editor can report the reason instead of a status number
-          // (ADR-0043).
+          // the editor can report the reason instead of a status number.
           if (error instanceof ThemeValidationError) {
             sendJson(response, 422, {
               error: `Theme "${rawId}" is stored but does not validate.`,
@@ -4884,7 +4883,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           stored = await themeStore.read(id);
         } catch (error) {
           // A document that is present and unreadable is the same 404 an absent
-          // one gets, as it was before the scoped reads (ADR-0043).
+          // one gets, as it was before the scoped reads.
           if (
             error instanceof ThemeValidationError ||
             error instanceof ThemeTooLargeError

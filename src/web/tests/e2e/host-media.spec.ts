@@ -187,7 +187,7 @@ async function recordWebm(page: Page): Promise<Uint8Array> {
 
 /** Publishes the theme through the host's own admin write route, so the bytes
  *  the display later fetches went in and out of the real store. The library is
- *  a folder (ADR-0017), so the route takes the document and its declared bytes
+ *  a folder, so the route takes the document and its declared bytes
  *  as JSON — the archive is only ever what an author exports. */
 async function publish(
   page: Page,

@@ -108,7 +108,7 @@ export interface GameProviderOptions {
   /** Steam's install root; absent is no Steam apps, not a failure. */
   readonly steamRoot?: () => Promise<string | undefined>;
   readonly loadSteamApps?: (root: string) => Promise<readonly SteamApp[]>;
-  /** Decision 0109's client; absent is local-only names and art. */
+  /** The remote client; absent is local-only names and art. */
   readonly store?: GameStore;
   /** Injected so a test reads no executable's version info. */
   readonly productName?: (

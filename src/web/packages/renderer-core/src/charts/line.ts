@@ -17,7 +17,7 @@ export type { EngineColor, LinearGradientColor };
 /**
  * Line/area/sparkline adapter. A missing reading is skipped and the readings
  * either side are joined, so a line has no break and no blank edge — the
- * line-only exception to §83 (0124). A missing reading is still never zero.
+ * line-only exception to §83. A missing reading is still never zero.
  */
 
 export type Interpolation = "linear" | "step" | "smooth";
@@ -129,8 +129,8 @@ export interface LineOption extends EngineAnimation {
  * Window, sort and cap a series' readings.
  *
  * A reading that is not `ok` and numeric is skipped, not carried as `null`: the
- * line joins the readings either side and has no break (§83 line exception,
- * 0124). The axis window is `[windowStart, endMs]`, and the sample just before
+ * line joins the readings either side and has no break (§83 line exception).
+ * The axis window is `[windowStart, endMs]`, and the sample just before
  * it is kept so the line reaches its left edge (`vg-571`).
  */
 export function toSeriesPoints(
@@ -179,7 +179,7 @@ export function lineEndMs(series: readonly SeriesInput[]): number | undefined {
 }
 
 /**
- * Draw a line with its axis placed by its data (0124).
+ * Draw a line with its axis placed by its data.
  *
  * **The axis ends at the newest reading, not at the clock.** Between batches
  * nothing moves; when a batch lands the whole picture shifts left by the gap it
@@ -239,7 +239,7 @@ export function buildLineOption(
       show: settings.showAxes,
       axisLabel: { show: false },
       // The window is placed behind the newest reading, so its right end is
-      // always painted (0124).
+      // always painted.
       min: windowStart,
       max: endMs,
     },
@@ -258,8 +258,8 @@ export function buildLineOption(
       symbolSize: settings.markerSize,
       // **Smoothing is authored, never implied.** ECharts draws a smooth
       // segment from the points either side of it, so a sample bends its
-      // neighbour segments once; with the data clock (0124) nothing is held at
-      // an advancing edge, so that is the only reshape (0127). Linear and step
+      // neighbour segments once; with the data clock nothing is held at
+      // an advancing edge, so that is the only reshape. Linear and step
       // depend only on their own endpoints.
       smooth: settings.interpolation === "smooth",
       step:
@@ -346,7 +346,7 @@ function thresholdBands(
  * A queued batch can be delivered minutes after it was sampled; placing it by
  * its arrival would collapse every reading in the burst onto one x. A constant
  * skew between the host's clock and the display's cancels, because the axis is
- * anchored to the same samples (0124).
+ * anchored to the same samples.
  */
 function sampleTimeMs(sample: Sample): number {
   return Date.parse(sample.timestamp);
@@ -373,7 +373,7 @@ export function toEngineColor(
 ): EngineColor {
   // A stroke that resolves to nothing draws no ink, so the series shows no
   // number it cannot colour; the points and axes still say a series is there
-  // (0007).
+  //.
   if (fill === undefined) return NO_INK;
   switch (fill.kind) {
     case "solid":

@@ -441,7 +441,7 @@ export class EditorDocument {
         undefined,
         this.#shell.backdrop(),
         // A package saved from inside an entered group ships the document, not
-        // the dim the author is working behind (0053, `vg-527`).
+        // the dim the author is working behind (`vg-527`).
         () => this.#shell.editor.groupingManager.suspendDim(),
       );
     } catch {
@@ -512,7 +512,7 @@ export class EditorDocument {
       // **The one archive left in this file, and it is not a round trip.**
       // Nothing is stored here: the package is built so the release refuses a
       // theme that would not export, and the archive is then downloaded by
-      // `save`. The library is a folder (ADR-0017); the export is not.
+      // `save`. The library is a folder; the export is not.
       const beforeRelease = serializeThemePackage(
         this.snapshot(),
         this.#assets.assets,

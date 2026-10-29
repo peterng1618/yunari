@@ -21,8 +21,8 @@ import {
  * The column as a value.
  *
  * Every leaf is a primitive, an array or a plain object, so a test can round-trip
- * it through JSON and a renderer can diff it. A Fabric object here would be the
- * one thing [ADR-0039] forbids — React holds this view and never the object it
+ * it through JSON and a renderer can diff it. A Fabric object here is
+ * forbidden — React holds this view and never the object it
  * describes, and the imperative edit port below is the only way back.
  */
 

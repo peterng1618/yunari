@@ -2,7 +2,7 @@ import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import type { ThemeContent } from "./store.js";
 
 /**
- * The host's theme library is a folder (ADR-0017), so a save carries the
+ * The host's theme library is a folder, so a save carries the
  * document and its declared bytes as JSON rather than as an archive the host
  * would only have to unpack. Assets ride along base64-encoded, keyed by the
  * path the document declares.

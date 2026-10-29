@@ -540,7 +540,7 @@ describe("the progress arc colour", () => {
   });
 });
 
-// 0007: the same gap, in the gauge's own vocabulary — `progress.show` is
+// The same gap, in the gauge's own vocabulary — `progress.show` is
 // already the no-value state a missing sample uses.
 describe("a gauge whose progress paint has no palette entry", () => {
   const unresolved: GaugeSettings = {
@@ -561,7 +561,7 @@ describe("a gauge whose progress paint has no palette entry", () => {
 });
 
 /**
- * 0008: the datum and the arc's visibility are one decision, because ECharts
+ * The datum and the arc's visibility are one decision, because ECharts
  * 6.1.0's `GaugeView._renderPointer` reads its own `_progressEls` inside the
  * data-diff `update` callback and only assigns it after a render that drew an
  * arc. A datum that outlives `progress.show: false` therefore throws inside the

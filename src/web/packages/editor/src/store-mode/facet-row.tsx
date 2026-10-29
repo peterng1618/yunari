@@ -139,8 +139,8 @@ function FacetButton(props: {
                 {facet.hint}
               </p>
             )}
-            {/* **The groups are drawn, not flattened** (`store-facets.html`):
-                each run of values sharing a group takes §2's eyebrow as its
+            {/* **The groups are drawn, not flattened**: each run of values
+                sharing a group takes §2's eyebrow as its
                 heading, and a value filed under nothing — a sensor whose key
                 this build does not know — is drawn under no heading rather than
                 under an invented one (§9). The runs come from the select's own
