@@ -45,7 +45,7 @@ export interface EditorShellSnapshot {
    *
    *  `undefined` where there is no scene to count. A strip reading `0 objects`
    *  over a canvas that has not mounted its document is a claim the product
-   *  does not have (DESIGN.md §9), and the absence is what says so — the same
+   *  does not have, and the absence is what says so — the same
    *  shape `documentName` takes for the document it names. A document that
    *  really holds nothing reports `0`, which is a reading rather than a
    *  default, and the two are different answers. */
@@ -60,7 +60,7 @@ export interface EditorShellSnapshot {
    *  declare no palette really holds none — `0 tokens` there is a reading, the
    *  same way `0 objects` is for an empty document. The `undefined` case is the
    *  shell's own no-document state, stated by `SelectionStore` before a bridge
-   *  is set, where the pane draws no count at all (DESIGN.md §9). */
+   *  is set, where the pane draws no count at all. */
   readonly tokenCount: number | undefined;
   readonly selectedCount: number;
   readonly locked: boolean;

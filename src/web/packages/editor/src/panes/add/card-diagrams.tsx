@@ -12,7 +12,7 @@ import { glyphStrokeWidth } from "../../editor-shell/icons.js";
  * is data (a card's parts, its readings, how a copy is minted) and this is a
  * React surface. **The library owns the name; the pane owns the drawing.**
  *
- * Stroke paths at DESIGN.md §6's weight on the 24px grid, taken from the reference's
+ * Stroke paths at the design's weight on the 24px grid, taken from the reference's
  * own tile artwork, so no icon family and no dependency arrives with them. That
  * is exactly §6's own escape from the library — a card unit tile may carry a
  * diagram of what it builds because the library is a fixed set of eight — while

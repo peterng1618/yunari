@@ -246,7 +246,7 @@ describe("SelectionColumn", () => {
     // Position was the one section put away, on the reasoning that geometry is
     // set once. It is what an object is usually selected *for*, so it is open —
     // and so is every other question the kind has: the column stops deciding
-    // that for the author (item 13, DESIGN.md §7.4).
+    // that for the author (item 13).
     for (const section of view.sections)
       expect(isOpen(section.id), section.id).toBe(true);
   });

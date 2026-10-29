@@ -466,7 +466,7 @@ describe("new object panel", () => {
   });
 
   it("draws no file section in the Add pane", () => {
-    // Local files belong to the Assets pane (DESIGN.md §7.2): the Add pane is
+    // Local files belong to the Assets pane: the Add pane is
     // insertion-only, so neither an import control nor a finder link lives here.
     const { root } = createNewObjectPanel(
       document.body,

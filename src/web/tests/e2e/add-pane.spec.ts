@@ -15,7 +15,7 @@ import { isDesktopSurface } from "./surface.js";
  * can name.
  *
  * The third case came here from the Add pane's deleted file section: local files
- * belong to the Assets pane (DESIGN.md §7.2), so the control it measures is
+ * belong to the Assets pane, so the control it measures is
  * opened where it now lives.
  */
 

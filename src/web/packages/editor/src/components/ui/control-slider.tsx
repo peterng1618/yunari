@@ -12,7 +12,7 @@ import {
 
 /**
  * A bounded number: a 3px track with an accent fill, a 10px thumb, and a well
- * showing the value (DESIGN.md §5).
+ * showing the value.
  *
  * A gesture has one undo boundary, so preview and history are separate calls:
  * `onPreview` fires while the gesture is moving and writes nothing, one changed

@@ -186,7 +186,7 @@ function FacetButton(props: {
 }
 
 /**
- * DESIGN.md §5's **checkbox choice row**: the choice row's geometry and its
+ * The design's **checkbox choice row**: the choice row's geometry and its
  * chosen treatment, with a checkbox in place of the radio and no group owning
  * one checked bit — a facet is a set you may choose *several* of, which is why
  * §5's rule 7 (a radio in one labelled `radiogroup`) is not this control's shape.

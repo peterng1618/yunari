@@ -5,7 +5,7 @@ import { tooltip } from "../../editor-shell/controls/tooltip.js";
 /**
  * What every control in the one control set carries.
  *
- * `refused` is a reason, not a flag: DESIGN.md §5.3 keeps a capability the
+ * `refused` is a reason, not a flag: the design keeps a capability the
  * selection cannot use visible, with its reason readable, and the control not
  * natively disabled — a disabled control leaves the tab order, so the reason
  * would reach nobody not holding a mouse. `data` belongs to the *focus target*,
@@ -49,7 +49,7 @@ export type ControlProps = {
 };
 
 /**
- * DESIGN.md §3's row rhythm, as a typed choice rather than a number: a panel row is
+ * The design's row rhythm, as a typed choice rather than a number: a panel row is
  * 26px, a dialog row 30, a settings row 32. A named value rather than a free
  * `28` keeps the rhythm a design decision and the caller unable to go around it.
  * The literal classes are spelled out because Tailwind scans source text — a
@@ -71,14 +71,14 @@ const ROW_MIN_HEIGHT: Readonly<Record<ControlDensity, string>> = {
 
 /**
  * A well is a surface, not a control: `--panel-2` fill, a 1px `--edge`, and
- * `--radius-md` (DESIGN.md §5). It carries no value and owns no focus — the input
+ * `--radius-md`. It carries no value and owns no focus — the input
  * inside it owns both — so the focus treatment is `focus-within`, and a
  * keyboard user gets the same accent boundary a mouse user does.
  *
  * The outline is a real `outline`, not only a ring: forced-colours mode
  * overrides author outline colours for you, and a box shadow disappears there.
  *
- * Hover raises the resting `--edge` to `--muted` (DESIGN.md §5 rule 6). The well
+ * Hover raises the resting `--edge` to `--muted`. The well
  * cannot know whether the control inside it is blocked, so the caller says so:
  * a refused row must not advertise a change it will not make, and `blocked`
  * drops the hover rather than leaving it to a `:has()` the caller cannot see.
@@ -92,7 +92,7 @@ export function wellClasses(
 }
 
 /**
- * DESIGN.md §5's target size, as a hit area that does not move the paint.
+ * The design's target size, as a hit area that does not move the paint.
  *
  * A dense control's own box can be smaller than the 24×24 a target needs — the
  * toggle's pill is 26×14 and a segmented label is 22px tall — so the extra area
@@ -342,7 +342,7 @@ export function ControlReason(props: {
 }
 
 /**
- * DESIGN.md §5's draft/commit keyboard decision, in one place for both the text
+ * The design's draft/commit keyboard decision, in one place for both the text
  * and the number field (vg-203).
  *
  * A keystroke writes a draft rather than the authored value; Enter commits that

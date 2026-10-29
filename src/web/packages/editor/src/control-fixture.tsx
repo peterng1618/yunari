@@ -17,7 +17,7 @@ import "./editor-shell/editor-shell.css";
 /**
  * The design-language parity fixture.
  *
- * It mounts every control of DESIGN.md §5's vocabulary — alone and inside the
+ * It mounts every control of the design's vocabulary — alone and inside the
  * `InspectorSection` a surface composes them into — over the built stylesheet,
  * and renders the states the language is *made of* rather than the happy path
  * alone: a required label, a refusal with its reason, an invalid draft, a

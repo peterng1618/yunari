@@ -11,7 +11,7 @@ import {
 } from "./control-well.js";
 
 /**
- * A boolean that applies immediately, as a 26×14 pill (DESIGN.md §5).
+ * A boolean that applies immediately, as a 26×14 pill.
  *
  * The primitive's `readOnly` is what a refusal uses: the switch stays in the
  * tab order, its reason stays readable, and the flip is refused at the source
@@ -22,7 +22,7 @@ import {
  * carries, because §5's dense-chrome rule is about what can be hit, not what
  * is drawn.
  *
- * Hover raises the resting `--edge` to `--muted` (DESIGN.md §5 rule 6), but only
+ * Hover raises the resting `--edge` to `--muted`, but only
  * while unchecked: the checked pill's border is `--accent`, and hover must not
  * override the state that carries the boolean.
  */

@@ -134,10 +134,10 @@ export default defineConfig({
       // The real Node host, not a preview server: hosted theme loading, package
       // asset serving and the SSE stream are otherwise never browser-tested.
       command: `node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
-      // http, which the host still serves beside https on the same port
-      //. The pairing link these specs drive is the one the host prints,
-      // and what that link should carry belongs to the per-display-themes
-      // spec; the secure origin is read by `host-secure-origin.spec.ts`, which
+      // http, which the host still serves beside https on the same port.
+      // The pairing link these specs drive is the one the host prints, and
+      // what that link should carry belongs to the per-display-themes work;
+      // the secure origin is read by `host-secure-origin.spec.ts`, which
       // starts its own host on the LAN and launches its own browser.
       url: `http://127.0.0.1:${HOST_PORT}/api/health`,
       reuseExistingServer: true,

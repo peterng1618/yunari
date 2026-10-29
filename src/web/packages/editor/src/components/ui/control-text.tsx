@@ -14,13 +14,13 @@ import {
 /**
  * A text field that commits on Enter or blur, and never on a keystroke.
  *
- * DESIGN.md §5's editing and recovery contract: the draft is not authored state, so
+ * The design's editing and recovery contract: the draft is not authored state, so
  * a publication that lands mid-edit cannot replace what is being typed, and
  * Escape restores the authored value without adding history. The keyboard
  * decision itself — the Enter/IME guard and the Escape reset — is
  * `useDraftCommit`'s, shared with the number field so the two cannot drift.
  *
- * The input is `h-full` of the well's 26px box, so its target is DESIGN.md §5's
+ * The input is `h-full` of the well's 26px box, so its target is the design's
  * 24×24. A field cannot take the button route (`hitTargetClasses`): a replaced
  * element has no `::before` to carry the area.
  */

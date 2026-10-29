@@ -24,7 +24,7 @@ type ChoiceShape = "row" | "card" | "chip";
 /**
  * One member of a closed set where every member has its own colour: a
  * `--radius-md` row at `--panel-2` carrying an adornment and a name, the chosen
- * one lifted to `--stage` behind an accent border (DESIGN.md §5) — or, where the
+ * one lifted to `--stage` behind an accent border — or, where the
  * surface's own drawing shapes the choice as a tile, a `--radius-lg` card with
  * the adornment above the name (`ChoiceShape`).
  *

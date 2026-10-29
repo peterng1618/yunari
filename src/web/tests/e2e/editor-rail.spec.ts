@@ -27,7 +27,7 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
 
-/** DESIGN.md §7.2's rail accent bar, in px. A bare number rather than a `px`
+/** The design's rail accent bar, in px. A bare number rather than a `px`
  *  string so the one value is written once and the assertion's message spells
  *  it from here — §3's step table has no entry for it. */
 const RAIL_ACCENT_BAR_PX = 2;
@@ -791,7 +791,7 @@ test("every pane's title bar carries the count of its own list, and Document car
 });
 
 /**
- * The selected slot's accent bar is on the rail's **inner** edge (DESIGN.md §7.2),
+ * The selected slot's accent bar is on the rail's **inner** edge,
  * and only a rendered box can show which edge that is.
  *
  * jsdom has no layout and no cascade, so a `*.dom.test.tsx` case cannot see a

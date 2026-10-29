@@ -212,7 +212,7 @@ body,
      token above and at the value `:root` already gave it, so the dark base can
      carry graphite's. */
   --yunari-control-bg: #f5f1e8;
-  /* DESIGN.md §4's role vocabulary, aliased per palette and never once at `:root`:
+  /* The design's role vocabulary, aliased per palette and never once at `:root`:
      an alias is substituted where it is declared, so a root-only declaration
      would pin a subtree that re-declares `--shell-*` — the swatch chip — to
      the live palette. Nothing is renamed and no `--shell-*` is removed; this
@@ -454,7 +454,7 @@ body,
   --edge-2: color-mix(in srgb, var(--edge) 55%, transparent);
 }
 
-/* The scale, name for name from `DESIGN.md` §2–§4, which
+/* The scale, name for name from the design, which
    is normative: a surface picks a step from here or it is off-scale, and
    `scripts/design-tokens.mjs` is what refuses the literal instead.
 
@@ -515,7 +515,7 @@ body,
   --elev-scrim: #00000073;
   /* §3's step table is the spacing scale, not the layout one: a region's own
      height, a dialog's bounds and the compact-viewport breakpoint are
-     dimensions no step can spell, and DESIGN.md leaves them to §7's diagram and
+     dimensions no step can spell, and the design leaves them to its diagram and
      to the drawings. Each is a token rather than a literal because
      `scripts/design-tokens.mjs` holds this file to the same scale it holds
      every surface consuming it (`vg-274`), so a dimension written here needs a
@@ -602,7 +602,7 @@ body,
   --color-shell-danger: var(--shell-danger);
   --color-shell-primary-bg: var(--shell-primary-bg);
   --color-shell-primary-text: var(--shell-primary-text);
-  /* DESIGN.md §4's roles, so a React surface writes `bg-panel-2`, `text-muted` or
+  /* The design's roles, so a React surface writes `bg-panel-2`, `text-muted` or
      `border-edge` and the utility carries the palette in force. `--color-bg` and
      `--color-stage` are omitted on purpose, and for the same reason: both alias
      `--shell-backdrop`, which light makes a gradient stack, and a colour utility
@@ -1130,7 +1130,7 @@ body,
 .editor-shell-body {
   display: grid;
   grid-template-areas: "rail panel stage inspector";
-  /* The layer panel is DESIGN.md's 246px (§7.3, "width 246px by default"). The
+  /* The layer panel is 246px wide by default. The
      360px this column carried before was plan 2's own measurement, taken when a
      row carried four things it had not: a 40px kind specimen, the name, and two
      columns naming it — what it *is* (`.yunari-layer-role`) and the key it
@@ -1165,7 +1165,7 @@ body,
   grid-template-areas: "rail stage inspector";
   grid-template-columns: 46px minmax(0, 1fr) 276px;
 }
-/* The rail: a 46px column of glyph slots, one per pane (DESIGN.md §7.2). It draws
+/* The rail: a 46px column of glyph slots, one per pane. It draws
    no pane content and decides nothing — the shell turns a press into open,
    swap or collapse. It owns the rail|pane hairline, carried by the §3
    elevation-0 block that selects the three body regions.
@@ -1209,7 +1209,7 @@ body,
   border-radius: 8px;
   background: transparent;
   /* Closed slots are `--faint`; the selected one lifts to `--accent` with a
-     wash and a 2px bar on the rail's inner edge (DESIGN.md §7.2). */
+     wash and a 2px bar on the rail's inner edge. */
   color: var(--faint);
   cursor: pointer;
 }
@@ -1248,7 +1248,7 @@ body,
   border-radius: 2px;
   background: var(--accent);
 }
-/* The settings gear, pinned to the foot (DESIGN.md §7.2). `margin-top: auto` is the
+/* The settings gear, pinned to the foot. `margin-top: auto` is the
    whole of the pin: it takes the slack between the slots and the gear, so
    the gear sits on the rail's bottom edge without a spacer element. It is
    `--muted` rather than a closed slot's `--faint`, because it is a real control
@@ -1326,7 +1326,7 @@ body,
    the **only** thing this rule may say about an inspector button. The rest of
    what it used to say — a transparent border and background, a 7px radius, a
    `--shell-text` colour — is a *treatment* of a control, and since the React
-   vocabulary moved into this column the control set owns it (DESIGN.md §5: the well
+   vocabulary moved into this column the control set owns it (the well
    is `--panel-2` inside a 1px `--edge`). Unlayered, the old rule beat the
    utilities and repainted a well in the shell's own colours, which is the second
    owner `vg-298` records; the dock still needs its own. */
@@ -1410,7 +1410,7 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
-/* The Add pane's insert surface (DESIGN.md §5.2). The group is an eyebrow over a
+/* The Add pane's insert surface. The group is an eyebrow over a
    grid, not a box: the panel-wide `fieldset` above draws a border and a legend
    padding, and both are taken back here rather than left to be out-specified
    per tile. The `fieldset` stays, because a group is what tells the shape Line
@@ -1571,7 +1571,7 @@ body,
    border inside a well that already draws one, gave the input a 30px
    `min-height` inside a 26px row and a 4px right margin that pulled a select's
    well 4px off the column the drawing draws. The React column owns its own
-   treatment now (DESIGN.md §5 — the well *is* the box), and what is left here is the
+   treatment now (the well *is* the box), and what is left here is the
    handful of buttons the inspector still renders as plain DOM: the runs'
    add/remove, the chart's remove-series and the crop row — the type-preset
    reveal went with item 17's read-only section (`vg-474`). Add a hook here
@@ -1710,8 +1710,8 @@ body,
   inset: 0;
   z-index: 70;
   /* §3's modal scrim, through the token rather than the `#0009` literal that
-     stood here: fifteen points darker than DESIGN.md's value, and a hex value in
-     a surface, which §10 forbids. Both dialogs render this one rule. */
+     stood here: fifteen points darker than the design's value, and a hex value
+     in a surface, which the design forbids. Both dialogs render this one rule. */
   background: var(--elev-scrim);
 }
 .editor-shell-dialog {
@@ -1953,10 +1953,10 @@ body,
    2px accent bar on its leading edge; the horizontal word strip this replaces is
    not drawn.
 
-   **The axis is the drawing's because DESIGN.md is silent about it, which
-   makes it the drawing's jurisdiction.** §5 opens the vocabulary with
+   **The axis is the drawing's because the design is silent about it, which
+   makes it the drawing's jurisdiction.** The vocabulary opens with
    "The vocabulary is closed. A control is one of these, or it is not a control."
-   and no *tab* control is in it, so no rule requires the horizontal form; §7
+   and no *tab* control is in it, so no rule requires the horizontal form; the design
    fixes the three tabs and what each holds, never their direction; and silence
    is not permission — it is the drawing's jurisdiction, which draws this very
    strip horizontal. The primitive stays Base UI's
@@ -2347,12 +2347,12 @@ body,
   background: var(--shell-accent);
   pointer-events: none;
 }
-/* Every pane's chrome (DESIGN.md §7.3): a title bar, a body and an optional footer
+/* Every pane's chrome: a title bar, a body and an optional footer
    toolbar. The section is the pane itself, so `data-yunari-panel` names it.
 
    The pane's own name overrides the panel-wide `h2` rule above it. That rule is
    for a *section* heading inside a pane — uppercase, display serif, a hairline
-   under it — and a pane's name is neither: DESIGN.md §2 reserves uppercase for
+   under it — and a pane's name is neither: the design reserves uppercase for
    section eyebrows and gives a panel title `--text-md` in the UI sans. The
    selector is long because it has to out-rank
    `[data-shell-palette="editorial"] .editor-shell-panel h2`. */
@@ -2458,7 +2458,7 @@ body,
    name starts on the same left edge — which is what makes a column of them
    scannable at all.
 
-   28px, re-cut for DESIGN.md's 246px pane (§7.3). The 40px this column carried
+   28px, re-cut for the design's 246px pane. The 40px this column carried
    was the budget a 360px pane allowed, and it stopped fitting when the pane
    narrowed: measured on canvas at 1600×900 with every group open, the row
    `group-trends-card` ran its role `Performance trends` 11px past its own right
@@ -2486,7 +2486,7 @@ body,
   overflow: hidden;
 }
 /* The name is the row's identity and it is the first column to yield, because
-   DESIGN.md §7.3 orders the whole row: "A row yields its name and its key before
+   the design orders the whole row: "A row yields its name and its key before
    it yields a control, and it yields the role last." **No width floor here**,
    rest row or attended: a floor is still a width the row may not have, and the
    role is the column that never gives up a glyph — so a name that kept 6ch
@@ -2903,8 +2903,8 @@ body,
   line-height: var(--text-sm--line-height);
   text-align: center;
 }
-/* The cluster's three camera controls: −, + and fit. Square at DESIGN.md's 26px
-   icon button, transparent inside the cluster's own glass, and §5 rule 6's
+/* The cluster's three camera controls: −, + and fit. Square at the design's 26px
+   icon button, transparent inside the cluster's own glass, and the hover rule's
    glyph-only hover — a resting 1px transparent border raised to `--muted`, so
    the control acquires its edge on hover and "nothing moves" holds (the
    transparent resting border is what keeps the box the same size; with

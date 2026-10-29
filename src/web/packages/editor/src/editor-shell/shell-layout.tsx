@@ -118,7 +118,7 @@ const MODE_SWITCH_ID = "yunari-shell-modes";
 const modeSegmentId = (mode: ShellMode): string => `${MODE_SWITCH_ID}-${mode}`;
 
 /**
- * DESIGN.md §5's Segmented, in the header's **bare** form.
+ * The design's Segmented, in the header's **bare** form.
  *
  * The one Segmented component (`components/ui/control-segmented.tsx`) is a
  * labelled *row* — §5's 74px label column beside a value cell — and the header
@@ -166,7 +166,7 @@ interface ShellHosts {
   /** The Add pane's body: shapes, text and the card library. */
   readonly add: HTMLElement;
   /** The Assets pane: every declared file, its import and placement, and the
-      finder link (DESIGN.md §7.2). */
+      finder link. */
   readonly assets: HTMLElement;
   /** The Tokens pane: the theme's paints and type presets. */
   readonly tokens: HTMLElement;
@@ -586,8 +586,8 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
               <CompositionPane bridge={store.bridge} />
             </Pane>
             {/* The Add pane's body is one host and one React tree: shapes,
-                text and the card library. Local files belong to the Assets slot
-                (DESIGN.md §7.2). */}
+                text and the card library. Local files belong to the Assets slot.
+                */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}

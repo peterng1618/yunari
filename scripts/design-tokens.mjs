@@ -35,7 +35,7 @@
  *
  * This is deliberately the *cheap* ratchet, and its second px tier is coarse in
  * a way that is documented rather than accidental: in a spacing property
- * DESIGN.md's §3 steps are enforced exactly, because the property is right there to
+ * The design's spacing steps are enforced exactly, because the property is right there to
  * read, and everywhere else only the values DESIGN.md prints are allowed. The
  * real enforcement is the browser assertion in Task 4 — every gated element's
  * computed spacing on DESIGN.md's scale — which is what catches a `26px` in a
@@ -53,7 +53,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-/** DESIGN.md §3's named steps: the only spacing values a surface may write. */
+/** The design's named steps: the only spacing values a surface may write. */
 const SPACING_STEPS = new Set([4, 6, 8, 10, 12, 14, 16, 20, 24, 32]);
 /** Always allowed anywhere: `1px` is a hairline border, and `0` is no border at all. */
 const ALWAYS_PX = new Set([0, 1]);
@@ -245,12 +245,12 @@ function position(text, index) {
 
 /**
  * Violations in one file's source. `designLanguagePx` is the tier-2 allowlist: px
- * lengths DESIGN.md fixes outside §3's spacing table, whatever the property —
+ * lengths the design fixes outside its spacing table, whatever the property —
  * the row rhythms, the rail and pane widths, §7.2's `2px` accent bar on the rail's
  * inner edge, §7.3's `28px` mark slot, the pill and toggle heights, the slider's
  * track and value well, the swatch, and §6's stroke widths among them. It is the
  * set of values that actually appear, not an enumeration of every number
- * DESIGN.md prints. What it deliberately does NOT cover is §2's type sizes
+ * the design prints. What it deliberately does NOT cover is type sizes
  * 13/15/19, because a value here is allowed *anywhere*, so adding them would
  * license `padding: 13px`. The steps and `0`/`1` are allowed without it, so an
  * empty allowlist narrows the rule rather than disabling it. Each violation
@@ -552,7 +552,7 @@ async function selfTest() {
     // a DESIGN.md value tier 2 would admit — `26` is allowed here only with the
     // allowlist, so this case fails if the utility rule is removed.
     [
-      "a tsx spacing utility is held to §3 even for a DESIGN.md value",
+      "a tsx spacing utility is held to the spacing steps even for a design value",
       "a.tsx",
       'const c = "p-[26px]";',
       1,

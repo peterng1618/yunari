@@ -10,7 +10,7 @@
  *
  * **A card unit may be depicted; a primitive may not be depicted beyond its
  * kind.** The library is a fixed set of eight, so a unit's tile is honest; a
- * shape is a kind, so its tile is the kind and nothing more (DESIGN.md §6).
+ * shape is a kind, so its tile is the kind and nothing more.
  */
 import { describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";

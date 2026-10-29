@@ -110,7 +110,7 @@ async function sectionIds(page: Page): Promise<string[]> {
 
 async function isOpen(page: Page, id: string): Promise<boolean> {
   // The section is a disclosure whose header is a button carrying
-  // `aria-expanded` (DESIGN.md §5), not a native `<details>` with an `.open`.
+  // `aria-expanded`, not a native `<details>` with an `.open`.
   return sectionExpanded(page, id);
 }
 
@@ -133,7 +133,7 @@ async function controlCount(
  * Whether the subject leads the column.
  *
  * The column's host mounts the subject in its first child and the sections in
- * the sibling after it (DESIGN.md §7.4: "The column opens with the subject … not a
+ * the sibling after it ("The column opens with the subject … not a
  * chrome label"), so "the subject leads" is a document-order fact rather than a
  * presentation class: the subject's host carries copy and the first section
  * follows it. A projection that rendered the sections first, or no subject at
@@ -1832,8 +1832,8 @@ test.describe("the per-kind inspector column", () => {
     // Plan 1's parity census (`vg-390`) re-derived these two from the drawing:
     // `:30` draws the header's
     // count in `ui-monospace` and `var(--faint)`, and `:24` draws the subject's
-    // name at weight 600. §2 gives counts to UI mono (`DESIGN.md:124`) and
-    // titles 600 (`:149`); §4 gives `--faint` to counts (`:103`). Both were
+    // name at weight 600. §2 gives counts to UI mono and titles 600; §4 gives
+    // `--faint` to counts. Both were
     // inherited before this case existed — the count took the heading's sans
     // and `--muted`, the name the shell's 400.
     const count = page.locator("[data-yunari-section-count]").first();

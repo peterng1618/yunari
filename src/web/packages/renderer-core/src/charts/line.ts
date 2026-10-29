@@ -372,8 +372,7 @@ export function toEngineColor(
   usage: "stroke" | "area",
 ): EngineColor {
   // A stroke that resolves to nothing draws no ink, so the series shows no
-  // number it cannot colour; the points and axes still say a series is there
-  //.
+  // number it cannot colour; the points and axes still say a series is there.
   if (fill === undefined) return NO_INK;
   switch (fill.kind) {
     case "solid":

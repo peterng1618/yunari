@@ -46,7 +46,7 @@ beforeAll(() => {
  * An icon-only control's name and its tooltip are one string, by construction
  * rather than by hand.
  *
- * DESIGN.md §6 makes it a defect for a glyph button's tooltip and accessible name to
+ * The design makes it a defect for a glyph button's tooltip and accessible name to
  * disagree, and §6 rule 2 says the tooltip **is** the label. The defect this
  * file catches is a call site that wires the two by hand, so the assertions run
  * over **mounted surfaces** rather than over `ControlIconButton` alone — a sweep

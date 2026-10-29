@@ -7,7 +7,7 @@
  * be *wrong* rather than unowned, and it lives apart from that file because
  * adding it there took the walk past the 800-line stop (783 before this file).
  *
- * **A missing reading is a gap, never a placeholder.** DESIGN.md §9, and the
+ * **A missing reading is a gap, never a placeholder.** The design and the
  * architecture guardrail: a reading that has not arrived is
  * never fabricated as a zero or a default. A surface may draw nothing (that is
  * the truth) or the gap's own word; it may never draw `0`, `-`, `--` or `—`,

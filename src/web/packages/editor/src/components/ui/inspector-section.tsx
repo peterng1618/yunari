@@ -4,7 +4,7 @@ import { hitTargetClasses } from "./control-well.js";
 
 /**
  * One region of a panel: a disclosure whose header is a button, and a body of
- * rows (DESIGN.md §5).
+ * rows.
  *
  * The header is the button rather than a div that contains one, so its
  * `aria-expanded` reaches the thing that was clicked (§5, "Section headers are

@@ -310,8 +310,7 @@ test.describe("the live line chart's edge", () => {
     }
 
     // Each line's axis ends at its newest reading and never moves backwards;
-    // nothing may be held past it, and no reading may be dropped as a null
-    //.
+    // nothing may be held past it, and no reading may be dropped as a null.
     const lines = new Map<string, Frame[]>();
     for (const frame of live) {
       if (frame.family !== "line") continue;

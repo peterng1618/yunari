@@ -411,8 +411,7 @@ describe("a display whose page is hidden", () => {
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
     // The synthetic frame clock is the wall clock: a line redraws with its
-    // data, so the repaint that proves the loop is alive is the text pass
-    //.
+    // data, so the repaint that proves the loop is alive is the text pass.
     vi.spyOn(Date, "now").mockImplementation(() => frameTime);
 
     await import("./main.js");

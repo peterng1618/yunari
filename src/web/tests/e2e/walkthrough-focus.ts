@@ -19,7 +19,7 @@ import type { Page } from "@playwright/test";
 /**
  * The shell's regions.
  *
- * **Taken from DESIGN.md §7's own drawing, not invented to fit a result.** Its
+ * **Taken from the design's own drawing, not invented to fit a result.** Its
  * labelled bands are `header · rail · pane · stage · inspector · status bar`.
  * The four here are the body's — the body regions the interactions act in,
  * and the ones that own a focusable surface: the rail chooses a pane, the pane

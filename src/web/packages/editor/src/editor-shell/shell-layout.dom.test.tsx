@@ -314,7 +314,7 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * holds no manager, so `assetCount` arrives through the store and a `0` before
  * that would be the same fabrication. And **before a bridge is set the
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
- * mounted its document is a claim the product does not have (DESIGN.md §9). The
+ * mounted its document is a claim the product does not have. The
  * Add pane's count is the exception, and it proves the rule rather than
  * breaking it: `CARD_LIBRARY` is a module constant, so eight units is a reading
  * at every moment the pane exists, never a default standing in for one.

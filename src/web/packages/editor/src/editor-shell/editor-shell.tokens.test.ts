@@ -316,7 +316,7 @@ describe("shell token stylesheet", () => {
 
   /** The values themselves, asserted rather than merely present.
    *
-   *  `DESIGN.md` §2–§3 is normative for these, and these
+   *  The design is normative for these, and these
    *  are the values it names. Asserting only that a token exists would let a
    *  change to `text-sm` land as a silent shift — which is how `--radius-md` sat
    *  at 8px against DESIGN.md's 6px with nothing to catch it; asserting the
@@ -362,7 +362,7 @@ describe("shell token stylesheet", () => {
     // Tailwind writes each `--text-*` companion for its own size — `--text-sm`
     // ships `calc(1.25 / .875)`, computed for 14px — so a size changed without
     // its companion inherits a ratio belonging to a size the token no longer
-    // has. These are DESIGN.md §2's ratios; every size states its own.
+    // has. These are the design's ratios; every size states its own.
     for (const [size, lineHeight] of [
       ["2xs", "1.2"],
       ["xs", "1.3"],
@@ -465,7 +465,7 @@ describe("shell token stylesheet", () => {
     }
   });
 
-  /** DESIGN.md §4's role vocabulary is what a *surface* writes, and today only the
+  /** The design's role vocabulary is what a *surface* writes, and today only the
    *  `--shell-*` layer exists. An alias is substituted where it is declared, so
    *  a role declared once at `:root` would resolve the root's palette and pin a
    *  subtree that re-declares `--shell-*` — the swatch chip — to it. Every

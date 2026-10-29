@@ -264,7 +264,7 @@ test("the state slot does not cover the role, at rest or with the row attended",
   // width floor at rest or attended — a floor is still a width the row may not
   // have, and on a font whose glyphs run wider than the one it was measured in
   // it pushed the role past the row's edge — so the name ellipsises while the
-  // role keeps its glyphs (DESIGN.md §7.3: "A row yields its name and its key
+  // role keeps its glyphs ("A row yields its name and its key
   // before it yields a control, and it yields the role last").
   //
   // Every row is walked rather than a hand-picked sample, because which row is

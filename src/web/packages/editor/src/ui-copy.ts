@@ -252,7 +252,7 @@ export const uiCopy = {
     position: "Position",
     size: "Size",
     invalidValue: "That value cannot be applied to the selection.",
-    /** §7.4: the empty column "says where to choose from" (`DESIGN.md:279`),
+    /** The empty column "says where to choose from",
         which needs the place named — "select an object" said the act and not
         where to do it. The canvas is the surface existing objects are chosen
         on; the Add pane inserts new ones, which is a different act. */
@@ -389,8 +389,8 @@ export const uiCopy = {
     view: "View",
   },
   /**
-   * The shell's three modes, as the header's switch names them (DESIGN.md
-   * §7.1). Each names the *surface* rather than the mechanism behind it.
+   * The shell's three modes, as the header's switch names them.
+   * Each names the *surface* rather than the mechanism behind it.
    *
    * **The user chose `Editor · Themes · Host` on 2026-10-19** (SDD ruling R100),
    * over the draft names — *theme store*, *theme editor*, *host

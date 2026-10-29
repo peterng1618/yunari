@@ -163,7 +163,7 @@ export function glassFields(object: FabricObject): readonly FieldView[] {
       label: uiCopy.inspectorFields.glassBlur,
       value: treatment.blurRadius,
       // It had both bounds pre-plan (`0 … MAX_GLASS_BLUR_RADIUS`) and so drew a
-      // slider; DESIGN.md's vocabulary says a bounded number is a slider (§5).
+      // slider; the design's vocabulary says a bounded number is a slider.
       // The pre-plan field refused a fraction unconditionally; the boundary
       // re-checks it. See `panelMaterialFields`.
       min: 0,

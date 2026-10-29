@@ -72,7 +72,7 @@ const SETTINGS_TABS: readonly SettingsTab[] = [
 ];
 
 /** Each tab's glyph, from the one icon family the shell already draws with
- *  (DESIGN.md §6: stroke-based, `currentColor`, on a 24px grid). The
+ *  (stroke-based, `currentColor`, on a 24px grid). The
  *  navigation column carries a glyph per row; its three are a palette, a
  *  keyboard and an info mark, all of which the installed set has, so no glyph
  *  is invented and §6 needs no addition. The
@@ -118,7 +118,7 @@ const VERSION_FACT_LABELS: Readonly<Record<VersionFact["id"], string>> = {
  *  open document's own `metadata.version` — the same fact the Document pane's
  *  `releaseVersion` row reads, and never the product's. A document that carries
  *  no release version (a new or unsaved theme, or one whose stored version is
- *  empty) contributes no row: DESIGN.md §9's missing reading is a gap stated by
+ *  empty) contributes no row: the design's missing reading is a gap stated by
  *  absence, never a placeholder that could read as data. */
 export function versionFacts(
   releaseVersion: string | undefined,
@@ -136,7 +136,7 @@ export function versionFacts(
 /** §7's Appearance tab: the six shell palettes, and follow-the-system.
  *
  *  The six are **cards in one radio group** rather than a `Segmented`, which
- *  DESIGN.md §5 sizes at 2–4 labels: six lifted segments is a control DESIGN.md
+ *  the design sizes at 2–4 labels: six lifted segments is a control the design
  *  does not draw. The group takes §5 rule 7's grid (`repeat(3,1fr)` of
  *  `--radius-lg` cards), so the columns follow it; the group's own keyboard
  *  model still walks the six in reading order, and a narrower dialog changing

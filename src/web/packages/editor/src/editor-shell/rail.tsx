@@ -3,7 +3,7 @@ import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { uiCopy } from "../ui-copy.js";
 import { Glyph, RAIL_GLYPHS, SETTINGS_GLYPH } from "./icons.js";
 
-/** The rail's five slots (DESIGN.md §7.2). Named here rather than in
+/** The rail's five slots. Named here rather than in
  *  `shell-layout.tsx` because the rail is what enumerates them — two owners of
  *  "which slots there are" would drift. The settings gear is deliberately not
  *  one of them: it opens a modal, never a pane, so it is outside this set. */
@@ -76,7 +76,7 @@ function RailSlotButton({
   );
 }
 
-/** The settings gear, pinned to the rail's foot (DESIGN.md §7.2).
+/** The settings gear, pinned to the rail's foot.
  *
  *  It draws its own button for the reason the slots do — the control set's icon
  *  button is a 26px action and this is the rail's 36px rhythm — and it carries

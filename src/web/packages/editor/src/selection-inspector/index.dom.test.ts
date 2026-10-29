@@ -528,7 +528,7 @@ describe("the selection inspector", () => {
       "[data-yunari-opacity]",
     )!;
 
-    // A bounded number is DESIGN.md's slider (§5) — Fabric's own 0–1, projected
+    // A bounded number is the design's slider — Fabric's own 0–1, projected
     // here as 0–100 — so the control is a track and the well reads the
     // percentage. Opacity is the example, and the glass blur drew the same
     // conclusion one directory away.
@@ -1167,7 +1167,7 @@ describe("the column's sections", () => {
     // rebuilding it: focus is kept by the element surviving, the same way the
     // name field keeps its caret. The imperative body deliberately did not
     // restore focus here, because doing so re-opened the glass control's reason
-    // popup — but the reason is words in the row now (DESIGN.md §5.3), owned by plan
+    // popup — but the reason is words in the row now, owned by plan
     // 1's `ControlRow`, so there is no popup left to re-open.
     const after = host.querySelector<HTMLElement>(
       "[data-yunari-glass-enabled]",

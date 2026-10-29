@@ -17,7 +17,7 @@ import { type SelectionStore, useSelection } from "./shell-stores.js";
  *
  * **No scene is not a scene with nothing in it.** Before a bridge is set there
  * is no total to read, so the strip draws nothing rather than `0 objects` — a
- * reading the product does not have (DESIGN.md §9). A document that really
+ * reading the product does not have. A document that really
  * holds nothing reports `0`, and that is an answer.
  */
 export function StatusReadout({

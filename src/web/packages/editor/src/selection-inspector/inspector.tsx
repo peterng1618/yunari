@@ -53,7 +53,7 @@ function createStore(): InspectorStore {
  * it says anything about fields. The kind's glyph leads the name at `--text-md`,
  * in the chrome's one icon vocabulary, and the line under them carries the key a
  * binding reads at `--text-xs` in `--muted`. The block is closed by a hairline
- * edge rather than a chrome label (DESIGN.md §7.4), and that edge is the column's
+ * edge rather than a chrome label, and that edge is the column's
  * *one* boundary below the header: the first section draws none of its own
  * (`vg-466`).
  */
@@ -102,7 +102,7 @@ function Inspector({
     if (accepted) setOpenedAt(null);
     else setDraftState(authoredName);
   };
-  // The same keyboard contract every input takes (DESIGN.md §5): Enter commits,
+  // The same keyboard contract every input takes: Enter commits,
   // Escape drops the draft and leaves the authored value showing, and an IME's
   // Enter is not mistaken for a commit.
   const keys = useDraftCommit({

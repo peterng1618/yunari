@@ -125,8 +125,8 @@ it("marks the open slot with the accent and the closed ones with --faint", () =>
 
   // The two treatments are CSS keyed on `aria-pressed`, so the attribute is
   // what both the stylesheet and the browser suite read — an accent glyph,
-  // wash and 2px bar on the selected slot, `--faint` on the rest (DESIGN.md
-  // §7.2). The rail has no visible text to read the colour from, which is why
+  // wash and 2px bar on the selected slot, `--faint` on the rest.
+  // The rail has no visible text to read the colour from, which is why
   // the marker is the attribute rather than a class on a label.
   expect(slot(host, "tokens").getAttribute("aria-pressed")).toBe("true");
   for (const id of RAIL_SLOTS) {

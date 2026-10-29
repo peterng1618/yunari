@@ -4,7 +4,7 @@ import type { ControlProps } from "./control-well.js";
 
 /**
  * A paint reference: a well holding a swatch, then the token's name, then the
- * chevron (DESIGN.md §5).
+ * chevron.
  *
  * It is the select with an adornment rather than a second selection
  * mechanism — the swatch is a picture of the value, the list is still the only

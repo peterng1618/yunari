@@ -370,7 +370,7 @@ test.describe("the shell, reached by keyboard alone", () => {
    * and what is asserted is where focus landed — a popup that opened with focus
    * left behind on its trigger fails here.
    *
-   * The palette is DESIGN.md §4's shell palette, chosen in Settings, and it is
+   * The palette is the design's shell palette, chosen in Settings, and it is
    * a choice rather than a re-press: `paletteNotInForce` owns that decision,
    * including why the palette already in force would assert nothing.
    *
