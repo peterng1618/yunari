@@ -1,38 +1,38 @@
 # Yunari status
 
 Updated: 2026-10-29
-Branch: `peterng1618/turzx-5-inch-display-support`
+Branch: `peterng1618/turzx-5-inch-display-support` (merged into `main` and pushed as `a20ffc8f`)
 
 ## Current objective
 
-Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape, COM5) through the host's panel subsystem, with a hardware-support record, a controls surface, and phased video-background support.
+Drive the TURZX/Turing 5" serial panel (Rev C, 800×480 landscape) through the host's panel subsystem, with a hardware-support record, a controls surface, and video-background support with a transparent UI overlay.
 
 ## Active work
 
-- **Active plan:** `docs/superpowers/plans/2026-10-29-turzx-serial-panel.md` (3 phases / 12 tasks); all tasks done, final review clean, awaiting integration choice.
-- **Video works on the panel:** the demo theme's clip uploads, plays, and the UI overlay updates over it; a start failure falls back to stills.
-- **The panel is wedged after a host kill:** COM5 answers "Access denied" to every open with no host running, so a replug or power-cycle is needed before the next hardware run.
-- **Device reclaim is designed, not planned:** per-adapter holder names plus one host service, kill + manual guide in one dialog; queued behind this plan.
-- **`main` is merged in:** the Lian Li panel video path (`0134`) and the `0135` fallback-frame/glass model now share one `PanelVideo` contract with the TURZX adapter.
+- **The panel campaign is complete and integrated:** all 12 plan tasks done, whole-branch review clean after one fix round, `main` at `a20ffc8f`.
+- **One `PanelVideo` contract** now serves the Lian Li driver and the TURZX adapter; the branch's stop chain and main's release-before-restart both survive the merge.
+- **Hardware partially proven (2026-10-29):** status (`needReSend:0|renderCnt:…`), hello (`chs_5inch.dev1_rom1.88`) and brightness answered 200 on the device; the screen control re-enumerates the panel's USB port.
+- **The `screen` command kills the host's port:** after it the runner reports `Cannot call write after a stream was destroyed` once a second and never rediscovers the panel (`vg-789`), so a replug is needed again.
+- **Device reclaim is designed, not planned:** per-adapter holder names plus one host service, kill + manual guide in one dialog.
 
 ## Last completed change
 
-- **Merged `main` into the TURZX branch:** one `PanelVideo`/`PanelVideoPlacement`/`PanelVideoSource` contract now serves the Lian Li driver and both panel adapters.
-- **Both stop paths kept:** the branch's retryable per-display stop/restart chain and main's release-before-restart (`b37d9286`), now awaited on the removal route too.
-- **Backlog unioned:** main's and the branch's `vg-789`–`vg-796` rows kept with no duplicate ids.
+- **Merged `main` into the branch and pushed `main`:** `38a1b58b` merge, `a20ffc8f` poll fix; gate `EXIT=0` (469 files / 7173 passed).
+- **Conflicts resolved with both sides kept:** main's Lian Li video methods and `0134`/`0135` work plus the branch's TURZX lifecycle; one duplicate `PanelVideo` removed.
+- **Backlog unioned:** `vg-789`–`vg-796` filed; `vg-789` now carries the observed screen-command re-enumeration.
+- **Hardware run:** brightness 50, screen off, hello and status all reached the device before the port died.
 
 ## Next
 
-1. Choose how to integrate the branch (merge to `develop`, PR, or hold).
-2. Replug the panel and run `vg-791`'s hardware session: controls, video, overlay alpha, glass over video, and a stop that leaves no clip looping.
+1. Replug the panel, then finish `vg-791`: overlay alpha, glass over video, and a stop that leaves no clip looping.
+2. Decide the screen-command policy: report the reconnect, or forbid it until rediscovery works (`vg-789`).
 3. Reclaim-device spec — designed, awaiting the user's approval of the shape.
-4. Apply the same UI/UX audit to the rest of the app (`vg-780`).
-5. Drain the backlog: a reproduction pass first, not a fix pass.
+4. Drain the backlog: a reproduction pass first, not a fix pass.
 
 ## Blockers / unverified
 
-- **COM5 is wedged:** a replug or power-cycle is required; without it no hardware step can run.
-- **No control is hardware-verified:** brightness, screen, status, restart and identify were never sent to the device; the dialog is proven by tests only.
+- **The panel needs another replug:** the `screen` control re-enumerated it and the host never recovered the port.
 - **Overlay alpha and glass over video are unverified on pixels:** the device accepted every frame, but no capture proof exists.
-- **Static and dynamic glass (`0135`) are unproven on the panel:** the browser cases pass, but no fixture theme has been pushed with either setting.
-- **`StopPlay`'s resting picture is unknown:** whether the panel returns to its stored still or holds the last decoded frame.
+- **`vg-789`/`vg-790` are the blocking product defects:** unplug and re-enumeration are not handled; a held port is silently invisible.
+- **Video stop is unverified:** whether `STOP_VIDEO` leaves the panel still or looping after a host exit was not observed.
+- **Only firmware `1.88` is verified:** a newer ROM may change the protocol silently.
