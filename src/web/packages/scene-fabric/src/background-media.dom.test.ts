@@ -430,7 +430,11 @@ describe("background media on a turned display", () => {
     top: number,
     width: number,
     height: number,
-    extra: { readonly radius?: "circle"; readonly angle?: number } = {},
+    extra: {
+      readonly radius?: "circle";
+      readonly angle?: number;
+      readonly angleOrigin?: "corner" | "centre";
+    } = {},
   ): MediaBox => ({ left, top, width, height, ...extra });
 
   /** A mounted layer on one of the two boxes, with the role its media declares. */
@@ -454,7 +458,7 @@ describe("background media on a turned display", () => {
     return { handle, layer };
   }
 
-  it("rotates a theme-bounded layer and not a display-bounded one", () => {
+  it("turns an artboard layer about its corner and a display layer about its centre", () => {
     const theme = mountLayer(
       { artboard: box(0, 0, 100, 50, { angle: 90 }) },
       "theme",
@@ -475,13 +479,31 @@ describe("background media on a turned display", () => {
     expect(display.layer.style.transform).toBe("");
     expect(display.layer.style.borderRadius).toBe("50%");
 
+    // A display-bounded layer is the screen, so a mount angle turns it in
+    // place: the same angle about the box's centre, not its corner.
+    const turned = mountLayer(
+      {
+        artboard: box(0, 0, 100, 50),
+        display: {
+          ...box(0, 0, 50, 50),
+          radius: "circle",
+          angle: 90,
+          angleOrigin: "centre",
+        },
+      },
+      "display",
+    );
+    expect(turned.layer.style.transform).toBe("rotate(90deg)");
+    expect(turned.layer.style.transformOrigin).toBe("50% 50%");
+
     theme.handle.destroy();
     display.handle.destroy();
+    turned.handle.destroy();
   });
 
   it("tells the sampler a theme's angle and a display's own box", () => {
     // Two different samplers: a theme layer turns with the composition, while a
-    // display layer fills the host and must not turn with it.
+    // display layer reports the screen box it occupies in host pixels.
     const theme = mountLayer(
       { artboard: box(0, 0, 100, 50, { angle: 180 }) },
       "theme",
@@ -505,8 +527,29 @@ describe("background media on a turned display", () => {
     });
     expect(display.handle.backdrop()?.angle).toBeUndefined();
 
+    // The mount angle reaches the sampler too, or a glass panel would sample
+    // the upright picture under a turned one.
+    const turned = mountLayer(
+      {
+        artboard: box(0, 0, 100, 50),
+        display: {
+          ...box(0, 0, 50, 50),
+          radius: "circle",
+          angle: 90,
+          angleOrigin: "centre",
+        },
+      },
+      "display",
+    );
+    expect(turned.handle.backdrop()?.screenRect).toMatchObject({
+      angle: 90,
+      angleOrigin: "centre",
+    });
+    expect(turned.handle.backdrop()?.angle).toBe(90);
+
     theme.handle.destroy();
     display.handle.destroy();
+    turned.handle.destroy();
   });
 });
 

@@ -620,6 +620,79 @@ describe("glass composition", () => {
     expect(corner[1]).toBeLessThan(60);
   });
 
+  it("turns a display-bounded backdrop by its mount angle, and keeps the disc", () => {
+    // The display is a 100px disc in a 200px host, mounted at 90 degrees. The
+    // media is red on its upright left half and blue on its right; a quarter
+    // turn about the screen's centre puts red on top and blue below.
+    const screen = {
+      left: 50,
+      top: 50,
+      width: 100,
+      height: 100,
+      radius: "circle" as const,
+    };
+    const s = stage({
+      size: 200,
+      texture: false,
+      backdrop: () => ({
+        screenRect: screen,
+        angle: 90,
+        // The display's own paint, as the real backdrop supplies: outside the
+        // disc the screen is black, so the clip is observable.
+        plate: {
+          screenRect: screen,
+          paint(ctx, region) {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, region.width, region.height);
+          },
+        },
+        paint(ctx, region, device) {
+          const left = device.left - region.left;
+          const top = device.top - region.top;
+          ctx.fillStyle = "#ff0000";
+          ctx.fillRect(left, top, device.width / 2, device.height);
+          ctx.fillStyle = "#0000ff";
+          ctx.fillRect(
+            left + device.width / 2,
+            top,
+            device.width / 2,
+            device.height,
+          );
+          return true;
+        },
+      }),
+    });
+    for (const [left, top] of [
+      [75, 55],
+      [105, 125],
+      // Inside the disc's bounding square, outside its arc: the clip has to
+      // survive a turned media, or the square's corner shows picture.
+      [52, 52],
+    ] as const)
+      s.canvas.add(
+        panel({
+          left,
+          top,
+          width: 16,
+          height: 16,
+          fill: "transparent",
+          yunariGlass: { blurRadius: 0 },
+        }),
+      );
+    s.canvas.renderAll();
+
+    expect(
+      s.pixel(82, 62)[0],
+      "the upright left half is now the top",
+    ).toBeGreaterThan(200);
+    expect(s.pixel(112, 132)[2], "and the right half is below").toBeGreaterThan(
+      200,
+    );
+    const corner = s.pixel(58, 58);
+    expect(corner[0], "outside the disc is still black").toBeLessThan(60);
+    expect(corner[2]).toBeLessThan(60);
+  });
+
   it("maps a theme-bounded device box by its mapped centre under a turned plane", () => {
     // The plane is a 45-degree clockwise rotation with no translation:
     // [cos45, sin45, -sin45, cos45, 0, 0]. The media rect is the 200x200 board,

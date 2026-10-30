@@ -58,8 +58,9 @@ export function artboardBackdrop(
     width: options.width,
     height: options.height,
   };
-  // A display-bounded layer's own box is not the board: it fills the host and
-  // must not turn with the composition, so its device rect is carried through.
+  // A display-bounded layer's own box is not the board: it is the screen, so
+  // its device rect is carried through, and the media turns inside it with the
+  // display's mount angle.
   const screenRect = media?.screenRect;
   const surface = options.surface;
 

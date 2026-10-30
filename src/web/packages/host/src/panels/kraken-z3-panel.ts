@@ -237,40 +237,68 @@ class KrakenPanel implements PanelDevice {
    * The bucket is deleted and recreated each frame because a bucket that
    * already holds an image is not overwritten in place — the firmware keeps
    * the first graphic it stored there.
+   *
+   * **Every command's status byte is read.** A refused delete or create leaves
+   * the bucket holding the frame it held before, and the switch that follows
+   * would put that older frame on the glass — the pull back measured on the
+   * attached Z73. A refusal therefore drops the table (`ready` false) so the
+   * next tick rebuilds it instead of carrying on out of order.
    */
   private async writeFrame(index: number, rgba: Uint8Array): Promise<void> {
-    this.deleteBucket(index);
-    this.createBucket(index);
+    this.require("free", index, this.deleteBucket(index));
+    this.require("allocate", index, this.createBucket(index));
 
     this.control.write([0x36, 0x01, index]);
-    const started = this.control.readUntil(0x37, 0x01);
-    if (started?.report[14] !== 0x01) {
-      // Status 9 is the bucket on the glass, 18 a busy device: either way this
-      // frame was not stored, and the table is worth rebuilding next time.
-      this.ready = false;
-      throw new Error(
-        `The Kraken refused a frame upload (status ${
-          started?.report[14] ?? "none"
-        }).`,
-      );
-    }
+    this.require(
+      "start",
+      index,
+      this.control.readUntil(0x37, 0x01)?.report[14],
+    );
 
     await this.bulk.write(transferHeader(RGBA_MODE, rgba.length));
     await this.bulk.write(rgba);
 
     this.control.write([0x36, 0x02, index]);
-    this.control.readUntil(0x37, 0x02);
-    this.switchBucket(index);
+    this.require(
+      "store",
+      index,
+      this.control.readUntil(0x37, 0x02)?.report[14],
+    );
+
+    this.require("show", index, this.switchBucket(index));
   }
 
-  private deleteBucket(index: number): boolean {
+  /**
+   * Accepts one bucket command's answer.
+   *
+   * Status `1` is the only success (`9` is the bucket on the glass, `18` a busy
+   * device, `16` a transfer the firmware had not started). Anything else means
+   * this driver no longer knows what the table holds, which is worse than
+   * losing the frame.
+   */
+  private require(
+    command: string,
+    index: number,
+    status: number | undefined,
+  ): void {
+    if (status === 0x01) return;
+
+    this.ready = false;
+    throw new Error(
+      `The Kraken refused to ${command} bucket ${index} (status ${
+        status ?? "none"
+      }).`,
+    );
+  }
+
+  private deleteBucket(index: number): number | undefined {
     this.control.write([0x32, 0x02, index]);
     // `33 02`, not "the next report": the firmware emits status reports on its
     // own, and a stray `75 01` read as an answer reports a failed delete.
-    return this.control.readUntil(0x33, 0x02)?.report[14] === 0x01;
+    return this.control.readUntil(0x33, 0x02)?.report[14];
   }
 
-  private createBucket(index: number): boolean {
+  private createBucket(index: number): number | undefined {
     const start = index * BUCKET_SLOTS;
     this.control.write([
       0x32,
@@ -284,12 +312,12 @@ class KrakenPanel implements PanelDevice {
       0x01,
     ]);
 
-    return this.control.readUntil(0x33, 0x01)?.report[14] === 0x01;
+    return this.control.readUntil(0x33, 0x01)?.report[14];
   }
 
-  private switchBucket(index: number, mode = 0x04): void {
+  private switchBucket(index: number, mode = 0x04): number | undefined {
     this.control.write([0x38, 0x01, mode, index]);
-    this.control.readUntil(0x39, 0x01);
+    return this.control.readUntil(0x39, 0x01)?.report[14];
   }
 
   async close(): Promise<void> {

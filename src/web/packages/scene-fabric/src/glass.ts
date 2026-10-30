@@ -71,12 +71,13 @@ export interface BackdropPlate {
 export interface BackdropMedia {
   /** The media layer's rect, in artboard units. */
   readonly rect: ArtboardRect;
-  /** Whole degrees clockwise the composition is turned, when this media turns
-   *  with it. Omitted is upright. */
+  /** Whole degrees clockwise the media is turned: the composition's angle for a
+   *  theme-bounded layer, the display's mount angle for a display-bounded one.
+   *  Omitted is upright. */
   readonly angle?: number;
   /** A display-bounded layer's own box, in host CSS pixels. Present only for a
-   *  layer that fills the display: it does not turn with the composition, so its
-   *  device rect is this box rather than a mapping of `rect`. */
+   *  layer that fills the display: its device rect is this box rather than a
+   *  mapping of `rect`, and the media turns about the box's centre. */
   readonly screenRect?: MediaBox;
   /** The display's own surface, painted under the media. Absent when the media
    *  is the whole backdrop, as in the glass tests' stubs. */
@@ -623,11 +624,11 @@ export function createGlass(options: GlassOptions): GlassHandle {
     if (!unmoved) context.clearRect(0, 0, region.width, region.height);
 
     const screenRect = media.screenRect;
-    // A display-bounded layer fills the host box and does not turn with the
-    // composition, while a theme-bounded one is the composition's own rect. The
-    // uniform scale is the matrix's equal-area root, so it is the scale of a
-    // turned plane as well as an upright one.
-    const angle = screenRect === undefined ? (media.angle ?? 0) : 0;
+    // A theme-bounded layer turns with the composition and a display-bounded
+    // one with the display's mount angle. Either way the turn is about the
+    // box's own centre: the uniform scale is the matrix's equal-area root, so
+    // it is the scale of a turned plane as well as an upright one.
+    const angle = media.angle ?? 0;
     const retina = canvas.getRetinaScaling();
     const device =
       screenRect === undefined
@@ -641,18 +642,16 @@ export function createGlass(options: GlassOptions): GlassHandle {
         ? screenDevice(screenRect, retina)
         : undefined;
     let painted: boolean;
-    if (angle === 0) {
-      if (disc === undefined) {
-        painted = media.paint(context, region, device, sampling);
-      } else {
-        context.save();
-        clipDisc(context, disc, region);
-        painted = media.paint(context, region, device, sampling);
-        context.restore();
-      }
-    } else {
+    // **Clip first, then turn.** A disc is the same disc after a rotation, so
+    // the clip cannot depend on whether the media turns; making the two one
+    // branch lost the clip on a turned round display.
+    if (disc !== undefined) {
+      context.save();
+      clipDisc(context, disc, region);
+    }
+    if (angle !== 0) {
       // The media draws in its own upright frame; turning the scratch about the
-      // rect's mapped centre puts it where the composition actually is. The
+      // rect's mapped centre puts it where the display actually is. The
       // `save`/`restore` is what keeps the rotation off every later panel.
       const pivotX = device.left + device.width / 2 - region.left;
       const pivotY = device.top + device.height / 2 - region.top;
@@ -660,9 +659,10 @@ export function createGlass(options: GlassOptions): GlassHandle {
       context.translate(pivotX, pivotY);
       context.rotate((angle * Math.PI) / 180);
       context.translate(-pivotX, -pivotY);
-      painted = media.paint(context, region, device, sampling);
-      context.restore();
     }
+    painted = media.paint(context, region, device, sampling);
+    if (angle !== 0) context.restore();
+    if (disc !== undefined) context.restore();
     // A static panel stands on the still — the picture an image background or a
     // paint would give it. With no declared frame there is no still, so nothing
     // is painted and a kept live sample is dropped: showing the last video frame
