@@ -81,12 +81,13 @@ export function VideoTrimModal({
       label={copy.title}
       closeLabel={uiCopy.assets.close}
       closeIcon
+      className="editor-shell-dialog--video-trim"
     >
       <div
         data-yunari-video-trim-modal=""
         className="flex w-[var(--import-dialog-width)] flex-col gap-[var(--space-10)]"
       >
-        <span className="break-words text-sm font-semibold text-text [overflow-wrap:anywhere]">
+        <span className="break-words pr-[var(--space-32)] text-sm font-semibold text-text [overflow-wrap:anywhere]">
           {name}
         </span>
         <video

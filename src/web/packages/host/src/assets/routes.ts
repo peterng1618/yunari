@@ -429,7 +429,7 @@ export async function handleAssetRoutes(
 
     const controller = new AbortController();
     const abort = (): void =>
-      controller.abort(new Error("The search was cancelled."));
+      controller.abort(new Error("The search was canceled."));
     request.once("aborted", abort);
 
     try {

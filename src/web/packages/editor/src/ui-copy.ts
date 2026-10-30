@@ -336,7 +336,7 @@ export const uiCopy = {
         carries none. */
     runTrackingNotSeparate: (run: string) =>
       `Tracking on "${run}" is not shown separately — a text object carries one tracking value, from its first run.`,
-    runColour: "Colour",
+    runColour: "Color",
     runSource: "Reads",
     staticText: "Static text",
     runFormat: "Format",
@@ -365,7 +365,7 @@ export const uiCopy = {
     runUnmapped: (key: string) => `No reading has arrived for ${key} yet.`,
     align: "Align",
     left: "Left",
-    centre: "Centre",
+    centre: "Center",
     right: "Right",
     /** Text inside its box, which is the thing the two words above do not say.
         The canvas's own `align-top` / `align-center-y` / `align-bottom` move
@@ -921,7 +921,7 @@ export const uiCopy = {
     facets: {
       label: "Filter themes",
       author: "Author",
-      colourMode: "Colour mode",
+      colourMode: "Color mode",
       sensors: "Sensors",
       shape: "Shape",
       style: "Style",
@@ -1272,7 +1272,7 @@ export const uiCopy = {
       icon: "Icons",
       image: "Images",
       video: "Videos",
-      colour: "Colours",
+      colour: "Colors",
       local: "Wallpaper Engine",
     } satisfies Record<ListingCategory, string>,
     action: {
@@ -1290,7 +1290,7 @@ export const uiCopy = {
       icon: "Search icons…",
       image: "Search photos…",
       video: "Search videos…",
-      colour: "Search colours…",
+      colour: "Search colors…",
       local: "Search this PC…",
     } satisfies Record<ListingCategory, string>,
     searching: (sources: number): string =>
@@ -1310,7 +1310,7 @@ export const uiCopy = {
      *  no source serves a playable URL yet. */
     previewModal: {
       posterOnly: "A video result shows its poster until it is imported.",
-      licence: "Licence",
+      licence: "License",
       source: "Source",
     },
     /** What the footer says when an action succeeds without words of its own. */
@@ -1491,7 +1491,7 @@ export const uiCopy = {
     /** The Colours tab's row action writes editor-local presets, so it reports
      *  what the library accepted rather than an import's own sentences. */
     presetAdded: (colours: number): string =>
-      `Added ${colours} ${colours === 1 ? "colour" : "colours"}`,
+      `Added ${colours} ${colours === 1 ? "color" : "colors"}`,
     gradientAdded: "Added gradient",
     presetAlreadyStored: "Already in presets",
     /** The Wallpaper Engine body. The host's own absence reason is the sentence
@@ -1716,10 +1716,10 @@ export const uiCopy = {
   /** One label per arrange action; keys mirror `ArrangeAction`. */
   arrangeLabels: {
     "align-left": "Align left",
-    "align-center-x": "Centre horizontally",
+    "align-center-x": "Center horizontally",
     "align-right": "Align right",
     "align-top": "Align top",
-    "align-center-y": "Centre vertically",
+    "align-center-y": "Center vertically",
     "align-bottom": "Align bottom",
     "distribute-x": "Distribute horizontally",
     "distribute-y": "Distribute vertically",
@@ -1941,7 +1941,7 @@ export const uiCopy = {
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */
     fontDetails: "Font details",
-    licence: "Licence",
+    licence: "License",
     sourceUrl: "Source URL",
     role: "Role",
     fontStyle: { normal: "Normal", italic: "Italic" },
@@ -2032,21 +2032,21 @@ export const uiCopy = {
      *  number is one-based, because it is what the author counts. */
     angle: "Angle",
     stopPosition: (stop: number) => `Stop ${stop} position`,
-    stopColour: (stop: number) => `Stop ${stop} colour`,
+    stopColour: (stop: number) => `Stop ${stop} color`,
     /** The name a freshly added token or preset carries until it is renamed.
      *  It is authored theme data the author goes on to edit, not a message. */
-    newColour: "New colour",
+    newColour: "New color",
     newType: "New type",
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Paint tokens or Type
      * tokens. */
-    colourToken: "Colour token",
+    colourToken: "Color token",
     typeToken: "Type token",
     paint: "Paint",
-    addColour: "Add colour",
+    addColour: "Add color",
     addStop: "Add stop",
     removeStop: "Remove stop",
-    deleteColour: "Delete colour",
+    deleteColour: "Delete color",
     reassign: "Reassign to",
     /** What the reassignment select says before a target is chosen. The delete
      *  route defaults to *no* target, so this is the only thing the box says
@@ -2104,7 +2104,7 @@ export const uiCopy = {
         the glass material samples. */
     backgroundFallbackFrame: "Fallback frame",
     /** A paint's own colour, as against the token it is chosen from. */
-    colour: "Colour",
+    colour: "Color",
     /** The channels the picker's controls announce, as accessible names.
      *  `pickerSaturation` and `pickerValue` are the area's two channels, named
      *  together in its `aria-valuetext`; `pickerHue` and `pickerAlpha` are the
@@ -2118,13 +2118,13 @@ export const uiCopy = {
     pickerArea: "Saturation and brightness",
     /** The library row inside the popup: the group's own name, never a
      *  preset's, because the preset names are the library's data. */
-    pickerPresets: "Colour presets",
+    pickerPresets: "Color presets",
     /** The gradient editor's own preset row: the group's name, never a preset's
      *  — the preset names are the library's data, like the colour row's. */
     gradientPresets: "Gradient presets",
     /** The action the platform's `EyeDropper` performs, drawn only when the
      *  browser has one. */
-    pickerEyedropper: "Pick a colour from the screen",
+    pickerEyedropper: "Pick a color from the screen",
     /** The field's own name. Distinct from `colourHex`: the field accepts any
      *  colour the parser takes, not only a hex. */
     pickerValueField: "Value",
@@ -2132,10 +2132,10 @@ export const uiCopy = {
     presetDelete: "Delete preset",
     /** The hex field inside the picker's popup. Named so the author who types a
      *  colour knows the field takes a hex, not the swatch's other channels. */
-    colourHex: "Hex colour",
+    colourHex: "Hex color",
     gradient: "Gradient",
     colourUnpaintable: (value: string) =>
-      `Not a colour the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS colour name.`,
+      `Not a color the browser can paint: "${value}". Hex, rgb(), hsl() or a CSS color name.`,
     family: "Family",
     /** The family list's trailing action rows: the two ways into the package
         without leaving the token. */

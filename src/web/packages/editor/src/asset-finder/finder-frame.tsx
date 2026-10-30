@@ -22,6 +22,7 @@ export function FinderFrame(props: {
   readonly tabs: readonly {
     readonly id: ListingCategory;
     readonly label: string;
+    readonly icon?: React.ReactNode;
   }[];
   readonly active: ListingCategory;
   readonly onTabChange: (id: ListingCategory) => void;
@@ -67,8 +68,9 @@ export function FinderFrame(props: {
                   key={tab.id}
                   value={tab.id}
                   data-yunari-asset-tab={tab.id}
-                  className="h-full border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
+                  className="flex h-full items-center gap-[var(--space-6)] border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
                 >
+                  {tab.icon}
                   {tab.label}
                 </Tabs.Tab>
               ))}
@@ -91,7 +93,15 @@ export function FinderFrame(props: {
             {props.filters}
             {props.sources}
             <span className="flex-1" />
-            {props.tools}
+            {/* The tools are glyph buttons at DESIGN.md's fixed 26px, while the
+                fields beside them scale with the root font. Their own height
+                would therefore set the row and make one tab's toolbar taller
+                than the next; the row's height is the field height. */}
+            {props.tools === undefined ? null : (
+              <div className="flex h-7 flex-none items-center">
+                {props.tools}
+              </div>
+            )}
           </div>
 
           <Tabs.Panel

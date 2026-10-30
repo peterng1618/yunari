@@ -1,4 +1,4 @@
-import type { AssetResult, FontCut } from "@yunari/renderer-core";
+import type { AssetPreset, AssetResult, FontCut } from "@yunari/renderer-core";
 import { cssArtboardPaint } from "@yunari/scene-fabric";
 import type * as React from "react";
 import { useMemo } from "react";
@@ -34,6 +34,13 @@ function sourceIdOf(id: string): string {
   return at === -1 ? id : id.slice(0, at);
 }
 
+/** A result with a larger form: a picture, or a preset drawn from its own
+ *  colours. The card's double-click, the footer's button and the modal's
+ *  preview all ask this one question. */
+export function previewableOf(result: AssetResult): boolean {
+  return result.kind === "image" || result.preset !== undefined;
+}
+
 export function cardModelOf(
   result: AssetResult,
   sourceLabel: string,
@@ -53,7 +60,7 @@ export function cardModelOf(
     sourceId: sourceIdOf(result.id),
     sourceLabel,
     preview: <CardPreview result={result} />,
-    previewable: result.kind === "image",
+    previewable: previewableOf(result),
   };
 }
 
@@ -102,15 +109,15 @@ function FontCardPreview({
         <span
           key={role}
           style={faceStyle(trio.roles[role])}
-          className={
+          className={`truncate text-center ${
             role === "heading"
-              ? "truncate text-xl leading-[1.1]"
+              ? "text-xl leading-[1.1]"
               : role === "body"
-                ? "truncate text-sm leading-[1.2] text-muted"
-                : "truncate font-mono text-xs leading-[1.2]"
-          }
+                ? "text-sm leading-[1.2] text-muted"
+                : "font-mono text-xs leading-[1.2]"
+          }`}
         >
-          {result.name}
+          {trio.roles[role]?.family ?? result.name}
         </span>
       ))}
     </span>
@@ -118,14 +125,14 @@ function FontCardPreview({
 }
 
 /** The picture in the card's well. A palette is a row of vertical bars rather
- *  than a block grid: the bars are the colours at the size they are used. */
-function CardPreview({
-  result,
+ *  than a block grid: the bars are the colours at the size they are used. One
+ *  owner for the shape, so the card and the enlarged preview cannot drift. */
+export function PresetPreview({
+  preset,
 }: {
-  readonly result: AssetResult;
-}): React.JSX.Element | null {
-  const preset = result.preset;
-  if (preset?.kind === "palette") {
+  readonly preset: AssetPreset;
+}): React.JSX.Element {
+  if (preset.kind === "palette") {
     return (
       <span
         aria-hidden="true"
@@ -143,16 +150,23 @@ function CardPreview({
       </span>
     );
   }
-  if (preset !== undefined) {
-    return (
-      <span
-        aria-hidden="true"
-        data-yunari-asset-preview="gradient"
-        className="h-full w-full"
-        style={{ backgroundImage: cssArtboardPaint(preset) }}
-      />
-    );
-  }
+  return (
+    <span
+      aria-hidden="true"
+      data-yunari-asset-preview="gradient"
+      className="h-full w-full"
+      style={{ backgroundImage: cssArtboardPaint(preset) }}
+    />
+  );
+}
+
+function CardPreview({
+  result,
+}: {
+  readonly result: AssetResult;
+}): React.JSX.Element | null {
+  const preset = result.preset;
+  if (preset !== undefined) return <PresetPreview preset={preset} />;
   if (result.font !== undefined) return <FontCardPreview result={result} />;
   if (result.preview === "") return null;
   if (result.kind === "image") {

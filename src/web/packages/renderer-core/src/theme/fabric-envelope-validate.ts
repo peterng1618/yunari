@@ -480,7 +480,7 @@ function sceneTypeReferences(
               issue(
                 "unresolved-global-ref",
                 `${path}/yunariText/runs/${index}/style/color`,
-                "Text runs must reference an existing palette token for colour.",
+                "Text runs must reference an existing palette token for color.",
               ),
             );
           }
@@ -1131,7 +1131,7 @@ function palettePaints(value: unknown, issues: ValidationIssue[]): void {
           issue(
             "wrong-type",
             path,
-            "A solid palette paint needs only a non-empty CSS colour.",
+            "A solid palette paint needs only a non-empty CSS color.",
           ),
         );
       }
@@ -1169,7 +1169,7 @@ function palettePaints(value: unknown, issues: ValidationIssue[]): void {
           issue(
             "wrong-type",
             `${path}/stops/${index}`,
-            "Gradient stops need ascending 0–1 offsets and non-empty CSS colours.",
+            "Gradient stops need ascending 0–1 offsets and non-empty CSS colors.",
           ),
         );
       } else previous = stop["offset"] as number;

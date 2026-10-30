@@ -43,7 +43,7 @@ export function createFavoritesClient(options?: {
         body: JSON.stringify({ favorites: [...ids] }),
       });
       if (!response.ok) {
-        throw new Error(`Could not save favourites (${response.status}).`);
+        throw new Error(`Could not save favorites (${response.status}).`);
       }
       // The host answers what it stored rather than an echo, because the store
       // drops an id it cannot keep — the client's answer is the stored list.

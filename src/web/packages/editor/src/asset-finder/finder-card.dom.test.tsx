@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AssetResult } from "@yunari/renderer-core";
+import type { AssetResult, FontCut } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -60,6 +60,19 @@ const imageResult: AssetResult = {
   licence: "Unsplash",
   sourceUrl: "https://unsplash.com/photos/photo",
 };
+
+const cut = (family: string, weight: number): FontCut => ({
+  id: `cut:${family.toLowerCase()}-${weight}`,
+  source: "curated-fonts",
+  family,
+  weight,
+  style: "normal",
+  subset: "latin",
+  format: "woff2",
+  previewUrl: `https://cdn.example/${family}.woff2`,
+  licence: "OFL-1.1",
+  sourceUrl: `https://cdn.example/${family}.woff2`,
+});
 
 const iconResult: AssetResult = {
   id: "lucide:house",
@@ -222,4 +235,55 @@ it("opens the preview for an image on a double press", () => {
     card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
   });
   expect(onPreview).toHaveBeenCalledOnce();
+});
+
+it("names each trio row by that row's family, centred", () => {
+  const trioResult: AssetResult = {
+    id: "curated-fonts:trio:inter",
+    name: "Inter / Poppins / Fira Code",
+    kind: "font",
+    preview: "",
+    subtitle: "",
+    licence: "OFL-1.1",
+    sourceUrl: "",
+    font: {
+      cuts: [],
+      trio: {
+        id: "trio:inter",
+        name: "Inter",
+        description: "",
+        roles: {
+          heading: cut("Inter", 700),
+          body: cut("Poppins", 400),
+          mono: cut("Fira Code", 400),
+        },
+      },
+    },
+  };
+
+  mount(
+    <FinderCard
+      model={cardModelOf(trioResult, "Curated fonts")}
+      selected={false}
+      busy={false}
+      failed={false}
+      done={false}
+      tabStop
+      onSelect={() => {}}
+      onKeyDown={() => {}}
+      focus={() => {}}
+    />,
+  );
+
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-yunari-asset-preview="font"] > span',
+    ),
+  ];
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "Inter",
+    "Poppins",
+    "Fira Code",
+  ]);
+  expect(rows.every((row) => row.className.includes("text-center"))).toBe(true);
 });
