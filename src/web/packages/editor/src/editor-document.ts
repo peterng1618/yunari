@@ -481,24 +481,12 @@ export class EditorDocument {
 
       if (choice === "cancel") return false;
       if (choice === "save") {
-        // A replacement's save asks the same cleanup question, and a cleanup
-        // that stops there stops the replacement too: a save the author
-        // cancelled must not go on to discard the document behind it.
-        const cleanup = await this.confirmAssetCleanup();
-        if (!cleanup.proceed) {
-          if (cleanup.message !== undefined) {
-            this.#source.onError?.(cleanup.message);
-          }
-          return false;
-        }
-        await this.#persistence.save(
-          this.snapshot(),
-          this.#assets.assets,
-          undefined,
-          this.#creditsPackage(),
-        );
-        this.#dirty = undefined;
-        this.#source.onSaved("Theme package saved");
+        // Save means the library, not a package download. The library manager
+        // owns the cleanup question, the base and the failure report; a save
+        // that did not land leaves the dirty mark in place, and a replacement
+        // must not discard the document behind it.
+        await this.#library.save();
+        if (this.isDirty()) return false;
       }
     }
     return true;

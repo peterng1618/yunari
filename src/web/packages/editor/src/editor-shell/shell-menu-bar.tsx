@@ -207,9 +207,11 @@ export function ShellMenuBar({
       <MenuGroup label={uiCopy.menus.file}>
         {/* A File row prints a chord where the row and its `PRODUCT_SHORTCUTS`
             id run the same call — `item`'s fourth argument — and each of the
-            three names the call it shares. `newFromStarter`, `releasePackage`,
-            `openLibrary` and `saveLibrary` carry none because the table binds
-            nothing for them, not because a File row cannot have one. */}
+            three names the call it shares. `newFromStarter`, `releasePackage`
+            and `openLibrary` carry none because the table binds nothing for
+            them, not because a File row cannot have one. `savePackage` carries
+            none either: `Ctrl+S` is the library save, and the package is the
+            explicit export that downloads. */}
         {/* `file.new` → `#document.newDocument()`. */}
         {item(
           uiCopy.file.newDocument,
@@ -226,16 +228,17 @@ export function ShellMenuBar({
           false,
           "file.open",
         )}
-        {/* `file.save` → `#document.save()`. */}
+        {/* `file.save` → `#document.saveLibrary()`. The package is the explicit
+            export below, so it prints no chord: Ctrl+S saves to the library. */}
+        {item(uiCopy.file.savePackage, () => void session?.savePackage())}
+        {item(uiCopy.file.releasePackage, () => void session?.releasePackage())}
+        {item(uiCopy.file.openLibrary, () => void session?.openLibrary())}
         {item(
-          uiCopy.file.savePackage,
-          () => void session?.savePackage(),
+          uiCopy.file.saveLibrary,
+          () => void session?.saveLibrary(),
           false,
           "file.save",
         )}
-        {item(uiCopy.file.releasePackage, () => void session?.releasePackage())}
-        {item(uiCopy.file.openLibrary, () => void session?.openLibrary())}
-        {item(uiCopy.file.saveLibrary, () => void session?.saveLibrary())}
       </MenuGroup>
       <MenuGroup label={uiCopy.menus.edit}>
         {/* A row names an id only when that binding reaches the same manager the

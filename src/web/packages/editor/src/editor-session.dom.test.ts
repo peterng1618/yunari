@@ -345,6 +345,21 @@ describe("EditorSession", () => {
     await session.saveLibrary();
     expect(mockClient.save).toHaveBeenCalled();
 
+    // Ctrl+S is the library save, not the package download: the chord reaches
+    // the same owner the menu row does, and the downloader is untouched.
+    const saveChord = registerMock.mock.calls.find(
+      ([action]) => action === "file.save",
+    )?.[1] as (() => void) | undefined;
+    expect(saveChord).toBeDefined();
+    saveMock.mockClear();
+    mockClient.save.mockClear();
+    saveChord?.();
+    await vi.waitFor(() => expect(mockClient.save).toHaveBeenCalledTimes(1));
+    expect(
+      saveMock,
+      "the save chord downloaded a package",
+    ).not.toHaveBeenCalled();
+
     extensions.destroy();
   });
 

@@ -676,7 +676,10 @@ export class EditorSession {
     });
     this.#document.refreshBackgroundMedia();
     this.#shortcuts.register("file.save", () => {
-      void this.#document.save();
+      // Save, not export: the library is where the product stores a theme, and
+      // Ctrl+S must not download a package. The package save stays its own File
+      // row, with no chord.
+      void this.#document.saveLibrary();
     });
     // The File menu's row carries this chord, and the row reads *Import
     // package*: the chord does what the control it is printed beside does.

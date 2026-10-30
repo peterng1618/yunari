@@ -18,6 +18,7 @@ import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
 import { serializeThemePackage } from "./persist.js";
 import { PersistenceManager } from "./persistence-manager/index.js";
+import type { ThemeLibraryClient } from "./theme-library-client.js";
 import { fontAssetId } from "./type-preset-apply.js";
 import type { TypeTokens } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
@@ -81,6 +82,7 @@ function documentWith(
     readonly envelope?: FabricThemeEnvelopeInput;
     readonly onSaved?: (message?: string) => void;
     readonly onError?: (message: string) => void;
+    readonly client?: ThemeLibraryClient;
   } = {},
 ): EditorDocument {
   return new EditorDocument({
@@ -100,6 +102,7 @@ function documentWith(
       assetManager: seams.assetManager ?? new AssetManager(),
       ...(credits === undefined ? {} : { credits }),
       ...(seams.unsaved === true ? { unsaved: true } : {}),
+      ...(seams.client === undefined ? {} : { libraryClient: seams.client }),
       onNew: async () => {},
       onNewFromStarter: async () => {},
       onSaved: seams.onSaved ?? (() => {}),
@@ -122,6 +125,18 @@ function managerWith(assets: readonly LocalAssetReference[]): AssetManager {
     ),
   );
   return manager;
+}
+
+/** The host's library, stubbed: a replacement's save must reach this and not a
+ *  package download. */
+function libraryClient(): ThemeLibraryClient {
+  return {
+    list: vi.fn(async () => []),
+    open: vi.fn(),
+    save: vi.fn(async () => "base-after-save"),
+    assign: vi.fn(async () => undefined),
+    listDisplays: vi.fn(async () => ({ default: null, displays: [] })),
+  } as unknown as ThemeLibraryClient;
 }
 
 /** A declaration the release's export check accepts. */
@@ -611,22 +626,21 @@ describe("EditorDocument save cleanup", () => {
   it("a replacement's save asks too, and a cancel aborts the replacement", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onError = vi.fn();
+    const client = libraryClient();
     replacementMock.mockResolvedValue("save");
     cleanupMock.mockResolvedValue("cancel");
-    const save = vi
-      .spyOn(PersistenceManager.prototype, "save")
-      .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
       unsaved: true,
       onError,
+      client,
     });
 
     expect(await document.confirmReplacement()).toBe(false);
 
     expect(cleanupMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: uiCopy.file.savePackage,
+        title: uiCopy.file.saveLibrary,
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
@@ -640,7 +654,7 @@ describe("EditorDocument save cleanup", () => {
         themeBytes: expect.any(Number),
       }),
     );
-    expect(save).not.toHaveBeenCalled();
+    expect(client.save).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
@@ -651,29 +665,47 @@ describe("EditorDocument save cleanup", () => {
   it("a refused trash aborts a replacement's save", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onError = vi.fn();
+    const client = libraryClient();
     replacementMock.mockResolvedValue("save");
     cleanupMock.mockResolvedValue("remove");
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin refused it.",
     });
-    const save = vi
-      .spyOn(PersistenceManager.prototype, "save")
-      .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
       envelope: bareEnvelope(),
       unsaved: true,
       onError,
+      client,
     });
 
     expect(await document.confirmReplacement()).toBe(false);
 
     expect(onError).toHaveBeenCalledWith("The Recycle Bin refused it.");
-    expect(save).not.toHaveBeenCalled();
+    expect(client.save).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
     ]);
+    document.destroy();
+  });
+
+  it("a replacement's save stores to the library and downloads nothing", async () => {
+    const client = libraryClient();
+    replacementMock.mockResolvedValue("save");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, { unsaved: true, client });
+
+    expect(await document.confirmReplacement()).toBe(true);
+
+    expect(client.save).toHaveBeenCalledTimes(1);
+    expect(
+      save,
+      "the replacement's save exported a package",
+    ).not.toHaveBeenCalled();
+    expect(document.isDirty()).toBe(false);
     document.destroy();
   });
 });

@@ -1355,8 +1355,8 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
   // Each row's own id, and the pairing is the ruled one (vg-185): a chord is
   // taught where the `PRODUCT_SHORTCUTS` id reaches the same call the row
   // reaches, which for these three is one method on the same receiver —
-  // `file.save`/`savePackage` both end at `#document.save()`, `file.new` and
-  // `newDocument` at `#document.newDocument()`, and `file.open` and the
+  // `file.save`/`saveLibrary` both end at `#document.saveLibrary()`, `file.new`
+  // and `newDocument` at `#document.newDocument()`, and `file.open` and the
   // *Import package* row at the session's own `importPackage()`, which is the
   // package picker. The four rows with no id stay chordless; the
   // menu does not pair a chord by eye, which is how a menu starts teaching a
@@ -1366,10 +1366,10 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
     [uiCopy.file.newFromStarter, undefined],
     [uiCopy.file.findAssets, "file.findAssets"],
     [uiCopy.file.importPackage, "file.open"],
-    [uiCopy.file.savePackage, "file.save"],
+    [uiCopy.file.savePackage, undefined],
     [uiCopy.file.releasePackage, undefined],
     [uiCopy.file.openLibrary, undefined],
-    [uiCopy.file.saveLibrary, undefined],
+    [uiCopy.file.saveLibrary, "file.save"],
   ]);
 
   const rows = menuItems();
@@ -1761,11 +1761,13 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
   // reads back — so the stub has to move it, or the successful path is
   // indistinguishable from the failed one.
   let dirty = true;
-  const savePackage = vi.fn(async () => {
+  const saveLibrary = vi.fn(async () => {
     dirty = false;
   });
   layout.setBridge(
-    bridgeStub({ session: { ...facade(), isDirty: () => dirty, savePackage } }),
+    bridgeStub({
+      session: { ...facade(), isDirty: () => dirty, saveLibrary },
+    }),
     undefined,
   );
   await Promise.resolve();
@@ -1783,12 +1785,12 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
     "false",
     "false",
   ]);
-  expect(savePackage, "a refusal saved the document").not.toHaveBeenCalled();
+  expect(saveLibrary, "a refusal saved the document").not.toHaveBeenCalled();
 
   await act(async () => modeSegments(root)[1]?.click());
   await answerPrompt(uiCopy.replaceDocument.save);
   await act(async () => {});
-  expect(savePackage, "the save answer did not save").toHaveBeenCalledTimes(1);
+  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
   expect(chosen(root), "the guard's save did not move the mode").toEqual([
     "false",
     "true",
@@ -1819,22 +1821,24 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
 /**
  * A save that does not land keeps the author in the editor.
  *
- * `savePackage()` resolves either way — `EditorDocument.save()` reports its own
- * failure through the editor's error channel — so "the save was awaited" is not
- * "the save happened". The only thing that tells the two apart is the document's
- * own dirty mark, read after the await.
+ * `saveLibrary()` resolves either way — `ThemeLibraryManager.save()` reports its
+ * own failure through the editor's error channel — so "the save was awaited" is
+ * not "the save happened". The only thing that tells the two apart is the
+ * document's own dirty mark, read after the await.
  *
  * The save is made to fail by leaving the mark where it was: `isDirty()` keeps
- * answering `true` and `savePackage()` resolves without clearing it, which is
+ * answering `true` and `saveLibrary()` resolves without clearing it, which is
  * exactly the shape a refused or failed write has.
  */
 it("stays in the editor when the save does not land", async () => {
   window.PointerEvent ??= MouseEvent as never;
   const root = document.createElement("div");
   const layout = createShellLayout(root);
-  const savePackage = vi.fn(async () => undefined);
+  const saveLibrary = vi.fn(async () => undefined);
   layout.setBridge(
-    bridgeStub({ session: { ...facade(), isDirty: () => true, savePackage } }),
+    bridgeStub({
+      session: { ...facade(), isDirty: () => true, saveLibrary },
+    }),
     undefined,
   );
   await Promise.resolve();
@@ -1843,7 +1847,7 @@ it("stays in the editor when the save does not land", async () => {
   await answerPrompt(uiCopy.replaceDocument.save);
   await act(async () => {});
 
-  expect(savePackage, "the save answer did not save").toHaveBeenCalledTimes(1);
+  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
   expect(chosen(root), "the mode moved past a save that did not land").toEqual([
     "true",
     "false",
