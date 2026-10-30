@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { KRAKEN_FRAME_INTERVAL_MS } from "./kraken-z3-panel.js";
 import type { PanelDevice, PanelHint } from "./panel-device.js";
 import { familyFor, PANEL_FAMILIES } from "./panel-families.js";
 
@@ -29,14 +30,6 @@ describe("PANEL_FAMILIES", () => {
   it("answers nothing for a device no driver claims", () => {
     expect(familyFor(0x1c8e, 0xa092)).toBeUndefined();
     expect(familyFor(0, 0)).toBeUndefined();
-  });
-
-  it("states which families store content rather than stream it", () => {
-    // The distinction the manager and the owner both need: a streaming panel
-    // costs a wire frame, a storing one costs a flash write.
-    expect(familyFor(0x1e71, 0x3008)?.stores).toBe(true);
-    expect(familyFor(0x1cbe, 0xa092)?.stores).toBe(false);
-    expect(familyFor(0x1cbe, 0xa088)?.stores).toBe(false);
   });
 
   it("claims the TURZX serial family and its support record", () => {
@@ -94,28 +87,28 @@ describe("the manager's own boundary", () => {
   });
 });
 
-describe("a storing panel's cadence", () => {
-  it("states a floor the runner honours", () => {
-    // The Kraken's `present` is a bucket upload. Without a floor the runner
-    // would rewrite a flash bucket every second for a picture that had not
-    // changed, so the device states one and the manager passes it through.
+describe("a panel's cadence", () => {
+  it("states the rate the runner should tick at, when the device has one", () => {
+    // The Kraken streams a frame nine times a second; CAM's own web
+    // integration runs at that rate on this hardware.
+    expect(KRAKEN_FRAME_INTERVAL_MS).toBe(111);
     const device = {
       geometry: { width: 320, height: 320 },
       open: async () => {},
       present: async () => {},
       close: async () => {},
-      minimumIntervalMs: 60_000,
+      frameIntervalMs: KRAKEN_FRAME_INTERVAL_MS,
     } satisfies PanelDevice;
 
-    expect(device.minimumIntervalMs).toBeGreaterThanOrEqual(1_000);
-    // Optional on the port, so a streaming family is not forced to invent one.
-    const streaming: PanelDevice = {
+    expect(device.frameIntervalMs).toBeLessThan(1_000);
+    // Optional on the port, so a family with no stated rate keeps the default.
+    const plain: PanelDevice = {
       geometry: { width: 464, height: 1920 },
       open: async () => {},
       present: async () => {},
       close: async () => {},
     };
-    expect(streaming.minimumIntervalMs).toBeUndefined();
+    expect(plain.frameIntervalMs).toBeUndefined();
   });
 });
 

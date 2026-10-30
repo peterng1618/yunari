@@ -94,7 +94,6 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
     label: 'Lian Li 9.2" LCD',
     vendorId: 0x1cbe,
     productId: 0xa092,
-    stores: false,
     support: {
       maker: "Lian Li",
       hardwareRevision: '9.2"',
@@ -114,7 +113,6 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
     label: 'Lian Li Universal Screen 8.8"',
     vendorId: 0x1cbe,
     productId: 0xa088,
-    stores: false,
     support: {
       maker: "Lian Li",
       hardwareRevision: '8.8"',
