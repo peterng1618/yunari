@@ -190,6 +190,8 @@ interface Written {
   }[];
   /** The displays a reconnect was asked for. */
   readonly reconnects: string[];
+  /** The display renames, in order: id and the name sent. */
+  readonly names: { readonly id: string; readonly label: string }[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -234,6 +236,7 @@ function hostSettings(
     presentation: [],
     panels: [],
     reconnects: [],
+    names: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -321,6 +324,10 @@ function hostSettings(
       reconnectPanel: async (id) => {
         wrote.reconnects.push(id);
         return "connected";
+      },
+      renameDisplay: async (id, label) => {
+        wrote.names.push({ id, label });
+        return label;
       },
     },
   };
@@ -765,6 +772,33 @@ it("snaps a circle angle when the shape becomes rect", async () => {
 });
 
 /** A refused write leaves the row on the value the host last answered. */
+it("renames the chosen display and redraws its row", async () => {
+  const { container, wrote } = await mountHost(TWO_DISPLAYS);
+  await act(async () => displayRow(container, "hallway").click());
+
+  const field = must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-name]",
+    ),
+    "the display name field",
+  );
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  await act(async () => {
+    setter?.call(field, "Hallway TV");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+
+  expect(wrote.names).toEqual([{ id: "hallway", label: "Hallway TV" }]);
+  // The row is the host's answer, so the list above updates without a reload.
+  expect(displayRow(container, "hallway").textContent).toContain("Hallway TV");
+});
+
 it("keeps the row's previous presentation when the write is refused", async () => {
   const refusal = "That angle is not a quarter turn.";
   const { container, published } = await mountHost({

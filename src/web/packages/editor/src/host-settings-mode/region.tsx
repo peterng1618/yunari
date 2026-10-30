@@ -539,6 +539,22 @@ function HostSettings(props: {
     });
   };
 
+  /** A rename replaces the row from the host's answer, for the same reason the
+   *  presentation write does: the host trims and validates the name. */
+  const replaceName = (id: string, label: string): void => {
+    if (!mounted.current) return;
+    setMap((current) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            displays: current.displays.map((row) =>
+              row.id === id ? { ...row, label } : row,
+            ),
+          },
+    );
+  };
+
   const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
 
   /** **The row is replaced from the host's answer**, never optimistically: the
@@ -681,6 +697,8 @@ function HostSettings(props: {
             write={write}
             save={settings.updateDisplayPresentation}
             onSaved={replacePresentation}
+            rename={settings.renameDisplay}
+            onRenamed={replaceName}
           />
 
           {/* Beside the presentation section, because both edit what drives the
