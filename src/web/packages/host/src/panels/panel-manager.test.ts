@@ -334,8 +334,9 @@ describe("createPanelManager", () => {
     await pause(2 * SETTLE_MS);
 
     await expect(manager.stop("strip")).rejects.toThrow("close failed");
-    // The entry survives the refusal: its port is still held.
-    expect(manager.running()).toEqual(["strip"]);
+    // The entry survives the refusal — its port is still held — but the panel
+    // is on its way down and is not reported as running.
+    expect(manager.running()).toEqual([]);
 
     await manager.stop("strip");
 
@@ -372,7 +373,9 @@ describe("createPanelManager", () => {
     // attempted; the panel stays where it was, and the refusal is reported.
     expect(opens).toBe(1);
     expect(errors).toEqual(["the port would not close"]);
-    expect(manager.running()).toEqual(["strip"]);
+    // The runner was told to stop even though the close failed, so the panel
+    // is not reported as running.
+    expect(manager.running()).toEqual([]);
   });
 
   it("refuses a command for a display with no running runner", async () => {

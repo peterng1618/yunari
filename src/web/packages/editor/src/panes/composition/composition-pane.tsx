@@ -252,6 +252,8 @@ export function CompositionPane({
 
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const cancelled = useRef(false);
+  /** The row to focus once a cancelled rename field has unmounted. */
+  const restoreFocus = useRef<HTMLElement | null>(null);
   // Which row the pointer is over and which holds the keyboard, so the two
   // state icons can appear for a row the author is about to act on. Ids rather
   // than booleans: attention is one property the author has, so one field per
@@ -319,6 +321,13 @@ export function CompositionPane({
     tree.current?.removeAttribute("data-dragging");
     if (indicator.current !== null) indicator.current.hidden = true;
   };
+
+  useEffect(() => {
+    const node = restoreFocus.current;
+    if (editing !== undefined || node === null) return;
+    restoreFocus.current = null;
+    node.focus();
+  }, [editing]);
 
   const commit = (id: string, name: string): void => {
     setEditing(undefined);
@@ -663,6 +672,12 @@ export function CompositionPane({
                       commit(row.id, event.currentTarget.value);
                     else if (event.key === "Escape") {
                       cancelled.current = true;
+                      // The field is about to unmount, so return focus to the
+                      // row it belonged to rather than let it fall to the body.
+                      restoreFocus.current =
+                        event.currentTarget.closest<HTMLElement>(
+                          '[role="treeitem"]',
+                        );
                       setEditing(undefined);
                     }
                   }}
