@@ -6,11 +6,13 @@ import type {
   FontTrioInfo,
 } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import {
   type FontActions,
   type FontFilterState,
   type FontPreviewState,
   fontActionsOf,
+  fontDoneMessage,
   fontRows,
 } from "./fonts.js";
 import type { FinderRow } from "./tab-data.js";
@@ -116,6 +118,15 @@ describe("fontRows", () => {
         (entry) => entry.result.name,
       ),
     ).toEqual(["Zeta", "Alpha"]);
+  });
+});
+
+describe("fontDoneMessage", () => {
+  it("names the three roles a trio wrote, and the token a face wrote", () => {
+    expect(fontDoneMessage("apply-trio")).toBe(uiCopy.assets.fontTrioDone);
+    expect(fontDoneMessage("apply-cut")).toBe(uiCopy.assets.done.font);
+    expect(fontDoneMessage("add-trio")).toBe(uiCopy.assets.done.colour);
+    expect(fontDoneMessage("add-cut")).toBe(uiCopy.assets.done.colour);
   });
 });
 

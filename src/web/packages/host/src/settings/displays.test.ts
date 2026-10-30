@@ -1,7 +1,14 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createActiveThemeStore } from "./active-theme.js";
 import {
   DisplaySettingError,
@@ -20,6 +27,11 @@ import {
 import { createThemeSettingsStore } from "./theme-settings.js";
 
 const FILE = "display-clients.json";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, rename: vi.fn(actual.rename) };
+});
 
 describe("displayIdFrom", () => {
   it("slugs a label into the host's one id shape", () => {
@@ -66,6 +78,17 @@ describe("createDisplayStore", () => {
     ]);
     // The write is atomic, so its temporary file is gone once it returns.
     expect(await readdir(directory)).toEqual([FILE]);
+  });
+
+  it("removes the temporary file when the write fails", async () => {
+    vi.mocked(rename).mockRejectedValueOnce(new Error("EPERM: rename failed"));
+
+    await expect(store.create("Kitchen tablet", "tok")).rejects.toThrow(
+      "EPERM",
+    );
+    expect(
+      (await readdir(directory)).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
   });
 
   it("adds a suffix when the slug is taken", async () => {

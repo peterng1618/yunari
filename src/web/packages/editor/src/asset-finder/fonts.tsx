@@ -65,6 +65,14 @@ function copy(): typeof uiCopy.assets {
   return uiCopy.assets;
 }
 
+/** The footer sentence for a successful font action. A trio writes three roles,
+ *  so the single-token sentence belongs to the face action alone. */
+export function fontDoneMessage(actionId: string): string {
+  const done = uiCopy.assets.done;
+  if (actionId === "apply-trio") return uiCopy.assets.fontTrioDone;
+  return actionId.startsWith("add") ? done.colour : done.font;
+}
+
 /** The footer's actions for the chosen font: a trio applies or adds its three
  *  roles, a family applies or adds the chosen cut. */
 export function fontActionsOf(

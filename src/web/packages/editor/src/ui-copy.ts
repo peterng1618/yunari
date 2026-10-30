@@ -1352,6 +1352,8 @@ export const uiCopy = {
     fontApplyTrio: "Apply trio",
     fontAddPresets: "Add to presets",
     fontApplyToken: "Apply to token",
+    /** A trio writes all three roles, so it cannot say it wrote one token. */
+    fontTrioDone: "Applied to heading, body and mono.",
     fontApplyBusy: "Applying…",
     fontAddBusy: "Adding…",
     fontResults: "Font results",
