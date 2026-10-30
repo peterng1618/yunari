@@ -1,7 +1,6 @@
 import type { AssetResult } from "@yunari/renderer-core";
+import { CATALOGUE_PAGE_SIZE } from "../catalogue.js";
 import type { AssetSource } from "../source.js";
-
-export const COLOUR_PAGE_SIZE = 40;
 
 const FEED_URL = "https://colorhunt.co/php/feed.php";
 const LICENCE = "unknown";
@@ -113,7 +112,7 @@ export const colorhuntSource: AssetSource = {
       totalPages:
         results.length === 0
           ? Math.max(1, page - 1)
-          : results.length < COLOUR_PAGE_SIZE
+          : results.length < CATALOGUE_PAGE_SIZE
             ? page
             : page + 1,
     };

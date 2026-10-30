@@ -1,13 +1,11 @@
 import type { AssetResult } from "@yunari/renderer-core";
+import { CATALOGUE_PAGE_SIZE, HEX_COLOUR } from "../catalogue.js";
 import type { AssetSource, SourceContext } from "../source.js";
-
-export const GRADIENT_PAGE_SIZE = 40;
 
 const CATALOGUE_URL =
   "https://raw.githubusercontent.com/ghosh/uiGradients/main/gradients.json";
 const LICENCE = "MIT";
 const SOURCE_URL = "https://github.com/ghosh/uiGradients";
-const HEX = /^#[0-9a-f]{6}$/i;
 
 interface Gradient {
   readonly id: string;
@@ -41,7 +39,7 @@ function gradientOf(value: unknown, index: number): Gradient | undefined {
 
   const colours = value.colors.filter(
     (colour): colour is string =>
-      typeof colour === "string" && HEX.test(colour),
+      typeof colour === "string" && HEX_COLOUR.test(colour),
   );
   if (colours.length < 2) return undefined;
 
@@ -131,12 +129,14 @@ export const uigradientsSource: AssetSource = {
             normalize(gradient.name).includes(wanted),
           );
 
-    const offset = (pageOf(asked) - 1) * GRADIENT_PAGE_SIZE;
+    const offset = (pageOf(asked) - 1) * CATALOGUE_PAGE_SIZE;
 
     return {
-      results: matches.slice(offset, offset + GRADIENT_PAGE_SIZE).map(resultOf),
+      results: matches
+        .slice(offset, offset + CATALOGUE_PAGE_SIZE)
+        .map(resultOf),
       // No match is one empty page, not no pages.
-      totalPages: Math.max(1, Math.ceil(matches.length / GRADIENT_PAGE_SIZE)),
+      totalPages: Math.max(1, Math.ceil(matches.length / CATALOGUE_PAGE_SIZE)),
     };
   },
 
