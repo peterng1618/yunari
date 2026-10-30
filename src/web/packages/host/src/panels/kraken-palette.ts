@@ -220,15 +220,22 @@ function meanOf(points: readonly Point[]): readonly [number, number, number] {
   ];
 }
 
-/** Where the destination pixel came from after a clockwise quarter turn. */
+/**
+ * Where the destination pixel came from after a clockwise quarter turn.
+ *
+ * Each case is a rotation, not a flip: a turned frame keeps its handedness, so
+ * a mirrored picture would be the bug here. The top-left pixel is the check —
+ * clockwise it lands top-right, a horizontal mirror would land it there too, so
+ * the top-right pixel must land bottom-right.
+ */
 function sourcePixel(x: number, y: number, quarter: number): number {
   switch (quarter) {
     case 1:
-      return y * KRAKEN_SIZE + (KRAKEN_SIZE - 1 - x);
+      return (KRAKEN_SIZE - 1 - x) * KRAKEN_SIZE + y;
     case 2:
       return (KRAKEN_SIZE - 1 - y) * KRAKEN_SIZE + (KRAKEN_SIZE - 1 - x);
     case 3:
-      return (KRAKEN_SIZE - 1 - y) * KRAKEN_SIZE + x;
+      return x * KRAKEN_SIZE + (KRAKEN_SIZE - 1 - y);
     default:
       return y * KRAKEN_SIZE + x;
   }

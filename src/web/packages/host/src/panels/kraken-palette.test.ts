@@ -69,19 +69,31 @@ describe("Kraken paletted frame", () => {
   });
 
   it("rotates the frame clockwise by the panel's quarter turns", () => {
-    const marked = raster((set) => set(0, 0, [255, 0, 0, 255]));
-    const red = entryOf(toPalettedFrame(marked, 0), [255, 0, 0]);
-
+    // Two markers, because one cannot tell a rotation from a mirror: a
+    // horizontal flip also puts the top-left pixel at the top-right.
+    const marked = raster((set) => {
+      set(0, 0, [255, 0, 0, 255]);
+      set(SIZE - 1, 0, [0, 0, 255, 255]);
+    });
     const straight = toPalettedFrame(marked, 0);
-    expect(indexAt(straight, 0, 0)).toBe(red);
+    const red = indexAt(straight, 0, 0);
+    const blue = indexAt(straight, SIZE - 1, 0);
+    expect(red).not.toBe(blue);
 
-    // One clockwise quarter turn: the top-left pixel lands top-right.
+    // One clockwise quarter turn: top-left to top-right, top-right to
+    // bottom-right. A mirror would leave the second one at the top-left.
     const turned = toPalettedFrame(marked, 1);
     expect(indexAt(turned, SIZE - 1, 0)).toBe(red);
-    expect(indexAt(turned, 0, 0)).not.toBe(red);
+    expect(indexAt(turned, SIZE - 1, SIZE - 1)).toBe(blue);
 
-    // Three turns: it lands bottom-left.
+    // Two turns: the pair swaps corners.
+    const reversed = toPalettedFrame(marked, 2);
+    expect(indexAt(reversed, SIZE - 1, SIZE - 1)).toBe(red);
+    expect(indexAt(reversed, 0, SIZE - 1)).toBe(blue);
+
+    // Three turns: top-left to bottom-left, top-right to top-left.
     const thrice = toPalettedFrame(marked, 3);
     expect(indexAt(thrice, 0, SIZE - 1)).toBe(red);
+    expect(indexAt(thrice, 0, 0)).toBe(blue);
   });
 });
