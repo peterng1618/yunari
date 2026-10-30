@@ -463,11 +463,15 @@ export function mountBackgroundMedia(
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
         paint(ctx, region, device, sampling) {
-          // A static panel stands on the declared frame — or the video's first
-          // frame when it declares none — the picture an image background or a
-          // paint would give it.
+          // A static panel stands on the video's declared frame — or its first
+          // frame when it declares none. An image is already a still, so it is
+          // its own static picture; reading only the video's extracted frame
+          // made glass over an image sample the board paint instead, which is
+          // what a video theme switched to an image background showed.
           const drawSource: CanvasImageSource | undefined =
-            sampling === "static" ? fallback : mounted;
+            sampling === "static" && mounted instanceof HTMLVideoElement
+              ? fallback
+              : mounted;
           if (drawSource === undefined) return false;
           const source = intrinsic(drawSource);
           // Sizing and drawing have different preconditions: metadata sizes the

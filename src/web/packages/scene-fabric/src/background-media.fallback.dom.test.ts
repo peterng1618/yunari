@@ -11,6 +11,7 @@ import { mountBackgroundMedia } from "./background-media.js";
 
 const ARTBOARD = { width: 400, height: 200 } as const;
 const LOOP = { id: "loop", kind: "video", path: "assets/loop.webm" } as const;
+const HERO = { id: "hero", kind: "image", path: "assets/hero.png" } as const;
 
 /** A fake 2D context that records the media's own operations. */
 const recordingContext = () => {
@@ -289,4 +290,60 @@ describe("a video background's declared frame", () => {
       media.restore();
     }
   });
+
+  it("samples an image background as its own still", () => {
+    // An image is already the picture a static panel wants. Reading only a
+    // video's extracted frame left glass over an image sampling the board paint
+    // instead — the card went flat the moment a video theme was switched to an
+    // image background (seen on the TURZX panel, 2026-10-30).
+    // jsdom decodes nothing, so the still states its own readiness and size.
+    const restores = [
+      stubImageProperty("complete", () => true),
+      stubImageProperty("naturalWidth", () => 400),
+      stubImageProperty("naturalHeight", () => 200),
+    ];
+
+    try {
+      const host = document.createElement("div");
+      const handle = mountBackgroundMedia({
+        host,
+        background: { media: { assetId: "hero", bounds: "theme" } },
+        artboard: ARTBOARD,
+        assets: [HERO],
+        resolveAsset: () => ({ url: "blob:hero" }),
+      });
+      const image = host.querySelector("img");
+      expect(image, "the image is mounted").not.toBeNull();
+
+      const { calls, ctx } = recordingContext();
+      const device = { left: 0, top: 0, width: 400, height: 200 };
+      expect(handle.backdrop()?.paint(ctx, device, device, "static")).toBe(
+        true,
+      );
+      expect(calls[0]?.[0], "the glass reads the image itself").toBe(image);
+      handle.destroy();
+    } finally {
+      for (const restore of restores.reverse()) restore();
+    }
+  });
 });
+
+/** A read-only image property jsdom answers with nothing; the restore puts it back. */
+function stubImageProperty(
+  key: "complete" | "naturalWidth" | "naturalHeight",
+  value: () => boolean | number,
+): () => void {
+  const before = Object.getOwnPropertyDescriptor(
+    HTMLImageElement.prototype,
+    key,
+  );
+  Object.defineProperty(HTMLImageElement.prototype, key, {
+    configurable: true,
+    get: value,
+  });
+  return () => {
+    if (before === undefined)
+      Reflect.deleteProperty(HTMLImageElement.prototype, key);
+    else Object.defineProperty(HTMLImageElement.prototype, key, before);
+  };
+}
