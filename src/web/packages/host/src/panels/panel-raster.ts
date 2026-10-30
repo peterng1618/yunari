@@ -12,8 +12,8 @@ import type { PanelGeometry } from "./panel-device.js";
  * is the whole point: glass sampling a video backdrop, ECharts
  * charts and packaged fonts already work in the player, and are exactly the
  * pieces a Node reimplementation would have to rebuild and then keep in step.
- * A screenshot is the cheapest correct answer to "what does this theme look
- * like", because the browser has already answered it.
+ * The compositor's own frames are the cheapest correct answer to "what does this
+ * theme look like", because the browser has already answered it.
  *
  * Every call is devtools-protocol over Node's own `WebSocket`: no dependency,
  * no `puppeteer`, and no second copy of a browser download — it drives the
@@ -27,6 +27,8 @@ const START_TIMEOUT_MS = 20_000;
 /** A capture measures ~45 ms. A reply that never comes must free the loop that
  *  is waiting for it, rather than leave the panel frozen with no message. */
 const REPLY_TIMEOUT_MS = 5_000;
+/** A composited frame is 33 ms away; a second of nothing is a page that stopped. */
+const FRAME_TIMEOUT_MS = 1_000;
 
 export interface RasterOptions {
   /** The browser executable, from `findBrowser`. */
@@ -40,10 +42,10 @@ export interface RasterOptions {
 
 export interface Rasterizer {
   /**
-   * One still of the artboard, in `geometry`.
+   * The newest frame of the artboard, in `geometry`.
    *
-   * Refused rather than blank when the page did not render: a panel showing the
-   * previous theme is honest, and one showing black is a display that looks
+   * Refused rather than blank when the page stopped composing: a panel showing
+   * the previous theme is honest, and one showing black is a display that looks
    * broken.
    */
   capture(): Promise<Uint8Array>;
@@ -60,21 +62,109 @@ export interface Rasterizer {
   close(): Promise<void>;
 }
 
+/** The newest frame the compositor has handed over, and its place in order. */
+export interface LiveFrame {
+  readonly sequence: number;
+  readonly bytes: Uint8Array;
+}
+
+export interface Screencast {
+  /** The first frame newer than `after`; waits at most `FRAME_TIMEOUT_MS`. */
+  next(after: number): Promise<LiveFrame>;
+  stop(): Promise<void>;
+}
+
 /**
- * The `Page.captureScreenshot` format parameters for a still, in `format`.
+ * Turns the page's compositor into a frame source.
  *
- * PNG carries no `quality`: the protocol refuses one, and the mode exists to be
- * lossless for a device that decodes the still rather than showing it as-is.
+ * `Page.captureScreenshot` answers "what is on screen now" with a round trip of
+ * its own: the reply lands later, on a surface the renderer had already
+ * committed, and the next request cannot start until it arrives. The screencast
+ * pushes every commit instead, in order, and drops one when the ack is late —
+ * the back-pressure a panel wants, and the only way the host can send the frame
+ * that is current rather than the frame that was current.
  */
-export function screenshotParameters(format: "jpeg" | "png"): {
-  readonly format: "jpeg" | "png";
-  readonly quality?: number;
-} {
-  return format === "jpeg" ? { format, quality: 85 } : { format };
+export async function startScreencast(
+  devtools: Devtools,
+  format: "jpeg" | "png",
+): Promise<Screencast> {
+  let sequence = 0;
+  let newest: LiveFrame | undefined;
+  let waiting: ((frame: LiveFrame) => void) | undefined;
+  let stopped = false;
+
+  devtools.on("Page.screencastFrame", (params) => {
+    const data = params["data"];
+    if (typeof data !== "string" || stopped) return;
+
+    sequence += 1;
+    const frame = {
+      sequence,
+      bytes: new Uint8Array(Buffer.from(data, "base64")),
+    };
+    newest = frame;
+
+    const sessionId = params["sessionId"];
+    if (typeof sessionId === "number") {
+      void devtools
+        .send("Page.screencastFrameAck", { sessionId })
+        .catch(() => undefined);
+    }
+
+    const resolve = waiting;
+    waiting = undefined;
+    resolve?.(frame);
+  });
+
+  await devtools.send("Page.startScreencast", {
+    format,
+    ...(format === "jpeg" ? { quality: 85 } : {}),
+    everyNthFrame: 1,
+  });
+
+  return {
+    async next(after: number): Promise<LiveFrame> {
+      const available = newest;
+      if (available !== undefined && available.sequence > after) {
+        return available;
+      }
+
+      return await new Promise<LiveFrame>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          waiting = undefined;
+          reject(
+            new Error(
+              `the panel page produced no frame in ${FRAME_TIMEOUT_MS} ms`,
+            ),
+          );
+        }, FRAME_TIMEOUT_MS);
+
+        waiting = (frame) => {
+          clearTimeout(timer);
+          resolve(frame);
+        };
+      });
+    },
+
+    async stop(): Promise<void> {
+      if (stopped) return;
+      stopped = true;
+      await devtools.send("Page.stopScreencast").catch(() => undefined);
+    },
+  };
 }
 
 export interface CdpReply {
   readonly id?: number;
+  readonly result?: Record<string, unknown>;
+  readonly error?: { readonly message?: string };
+}
+
+/** A protocol event: the browser's own push, carrying no request id. */
+interface CdpEvent {
+  readonly id?: number;
+  readonly method?: string;
+  readonly params?: Record<string, unknown>;
   readonly result?: Record<string, unknown>;
   readonly error?: { readonly message?: string };
 }
@@ -87,21 +177,38 @@ export interface CdpReply {
  */
 export interface Devtools {
   send(method: string, params?: Record<string, unknown>): Promise<CdpReply>;
+  /** One handler per protocol event; the screencast is the only source. */
+  on(method: string, listener: (params: Record<string, unknown>) => void): void;
+}
+
+interface Pending {
+  readonly method: string;
+  readonly resolve: (reply: CdpReply) => void;
+  readonly reject: (error: Error) => void;
+  readonly settle: () => void;
 }
 
 /**
- * A minimal devtools client: one request in flight per id, and no event
- * handling beyond what a capture needs.
+ * A minimal devtools client: one request in flight per id, plus the events the
+ * screencast pushes.
  */
 class BrowserDevtools implements Devtools {
   private closed = false;
+  private nextId = 1;
+  private readonly pending = new Map<number, Pending>();
+  private readonly listeners = new Map<
+    string,
+    Set<(params: Record<string, unknown>) => void>
+  >();
 
-  private constructor(
-    private readonly socket: WebSocket,
-    private nextId: number,
-  ) {
-    this.socket.addEventListener("close", () => {
+  private constructor(private readonly socket: WebSocket) {
+    socket.addEventListener("close", () => {
       this.closed = true;
+    });
+    // One handler for the socket: a reply settles its request, anything else is
+    // an event, and a request that never arrives settles by its own timer.
+    socket.addEventListener("message", (event) => {
+      this.receive(String(event.data));
     });
   }
 
@@ -116,7 +223,41 @@ class BrowserDevtools implements Devtools {
       );
     });
 
-    return new BrowserDevtools(socket, 1);
+    return new BrowserDevtools(socket);
+  }
+
+  private receive(raw: string): void {
+    const message = JSON.parse(raw) as CdpEvent;
+
+    if (typeof message.id === "number") {
+      const pending = this.pending.get(message.id);
+      if (pending === undefined) return;
+
+      this.pending.delete(message.id);
+      pending.settle();
+      if (message.error !== undefined) {
+        pending.reject(new Error(message.error.message ?? pending.method));
+        return;
+      }
+
+      pending.resolve(message);
+      return;
+    }
+
+    if (typeof message.method !== "string") return;
+
+    for (const listener of this.listeners.get(message.method) ?? []) {
+      listener(message.params ?? {});
+    }
+  }
+
+  on(
+    method: string,
+    listener: (params: Record<string, unknown>) => void,
+  ): void {
+    const listeners = this.listeners.get(method) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(method, listeners);
   }
 
   send(
@@ -137,35 +278,25 @@ class BrowserDevtools implements Devtools {
       // this the caller waits on a promise nothing will settle, and the tick
       // that owns it never returns to try again.
       const timer = setTimeout(() => {
-        this.socket.removeEventListener("message", onMessage);
+        this.pending.delete(id);
         reject(new Error(`${method} got no reply in ${REPLY_TIMEOUT_MS} ms`));
       }, REPLY_TIMEOUT_MS);
 
-      const settle = (): void => {
-        clearTimeout(timer);
-        this.socket.removeEventListener("message", onMessage);
-      };
-
-      const onMessage = (event: MessageEvent): void => {
-        const message = JSON.parse(String(event.data)) as CdpReply;
-        if (message.id !== id) return;
-
-        settle();
-        if (message.error !== undefined) {
-          reject(new Error(message.error.message ?? method));
-          return;
-        }
-
-        resolve(message);
-      };
-
-      this.socket.addEventListener("message", onMessage);
+      this.pending.set(id, {
+        method,
+        resolve,
+        reject,
+        settle: () => {
+          clearTimeout(timer);
+        },
+      });
 
       try {
         this.socket.send(JSON.stringify({ id, method, params }));
       } catch (error) {
-        settle();
-        reject(error);
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -239,8 +370,9 @@ async function startBrowser(
  *
  * One browser per capture would be a second of latency per frame; one browser
  * for the rasteriser's life is the shape that is affordable. The page is
- * navigated once and re-captured, so a live theme's samples keep arriving over
- * its own stream and the screenshot picks up whatever is on screen.
+ * navigated once and screencast for the rest of its life, so a live theme's
+ * samples keep arriving over its own stream and a capture returns the newest one
+ * rather than asking the renderer to compose on demand.
  */
 export async function createRasterizer(
   options: RasterOptions,
@@ -253,6 +385,9 @@ export async function createRasterizer(
     .replace(/\/devtools\/browser\/.*$/, "");
 
   let devtools: BrowserDevtools | undefined;
+  let frames: Screencast | undefined;
+  /** The encoding the running screencast produces; the overlay needs PNG. */
+  let encoding: "jpeg" | "png" = options.stillFormat ?? "jpeg";
 
   try {
     const target = (await fetch(`${base}/json/new?about:blank`, {
@@ -280,6 +415,9 @@ export async function createRasterizer(
 
     await devtools.send("Page.navigate", { url: options.url });
     await waitForScene(devtools);
+    // The compositor is the frame source from here: a capture is a lookup of
+    // what it has already committed, not a request for a fresh surface.
+    frames = await startScreencast(devtools, encoding);
   } catch (error) {
     child.kill();
     await rm(profile, { recursive: true, force: true }).catch(() => {});
@@ -287,8 +425,12 @@ export async function createRasterizer(
   }
 
   let closed = false;
+  /** The identity of the last frame handed to the runner. */
+  let sequence = 0;
+  /** The mode the last frame was composed in, so a switch settles once. */
+  let overlay = false;
 
-  const live = (): Devtools => {
+  const connected = (): Devtools => {
     if (closed || devtools === undefined) {
       throw new Error("The rasteriser is closed.");
     }
@@ -296,80 +438,56 @@ export async function createRasterizer(
     return devtools;
   };
 
+  /**
+   * The next frame the renderer has not already given us, composed in
+   * `wantOverlay`.
+   *
+   * A mode change is spent before it is answered: a frame the compositor
+   * committed before the switch would carry the old mode, so that one is
+   * consumed and the next frame is the one the caller asked for.
+   */
+  const nextFrame = async (wantOverlay: boolean): Promise<Uint8Array> => {
+    const format = wantOverlay ? "png" : (options.stillFormat ?? "jpeg");
+
+    if (format !== encoding) {
+      await frames?.stop();
+      frames = await startScreencast(connected(), format);
+      encoding = format;
+      sequence = 0;
+    }
+
+    if (frames === undefined) throw new Error("The rasteriser is closed.");
+
+    if (wantOverlay !== overlay) {
+      await setOverlayMode(connected(), wantOverlay);
+      overlay = wantOverlay;
+      sequence = (await frames.next(sequence)).sequence;
+    }
+
+    const frame = await frames.next(sequence);
+    sequence = frame.sequence;
+    return frame.bytes;
+  };
+
   return {
-    async capture(): Promise<Uint8Array> {
-      return captureStill(
-        live(),
-        options.geometry,
-        options.stillFormat ?? "jpeg",
-      );
+    capture(): Promise<Uint8Array> {
+      return nextFrame(false);
     },
 
-    async captureOverlay(): Promise<Uint8Array> {
-      return captureOverlay(live(), options.geometry);
+    captureOverlay(): Promise<Uint8Array> {
+      return nextFrame(true);
     },
 
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
 
+      await frames?.stop();
       devtools?.close();
       child.kill();
       await rm(profile, { recursive: true, force: true }).catch(() => {});
     },
   };
-}
-
-/** One `Page.captureScreenshot` of the whole page, decoded to bytes. */
-async function shot(
-  devtools: Devtools,
-  geometry: PanelGeometry,
-  format: "jpeg" | "png",
-): Promise<Uint8Array> {
-  const reply = await devtools.send("Page.captureScreenshot", {
-    ...screenshotParameters(format),
-    clip: {
-      x: 0,
-      y: 0,
-      width: geometry.width,
-      height: geometry.height,
-      scale: 1,
-    },
-    // The page is exactly the clip size, so nothing here is off-screen; the
-    // flag keeps a shorter page from producing a short image.
-    captureBeyondViewport: false,
-  });
-
-  const data = reply.result?.["data"];
-  if (typeof data !== "string") {
-    throw new Error("The browser returned no image.");
-  }
-
-  return new Uint8Array(Buffer.from(data, "base64"));
-}
-
-/**
- * One still of the whole artboard, in the device's `stillFormat`.
- *
- * Overlay mode is turned off first: a JPEG has no alpha, and a transparent
- * backdrop left over from the previous overlay would come out black.
- */
-export async function captureStill(
-  devtools: Devtools,
-  geometry: PanelGeometry,
-  stillFormat: "jpeg" | "png",
-): Promise<Uint8Array> {
-  await overlayMode(devtools, false);
-  return shot(devtools, geometry, stillFormat);
-}
-
-/** The UI alone as an alpha PNG, over the still the device shows. */
-export async function captureOverlay(
-  devtools: Devtools,
-  geometry: PanelGeometry,
-): Promise<Uint8Array> {
-  await overlayMode(devtools, true);
-  return shot(devtools, geometry, "png");
 }
 
 const OVERLAY_STYLE_ID = "yunari-panel-overlay";
@@ -382,7 +500,10 @@ const OVERLAY_STYLE_ID = "yunari-panel-overlay";
  * can outrank an inline value without `!important` leaking into a still capture.
  * So the host's own paint is saved on the element and restored on the way out.
  */
-async function overlayMode(devtools: Devtools, on: boolean): Promise<void> {
+export async function setOverlayMode(
+  devtools: Devtools,
+  on: boolean,
+): Promise<void> {
   await devtools.send("Runtime.evaluate", {
     expression: `(() => {
       const id = ${JSON.stringify(OVERLAY_STYLE_ID)};
