@@ -62,6 +62,8 @@ const FILE_REPLY_DEADLINE_MS = 30_000;
  * captured. A hardware run that sees a refusal must record its exact text.
  */
 const OVERLAY_INIT_OK = "seq_png_init_sucess";
+/** The upload's two acks: the file was opened, then the panel finished it. */
+const UPLOAD_ACKS = ["create_success", "file_rev_done"] as const;
 const OVERLAY_INIT_FAILED = "seq_png_init_failed";
 /** Storage the vendor firmware reads clips from. */
 const VIDEO_DIRECTORY = "/mnt/SDCARD/video";
@@ -204,7 +206,14 @@ class TurzxPanel implements PanelDevice {
 
   /** Hardware controls, percent in and the byte mapping kept here. */
   readonly controls: PanelControls = {
-    commands: ["brightness", "screen", "restart", "status", "hello"],
+    commands: [
+      "brightness",
+      "screen",
+      "panel-settings",
+      "restart",
+      "status",
+      "hello",
+    ],
     run: (command) => this.runControl(command),
   };
 
@@ -213,6 +222,18 @@ class TurzxPanel implements PanelDevice {
   private previousOverlay: Uint8Array | undefined;
   /** UPDATE_BITMAP's count field: the verified probe sent 0 first. */
   private overlayCount = 0;
+  /**
+   * The brightness byte this host last wrote, full by default.
+   *
+   * The settings packet carries brightness in its first byte and the panel
+   * offers no read-back, so a mode or flip change would otherwise rewrite the
+   * level with a value nobody chose. What the owner set before this host
+   * started is unknown and is replaced by this one's last write.
+   */
+  private brightnessWeight = 255;
+  /** True between a screen-off and a screen-on, so every later brightness
+   *  write stays dark until the owner asks for light again. */
+  private screenOff = false;
   /** The clip most recently started; a different one deletes it. */
   private previousVideoPath: string | undefined;
 
@@ -387,26 +408,29 @@ class TurzxPanel implements PanelDevice {
       fileHeader(TURZX_COMMAND.uploadFile, remotePath, bytes.length),
     );
 
+    // **`create_success` first, before any chunk.** A chunk written before the
+    // panel has opened the file is dropped: the panel then answers neither ack
+    // and the upload strands (rom1.88, measured — the same bytes land when the
+    // create is waited for). `file_rev_done` says the panel finished writing.
+    // Starting the clip between them is refused: START_VIDEO went unanswered
+    // and the runner fell back to full-frame stills.
+    const seen = new Set<string>();
+
+    await this.readUntil('"create_success"', (text) => {
+      for (const phrase of UPLOAD_ACKS) {
+        if (text.includes(phrase)) seen.add(phrase);
+      }
+
+      return seen.has("create_success") ? true : undefined;
+    });
+
     for (let start = 0; start < bytes.length; start += FILE_CHUNK_BYTES) {
       await this.send(frame(bytes.subarray(start, start + FILE_CHUNK_BYTES)));
     }
 
-    // **Both acks, in either order.** `create_success` says the file was
-    // opened; `file_rev_done` says the panel finished writing it. Starting the
-    // clip between them is refused on hardware — START_VIDEO went unanswered
-    // and the last reply was `file_rev_done` — and the runner then fell back to
-    // full-frame stills until the next start, which found the clip already
-    // stored and played smoothly. Accepting both in one loop keeps a firmware
-    // that emits them in the other order working.
-    const pending = new Set(["create_success", "file_rev_done"]);
-
-    await this.readUntil('"create_success" and "file_rev_done"', (text) => {
-      for (const phrase of pending) {
-        if (text.includes(phrase)) pending.delete(phrase);
-      }
-
-      return pending.size === 0 ? true : undefined;
-    });
+    // A firmware that emits the completion before the create has already said
+    // it; waiting again would be waiting for a reply it does not send twice.
+    if (!seen.has("file_rev_done")) await this.readFor("file_rev_done");
   }
 
   /**
@@ -474,6 +498,11 @@ class TurzxPanel implements PanelDevice {
     return { accepted: undefined, last };
   }
 
+  /** The brightness byte the panel should be showing right now. */
+  private brightnessByte(): number {
+    return this.screenOff ? 0 : this.brightnessWeight;
+  }
+
   /**
    * One control on the same queue as the frames, so a write cannot land inside
    * a frame or between an overlay header and its body.
@@ -502,6 +531,10 @@ class TurzxPanel implements PanelDevice {
           await this.send(
             frame(Uint8Array.of(...TURZX_COMMAND.brightness, weight)),
           );
+          // The settings packet rewrites this byte, so it carries this value.
+          // Asking for a level is also asking for the screen back.
+          this.brightnessWeight = weight;
+          this.screenOff = false;
 
           // Write-only: the device answers nothing, and a host sentence here
           // would be shown as the panel's reply.
@@ -517,8 +550,55 @@ class TurzxPanel implements PanelDevice {
         }
 
         return await this.enqueue(async () => {
+          // **Brightness, not the sleep opcode.** 131 takes the panel off the
+          // USB bus — its port disappears and nothing can be written after it —
+          // so a screen turned off that way could not be turned back on. Zero
+          // brightness draws nothing and leaves the port open; waking restores
+          // the level this host last wrote, which is what the vendor does before
+          // it sleeps the panel.
+          this.screenOff = !on;
           await this.send(
-            on ? TURZX_COMMAND.screenOn : TURZX_COMMAND.screenOff,
+            frame(
+              Uint8Array.of(...TURZX_COMMAND.brightness, this.brightnessByte()),
+            ),
+          );
+
+          // Write-only: the device answers nothing.
+          return "";
+        });
+      }
+      case "panel-settings": {
+        const { startMode, flip, sleepDelay } = command;
+        if (startMode !== 0 && startMode !== 1 && startMode !== 2) {
+          throw new Error(
+            `The start mode must be 0, 1 or 2; received ${startMode}.`,
+          );
+        }
+        if (typeof flip !== "boolean") {
+          throw new Error("The image flip needs flip to be true or false.");
+        }
+        if (
+          !Number.isInteger(sleepDelay) ||
+          sleepDelay < 0 ||
+          sleepDelay > 10
+        ) {
+          throw new Error(
+            `The sleep delay must be a whole number from 0 to 10; received ${sleepDelay}.`,
+          );
+        }
+
+        return await this.enqueue(async () => {
+          await this.send(
+            frame(
+              Uint8Array.of(
+                ...TURZX_COMMAND.panelSettings,
+                this.brightnessByte(),
+                startMode,
+                0,
+                flip ? 1 : 0,
+                sleepDelay,
+              ),
+            ),
           );
 
           // Write-only: the device answers nothing.
@@ -748,7 +828,14 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
     label: LABEL,
     vendorId: 0x1d6b,
     productId: 0x0106,
-    commands: ["brightness", "screen", "restart", "status", "hello"],
+    commands: [
+      "brightness",
+      "screen",
+      "panel-settings",
+      "restart",
+      "status",
+      "hello",
+    ],
     support: {
       maker: "TURZX",
       hardwareRevision: "Rev C",

@@ -40,7 +40,14 @@ const CONTROLLABLE: PanelHint = {
   },
 };
 
-const ALL_COMMANDS = ["brightness", "screen", "restart", "status", "hello"];
+const ALL_COMMANDS = [
+  "brightness",
+  "screen",
+  "panel-settings",
+  "restart",
+  "status",
+  "hello",
+];
 
 globalThis.ResizeObserver ??= class {
   observe(): void {}
@@ -166,6 +173,21 @@ async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
   });
 }
 
+/** Picks an option the way the browser does: a value and a change event. */
+async function selectInto(
+  select: HTMLSelectElement,
+  value: string,
+): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  await act(async () => {
+    setter?.call(select, value);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
 function brightnessField(): HTMLInputElement {
   return must(
     document.querySelector<HTMLInputElement>("#yunari-panel-brightness"),
@@ -261,6 +283,42 @@ it("sends brightness as a whole percent and shows the reply", async () => {
   expect(replyText()).toBe("ok");
   // The label is what distinguishes device words from the host's own.
   expect(document.body.textContent).toContain("Panel reply");
+});
+
+it("sends the panel's stored settings as one command", async () => {
+  const onCommand = vi.fn(async () => "");
+  await mount(section({ panel: CONTROLLABLE, onCommand }));
+  await click(buttonNamed(/controls/i));
+  await selectInto(
+    must(
+      document.querySelector<HTMLSelectElement>("#yunari-panel-start-mode"),
+      "start mode",
+    ),
+    "2",
+  );
+  await selectInto(
+    must(
+      document.querySelector<HTMLSelectElement>("#yunari-panel-sleep-delay"),
+      "sleep delay",
+    ),
+    "3",
+  );
+  const flip = must(
+    document.querySelector<HTMLInputElement>("#yunari-panel-flip"),
+    "flip",
+  );
+  await act(async () => {
+    flip.click();
+  });
+  await click(buttonNamed(/^apply settings$/i));
+
+  // One packet carries all three; the brightness byte is the adapter's.
+  expect(onCommand).toHaveBeenCalledWith({
+    kind: "panel-settings",
+    startMode: 2,
+    flip: true,
+    sleepDelay: 3,
+  });
 });
 
 it("shows a host confirmation, not a reply, for a write-only command", async () => {

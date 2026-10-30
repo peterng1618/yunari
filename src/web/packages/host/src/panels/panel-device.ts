@@ -34,6 +34,15 @@ export interface PanelHint {
 export type PanelControlCommand =
   | { readonly kind: "brightness"; readonly level: number }
   | { readonly kind: "screen"; readonly on: boolean }
+  | {
+      readonly kind: "panel-settings";
+      /** What the panel shows when it powers on: 0 default, 1 image, 2 video. */
+      readonly startMode: 0 | 1 | 2;
+      /** One byte; the adapter sends the image upside down when true. */
+      readonly flip: boolean;
+      /** Whole steps: 0 is no sleep, 1..10 are the firmware's own. */
+      readonly sleepDelay: number;
+    }
   | { readonly kind: "restart" }
   | { readonly kind: "status" }
   | { readonly kind: "hello" };

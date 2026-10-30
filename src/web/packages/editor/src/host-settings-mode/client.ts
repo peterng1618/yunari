@@ -198,6 +198,12 @@ export interface HostSettingsClient {
 export type EditorPanelCommand =
   | { readonly kind: "brightness"; readonly level: number }
   | { readonly kind: "screen"; readonly on: boolean }
+  | {
+      readonly kind: "panel-settings";
+      readonly startMode: 0 | 1 | 2;
+      readonly flip: boolean;
+      readonly sleepDelay: number;
+    }
   | { readonly kind: "restart" }
   | { readonly kind: "status" }
   | { readonly kind: "hello" };
@@ -208,6 +214,7 @@ export type EditorPanelCommand =
 export type PanelCommandKind =
   | "brightness"
   | "screen"
+  | "panel-settings"
   | "restart"
   | "status"
   | "hello";
@@ -215,6 +222,7 @@ export type PanelCommandKind =
 const PANEL_COMMAND_KINDS: readonly PanelCommandKind[] = [
   "brightness",
   "screen",
+  "panel-settings",
   "restart",
   "status",
   "hello",

@@ -122,10 +122,10 @@ describe("overlayUpdate", () => {
     );
     // One row-0 changed segment: offset 3 bytes, width 2, then 2 pixels of 3 bytes.
     expect([...update.body.slice(0, 5)]).toEqual([0, 0, 1, 0, 2]);
-    // A fully opaque red pixel: blue 0, green 0, red 15, alpha 15, split across
-    // three bytes as b<<4|a_hi, g<<4|a_lo, r<<4.
+    // A fully opaque red pixel: blue 0, green 0, red 255, alpha 15, split across
+    // three bytes as b|a_hi, g|a_lo, r.
     expect([...update.body.slice(5, 11)]).toEqual([
-      0x03, 0x03, 0xf0, 0x03, 0x03, 0xf0,
+      0x03, 0x03, 0xff, 0x03, 0x03, 0xff,
     ]);
     // The visible list repeats that segment after the changed pixels.
     expect([...update.body.slice(11, 16)]).toEqual([0, 0, 1, 0, 2]);
@@ -133,23 +133,24 @@ describe("overlayUpdate", () => {
     expect(update.imageSize).toBe(5 + 6 + 5 + 2);
   });
 
-  it("dithers a mid tone instead of flat-banding it", () => {
-    // 4 bits per channel turns a smooth gradient into 16 flat bands; a 128 grey
-    // must land on both 7 and 8 across a 4x4 patch, or the panel shows a step.
+  it("keeps sub-nibble colour instead of quantizing to four bits", () => {
+    // The vendor's encoder sends B6|A2, G6|A2, R8; a 128 grey is 0x83, 0x83,
+    // 0x80, and every pixel is identical. Four bits per channel would send
+    // 0x80 in each top nibble and a dither to hide the band.
     const update = overlayUpdate(blank(4, 4), grey(4, 4, 128), {
       width: 4,
       height: 4,
     });
-    const levels = new Set<number>();
     let at = 0;
     for (let y = 0; y < 4; y += 1) {
       at += 5; // the row's segment header: offset, width
       for (let x = 0; x < 4; x += 1) {
-        levels.add((update.body[at + 2] ?? 0) >>> 4); // red's high nibble
+        expect([...(update.body.slice(at, at + 3) ?? [])]).toEqual([
+          0x83, 0x83, 0x80,
+        ]);
         at += 3;
       }
     }
-    expect([...levels].sort()).toEqual([7, 8]);
   });
 
   it("drops the old position from the visible list", () => {
@@ -235,7 +236,7 @@ describe("overlayUpdate", () => {
     // because the pixel after it is opaque.
     expect([...update.body.slice(0, 5)]).toEqual([0, 0, 0, 0, 3]);
     expect([...update.body.slice(5, 14)]).toEqual([
-      0x03, 0x03, 0xf0, 0x00, 0x00, 0x00, 0x03, 0x03, 0xf0,
+      0x03, 0x03, 0xff, 0x00, 0x00, 0x00, 0x03, 0x03, 0xff,
     ]);
     // The visible list carries spans only: offset and width, no pixel bytes.
     expect([...update.body.slice(14, 19)]).toEqual([0, 0, 0, 0, 3]);

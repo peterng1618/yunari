@@ -909,6 +909,13 @@ async function readBytes(
   return new Uint8Array(Buffer.concat(chunks));
 }
 
+/** The panel's power-on mode, refused rather than rounded down to a neighbour. */
+function startModeOf(value: unknown): 0 | 1 | 2 {
+  if (value === 0 || value === 1 || value === 2) return value;
+
+  throw new Error("The start mode must be 0, 1 or 2.");
+}
+
 /**
  * One command from a request body, refusing what the adapter would refuse.
  *
@@ -922,10 +929,13 @@ function panelCommand(body: unknown): PanelControlCommand {
     throw new Error("That is not a panel command.");
   }
 
-  const { kind, level, on } = body as {
+  const { kind, level, on, startMode, flip, sleepDelay } = body as {
     readonly kind?: unknown;
     readonly level?: unknown;
     readonly on?: unknown;
+    readonly startMode?: unknown;
+    readonly flip?: unknown;
+    readonly sleepDelay?: unknown;
   };
 
   if (kind === "brightness") {
@@ -949,6 +959,26 @@ function panelCommand(body: unknown): PanelControlCommand {
     }
 
     return { kind: "screen", on };
+  }
+
+  if (kind === "panel-settings") {
+    // The three values the panel stores: what it shows at power-on, whether the
+    // image is upside down, and how long it waits before sleeping. Each is
+    // refused rather than coerced — a mode of 4 is not "closest to video".
+    const mode = startModeOf(startMode);
+    if (typeof flip !== "boolean") {
+      throw new Error("The image flip needs flip to be true or false.");
+    }
+    if (
+      typeof sleepDelay !== "number" ||
+      !Number.isInteger(sleepDelay) ||
+      sleepDelay < 0 ||
+      sleepDelay > 10
+    ) {
+      throw new Error("The sleep delay must be a whole number from 0 to 10.");
+    }
+
+    return { kind: "panel-settings", startMode: mode, flip, sleepDelay };
   }
 
   if (kind === "restart" || kind === "status" || kind === "hello") {

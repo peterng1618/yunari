@@ -297,6 +297,34 @@ describe("openTurzxPanel", () => {
     }
   });
 
+  it("writes no chunk before the panel has opened the file", async () => {
+    // Measured on rom1.88: chunks written before `create_success` are dropped,
+    // and the panel then answers neither ack, stranding the transfer.
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored
+      // UPLOAD_FILE's open is never answered.
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+    });
+
+    try {
+      await expect(
+        panel.video!.start(Uint8Array.of(1, 2, 3), {
+          offsetX: 0,
+          offsetY: 0,
+        }),
+      ).rejects.toThrow(/create_success/);
+      const upload = fake.writes.findIndex((bytes) => bytes[0] === 0x6f);
+      expect(upload, "UPLOAD_FILE was never written").toBeGreaterThanOrEqual(0);
+      expect(fake.writes.slice(upload + 1)).toEqual([]);
+    } finally {
+      await panel.close();
+    }
+  });
+
   it("accepts the two upload acks in either order", async () => {
     const fake = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO
@@ -337,7 +365,7 @@ describe("openTurzxPanel", () => {
           offsetX: 0,
           offsetY: 0,
         }),
-      ).rejects.toThrow(/file_rev_done/);
+      ).rejects.toThrow(/create_success/);
       expect(Date.now() - started).toBeLessThan(1000);
     } finally {
       await panel.close();
@@ -463,6 +491,8 @@ describe("a panel's controls", () => {
   }
 
   const BRIGHTNESS = [0x7b, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0];
+  /** Opcode 125 with its five-byte length; the payload follows. */
+  const SETTINGS = [0x7d, 0xef, 0x69, 0, 0, 0, 5, 0, 0, 0];
   const STATUS = [0xcf, 0xef, 0x69, 0, 0, 0, 1];
   const HELLO = [0x01, 0xef, 0x69, 0, 0, 0, 1, 0, 0, 0, 0xc5, 0xd3];
 
@@ -493,6 +523,70 @@ describe("a panel's controls", () => {
 
       await panel.controls!.run({ kind: "brightness", level: 100 });
       expectCommand(writes[writes.length - 1]!, [...BRIGHTNESS, 255]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("writes the stored settings with the brightness this host last sent", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+
+    try {
+      await panel.controls!.run({ kind: "brightness", level: 50 });
+      await panel.controls!.run({
+        kind: "panel-settings",
+        startMode: 2,
+        flip: true,
+        sleepDelay: 4,
+      });
+
+      // Brightness first (the 50% weight), then mode, the vendor's constant
+      // zero, the flip byte and the delay: a mode change must not dim a panel
+      // the owner set to half.
+      expectCommand(writes[writes.length - 1]!, [...SETTINGS, 128, 2, 0, 1, 4]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("sends full brightness when nothing has been set yet", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+
+    try {
+      await panel.controls!.run({
+        kind: "panel-settings",
+        startMode: 0,
+        flip: false,
+        sleepDelay: 0,
+      });
+      expectCommand(writes[writes.length - 1]!, [...SETTINGS, 255, 0, 0, 0, 0]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("refuses settings the panel cannot store", async () => {
+    const { writes, transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(transport);
+    const sent = writes.length;
+    // A route that lost the field's type would otherwise reach the wire.
+    const run = (settings: object): Promise<string> =>
+      panel.controls!.run({
+        kind: "panel-settings",
+        startMode: 0,
+        flip: false,
+        sleepDelay: 0,
+        ...settings,
+      } as Parameters<NonNullable<typeof panel.controls>["run"]>[0]);
+
+    try {
+      await expect(run({ startMode: 3 })).rejects.toThrow(/start mode/);
+      await expect(run({ flip: "yes" })).rejects.toThrow(/image flip/);
+      await expect(run({ sleepDelay: 11 })).rejects.toThrow(/sleep delay/);
+      await expect(run({ sleepDelay: 1.5 })).rejects.toThrow(/sleep delay/);
+      expect(writes.length).toBe(sent);
     } finally {
       await panel.close();
     }
@@ -607,26 +701,53 @@ describe("a panel's controls", () => {
     }
   });
 
-  it("writes the screen state without waiting for a reply", async () => {
+  it("turns the screen off and on with brightness, never the sleep opcode", async () => {
+    // Opcode 131 takes the panel off the USB bus, so nothing can wake it: the
+    // control is a zero level, and waking restores what the host last wrote.
     const fake = fakeTransport("chs_5inch.dev1_rom1.88");
     const panel = await opened(fake.transport);
 
     try {
-      await expect(
-        panel.controls!.run({ kind: "screen", on: true }),
-      ).resolves.toBe("");
-      expectCommand(
-        fake.writes[fake.writes.length - 1]!,
-        [0x83, 0xef, 0x69, 0, 0, 0, 0],
-      );
+      await panel.controls!.run({ kind: "brightness", level: 60 });
 
       await expect(
         panel.controls!.run({ kind: "screen", on: false }),
       ).resolves.toBe("");
-      expectCommand(
-        fake.writes[fake.writes.length - 1]!,
-        [0x83, 0xef, 0x69, 0, 0, 0, 1],
-      );
+      expectCommand(fake.writes[fake.writes.length - 1]!, [...BRIGHTNESS, 0]);
+
+      await expect(
+        panel.controls!.run({ kind: "screen", on: true }),
+      ).resolves.toBe("");
+      expectCommand(fake.writes[fake.writes.length - 1]!, [...BRIGHTNESS, 153]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("keeps a dark screen dark through a settings write", async () => {
+    const fake = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await opened(fake.transport);
+
+    try {
+      await panel.controls!.run({ kind: "brightness", level: 60 });
+      await panel.controls!.run({ kind: "screen", on: false });
+      await panel.controls!.run({
+        kind: "panel-settings",
+        startMode: 1,
+        flip: false,
+        sleepDelay: 0,
+      });
+
+      // The settings packet rewrites brightness; it must not relight a panel
+      // the owner blanked.
+      expectCommand(fake.writes[fake.writes.length - 1]!, [
+        ...SETTINGS,
+        0,
+        1,
+        0,
+        0,
+        0,
+      ]);
     } finally {
       await panel.close();
     }
@@ -714,7 +835,7 @@ describe("a panel's overlay", () => {
       // The changed span [offset 0, width 1], its pixel, the visible span,
       // then the terminator.
       expect([...body.slice(0, 15)]).toEqual([
-        0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0xf0, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0xff, 0x00, 0x00, 0x00, 0x00,
         0x01, 0xef, 0x69,
       ]);
 

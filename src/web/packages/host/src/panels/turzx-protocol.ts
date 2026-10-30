@@ -147,8 +147,31 @@ export const TURZX_COMMAND = {
     0x00,
     0x00,
   ),
-  screenOff: Uint8Array.of(0x83, 0xef, 0x69, 0x00, 0x00, 0x00, 0x01),
-  screenOn: Uint8Array.of(0x83, 0xef, 0x69, 0x00, 0x00, 0x00, 0x00),
+  /**
+   * The panel's stored settings, five bytes: brightness weight, start mode,
+   * a zero the vendor never varies, image flip and sleep delay.
+   *
+   * **There is no read-back**, so the brightness byte is rewritten by every
+   * send and the adapter carries the last weight it wrote.
+   */
+  panelSettings: Uint8Array.of(
+    0x7d,
+    0xef,
+    0x69,
+    0x00,
+    0x00,
+    0x00,
+    0x05,
+    0x00,
+    0x00,
+    0x00,
+  ),
+  // **No sleep command is named here.** Opcode 131 takes the panel off the USB
+  // bus (measured on rom1.88: its port disappears and the write after it hangs),
+  // and opcode 130, the vendor's other bare command, is sent mid-handshake while
+  // the panel is still attached. There is no channel to a sleeping panel, so a
+  // screen this host turned off could not be turned back on. `screen` is
+  // brightness 0 instead; see `runControl`.
   restart: Uint8Array.of(0x84, 0xef, 0x69, 0x00, 0x00, 0x00, 0x01),
   preUpdate: Uint8Array.of(0x86, 0xef, 0x69, 0x00, 0x00, 0x00, 0x01),
   startBitmap: new Uint8Array(FRAME_SIZE).fill(0x2c),
@@ -304,22 +327,26 @@ function segmentsInRow(
 }
 
 /**
- * 4x4 Bayer thresholds. The overlay stores 4 bits per channel, so a smooth
- * gradient is 16 flat bands on the panel (observed 2026-10-29, static glass
- * over a video); a fraction of one step before rounding trades the band edge
- * for a fixed texture that reads as the tone between them. Solid black and
- * white stay exact, and the changed-pixel test runs before this, so no extra
- * bytes reach the wire.
+ * One pixel as three bytes: **blue 6 bits, green 6 bits, red 8 bits, alpha 4** —
+ * the packing the vendor's own app sends (`UsbMonitorL.exe`, `렎.cs`).
+ *
+ * The alpha nibble sits where the earlier reference puts it (bits 1-0 of the
+ * first two bytes), so a device that reads four bits per channel sees exactly
+ * what that form sent: its top nibbles are these top nibbles. A device that
+ * reads the low bits — as the vendor's encoder implies — gets 64 blue and green
+ * steps and 256 red, which is why a gradient needs no dither to hide banding.
  */
-const DITHER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-
-/** One 4-bit channel value, dithered by the pixel's position. */
-function dither(value: number, x: number, y: number): number {
-  const threshold = DITHER_4[((y & 3) << 2) | (x & 3)] ?? 0;
-  return Math.max(
-    0,
-    Math.min(15, Math.round((value / 255) * 15 + threshold / 16 - 0.5)),
-  );
+function writePixel(
+  at: number,
+  out: Uint8Array,
+  red: number,
+  green: number,
+  blue: number,
+  alpha: number,
+): void {
+  out[at] = (blue & 0xfc) | ((alpha & 0x0c) >> 2);
+  out[at + 1] = (green & 0xfc) | (alpha & 0x03);
+  out[at + 2] = red;
 }
 
 /**
@@ -392,17 +419,16 @@ export function overlayUpdate(
 
     for (let pixel = 0; pixel < segment.width; pixel += 1) {
       const index = segment.at + pixel * 4;
-      const cell = segment.offset + pixel;
-      const x = cell % width;
-      const y = (cell - x) / width;
-      const red = dither(current[index] ?? 0, x, y);
-      const green = dither(current[index + 1] ?? 0, x, y);
-      const blue = dither(current[index + 2] ?? 0, x, y);
       const alpha = Math.floor(((current[index + 3] ?? 0) / 255) * 15);
 
-      message[at] = (blue << 4) | ((alpha & 0xc) >> 2);
-      message[at + 1] = (green << 4) | (alpha & 0x3);
-      message[at + 2] = red << 4;
+      writePixel(
+        at,
+        message,
+        current[index] ?? 0,
+        current[index + 1] ?? 0,
+        current[index + 2] ?? 0,
+        alpha,
+      );
       at += 3;
     }
   }

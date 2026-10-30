@@ -23,6 +23,11 @@ const BRIGHTNESS_ID = "yunari-panel-brightness";
 /** Where the field's own refusal lives, for `aria-describedby` to name. */
 const LEVEL_ERROR_ID = "yunari-panel-brightness-error";
 
+/** The stored settings' three fields, each named once for its label and id. */
+const START_MODE_ID = "yunari-panel-start-mode";
+const FLIP_ID = "yunari-panel-flip";
+const SLEEP_DELAY_ID = "yunari-panel-sleep-delay";
+
 /**
  * One panel display's connection and commands.
  *
@@ -62,6 +67,11 @@ export function PanelControlsSection(props: {
   /** The host's or the panel's own words, drawn at the dialog's foot. */
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [confirmingRestart, setConfirmingRestart] = useState(false);
+  /** The panel's stored settings. The panel has no read-back, so the form opens
+   *  at the defaults rather than at what the device is holding. */
+  const [startMode, setStartMode] = useState<0 | 1 | 2>(0);
+  const [flip, setFlip] = useState(false);
+  const [sleepDelay, setSleepDelay] = useState(0);
   /** True while a command runs. A second press would be a second command, and
    *  two answers settling out of order would leave the earlier one standing. */
   const [inFlight, setInFlight] = useState(false);
@@ -96,6 +106,9 @@ export function PanelControlsSection(props: {
     setFailure(undefined);
     setReply(undefined);
     setConfirmingRestart(false);
+    setStartMode(0);
+    setFlip(false);
+    setSleepDelay(0);
   };
 
   const holds = (kind: PanelCommandKind): boolean =>
@@ -293,6 +306,94 @@ export function PanelControlsSection(props: {
                     onClick={() => send({ kind: "screen", on: false })}
                   >
                     {copy.screenOff}
+                  </button>
+                </div>
+              ) : null}
+
+              {holds("panel-settings") ? (
+                <div className="flex flex-col gap-[var(--space-6)]">
+                  <div className="flex flex-col gap-[var(--space-2)]">
+                    <span className="text-xs text-muted">
+                      {copy.settingsHeading}
+                    </span>
+                    <p className="m-0 text-2xs text-faint">
+                      {copy.settingsHint}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-[var(--space-4)]">
+                    <label
+                      htmlFor={START_MODE_ID}
+                      className="text-xs text-muted"
+                    >
+                      {copy.startMode}
+                    </label>
+                    <select
+                      id={START_MODE_ID}
+                      data-yunari-panel-start-mode=""
+                      value={String(startMode)}
+                      onChange={(event) =>
+                        setStartMode(Number(event.target.value) as 0 | 1 | 2)
+                      }
+                      className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
+                    >
+                      {copy.startModeOptions.map((label, mode) => (
+                        <option key={label} value={String(mode)}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-[var(--space-4)]">
+                    <label
+                      htmlFor={SLEEP_DELAY_ID}
+                      className="text-xs text-muted"
+                    >
+                      {copy.sleepDelay}
+                    </label>
+                    <select
+                      id={SLEEP_DELAY_ID}
+                      data-yunari-panel-sleep-delay=""
+                      value={String(sleepDelay)}
+                      onChange={(event) =>
+                        setSleepDelay(Number(event.target.value))
+                      }
+                      className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
+                    >
+                      {copy.sleepDelayOptions.map((label, step) => (
+                        <option key={label} value={String(step)}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label
+                    htmlFor={FLIP_ID}
+                    className="flex items-center gap-[var(--space-8)]"
+                  >
+                    <input
+                      id={FLIP_ID}
+                      type="checkbox"
+                      checked={flip}
+                      data-yunari-panel-flip=""
+                      onChange={(event) => setFlip(event.target.checked)}
+                      className="size-4 flex-none accent-accent"
+                    />
+                    <span className="text-xs text-text">{copy.flip}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={ACTION_BUTTON}
+                    disabled={inFlight}
+                    onClick={() =>
+                      send({
+                        kind: "panel-settings",
+                        startMode,
+                        flip,
+                        sleepDelay,
+                      })
+                    }
+                  >
+                    {copy.applySettings}
                   </button>
                 </div>
               ) : null}

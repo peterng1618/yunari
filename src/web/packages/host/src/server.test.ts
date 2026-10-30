@@ -5475,6 +5475,45 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("forwards the panel's stored settings with every field", async () => {
+      const called: unknown[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          command: (id, command) => {
+            called.push({ id, command });
+            return Promise.resolve("");
+          },
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const body = {
+          kind: "panel-settings",
+          startMode: 2,
+          flip: true,
+          sleepDelay: 4,
+        };
+        const answer = await request(
+          hosting.server,
+          "POST",
+          COMMAND,
+          json(body),
+        );
+        expect(answer.status).toBe(200);
+        expect(called).toEqual([{ id: "strip", command: body }]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("answers the empty reply a silent panel gave", async () => {
       const hosting = host({
         attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
@@ -5607,6 +5646,26 @@ describe("A local monitor is specified rather than paired", () => {
       ["a missing kind", {}],
       ["a missing on", { kind: "screen" }],
       ["a non-boolean on", { kind: "screen", on: "true" }],
+      [
+        "a start mode outside the three",
+        { kind: "panel-settings", startMode: 3, flip: false, sleepDelay: 0 },
+      ],
+      [
+        "a string start mode",
+        { kind: "panel-settings", startMode: "1", flip: false, sleepDelay: 0 },
+      ],
+      [
+        "a missing flip",
+        { kind: "panel-settings", startMode: 0, sleepDelay: 0 },
+      ],
+      [
+        "a sleep delay above ten",
+        { kind: "panel-settings", startMode: 0, flip: false, sleepDelay: 11 },
+      ],
+      [
+        "a fractional sleep delay",
+        { kind: "panel-settings", startMode: 0, flip: false, sleepDelay: 2.5 },
+      ],
     ])("refuses %s with 400 and sends nothing", async (_name, body) => {
       const command = vi.fn();
       const hosting = host({
