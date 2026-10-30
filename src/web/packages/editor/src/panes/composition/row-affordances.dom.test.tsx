@@ -254,6 +254,8 @@ it("draws no rename control on an attended row, and the name still opens for typ
   // opened. The failure mode to guard is the other half — removing the pen while
   // taking the pointer and keyboard routes with it.
   const host = await renderPane([row()]);
+  // In the document, because the case proves where focus lands.
+  document.body.append(host);
   const line = host.querySelector<HTMLElement>(
     '[data-yunari-layer="loose-0"]',
   )!;
@@ -275,6 +277,18 @@ it("draws no rename control on an attended row, and the name still opens for typ
   expect(
     host.querySelector<HTMLInputElement>('[aria-label="Rename loose-0"]'),
   ).not.toBeNull();
+
+  // Escape cancels the draft and returns focus to the row it was renaming, not
+  // to the document body.
+  await act(async () =>
+    host
+      .querySelector<HTMLInputElement>('[aria-label="Rename loose-0"]')
+      ?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+  );
+  expect(host.querySelector('[aria-label="Rename loose-0"]')).toBeNull();
+  expect(document.activeElement).toBe(line);
   host.remove();
 });
 

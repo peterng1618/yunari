@@ -2,6 +2,7 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import type { FinderCardModel } from "./finder-card.js";
 import { FinderGrid, moveInGrid } from "./finder-grid.js";
 
@@ -99,6 +100,11 @@ it("renders one listbox and one tab stop, and four skeletons while appending", (
   expect(document.querySelectorAll("[data-yunari-skeleton-card]")).toHaveLength(
     4,
   );
+  expect(
+    document.querySelector("[role=listbox]")?.getAttribute("aria-busy"),
+  ).toBe("true");
+  const status = document.querySelector("[role=status]");
+  expect(status?.textContent).toBe(uiCopy.assets.skeletonLoading);
 });
 
 it("asks for more when the sentinel intersects", () => {

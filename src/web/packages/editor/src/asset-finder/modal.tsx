@@ -52,6 +52,7 @@ import {
   type FontPreviewState,
   FontsFilter,
   fontActionsOf,
+  fontDoneMessage,
   fontRows,
 } from "./fonts.js";
 import { type FinderPreview, FinderPreviewModal } from "./preview-modal.js";
@@ -784,11 +785,7 @@ export function AssetFinder({
       patch(active, (current) => ({
         ...current,
         message: {
-          text: result.ok
-            ? action.id.startsWith("add")
-              ? uiCopy.assets.done.colour
-              : uiCopy.assets.done.font
-            : result.message,
+          text: result.ok ? fontDoneMessage(action.id) : result.message,
           tone: result.ok ? "ok" : "failed",
           ...(result.ok || rowId === undefined ? {} : { failedId: rowId }),
         },

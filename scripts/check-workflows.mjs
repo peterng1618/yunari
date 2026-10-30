@@ -53,7 +53,7 @@
  * or an unread shape.
  */
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -406,7 +406,8 @@ function parseJob(tokens, start, job, uses) {
     job.keys.add(key);
 
     if (key === "steps") {
-      if (token.value !== "" || token.block !== undefined) refuseFlow(token, "steps");
+      if (token.value !== "" || token.block !== undefined)
+        refuseFlow(token, "steps");
       index = parseSteps(tokens, index + 1, job, uses);
       continue;
     }
@@ -459,7 +460,8 @@ function parseJobs(tokens, start, jobs, uses) {
     if (token.indent !== 2) {
       refuse(token, `job list shape is not read at indent ${token.indent}`);
     }
-    if (token.isItem) refuse(token, "a list item is not read where a job name goes");
+    if (token.isItem)
+      refuse(token, "a list item is not read where a job name goes");
     if (token.key === undefined) refuse(token, "job name is not read");
     if (token.value !== "" || token.block !== undefined) {
       refuse(token, `job "${token.key}" must open a block mapping`);
@@ -498,7 +500,10 @@ function readTriggerTree(tokens, start, ownerIndent, label) {
     }
     if (token.key === undefined) refuse(token, `${label}: entry is not read`);
     if (token.block !== undefined) {
-      refuse(token, `${label} "${token.key}" must be a scalar or a block mapping`);
+      refuse(
+        token,
+        `${label} "${token.key}" must be a scalar or a block mapping`,
+      );
     }
     if (token.value !== "") {
       value.set(token.key, token.value);
@@ -527,7 +532,8 @@ function parseWorkflow(text, { publishTriggers = false } = {}) {
     if (token.indent === 0 && !token.isItem && token.key === "jobs") {
       if (sawJobs) refuse(token, "duplicate jobs: block");
       sawJobs = true;
-      if (token.value !== "" || token.block !== undefined) refuseFlow(token, "jobs");
+      if (token.value !== "" || token.block !== undefined)
+        refuseFlow(token, "jobs");
       const parsed = parseJobs(tokens, index + 1, jobs, uses);
       index = parsed.next;
       continue;
@@ -541,7 +547,7 @@ function parseWorkflow(text, { publishTriggers = false } = {}) {
       if (onLine !== undefined) refuse(token, "duplicate on: block");
       onLine = token.line;
       if (token.block !== undefined) {
-        refuse(token, 'on: must be a block mapping, not a block scalar');
+        refuse(token, "on: must be a block mapping, not a block scalar");
       }
       if (token.value !== "") {
         on = { scalar: token.value, line: token.line };
@@ -585,7 +591,8 @@ const GUARD_COMMAND = "node scripts/assert-publish-ref.mjs";
  * unchanged. A comment-only `run: |` is still reachable, so it is named.
  */
 function guardProblem(step) {
-  if (step === undefined || step.run === undefined) return "has no run: command";
+  if (step === undefined || step.run === undefined)
+    return "has no run: command";
   const extra = [...step.keys].filter((key) => key !== "name" && key !== "run");
   if (extra.length > 0) {
     return `may only declare "name" and "run" (found ${extra.map((key) => `"${key}"`).join(", ")})`;
@@ -810,7 +817,9 @@ function checkPublish(publish) {
   if (install !== undefined) {
     const pairs = permissionPairs(install);
     const readOnly =
-      pairs.length === 1 && pairs[0][0] === "contents" && pairs[0][1] === "read";
+      pairs.length === 1 &&
+      pairs[0][0] === "contents" &&
+      pairs[0][1] === "read";
     if (install.permissionsScalar !== undefined) {
       violations.push(
         `install job declares permissions as the scalar "${install.permissionsScalar}"; it must declare exactly "contents: read"`,
@@ -930,7 +939,10 @@ export function checkWorkflows(root) {
       .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
       .sort();
   } catch (error) {
-    return { exitCode: 2, lines: [`workflows: cannot read ${dir}: ${error.message}`] };
+    return {
+      exitCode: 2,
+      lines: [`workflows: cannot read ${dir}: ${error.message}`],
+    };
   }
 
   // A directory this check cannot read is reported above; an empty one would
@@ -982,7 +994,9 @@ export function checkWorkflows(root) {
 
   const publish = parsed.get("publish.yml");
   if (publish === undefined) {
-    violations.push("publish.yml: missing; the publish rules cannot be checked");
+    violations.push(
+      "publish.yml: missing; the publish rules cannot be checked",
+    );
   } else {
     for (const violation of checkPublish(publish)) {
       violations.push(`publish.yml: ${violation}`);

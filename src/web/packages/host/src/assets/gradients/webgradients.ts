@@ -1,13 +1,11 @@
 import type { AssetResult } from "@yunari/renderer-core";
+import { CATALOGUE_PAGE_SIZE, HEX_COLOUR } from "../catalogue.js";
 import type { AssetSource, SourceContext } from "../source.js";
-
-export const WEBGRADIENTS_PAGE_SIZE = 40;
 
 const CATALOGUE_URL =
   "https://raw.githubusercontent.com/itmeo/webgradients/master/gradients.json";
 const LICENCE = "MIT";
 const SOURCE_URL = "https://webgradients.com/";
-const HEX = /^#[0-9a-f]{6}$/i;
 
 interface Stop {
   readonly offset: number;
@@ -44,7 +42,7 @@ function stopOf(value: unknown): Stop | undefined {
 
   const color = textOf(value.color);
   const pos = value.pos;
-  if (color === undefined || !HEX.test(color)) return undefined;
+  if (color === undefined || !HEX_COLOUR.test(color)) return undefined;
   if (typeof pos !== "number" || !Number.isFinite(pos)) return undefined;
 
   // The catalogue carries out-of-range percentages ("Slick Carbon" has 150);
@@ -160,17 +158,14 @@ export const webgradientsSource: AssetSource = {
             normalize(gradient.name).includes(wanted),
           );
 
-    const offset = (pageOf(asked) - 1) * WEBGRADIENTS_PAGE_SIZE;
+    const offset = (pageOf(asked) - 1) * CATALOGUE_PAGE_SIZE;
 
     return {
       results: matches
-        .slice(offset, offset + WEBGRADIENTS_PAGE_SIZE)
+        .slice(offset, offset + CATALOGUE_PAGE_SIZE)
         .map(resultOf),
       // No match is one empty page, not no pages.
-      totalPages: Math.max(
-        1,
-        Math.ceil(matches.length / WEBGRADIENTS_PAGE_SIZE),
-      ),
+      totalPages: Math.max(1, Math.ceil(matches.length / CATALOGUE_PAGE_SIZE)),
     };
   },
 

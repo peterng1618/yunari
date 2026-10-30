@@ -120,14 +120,14 @@ export default defineConfig({
       command:
         "npx vite preview packages/player --port 4173 --strictPort --host 127.0.0.1",
       url: "http://127.0.0.1:4173",
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
     {
       command:
         "npx vite preview packages/editor --port 4174 --strictPort --host 127.0.0.1",
       url: "http://127.0.0.1:4174",
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
     {
@@ -140,7 +140,7 @@ export default defineConfig({
       // the secure origin is read by `host-secure-origin.spec.ts`, which
       // starts its own host on the LAN and launches its own browser.
       url: `http://127.0.0.1:${HOST_PORT}/api/health`,
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],

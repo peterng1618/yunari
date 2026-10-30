@@ -12,15 +12,9 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC_WEB = path.join(ROOT, "src/web");
-const ICON_DIR = path.join(
-  SRC_WEB,
-  "node_modules/lucide-react/dist/esm/icons",
-);
+const ICON_DIR = path.join(SRC_WEB, "node_modules/lucide-react/dist/esm/icons");
 const OUT = path.join(
   SRC_WEB,
   "packages/host/src/assets/icons/lucide-icons.generated.ts",
@@ -48,7 +42,9 @@ function markup(node) {
   return node
     .map(
       ([tag, attrs]) =>
-        `<${tag}${Object.entries(attrs).map(([name, value]) => attribute(name, value)).join("")}/>`,
+        `<${tag}${Object.entries(attrs)
+          .map(([name, value]) => attribute(name, value))
+          .join("")}/>`,
     )
     .join("");
 }
@@ -89,4 +85,6 @@ const file =
 
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, file, "utf8");
-console.log(`Wrote ${icons.length} icons from lucide-react ${VERSION} to ${path.relative(ROOT, OUT)}.`);
+console.log(
+  `Wrote ${icons.length} icons from lucide-react ${VERSION} to ${path.relative(ROOT, OUT)}.`,
+);

@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { uiCopy } from "../ui-copy.js";
 import { FinderCard, type FinderCardModel } from "./finder-card.js";
 import { SkeletonCard } from "./skeleton.js";
 
@@ -137,42 +138,52 @@ export function FinderGrid(props: {
   // The right pad is the gap between the last column and the scrollbar: the
   // cards must not sit against the thumb.
   return (
-    <div
-      ref={scroller}
-      role="listbox"
-      aria-label={props.label}
-      data-yunari-finder-grid=""
-      className="min-h-0 flex-1 overflow-y-auto pr-[var(--space-8)]"
-    >
+    <>
+      {props.appending ? (
+        // The appended skeleton cards are hidden, so this is what announces
+        // the wait. Outside the listbox: its children must be options.
+        <span role="status" className="sr-only">
+          {uiCopy.assets.skeletonLoading}
+        </span>
+      ) : null}
       <div
-        ref={grid}
-        className="grid content-start grid-cols-[repeat(auto-fill,minmax(var(--finder-card-min-width),1fr))] gap-[var(--space-12)]"
+        ref={scroller}
+        role="listbox"
+        aria-label={props.label}
+        aria-busy={props.appending ? true : undefined}
+        data-yunari-finder-grid=""
+        className="min-h-0 flex-1 overflow-y-auto pr-[var(--space-8)]"
       >
-        {props.cards.map((card, index) => (
-          <FinderCard
-            // Two sources can name the same id; the pair is the identity.
-            key={`${card.sourceId}:${card.id}`}
-            model={card}
-            selected={`${card.sourceId}:${card.id}` === props.selectedId}
-            busy={card.id === props.busyId}
-            failed={card.id === props.failedId}
-            done={props.doneIds?.has(card.id) ?? false}
-            tabStop={index === at}
-            focus={(node) => {
-              nodes.current.set(index, node);
-            }}
-            onSelect={() => props.onSelect(card)}
-            onPreview={() => props.onPreview(card)}
-            onKeyDown={onKeyDown(index)}
-          />
-        ))}
-        {props.appending
-          ? Array.from({ length: 4 }, (_, index) => (
-              <SkeletonCard key={`skeleton-${index}`} />
-            ))
-          : null}
+        <div
+          ref={grid}
+          className="grid content-start grid-cols-[repeat(auto-fill,minmax(var(--finder-card-min-width),1fr))] gap-[var(--space-12)]"
+        >
+          {props.cards.map((card, index) => (
+            <FinderCard
+              // Two sources can name the same id; the pair is the identity.
+              key={`${card.sourceId}:${card.id}`}
+              model={card}
+              selected={`${card.sourceId}:${card.id}` === props.selectedId}
+              busy={card.id === props.busyId}
+              failed={card.id === props.failedId}
+              done={props.doneIds?.has(card.id) ?? false}
+              tabStop={index === at}
+              focus={(node) => {
+                nodes.current.set(index, node);
+              }}
+              onSelect={() => props.onSelect(card)}
+              onPreview={() => props.onPreview(card)}
+              onKeyDown={onKeyDown(index)}
+            />
+          ))}
+          {props.appending
+            ? Array.from({ length: 4 }, (_, index) => (
+                <SkeletonCard key={`skeleton-${index}`} />
+              ))
+            : null}
+        </div>
+        <div ref={sentinel} aria-hidden="true" />
       </div>
-      <div ref={sentinel} aria-hidden="true" />
-    </div>
+    </>
   );
 }

@@ -547,7 +547,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     running(): readonly string[] {
       return [...entries.entries()]
-        .filter(([, entry]) => entry.runner !== undefined)
+        .filter(([, entry]) => entry.runner?.running === true)
         .map(([displayId]) => displayId);
     },
 

@@ -1371,6 +1371,8 @@ export const uiCopy = {
     fontApplyTrio: "Apply trio",
     fontAddPresets: "Add to presets",
     fontApplyToken: "Apply to token",
+    /** A trio writes all three roles, so it cannot say it wrote one token. */
+    fontTrioDone: "Applied to heading, body and mono.",
     fontApplyBusy: "Applying…",
     fontAddBusy: "Adding…",
     fontResults: "Font results",
@@ -2051,7 +2053,6 @@ export const uiCopy = {
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Paint tokens or Type
      * tokens. */
-    colourToken: "Color token",
     typeToken: "Type token",
     paint: "Paint",
     addColour: "Add color",
@@ -2067,7 +2068,6 @@ export const uiCopy = {
     typeTokens: "Type tokens",
     addType: "Add type",
     deleteType: "Delete type",
-    previewFont: "Preview font",
     applyFont: "Apply font",
     applyTrio: "Apply trio",
     unitDisplay: "Unit display",
@@ -2182,10 +2182,8 @@ export const uiCopy = {
     weight: "Weight",
     lineHeight: "Line height",
     letterSpacing: "Letter spacing",
-    /** The curated face a preset adopts, and the trio whose faces are written
-        across the presets. */
+    /** The curated face a preset adopts. */
     fontFace: "Font face",
-    fontTrioAdopt: "Font trio",
     fontBound: "Bound to a packaged face",
     unbindFont: "Unbind",
   },

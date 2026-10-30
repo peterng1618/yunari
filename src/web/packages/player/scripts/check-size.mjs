@@ -12,10 +12,10 @@
  * and record any approved policy change beside the budget.
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, extname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { readdir, readFile, stat } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 
 /** Gzipped budget in kilobytes for all JS in the player bundle. */
 const JS_GZIP_BUDGET_KB = 400;
@@ -25,7 +25,7 @@ const CSS_GZIP_BUDGET_KB = 40;
 
 // fileURLToPath, not URL.pathname: on Windows the latter yields "/D:/..." with a
 // leading slash, which every fs call then fails to resolve.
-const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
+const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 
 /** Recursively lists files under a directory. */
 async function walk(dir) {
@@ -59,20 +59,22 @@ async function main() {
   try {
     await stat(DIST);
   } catch {
-    console.error('No dist/ directory. Run `npm run build -w @yunari/player` first.');
+    console.error(
+      "No dist/ directory. Run `npm run build -w @yunari/player` first.",
+    );
     process.exit(2);
   }
 
   const files = await walk(DIST);
-  const js = files.filter((f) => extname(f) === '.js');
-  const css = files.filter((f) => extname(f) === '.css');
+  const js = files.filter((f) => extname(f) === ".js");
+  const css = files.filter((f) => extname(f) === ".css");
 
   const jsKb = await gzippedKb(js);
   const cssKb = await gzippedKb(css);
 
   const rows = [
-    { what: 'JS (gzip)', actual: jsKb, budget: JS_GZIP_BUDGET_KB },
-    { what: 'CSS (gzip)', actual: cssKb, budget: CSS_GZIP_BUDGET_KB },
+    { what: "JS (gzip)", actual: jsKb, budget: JS_GZIP_BUDGET_KB },
+    { what: "CSS (gzip)", actual: cssKb, budget: CSS_GZIP_BUDGET_KB },
   ];
 
   let failed = false;
@@ -81,16 +83,16 @@ async function main() {
     const ok = row.actual <= row.budget;
     failed ||= !ok;
     console.log(
-      `${ok ? 'PASS' : 'FAIL'}  ${row.what.padEnd(12)} ${row.actual.toFixed(1).padStart(7)} KB  ` +
+      `${ok ? "PASS" : "FAIL"}  ${row.what.padEnd(12)} ${row.actual.toFixed(1).padStart(7)} KB  ` +
         `(budget ${row.budget} KB)`,
     );
   }
 
   if (failed) {
     console.error(
-      '\nPlayer bundle exceeds its budget. Before raising the budget, check whether an ' +
-        'editor-only dependency has leaked into @yunari/renderer-core or @yunari/player — ' +
-        'that is the failure §47 is guarding against.',
+      "\nPlayer bundle exceeds its budget. Before raising the budget, check whether an " +
+        "editor-only dependency has leaked into @yunari/renderer-core or @yunari/player — " +
+        "that is the failure §47 is guarding against.",
     );
     process.exit(1);
   }

@@ -31,7 +31,11 @@ import { readThemePackage } from "@yunari/theme-package";
  * left to drift, and `--settings` overrides it for anyone whose host was
  * launched with `--app-dir`.
  */
-export const defaultSettingsDir = path.join(os.homedir(), ".yunari", "settings");
+export const defaultSettingsDir = path.join(
+  os.homedir(),
+  ".yunari",
+  "settings",
+);
 
 const FILE = {
   item: "item.json",
@@ -58,7 +62,8 @@ const IMPORTED_VERSION = "1.0.0";
  */
 export function envelopeOfPackage(bytes) {
   const read = readThemePackage(bytes);
-  if (!read.ok) throw new Error(`That package cannot be imported: ${read.message}`);
+  if (!read.ok)
+    throw new Error(`That package cannot be imported: ${read.message}`);
   return read.envelope;
 }
 
@@ -66,7 +71,12 @@ export function envelopeOfPackage(bytes) {
  * Validates the old item and its package, then returns the one upload plan.
  * Pure: no fetch, no filesystem — the CLI reads the files.
  */
-export function importPlan({ itemJson, packageBytes, thumbnailBytes, session }) {
+export function importPlan({
+  itemJson,
+  packageBytes,
+  thumbnailBytes,
+  session,
+}) {
   const item = parseItem(itemJson);
 
   if (typeof session?.token !== "string" || session.token === "")
@@ -75,7 +85,10 @@ export function importPlan({ itemJson, packageBytes, thumbnailBytes, session }) 
 
   if (!(packageBytes instanceof Uint8Array) || packageBytes.byteLength === 0)
     throw new Error("The catalogue item has no package bytes.");
-  if (!(thumbnailBytes instanceof Uint8Array) || thumbnailBytes.byteLength === 0)
+  if (
+    !(thumbnailBytes instanceof Uint8Array) ||
+    thumbnailBytes.byteLength === 0
+  )
     throw new Error(`The catalogue item has no ${FILE.thumbnail}.`);
 
   const envelope = envelopeOfPackage(packageBytes);
@@ -106,7 +119,9 @@ function parseItem(itemJson) {
 
   const id = value.id;
   if (typeof id !== "string" || !isCatalogueId(id))
-    throw new Error(`${FILE.item}'s id must be a catalogue UUID; got ${JSON.stringify(id)}.`);
+    throw new Error(
+      `${FILE.item}'s id must be a catalogue UUID; got ${JSON.stringify(id)}.`,
+    );
 
   const name = value.name;
   if (typeof name !== "string" || name.trim() === "")
@@ -128,10 +143,14 @@ function httpOrigin(origin) {
   try {
     url = new URL(origin);
   } catch {
-    throw new Error(`The Worker origin ${JSON.stringify(origin)} is not a URL.`);
+    throw new Error(
+      `The Worker origin ${JSON.stringify(origin)} is not a URL.`,
+    );
   }
   if (url.protocol !== "https:" && url.protocol !== "http:")
-    throw new Error(`The Worker origin must be http or https; got ${url.protocol}`);
+    throw new Error(
+      `The Worker origin must be http or https; got ${url.protocol}`,
+    );
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
 
@@ -176,7 +195,9 @@ export async function driveImport({ plan, token, fetch }) {
 
   const version = requested?.version;
   if (typeof version !== "string" || version === "")
-    throw new Error("The Worker did not answer the version request with a version.");
+    throw new Error(
+      "The Worker did not answer the version request with a version.",
+    );
   if (version !== IMPORTED_VERSION)
     throw new Error(
       `The Worker computed version "${version}", not ${IMPORTED_VERSION}: the item already exists at another version, and importing would rewrite its history.`,
@@ -184,7 +205,9 @@ export async function driveImport({ plan, token, fetch }) {
 
   const uploadUrl = requested?.uploadUrl;
   if (typeof uploadUrl !== "string" || uploadUrl === "")
-    throw new Error("The Worker did not answer the version request with an upload URL.");
+    throw new Error(
+      "The Worker did not answer the version request with an upload URL.",
+    );
 
   let uploaded;
   try {
@@ -247,7 +270,10 @@ export async function driveImport({ plan, token, fetch }) {
 
 async function requestJson(fetch, url, init, what) {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`${what} was refused (${response.status})${await detail(response)}`);
+  if (!response.ok)
+    throw new Error(
+      `${what} was refused (${response.status})${await detail(response)}`,
+    );
   return jsonOf(response, what);
 }
 
@@ -293,7 +319,8 @@ async function readOr(file, what, source) {
  */
 async function readToken({ settings, tokenFile }) {
   const file =
-    tokenFile ?? path.join(settings ?? defaultSettingsDir, "store-session.json");
+    tokenFile ??
+    path.join(settings ?? defaultSettingsDir, "store-session.json");
   let value;
   try {
     value = JSON.parse(await readFile(file, "utf8"));
@@ -317,13 +344,21 @@ async function main(argv) {
 
   try {
     const itemJson = (
-      await readOr(path.join(parsed.source, FILE.item), FILE.item, parsed.source)
+      await readOr(
+        path.join(parsed.source, FILE.item),
+        FILE.item,
+        parsed.source,
+      )
     ).toString("utf8");
     // Read before the version ZIP is named, so a path cannot be built from a
     // value the import would refuse.
     const id = parseItem(itemJson).id;
     const packageBytes = new Uint8Array(
-      await readOr(path.join(parsed.source, `${id}.zip`), `${id}.zip`, parsed.source),
+      await readOr(
+        path.join(parsed.source, `${id}.zip`),
+        `${id}.zip`,
+        parsed.source,
+      ),
     );
     const thumbnailBytes = new Uint8Array(
       await readOr(
@@ -345,7 +380,9 @@ async function main(argv) {
     process.stdout.write(`${result.id} ${result.version} ${result.status}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
     return 1;
   }
 }

@@ -8,6 +8,8 @@
       "src/web/**/*.tsx",
       "src/web/**/*.json",
       "src/web/**/*.css",
+      "src/web/**/*.mjs",
+      "scripts/**/*.mjs",
       "src/web/packages/host/src/themes/ffmpeg-hash.mjs",
       "!src/web/packages/host/src/assets/icons/*.generated.ts"
     ]

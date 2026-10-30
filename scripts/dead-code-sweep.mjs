@@ -71,7 +71,16 @@
  *                  those writes is a change to the crash story, not a tidy-up.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,7 +101,10 @@ if (rootAt !== -1 && argv[rootAt + 1] === undefined) {
   process.stderr.write("--root needs a directory\n");
   process.exit(2);
 }
-const ROOT = rootAt === -1 ? resolve(fileURLToPath(new URL("..", import.meta.url))) : resolve(argv[rootAt + 1]);
+const ROOT =
+  rootAt === -1
+    ? resolve(fileURLToPath(new URL("..", import.meta.url)))
+    : resolve(argv[rootAt + 1]);
 const WEB = join(ROOT, "src/web");
 
 // ---------------------------------------------------------------------------
@@ -127,7 +139,11 @@ const WEB = join(ROOT, "src/web");
  * disk, and the `--json` intactness check must run after the self-test has
  * written — one write leaves both reading the previous run's artifact.
  */
-const SELFTEST_JSON = join(WEB, "test-results", "dead-code-sweep-self-test.json");
+const SELFTEST_JSON = join(
+  WEB,
+  "test-results",
+  "dead-code-sweep-self-test.json",
+);
 
 /**
  * The start-of-run marker, written before any check runs.
@@ -144,8 +160,15 @@ const incompleteSelfTestResult = () => ({
   stage: "start-up",
   passed: 0,
   total: 0,
-  failed: ["this run did not finish — the process ended before the checks completed"],
-  checks: [{ name: "the checks never ran: this document is the start-of-run marker, not a result", ok: false }],
+  failed: [
+    "this run did not finish — the process ended before the checks completed",
+  ],
+  checks: [
+    {
+      name: "the checks never ran: this document is the start-of-run marker, not a result",
+      ok: false,
+    },
+  ],
   note: "This run did not finish — the process ended before the checks completed, so this file holds no result for it. It is not a pass.",
 });
 
@@ -155,7 +178,8 @@ const incompleteSelfTestResult = () => ({
  * a vacuous pass, and the self-test asserts both halves so the predicate cannot
  * be loosened without failing the gate.
  */
-const isCompletePass = (doc) => doc.incomplete === false && doc.total > 0 && doc.passed === doc.total;
+const isCompletePass = (doc) =>
+  doc.incomplete === false && doc.total > 0 && doc.passed === doc.total;
 
 /**
  * The candidate report's start-of-run marker — failure-shaped, the way the
@@ -185,9 +209,18 @@ const incompleteCandidateReport = () => ({
   stage: "start-up",
   passed: 0,
   total: 1,
-  failed: ["this run did not finish — the scan did not complete, so there is no candidate list for it"],
-  checks: [{ name: "the scan did not complete: this document is the start-of-run marker, not a result", ok: false }],
-  candidates: { note: "no candidate list — this run did not finish; this is not a clean sweep and not a previous run's list" },
+  failed: [
+    "this run did not finish — the scan did not complete, so there is no candidate list for it",
+  ],
+  checks: [
+    {
+      name: "the scan did not complete: this document is the start-of-run marker, not a result",
+      ok: false,
+    },
+  ],
+  candidates: {
+    note: "no candidate list — this run did not finish; this is not a clean sweep and not a previous run's list",
+  },
   note: "This run did not finish — the scan did not complete, so there is no candidate list for it. This is not a clean sweep and not a previous run's list.",
 });
 
@@ -281,12 +314,15 @@ const inProgressSelfTestResult = (collected) => ({
   failed: [
     `this run has not finished — ${collected} of its checks are collected and the completion write has not run, so this document is a snapshot and not a result`,
   ],
-  checks: [{ name: "the checks are collected but not yet a result", ok: false }],
+  checks: [
+    { name: "the checks are collected but not yet a result", ok: false },
+  ],
   note: "Written before the run finishes. The completion write replaces it; if this is still on disk, the process ended early and there is no result here.",
 });
 
 if (SELF_TEST) writeJson(SELFTEST_JSON, incompleteSelfTestResult());
-if (jsonPath !== null && jsonPath !== undefined) writeJson(jsonPath, incompleteCandidateReport());
+if (jsonPath !== null && jsonPath !== undefined)
+  writeJson(jsonPath, incompleteCandidateReport());
 
 /** Windows `relative()` yields backslashes; every path here is posix. */
 const posix = (p) => p.replaceAll("\\", "/");
@@ -306,7 +342,8 @@ function walk(dir, out = []) {
     return out;
   }
   for (const entry of entries) {
-    if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
+    if (entry === "node_modules" || entry === "dist" || entry.startsWith("."))
+      continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) walk(full, out);
     else if (SCANNED_EXT.test(entry)) out.push(key(full));
@@ -375,13 +412,21 @@ function entryPoints(files) {
   for (const name of names) {
     const pkgDir = join(packagesDir, name);
     try {
-      const manifest = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
+      const manifest = JSON.parse(
+        readFileSync(join(pkgDir, "package.json"), "utf8"),
+      );
       for (const field of [manifest.main, manifest.module, manifest.types]) {
-        const path = typeof field === "string" ? `src/web/packages/${name}/${field.replace(/^\.\//, "")}` : null;
+        const path =
+          typeof field === "string"
+            ? `src/web/packages/${name}/${field.replace(/^\.\//, "")}`
+            : null;
         if (path !== null && files.has(path)) points.add(path);
       }
       for (const target of Object.values(manifest.exports ?? {})) {
-        const path = typeof target === "string" ? `src/web/packages/${name}/${target.replace(/^\.\//, "")}` : null;
+        const path =
+          typeof target === "string"
+            ? `src/web/packages/${name}/${target.replace(/^\.\//, "")}`
+            : null;
         if (path !== null && files.has(path)) points.add(path);
       }
     } catch {
@@ -400,7 +445,9 @@ function entryPoints(files) {
 }
 
 const isScriptOrConfig = (file) =>
-  /^src\/web\/packages\/[^/]+\/(vite|playwright|vitest)\.config[^/]*\.ts$/.test(file) ||
+  /^src\/web\/packages\/[^/]+\/(vite|playwright|vitest)\.config[^/]*\.ts$/.test(
+    file,
+  ) ||
   /^src\/web\/(vite|playwright|vitest)\.config[^/]*\.ts$/.test(file) ||
   /^scripts\/[^/]+\.mjs$/.test(file) ||
   /^src\/web\/scripts\/[^/]+\.mjs$/.test(file) ||
@@ -427,17 +474,20 @@ function namesFromList(list) {
     .filter((name) => NAMES.test(name));
 }
 
-const IMPORT_BRACED = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+const IMPORT_BRACED =
+  /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
 const IMPORT_NS = /import\s+\*\s+as\s+[\w$]+\s*from\s*["']([^"']+)["']/g;
 const IMPORT_DEFAULT =
   /import\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,\s*\{[^}]*\}\s*)?from\s*["']([^"']+)["']/g;
 const IMPORT_SIDE_EFFECT = /import\s*["']([^"']+)["']/g;
 const IMPORT_DYNAMIC = /import\s*\(\s*["']([^"']+)["']\s*\)/g;
 const VI_MOCK = /\bvi\.(?:do)?mock\s*\(\s*["']([^"']+)["']/g;
-const EXPORT_FROM = /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+const EXPORT_FROM =
+  /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
 const EXPORT_STAR = /export\s+\*\s*(?:as\s+[\w$]+\s*)?from\s*["']([^"']+)["']/g;
 
-const EXPORT_FN = /^export\s+(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/gm;
+const EXPORT_FN =
+  /^export\s+(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/gm;
 const EXPORT_CLASS = /^export\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/gm;
 const EXPORT_VAR = /^export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
 const EXPORT_TYPE = /^export\s+(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/gm;
@@ -453,15 +503,18 @@ const EXPORT_LIST = /^export\s*\{([^}]*)\}(\s*from\s*["'][^"']*["'])?/gm;
  */
 function readSpecifiers(source) {
   const edges = [];
-  const push = (spec, names, reExport = false) => edges.push({ spec, names, reExport });
+  const push = (spec, names, reExport = false) =>
+    edges.push({ spec, names, reExport });
 
-  for (const m of source.matchAll(IMPORT_BRACED)) push(m[2], namesFromList(m[1]));
+  for (const m of source.matchAll(IMPORT_BRACED))
+    push(m[2], namesFromList(m[1]));
   for (const m of source.matchAll(IMPORT_NS)) push(m[1], null);
   for (const m of source.matchAll(IMPORT_DEFAULT)) push(m[2], ["default"]);
   for (const m of source.matchAll(IMPORT_SIDE_EFFECT)) push(m[1], null);
   for (const m of source.matchAll(IMPORT_DYNAMIC)) push(m[1], null);
   for (const m of source.matchAll(VI_MOCK)) push(m[1], null);
-  for (const m of source.matchAll(EXPORT_FROM)) push(m[2], namesFromList(m[1]), true);
+  for (const m of source.matchAll(EXPORT_FROM))
+    push(m[2], namesFromList(m[1]), true);
   for (const m of source.matchAll(EXPORT_STAR)) push(m[1], null, true);
   return edges;
 }
@@ -472,11 +525,16 @@ function declaredExports(source) {
   for (const re of [EXPORT_FN, EXPORT_CLASS, EXPORT_VAR, EXPORT_TYPE]) {
     for (const m of source.matchAll(re)) found.add(m[1]);
   }
-  for (const m of source.matchAll(EXPORT_DEFAULT)) found.add("default");
+  if ([...source.matchAll(EXPORT_DEFAULT)].length > 0) found.add("default");
   for (const m of source.matchAll(EXPORT_LIST)) {
     if (m[2] !== undefined) continue; // `export { x } from "./y"` re-exports y's name
     for (const cell of m[1].split(",")) {
-      const name = cell.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop()?.trim();
+      const name = cell
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .pop()
+        ?.trim();
       if (name !== undefined && NAMES.test(name)) found.add(name);
     }
   }
@@ -532,7 +590,10 @@ const stripComments = (text) =>
   text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/[^\n]*/g, "$1");
 
 const source = new Map(
-  all.map((file) => [file, stripComments(readFileSync(join(ROOT, file), "utf8"))]),
+  all.map((file) => [
+    file,
+    stripComments(readFileSync(join(ROOT, file), "utf8")),
+  ]),
 );
 
 /**
@@ -547,9 +608,13 @@ const source = new Map(
  * is affected today; the only backtick hits are real `${…}` interpolations.
  */
 const stripStrings = (text) =>
-  text.replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/'(?:[^'\\\n]|\\.)*'/g, "''");
+  text
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''");
 
-const selfUse = new Map(all.map((file) => [file, stripStrings(source.get(file))]));
+const selfUse = new Map(
+  all.map((file) => [file, stripStrings(source.get(file))]),
+);
 const escapeRe = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const usesIn = (text, name) =>
   (text.match(new RegExp(`\\b${escapeRe(name)}\\b`, "g")) ?? []).length;
@@ -604,7 +669,8 @@ function declares(before, after) {
 function readsOutsideDeclaration(text, name) {
   let reads = 0;
   for (const m of text.matchAll(new RegExp(`\\b${escapeRe(name)}\\b`, "g"))) {
-    if (!declares(text.slice(0, m.index), text.slice(m.index + name.length))) reads += 1;
+    if (!declares(text.slice(0, m.index), text.slice(m.index + name.length)))
+      reads += 1;
   }
   return reads;
 }
@@ -646,7 +712,11 @@ function barrelRoutes(target) {
         if (edge.target !== current) continue;
         const forwarded = edge.names === null ? null : edge.names;
         if (forwarded === null) routes.set(from, null);
-        else routes.set(from, new Set([...(routes.get(from) ?? []), ...forwarded]));
+        else
+          routes.set(
+            from,
+            new Set([...(routes.get(from) ?? []), ...forwarded]),
+          );
         seen.add(from);
         queue.push(from);
       }
@@ -655,7 +725,8 @@ function barrelRoutes(target) {
   return routes;
 }
 
-const packageOf = (file) => /^src\/web\/packages\/([^/]+)\//.exec(file)?.[1] ?? null;
+const packageOf = (file) =>
+  /^src\/web\/packages\/([^/]+)\//.exec(file)?.[1] ?? null;
 const ownBarrel = (file) => {
   const pkg = packageOf(file);
   return pkg === null ? null : `src/web/packages/${pkg}/src/index.ts`;
@@ -677,7 +748,8 @@ const RUN_BODY = /^\s*\|?\s*"[^"\n]{0,60}"(?:\s*\|\s*"[^"\n]{0,60}")*/;
  * draft of this kind report 45 hits, and they are filtered out here rather than
  * left for a human to wade through.
  */
-const TYPE_ALIAS = /(?:^|\n)[ \t]*(?:export\s+)?(?:declare\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/g;
+const TYPE_ALIAS =
+  /(?:^|\n)[ \t]*(?:export\s+)?(?:declare\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/g;
 const PROPERTY_UNION =
   /(?:^|\n)[ \t]*(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*:\s*"[^"\n]{0,60}"(?:\s*\|\s*"[^"\n]{0,60}")+/g;
 
@@ -715,7 +787,8 @@ for (const file of all) {
 // Classify
 // ---------------------------------------------------------------------------
 
-const IMPORTERS = "importer graph over every .ts/.tsx/.mjs under src/web/packages/*/src, src/web/tests, src/web/scripts and scripts/ (dist/ and node_modules/ excluded), resolving relative, @yunari/* and @/* specifiers";
+const IMPORTERS =
+  "importer graph over every .ts/.tsx/.mjs under src/web/packages/*/src, src/web/tests, src/web/scripts and scripts/ (dist/ and node_modules/ excluded), resolving relative, @yunari/* and @/* specifiers";
 
 const candidates = [];
 const list = (paths) => (paths.length === 0 ? "none" : paths.join(", "));
@@ -725,7 +798,10 @@ function productionImporters(file) {
 }
 
 function testImporters(file) {
-  return consumedBy.get(file).filter((edge) => isTestFile(edge.from)).map((e) => e.from);
+  return consumedBy
+    .get(file)
+    .filter((edge) => isTestFile(edge.from))
+    .map((e) => e.from);
 }
 
 for (const file of all) {
@@ -760,19 +836,24 @@ for (const file of all) {
   const exportsDeclared = declaredExports(source.get(file));
 
   for (const name of exportsDeclared) {
-    const direct = consumedBy.get(file).filter((e) => e.names === null || e.names.includes(name));
+    const direct = consumedBy
+      .get(file)
+      .filter((e) => e.names === null || e.names.includes(name));
     const through = [];
     for (const [barrelFile, names] of routes) {
       for (const edge of consumedBy.get(barrelFile)) {
         if (names !== null && !names.has(name)) continue;
-        if (edge.names === null || edge.names.includes(name)) through.push(edge.from);
+        if (edge.names === null || edge.names.includes(name))
+          through.push(edge.from);
       }
     }
     const consumers = [...new Set([...direct.map((e) => e.from), ...through])];
     // The file's own barrel is the one production consumer this tier looks
     // past — a barrel is a door a name is reached through, not a consumer — and
     // counting it skipped every input the tier exists to report.
-    const prodConsumers = consumers.filter((file_) => !isTestFile(file_) && file_ !== barrel);
+    const prodConsumers = consumers.filter(
+      (file_) => !isTestFile(file_) && file_ !== barrel,
+    );
     if (prodConsumers.length > 0) continue;
 
     const testConsumers = consumers.filter(isTestFile);
@@ -792,7 +873,8 @@ for (const file of all) {
     // in the dead tier — an `export default function foo()` whose `foo` is used in
     // its own module would be tiered dead-export. No default row exists at HEAD.
     // The two tiers take opposite actions, so they are two kinds, not one.
-    const ownReads = name === "default" ? 0 : readsOutsideDeclaration(selfUse.get(file), name);
+    const ownReads =
+      name === "default" ? 0 : readsOutsideDeclaration(selfUse.get(file), name);
     if (ownReads > 0) {
       candidates.push({
         kind: "redundant-export",
@@ -815,13 +897,19 @@ for (const file of all) {
 const unreachableDeclarers = new Map(); // literal -> every file that declares it
 for (const union of unions) {
   for (const member of new Set(union.members)) {
-    if (!unreachableDeclarers.has(member)) unreachableDeclarers.set(member, new Set());
+    if (!unreachableDeclarers.has(member))
+      unreachableDeclarers.set(member, new Set());
     unreachableDeclarers.get(member).add(union.file);
   }
 }
 
 for (const union of unions) {
-  if (isEntryPoint(union.file) || isAmbientTypes(union.file) || isTestFile(union.file)) continue;
+  if (
+    isEntryPoint(union.file) ||
+    isAmbientTypes(union.file) ||
+    isTestFile(union.file)
+  )
+    continue;
   for (const member of new Set(union.members)) {
     const total = literalCounts.get(member) ?? 0;
     const inside = unionLiterals.get(member) ?? 0;
@@ -842,12 +930,18 @@ for (const union of unions) {
   }
 }
 
-candidates.sort((a, b) => a.kind.localeCompare(b.kind) || a.file.localeCompare(b.file) || (a.symbol ?? "").localeCompare(b.symbol ?? ""));
+candidates.sort(
+  (a, b) =>
+    a.kind.localeCompare(b.kind) ||
+    a.file.localeCompare(b.file) ||
+    (a.symbol ?? "").localeCompare(b.symbol ?? ""),
+);
 
 /** A candidate outside a package is still counted, under the tree that owns it. */
 function bucketOf(file) {
   if (file.startsWith("src/web/tests/")) return "(tests)";
-  if (file.startsWith("scripts/") || file.startsWith("src/web/scripts/")) return "(scripts)";
+  if (file.startsWith("scripts/") || file.startsWith("src/web/scripts/"))
+    return "(scripts)";
   return "(root)";
 }
 
@@ -876,7 +970,9 @@ const report = {
     files: all.length,
     productionFiles: all.filter((f) => !isTestFile(f)).length,
     testFiles: all.filter(isTestFile).length,
-    testOnlyModules: candidates.filter((candidate) => candidate.kind === "test-only-consumer").length,
+    testOnlyModules: candidates.filter(
+      (candidate) => candidate.kind === "test-only-consumer",
+    ).length,
   },
   candidates,
   countsByKind,
@@ -887,7 +983,9 @@ const report = {
    * branches. This is the number a reader should quote.
    */
   unreachableBranchDistinctLiterals: new Set(
-    candidates.filter((c) => c.kind === "unreachable-branch").map((c) => c.symbol),
+    candidates
+      .filter((c) => c.kind === "unreachable-branch")
+      .map((c) => c.symbol),
   ).size,
   unresolvedRelativeSpecifiers: unresolved,
   /** Set false only here; the start-of-run marker writes true to the same path. */
@@ -902,7 +1000,9 @@ const report = {
 
 function renderReport(report) {
   const lines = [];
-  lines.push("Dead-code sweep — candidates, not verdicts. Nothing is deleted by this run.");
+  lines.push(
+    "Dead-code sweep — candidates, not verdicts. Nothing is deleted by this run.",
+  );
   lines.push("");
   lines.push(
     `Scanned ${report.scanned.files} files (${report.scanned.productionFiles} production, ${report.scanned.testFiles} test).`,
@@ -910,24 +1010,33 @@ function renderReport(report) {
   lines.push("");
   for (const [kind, count] of Object.entries(report.countsByKind)) {
     const distinct =
-      kind === "unreachable-branch" && report.unreachableBranchDistinctLiterals !== count
+      kind === "unreachable-branch" &&
+      report.unreachableBranchDistinctLiterals !== count
         ? `  (${report.unreachableBranchDistinctLiterals} distinct literals — one literal declared in two files is two rows, one branch)`
         : "";
     lines.push(`${kind} — ${count}${distinct}`);
-    const rows = report.candidates.filter((candidate) => candidate.kind === kind);
+    const rows = report.candidates.filter(
+      (candidate) => candidate.kind === kind,
+    );
     for (const row of rows.slice(0, 25)) {
-      lines.push(`  ${row.file}${row.symbol === undefined ? "" : ` :: ${row.symbol}`}`);
+      lines.push(
+        `  ${row.file}${row.symbol === undefined ? "" : ` :: ${row.symbol}`}`,
+      );
     }
-    if (rows.length > 25) lines.push(`  … ${rows.length - 25} more (see --json)`);
+    if (rows.length > 25)
+      lines.push(`  … ${rows.length - 25} more (see --json)`);
     lines.push("");
   }
-  if (Object.keys(report.countsByKind).length === 0) lines.push("No candidates.");
+  if (Object.keys(report.countsByKind).length === 0)
+    lines.push("No candidates.");
   lines.push("By package: " + JSON.stringify(report.countsByPackage));
   lines.push("");
   lines.push(report.note);
   if (report.unresolvedRelativeSpecifiers.length > 0) {
     lines.push("");
-    lines.push(`Unresolved relative specifiers (${report.unresolvedRelativeSpecifiers.length}) — each one hides a file's importer:`);
+    lines.push(
+      `Unresolved relative specifiers (${report.unresolvedRelativeSpecifiers.length}) — each one hides a file's importer:`,
+    );
     for (const row of report.unresolvedRelativeSpecifiers.slice(0, 20)) {
       lines.push(`  ${row.from} -> ${row.spec}`);
     }
@@ -946,9 +1055,12 @@ function renderReport(report) {
  * marker's failure *shape* against what really landed, and the completion write
  * below replaces it a moment from now.
  */
-const candidateMarker = jsonPath === null || jsonPath === undefined ? null : readJsonDoc(jsonPath);
+const candidateMarker =
+  jsonPath === null || jsonPath === undefined ? null : readJsonDoc(jsonPath);
 const candidateMarkerOnDisk =
-  jsonPath === null || jsonPath === undefined || candidateMarker?.incomplete === true;
+  jsonPath === null ||
+  jsonPath === undefined ||
+  candidateMarker?.incomplete === true;
 
 if (jsonPath !== null && jsonPath !== undefined) writeJson(jsonPath, report);
 
@@ -1017,7 +1129,8 @@ if (SELF_TEST) {
    * one that would report them, and `unresolvedRelativeSpecifiers` is a
    * diagnostic a phase reads.
    */
-  const importFrom = (names, spec) => `import { ${names} } from ${JSON.stringify(spec)};\n`;
+  const importFrom = (names, spec) =>
+    `import { ${names} } from ${JSON.stringify(spec)};\n`;
   const FIXTURE_FILES = {
     [`${FIXTURE_PKG}/live.ts`]: "export const live = 1;\n",
     [`${FIXTURE_PKG}/reader.ts`]: `${importFrom("live", "./live")}export const read = () => live;\n`,
@@ -1040,7 +1153,13 @@ if (SELF_TEST) {
     const fixtureJson = join(fixtureRoot, "fixture-report.json");
     const child = spawnSync(
       process.execPath,
-      [fileURLToPath(import.meta.url), "--root", fixtureRoot, "--json", fixtureJson],
+      [
+        fileURLToPath(import.meta.url),
+        "--root",
+        fixtureRoot,
+        "--json",
+        fixtureJson,
+      ],
       { encoding: "utf8" },
     );
     fixtureExit = child.status;
@@ -1082,17 +1201,25 @@ if (SELF_TEST) {
       "no package barrel is a no-importer-file (exports makes it an entry point)",
       candidates.every(
         (candidate) =>
-          candidate.kind !== "no-importer-file" || !/^src\/web\/packages\/[^/]+\/src\/index\.ts$/.test(candidate.file),
+          candidate.kind !== "no-importer-file" ||
+          !/^src\/web\/packages\/[^/]+\/src\/index\.ts$/.test(candidate.file),
       ),
     ],
-    ["no ambient .d.ts is a candidate", candidates.every((candidate) => !isAmbientTypes(candidate.file))],
+    [
+      "no ambient .d.ts is a candidate",
+      candidates.every((candidate) => !isAmbientTypes(candidate.file)),
+    ],
     [
       "dead-export fires on the fixture (its own file never reads the symbol, and no production file imports it)",
       fixtureAt("dead-export", `${FIXTURE_PKG}/field.ts`, "settingsField"),
     ],
     [
       "redundant-export fires on the fixture (its own file calls the symbol)",
-      fixtureAt("redundant-export", `${FIXTURE_PKG}/card.ts`, "instantiateCard"),
+      fixtureAt(
+        "redundant-export",
+        `${FIXTURE_PKG}/card.ts`,
+        "instantiateCard",
+      ),
     ],
     /**
      * The number in a redundant row is evidence a Phase 2 reader acts on, so it
@@ -1108,12 +1235,16 @@ if (SELF_TEST) {
       (() => {
         const row = fixtureCandidates.find(
           (candidate) =>
-            candidate.kind === "redundant-export" && candidate.file === `${FIXTURE_PKG}/card.ts`,
+            candidate.kind === "redundant-export" &&
+            candidate.file === `${FIXTURE_PKG}/card.ts`,
         );
         const claimed = /\((\d+) occurrence/.exec(row?.evidence ?? "")?.[1];
         return (
           claimed === "1" &&
-          usesIn(stripStrings(FIXTURE_FILES[`${FIXTURE_PKG}/card.ts`]), "instantiateCard") === 2
+          usesIn(
+            stripStrings(FIXTURE_FILES[`${FIXTURE_PKG}/card.ts`]),
+            "instantiateCard",
+          ) === 2
         );
       })(),
     ],
@@ -1132,12 +1263,18 @@ if (SELF_TEST) {
       candidates
         .filter((candidate) => candidate.kind === "redundant-export")
         .every((candidate) => {
-          const claimed = Number(/\((\d+) occurrence/.exec(candidate.evidence)?.[1]);
+          const claimed = Number(
+            /\((\d+) occurrence/.exec(candidate.evidence)?.[1],
+          );
           const raw = usesIn(selfUse.get(candidate.file), candidate.symbol);
           return (
             claimed >= 1 &&
             claimed < raw &&
-            claimed === readsOutsideDeclaration(selfUse.get(candidate.file), candidate.symbol)
+            claimed ===
+              readsOutsideDeclaration(
+                selfUse.get(candidate.file),
+                candidate.symbol,
+              )
           );
         }),
     ],
@@ -1157,19 +1294,29 @@ if (SELF_TEST) {
     ],
     [
       "a re-export of an imported name is not a read (the file only forwards it)",
-      readsOutsideDeclaration('import { countable } from "./x";\nexport { countable };\n', "countable") === 0,
+      readsOutsideDeclaration(
+        'import { countable } from "./x";\nexport { countable };\n',
+        "countable",
+      ) === 0,
     ],
     [
       "a value beside a key is still a read (an object literal is not excluded wholesale)",
-      readsOutsideDeclaration("export const panel = 1;\nconst b = { panel: 2, fill: panel };\n", "panel") === 1,
+      readsOutsideDeclaration(
+        "export const panel = 1;\nconst b = { panel: 2, fill: panel };\n",
+        "panel",
+      ) === 1,
     ],
     [
       "the two export tiers are disjoint (opposite remedies, one row never both)",
-      candidates.every(
-        (candidate) =>
-          candidate.kind !== "dead-export" && candidate.kind !== "redundant-export"
-            ? true
-            : candidates.filter((other) => other.file === candidate.file && other.symbol === candidate.symbol).length === 1,
+      candidates.every((candidate) =>
+        candidate.kind !== "dead-export" &&
+        candidate.kind !== "redundant-export"
+          ? true
+          : candidates.filter(
+              (other) =>
+                other.file === candidate.file &&
+                other.symbol === candidate.symbol,
+            ).length === 1,
       ),
     ],
     [
@@ -1179,7 +1326,9 @@ if (SELF_TEST) {
       // production importer — a *negative* fixture that is a real file is the
       // same defect wearing the opposite sign, and it reddened all of Phase 6.
       "the negative case is absent from every kind (the fixture's live.ts is imported by a production file)",
-      fixtureCandidates.every((candidate) => candidate.file !== `${FIXTURE_PKG}/live.ts`),
+      fixtureCandidates.every(
+        (candidate) => candidate.file !== `${FIXTURE_PKG}/live.ts`,
+      ),
     ],
     [
       "every candidate carries kind, file and the search that found it",
@@ -1206,7 +1355,8 @@ if (SELF_TEST) {
     ],
     [
       "a Pick<T, ...> argument list is not read as a union",
-      unionRunsIn('function f(options: Pick<O, "flex" | "width"> = {}) {}').length === 0,
+      unionRunsIn('function f(options: Pick<O, "flex" | "width"> = {}) {}')
+        .length === 0,
     ],
     /**
      * What this establishes and what it does not: it proves a barrel's re-export
@@ -1218,7 +1368,9 @@ if (SELF_TEST) {
      */
     [
       "a barrel's re-export is followed as a route (an import is not)",
-      barrelRoutes("src/web/packages/renderer-core/src/charts/settings-fields.ts")
+      barrelRoutes(
+        "src/web/packages/renderer-core/src/charts/settings-fields.ts",
+      )
         .get("src/web/packages/renderer-core/src/index.ts")
         ?.has("settingsFieldsFor") === true,
     ],
@@ -1249,10 +1401,14 @@ if (SELF_TEST) {
      */
     [
       "the candidate marker fails every clean-sweep reading, and the marker on disk is that shape (the second half is vacuous unless --json was passed)",
-      cleanSweepReadings(incompleteCandidateReport()).every((reads) => reads === false) &&
+      cleanSweepReadings(incompleteCandidateReport()).every(
+        (reads) => reads === false,
+      ) &&
         (candidateMarker === null ||
           (candidateMarker.incomplete === true &&
-            cleanSweepReadings(candidateMarker).every((reads) => reads === false))),
+            cleanSweepReadings(candidateMarker).every(
+              (reads) => reads === false,
+            ))),
     ],
   ];
 
@@ -1364,9 +1520,17 @@ if (SELF_TEST) {
         !isCompletePass(onDisk) &&
         // Not even a run that collected every check without finishing: the
         // `incomplete` flag, not the counts, is what says the run ended.
-        !isCompletePass({ incomplete: true, total: checks.length, passed: checks.length }) &&
+        !isCompletePass({
+          incomplete: true,
+          total: checks.length,
+          passed: checks.length,
+        }) &&
         // While a genuinely finished document still passes it.
-        isCompletePass({ incomplete: false, total: checks.length, passed: checks.length }) &&
+        isCompletePass({
+          incomplete: false,
+          total: checks.length,
+          passed: checks.length,
+        }) &&
         // And a zero-check document does not, which is what `total > 0` is for:
         // without it, a `0/0` document reads as a vacuous pass.
         !isCompletePass({ incomplete: false, total: 0, passed: 0 }) &&
@@ -1384,7 +1548,10 @@ if (SELF_TEST) {
   collect();
   writeJson(SELFTEST_JSON, { ...result, incomplete: false });
 
-  for (const { name, ok } of result.checks) process.stdout.write(`${ok ? "  ok  " : "  FAIL"} ${name}\n`);
-  process.stdout.write(`\ndead-code-sweep self-test: ${result.passed}/${result.total} passed -> ${outPath}\n`);
+  for (const { name, ok } of result.checks)
+    process.stdout.write(`${ok ? "  ok  " : "  FAIL"} ${name}\n`);
+  process.stdout.write(
+    `\ndead-code-sweep self-test: ${result.passed}/${result.total} passed -> ${outPath}\n`,
+  );
   if (result.failed.length > 0) process.exit(1);
 }

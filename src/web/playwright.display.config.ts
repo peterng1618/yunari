@@ -39,7 +39,7 @@ export default defineConfig({
   webServer: {
     command: `npx vite preview packages/editor --port ${EDITOR_PORT} --strictPort --host 127.0.0.1`,
     url: `http://127.0.0.1:${EDITOR_PORT}`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 

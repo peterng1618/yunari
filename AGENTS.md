@@ -156,7 +156,9 @@ Node support is `>=22`; Vitest 5 accepts `^22.12 || ^24 || >=26`. CI pins Node
 - **Browser tests use built bundles.** Playwright starts `vite preview` (and the
   real host); `dist/` is gitignored, so `npm run build` must run first. Ports are
   fixed with `--strictPort`; each config and own-host spec owns its port, and
-  shared host state runs with `workers: 1`.
+  shared host state runs with `workers: 1`. `reuseExistingServer` is `false`, so
+  a port already in use fails the run instead of serving another worktree's
+  bundle.
 - **The host needs its own build.** `packages/host/bin/yunari.js` imports
   `dist/main.js` and refuses to start without it. Build the host after changing
   it, before running the CLI or host specs.

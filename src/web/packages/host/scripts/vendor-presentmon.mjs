@@ -14,7 +14,8 @@ import { fileURLToPath } from "node:url";
 const VERSION = "v2.6.0";
 const ASSET = "PresentMon-2.6.0-x64.exe";
 /** Pinned so the staged bytes are reproducible and auditable. */
-const SHA256 = "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af";
+const SHA256 =
+  "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const target = path.join(here, "..", "vendor", "presentmon");

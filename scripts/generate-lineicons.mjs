@@ -12,12 +12,12 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC_WEB = path.join(ROOT, "src/web");
-const ICON_DIR = path.join(SRC_WEB, "node_modules/lineicons/assets/svgs/regular");
+const ICON_DIR = path.join(
+  SRC_WEB,
+  "node_modules/lineicons/assets/svgs/regular",
+);
 const OUT = path.join(
   SRC_WEB,
   "packages/host/src/assets/icons/lineicons.generated.ts",
@@ -66,4 +66,6 @@ const file =
 
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, file, "utf8");
-console.log(`Wrote ${icons.length} icons from lineicons ${VERSION} to ${path.relative(ROOT, OUT)}.`);
+console.log(
+  `Wrote ${icons.length} icons from lineicons ${VERSION} to ${path.relative(ROOT, OUT)}.`,
+);

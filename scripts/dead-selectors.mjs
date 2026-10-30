@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 /**
  * Two reachability questions over the two stylesheets the product ships:
  * whether a selector one of them declares is applied by anything, and whether a
@@ -21,11 +22,25 @@
  * Upgrade to a parser or to Tailwind's `__unstable__loadDesignSystem` when a
  * false finding or a miss is observed, not before.
  */
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  extname,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const STYLESHEETS = [
@@ -33,15 +48,47 @@ const STYLESHEETS = [
   "src/web/packages/host/public/yunari-page.css",
 ];
 const SKIP_DIRS = new Set([
-  "node_modules", "dist", ".git", ".vite", "coverage", "test-results",
-  "playwright-report", ".agent-scratch", ".superpowers", ".codegraph",
-  "build", ".cache", ".turbo", ".e2e-host-app",
+  "node_modules",
+  "dist",
+  ".git",
+  ".vite",
+  "coverage",
+  "test-results",
+  "playwright-report",
+  ".agent-scratch",
+  ".superpowers",
+  ".codegraph",
+  "build",
+  ".cache",
+  ".turbo",
+  ".e2e-host-app",
 ]);
 const WORKSPACE_EXTS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".html", ".htm", ".css",
-  ".md", ".json", ".jsonl", ".svg", ".txt",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".html",
+  ".htm",
+  ".css",
+  ".md",
+  ".json",
+  ".jsonl",
+  ".svg",
+  ".txt",
 ]);
-const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".html", ".htm"]);
+const SOURCE_EXTS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".html",
+  ".htm",
+]);
 /** A namespace is a leading segment the stylesheets use on more than one class. */
 const NAMESPACE_FLOOR = 2;
 
@@ -74,8 +121,14 @@ function readStylesheets(root) {
     files.push({
       rel,
       path: normalize(path),
-      classes: new Set([...stripped.matchAll(/[.]([A-Za-z_-][A-Za-z0-9_-]*)/g)].map((m) => m[1])),
-      attrs: new Set([...stripped.matchAll(/\[(data-[A-Za-z0-9_-]+)/g)].map((m) => m[1])),
+      classes: new Set(
+        [...stripped.matchAll(/[.]([A-Za-z_-][A-Za-z0-9_-]*)/g)].map(
+          (m) => m[1],
+        ),
+      ),
+      attrs: new Set(
+        [...stripped.matchAll(/\[(data-[A-Za-z0-9_-]+)/g)].map((m) => m[1]),
+      ),
     });
   }
   return files;
@@ -94,7 +147,8 @@ function workspaceFiles(root) {
       if (SKIP_DIRS.has(entry.name)) continue;
       const path = join(dir, entry.name);
       if (entry.isDirectory()) walk(path);
-      else if (WORKSPACE_EXTS.has(extname(entry.name).toLowerCase())) out.push(path);
+      else if (WORKSPACE_EXTS.has(extname(entry.name).toLowerCase()))
+        out.push(path);
     }
   })(root);
   return out;
@@ -128,7 +182,10 @@ const WRITE_PATTERNS = [
   new RegExp(String.raw`className\s*=\s*` + STRING, "g"),
   new RegExp(String.raw`className\s*:\s*` + STRING, "g"),
   new RegExp(String.raw`\bclass\s*=\s*` + STRING, "g"),
-  new RegExp(String.raw`setAttribute\s*\(\s*["'\`]class["'\`]\s*,\s*` + STRING, "g"),
+  new RegExp(
+    String.raw`setAttribute\s*\(\s*["'\`]class["'\`]\s*,\s*` + STRING,
+    "g",
+  ),
 ];
 const CLASS_LIST_CALL = /classList\s*\.\s*(?:add|remove|toggle)\s*\(([^)]*)\)/g;
 const STRING_ARG = new RegExp(STRING, "g");
@@ -180,13 +237,17 @@ function classWrites(root, files) {
       entry.add(rel);
     };
     for (const pattern of WRITE_PATTERNS) {
-      for (const match of text.matchAll(pattern)) for (const name of match[1].split(/\s+/)) record(name);
+      for (const match of text.matchAll(pattern))
+        for (const name of match[1].split(/\s+/)) record(name);
     }
     for (const match of text.matchAll(CLASS_LIST_CALL)) {
       for (const arg of match[1].matchAll(STRING_ARG)) record(arg[1]);
     }
     for (const match of text.matchAll(CLASS_NAME_EXPRESSION)) {
-      for (const literal of expressionLiterals(text, match.index + match[0].length - 1)) {
+      for (const literal of expressionLiterals(
+        text,
+        match.index + match[0].length - 1,
+      )) {
         for (const name of literal.split(/\s+/)) record(name);
       }
     }
@@ -210,7 +271,8 @@ function stylesheetNamespaces(classes) {
 function forward(root, sheets, files, writes) {
   const items = [];
   for (const sheet of sheets) {
-    for (const name of sheet.classes) items.push({ name, kind: "class", sheet });
+    for (const name of sheet.classes)
+      items.push({ name, kind: "class", sheet });
     for (const name of sheet.attrs) items.push({ name, kind: "attr", sheet });
   }
   const bodies = files.map((path) => [path, readFileSync(path, "utf8")]);
@@ -226,7 +288,8 @@ function forward(root, sheets, files, writes) {
     // not an application. The attribute half keeps the spelling reading: an
     // attribute is written through `dataset`'s camelCase form as often as through
     // its kebab spelling, so a write reading needs its own design.
-    const applied = item.kind === "class" ? writes.has(item.name) : where.PRODUCT > 0;
+    const applied =
+      item.kind === "class" ? writes.has(item.name) : where.PRODUCT > 0;
     if (!applied) findings.push({ ...item, where });
   }
   return { items, findings };
@@ -234,7 +297,8 @@ function forward(root, sheets, files, writes) {
 
 function reverse(sheets, writes) {
   const defined = new Set();
-  for (const sheet of sheets) for (const name of sheet.classes) defined.add(name);
+  for (const sheet of sheets)
+    for (const name of sheet.classes) defined.add(name);
   const namespaces = stylesheetNamespaces(defined);
   const findings = [];
   let outside = 0;
@@ -258,17 +322,28 @@ function report(root, sheets, files) {
   const fwd = forward(root, sheets, files, writes);
   const rev = reverse(sheets, writes);
   const shape = sheets
-    .map((sheet) => `${sheet.rel.split("/").pop()} classes=${sheet.classes.size} dataAttrs=${sheet.attrs.size}`)
+    .map(
+      (sheet) =>
+        `${sheet.rel.split("/").pop()} classes=${sheet.classes.size} dataAttrs=${sheet.attrs.size}`,
+    )
     .join("  ");
   console.log(`dead-selectors: ${shape}  tokens=${fwd.items.length}`);
 
-  console.log("\nFORWARD — a selector in either stylesheet that no production source applies");
+  console.log(
+    "\nFORWARD — a selector in either stylesheet that no production source applies",
+  );
   for (const finding of fwd.findings) {
-    console.log(`  ${finding.name}  (${finding.kind}, ${finding.sheet.rel.split("/").pop()})  ${counts(finding.where)}`);
+    console.log(
+      `  ${finding.name}  (${finding.kind}, ${finding.sheet.rel.split("/").pop()})  ${counts(finding.where)}`,
+    );
   }
-  console.log(`  forward: ${fwd.findings.length} of ${fwd.items.length} token(s) unapplied`);
+  console.log(
+    `  forward: ${fwd.findings.length} of ${fwd.items.length} token(s) unapplied`,
+  );
 
-  console.log("\nREVERSE — a class production source writes that neither stylesheet defines");
+  console.log(
+    "\nREVERSE — a class production source writes that neither stylesheet defines",
+  );
   for (const { name, entry } of rev.findings) {
     console.log(`  ${name}  ${[...entry].slice(0, 3).join(" ")}`);
   }
@@ -326,7 +401,10 @@ function run(root) {
     );
     return { code: 0, out: stdout };
   } catch (error) {
-    return { code: error.status ?? 1, out: `${error.stdout ?? ""}${error.stderr ?? ""}` };
+    return {
+      code: error.status ?? 1,
+      out: `${error.stdout ?? ""}${error.stderr ?? ""}`,
+    };
   }
 }
 
@@ -335,7 +413,10 @@ function selfTest() {
   const cases = [
     [
       "reports a class production writes that no stylesheet defines",
-      { [`${editor}/pane.tsx`]: 'const el = <p className="yunari-field-hint" />;\n' },
+      {
+        [`${editor}/pane.tsx`]:
+          'const el = <p className="yunari-field-hint" />;\n',
+      },
       1,
       "yunari-field-hint",
     ],
@@ -359,14 +440,18 @@ function selfTest() {
     ],
     [
       "reads the literals inside a conditional className expression",
-      { [`${editor}/pane.tsx`]: 'const el = <p className={a ? "yunari-one" : "yunari-two"} />;\n' },
+      {
+        [`${editor}/pane.tsx`]:
+          'const el = <p className={a ? "yunari-one" : "yunari-two"} />;\n',
+      },
       1,
       "yunari-two",
     ],
     [
       "counts a host page's own class write as the product applying it",
       {
-        "src/web/packages/editor/src/editor-shell/editor-shell.css": ".theme-list { color: green }\n",
+        "src/web/packages/editor/src/editor-shell/editor-shell.css":
+          ".theme-list { color: green }\n",
         "src/web/packages/host/public/yunari-page.css": "",
         "src/web/packages/host/public/settings.html":
           '<html><body><ul class="theme-list"></ul></body></html>\n',

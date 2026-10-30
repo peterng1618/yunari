@@ -107,11 +107,7 @@ function resolveDependency(packages, workspace, name) {
 
 /** Parentheses and case are the only differences the notices need to tolerate. */
 function normaliseLicence(value) {
-  return value
-    .replace(/[()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
+  return value.replace(/[()]/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
 }
 
 /**

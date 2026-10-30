@@ -1,11 +1,9 @@
 import type { AssetResult } from "@yunari/renderer-core";
+import { CATALOGUE_PAGE_SIZE, HEX_COLOUR } from "../catalogue.js";
 import type { AssetSource, SourceContext } from "../source.js";
-
-export const COLOUR_PAGE_SIZE = 40;
 
 const CATALOGUE_URL = "https://colorswoop.com/api/palettes.json";
 const LICENCE = "CC0-1.0";
-const HEX = /^#[0-9a-f]{6}$/i;
 
 interface Palette {
   readonly id: string;
@@ -47,7 +45,7 @@ function paletteOf(value: unknown): Palette | undefined {
   if (!colours.every((entry): entry is string => textOf(entry) !== undefined)) {
     return undefined;
   }
-  if (!colours.every((entry) => HEX.test(entry))) return undefined;
+  if (!colours.every((entry) => HEX_COLOUR.test(entry))) return undefined;
 
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === "string")
@@ -131,12 +129,14 @@ export const colorswoopSource: AssetSource = {
               palette.tags.some((tag) => normalize(tag).includes(wanted)),
           );
 
-    const offset = (pageOf(asked) - 1) * COLOUR_PAGE_SIZE;
+    const offset = (pageOf(asked) - 1) * CATALOGUE_PAGE_SIZE;
 
     return {
-      results: matches.slice(offset, offset + COLOUR_PAGE_SIZE).map(resultOf),
+      results: matches
+        .slice(offset, offset + CATALOGUE_PAGE_SIZE)
+        .map(resultOf),
       // No match is one empty page, not no pages.
-      totalPages: Math.max(1, Math.ceil(matches.length / COLOUR_PAGE_SIZE)),
+      totalPages: Math.max(1, Math.ceil(matches.length / CATALOGUE_PAGE_SIZE)),
     };
   },
 

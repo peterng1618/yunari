@@ -4,18 +4,18 @@ import {
   catalogFaces,
   faceForRole,
   fontTrio,
-  fontTrios,
 } from "./font-catalog.js";
+import { GENERATED_TRIOS } from "./font-trios.generated.js";
 
 /** A real trio with three distinct families, so a test cannot pass on a
  * fixture whose three roles happen to share one family. */
-const trio = fontTrios().find(
+const trio = GENERATED_TRIOS.find(
   (candidate) => new Set(candidate.faces.map((face) => face.family)).size === 3,
 )!;
 
 describe("curated font trios", () => {
   it("serves every generated trio through one owner", () => {
-    expect(fontTrios().length).toBeGreaterThan(1);
+    expect(GENERATED_TRIOS.length).toBeGreaterThan(1);
     expect(fontTrio(trio.id)).toBe(trio);
     expect(fontTrio("no-such-trio")).toBeUndefined();
   });

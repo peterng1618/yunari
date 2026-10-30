@@ -44,9 +44,9 @@ import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector } from "./index.js";
 import {
   type ChartFieldsPort,
+  FABRIC_SELECTION_KINDS,
   perKindColumn,
   rendersExtra,
-  SELECTION_KINDS,
   type SelectionKind,
   selectionKindOf,
 } from "./per-kind-column.js";
@@ -2075,7 +2075,7 @@ describe("the column a kind gets", () => {
   /**
    * One live example per kind, in the brief's own terms: a `Wedge`, a text box,
    * a chart, an image, a group, and a selection spanning two kinds. The list is
-   * the driver — a kind added to `SELECTION_KINDS` arrives here without an
+   * the driver — a kind added to `FABRIC_SELECTION_KINDS` arrives here without an
    * example and fails to compile, rather than passing unnoticed. The background
    * is not one of these: it is no Fabric object, and `background-column.test.ts`
    * describes it.
@@ -2194,7 +2194,7 @@ describe("the column a kind gets", () => {
     activeSelection: [...EVERY_OBJECT],
   };
 
-  it.each([...SELECTION_KINDS])(
+  it.each([...FABRIC_SELECTION_KINDS])(
     "answers a %s with a column rather than an empty one",
     (kind) => {
       const { host } = setup(EXAMPLE[kind]());
@@ -2216,7 +2216,7 @@ describe("the column a kind gets", () => {
     },
   );
 
-  it.each([...SELECTION_KINDS])(
+  it.each([...FABRIC_SELECTION_KINDS])(
     "keeps every field a %s had before the column was per-kind",
     (kind) => {
       const { host } = setup(EXAMPLE[kind]());
@@ -2230,7 +2230,7 @@ describe("the column a kind gets", () => {
     },
   );
 
-  it.each([...SELECTION_KINDS])(
+  it.each([...FABRIC_SELECTION_KINDS])(
     "reads its %s example as that kind and no other",
     (kind) => {
       // The two containers share a class — Fabric's `ActiveSelection` *is* a

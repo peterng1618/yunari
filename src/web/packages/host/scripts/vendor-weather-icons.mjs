@@ -1,16 +1,10 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  copyFile,
-  mkdir,
-  mkdtemp,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 /**
  * Stages the Meteocons `fill` icons the weather keys name into
@@ -104,7 +98,10 @@ async function main() {
     }
 
     // The licence travels with the bytes, as the notice files promise.
-    await copyFile(path.join(extracted, "LICENSE"), path.join(target, "LICENSE"));
+    await copyFile(
+      path.join(extracted, "LICENSE"),
+      path.join(target, "LICENSE"),
+    );
 
     console.log(`Staged ${SLUGS.length} weather icons in ${target}`);
   } finally {

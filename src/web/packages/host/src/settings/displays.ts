@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
 import { DEVICE_ID_PATTERN } from "./devices.js";
@@ -568,12 +568,19 @@ export function createDisplayStore(
       directory,
       `${FILE}.${randomBytes(6).toString("hex")}.tmp`,
     );
-    await writeFile(
-      temporary,
-      `${JSON.stringify({ displays }, null, 2)}\n`,
-      "utf8",
-    );
-    await rename(temporary, file);
+    try {
+      await writeFile(
+        temporary,
+        `${JSON.stringify({ displays }, null, 2)}\n`,
+        "utf8",
+      );
+      await rename(temporary, file);
+    } catch (error) {
+      // A failed write must not leave its temp file behind. Removing it is
+      // best effort: the write failure is the error worth reporting.
+      await rm(temporary, { force: true }).catch(() => undefined);
+      throw error;
+    }
   };
 
   /**

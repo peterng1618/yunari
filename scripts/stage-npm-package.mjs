@@ -50,7 +50,10 @@ const COPY = [
   // so the icons are runtime bytes, not optional binaries. Copy that directory
   // by name, not `vendor/`: the rest of it is ignored, and a local
   // `vendor:lhm` run would otherwise publish those binaries from a dev box.
-  ["src/web/packages/host/vendor/weather-icons", "packages/host/vendor/weather-icons"],
+  [
+    "src/web/packages/host/vendor/weather-icons",
+    "packages/host/vendor/weather-icons",
+  ],
   ["src/web/packages/player/dist", "packages/player/dist"],
   ["src/web/packages/editor/dist", "packages/editor/dist"],
   ["schema", "schema"],
@@ -91,7 +94,13 @@ function inside(parent, child) {
  * manifest. Returns `{ ok: false, errors }` rather than throwing, so the CLI
  * owns exit codes and the tests drive the decisions directly.
  */
-export function stagePackage({ source, out, version, expectVersion, dependencies = {} }) {
+export function stagePackage({
+  source,
+  out,
+  version,
+  expectVersion,
+  dependencies = {},
+}) {
   const errors = [];
 
   if (typeof source !== "string" || typeof out !== "string") {
@@ -101,7 +110,9 @@ export function stagePackage({ source, out, version, expectVersion, dependencies
     return { ok: false, errors: ["version is required"] };
   }
   if (inside(source, out)) {
-    errors.push(`out ${out} is inside the source tree; stage outside the repository`);
+    errors.push(
+      `out ${out} is inside the source tree; stage outside the repository`,
+    );
   }
   if (expectVersion !== undefined && expectVersion !== version) {
     errors.push(
@@ -117,7 +128,9 @@ export function stagePackage({ source, out, version, expectVersion, dependencies
     try {
       manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     } catch (error) {
-      errors.push(`unreadable ${MANIFEST[1]} (from ${MANIFEST[0]}): ${error.message}`);
+      errors.push(
+        `unreadable ${MANIFEST[1]} (from ${MANIFEST[0]}): ${error.message}`,
+      );
     }
     if (manifest !== undefined && manifest.version !== version) {
       errors.push(
@@ -149,7 +162,10 @@ export function stagePackage({ source, out, version, expectVersion, dependencies
     return { ok: false, errors: [`out ${out} exists and is not a directory`] };
   }
   if (existsSync(out) && readdirSync(out).length > 0) {
-    return { ok: false, errors: [`out ${out} is not empty; stage into a fresh directory`] };
+    return {
+      ok: false,
+      errors: [`out ${out} is not empty; stage into a fresh directory`],
+    };
   }
 
   try {
@@ -214,7 +230,9 @@ function main() {
   };
 
   try {
-    const source = resolve(flag("--source") ?? resolve(import.meta.dirname, ".."));
+    const source = resolve(
+      flag("--source") ?? resolve(import.meta.dirname, ".."),
+    );
     const out = flag("--out", true);
     const expectVersion = flag("--expect-version");
     const version = JSON.parse(
@@ -232,7 +250,8 @@ function main() {
     });
 
     if (!result.ok) {
-      for (const error of result.errors) process.stderr.write(`stage: ${error}\n`);
+      for (const error of result.errors)
+        process.stderr.write(`stage: ${error}\n`);
       process.exit(1);
     }
     const mb = (result.bytes / 1024 / 1024).toFixed(1);

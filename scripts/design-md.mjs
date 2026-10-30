@@ -29,9 +29,9 @@
  * so an unparseable file is a failure, not an empty pass.
  */
 
-import { readFile } from "node:fs/promises";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -110,11 +110,15 @@ function parseFrontMatter(design) {
 function frontMatterTokens(design) {
   const groups = parseFrontMatter(design);
   const tokens = new Map();
-  for (const [key, value] of groups.spacing) tokens.set(`--space-${key}`, String(value));
-  for (const [key, value] of groups.rounded) tokens.set(`--radius-${key}`, String(value));
+  for (const [key, value] of groups.spacing)
+    tokens.set(`--space-${key}`, String(value));
+  for (const [key, value] of groups.rounded)
+    tokens.set(`--radius-${key}`, String(value));
   for (const [key, entry] of groups.typography) {
-    if (entry.fontSize !== undefined) tokens.set(`--text-${key}`, String(entry.fontSize));
-    if (entry.lineHeight !== undefined) tokens.set(`--text-${key}--line-height`, String(entry.lineHeight));
+    if (entry.fontSize !== undefined)
+      tokens.set(`--text-${key}`, String(entry.fontSize));
+    if (entry.lineHeight !== undefined)
+      tokens.set(`--text-${key}--line-height`, String(entry.lineHeight));
   }
   return tokens;
 }
@@ -146,7 +150,8 @@ function cssTokens(css) {
   return tokens;
 }
 
-const inScope = (name) => SYNC_PREFIXES.some((prefix) => name.startsWith(prefix));
+const inScope = (name) =>
+  SYNC_PREFIXES.some((prefix) => name.startsWith(prefix));
 
 const normalise = (value) => String(value).trim().replace(/\s+/g, " ");
 
@@ -193,7 +198,9 @@ async function readOrFail(path, label) {
   try {
     return await readFile(path, "utf8");
   } catch (error) {
-    console.error(`design-md: cannot read ${label} at ${path} (${error.code ?? error.message})`);
+    console.error(
+      `design-md: cannot read ${label} at ${path} (${error.code ?? error.message})`,
+    );
     process.exit(1);
   }
 }
@@ -211,35 +218,109 @@ function selfTest() {
   };
   const sync = (name, read, expected) => {
     const got = checkSync(read).map((f) => f.what);
-    report(name, JSON.stringify(got) === JSON.stringify(expected), `expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`);
+    report(
+      name,
+      JSON.stringify(got) === JSON.stringify(expected),
+      `expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`,
+    );
   };
 
   // --sync: a value that differs, a name on one side only, :root ignored.
-  sync("a value the stylesheet and the front matter disagree on", { css: "@theme static {\n  --space-16: 15px;\n}\n", design: "spacing:\n  16: 16px\n" }, ["space-16"]);
-  sync("a name only the front matter declares", { css: "", design: "spacing:\n  16: 16px\n" }, ["space-16"]);
-  sync("a name only the stylesheet declares", { css: "@theme static {\n  --space-40: 40px;\n}\n", design: "" }, ["space-40"]);
-  sync("the line-height companion is its own token", { css: "@theme static {\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n", design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n" }, ["text-md--line-height"]);
-  sync("agreement is not a finding", { css: "@theme static {\n  --space-16: 16px;\n}\n", design: "spacing:\n  16: 16px\n" }, []);
-  sync("reads @theme static, not :root", { css: "@theme static {\n  --space-16: 16px;\n}\n:root {\n  --space-16: 99px;\n}\n", design: "spacing:\n  16: 16px\n" }, []);
-  sync("a name outside the three groups is not read", { css: "@theme static {\n  --spacing: 0.25rem;\n  --shadow-raised: 0 12px 28px #000;\n}\n", design: "" }, []);
+  sync(
+    "a value the stylesheet and the front matter disagree on",
+    {
+      css: "@theme static {\n  --space-16: 15px;\n}\n",
+      design: "spacing:\n  16: 16px\n",
+    },
+    ["space-16"],
+  );
+  sync(
+    "a name only the front matter declares",
+    { css: "", design: "spacing:\n  16: 16px\n" },
+    ["space-16"],
+  );
+  sync(
+    "a name only the stylesheet declares",
+    { css: "@theme static {\n  --space-40: 40px;\n}\n", design: "" },
+    ["space-40"],
+  );
+  sync(
+    "the line-height companion is its own token",
+    {
+      css: "@theme static {\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n",
+      design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n",
+    },
+    ["text-md--line-height"],
+  );
+  sync(
+    "agreement is not a finding",
+    {
+      css: "@theme static {\n  --space-16: 16px;\n}\n",
+      design: "spacing:\n  16: 16px\n",
+    },
+    [],
+  );
+  sync(
+    "reads @theme static, not :root",
+    {
+      css: "@theme static {\n  --space-16: 16px;\n}\n:root {\n  --space-16: 99px;\n}\n",
+      design: "spacing:\n  16: 16px\n",
+    },
+    [],
+  );
+  sync(
+    "a name outside the three groups is not read",
+    {
+      css: "@theme static {\n  --spacing: 0.25rem;\n  --shadow-raised: 0 12px 28px #000;\n}\n",
+      design: "",
+    },
+    [],
+  );
 
   // --lint: the counts are read, and every shape they cannot be read from fails
   // closed rather than defaulting to clean.
   const lintCase = (name, reportValue, expected) => {
     const got = lintCounts(reportValue);
-    const ok = expected.ok === false
-      ? got.ok === false
-      : got.ok === true && got.errors === expected.errors && got.warnings === expected.warnings;
+    const ok =
+      expected.ok === false
+        ? got.ok === false
+        : got.ok === true &&
+          got.errors === expected.errors &&
+          got.warnings === expected.warnings;
     report(name, ok, JSON.stringify(got));
   };
-  lintCase("a clean summary is read", { summary: { errors: 0, warnings: 0 } }, { ok: true, errors: 0, warnings: 0 });
-  lintCase("a warning is not rounded to clean", { summary: { errors: 0, warnings: 1 } }, { ok: true, errors: 0, warnings: 1 });
-  lintCase("a report with no summary fails closed", { findings: [] }, { ok: false });
-  lintCase("a summary that is not an object fails closed", { summary: 0 }, { ok: false });
+  lintCase(
+    "a clean summary is read",
+    { summary: { errors: 0, warnings: 0 } },
+    { ok: true, errors: 0, warnings: 0 },
+  );
+  lintCase(
+    "a warning is not rounded to clean",
+    { summary: { errors: 0, warnings: 1 } },
+    { ok: true, errors: 0, warnings: 1 },
+  );
+  lintCase(
+    "a report with no summary fails closed",
+    { findings: [] },
+    { ok: false },
+  );
+  lintCase(
+    "a summary that is not an object fails closed",
+    { summary: 0 },
+    { ok: false },
+  );
   lintCase("a null summary fails closed", { summary: null }, { ok: false });
   lintCase("an array summary fails closed", { summary: [] }, { ok: false });
-  lintCase("a count that is not a number fails closed", { summary: { errors: 0, warnings: "0" } }, { ok: false });
-  lintCase("a missing count fails closed", { summary: { errors: 0 } }, { ok: false });
+  lintCase(
+    "a count that is not a number fails closed",
+    { summary: { errors: 0, warnings: "0" } },
+    { ok: false },
+  );
+  lintCase(
+    "a missing count fails closed",
+    { summary: { errors: 0 } },
+    { ok: false },
+  );
   lintCase("a non-object report fails closed", "lint output", { ok: false });
 
   if (failed > 0) {
@@ -269,7 +350,9 @@ function linterCli() {
     const bin = JSON.parse(readFileSync(pkgPath, "utf8")).bin?.["design.md"];
     if (typeof bin === "string") return resolve(ROOT, dir, bin);
   }
-  console.error("design-md: @google/design.md is not installed; run `npm install` in src/web/");
+  console.error(
+    "design-md: @google/design.md is not installed; run `npm install` in src/web/",
+  );
   process.exit(1);
 }
 
@@ -282,7 +365,11 @@ function linterCli() {
  */
 export function lintCounts(report) {
   const summary = report?.summary;
-  if (typeof summary !== "object" || summary === null || Array.isArray(summary)) {
+  if (
+    typeof summary !== "object" ||
+    summary === null ||
+    Array.isArray(summary)
+  ) {
     return { ok: false, why: "the report carries no `summary` object" };
   }
   const { errors, warnings } = summary;
@@ -318,21 +405,29 @@ function checkLint() {
   try {
     report = JSON.parse(stdout);
   } catch {
-    console.error("design-md: the linter printed no JSON to read; the check would find nothing");
+    console.error(
+      "design-md: the linter printed no JSON to read; the check would find nothing",
+    );
     process.exit(1);
   }
-  for (const finding of Array.isArray(report?.findings) ? report.findings : []) {
+  for (const finding of Array.isArray(report?.findings)
+    ? report.findings
+    : []) {
     const line = `${finding.rule ?? "lint"}: ${finding.message}`;
     if (finding.severity === "info") console.log(line);
     else console.error(line);
   }
   const counts = lintCounts(report);
   if (!counts.ok) {
-    console.error(`design-md: cannot read the linter's counts — ${counts.why}; the check must not read this as clean`);
+    console.error(
+      `design-md: cannot read the linter's counts — ${counts.why}; the check must not read this as clean`,
+    );
     process.exit(1);
   }
   if (counts.errors > 0 || counts.warnings > 0) {
-    console.error(`design-md: lint reports ${counts.errors} error(s) and ${counts.warnings} warning(s) in ${DESIGN_REL}`);
+    console.error(
+      `design-md: lint reports ${counts.errors} error(s) and ${counts.warnings} warning(s) in ${DESIGN_REL}`,
+    );
     process.exit(1);
   }
   console.log(`design-md: lint clean in ${DESIGN_REL} (0 errors, 0 warnings)`);
@@ -340,7 +435,8 @@ function checkLint() {
 }
 
 function printFindings(findings, label) {
-  for (const finding of findings) console.error(`${finding.what}: ${finding.why}`);
+  for (const finding of findings)
+    console.error(`${finding.what}: ${finding.why}`);
   if (findings.length > 0) {
     console.error(`design-md: ${findings.length} finding(s) in ${label}`);
     return 1;
@@ -381,7 +477,12 @@ if (isEntryPoint) {
   if (process.argv.includes("--sync")) {
     const design = await readOrFail(resolve(ROOT, DESIGN_REL), DESIGN_REL);
     const css = await readOrFail(resolve(ROOT, CSS_REL), CSS_REL);
-    process.exit(printFindings(checkSync({ design, css }), `DESIGN.md and editor-shell.css`));
+    process.exit(
+      printFindings(
+        checkSync({ design, css }),
+        `DESIGN.md and editor-shell.css`,
+      ),
+    );
   }
 
   console.error("design-md: pass --lint, --sync or --self-test");

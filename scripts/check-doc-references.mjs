@@ -24,8 +24,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -88,13 +87,19 @@ const SELF = "scripts/check-doc-references.mjs";
  * reference in a new decision note and watching this report green.
  */
 const scannedFiles = () =>
-  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
-    cwd: ROOT,
-    maxBuffer: 1 << 28,
-  })
+  execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard"],
+    {
+      cwd: ROOT,
+      maxBuffer: 1 << 28,
+    },
+  )
     .toString()
     .split("\n")
-    .filter((f) => f !== "" && f !== SELF && SCANNED.test(f) && !EXCLUDED.test(f));
+    .filter(
+      (f) => f !== "" && f !== SELF && SCANNED.test(f) && !EXCLUDED.test(f),
+    );
 
 const planExists = (name) =>
   existsSync(join(PLANS, name)) ||
@@ -106,24 +111,51 @@ if (process.argv.includes("--self-test")) {
     ["accepts a bare name found in archive", "moved to plans/moved.md", true],
     ["accepts an archive path", "see plans/archive/old.md", true],
     ["refuses a bare name in neither place", "see plans/gone.md", false],
-    ["refuses a path that does not resolve", "see docs/superpowers/plans/gone.md", false],
+    [
+      "refuses a path that does not resolve",
+      "see docs/superpowers/plans/gone.md",
+      false,
+    ],
     ["refuses a code span, not only a link", "`plans/gone.md`", false],
-    ["refuses prose, not only a code span", "the plan at plans/gone.md was moved", false],
-    ["accepts one escaped by its own line", "see plans/gone.md <!-- doc-ref-ok: fixture -->", true],
-    ["accepts one escaped by the line above", "<!-- doc-ref-ok: fixture -->\nsee plans/gone.md", true],
-    ["refuses an escape with no reason", "see plans/gone.md <!-- doc-ref-ok: -->", false],
-    ["ignores a reference to something that is not a plan", "see plans/notes.txt", true],
+    [
+      "refuses prose, not only a code span",
+      "the plan at plans/gone.md was moved",
+      false,
+    ],
+    [
+      "accepts one escaped by its own line",
+      "see plans/gone.md <!-- doc-ref-ok: fixture -->",
+      true,
+    ],
+    [
+      "accepts one escaped by the line above",
+      "<!-- doc-ref-ok: fixture -->\nsee plans/gone.md",
+      true,
+    ],
+    [
+      "refuses an escape with no reason",
+      "see plans/gone.md <!-- doc-ref-ok: -->",
+      false,
+    ],
+    [
+      "ignores a reference to something that is not a plan",
+      "see plans/notes.txt",
+      true,
+    ],
   ];
-  const exists = (name) => name === "live.md" || name === "moved.md" || name === "archive/old.md";
+  const exists = (name) =>
+    name === "live.md" || name === "moved.md" || name === "archive/old.md";
   let failed = 0;
   for (const [name, text, expected] of fixtures) {
     const found = brokenIn(text, exists);
-    const ok = found.length === 0 === expected;
+    const ok = (found.length === 0) === expected;
     if (!ok) failed += 1;
     process.stdout.write(`${ok ? "ok  " : "FAIL"} ${name}\n`);
   }
   if (failed > 0) {
-    process.stderr.write(`check-doc-references self-test: ${failed} case(s) wrong\n`);
+    process.stderr.write(
+      `check-doc-references self-test: ${failed} case(s) wrong\n`,
+    );
     process.exit(1);
   }
   process.stdout.write("check-doc-references self-test: all cases behave\n");
@@ -138,7 +170,10 @@ for (const file of scannedFiles()) {
   // It carries no reference to check, and reading it threw ENOENT out of this loop.
   if (!existsSync(join(ROOT, file))) continue;
   scanned += 1;
-  for (const { line, token } of brokenIn(readFileSync(join(ROOT, file), "utf8"), planExists)) {
+  for (const { line, token } of brokenIn(
+    readFileSync(join(ROOT, file), "utf8"),
+    planExists,
+  )) {
     process.stderr.write(`${file}:${line}  ${token} resolves to nothing\n`);
     broken += 1;
   }
@@ -149,4 +184,6 @@ if (broken > 0) {
   );
   process.exit(1);
 }
-process.stdout.write(`check-doc-references: every plans/ reference resolves (${scanned} files)\n`);
+process.stdout.write(
+  `check-doc-references: every plans/ reference resolves (${scanned} files)\n`,
+);
