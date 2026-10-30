@@ -1357,7 +1357,10 @@ body,
 .editor-shell-inspector h2 {
   margin: 0 0 12px;
   color: var(--shell-text);
-  font-family: var(--shell-display);
+  /* UI sans, not the palette's display face: §2 gives headings to the UI sans
+     and no clause grants chrome a serif. `--shell-display` still dresses the
+     brand and a dialog's lead. */
+  font-family: system-ui, sans-serif;
   font-size: var(--text-md);
   line-height: var(--text-md--line-height);
   text-transform: uppercase;
@@ -1946,8 +1949,7 @@ body,
   cursor: pointer;
 }
 .editor-shell-dialog > button:hover {
-  border-color: var(--shell-accent);
-  color: var(--shell-accent);
+  border-color: var(--shell-muted);
 }
 
 /* The settings modal's own navigation and body. A `150px` column of three

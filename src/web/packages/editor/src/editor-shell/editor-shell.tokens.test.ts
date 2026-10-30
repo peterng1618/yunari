@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { shellPalettes } from "./palette.js";
@@ -132,6 +133,39 @@ describe("shell token stylesheet", () => {
       base?.at ?? Number.MAX_SAFE_INTEGER,
       "the :root control block must precede the palette blocks, or the base wins",
     ).toBeLessThan(graphiteBlockAt());
+  });
+
+  it("references only spacing steps the @theme block declares", () => {
+    const declaredSpacing = new Set(
+      [...themeBody().matchAll(/(--space-[a-z0-9-]+)\s*:/g)].flatMap((match) =>
+        match[1] === undefined ? [] : [match[1]],
+      ),
+    );
+    expect(
+      declaredSpacing.size,
+      "the @theme block declares no spacing",
+    ).toBeGreaterThan(0);
+
+    const sourceRoot = fileURLToPath(new URL("..", import.meta.url));
+    const unreferenced = readdirSync(sourceRoot, { recursive: true })
+      .map(String)
+      .filter((file) => /\.(ts|tsx)$/.test(file))
+      .flatMap((file) => {
+        const source = readFileSync(join(sourceRoot, file), "utf8");
+        return [...source.matchAll(/var\((--space-[a-z0-9-]+)/g)].flatMap(
+          (match) => {
+            const token = match[1];
+            return token === undefined || declaredSpacing.has(token)
+              ? []
+              : [`${file}: ${token}`];
+          },
+        );
+      });
+
+    // A `var()` naming a step no declaration provides is invalid at
+    // computed-value time, so the declaration using it is dropped rather than
+    // falling back — invisible in review, jsdom and a class assertion.
+    expect(unreferenced).toEqual([]);
   });
 
   /** Choosing a palette the stylesheet does not name leaves the shell on

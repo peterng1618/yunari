@@ -115,7 +115,7 @@ export function ControlIconButton(
           if (blocked) return;
           onClick();
         }}
-        className={`inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent ${tone} hover:border-edge hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+        className={`inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent ${tone} enabled:hover:border-edge enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
       >
         {children}
       </button>

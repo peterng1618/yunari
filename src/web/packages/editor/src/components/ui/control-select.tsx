@@ -224,7 +224,7 @@ export function SelectControl(
                   items
                 ) : (
                   <Select.Group key={run.group}>
-                    <Select.GroupLabel className="px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-2)] text-2xs uppercase tracking-wide text-faint">
+                    <Select.GroupLabel className="px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-4)] text-2xs uppercase tracking-wide text-faint">
                       {run.group}
                     </Select.GroupLabel>
                     {items}

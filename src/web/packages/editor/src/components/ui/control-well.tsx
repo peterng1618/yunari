@@ -118,7 +118,7 @@ export const hitTargetClasses =
  * (disabled, aria, a variant).
  */
 export const plainButtonClasses =
-  "self-start rounded-md border border-edge bg-panel-2 px-[var(--space-6)] py-[var(--space-4)] text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+  "self-start rounded-md border border-edge bg-panel-2 px-[var(--space-6)] py-[var(--space-4)] text-sm hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
 
 export function ControlWell(props: {
   readonly density?: ControlDensity | undefined;

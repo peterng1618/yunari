@@ -121,7 +121,7 @@ export function VideoTrimModal({
           <div className="flex flex-col gap-[var(--space-4)]">
             <span className="text-xs text-muted">{copy.hint}</span>
             <div className="flex items-center gap-[var(--space-8)]">
-              <label className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] text-2xs text-faint">
+              <label className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)] text-2xs text-faint">
                 {copy.start}
                 <input
                   data-yunari-video-trim-start=""
@@ -137,7 +137,7 @@ export function VideoTrimModal({
                   className="w-full"
                 />
               </label>
-              <label className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] text-2xs text-faint">
+              <label className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)] text-2xs text-faint">
                 {copy.end}
                 <input
                   data-yunari-video-trim-end=""
