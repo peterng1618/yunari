@@ -156,10 +156,27 @@ export function startDraftAutosave(input: {
   let timer: ReturnType<typeof setInterval> | undefined;
   /** The document's own answer, as this autosave last read it. */
   let dirty = false;
+  /** The source those two were read from, so a different document is not
+   *  compared against this one's answer. */
+  let open: DraftSource | undefined;
 
   const writeNow = (): void => {
     const document = input.document();
     if (document === undefined) return;
+    if (open === undefined) {
+      // The first document this autosave sees writes on this tick, as it did
+      // before the switch gate existed.
+      open = document;
+    } else if (document !== open) {
+      // A switch replaces the document under one autosave. The flag remembers
+      // the document that left, so comparing the incoming one against it would
+      // either clear the outgoing draft on a clean incoming document or write
+      // the incoming draft into a slot the outgoing one still owns. Adopt the
+      // new document's answer and leave this tick's slot alone.
+      open = document;
+      dirty = document.isDirty();
+      return;
+    }
     const next = document.isDirty();
     if (next) input.store.write(document.draft());
     else if (dirty) input.store.clear();

@@ -88,24 +88,36 @@ async function start(): Promise<void> {
    *  nothing in the boot writes (vg-511). */
   let refusedDraftRestore: string | undefined;
   /** The open document as the autosave asks it. `isDirty` is the session's own,
-   *  pulled rather than held, so nothing here re-derives what "saved" means. */
+   *  pulled rather than held, so nothing here re-derives what "saved" means.
+   *  **One source per mounted document**: the autosave compares this object to
+   *  notice a switch, and a fresh object every tick would make every tick look
+   *  like one (`vg-541`). */
+  let draftSource:
+    | { readonly active: ActiveEditor; readonly source: DraftSource }
+    | undefined;
   const draftDocument = (): DraftSource | undefined => {
     if (active === undefined) return undefined;
-    const extensions = active.extensions;
-    return {
-      isDirty: () => extensions.isDirty(),
-      draft: () => {
-        const content = extensions.snapshot();
-        return {
-          name: documentNameOf({
-            name: content.metadata?.name,
-            id: content.id,
-          }),
-          savedAt: new Date().toISOString(),
-          content,
-        };
-      },
-    };
+    if (draftSource?.active !== active) {
+      const extensions = active.extensions;
+      draftSource = {
+        active,
+        source: {
+          isDirty: () => extensions.isDirty(),
+          draft: () => {
+            const content = extensions.snapshot();
+            return {
+              name: documentNameOf({
+                name: content.metadata?.name,
+                id: content.id,
+              }),
+              savedAt: new Date().toISOString(),
+              content,
+            };
+          },
+        },
+      };
+    }
+    return draftSource.source;
   };
   const autosave = startDraftAutosave({
     store: draftStore,

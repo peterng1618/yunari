@@ -158,9 +158,8 @@ describe("the draft's autosave", () => {
     vi.useFakeTimers();
     const store = new DraftStore(memoryStorage());
     let open = false;
-    const autosave = autosaveOver(store, () =>
-      open ? documentOver(() => true) : undefined,
-    );
+    const doc = documentOver(() => true);
+    const autosave = autosaveOver(store, () => (open ? doc : undefined));
 
     vi.advanceTimersByTime(30_000);
     expect(store.read(), "no document, no draft").toBeUndefined();
@@ -176,7 +175,8 @@ describe("the draft's autosave", () => {
     vi.useFakeTimers();
     const store = new DraftStore(memoryStorage());
     let dirty = true;
-    const autosave = autosaveOver(store, () => documentOver(() => dirty));
+    const doc = documentOver(() => dirty);
+    const autosave = autosaveOver(store, () => doc);
 
     vi.advanceTimersByTime(30_000);
     expect(store.read(), "the edit is kept").toEqual(DRAFT);
@@ -198,7 +198,8 @@ describe("the draft's autosave", () => {
     // something else. That document never superseded the draft — it was born
     // clean and never adopted it — and the draft is the only copy of the work.
     store.write(DRAFT);
-    const autosave = autosaveOver(store, () => documentOver(() => false));
+    const doc = documentOver(() => false);
+    const autosave = autosaveOver(store, () => doc);
 
     vi.advanceTimersByTime(120_000);
 
@@ -221,10 +222,11 @@ describe("the draft's autosave", () => {
       content: { ...ENVELOPE, id: "untitled" },
     };
     let dirty = false;
-    const autosave = autosaveOver(store, () => ({
+    const fallback = {
       isDirty: () => dirty,
       draft: () => FALLBACK,
-    }));
+    };
+    const autosave = autosaveOver(store, () => fallback);
     // The refused restore: the build could not open this draft, so the boot
     // opened the document it would have, and the draft is still the slot's.
     store.write(DRAFT);
@@ -250,10 +252,43 @@ describe("the draft's autosave", () => {
     autosave.stop();
   });
 
+  it("does not clear the outgoing draft on the tick after a switch", () => {
+    vi.useFakeTimers();
+    const store = new DraftStore(memoryStorage());
+    let current = documentOver(() => true);
+    const autosave = autosaveOver(store, () => current);
+
+    vi.advanceTimersByTime(30_000);
+    expect(store.read(), "the outgoing document's edit").toEqual(DRAFT);
+
+    // A document replaced under the autosave: the incoming one is clean, and
+    // its cleanliness says nothing about the draft the outgoing one left.
+    current = documentOver(() => false);
+    vi.advanceTimersByTime(30_000);
+    expect(store.read(), "the outgoing draft survives the switch").toEqual(
+      DRAFT,
+    );
+
+    // The ordinary clear still runs for the incoming document: its own edit,
+    // then its own undo.
+    let incomingDirty = false;
+    current = documentOver(() => incomingDirty);
+    vi.advanceTimersByTime(30_000);
+    incomingDirty = true;
+    vi.advanceTimersByTime(30_000);
+    expect(store.read(), "the incoming document's own draft").toEqual(DRAFT);
+    incomingDirty = false;
+    vi.advanceTimersByTime(30_000);
+    expect(store.read(), "and its own clean tick clears it").toBeUndefined();
+
+    autosave.stop();
+  });
+
   it("writes on the way out, and resumes when the page comes back", () => {
     vi.useFakeTimers();
     const store = new DraftStore(memoryStorage());
-    const autosave = autosaveOver(store, () => documentOver(() => true));
+    const doc = documentOver(() => true);
+    const autosave = autosaveOver(store, () => doc);
     const page = new EventTarget();
     bindDraftAutosave(autosave, page);
 
@@ -279,7 +314,8 @@ describe("the draft's autosave", () => {
   it("stops writing when the editor goes away", () => {
     vi.useFakeTimers();
     const store = new DraftStore(memoryStorage());
-    const autosave = autosaveOver(store, () => documentOver(() => true));
+    const doc = documentOver(() => true);
+    const autosave = autosaveOver(store, () => doc);
 
     autosave.stop();
     vi.advanceTimersByTime(120_000);
