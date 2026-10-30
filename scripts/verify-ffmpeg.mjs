@@ -85,7 +85,9 @@ function main(argv) {
     return 2;
   }
   if (!existsSync(binaryPath)) {
-    console.error(`ffmpeg: the ffmpeg-static binary is missing at ${binaryPath}`);
+    console.error(
+      `ffmpeg: the ffmpeg-static binary is missing at ${binaryPath}`,
+    );
     return 2;
   }
 

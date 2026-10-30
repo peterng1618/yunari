@@ -46,11 +46,18 @@
  * exists to remove, so an empty gated list is a failure, not a pass.
  */
 
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** The design's named steps: the only spacing values a surface may write. */
@@ -89,7 +96,8 @@ const DEFINITION_SELECTOR =
   /^(?::root|\[data-shell-palette="[a-z-]+"\]|\.editor-shell-palette-swatch)$/;
 
 /** Longest alternative first: a 6-digit match on an 8-digit literal would leave two hex digits behind. */
-const HEX = /(?<![\w#-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g;
+const HEX =
+  /(?<![\w#-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w-])/g;
 const PX = /(?<![\w.])(\d+(?:\.\d+)?)px(?![\w-])/g;
 
 const DEFAULT_GATED = "scripts/design-tokens.gated.json";
@@ -146,7 +154,8 @@ function scannable(source, relPath) {
       i += 1;
     }
     const from = match.index + match[0].length;
-    text = text.slice(0, from) + blank(text.slice(from, i - 1)) + text.slice(i - 1);
+    text =
+      text.slice(0, from) + blank(text.slice(from, i - 1)) + text.slice(i - 1);
     match = opens.exec(text);
   }
   return text;
@@ -156,7 +165,9 @@ function isDefinition(prelude) {
   const head = prelude.trim();
   if (head === "") return false;
   if (/^@theme\b/.test(head)) return true;
-  return head.split(",").every((selector) => DEFINITION_SELECTOR.test(selector.trim()));
+  return head
+    .split(",")
+    .every((selector) => DEFINITION_SELECTOR.test(selector.trim()));
 }
 
 /** Offsets of every definition block's body: `@theme`, and the palette blocks. */
@@ -194,7 +205,11 @@ function definitionSpans(text) {
 /** The property name the px at `index` is a value of, or null outside a declaration. */
 function declarationProperty(text, index) {
   const start =
-    Math.max(text.lastIndexOf("{", index), text.lastIndexOf("}", index), text.lastIndexOf(";", index)) + 1;
+    Math.max(
+      text.lastIndexOf("{", index),
+      text.lastIndexOf("}", index),
+      text.lastIndexOf(";", index),
+    ) + 1;
   const colon = text.indexOf(":", start);
   if (colon === -1 || colon > index) return null;
   const property = text.slice(start, colon).trim();
@@ -240,7 +255,10 @@ function siteOf(text, index) {
 
 function position(text, index) {
   const before = text.slice(0, index);
-  return { line: before.split("\n").length, column: index - before.lastIndexOf("\n") };
+  return {
+    line: before.split("\n").length,
+    column: index - before.lastIndexOf("\n"),
+  };
 }
 
 /**
@@ -264,7 +282,8 @@ export function check(relPath, source, designLanguagePx = []) {
   const named = new Set([...designLanguagePx].map(Number));
   const text = scannable(String(source ?? ""), path);
   const definitions = definitionSpans(text);
-  const inDefinition = (index) => definitions.some(([from, to]) => index >= from && index < to);
+  const inDefinition = (index) =>
+    definitions.some(([from, to]) => index >= from && index < to);
   const isCss = /\.css$/.test(path);
   const found = [];
 
@@ -311,7 +330,12 @@ export function check(relPath, source, designLanguagePx = []) {
         text: `${property}: ${match[0]}`,
       });
     } else if (!spacing && !SPACING_STEPS.has(value) && !named.has(value)) {
-      found.push({ rule: "off-scale-px", ...position(text, match.index), site, text: match[0] });
+      found.push({
+        rule: "off-scale-px",
+        ...position(text, match.index),
+        site,
+        text: match[0],
+      });
     }
   }
 
@@ -354,12 +378,20 @@ export function unconsumedPx(designLanguagePx, sources) {
     const text = scannable(source, String(relPath ?? ""));
     const definitions = definitionSpans(text);
     for (const match of text.matchAll(PX)) {
-      if (definitions.some(([from, to]) => match.index >= from && match.index < to)) continue;
+      if (
+        definitions.some(
+          ([from, to]) => match.index >= from && match.index < to,
+        )
+      )
+        continue;
       written.add(Number(match[1]));
     }
   }
   if (unread.length > 0) return { unconsumed: [], unread };
-  return { unconsumed: [...designLanguagePx].filter((value) => !written.has(value)), unread };
+  return {
+    unconsumed: [...designLanguagePx].filter((value) => !written.has(value)),
+    unread,
+  };
 }
 
 /**
@@ -403,7 +435,9 @@ function posix(path) {
 export async function selectTestFiles(root) {
   const web = resolve(root, "src", "web");
   const selected = await walkFiles(web, [".dom.test.tsx"]);
-  for (const path of await walkFiles(resolve(web, "tests", "e2e"), [".spec.ts"])) {
+  for (const path of await walkFiles(resolve(web, "tests", "e2e"), [
+    ".spec.ts",
+  ])) {
     let source;
     try {
       source = await readFile(path, "utf8");
@@ -412,7 +446,9 @@ export async function selectTestFiles(root) {
     }
     if (OPENS_EDITOR.test(source)) selected.push(path);
   }
-  return [...new Set(selected.map((path) => posix(relative(root, path))))].sort();
+  return [
+    ...new Set(selected.map((path) => posix(relative(root, path)))),
+  ].sort();
 }
 
 /**
@@ -476,7 +512,10 @@ export async function remainderFiles(root, gated, designLanguagePx = []) {
   const excluded = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    for (const path of await walkFiles(join(packages, entry.name, "src"), [".ts", ".tsx"])) {
+    for (const path of await walkFiles(join(packages, entry.name, "src"), [
+      ".ts",
+      ".tsx",
+    ])) {
       const relPath = posix(relative(root, path));
       if (gated.has(relPath) || NOT_PRODUCT_SOURCE.test(relPath)) continue;
       let source;
@@ -504,15 +543,47 @@ async function selfTest() {
     ["a role reference is not", "a.css", ".x { color: var(--text); }", 0],
 
     // Tier 1: a spacing property is held to the steps, and to nothing else.
-    ["an off-scale px spacing is a violation", "a.css", ".x { padding: 7px; }", 1],
+    [
+      "an off-scale px spacing is a violation",
+      "a.css",
+      ".x { padding: 7px; }",
+      1,
+    ],
     ["an on-scale px spacing is not", "a.css", ".x { padding: 12px; }", 0],
-    ["a DESIGN.md row rhythm is not a spacing step", "a.css", ".x { margin: 26px; }", 1, { designLanguagePx: [26] }],
-    ["a hairline border is not", "a.css", ".x { border: 1px solid var(--edge); }", 0],
-    ["a zero and a percentage are not", "a.css", ".x { margin: 0; opacity: 100%; }", 0],
+    [
+      "a DESIGN.md row rhythm is not a spacing step",
+      "a.css",
+      ".x { margin: 26px; }",
+      1,
+      { designLanguagePx: [26] },
+    ],
+    [
+      "a hairline border is not",
+      "a.css",
+      ".x { border: 1px solid var(--edge); }",
+      0,
+    ],
+    [
+      "a zero and a percentage are not",
+      "a.css",
+      ".x { margin: 0; opacity: 100%; }",
+      0,
+    ],
 
     // Tier 2: outside a spacing property, every value DESIGN.md prints is allowed.
-    ["a DESIGN.md value outside a spacing property is not", "a.css", ".x { width: 26px; }", 0, { designLanguagePx: [26] }],
-    ["the same value is a violation with no allowlist", "a.css", ".x { width: 26px; }", 1],
+    [
+      "a DESIGN.md value outside a spacing property is not",
+      "a.css",
+      ".x { width: 26px; }",
+      0,
+      { designLanguagePx: [26] },
+    ],
+    [
+      "the same value is a violation with no allowlist",
+      "a.css",
+      ".x { width: 26px; }",
+      1,
+    ],
     ["a rem length is not checked", "a.css", ".x { padding: 1rem; }", 0],
     ["calc() is not checked", "a.css", ".x { width: calc(100% - 7px); }", 0],
 
@@ -529,7 +600,12 @@ async function selfTest() {
       "@theme static {\n  --text-xs: 11px;\n  --shadow-raised: 0 12px 28px #0000003d;\n}",
       0,
     ],
-    [":root token block is a definition", "a.css", ":root {\n  --yunari-input-bg: #ffffff;\n}", 0],
+    [
+      ":root token block is a definition",
+      "a.css",
+      ":root {\n  --yunari-input-bg: #ffffff;\n}",
+      0,
+    ],
     [
       "a rule that only names a palette is not a definition",
       "editor-shell.css",
@@ -542,11 +618,31 @@ async function selfTest() {
       ':root:not([data-shell-palette="editorial"]) .editor-glass {\n  background: #ff0000;\n}',
       1,
     ],
-    ["the same hex outside a definition block is a violation", "a.css", ".x { color: #eef9f4; }", 1],
+    [
+      "the same hex outside a definition block is a violation",
+      "a.css",
+      ".x { color: #eef9f4; }",
+      1,
+    ],
 
-    ["a comment is not a violation", "a.css", "/* 12px was the step; 7px was the bug */", 0],
-    ["an eight-digit hex is one violation, not two", "a.css", ".x { color: #00000059; }", 1],
-    ["an id selector is not a hex colour", "a.css", "#app { height: 100%; }", 0],
+    [
+      "a comment is not a violation",
+      "a.css",
+      "/* 12px was the step; 7px was the bug */",
+      0,
+    ],
+    [
+      "an eight-digit hex is one violation, not two",
+      "a.css",
+      ".x { color: #00000059; }",
+      1,
+    ],
+    [
+      "an id selector is not a hex colour",
+      "a.css",
+      "#app { height: 100%; }",
+      0,
+    ],
     ["a tsx literal is checked", "a.tsx", 'const s = { padding: "7px" };', 1],
     // A Tailwind spacing utility in a `.tsx` is tier 1, even where the value is
     // a DESIGN.md value tier 2 would admit — `26` is allowed here only with the
@@ -558,8 +654,18 @@ async function selfTest() {
       1,
       { designLanguagePx: [26] },
     ],
-    ["a tsx gap utility with an off-scale value is a violation", "a.tsx", 'const c = "gap-[7px]";', 1],
-    ["a tsx spacing utility on a step is not", "a.tsx", 'const c = "px-[12px]";', 0],
+    [
+      "a tsx gap utility with an off-scale value is a violation",
+      "a.tsx",
+      'const c = "gap-[7px]";',
+      1,
+    ],
+    [
+      "a tsx spacing utility on a step is not",
+      "a.tsx",
+      'const c = "px-[12px]";',
+      0,
+    ],
     // A leading `-` is a negative margin/inset, not an exemption: it is held to
     // the spacing scale the same way, so this case fails if negative support is removed.
     [
@@ -569,11 +675,27 @@ async function selfTest() {
       1,
       { designLanguagePx: [26] },
     ],
-    ["a negative tsx spacing utility on a step is not", "a.tsx", 'const c = "-mt-[12px]";', 0],
+    [
+      "a negative tsx spacing utility on a step is not",
+      "a.tsx",
+      'const c = "-mt-[12px]";',
+      0,
+    ],
     // Scoping: a non-spacing utility keeps the tier-2 allowlist.
-    ["a tsx non-spacing utility keeps the DESIGN.md allowlist", "a.tsx", 'const c = "h-[26px]";', 0, { designLanguagePx: [26] }],
+    [
+      "a tsx non-spacing utility keeps the DESIGN.md allowlist",
+      "a.tsx",
+      'const c = "h-[26px]";',
+      0,
+      { designLanguagePx: [26] },
+    ],
     ["a tsx comment is not", "a.tsx", "// 7px was the bug\nconst s = {};", 0],
-    ["a url in a tsx file is not a comment", "a.tsx", 'const u = "https://x"; const s = "7px";', 1],
+    [
+      "a url in a tsx file is not a comment",
+      "a.tsx",
+      'const u = "https://x"; const s = "7px";',
+      1,
+    ],
     // A masked comment must not move the line it reports: it did, and a
     // multi-line comment is what shifted every line below it.
     [
@@ -626,19 +748,55 @@ async function selfTest() {
   // the two that matter are `vg-332`'s — a bare number, and a `px` that only a
   // comment holds.
   const allowlistCases = [
-    ["a px value a source writes is consumed", [46], [["a.tsx", 'const s = "h-[46px]";']], []],
-    ["a value no source writes is unconsumed", [999], [["a.tsx", 'const s = "h-[26px]";']], [999]],
-    ["a bare numeric literal is not a consumer", [1.7], [["a.tsx", "const w = { strokeWidth: 1.7 };"]], [1.7]],
-    ["a value only a comment holds is unconsumed", [1.8], [["a.tsx", '// a 1.8px stroke\nconst s = "";']], [1.8]],
-    ["a value only a definition block holds is unconsumed", [46], [["a.css", "@theme static { --x: 46px; }"]], [46]],
+    [
+      "a px value a source writes is consumed",
+      [46],
+      [["a.tsx", 'const s = "h-[46px]";']],
+      [],
+    ],
+    [
+      "a value no source writes is unconsumed",
+      [999],
+      [["a.tsx", 'const s = "h-[26px]";']],
+      [999],
+    ],
+    [
+      "a bare numeric literal is not a consumer",
+      [1.7],
+      [["a.tsx", "const w = { strokeWidth: 1.7 };"]],
+      [1.7],
+    ],
+    [
+      "a value only a comment holds is unconsumed",
+      [1.8],
+      [["a.tsx", '// a 1.8px stroke\nconst s = "";']],
+      [1.8],
+    ],
+    [
+      "a value only a definition block holds is unconsumed",
+      [46],
+      [["a.css", "@theme static { --x: 46px; }"]],
+      [46],
+    ],
     // The rule is about what a file *writes*, not about what the allowlist
     // suppresses: a spacing utility is held to the spacing scale anyway, and its value still
     // counts as written, which is why a scale step in the list is not reported.
-    ["a spacing utility still writes its value", [46], [["a.tsx", 'const s = "p-[46px]";']], []],
+    [
+      "a spacing utility still writes its value",
+      [46],
+      [["a.tsx", 'const s = "p-[46px]";']],
+      [],
+    ],
     // A read that failed truncates the union, so the rule reports nothing and
     // names the unread pair instead: `46`'s only consumer is the file that did
     // not load, and the message below would otherwise say to drop it.
-    ["a source that could not be read leaves the rule unrun", [46], [["gone.css", null]], [], ["gone.css"]],
+    [
+      "a source that could not be read leaves the rule unrun",
+      [46],
+      [["gone.css", null]],
+      [],
+      ["gone.css"],
+    ],
   ];
   for (const [name, values, sources, expected, unread = []] of allowlistCases) {
     const got = unconsumedPx(values, sources);
@@ -678,12 +836,17 @@ async function selfTest() {
       designLanguagePx: [],
     }),
     "src/web/packages/editor/src/listed.tsx": "export const listed = 1;",
-    "src/web/packages/editor/src/selected.dom.test.tsx": 'const s = { color: "#ff0000" };',
-    "src/web/packages/editor/src/unselected.tsx": 'const s = { color: "#00ff00" };',
-    "src/web/tests/e2e/driving.spec.ts": 'await page.goto("http://127.0.0.1:4174/");\nconst c = "#0000ff";',
-    "src/web/tests/e2e/unopened.spec.ts": 'await page.goto("https://example.com/");\nconst c = "#ff00ff";',
+    "src/web/packages/editor/src/selected.dom.test.tsx":
+      'const s = { color: "#ff0000" };',
+    "src/web/packages/editor/src/unselected.tsx":
+      'const s = { color: "#00ff00" };',
+    "src/web/tests/e2e/driving.spec.ts":
+      'await page.goto("http://127.0.0.1:4174/");\nconst c = "#0000ff";',
+    "src/web/tests/e2e/unopened.spec.ts":
+      'await page.goto("https://example.com/");\nconst c = "#ff00ff";',
     "src/web/tests/e2e/helper.ts": 'export const helper = "#ffff00";',
-    "src/web/node_modules/pkg/ignored.dom.test.tsx": 'const s = { color: "#00ffff" };',
+    "src/web/node_modules/pkg/ignored.dom.test.tsx":
+      'const s = { color: "#00ffff" };',
   });
   try {
     const selected = await selectTestFiles(tree);
@@ -696,15 +859,19 @@ async function selfTest() {
     const run = runOver(tree);
     report(
       "a selected file is scanned",
-      run.stderr.includes("src/web/packages/editor/src/selected.dom.test.tsx:1:") &&
-        run.stderr.includes("src/web/tests/e2e/driving.spec.ts:2:"),
+      run.stderr.includes(
+        "src/web/packages/editor/src/selected.dom.test.tsx:1:",
+      ) && run.stderr.includes("src/web/tests/e2e/driving.spec.ts:2:"),
       `exit ${run.status}, stderr ${JSON.stringify(run.stderr.slice(0, 300))}`,
     );
     report(
       "a file the rule did not select is not scanned",
-      !["unselected.tsx", "unopened.spec.ts", "helper.ts", "ignored.dom.test.tsx"].some(
-        (name) => run.stderr.includes(name),
-      ),
+      ![
+        "unselected.tsx",
+        "unopened.spec.ts",
+        "helper.ts",
+        "ignored.dom.test.tsx",
+      ].some((name) => run.stderr.includes(name)),
       `exit ${run.status}, stderr ${JSON.stringify(run.stderr.slice(0, 300))}`,
     );
   } finally {
@@ -740,17 +907,25 @@ async function selfTest() {
       remainderCeiling: 2,
     }),
     "src/web/packages/editor/src/listed.tsx": "export const listed = 1;",
-    "src/web/packages/editor/src/selected.dom.test.tsx": "export const selected = 1;",
-    "src/web/tests/e2e/driving.spec.ts": 'await page.goto("http://127.0.0.1:4174/");',
-    "src/web/packages/editor/src/unconverted.tsx": 'const s = { color: "#00ff00" };',
-    "src/web/packages/editor/src/fixture-fixture.ts": 'export const f = "#123456";',
+    "src/web/packages/editor/src/selected.dom.test.tsx":
+      "export const selected = 1;",
+    "src/web/tests/e2e/driving.spec.ts":
+      'await page.goto("http://127.0.0.1:4174/");',
+    "src/web/packages/editor/src/unconverted.tsx":
+      'const s = { color: "#00ff00" };',
+    "src/web/packages/editor/src/fixture-fixture.ts":
+      'export const f = "#123456";',
     "src/web/packages/editor/src/thing.test.ts": 'export const t = "#654321";',
     "src/web/packages/fresh-ui/src/chart.ts": 'const s = { color: "#abcdef" };',
     "src/web/packages/player/src/strip.ts": 'const s = { color: "#111111" };',
-    "src/web/packages/renderer-core/src/defaults.ts": 'const s = { color: "#222222" };',
-    "src/web/packages/editor/src/snap-manager/guides.ts": 'const s = { color: "#333333" };',
-    "src/web/packages/editor/src/new-fabric-theme-globals.ts": 'const s = { color: "#444444" };',
-    "src/web/packages/editor/src/editor-shell/qr-symbol.tsx": 'const s = { color: "#555555" };',
+    "src/web/packages/renderer-core/src/defaults.ts":
+      'const s = { color: "#222222" };',
+    "src/web/packages/editor/src/snap-manager/guides.ts":
+      'const s = { color: "#333333" };',
+    "src/web/packages/editor/src/new-fabric-theme-globals.ts":
+      'const s = { color: "#444444" };',
+    "src/web/packages/editor/src/editor-shell/qr-symbol.tsx":
+      'const s = { color: "#555555" };',
   });
   try {
     const atCeiling = runOver(remainderTree);
@@ -758,7 +933,9 @@ async function selfTest() {
       "the remainder counts reachable product source, reports the rest, and stops at its ceiling",
       atCeiling.status === 0 &&
         atCeiling.stdout.includes("the remainder is 2 file(s)") &&
-        atCeiling.stdout.includes("5 file(s) outside the design language's reach") &&
+        atCeiling.stdout.includes(
+          "5 file(s) outside the design language's reach",
+        ) &&
         !atCeiling.stdout.includes("fixture-fixture") &&
         !atCeiling.stdout.includes("thing.test") &&
         !atCeiling.stdout.includes("player/src/strip") &&
@@ -782,8 +959,12 @@ async function selfTest() {
       "a remainder past its ceiling fails and names the reachable file",
       overCeiling.status === 1 &&
         overCeiling.stderr.includes("the remainder grew to 2") &&
-        overCeiling.stderr.includes("unconverted: src/web/packages/editor/src/unconverted.tsx") &&
-        overCeiling.stderr.includes("unconverted: src/web/packages/fresh-ui/src/chart.ts") &&
+        overCeiling.stderr.includes(
+          "unconverted: src/web/packages/editor/src/unconverted.tsx",
+        ) &&
+        overCeiling.stderr.includes(
+          "unconverted: src/web/packages/fresh-ui/src/chart.ts",
+        ) &&
         !overCeiling.stderr.includes("player/src/strip"),
       `exit ${overCeiling.status}, stderr ${JSON.stringify(overCeiling.stderr.slice(-420))}`,
     );
@@ -798,7 +979,8 @@ async function selfTest() {
     const noCeiling = runOver(remainderTree);
     report(
       "a config with no ceiling fails rather than measuring nothing",
-      noCeiling.status === 1 && noCeiling.stderr.includes("needs a \"remainderCeiling\""),
+      noCeiling.status === 1 &&
+        noCeiling.stderr.includes('needs a "remainderCeiling"'),
       `exit ${noCeiling.status}, stderr ${JSON.stringify(noCeiling.stderr.slice(-200))}`,
     );
   } finally {
@@ -886,13 +1068,16 @@ if (isEntryPoint) {
   // `--root` exists for the self-test and a red proof: both run this whole
   // instrument over a tree the repo does not own.
   const root = rootArg === null ? ROOT : resolve(rootArg);
-  const gatedPath = gatedArg === null ? resolve(root, DEFAULT_GATED) : resolve(gatedArg);
+  const gatedPath =
+    gatedArg === null ? resolve(root, DEFAULT_GATED) : resolve(gatedArg);
 
   let config;
   try {
     config = JSON.parse(await readFile(gatedPath, "utf8"));
   } catch (error) {
-    console.error(`design-tokens: cannot read the gated list ${gatedPath} (${error.code ?? error.message})`);
+    console.error(
+      `design-tokens: cannot read the gated list ${gatedPath} (${error.code ?? error.message})`,
+    );
     process.exit(1);
   }
   // A bare array is the gated list alone, which is what the plan's own
@@ -900,16 +1085,25 @@ if (isEntryPoint) {
   const gated = Array.isArray(config) ? config : config.gated;
   const designLanguagePx = config.designLanguagePx ?? [];
   if (!Array.isArray(gated)) {
-    console.error(`design-tokens: ${gatedPath} must hold an array, or an object with a "gated" array`);
+    console.error(
+      `design-tokens: ${gatedPath} must hold an array, or an object with a "gated" array`,
+    );
     process.exit(1);
   }
-  if (!Array.isArray(designLanguagePx) || designLanguagePx.some((value) => !Number.isFinite(value))) {
-    console.error(`design-tokens: ${gatedPath}'s "designLanguagePx" must be an array of numbers`);
+  if (
+    !Array.isArray(designLanguagePx) ||
+    designLanguagePx.some((value) => !Number.isFinite(value))
+  ) {
+    console.error(
+      `design-tokens: ${gatedPath}'s "designLanguagePx" must be an array of numbers`,
+    );
     process.exit(1);
   }
   if (gated.length === 0) {
     // The whole point of the ratchet: a list nobody has added to yet proves nothing.
-    console.error(`design-tokens: the gated list ${gatedPath} is empty; the guard would check nothing`);
+    console.error(
+      `design-tokens: the gated list ${gatedPath} is empty; the guard would check nothing`,
+    );
     process.exit(1);
   }
 
@@ -934,7 +1128,8 @@ if (isEntryPoint) {
   console.log(
     `design-tokens: the test-file rule selected ${derived.length} file(s) — every *.dom.test.tsx under src/web, and every tests/e2e spec that opens the editor preview`,
   );
-  for (const relPath of derived) console.log(`design-tokens: by rule: ${relPath}`);
+  for (const relPath of derived)
+    console.log(`design-tokens: by rule: ${relPath}`);
 
   // Every file the run reads, read once: the gated list and the files the
   // test-file rule selects. The allowlist rule at the end needs the same union,
@@ -961,7 +1156,9 @@ if (isEntryPoint) {
     const relPath = String(entry);
     const source = await sourceOf(relPath);
     if (typeof source !== "string") {
-      console.error(`design-tokens: ${relPath} cannot be read (${source.error.code ?? source.error.message})`);
+      console.error(
+        `design-tokens: ${relPath} cannot be read (${source.error.code ?? source.error.message})`,
+      );
       violations += 1;
       continue;
     }
@@ -973,7 +1170,9 @@ if (isEntryPoint) {
     }
   }
   if (violations > 0) {
-    console.error(`design-tokens: ${violations} violation(s) across ${files.length} gated file(s)`);
+    console.error(
+      `design-tokens: ${violations} violation(s) across ${files.length} gated file(s)`,
+    );
     process.exit(1);
   }
   notices.push(`design-tokens: ${files.length} gated file(s) clean`);
@@ -1024,7 +1223,8 @@ if (isEntryPoint) {
     console.error(
       `design-tokens: the remainder grew to ${remainder.length}, past its ceiling of ${ceiling} — a file written with a literal should have consumed a token instead`,
     );
-    for (const relPath of remainder) console.error(`design-tokens: unconverted: ${relPath}`);
+    for (const relPath of remainder)
+      console.error(`design-tokens: unconverted: ${relPath}`);
     process.exit(1);
   }
   if (remainder.length < ceiling) {

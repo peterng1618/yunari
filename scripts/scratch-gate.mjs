@@ -24,9 +24,9 @@
  * `YUNARI_ALLOW_SCRATCH=1` for the invocation, so using it is visible.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -177,7 +177,8 @@ function shellTargets(command) {
   const flags =
     /(?:--outputFile|--outfile|--out|--log-file|--logFile)[=\s]+("[^"]+"|'[^']+'|\S+)/g;
   for (const match of command.matchAll(flags)) push(match[1]);
-  const tee = /(?:^|[\s;&|])(?:tee|Out-File|Set-Content|Add-Content)\s+(?:-\S+\s+)*("[^"]+"|'[^']+'|\S+)/g;
+  const tee =
+    /(?:^|[\s;&|])(?:tee|Out-File|Set-Content|Add-Content)\s+(?:-\S+\s+)*("[^"]+"|'[^']+'|\S+)/g;
   for (const match of command.matchAll(tee)) push(match[1]);
   return targets;
 }
@@ -240,7 +241,9 @@ function deadWorktrees() {
     git(["worktree", "list", "--porcelain"])
       .split("\n")
       .filter((line) => line.startsWith("worktree "))
-      .map((line) => posix(resolve(line.slice("worktree ".length))).toLowerCase()),
+      .map((line) =>
+        posix(resolve(line.slice("worktree ".length))).toLowerCase(),
+      ),
   );
   return readdirSync(root)
     .filter((name) => statSync(join(root, name)).isDirectory())
@@ -359,7 +362,11 @@ try {
 
   if (process.argv.includes("--sweep")) {
     const { stray, tracked, deadWorktrees } = sweep();
-    if (stray.length === 0 && tracked.length === 0 && deadWorktrees.length === 0) {
+    if (
+      stray.length === 0 &&
+      tracked.length === 0 &&
+      deadWorktrees.length === 0
+    ) {
       console.log(
         "scratch-gate: no ignored residue and no scratch-shaped tracked file",
       );

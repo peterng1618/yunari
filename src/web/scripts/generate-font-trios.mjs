@@ -20,10 +20,7 @@ if (!/^[0-9a-f]{40}$/.test(COMMIT)) {
   throw new Error(`FONTTRIO_COMMIT must be a full sha, got "${COMMIT}".`);
 }
 
-const ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(
   ROOT,
   "packages/host/src/assets/fonts/curated.generated.ts",
@@ -87,7 +84,8 @@ async function jsonAll(urls, limit = 16) {
  */
 function familyIdOf(pairing, role) {
   const value = pairing.cssVars?.theme?.[`--font-${role}`];
-  const match = typeof value === "string" ? /^var\(--font-(.+)\)$/.exec(value) : null;
+  const match =
+    typeof value === "string" ? /^var\(--font-(.+)\)$/.exec(value) : null;
   if (!match) throw new Error(`${pairing.name}: --font-${role} is ${value}`);
   return match[1];
 }

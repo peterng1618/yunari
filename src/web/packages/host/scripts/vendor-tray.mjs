@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFile,
   mkdir,
@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 /**
  * Stages the `systray2` Linux tray binary into `packages/host/vendor/tray` so a
@@ -25,7 +25,8 @@ import { fileURLToPath } from "node:url";
 const VERSION = "2.1.4";
 const URL = `https://registry.npmjs.org/systray2/-/systray2-${VERSION}.tgz`;
 /** Pinned so the staged bytes are reproducible and auditable. */
-const SHA256 = "24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00";
+const SHA256 =
+  "24a176933952c4db79026dcec25c7acf48e5c1cee5d94bc6b87740060bc8ed00";
 
 /** Only these travel; the archive's macOS/Windows binaries are not staged. */
 const BINARY_MEMBER = "package/traybin/tray_linux_release";
@@ -69,14 +70,7 @@ async function main() {
     // argument as a remote host, which fails on `C:\…`.
     await run(
       "tar",
-      [
-        "-xzf",
-        "systray2.tgz",
-        "-C",
-        "extract",
-        BINARY_MEMBER,
-        LICENSE_MEMBER,
-      ],
+      ["-xzf", "systray2.tgz", "-C", "extract", BINARY_MEMBER, LICENSE_MEMBER],
       { cwd: temp },
     );
 
@@ -114,7 +108,9 @@ async function main() {
 
   console.log(`Staged systray2 ${VERSION} into ${target}`);
   console.log(`sha256 ${digest}`);
-  console.log("Release packaging must ship vendor/tray/LICENSE with the binary.");
+  console.log(
+    "Release packaging must ship vendor/tray/LICENSE with the binary.",
+  );
 }
 
 await main();

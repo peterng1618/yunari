@@ -34,8 +34,7 @@ function advisoryOf(via, packageName) {
   if (via !== null && typeof via === "object") {
     const url = typeof via.url === "string" ? via.url : "";
     return (
-      GHSA.exec(url)?.[0] ??
-      (url !== "" ? url : (via.name ?? packageName))
+      GHSA.exec(url)?.[0] ?? (url !== "" ? url : (via.name ?? packageName))
     );
   }
   return packageName;
@@ -187,7 +186,11 @@ function selfTest() {
       "fails a finding no row covers",
       () =>
         evaluateAuditReport(
-          report({ "node-forge": { via: [objectVia("node-forge", "GHSA-aaaa-bbbb-cccc")] } }),
+          report({
+            "node-forge": {
+              via: [objectVia("node-forge", "GHSA-aaaa-bbbb-cccc")],
+            },
+          }),
           [],
         ).ok === false,
     ],
@@ -195,31 +198,34 @@ function selfTest() {
       "passes a covered finding",
       () =>
         evaluateAuditReport(
-          report({ "node-forge": { via: [objectVia("node-forge", "GHSA-aaaa-bbbb-cccc")] } }),
+          report({
+            "node-forge": {
+              via: [objectVia("node-forge", "GHSA-aaaa-bbbb-cccc")],
+            },
+          }),
           [row("node-forge", "GHSA-aaaa-bbbb-cccc")],
         ).ok === true,
     ],
     [
       "fails a stale row",
       () =>
-        evaluateAuditReport(report({}), [row("node-forge", "GHSA-aaaa-bbbb-cccc")])
-          .stale.length === 1,
+        evaluateAuditReport(report({}), [
+          row("node-forge", "GHSA-aaaa-bbbb-cccc"),
+        ]).stale.length === 1,
     ],
     [
       "matches a string via against the named dependency",
       () =>
-        evaluateAuditReport(
-          report({ "@google/design.md": { via: ["zod"] } }),
-          [row("@google/design.md", "zod")],
-        ).ok === true,
+        evaluateAuditReport(report({ "@google/design.md": { via: ["zod"] } }), [
+          row("@google/design.md", "zod"),
+        ]).ok === true,
     ],
     [
       "spends a wildcard row once",
       () =>
-        evaluateAuditReport(
-          report({ pkg: { via: ["dep", "dep"] } }),
-          [row("pkg", "*")],
-        ).unmatched.length === 1,
+        evaluateAuditReport(report({ pkg: { via: ["dep", "dep"] } }), [
+          row("pkg", "*"),
+        ]).unmatched.length === 1,
     ],
     [
       "prefers an exact row before a wildcard",
@@ -270,7 +276,9 @@ function main() {
       ),
     );
     const report = parseReport(
-      reportArg === undefined ? auditJson() : readJson(resolve(reportArg), "audit report"),
+      reportArg === undefined
+        ? auditJson()
+        : readJson(resolve(reportArg), "audit report"),
     );
     const { ok, unmatched, stale } = evaluateAuditReport(report, allowlist);
 
@@ -290,7 +298,9 @@ function main() {
       );
       process.exit(1);
     }
-    process.stdout.write("audit-policy: every finding is allowlisted, no stale rows\n");
+    process.stdout.write(
+      "audit-policy: every finding is allowlisted, no stale rows\n",
+    );
   } catch (error) {
     process.stderr.write(`audit-policy: ${error.message}\n`);
     process.exit(2);
