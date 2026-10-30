@@ -7,17 +7,28 @@ import type {
   PanelGeometry,
   PanelHint,
 } from "./panel-device.js";
-import { decodeStill } from "./panel-image.js";
+import { decodePngRgba } from "./png-raster.js";
 
 /**
- * The NZXT Kraken Z LCD: a **round 320x320 screen that plays content from its
- * own memory**, not a frame stream.
+ * The NZXT Kraken Z LCD: a **round 320x320 screen fed one 32-bit RGBA frame
+ * into a bucket that is not on the glass, then switched to**.
  *
- * **This is the second mechanism the port has to carry, and it is why the port
- * is `present` rather than `push-jpeg`.** The Lian Li panels take one JPEG per
- * frame down a bulk endpoint and show it immediately; a Kraken takes a whole
- * still image once, into one of 16 buckets, and then plays it with the host
- * gone. Two verbs, one interface: what a panel shows, not how it gets there.
+ * **The firmware refuses the bucket it is displaying.** Deleting or starting a
+ * write on the bucket that is currently shown answers status `9`,
+ * `BucketIsBeingDisplayed`, and the transfer that follows stores nothing; every
+ * write still succeeds on the wire. So the driver keeps two buckets and always
+ * writes the one that is not displayed, which is what makes the picture move.
+ *
+ * **Mode `0x03` streaming packets do not paint this firmware.** CAM's own
+ * web-integration stream is a 20-byte header plus a 103,424-byte palette and
+ * index plane, about nine times a second, and CAM's captured packets replayed
+ * by hand are accepted without error and shown nowhere. The bucket ring above
+ * is the transport that works on the attached Z73: 2,316 frames in three
+ * minutes with no failed command, measured at 12.9 FPS.
+ *
+ * **The payload goes out in one bulk write.** The endpoint took all 409,600
+ * bytes in 36 ms; splitting it into liquidctl's 512-byte writes costs 800 USB
+ * round trips for the same bytes.
  *
  * The transport is two interfaces on one device, and neither alone is enough:
  * **control is HID** (interface 1, 64-byte reports) and **data is bulk**
@@ -25,44 +36,55 @@ import { decodeStill } from "./panel-image.js";
  * class driver, so it is opened through `node-hid` rather than claimed through
  * libusb — claiming it fails with "incompatible driver is installed".
  *
+ * **The driver does not rotate the picture.** The mount angle is the display
+ * record's `rotation`, which the player has already applied when the frame is
+ * captured; the `31 01` reply also reports one, and honouring both turned every
+ * frame twice. The record is the owner because a person can see and change it.
+ *
  * **The bytes here were measured, not guessed** against firmware 5.11.0:
- * firmware answers `11 01` with 5.11.0, LCD info answers `31 01` with
- * brightness and orientation, and the 16-bucket table answers `31 04` with a
- * start/size pair each.
+ * firmware answers `11 01` with its version, and LCD info answers `31 01` with
+ * brightness and the mount's quarter turns in byte `0x1A`.
  */
 
 const VENDOR_ID = 0x1e71;
 const PRODUCT_ID = 0x3008;
-/** The LCD is 320x320; liquidctl's table for this PID says the same. */
+/** The LCD is 320x320. */
 const SIZE = 320;
-/** liquidctl's `_LCD_TOTAL_MEMORY`: how many 1024-byte slots the LCD has. */
-const TOTAL_SLOTS = 24_320;
-/** The unit a bucket's start and size are counted in, both on the device. */
-const SLOT_BYTES = 1024;
-const BUCKET_COUNT = 16;
-/** Bulk writes are this size in liquidctl; the endpoint accepts it here. */
-const BULK_CHUNK = 512;
+/** Bulk writes go to endpoint 2 on interface 0. */
+const HID_BULK_ENDPOINT = 0x02;
+const USB_INTERFACE = 0;
 /** The transfer header every upload begins with. */
 const HEADER_MAGIC = [
   0x12, 0xfa, 0x01, 0xe8, 0xab, 0xcd, 0xef, 0x98, 0x76, 0x54, 0x32, 0x10,
 ];
+/** Upload type `0x02`: one still, 32 bits per pixel, alpha ignored. */
+const RGBA_MODE = 0x02;
+/** The unit a bucket's start and size are counted in, both on the device. */
+const SLOT_BYTES = 1024;
+/** The device's bucket table; every index in it can hold one frame. */
+const BUCKET_COUNT = 16;
+/** A frame is one 320x320 RGBA image, and the header counts against the
+ *  bucket's size in the same units. */
+const FRAME_BYTES = SIZE * SIZE * 4;
+const HEADER_BYTES = HEADER_MAGIC.length + 8;
+const BUCKET_SLOTS = Math.ceil((HEADER_BYTES + FRAME_BYTES) / SLOT_BYTES);
+const MAX_READ_ATTEMPTS = 12;
+const READ_TIMEOUT_MS = 300;
+/** CAM streams this panel at nine frames a second. */
+export const KRAKEN_FRAME_INTERVAL_MS = 111;
 
 /**
- * The 20 bytes that precede an upload's pixels: the 12-byte magic, then asset
- * mode `2` and the payload's byte count, each a 32-bit little-endian word.
+ * The header that precedes a frame: the 12-byte magic, the transfer type, and
+ * the payload's byte count as a 32-bit little-endian word.
  */
-function transferHeader(payloadBytes: number): Uint8Array {
-  const header = new Uint8Array(HEADER_MAGIC.length + 8);
+function transferHeader(mode: number, payloadBytes: number): Uint8Array {
+  const header = new Uint8Array(HEADER_BYTES);
   header.set(HEADER_MAGIC);
-  header[12] = 0x02;
+  header[12] = mode;
 
   new DataView(header.buffer).setUint32(16, payloadBytes, true);
   return header;
 }
-const MAX_READ_ATTEMPTS = 12;
-const READ_TIMEOUT_MS = 300;
-const HID_BULK_ENDPOINT = 0x02;
-const USB_INTERFACE = 0;
 
 export interface KrakenHint extends PanelHint {
   readonly model: "kraken-z3";
@@ -117,7 +139,7 @@ class KrakenControl {
     return undefined;
   }
 
-  /** liquidctl's `_write_then_read`: a command whose only reply is its answer. */
+  /** liquidctl's `_write_then_read`: a command whose next report is its answer. */
   ask(bytes: readonly number[]): Uint8Array | undefined {
     this.write(bytes);
     return this.read()?.report;
@@ -130,70 +152,20 @@ class KrakenControl {
   }
 }
 
-interface Bucket {
-  readonly index: number;
-  readonly start: number;
-  readonly size: number;
-}
-
-/** liquidctl's rule: the first bucket with nothing in it, else bucket 0. */
-export function pickBucket(buckets: readonly Bucket[]): Bucket {
-  const free = buckets.find((bucket) => bucket.size === 0);
-  return free ?? buckets[0] ?? { index: 0, start: 0, size: 0 };
-}
-
-/**
- * Where to put `slots` without overwriting another bucket, counted in slots
- * from the device's own table. `-1` means nothing fits and the caller's only
- * option is to clear the memory.
- *
- * liquidctl's four rules, in its order: a deleted bucket keeps its old range
- * for reuse; otherwise append past the highest occupied byte; otherwise use the
- * gap before the lowest; otherwise give up.
- */
-export function memoryOffset(
-  buckets: readonly Bucket[],
-  target: Bucket,
-  slots: number,
-): number {
-  if (slots <= target.size) return target.start;
-
-  let lowest = target.start;
-  let highest = 0;
-  let overlaps = false;
-
-  for (const bucket of buckets) {
-    const end = bucket.start + bucket.size;
-    highest = Math.max(highest, end);
-    lowest = Math.min(lowest, bucket.start);
-
-    if (
-      (bucket.start > target.start && bucket.start < target.start + slots) ||
-      (bucket.start < target.start && end > target.start) ||
-      (bucket.start === target.start && bucket.index !== target.index)
-    ) {
-      overlaps = true;
-    }
-  }
-
-  if (!overlaps) return target.start;
-  // `<`, not `<=`: liquidctl's own guard, and the last slot is not spare.
-  if (highest + slots < TOTAL_SLOTS) return highest;
-  if (slots < lowest) return 0;
-
-  return -1;
-}
-
 class KrakenPanel implements PanelDevice {
   readonly geometry: PanelGeometry = { width: SIZE, height: SIZE };
   /**
-   * A `present` here is a storage write: a header plus ~800 bulk transfers,
-   * each one a flash write. A one-second cadence would rewrite the panel's
-   * memory every second for a picture nobody asked to change that fast, so the
-   * floor is a minute — slow enough to be a still, fast enough that an owner
-   * who edits the theme sees the result without restarting anything.
+   * Nine frames a second is what CAM asks this panel for. The ring itself ran
+   * at 12.9 FPS on this hardware; the runner skips a tick whose capture is
+   * still in flight, so this is a target rather than a promise.
    */
-  readonly minimumIntervalMs = 60_000;
+  readonly frameIntervalMs = KRAKEN_FRAME_INTERVAL_MS;
+  /** The still is decoded here, so the rasteriser can skip a lossy step. */
+  readonly stillFormat = "png";
+  /** Whether the bucket table has been cleared for this driver. */
+  private ready = false;
+  /** The bucket on the glass, or undefined before the first frame. */
+  private shown: number | undefined;
 
   constructor(
     private readonly control: KrakenControl,
@@ -223,78 +195,66 @@ class KrakenPanel implements PanelDevice {
   }
 
   /**
-   * Sends one still to a free bucket and switches to it.
+   * Sends one frame into the bucket that is not on the glass, then shows it.
    *
-   * **The panel keeps showing it after this returns**, which is the whole
-   * difference from a streaming panel: the host may sleep, exit, or lose the
-   * cable's owner, and the picture stays up because the pixels live on the
-   * device.
+   * The first frame also clears the bucket table — whatever CAM or a previous
+   * run left there — because this driver addresses its two buckets at fixed
+   * offsets and another object in that range would be overwritten.
    */
   async present(image: Uint8Array): Promise<void> {
-    const frame = await decodeStill(image, SIZE, SIZE);
-    // The protocol takes 32-bit ARGB with the alpha byte ignored, so the raster
-    // is widened and the channels reordered rather than sent as RGBA.
-    const payload = toArgb(frame.rgba);
+    const rgba = decodePngRgba(image, SIZE, SIZE);
 
-    // One slot is 1024 bytes, and the whole transfer — header included — is
-    // counted in slots. The device's own report is payload only: a bucket
-    // holding one 320x320 still reports size 400, and 409,600 / 1024 = 400.
-    // Counting the header rounds that to 401, which is liquidctl's arithmetic
-    // and errs towards not overlapping the next bucket rather than into it.
-    const header = transferHeader(payload.length);
-    const slots = Math.ceil((header.length + payload.length) / SLOT_BYTES);
+    if (!this.ready) {
+      await this.prepare();
+      this.ready = true;
+    }
 
-    if (slots > TOTAL_SLOTS) {
+    const target = this.shown === 0 ? 1 : 0;
+    await this.writeFrame(target, rgba);
+    this.shown = target;
+  }
+
+  /** Liquefy the glass, then empty every bucket so the ring has its range. */
+  private async prepare(): Promise<void> {
+    this.control.ask([0x36, 0x03]);
+    // Liquid mode first: the firmware refuses to delete the bucket it plays.
+    this.switchBucket(0, 0x02);
+
+    for (let index = 0; index < BUCKET_COUNT; index += 1) {
+      this.deleteBucket(index);
+    }
+  }
+
+  /**
+   * One frame: fresh bucket, header, pixels, end, switch.
+   *
+   * The bucket is deleted and recreated each frame because a bucket that
+   * already holds an image is not overwritten in place — the firmware keeps
+   * the first graphic it stored there.
+   */
+  private async writeFrame(index: number, rgba: Uint8Array): Promise<void> {
+    this.deleteBucket(index);
+    this.createBucket(index);
+
+    this.control.write([0x36, 0x01, index]);
+    const started = this.control.readUntil(0x37, 0x01);
+    if (started?.report[14] !== 0x01) {
+      // Status 9 is the bucket on the glass, 18 a busy device: either way this
+      // frame was not stored, and the table is worth rebuilding next time.
+      this.ready = false;
       throw new Error(
-        `A ${payload.length}-byte frame needs ${slots} of ${TOTAL_SLOTS} slots.`,
+        `The Kraken refused a frame upload (status ${
+          started?.report[14] ?? "none"
+        }).`,
       );
     }
 
-    // End any transfer, then read the table **before** deleting. A deleted
-    // bucket reports start 0, so choosing the offset afterwards puts this
-    // upload at offset 0 and over whatever bucket already lives there.
-    this.control.ask([0x36, 0x03]);
-    const buckets = this.queryBuckets();
-    let target = pickBucket(buckets);
-    let start = memoryOffset(buckets, target, slots);
+    await this.bulk.write(transferHeader(RGBA_MODE, rgba.length));
+    await this.bulk.write(rgba);
 
-    if (start < 0) {
-      // Nothing fits without overlap: liquidctl's last resort, clear and go.
-      this.deleteAllBuckets();
-      target = { index: 0, start: 0, size: 0 };
-      start = 0;
-    }
-
-    this.deleteBucket(target.index);
-    this.setupBucket(target.index, start, slots);
-    this.control.ask([0x36, 0x01, target.index]);
-
-    await this.bulk.write(header);
-
-    for (let offset = 0; offset < payload.length; offset += BULK_CHUNK) {
-      await this.bulk.write(payload.subarray(offset, offset + BULK_CHUNK));
-    }
-
-    this.control.ask([0x36, 0x02]);
-    this.switchBucket(target.index);
-  }
-
-  /** The bucket table, as the device reports it. */
-  queryBuckets(): readonly Bucket[] {
-    const buckets: Bucket[] = [];
-
-    for (let index = 0; index < BUCKET_COUNT; index += 1) {
-      const reply = this.control.ask([0x30, 0x04, index]);
-      if (reply === undefined) continue;
-
-      buckets.push({
-        index,
-        start: (reply[17] ?? 0) | ((reply[18] ?? 0) << 8),
-        size: (reply[19] ?? 0) | ((reply[20] ?? 0) << 8),
-      });
-    }
-
-    return buckets;
+    this.control.write([0x36, 0x02, index]);
+    this.control.readUntil(0x37, 0x02);
+    this.switchBucket(index);
   }
 
   private deleteBucket(index: number): boolean {
@@ -304,33 +264,26 @@ class KrakenPanel implements PanelDevice {
     return this.control.readUntil(0x33, 0x02)?.report[14] === 0x01;
   }
 
-  private deleteAllBuckets(): void {
-    // Liquid mode first: the firmware refuses to delete the bucket it is
-    // currently playing.
-    this.switchBucket(0, 0x02);
-    for (let index = 0; index < BUCKET_COUNT; index += 1) {
-      this.deleteBucket(index);
-    }
-  }
-
-  private setupBucket(index: number, start: number, slots: number): boolean {
-    const reply = this.control.ask([
+  private createBucket(index: number): boolean {
+    const start = index * BUCKET_SLOTS;
+    this.control.write([
       0x32,
       0x01,
       index,
       index + 1,
       start & 0xff,
       (start >>> 8) & 0xff,
-      slots & 0xff,
-      (slots >>> 8) & 0xff,
+      BUCKET_SLOTS & 0xff,
+      (BUCKET_SLOTS >>> 8) & 0xff,
       0x01,
     ]);
 
-    return reply?.[14] === 0x01;
+    return this.control.readUntil(0x33, 0x01)?.report[14] === 0x01;
   }
 
   private switchBucket(index: number, mode = 0x04): void {
-    this.control.ask([0x38, 0x01, mode, index]);
+    this.control.write([0x38, 0x01, mode, index]);
+    this.control.readUntil(0x39, 0x01);
   }
 
   async close(): Promise<void> {
@@ -380,20 +333,6 @@ async function openBulk(): Promise<BulkUploader> {
       }
     },
   };
-}
-
-/** RGBA to the ARGB the firmware reads, alpha left at zero. */
-function toArgb(rgba: Uint8Array): Uint8Array {
-  const argb = new Uint8Array(rgba.length);
-
-  for (let index = 0; index < rgba.length; index += 4) {
-    argb[index] = 0;
-    argb[index + 1] = rgba[index] ?? 0;
-    argb[index + 2] = rgba[index + 1] ?? 0;
-    argb[index + 3] = rgba[index + 2] ?? 0;
-  }
-
-  return argb;
 }
 
 /** One enumerated HID device, in the fields a hint reads. */
@@ -465,19 +404,18 @@ export async function openKraken(label: string): Promise<PanelDevice> {
   return panel;
 }
 
-/** The Kraken Z: HID control, bulk data, and content that outlives the host. */
+/** The Kraken Z: HID control, a two-bucket ring, a picture that follows the host. */
 export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
   {
     id: "kraken-z3",
     label: KRAKEN_LABEL,
     vendorId: VENDOR_ID,
     productId: PRODUCT_ID,
-    stores: true,
     support: {
       maker: "NZXT",
       hardwareRevision: "Z53/Z63/Z73",
       supportedFirmware: [],
-      updatedAt: "2026-10-28",
+      updatedAt: "2026-10-30",
     },
     commands: [],
     attached: () => Promise.resolve(attachedKrakens()),

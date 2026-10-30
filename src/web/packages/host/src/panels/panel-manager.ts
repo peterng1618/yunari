@@ -262,12 +262,12 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       device,
       rasterizer,
       ...(video === undefined ? {} : { video }),
-      // A panel that uploads to its own memory pays an upload per frame, so its
-      // floor wins over the streaming default. The device states the floor
-      // rather than this file guessing at one family's cost.
-      ...(device.minimumIntervalMs === undefined
+      // The device states its own cadence: a storing upload and a nine-frame
+      // stream differ by an order of magnitude, and the driver is the one that
+      // measured it.
+      ...(device.frameIntervalMs === undefined
         ? {}
-        : { intervalMs: device.minimumIntervalMs }),
+        : { intervalMs: device.frameIntervalMs }),
       onError: (message) => report(displayId, message),
       // The device refused three frames in a row: remove this runner and let
       // the retry pass open the panel again. Detaching goes through this

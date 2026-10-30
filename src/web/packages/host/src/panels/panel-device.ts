@@ -86,27 +86,30 @@ export interface PanelDevice {
    * **A JPEG by default, because that is the one encoding every panel family
    * takes.** A device that decodes the still itself states `stillFormat` and
    * receives that encoding instead. A streaming panel sends those bytes down its
-   * wire; a panel with storage decodes them and writes pixels once, then shows
-   * them with no host attached. The caller passes a frame and does not decide
-   * which of those happened.
+   * wire; a panel with storage decodes them and writes one complete frame into
+   * its memory, then shows it with no host attached. The caller passes a frame
+   * and does not decide which of those happened.
    */
   present(still: Uint8Array): Promise<void>;
   /**
    * The still encoding this device consumes, when it is not a JPEG.
    *
-   * The device states it, the way it states `minimumIntervalMs`, because the
+   * The device states it, the way it states `frameIntervalMs`, because the
    * encoding is what its own decoder takes: a panel that decodes the still to
    * raw pixels pays JPEG artifacts for nothing.
    */
   readonly stillFormat?: "jpeg" | "png";
   /**
-   * The floor on how often a frame is worth sending, when the device has one.
+   * How often the runner should ask this device for a frame, when it states a
+   * rate.
    *
-   * A panel whose `present` is a **storage write** pays a multi-hundred-transfer
-   * upload for every frame, so a one-second cadence would rewrite its flash
-   * every second. A streaming panel has no such floor and leaves this absent.
+   * The device owns its cadence rather than this port guessing at one: a panel
+   * that buffers a whole upload may take one frame a second, a streaming panel
+   * may take nine, and a panel that states nothing gets the runner's default.
+   * A tick that finds the previous capture still running is skipped, so this is
+   * a target the pipeline can fall short of, not a promise.
    */
-  readonly minimumIntervalMs?: number;
+  readonly frameIntervalMs?: number;
   /** Present when the device accepts commands beyond the picture. */
   readonly controls?: PanelControls;
   /** Present when the device takes video as well as stills. */
@@ -135,8 +138,6 @@ export interface PanelFamily {
   readonly label: string;
   readonly vendorId: number;
   readonly productId: number;
-  /** True when `present` writes to the device rather than streaming a frame. */
-  readonly stores: boolean;
   readonly support: PanelSupport;
   readonly commands: readonly PanelControlCommand["kind"][];
   /** Panels of this family attached right now, as record hints. */

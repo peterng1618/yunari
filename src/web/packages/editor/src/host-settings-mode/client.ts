@@ -172,6 +172,10 @@ export interface HostSettingsClient {
     id: string,
     next: { readonly shape: DisplayShape; readonly rotation: number },
   ): Promise<{ readonly shape: DisplayShape; readonly rotation: number }>;
+  /** Renames a paired display and answers the name the host stored. The id does
+   *  not move with it: assignments and themes are keyed by the id minted when
+   *  the display was created. */
+  renameDisplay(id: string, label: string): Promise<string>;
   /** The USB panels attached to this PC right now, as the hardware reports
    *  them. A panel is *found* rather than admitted, so this is a list to choose
    *  from and implies no record. */
@@ -740,6 +744,25 @@ export function createHostSettingsClient(options?: {
         readonly rotation?: unknown;
       };
       return readDisplayPresentation(body?.shape, body?.rotation);
+    },
+
+    async renameDisplay(id, label) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ label }),
+        },
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not save the display's name");
+      }
+      const body = (await response.json()) as { readonly label?: unknown };
+      if (typeof body?.label !== "string") {
+        throw new Error("The host did not report the display's name.");
+      }
+      return body.label;
     },
 
     async listPanels() {

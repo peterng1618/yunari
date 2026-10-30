@@ -2,7 +2,7 @@
     A new document picks one; a document with a size the presets cannot name
     keeps it, because the numeric fields are the same fields (the artboard panel). */
 
-export type ArtboardRatioId = "16:9" | "19.5:9" | "4:3";
+export type ArtboardRatioId = "16:9" | "19.5:9" | "4:3" | "circle";
 export type ArtboardResolutionId = "1080p" | "2k" | "4k";
 export type ArtboardOrientation = "landscape" | "portrait";
 
@@ -18,6 +18,9 @@ export const ARTBOARD_RATIOS: ReadonlyArray<{
   { id: "16:9", ratio: 16 / 9 },
   { id: "19.5:9", ratio: 19.5 / 9 },
   { id: "4:3", ratio: 4 / 3 },
+  // A round display's square. The panel shows the disc inscribed in it: the
+  // four edges touch the ring and the corners fall outside the glass.
+  { id: "circle", ratio: 1 },
 ];
 
 /** A resolution names the **short** edge — 19.5:9 at 1080p is 2340 × 1080, not
@@ -102,6 +105,11 @@ const EVERY_PRESET: ReadonlyArray<ArtboardSize & ArtboardPresetChoice> =
         orientation,
       })),
     ),
+  ).filter(
+    // A square is one size whichever orientation asked for it, and
+    // `artboardOrientation` calls it landscape. Keeping the portrait twin would
+    // be a second entry for the same size that matching can never name.
+    (preset) => artboardOrientation(preset) === preset.orientation,
   );
 
 /** The three ids a size came from, or `undefined` when none of them do — a

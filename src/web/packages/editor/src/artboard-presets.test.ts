@@ -6,6 +6,7 @@ import {
   type ArtboardOrientation,
   type ArtboardRatioId,
   type ArtboardResolutionId,
+  artboardOrientation,
   artboardPresetFor,
   artboardSize,
   DEFAULT_ARTBOARD_PRESET,
@@ -26,9 +27,17 @@ const LANDSCAPE: ReadonlyArray<
   ["4:3", "1080p", 1440, 1080],
   ["4:3", "2k", 1920, 1440],
   ["4:3", "4k", 2880, 2160],
+  ["circle", "1080p", 1080, 1080],
+  ["circle", "2k", 1440, 1440],
+  ["circle", "4k", 2160, 2160],
 ];
 
-const RATIO_IDS: ReadonlyArray<ArtboardRatioId> = ["16:9", "19.5:9", "4:3"];
+const RATIO_IDS: ReadonlyArray<ArtboardRatioId> = [
+  "16:9",
+  "19.5:9",
+  "4:3",
+  "circle",
+];
 const RESOLUTION_IDS: ReadonlyArray<ArtboardResolutionId> = [
   "1080p",
   "2k",
@@ -133,7 +142,8 @@ describe("matching a document's size back to its preset", () => {
           expect(artboardPresetFor(size)).toEqual({
             ratio,
             resolution,
-            orientation,
+            // A square is called landscape whichever orientation derived it.
+            orientation: artboardOrientation(size),
           });
         }
       }
@@ -168,13 +178,13 @@ describe("the preset a new document should open on", () => {
   });
 
   it("picks the closest ratio rather than the first one that fits", () => {
-    // 5:4 is nearer 4:3 (1.25) than 16:9 (1.78), and a square is nearer
-    // neither — both are still answered, and neither is the default's ratio.
+    // 5:4 is nearer 4:3 (1.25) than 16:9 (1.78), and a square is exactly the
+    // Circle preset — the round display's own shape.
     expect(nearestArtboardPreset({ width: 1200, height: 960 }).ratio).toBe(
       "4:3",
     );
     expect(nearestArtboardPreset({ width: 1000, height: 1000 }).ratio).toBe(
-      "4:3",
+      "circle",
     );
   });
 
@@ -183,7 +193,7 @@ describe("the preset a new document should open on", () => {
     [{ width: 2000, height: 920 }, "19.5:9", "landscape"],
     [{ width: 960, height: 1280 }, "4:3", "portrait"],
     [{ width: 1024, height: 768 }, "4:3", "landscape"],
-    [{ width: 1000, height: 1000 }, "4:3", "landscape"],
+    [{ width: 1000, height: 1000 }, "circle", "landscape"],
   ])(
     "reads %o as %s %s, landscape ratio or portrait reciprocal",
     (size, ratio, orientation) => {

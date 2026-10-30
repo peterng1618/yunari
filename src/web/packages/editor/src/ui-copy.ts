@@ -438,8 +438,13 @@ export const uiCopy = {
       follows: "Follows this PC",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
-      /** The section that edits the selected display's glass and mounting angle. */
-      presentation: "Screen shape and rotation",
+      /** The section that edits the selected display's name and glass. */
+      presentation: "Display settings",
+      name: "Name",
+      /** Says the rename is the display's, not the theme's: a row and a theme
+       *  can share a word, and only one of them changes here. */
+      nameHint: "The name this display is listed under.",
+      savedName: "Saved the display's name.",
       shape: "Shape",
       shapeRect: "Rect",
       shapeCircle: "Circle",
@@ -1824,6 +1829,12 @@ export const uiCopy = {
    */
   artboardOrientations: { landscape: "Landscape", portrait: "Portrait" },
   artboardResolutions: { "1080p": "1080p", "2k": "2K", "4k": "4K" },
+  artboardRatios: {
+    "16:9": "16:9",
+    "19.5:9": "19.5:9",
+    "4:3": "4:3",
+    circle: "Circle",
+  },
   /**
    * The two boxes a background picture is clipped to, spelled once. This is the
    * layer's own `bounds`; the artboard's content fit is a guarantee of the

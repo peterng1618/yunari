@@ -2,6 +2,7 @@ import type { DisplayShape } from "@yunari/renderer-core";
 import type * as React from "react";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
+import { ControlText } from "../components/ui/control-text.js";
 import type { ThemedDisplay } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { Group } from "./section-group.js";
@@ -25,7 +26,8 @@ function snapQuarterTurn(rotation: number): number {
 }
 
 /**
- * The chosen display's glass and mounting angle, and the write that stores them.
+ * The chosen display's name, glass and mounting angle, and the writes that
+ * store them.
  *
  * **The words speak for the chosen display**, so the controls edit only the
  * record the rows above selected. This PC is the machine rather than a record —
@@ -34,8 +36,10 @@ function snapQuarterTurn(rotation: number): number {
  * a theme key, so there is nothing here to present.
  *
  * The row is replaced from the host's answer, never optimistically: the store
- * decides the pair together, and a snapped angle it refused must not stand on
- * the row as though it had been stored.
+ * decides the shape and angle together, and a snapped angle it refused must not
+ * stand on the row as though it had been stored. A rename answers the stored
+ * name for the same reason, and the id stays where it was: assignments are keyed
+ * by the id minted at creation.
  */
 export function DisplayPresentationSection(props: {
   readonly display: ThemedDisplay | undefined;
@@ -45,6 +49,8 @@ export function DisplayPresentationSection(props: {
     next: DisplayPresentation,
   ) => Promise<DisplayPresentation>;
   readonly onSaved: (id: string, saved: DisplayPresentation) => void;
+  readonly rename: (id: string, label: string) => Promise<string>;
+  readonly onRenamed: (id: string, label: string) => void;
 }): React.JSX.Element {
   const editable =
     props.display !== undefined && props.display.id !== "this-pc"
@@ -72,6 +78,18 @@ export function DisplayPresentationSection(props: {
     });
   };
 
+  const rename = (display: ThemedDisplay, label: string): void => {
+    const next = label.trim();
+    // An empty field is a keystroke, not a name: the store refuses it and the
+    // row would keep the old one, so nothing is sent.
+    if (next === "" || next === display.label) return;
+    props.write(async () => {
+      const saved = await props.rename(display.id, next);
+      props.onRenamed(display.id, saved);
+      return uiCopy.hostSettings.displays.savedName;
+    });
+  };
+
   return (
     <Group
       testId="presentation"
@@ -86,6 +104,15 @@ export function DisplayPresentationSection(props: {
         </p>
       ) : (
         <>
+          <ControlText
+            id="yunari-host-display-name"
+            label={uiCopy.hostSettings.displays.name}
+            hint={uiCopy.hostSettings.displays.nameHint}
+            density="settings"
+            data={{ "data-yunari-host-display-name": "" }}
+            value={editable.label}
+            onCommit={(label) => rename(editable, label)}
+          />
           {/* Inside the body, because the sentence is about controls a display
               without a record does not have. */}
           <p className="text-xs text-muted">

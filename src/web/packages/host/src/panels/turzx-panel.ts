@@ -748,7 +748,6 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
     label: LABEL,
     vendorId: 0x1d6b,
     productId: 0x0106,
-    stores: false,
     commands: ["brightness", "screen", "restart", "status", "hello"],
     support: {
       maker: "TURZX",

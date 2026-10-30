@@ -55,7 +55,7 @@ interface DeviceOptions {
   readonly name?: string;
   readonly events?: string[];
   readonly present?: (frame: Uint8Array) => Promise<void>;
-  readonly minimumIntervalMs?: number;
+  readonly frameIntervalMs?: number;
   readonly video?: PanelDevice["video"];
 }
 
@@ -71,9 +71,9 @@ function deviceOver(options: DeviceOptions = {}): PanelDevice {
     close: vi.fn(async () => {
       events.push(`close:${name}`);
     }),
-    ...(options.minimumIntervalMs === undefined
+    ...(options.frameIntervalMs === undefined
       ? {}
-      : { minimumIntervalMs: options.minimumIntervalMs }),
+      : { frameIntervalMs: options.frameIntervalMs }),
     ...(options.video === undefined ? {} : { video: options.video }),
   };
 }
@@ -84,7 +84,6 @@ function familyOver(open: () => Promise<PanelDevice>): PanelFamily {
     label: "Fake panel",
     vendorId: VENDOR_ID,
     productId: PRODUCT_ID,
-    stores: false,
     support: {
       maker: "Fake",
       hardwareRevision: "1",
@@ -176,7 +175,7 @@ describe("createPanelManager", () => {
         name: "d1",
         events,
         present,
-        minimumIntervalMs: 5,
+        frameIntervalMs: 5,
       });
       return device;
     });
@@ -266,7 +265,7 @@ describe("createPanelManager", () => {
 
     h.family = familyOver(async () =>
       deviceOver({
-        minimumIntervalMs: 5,
+        frameIntervalMs: 5,
         present,
         video: { start, presentOverlay, stop: async () => {} },
       }),
@@ -302,7 +301,7 @@ describe("createPanelManager", () => {
     });
     h.family = familyOver(async () =>
       deviceOver({
-        minimumIntervalMs: 5,
+        frameIntervalMs: 5,
         video: { start, presentOverlay, stop: async () => {} },
       }),
     );
@@ -328,7 +327,7 @@ describe("createPanelManager", () => {
     h.family = familyOver(async () => {
       opens += 1;
       return deviceOver({
-        minimumIntervalMs: 5,
+        frameIntervalMs: 5,
         video: { start, presentOverlay: async () => {}, stop },
       });
     });
@@ -361,7 +360,7 @@ describe("createPanelManager", () => {
     h.family = familyOver(async () => {
       opens += 1;
       return deviceOver({
-        minimumIntervalMs: 5,
+        frameIntervalMs: 5,
         video: { start, presentOverlay: async () => {}, stop: async () => {} },
       });
     });
@@ -597,12 +596,12 @@ describe("createPanelManager", () => {
       opens += 1;
       return opens === 1
         ? deviceOver({
-            minimumIntervalMs: 1,
+            frameIntervalMs: 1,
             present: async () => {
               throw new Error("port gone");
             },
           })
-        : deviceOver({ minimumIntervalMs: 1 });
+        : deviceOver({ frameIntervalMs: 1 });
     });
 
     const manager = managerOver({

@@ -8,16 +8,22 @@ import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 
 /**
- * A decoded still, for a panel that needs pixels rather than a file.
+ * One decoded still, for a panel that needs pixels rather than a file.
  *
  * The streaming panels send a JPEG straight down the wire and never need this.
- * A panel with its own storage takes something else: the Kraken's upload is
- * **raw 32-bit pixels**, and its animation mode is a **GIF file**, so both
- * routes start from a decoded raster.
+ * A panel that composes pixels itself takes something else: the Kraken's
+ * streaming frame is **8-bit palette indices**, and its rotation is host-side,
+ * so both routes start from a decoded raster.
  *
  * **ffmpeg is reused rather than added.** The host already ships it, already
  * verifies its digest before running it (`ffmpeg-hash.mjs`), and already spawns
  * it for theme video; a second decoder would be a second binary to trust.
+ *
+ * **A live frame does not go through ffmpeg.** A spawn plus digest check costs
+ * 220-250 ms for a 320x320 PNG, and ffmpeg emits nothing before its input's EOF
+ * (measured on this build), so a live panel decodes the PNG the rasteriser
+ * already produces in process — `png-raster.ts` owns that, and this module's
+ * ffmpeg path stays for arbitrary stills.
  */
 
 /** The bundled ffmpeg's own version; the hash file is keyed by it. */

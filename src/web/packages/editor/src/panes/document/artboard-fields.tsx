@@ -189,7 +189,10 @@ const CUSTOM: ControlOption = {
 
 function ratioOptions(): readonly ControlOption[] {
   return [
-    ...ARTBOARD_RATIOS.map((entry) => ({ id: entry.id, name: entry.id })),
+    ...ARTBOARD_RATIOS.map((entry) => ({
+      id: entry.id,
+      name: uiCopy.artboardRatios[entry.id],
+    })),
     CUSTOM,
   ];
 }
