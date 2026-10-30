@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * Which curated font trios this author reaches for.
@@ -64,27 +63,17 @@ export function normalizeFontFavorites(input: unknown): readonly string[] {
 export function createFontFavoritesStore(
   directory: string,
 ): FontFavoritesStore {
-  const file = path.join(directory, FILE);
+  const stored = createJsonFile(directory, FILE, {
+    normalize: normalizeFontFavorites,
+    empty: () => [],
+  });
 
   return {
-    async read(): Promise<readonly string[]> {
-      try {
-        return normalizeFontFavorites(JSON.parse(await readFile(file, "utf8")));
-      } catch {
-        // No file, an unreadable one, or one this build cannot parse: no
-        // favourites. Never fail an editor load over a stored preference.
-        return [];
-      }
-    },
+    read: () => stored.read(),
 
-    async write(input: unknown): Promise<readonly string[]> {
+    async write(input) {
       const normalized = normalizeFontFavorites(input);
-      await mkdir(directory, { recursive: true });
-      await writeFile(
-        file,
-        `${JSON.stringify({ favorites: normalized }, null, 2)}\n`,
-        "utf8",
-      );
+      await stored.write({ favorites: normalized });
       return normalized;
     },
   };

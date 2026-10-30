@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * Whether this PC serves the LAN (§145). A fact about this machine, so it sits
@@ -44,24 +43,17 @@ function normalizeHostingSettings(input: unknown): HostingSettings {
 export function createHostingSettingsStore(
   directory: string,
 ): HostingSettingsStore {
-  const file = path.join(directory, FILE);
+  const stored = createJsonFile(directory, FILE, {
+    normalize: normalizeHostingSettings,
+    empty: () => DEFAULT_HOSTING_SETTINGS,
+  });
 
   return {
-    async read() {
-      try {
-        return normalizeHostingSettings(
-          JSON.parse(await readFile(file, "utf8")) as unknown,
-        );
-      } catch {
-        // No file yet, or an unreadable one: loopback only.
-        return DEFAULT_HOSTING_SETTINGS;
-      }
-    },
+    read: () => stored.read(),
 
     async write(input) {
       const settings = normalizeHostingSettings(input);
-      await mkdir(directory, { recursive: true });
-      await writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+      await stored.write(settings);
       return settings;
     },
   };

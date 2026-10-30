@@ -169,6 +169,49 @@ describe("theme answers", () => {
     expect(await readFile(answersFile(dir), "utf8")).toBe(corrupt);
   });
 
+  it("refuses a write over a file it could not read", async () => {
+    const corrupt = "{ not json";
+    await writeFile(answersFile(dir), corrupt, "utf8");
+
+    await expect(
+      store.write("this-pc", "wall", { gpu: "gpu-0" }),
+    ).rejects.toThrow("theme-answers.json could not be read, so it was not");
+
+    expect(await readFile(answersFile(dir), "utf8")).toBe(corrupt);
+  });
+
+  it("keeps both answers when two writes overlap", async () => {
+    // Both are read-modify-write over the whole file; serialised, neither
+    // reads a file the other has not saved yet.
+    await Promise.all([
+      store.write("this-pc", "wall", { gpu: "gpu-0" }),
+      store.write("this-pc", "office", { gpu: "gpu-1" }),
+    ]);
+
+    expect(await store.read("this-pc", "wall")).toEqual({ gpu: "gpu-0" });
+    expect(await store.read("this-pc", "office")).toEqual({ gpu: "gpu-1" });
+  });
+
+  it("does not treat an inherited property name as a stored theme", async () => {
+    const stored = JSON.stringify({ "this-pc": { wall: { gpu: "gpu-0" } } });
+    await writeFile(answersFile(dir), stored, "utf8");
+
+    // `constructor`, `toString` and `__proto__` match THEME_ID, so `in` would
+    // find them on every level and rewrite the file to remove nothing.
+    await store.removeTheme("constructor");
+    await store.removeDisplay("constructor");
+
+    expect(await readFile(answersFile(dir), "utf8")).toBe(stored);
+  });
+
+  it("stores a theme whose id is __proto__", async () => {
+    await store.write("this-pc", "__proto__", { gpu: "gpu-0" });
+
+    expect(await store.read("this-pc", "__proto__")).toEqual({
+      gpu: "gpu-0",
+    });
+  });
+
   it("leaves the file alone when there is nothing to remove", async () => {
     const stored = JSON.stringify({ "this-pc": { wall: { gpu: "gpu-0" } } });
     await writeFile(answersFile(dir), stored, "utf8");

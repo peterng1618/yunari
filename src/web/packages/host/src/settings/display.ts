@@ -1,5 +1,3 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import {
   isMeasurementSystem,
   isTimeZoneName,
@@ -7,6 +5,7 @@ import {
   normalizeUnitPreferences,
   type UnitPreferences,
 } from "@yunari/renderer-core";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * How this PC's readings are displayed, where the choice is the consumer's
@@ -104,25 +103,17 @@ export function normalizeDisplaySettings(input: unknown): DisplaySettings {
 export function createDisplaySettingsStore(
   directory: string,
 ): DisplaySettingsStore {
-  const file = path.join(directory, FILE);
+  const stored = createJsonFile(directory, FILE, {
+    normalize: normalizeDisplaySettings,
+    empty: () => EMPTY_DISPLAY_SETTINGS,
+  });
 
   return {
-    async read(): Promise<DisplaySettings> {
-      try {
-        return normalizeDisplaySettings(
-          JSON.parse(await readFile(file, "utf8")),
-        );
-      } catch {
-        // No file, an unreadable one, or a zone this runtime has since dropped:
-        // this PC's own zone. Never fail a poll over a stored setting.
-        return EMPTY_DISPLAY_SETTINGS;
-      }
-    },
+    read: () => stored.read(),
 
-    async write(input: unknown): Promise<DisplaySettings> {
+    async write(input) {
       const normalized = normalizeDisplaySettings(input);
-      await mkdir(directory, { recursive: true });
-      await writeFile(file, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+      await stored.write(normalized);
       return normalized;
     },
   };
