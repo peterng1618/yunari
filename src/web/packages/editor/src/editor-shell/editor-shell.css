@@ -522,10 +522,10 @@ body,
   --header-height: 42px;
   --menu-min-width: 190px;
   --asset-preview-max-height: 120px;
-  /* The finder's window (R1): a centred 1180 x 800 box over the whole
+  /* The finder's window (R1): a centred 1416 x 880 box over the whole
      viewport, and the width below which it becomes the whole window. */
-  --finder-width: 1180px;
-  --finder-height: 800px;
+  --finder-width: 1416px;
+  --finder-height: 880px;
   --finder-compact-width: 720px;
   --finder-footer-height: 52px;
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
@@ -1776,10 +1776,12 @@ body,
   }
 }
 
-/* The finder's way out is a mark in its own corner, the way a window's is: the
-   window has no title bar and no footer to hold a word, and the tabs, the search
-   and the grid use every other edge. */
-.editor-shell-dialog--finder .editor-shell-dialog-close {
+/* A window's way out is a mark in its own corner. The finder has no title bar
+   or footer to hold a word — the tabs, the search and the grid use every other
+   edge — and the video trim surface spends its header on the file name and its
+   foot on the two answers, so both take the corner. */
+.editor-shell-dialog--finder .editor-shell-dialog-close,
+.editor-shell-dialog--video-trim .editor-shell-dialog-close {
   position: absolute;
   top: var(--space-8);
   right: var(--space-8);

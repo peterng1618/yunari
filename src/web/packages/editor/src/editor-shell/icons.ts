@@ -1,3 +1,4 @@
+import type { ListingCategory } from "@yunari/renderer-core";
 import {
   Activity,
   ChartColumn,
@@ -54,6 +55,7 @@ import {
   Type,
   Unlock,
   Upload,
+  Video,
   Wallpaper,
   X,
 } from "lucide-react";
@@ -324,6 +326,19 @@ export const KIND_GLYPHS = {
   image: ImageIcon,
   background: BACKGROUND_GLYPH,
 } satisfies Readonly<Record<LayerKind, LucideIcon>>;
+
+/** The asset finder's six tabs, one glyph per category. The tab is a place,
+ *  not a layer: `Type` for fonts, `Shapes` for icons, the picture and film for
+ *  media, `Palette` for presets, and `Wallpaper` for this PC's own library. */
+export const FINDER_TAB_GLYPHS: Readonly<Record<ListingCategory, LucideIcon>> =
+  {
+    font: Type,
+    icon: Shapes,
+    image: ImageIcon,
+    video: Video,
+    colour: Palette,
+    local: Wallpaper,
+  };
 
 /** The tree's open/closed chevrons. Each points the way the press goes, and the
  *  state itself stays on `aria-expanded`. */

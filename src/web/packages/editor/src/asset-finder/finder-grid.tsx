@@ -134,13 +134,15 @@ export function FinderGrid(props: {
     setFocusAt(next);
   };
 
+  // The right pad is the gap between the last column and the scrollbar: the
+  // cards must not sit against the thumb.
   return (
     <div
       ref={scroller}
       role="listbox"
       aria-label={props.label}
       data-yunari-finder-grid=""
-      className="min-h-0 flex-1 overflow-y-auto"
+      className="min-h-0 flex-1 overflow-y-auto pr-[var(--space-8)]"
     >
       <div
         ref={grid}

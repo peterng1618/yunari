@@ -357,6 +357,17 @@ describe("AssetFinder tabs", () => {
     expect(tab("local").textContent).toContain(uiCopy.assets.category.local);
   });
 
+  it("draws each tab's own glyph", async () => {
+    await render([lucide, curatedFonts, wallpaperEngine]);
+    await settle();
+
+    for (const element of document.querySelectorAll(
+      "[data-yunari-asset-tab]",
+    )) {
+      expect(element.querySelector("svg")).not.toBeNull();
+    }
+  });
+
   it("opens on the category a caller asked for", async () => {
     // The font field's button opens the finder on Fonts, so the modal honours
     // `initialCategory` over the listing's own first entry.
@@ -875,6 +886,72 @@ describe("AssetFinder's Colours tab", () => {
     // The sentence answered the palette just added; a new question has not
     // been answered yet, so it cannot sit beside its count.
     expect(document.querySelector("[data-yunari-asset-message]")).toBeNull();
+  });
+
+  it("leaves the last answer behind when it closes", async () => {
+    const palette: AssetResult = {
+      ...result("colorhunt:abc"),
+      kind: "palette",
+      licence: "unknown",
+      preset: {
+        kind: "palette",
+        colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
+      },
+    };
+    searchAssets.mockResolvedValue({ pages: [page("colorhunt", [palette])] });
+    const onAction = vi.fn(
+      async () => ({ ok: true, message: "Added 2 colors" }) as const,
+    );
+
+    await render([colorhunt], { onAction });
+    await settle();
+
+    act(() => card("colorhunt:abc").click());
+    act(() => footerAction().click());
+    await settle();
+    expect(
+      document.querySelector("[data-yunari-asset-message]")?.textContent,
+    ).toBe("Added 2 colors");
+
+    await rerender({ open: false });
+    await rerender({ open: true });
+    await settle();
+
+    // A reopen is a new visit: the sentence belongs to the visit that ran it.
+    expect(document.querySelector("[data-yunari-asset-message]")).toBeNull();
+  });
+
+  it("opens a palette in the same preview an image gets", async () => {
+    const palette: AssetResult = {
+      ...result("colorhunt:abc"),
+      kind: "palette",
+      preset: {
+        kind: "palette",
+        colours: ["rgb(17, 34, 51)", "rgb(68, 85, 102)"],
+      },
+    };
+    searchAssets.mockResolvedValue({ pages: [page("colorhunt", [palette])] });
+    await render([colorhunt]);
+    await settle();
+
+    act(() => card("colorhunt:abc").click());
+    await settle();
+    act(() => {
+      document
+        .querySelector<HTMLElement>("[data-yunari-asset-preview-open]")
+        ?.click();
+    });
+    await settle();
+
+    const modal = document.querySelector("[data-yunari-asset-preview-modal]");
+    expect(
+      modal?.querySelector("[data-yunari-asset-preview-content]"),
+    ).not.toBeNull();
+    expect(
+      modal?.querySelectorAll(
+        "[data-yunari-asset-preview-content] [data-yunari-swatch]",
+      ),
+    ).toHaveLength(2);
   });
 
   it("returns the kind filter to all when the tab changes", async () => {

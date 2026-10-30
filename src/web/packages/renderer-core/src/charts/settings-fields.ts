@@ -17,9 +17,9 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  * Scalar settings only: numbers, booleans and enumerations. **Paint is not
  * here.** `track`, `progress`, `stroke`, `fill`, `area`, `remainderFill` and
  * the two `palette` arrays are all `Fill` — `solid | thresholds | gradient` —
- * and colour belongs at the theme level. Persisted chart paint now
+ * and color belongs at the theme level. Persisted chart paint now
  * references palette tokens; its control still needs to author those references
- * and threshold-band offsets without writing literal colours onto a chart.
+ * and threshold-band offsets without writing literal colors onto a chart.
  *
  * ## Grouping and hints
  *
@@ -337,13 +337,13 @@ export const CHART_SETTINGS_FIELDS: Readonly<
 > = {
   gauge: [
     // §85's gauge-arc approximation: angles are degrees, 0 at the right of
-    // centre, 90 straight up.
+    // center, 90 straight up.
     {
       property: "startAngle",
       label: "Start angle",
       kind: "number",
       section: "content",
-      hint: "Where the drawn arc begins, in degrees — 0 points right of centre and 90 straight up.",
+      hint: "Where the drawn arc begins, in degrees — 0 points right of center and 90 straight up.",
       min: -360,
       max: 360,
     },
@@ -458,7 +458,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "select",
       section: "content",
       optional: true,
-      hint: "Draws the stroke broken rather than solid, so two series that share a colour are still told apart.",
+      hint: "Draws the stroke broken rather than solid, so two series that share a color are still told apart.",
       options: DASH,
     },
     {
@@ -661,7 +661,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       advanced: true,
-      hint: "Where the first slice begins, in degrees — 0 points right of centre and 90 straight up.",
+      hint: "Where the first slice begins, in degrees — 0 points right of center and 90 straight up.",
       min: -360,
       max: 360,
     },
@@ -748,14 +748,14 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Minimum",
       kind: "number",
       section: "content",
-      hint: "The value the centre stands for; a lower reading draws at the centre.",
+      hint: "The value the center stands for; a lower reading draws at the center.",
     },
     {
       property: "max",
       label: "Maximum",
       kind: "number",
       section: "content",
-      hint: "The value the outer edge stands for, shared by every spoke. Readings in different units must be normalised through the series.",
+      hint: "The value the outer edge stands for, shared by every spoke. Readings in different units must be normalized through the series.",
     },
     {
       property: "shape",
@@ -771,7 +771,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       kind: "number",
       section: "content",
       advanced: true,
-      hint: "How many rings divide the scale from the centre to the edge.",
+      hint: "How many rings divide the scale from the center to the edge.",
       min: 1,
       max: 10,
     },
@@ -825,7 +825,7 @@ export const CHART_SETTINGS_FIELDS: Readonly<
       label: "Inner radius %",
       kind: "number",
       section: "content",
-      hint: "How far from the centre the bars begin; anything above zero leaves a hole.",
+      hint: "How far from the center the bars begin; anything above zero leaves a hole.",
       min: 0,
       max: 100,
     },
@@ -932,13 +932,13 @@ export const CHART_PAINT_FIELDS: Readonly<
       property: "stroke",
       label: "Stroke paint",
       section: "paint",
-      hint: "The line's own colour, and the fallback for a series the palette does not cover.",
+      hint: "The line's own color, and the fallback for a series the palette does not cover.",
     },
     {
       property: "palette",
       label: "Series paint",
       section: "paint",
-      hint: "One colour per series, cycled when there are more series than entries.",
+      hint: "One color per series, cycled when there are more series than entries.",
       multiple: true,
     },
     {
@@ -973,7 +973,7 @@ export const CHART_PAINT_FIELDS: Readonly<
       property: "palette",
       label: "Slice paint",
       section: "paint",
-      hint: "One colour per slice, cycled when there are more slices than entries.",
+      hint: "One color per slice, cycled when there are more slices than entries.",
       multiple: true,
     },
   ],
@@ -982,7 +982,7 @@ export const CHART_PAINT_FIELDS: Readonly<
       property: "stroke",
       label: "Outline paint",
       section: "paint",
-      hint: "The polygon's outline. One polygon cannot carry a colour per spoke, so a threshold takes its top band.",
+      hint: "The polygon's outline. One polygon cannot carry a color per spoke, so a threshold takes its top band.",
     },
     {
       property: "area",

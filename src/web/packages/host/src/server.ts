@@ -2927,11 +2927,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // holds and only this PC may change it.
     if (url.pathname === "/api/font-favorites") {
       if (fontFavorites === undefined) {
-        sendText(
-          response,
-          404,
-          "Font favourites are not enabled on this host.",
-        );
+        sendText(response, 404, "Font favorites are not enabled on this host.");
         return;
       }
 
@@ -2953,7 +2949,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
           sendText(
             response,
             403,
-            "Font favourites are available on this PC only.",
+            "Font favorites are available on this PC only.",
           );
           return;
         }
@@ -2967,7 +2963,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         } catch (error: unknown) {
           if (isPlatformError(error)) {
             console.error(error);
-            sendText(response, 400, "The font favourites could not be saved.");
+            sendText(response, 400, "The font favorites could not be saved.");
             return;
           }
           sendText(

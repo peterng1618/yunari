@@ -19,6 +19,9 @@ export interface FinderPreview {
   readonly sourceUrl: string;
   readonly imageUrl: string | undefined;
   readonly posterOnly: boolean;
+  /** A drawn preview for a result with no picture URL — a palette's bars or a
+   *  gradient. One owner for that shape, shared with the card. */
+  readonly content?: React.ReactNode;
 }
 
 export function FinderPreviewModal(props: {
@@ -54,6 +57,14 @@ export function FinderPreviewModal(props: {
             data-yunari-asset-preview-stage=""
             className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-[var(--space-12)] p-[var(--space-20)] [background:var(--asset-preview-stage)]"
           >
+            {preview.content === undefined ? null : (
+              <div
+                data-yunari-asset-preview-content=""
+                className="flex h-2/3 w-2/3 overflow-hidden rounded-[var(--radius-md)] border border-edge"
+              >
+                {preview.content}
+              </div>
+            )}
             {preview.imageUrl === undefined ? null : (
               <img
                 data-yunari-asset-preview-image=""

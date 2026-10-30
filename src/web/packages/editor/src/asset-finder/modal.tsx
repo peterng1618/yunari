@@ -10,7 +10,11 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { Dialog } from "../components/ui/dialog.js";
-import { Glyph, PREVIEW_GLYPH } from "../editor-shell/icons.js";
+import {
+  FINDER_TAB_GLYPHS,
+  Glyph,
+  PREVIEW_GLYPH,
+} from "../editor-shell/icons.js";
 import { VideoTrimModal } from "../panes/assets/video-trim-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import {
@@ -21,7 +25,12 @@ import {
 } from "../wallpaper-engine/client.js";
 import { type AssetPlacement } from "./actions.js";
 import { type ClientOptions, listSources, searchAssets } from "./client.js";
-import { cardModelOf, type FinderCardModel } from "./finder-card.js";
+import {
+  cardModelOf,
+  type FinderCardModel,
+  PresetPreview,
+  previewableOf,
+} from "./finder-card.js";
 import {
   ConnectionsButton,
   type FinderAction,
@@ -284,6 +293,27 @@ export function AssetFinder({
    *  "set background" opens the trim surface before the host normalizer runs. */
   const [trimming, setTrimming] = useState<WallpaperEngineItem | undefined>();
   const tickets = useRef(new Map<ListingCategory, number>());
+
+  // A closed finder is not a status surface: the sentence a write left belongs
+  // to the session that ran it, so reopening starts without one.
+  useEffect(() => {
+    if (open) return;
+    setViews((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const category of CATEGORY_ORDER) {
+        if (current[category].message === undefined) continue;
+        next[category] = { ...current[category], message: undefined };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+    setLocal((current) =>
+      current.message === undefined
+        ? current
+        : { ...current, message: undefined },
+    );
+  }, [open]);
 
   /** A category exists when the registry lists one, or when the session offers
    *  the writes a pane needs. */
@@ -822,7 +852,9 @@ export function AssetFinder({
    *  face keeps its single-press selection and no Preview button. */
   const previewableSelection = isLocal
     ? local.selection !== undefined
-    : active !== "font" && view.selection?.result.kind === "image";
+    : active !== "font" &&
+      view.selection !== undefined &&
+      previewableOf(view.selection.result);
 
   const openSelectionPreview = (): void => {
     if (isLocal) {
@@ -832,7 +864,7 @@ export function AssetFinder({
       return;
     }
     const row = view.selection;
-    if (row !== undefined && row.result.kind === "image") {
+    if (row !== undefined && previewableOf(row.result)) {
       setPreviewing({ kind: "asset", row });
     }
   };
@@ -859,6 +891,9 @@ export function AssetFinder({
       sourceUrl: result.sourceUrl,
       imageUrl: result.preview === "" ? undefined : result.preview,
       posterOnly: result.kind === "video",
+      ...(result.preset === undefined
+        ? {}
+        : { content: <PresetPreview preset={result.preset} /> }),
     };
   };
 
@@ -989,6 +1024,7 @@ export function AssetFinder({
         tabs={categories.map((category) => ({
           id: category,
           label: uiCopy.assets.category[category],
+          icon: <Glyph icon={FINDER_TAB_GLYPHS[category]} size={13} />,
         }))}
         active={active}
         onTabChange={(category) => {
@@ -1316,7 +1352,7 @@ export function AssetFinder({
                     // Double-click enlarges a picture; every other kind has no
                     // larger form and keeps its single-press selection.
                     const row = rowOfCard(card);
-                    if (row !== undefined && row.result.kind === "image") {
+                    if (row !== undefined && previewableOf(row.result)) {
                       setPreviewing({ kind: "asset", row });
                     }
                   }}

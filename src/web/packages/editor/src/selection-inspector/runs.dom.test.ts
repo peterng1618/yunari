@@ -273,7 +273,7 @@ describe("binding a text run to a sensor", () => {
   it("writes alignment and overflow into the object's authored text", async () => {
     const box = mountRunEditor({ runs: literalClock });
 
-    await segment(box.host, "data-yunari-text-align", "Centre");
+    await segment(box.host, "data-yunari-text-align", "Center");
     await segment(box.host, "data-yunari-text-overflow", "Ellipsis");
 
     // These are the object's layout, which the renderer already honours; they

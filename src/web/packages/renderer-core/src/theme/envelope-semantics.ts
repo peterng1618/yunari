@@ -674,7 +674,7 @@ function validateFontAsset(
       issues.add(
         "wrong-type",
         `${path}/license`,
-        "A font asset licence must be an object.",
+        "A font asset license must be an object.",
       );
     } else {
       if (
@@ -685,7 +685,7 @@ function validateFontAsset(
         issues.add(
           "missing-field",
           `${path}/license/name`,
-          "A font asset licence name must be a non-empty string.",
+          "A font asset license name must be a non-empty string.",
         );
       }
       if (
@@ -695,7 +695,7 @@ function validateFontAsset(
         issues.add(
           "wrong-type",
           `${path}/license/url`,
-          "A font asset licence URL must be HTTPS.",
+          "A font asset license URL must be HTTPS.",
         );
       }
     }

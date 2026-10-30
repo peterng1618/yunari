@@ -158,7 +158,7 @@ describe("applyPreset", () => {
 
     const outcome = applyPreset(palette, library);
 
-    expect(outcome).toEqual({ ok: true, message: "Added 2 colours" });
+    expect(outcome).toEqual({ ok: true, message: "Added 2 colors" });
     expect(library.getSnapshot().colours.at(-2)?.name).toBe("Cloud Dancer 1");
     expect(library.getSnapshot().colours.at(-1)?.name).toBe("Cloud Dancer 2");
   });
@@ -177,7 +177,7 @@ describe("applyPreset", () => {
 
     expect(applyPreset(four, library)).toEqual({
       ok: true,
-      message: "Added 4 colours",
+      message: "Added 4 colors",
     });
     expect(library.getSnapshot().colours.slice(before)).toEqual([
       { id: expect.any(String), name: "Cloud Dancer 1", value: "#112233" },
@@ -240,7 +240,7 @@ describe("applyPreset", () => {
 
     expect(applyPreset(palette, library)).toEqual({
       ok: true,
-      message: "Added 1 colour",
+      message: "Added 1 color",
     });
     expect(library.getSnapshot().colours.length).toBe(before + 1);
   });
