@@ -3022,7 +3022,6 @@ export function createHostServer(options: HostServerOptions): HostServer {
         id: live?.id ?? null,
         revision: published.revision(),
         display: {
-          id: display,
           theme,
           shape: presentation.shape,
           rotation: presentation.rotation,
@@ -3781,7 +3780,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // hosting, not about credentials.
         sendJson(response, 200, {
           ...(await binding.state()),
-          sessions: ((await displays?.list()) ?? []).map(peerOf),
+          displays: ((await displays?.list()) ?? []).map(peerOf),
         });
         return;
       }
@@ -3798,7 +3797,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       sendJson(response, 200, {
         ...((await binding?.state()) ?? NO_HOSTING),
-        sessions: ((await displays?.list()) ?? []).map(peerOf),
+        displays: ((await displays?.list()) ?? []).map(peerOf),
       });
       return;
     }

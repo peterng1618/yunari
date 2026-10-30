@@ -6123,7 +6123,6 @@ describe("A local monitor is specified rather than paired", () => {
       );
       expect(poll.status).toBe(200);
       expect((poll.json() as { display: unknown }).display).toEqual({
-        id: "left-screen",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -9606,7 +9605,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: 5227,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
 
     // A `DisplayRecord` carries `tokenHash`, so a route that forwards `list()`
@@ -9617,8 +9616,8 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     await displays.create("Kitchen phone", token);
     const withOne = await request(hosted.server, "GET", "/api/hosting");
     const peers = (
-      withOne.json() as { sessions: readonly Record<string, unknown>[] }
-    ).sessions;
+      withOne.json() as { displays: readonly Record<string, unknown>[] }
+    ).displays;
     expect(peers).toHaveLength(1);
     expect(peers[0]).not.toHaveProperty("tokenHash");
     expect(JSON.stringify(peers)).not.toContain(hashToken(token));
@@ -9655,7 +9654,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: null,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
   });
 
@@ -9700,7 +9699,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: 5227,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
 
     // And the move does happen, once that answer has finished.
@@ -10022,7 +10021,6 @@ describe("The published endpoint", () => {
         id: null,
         revision: 0,
         display: {
-          id: LOCAL_DISPLAY_ID,
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -10124,7 +10122,6 @@ describe("The published endpoint", () => {
       );
       expect(own.status).toBe(200);
       expect((own.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,
@@ -10146,7 +10143,6 @@ describe("The published endpoint", () => {
         },
       );
       expect((fallback.json() as { display: unknown }).display).toEqual({
-        id: "hallway-phone",
         theme: "living-room",
         shape: "rect",
         rotation: 0,
@@ -10193,7 +10189,6 @@ describe("The published endpoint", () => {
       );
       expect(linked.status).toBe(200);
       expect((linked.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -10212,7 +10207,6 @@ describe("The published endpoint", () => {
         },
       );
       expect((assigned.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,
@@ -10258,7 +10252,6 @@ describe("The published endpoint", () => {
       );
       expect(answer.status).toBe(200);
       expect((answer.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,

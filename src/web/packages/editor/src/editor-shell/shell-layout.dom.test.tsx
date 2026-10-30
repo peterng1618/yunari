@@ -412,7 +412,7 @@ it("opens the publish surface from the shell's own door, and moves no host state
           address: "192.168.1.42",
           port: 5227,
           refusal: null,
-          sessions: [],
+          displays: [],
         }),
         { status: 200 },
       );
@@ -1579,7 +1579,7 @@ it("moves the shell only when the open's replacement is accepted", async () => {
           address: null,
           port: null,
           refusal: null,
-          sessions: [],
+          displays: [],
         }),
         { status: 200 },
       );

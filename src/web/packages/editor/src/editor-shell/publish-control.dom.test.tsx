@@ -116,7 +116,7 @@ function hostServing(options: {
           name: named,
           port: lan ? at : null,
           refusal,
-          sessions: [],
+          displays: [],
         }),
         { status: 200 },
       );

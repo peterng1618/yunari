@@ -17,7 +17,7 @@ describe("readHosting", () => {
         lan: true,
         address: "192.168.1.42",
         port: 5227,
-        sessions: [],
+        displays: [],
       }),
     );
     expect(read).toEqual({
@@ -36,7 +36,7 @@ describe("readHosting", () => {
         address: "192.168.1.42",
         name: "study-pc.local",
         port: 5227,
-        sessions: [],
+        displays: [],
       }),
     );
     expect(read?.name).toBe("study-pc.local");
@@ -52,7 +52,7 @@ describe("readHosting", () => {
         address: null,
         port: 5227,
         refusal: "Port 5227 is not free on 0.0.0.0: EADDRINUSE",
-        sessions: [],
+        displays: [],
       }),
     );
     expect(read?.refusal).toBe("Port 5227 is not free on 0.0.0.0: EADDRINUSE");
