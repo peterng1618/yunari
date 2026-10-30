@@ -1,4 +1,4 @@
-# 0009 — Recover the Kraken ring when a bucket command is refused
+# 0013 — Recover the Kraken ring when a bucket command is refused
 
 - **Date:** 2026-10-30
 - **Status:** accepted

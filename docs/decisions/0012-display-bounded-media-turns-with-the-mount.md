@@ -1,4 +1,4 @@
-# 0008 — A display-bounded media layer turns with the mount angle
+# 0012 — A display-bounded media layer turns with the mount angle
 
 - **Date:** 2026-10-30
 - **Status:** accepted
