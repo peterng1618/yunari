@@ -4960,6 +4960,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
             console.error(error);
           }
 
+          // A removed theme's per-display answers are answers about a document
+          // nobody can open again. Like the origin, their failure cannot undo
+          // the removal: the folder is already in the trash, so it is logged
+          // and the removal stands.
+          try {
+            await themeSettings?.removeTheme(rawId);
+          } catch (error) {
+            console.error(error);
+          }
+
           // A display must not be told to reload a document that no longer
           // exists. Clearing moves the revision, so a page showing it falls
           // back to its assignment.
@@ -5218,6 +5228,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
     request.on("close", drop);
     request.on("error", drop);
+    // A display that goes away mid-frame surfaces the reset on the response,
+    // not only the request: a write into a socket the client closed raises
+    // here, and an unhandled `error` would take the host down with it.
+    response.on("error", drop);
   }
 
   /**

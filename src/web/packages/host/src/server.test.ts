@@ -1073,22 +1073,25 @@ describe("Host theme routes", () => {
       hosted.server,
       "PUT",
       "/api/themes/living-room",
-      themeBody({
-        envelope: {
-          ...document,
-          assets: Array.from({ length: 129 }, (_unused, index) => ({
-            id: `asset-${index}`,
-            kind: "image",
-            path: `assets/a${index}.png`,
-          })),
+      themeBody(
+        {
+          envelope: {
+            ...document,
+            assets: Array.from({ length: 129 }, (_unused, index) => ({
+              id: `asset-${index}`,
+              kind: "image",
+              path: `assets/a${index}.png`,
+            })),
+          },
+          assets: Object.fromEntries(
+            Array.from({ length: 129 }, (_unused, index) => [
+              `assets/a${index}.png`,
+              new Uint8Array(1),
+            ]),
+          ),
         },
-        assets: Object.fromEntries(
-          Array.from({ length: 129 }, (_unused, index) => [
-            `assets/a${index}.png`,
-            new Uint8Array(1),
-          ]),
-        ),
-      }),
+        { overwrite: true },
+      ),
     );
     expect(tooMany.status).toBe(413);
     expect(tooMany.text()).toContain("at most 128");
@@ -9386,6 +9389,39 @@ describe("An admin write keeps the platform's words off the wire", () => {
     }
   });
 
+  it("forgets a removed theme's answers, and reports the removal when they cannot be", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: () => Promise.resolve(true),
+      },
+      themeSettings: {
+        ...createThemeSettingsStore(os.tmpdir()),
+        removeTheme: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      // The answers belong to a document nobody can open again. As with the
+      // origin sweep, the folder is already in the trash, so a failed cleanup
+      // is logged and the removal stands.
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({ ok: true });
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
   it("answers a fixed sentence when the trash refuses with a path-bearing message", async () => {
     const logged = vi
       .spyOn(console, "error")
@@ -10038,7 +10074,9 @@ describe("The published endpoint", () => {
         hosted.server,
         "PUT",
         "/api/themes/living-room",
-        themeBody(createValidPackage("living-room", "Renamed")),
+        themeBody(createValidPackage("living-room", "Renamed"), {
+          overwrite: true,
+        }),
       );
       const second = await publishedOf();
       expect(second.id).toBe("living-room");

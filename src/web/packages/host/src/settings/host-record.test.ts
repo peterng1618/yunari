@@ -88,6 +88,18 @@ describe("readOrMintHostRecord", () => {
     expect(record).toEqual({ id: "a1b2c3d4e5f60718", name: "study-pc" });
   });
 
+  it("names a host whose hostname is blank with a prefix of its id", async () => {
+    const first = await readOrMintHostRecord(dir, { hostname: () => "   " });
+
+    // A blank name would leave a record every later run rewrites; the id is
+    // already stored, so its prefix is the one stable name left.
+    expect(first.name).toBe(first.id.slice(0, 8));
+    expect(first.name.length).toBeGreaterThan(0);
+
+    const again = await readOrMintHostRecord(dir, { hostname: () => "   " });
+    expect(again).toEqual(first);
+  });
+
   it("mints a fresh record when the stored file is malformed", async () => {
     await writeFile(path.join(dir, FILE), '{"id": "a1b2', "utf8");
 

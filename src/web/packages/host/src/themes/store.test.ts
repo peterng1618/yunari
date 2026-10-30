@@ -115,7 +115,9 @@ async function crashSave(
     });
   });
 
-  void store.write(id, content);
+  // The saved theme is being replaced on purpose: a crash test's second save
+  // is the author's own, not a first save that happens to land on a taken id.
+  void store.write(id, content, { overwrite: true });
   await crashed;
 }
 
@@ -681,10 +683,14 @@ describe("ThemeStore", () => {
     // An asset the document does not declare is refused before the folder is
     // staged, so the stored theme is never touched.
     await expect(
-      store.write("living-room", {
-        envelope: envelopeFor("living-room", "Second Name"),
-        assets: { "assets/ghost.svg": new Uint8Array([1]) },
-      }),
+      store.write(
+        "living-room",
+        {
+          envelope: envelopeFor("living-room", "Second Name"),
+          assets: { "assets/ghost.svg": new Uint8Array([1]) },
+        },
+        { overwrite: true },
+      ),
     ).rejects.toThrow("Assets must exactly match the theme declaration.");
 
     expect(await store.read("living-room")).toMatchObject({
@@ -1438,7 +1444,9 @@ describe("ThemeStore crash recovery", () => {
     await store.write("living-room", save("living-room", "First Name"));
     // A second save is the one that stages a folder, retires the old theme and
     // cleans both up — the path a crash would interrupt.
-    await store.write("living-room", save("living-room", "Second Name"));
+    await store.write("living-room", save("living-room", "Second Name"), {
+      overwrite: true,
+    });
     await store.write("theme-a", save("theme-a", "Theme Alpha"));
 
     expect((await store.list()).map((entry) => entry.id)).toEqual([
@@ -1526,13 +1534,17 @@ describe("ThemeStore asset reuse", () => {
     await backdate(path.join(tmpDir, "living-room", "theme.json"));
 
     // The same theme again, with only its name changed.
-    await store.write("living-room", {
-      ...content,
-      envelope: {
-        ...content.envelope,
-        metadata: { name: "Renamed", author: "Ada", themeLanguage: "en" },
+    await store.write(
+      "living-room",
+      {
+        ...content,
+        envelope: {
+          ...content.envelope,
+          metadata: { name: "Renamed", author: "Ada", themeLanguage: "en" },
+        },
       },
-    });
+      { overwrite: true },
+    );
 
     // Neither asset was rewritten, so neither moved; the document is written on
     // every save, so it did. That is the whole claim, as two clocks disagreeing.
@@ -1571,6 +1583,7 @@ describe("ThemeStore asset reuse", () => {
         ["assets/backdrop.png", backport],
         ["assets/badge.svg", changed],
       ]),
+      { overwrite: true },
     );
 
     expect(await modifiedAt(asset("assets/backdrop.png"))).toBe(
@@ -1596,7 +1609,7 @@ describe("ThemeStore asset reuse", () => {
     await backdate(asset("assets/backdrop.png"));
     await fs.rm(asset("assets/backdrop.png"));
 
-    await store.write("living-room", content);
+    await store.write("living-room", content, { overwrite: true });
 
     // Restored, and written rather than copied — a copy would have had nothing
     // to copy from.
@@ -1619,7 +1632,7 @@ describe("ThemeStore asset reuse", () => {
     await fs.rm(asset("assets/backdrop.png"));
     await fs.mkdir(asset("assets/backdrop.png"));
 
-    await store.write("living-room", content);
+    await store.write("living-room", content, { overwrite: true });
 
     // Copying a directory there would commit a theme that renders nothing.
     expect((await fs.stat(asset("assets/backdrop.png"))).isFile()).toBe(true);
@@ -1634,7 +1647,7 @@ describe("ThemeStore asset reuse", () => {
     await store.write("living-room", content);
     await backdate(asset("assets/backdrop.png"));
 
-    await store.write("living-room", content);
+    await store.write("living-room", content, { overwrite: true });
 
     // Two unhashable declarations are not a match; they are no evidence at all.
     expect(await modifiedAt(asset("assets/backdrop.png"))).not.toBe(
@@ -1840,7 +1853,7 @@ describe("ThemeStore partial saves", () => {
       ],
       "Living Room, by someone else",
     );
-    await store.write("living-room", theirs);
+    await store.write("living-room", theirs, { overwrite: true });
     const before = await store.read("living-room");
 
     // The stale tab sends only the badge — the asset it believes the folder
@@ -1883,17 +1896,19 @@ describe("ThemeStore partial saves", () => {
     });
   });
 
-  it("refuses a partial save with no base, and one for a theme that is not stored", async () => {
+  it("refuses a first save onto a stored id, and a partial one for a theme that is not stored", async () => {
     const content = themeWith([["assets/backdrop.png", backport]]);
     const opened = await store.write("living-room", content);
 
-    // No base at all: a first save, and nothing to reconstruct from.
+    // No base at all onto an id that is taken: the caller believes this is a
+    // first save, and the stored theme is proof it is not.
     await expect(
       store.write("living-room", only(content, "assets/backdrop.png")),
-    ).rejects.toThrow(/exactly match/);
+    ).rejects.toThrow(ThemeConflictError);
 
-    // A base against a theme that is not stored is a first save too — there is
-    // no stored document for the guard to have matched.
+    // A base against a theme that is not stored is a first save — there is no
+    // stored document for the guard to have matched — so it reaches the asset
+    // rule and is refused there.
     const fresh = createThemeStore(path.join(tmpDir, "empty-library"));
     await expect(
       fresh.write("living-room", only(content, "assets/backdrop.png"), {
@@ -2086,6 +2101,20 @@ describe("ThemeStore concurrent saves", () => {
     ).resolves.toMatchObject({ id: "garden" });
   });
 
+  it("refuses a first save onto a stored id rather than replacing it silently", async () => {
+    await store.write("kitchen", empty);
+
+    // Neither a base nor an overwrite: the caller believes this is a first
+    // save, and the stored theme is proof it is not. The conflict road is what
+    // asks the author whether to reload or overwrite.
+    await expect(store.write("kitchen", edited)).rejects.toBeInstanceOf(
+      ThemeConflictError,
+    );
+
+    const record = await store.read("kitchen");
+    expect(record?.envelope.metadata?.name).toBe(empty.envelope.metadata?.name);
+  });
+
   it("applies an overwrite deliberately, and answers the base to build on next", async () => {
     const opened = await store.write("kitchen", empty);
     await expect(
@@ -2244,6 +2273,7 @@ describe("ThemeStore asset bounds", () => {
       store.write(
         "living-room",
         themeWith("living-room", [["assets/big.png", 81 * MIB]], "Renamed"),
+        { overwrite: true },
       ),
     ).rejects.toThrow(
       'Asset "assets/big.png" is 81 MB (84,934,656 bytes); one asset may be ' +
@@ -2276,6 +2306,7 @@ describe("ThemeStore asset bounds", () => {
       store.write(
         "living-room",
         themeWith("living-room", [["assets/big.png", 80 * MIB + 1]]),
+        { overwrite: true },
       ),
     ).rejects.toThrow(ThemeAssetLimitError);
     // The refused save did not shrink the theme to the size it accepted.

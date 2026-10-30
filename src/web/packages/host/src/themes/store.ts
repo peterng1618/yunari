@@ -964,6 +964,16 @@ export function createThemeStore(
         throw new ThemeIdTakenError(id);
       }
       const stored = await readStoredOrAbsent(directory, id);
+      // Neither a base nor an overwrite says "first save", so a first save onto
+      // a stored id is a refusal rather than a silent replacement: the
+      // caller's conflict road is the one that asks the author what to do.
+      if (
+        options?.overwrite !== true &&
+        options?.base === undefined &&
+        stored !== undefined
+      ) {
+        throw new ThemeConflictError(id);
+      }
       let reconstructFrom: StoredTheme | undefined;
       if (options?.overwrite !== true && options?.base !== undefined) {
         // A theme that is not stored cannot have been moved on, so a base

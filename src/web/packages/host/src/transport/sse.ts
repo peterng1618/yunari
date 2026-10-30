@@ -98,6 +98,11 @@ export class SseConnection {
     }
 
     this.closed = true;
-    this.response.end();
+    // A write that lost its client raises on the response before the server's
+    // own listener has removed this connection; ending an already-destroyed
+    // response would raise again, from inside `close`.
+    if (!this.response.destroyed) {
+      this.response.end();
+    }
   }
 }
