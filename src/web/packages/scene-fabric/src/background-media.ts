@@ -33,8 +33,11 @@ export interface BackgroundMediaOptions {
 }
 
 /** A box in host pixels: where a media layer sits and how large it is. A
- *  `circle` display clips the layer to a disc; an `angle` turns a layer that
- *  belongs to the composition about the box's top-left corner. */
+ *  `circle` display clips the layer to a disc; an `angle` turns the layer, and
+ *  `angleOrigin` names the point it turns about. A theme-bounded layer turns
+ *  about the box's top-left corner — the corner the canvas matrix maps from —
+ *  while a display-bounded one turns about its own centre, because it is the
+ *  screen and a mount angle turns the picture in place. */
 export interface MediaBox {
   readonly left: number;
   readonly top: number;
@@ -42,6 +45,7 @@ export interface MediaBox {
   readonly height: number;
   readonly radius?: "circle";
   readonly angle?: number;
+  readonly angleOrigin?: "corner" | "centre";
 }
 
 /** The two boxes a media layer can be sized to. `display` is absent until the
@@ -224,15 +228,16 @@ export function mountBackgroundMedia(
     layer.style.width = `${box.width}px`;
     layer.style.height = `${box.height}px`;
     layer.style.borderRadius = box.radius === "circle" ? "50%" : "";
-    // The box is placed at the artboard's own origin, which is the corner the
-    // canvas matrix maps it from; rotating about the element's default centre
-    // would move a turned board off the composition.
-    layer.style.transformOrigin =
-      box.angle === undefined || box.angle === 0 ? "" : "0 0";
-    layer.style.transform =
-      box.angle === undefined || box.angle === 0
-        ? ""
-        : `rotate(${box.angle}deg)`;
+    // A turned artboard box is placed at the composition's own origin, which is
+    // the corner the canvas matrix maps it from; a turned display box is the
+    // screen, so it turns in place about its centre.
+    const turned = box.angle !== undefined && box.angle !== 0;
+    layer.style.transformOrigin = turned
+      ? box.angleOrigin === "centre"
+        ? "50% 50%"
+        : "0 0"
+      : "";
+    layer.style.transform = turned ? `rotate(${box.angle}deg)` : "";
     const child = element;
     if (child === undefined || media === undefined) return;
     const rect = placement({
@@ -453,11 +458,12 @@ export function mountBackgroundMedia(
               width: artboardSize.width,
               height: artboardSize.height,
             };
-      // A theme-bounded layer turns with the composition, so the sampler needs
-      // the angle. A display-bounded layer fills the host box and must not turn,
-      // so it reports that box in host pixels instead; `rect` stays in artboard
-      // units for the placement the paint does.
-      const angle = display === undefined ? bounds?.artboard.angle : undefined;
+      // A theme-bounded layer turns with the composition and a display-bounded
+      // one with the display's mount angle; either way the sampler needs the
+      // angle. A display-bounded layer also reports the box it occupies in host
+      // pixels, while `rect` stays in artboard units for the placement.
+      const angle =
+        display === undefined ? bounds?.artboard.angle : display.angle;
       return {
         rect,
         ...(angle === undefined ? {} : { angle }),
