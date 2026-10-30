@@ -95,8 +95,8 @@ export function rendersExtra(extra: ExtraView): boolean {
 }
 
 /**
- * The kinds of thing the editor can have selected. This is the partition the
- * column's questions fall on, not the roster of Fabric class names.
+ * The Fabric-object kinds the editor can have selected. This is the partition
+ * the column's questions fall on, not the roster of Fabric class names.
  *
  * Deliberately not `layer-tree`'s `LayerKind`, which answers a different
  * question — which label and icon a tree row carries — and always describes one
@@ -111,7 +111,7 @@ export function rendersExtra(extra: ExtraView): boolean {
  * it. `KIND_WORD`'s totality is the compile-time half; the per-kind suites
  * enumerate this list, which is the runnable half.
  */
-export const SELECTION_KINDS = [
+export const FABRIC_SELECTION_KINDS = [
   "shape",
   "text",
   "chart",
@@ -120,7 +120,9 @@ export const SELECTION_KINDS = [
   "activeSelection",
 ] as const;
 
-export type SelectionKind = (typeof SELECTION_KINDS)[number] | "background";
+export type SelectionKind =
+  | (typeof FABRIC_SELECTION_KINDS)[number]
+  | "background";
 
 /** Fabric lowercases `type` on the instance, so these are its own spellings. */
 function isTextKind(object: FabricObject): boolean {
