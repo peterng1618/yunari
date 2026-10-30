@@ -41,13 +41,52 @@ describe("createPanelRunner", () => {
     expect(present).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start a second capture while one is in flight", async () => {
+  it("starts the next capture while the frame is still being sent", async () => {
+    const order: string[] = [];
+    let sending = false;
+    const capture = vi.fn(async () => {
+      order.push(sending ? "capture-during-send" : "capture");
+      return RED;
+    });
+    const present = vi.fn(async () => {
+      sending = true;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      sending = false;
+    });
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+    };
+    const runner = createPanelRunner({
+      device,
+      rasterizer: {
+        capture,
+        captureOverlay: async () => new Uint8Array(),
+        close: async () => {},
+      },
+    });
+
+    await expect(runner.tick()).resolves.toBe(true);
+
+    // The overlap is the whole point: the next frame is in hand before this
+    // one is on the wire, so a frame costs the longer of the two, not the sum.
+    expect(order).toEqual(["capture", "capture-during-send"]);
+  });
+
+  it("never runs two captures at once", async () => {
+    let active = 0;
+    let peak = 0;
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     const capture = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
       await gate;
+      active -= 1;
       return RED;
     });
     const present = vi.fn(async () => {});
@@ -67,11 +106,12 @@ describe("createPanelRunner", () => {
     });
 
     const first = runner.tick();
+    // A tick that arrives mid-capture is queued, not raced.
     await expect(runner.tick()).resolves.toBe(false);
     release?.();
     await expect(first).resolves.toBe(true);
 
-    expect(capture).toHaveBeenCalledTimes(1);
+    expect(peak).toBe(1);
     expect(present).toHaveBeenCalledTimes(1);
   });
 
