@@ -94,6 +94,12 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   let failures = 0;
   /** The device was given up on, so no further tick may read or write it. */
   let lost = false;
+  /** A capture started ahead of the send, so the next tick does not pay it. */
+  let ahead:
+    | { readonly overlay: boolean; readonly frame: Promise<Uint8Array> }
+    | undefined;
+  /** The timer fired mid-tick; one follow-up runs when that tick settles. */
+  let queued = false;
 
   /**
    * Counts one failed capture or send, and gives the device up after the
@@ -112,6 +118,42 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     options.onLost?.(exactly(error));
   };
 
+  const captureFor = (useOverlay: boolean): Promise<Uint8Array> =>
+    useOverlay
+      ? options.rasterizer.captureOverlay()
+      : options.rasterizer.capture();
+
+  /** The prefetched capture when it matches this path, else a fresh one. */
+  const takeCapture = (useOverlay: boolean): Promise<Uint8Array> => {
+    if (ahead !== undefined && ahead.overlay === useOverlay) {
+      const { frame } = ahead;
+      ahead = undefined;
+      return frame;
+    }
+
+    return captureFor(useOverlay);
+  };
+
+  /**
+   * Starts the next capture while this frame is still on the wire.
+   *
+   * A capture costs about what a send costs, so running them one after the
+   * other halves the panel's rate; overlapping them makes a frame cost the
+   * longer of the two. Only one capture is ever in flight: a prefetch is
+   * started only when none is pending, and a change of path (the overlay
+   * fallback) leaves the stale one to be dropped.
+   */
+  const prefetch = (useOverlay: boolean): void => {
+    if (ahead !== undefined || !running || lost) return;
+
+    // A synchronous refusal ("the rasteriser is closed") and an asynchronous
+    // one are both the next tick's to report: a prefetched capture nobody
+    // consumes must not surface as an unhandled rejection.
+    const frame = Promise.resolve().then(() => captureFor(useOverlay));
+    frame.catch(() => {});
+    ahead = { overlay: useOverlay, frame };
+  };
+
   /**
    * One capture and one send, if the pixels moved.
    *
@@ -121,18 +163,21 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
    * choice, because that noise is real pixels.
    */
   const send = async (
-    capture: () => Promise<Uint8Array>,
+    useOverlay: boolean,
     present: (frame: Uint8Array) => Promise<void>,
     presentFailed?: () => void,
   ): Promise<boolean> => {
     let frame: Uint8Array;
 
     try {
-      frame = await capture();
+      frame = await takeCapture(useOverlay);
     } catch (error) {
       failed(error);
       return false;
     }
+
+    // Before the send, not after it: this is the overlap.
+    prefetch(useOverlay);
 
     if (last !== undefined && sameBytes(last, frame)) return false;
 
@@ -173,7 +218,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     if (overlay && video !== undefined) {
       return await send(
-        () => options.rasterizer.captureOverlay(),
+        true,
         (frame) => video.presentOverlay(frame),
         () => {
           // An overlay the device will not take is a video mode it cannot
@@ -184,10 +229,32 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
       );
     }
 
-    return await send(
-      () => options.rasterizer.capture(),
-      (frame) => options.device.present(frame),
-    );
+    return await send(false, (frame) => options.device.present(frame));
+  };
+
+  const tickOnce = (): Promise<boolean> => {
+    // A tick asked for after the stop began must not open a capture: the
+    // device is on its way to closed. Neither may one after the device was
+    // given up on: the manager is already tearing this runner down.
+    if (!running || lost) return Promise.resolve(false);
+    // A capture that is slow enough to still be running when the timer fires
+    // again is not a reason to start a second one: two sends racing for the
+    // same wire is worse than a skipped frame. The tick it displaced is not
+    // dropped either — one follow-up runs as soon as this one settles, which
+    // is what keeps a slow panel at its own rate instead of the timer's.
+    if (inFlight !== undefined) {
+      queued = true;
+      return Promise.resolve(false);
+    }
+
+    const tick = runTick().finally(() => {
+      if (inFlight === tick) inFlight = undefined;
+      if (!queued) return;
+      queued = false;
+      void tickOnce();
+    });
+    inFlight = tick;
+    return tick;
   };
 
   return {
@@ -197,22 +264,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     intervalMs,
 
-    tick(): Promise<boolean> {
-      // A tick asked for after the stop began must not open a capture: the
-      // device is on its way to closed. Neither may one after the device was
-      // given up on: the manager is already tearing this runner down.
-      if (!running || lost) return Promise.resolve(false);
-      // A capture that is slow enough to still be running when the timer
-      // fires again is not a reason to start a second one: two sends racing
-      // for the same wire is worse than a skipped frame.
-      if (inFlight !== undefined) return Promise.resolve(false);
-
-      const tick = runTick().finally(() => {
-        if (inFlight === tick) inFlight = undefined;
-      });
-      inFlight = tick;
-      return tick;
-    },
+    tick: tickOnce,
 
     stop(): Promise<void> {
       running = false;
@@ -224,6 +276,10 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
         // closing the port under it would make the start fail against a dead
         // device, and its result could land after this stop read it.
         await inFlight;
+        // A prefetched capture is a request inside the rasteriser: closing it
+        // now would answer that request with an error nobody is waiting for.
+        await ahead?.frame.catch(() => {});
+        ahead = undefined;
 
         // The clip belongs to the device once started, so it is stopped with
         // it rather than left playing behind a port the next runner wants.

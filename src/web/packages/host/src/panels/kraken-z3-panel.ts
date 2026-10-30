@@ -68,10 +68,15 @@ const BUCKET_COUNT = 16;
 const FRAME_BYTES = SIZE * SIZE * 4;
 const HEADER_BYTES = HEADER_MAGIC.length + 8;
 const BUCKET_SLOTS = Math.ceil((HEADER_BYTES + FRAME_BYTES) / SLOT_BYTES);
-const MAX_READ_ATTEMPTS = 12;
-const READ_TIMEOUT_MS = 300;
-/** CAM streams this panel at nine frames a second. */
-export const KRAKEN_FRAME_INTERVAL_MS = 111;
+const MAX_READ_ATTEMPTS = 8;
+const READ_TIMEOUT_MS = 120;
+/**
+ * The camera-ready cadence: the ring carried 12.9 FPS on this hardware, so the
+ * runner is asked for one frame every 70 ms. A tick costs about a capture plus
+ * a send and the runner overlaps those, so the achieved rate lands near 10 FPS
+ * rather than the 9 CAM asks for.
+ */
+export const KRAKEN_FRAME_INTERVAL_MS = 70;
 
 /**
  * The header that precedes a frame: the 12-byte magic, the transfer type, and
@@ -155,9 +160,10 @@ class KrakenControl {
 class KrakenPanel implements PanelDevice {
   readonly geometry: PanelGeometry = { width: SIZE, height: SIZE };
   /**
-   * Nine frames a second is what CAM asks this panel for. The ring itself ran
-   * at 12.9 FPS on this hardware; the runner skips a tick whose capture is
-   * still in flight, so this is a target rather than a promise.
+   * CAM asks this panel for nine frames a second; the ring itself ran at 12.9
+   * FPS on this hardware. The runner skips a tick whose capture is still in
+   * flight and overlaps capture with send, so this is a target the pipeline
+   * can fall short of, not a promise.
    */
   readonly frameIntervalMs = KRAKEN_FRAME_INTERVAL_MS;
   /** The still is decoded here, so the rasteriser can skip a lossy step. */
