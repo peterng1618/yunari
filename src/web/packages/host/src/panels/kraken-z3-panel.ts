@@ -32,10 +32,16 @@ import { decodePngRgba } from "./png-raster.js";
  * class driver, so it is opened through `node-hid` rather than claimed through
  * libusb — claiming it fails with "incompatible driver is installed".
  *
+ * **The driver does not rotate the picture.** The mount angle is the display
+ * record's `rotation`, which the player has already applied when the frame is
+ * captured; the `31 01` reply also reports one, and honouring both turned every
+ * frame twice. The record is the owner because a person can see and change it.
+ *
  * **The bytes here were measured, not guessed** against firmware 5.11.0:
- * firmware answers `11 01` with 5.11.0, and LCD info answers `31 01` with
- * brightness and orientation in byte `0x1A`. The frame layout and mode byte come
- * from CAM's own web-integration stream, captured from its WinUSB writes.
+ * firmware answers `11 01` with its version, and LCD info answers `31 01` with
+ * brightness and the mount's quarter turns in byte `0x1A`. The frame layout and
+ * mode byte come from CAM's own web-integration stream, captured from its WinUSB
+ * writes.
  */
 
 const VENDOR_ID = 0x1e71;
@@ -53,8 +59,6 @@ const HEADER_MAGIC = [
 const STREAM_MODE = 0x03;
 const MAX_READ_ATTEMPTS = 12;
 const READ_TIMEOUT_MS = 300;
-/** The `31 01` reply holds the panel's quarter turns in byte `0x1A`. */
-const ORIENTATION_BYTE = 0x1a;
 /** CAM streams this panel at nine frames a second. */
 export const KRAKEN_FRAME_INTERVAL_MS = 111;
 
@@ -139,8 +143,6 @@ class KrakenPanel implements PanelDevice {
    * this is a target rather than a promise about the pipeline.
    */
   readonly frameIntervalMs = KRAKEN_FRAME_INTERVAL_MS;
-  /** The quarter turns the panel last reported; `open` establishes it. */
-  private orientation = 0;
   /** The still is decoded here, so the rasteriser can skip a lossy step. */
   readonly stillFormat = "png";
 
@@ -156,7 +158,6 @@ class KrakenPanel implements PanelDevice {
    * The two queries are the check, not a record: what a panel says about its
    * firmware and its LCD is the only way to know that a HID handle which opened
    * is a handle the firmware is listening on, and every later step assumes that.
-   * The LCD reply also carries the mount orientation the frame is rotated for.
    */
   async open(): Promise<void> {
     this.control.drain();
@@ -167,11 +168,9 @@ class KrakenPanel implements PanelDevice {
     }
 
     this.control.write([0x30, 0x01]);
-    const lcd = this.control.readUntil(0x31, 0x01);
-    if (lcd === undefined) {
+    if (this.control.readUntil(0x31, 0x01) === undefined) {
       throw new Error("The Kraken did not answer its LCD query.");
     }
-    this.orientation = quarterTurns(lcd.report);
   }
 
   /**
@@ -182,13 +181,12 @@ class KrakenPanel implements PanelDevice {
    * for as long as the runner runs; it keeps the last frame but does not animate
    * once the host stops, because there is no bucket holding a file.
    *
-   * Rotation is host-side: the panel reports how it is mounted and expects an
-   * upright picture for that mount, so the encoder turns each frame by the
-   * reported quarter turns.
+   * The frame is sent as the browser rendered it: the display record's rotation
+   * is already in the capture, so turning it here would turn it twice.
    */
   async present(image: Uint8Array): Promise<void> {
     const rgba = decodePngRgba(image, SIZE, SIZE);
-    const payload = toPalettedFrame(rgba, this.orientation);
+    const payload = toPalettedFrame(rgba);
 
     await this.bulk.write(transferHeader(payload.length));
     await this.bulk.write(payload);
@@ -241,12 +239,6 @@ async function openBulk(): Promise<BulkUploader> {
       }
     },
   };
-}
-
-/** The `31 01` reply's orientation byte: 0..3 quarter turns, clockwise. */
-export function quarterTurns(report: Uint8Array): number {
-  const value = report[ORIENTATION_BYTE] ?? 0;
-  return value <= 3 ? value : 0;
 }
 
 /** One enumerated HID device, in the fields a hint reads. */

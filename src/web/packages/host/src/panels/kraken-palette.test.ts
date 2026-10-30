@@ -36,10 +36,7 @@ function indexAt(frame: Uint8Array, x: number, y: number): number {
 
 describe("Kraken paletted frame", () => {
   it("is a 256-entry RGBA palette followed by one index per pixel", () => {
-    const frame = toPalettedFrame(
-      raster(() => {}),
-      0,
-    );
+    const frame = toPalettedFrame(raster(() => {}));
 
     expect(frame.length).toBe(KRAKEN_FRAME_BYTES);
     // A flat raster needs one colour, and the fourth byte is padding rather
@@ -60,7 +57,6 @@ describe("Kraken paletted frame", () => {
         set(11, 10, [0, 255, 0, 255]);
         set(12, 10, [0, 0, 255, 255]);
       }),
-      0,
     );
 
     expect(entryOf(frame, [255, 0, 0])).toBeGreaterThanOrEqual(0);
@@ -68,32 +64,16 @@ describe("Kraken paletted frame", () => {
     expect(entryOf(frame, [0, 0, 255])).toBeGreaterThanOrEqual(0);
   });
 
-  it("rotates the frame clockwise by the panel's quarter turns", () => {
-    // Two markers, because one cannot tell a rotation from a mirror: a
-    // horizontal flip also puts the top-left pixel at the top-right.
+  it("keeps each pixel where the capture put it", () => {
+    // The mount angle is the display record's, already applied by the player,
+    // so the encoder must not turn the plane a second time.
     const marked = raster((set) => {
       set(0, 0, [255, 0, 0, 255]);
       set(SIZE - 1, 0, [0, 0, 255, 255]);
     });
-    const straight = toPalettedFrame(marked, 0);
-    const red = indexAt(straight, 0, 0);
-    const blue = indexAt(straight, SIZE - 1, 0);
-    expect(red).not.toBe(blue);
+    const frame = toPalettedFrame(marked);
 
-    // One clockwise quarter turn: top-left to top-right, top-right to
-    // bottom-right. A mirror would leave the second one at the top-left.
-    const turned = toPalettedFrame(marked, 1);
-    expect(indexAt(turned, SIZE - 1, 0)).toBe(red);
-    expect(indexAt(turned, SIZE - 1, SIZE - 1)).toBe(blue);
-
-    // Two turns: the pair swaps corners.
-    const reversed = toPalettedFrame(marked, 2);
-    expect(indexAt(reversed, SIZE - 1, SIZE - 1)).toBe(red);
-    expect(indexAt(reversed, 0, SIZE - 1)).toBe(blue);
-
-    // Three turns: top-left to bottom-left, top-right to top-left.
-    const thrice = toPalettedFrame(marked, 3);
-    expect(indexAt(thrice, 0, SIZE - 1)).toBe(red);
-    expect(indexAt(thrice, 0, 0)).toBe(blue);
+    expect(indexAt(frame, 0, 0)).not.toBe(indexAt(frame, SIZE - 1, 0));
+    expect(indexAt(frame, SIZE - 1, 0)).toBe(entryOf(frame, [0, 0, 255]));
   });
 });

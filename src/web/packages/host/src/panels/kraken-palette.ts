@@ -47,13 +47,11 @@ interface Box {
 }
 
 /**
- * The frame the device reads, rotated clockwise by `quarterTurns` so the
- * picture is upright for the mount the panel reported.
+ * The frame the device reads: the palette, then one index per pixel in the
+ * capture's own orientation. Rotation is not this module's: the display record
+ * owns the mount angle and the player has applied it before the capture.
  */
-export function toPalettedFrame(
-  rgba: Uint8Array,
-  quarterTurns: number,
-): Uint8Array {
+export function toPalettedFrame(rgba: Uint8Array): Uint8Array {
   const histogram = new Uint32Array(BIN_COUNT);
 
   for (let pixel = 0; pixel < KRAKEN_SIZE * KRAKEN_SIZE; pixel += 1) {
@@ -92,11 +90,9 @@ export function toPalettedFrame(
     }
   });
 
-  const quarter = ((quarterTurns % 4) + 4) % 4;
   for (let y = 0; y < KRAKEN_SIZE; y += 1) {
     for (let x = 0; x < KRAKEN_SIZE; x += 1) {
-      const pixel = sourcePixel(x, y, quarter);
-      const at = pixel * 4;
+      const at = (y * KRAKEN_SIZE + x) * 4;
       frame[KRAKEN_PALETTE_BYTES + y * KRAKEN_SIZE + x] =
         lookup[binOf(rgba[at] ?? 0, rgba[at + 1] ?? 0, rgba[at + 2] ?? 0)] ?? 0;
     }
@@ -218,25 +214,4 @@ function meanOf(points: readonly Point[]): readonly [number, number, number] {
     Math.round(green / count),
     Math.round(blue / count),
   ];
-}
-
-/**
- * Where the destination pixel came from after a clockwise quarter turn.
- *
- * Each case is a rotation, not a flip: a turned frame keeps its handedness, so
- * a mirrored picture would be the bug here. The top-left pixel is the check —
- * clockwise it lands top-right, a horizontal mirror would land it there too, so
- * the top-right pixel must land bottom-right.
- */
-function sourcePixel(x: number, y: number, quarter: number): number {
-  switch (quarter) {
-    case 1:
-      return (KRAKEN_SIZE - 1 - x) * KRAKEN_SIZE + y;
-    case 2:
-      return (KRAKEN_SIZE - 1 - y) * KRAKEN_SIZE + (KRAKEN_SIZE - 1 - x);
-    case 3:
-      return x * KRAKEN_SIZE + (KRAKEN_SIZE - 1 - y);
-    default:
-      return y * KRAKEN_SIZE + x;
-  }
 }

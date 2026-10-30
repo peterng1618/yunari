@@ -77,6 +77,8 @@ decoder refuses every other form by name rather than guessing.
   per pixel, row-major 320x320. Decoding a captured frame with that layout
   reproduces the page, and the frame needs a 90-degree counter-clockwise turn to
   be upright, which is CAM pre-rotating for the mount the way liquidctl does.
+  Yunari expresses that same turn as the display record's `rotation`, because the
+  player applies it before the capture.
 - **There is no control command in steady state, and none to resume.** Switching
   the LCD away and back sent mode `0x01` once with a 141,517-byte payload (the
   Image/GIF asset) and resumed mode `0x03` with no HID or control transfer at
@@ -100,27 +102,32 @@ product's panel runner always running while the display is assigned.
 
 ## Rung 6 — smallest probe
 
-`kraken-palette.test.ts` pins the palette channel order, the rotation of a marked
-pixel into its destination corner, and that a flat raster costs one palette
-entry. `png-raster.test.ts` decodes generated PNGs that use each of PNG's five
-row filters, and refuses a palette image, an interlaced image and a size the
-panel did not ask for. The hardware probe is a frame sent by this driver with
-CAM closed, checked against the same theme CAM currently streams.
+`kraken-palette.test.ts` pins the palette channel order, that a flat raster costs
+one palette entry, and that a marked pixel stays where the capture put it — the
+encoder never turns the plane. `png-raster.test.ts` decodes generated PNGs that
+use each of PNG's five row filters, and refuses a palette image, an interlaced
+image and a size the panel did not ask for. The hardware probe is a frame sent by
+this driver with CAM closed, checked against the same theme CAM currently streams.
 
 ## Decision
 
 `present` decodes the captured PNG in process (`node:zlib` plus PNG's filter
 step), encodes one 320x320 frame as a `1,024`-byte RGBA palette plus 320x320
-indices, rotates it by the `31 01` orientation byte (clockwise quarter turns, as
-liquidctl does), and sends the 20-byte mode-`0x03` header followed by that
-payload in one bulk write. ffmpeg stays for arbitrary stills only: a per-frame
-process costs 250 ms, and this build emits nothing before input EOF, so it
-cannot be held open for a live stream. The bucket table, slot arithmetic and
-switch commands leave the driver: they only served the static format. The runner
-ticks at the device's 9 FPS rate, stated by the device as `frameIntervalMs`. The
-bucket table, slot arithmetic and switch commands leave the driver: they only
+indices, and sends the 20-byte mode-`0x03` header followed by that payload in one
+bulk write. ffmpeg stays for arbitrary stills only: a per-frame process costs
+250 ms, and this build emits nothing before input EOF, so it cannot be held open
+for a live stream.
+
+**The driver does not rotate the frame.** The mount angle is the display record's
+`rotation`, which the player applies to the composition before the browser is
+captured; the `31 01` reply reports one too, and honouring both turned every frame
+twice. The record owns it because a person can see the result and change it, and
+the other panel families already work that way.
+
+The bucket table, slot arithmetic and switch commands leave the driver: they only
 served the static format, and no family keeps a frame on the device any more, so
-`PanelFamily.stores` leaves with them.
+`PanelFamily.stores` leaves with them. The runner ticks at the device's 9 FPS
+rate, stated by the device as `frameIntervalMs`.
 
 ## Hardware result
 
@@ -129,5 +136,9 @@ headers in six seconds (7.8 frames a second against CAM's 9), with no failed
 transfers in the log. One frame read off the wire decodes to the theme's own
 render: the green gauge reads `38,211,161` against the page's `43,214,160` and
 the flame `239,178,38` against `236,178,49`, which is median-cut error rather
-than a channel swap. The payload is the page turned one quarter clockwise, the
-same turn CAM's captured stream carried for this mount.
+than a channel swap.
+
+The first build also honoured the `31 01` orientation byte while the display
+record carried `rotation: 90`, and the wire frame decoded to the page turned
+half a turn — the double turn this note now forbids. The display record is the
+one knob: a quarter turn there is the whole picture turned one quarter.
