@@ -392,7 +392,15 @@ it("opens the publish surface from the shell's own door, and moves no host state
       if (String(input).startsWith("/api/pairing/sessions")) {
         return new Response(
           JSON.stringify({
-            session: { token, expiresAt: "2026-10-08T00:00:00.000Z" },
+            display: {
+              id: "living-room",
+              label: "Living Room",
+              kind: "paired",
+              createdAt: "2026-10-08T00:00:00.000Z",
+              lastSeenAt: "2026-10-08T00:00:00.000Z",
+              shape: "rect",
+            },
+            token,
           }),
           { status: 201 },
         );

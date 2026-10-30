@@ -56,7 +56,11 @@ export function useControlTooltip(
  * whose action is refused goes `--faint` rather than dimming red.
  */
 export function ControlIconButton(
-  props: ControlProps & {
+  // No `hint`: this control's tooltip is its label, so there is nowhere a hint
+  // could be rendered that would not be a second tooltip owner. Omitting the
+  // prop is the contract half of the choice — a caller cannot hand it one and
+  // then wonder why it vanished.
+  props: Omit<ControlProps, "hint"> & {
     readonly destructive?: boolean;
     readonly shortcut?: { readonly printed: string; readonly spoken: string };
     /** A press that does nothing, without native `disabled`: the control keeps

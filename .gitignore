@@ -72,8 +72,6 @@ secrets.local.json
 .DS_Store
 Thumbs.db
 
-# Agents leave scratch in the tree; it is never a deliverable.
-src/web/.agent-scratch/
 # The agent's SDD workspace: per-plan ledgers, task briefs, review packages,
 # dispatch records and PreCompact checkpoints, plus the visual companion's
 # throwaway screens. **Local working state, never repository content** — it is
