@@ -564,8 +564,17 @@ export class EditorDocument {
     const presets = this.#envelope.globals?.typeTokens as
       | TypeTokens
       | undefined;
+    // A font is held by its family, not by its exact file: applying one cut
+    // adopts every weight and subset of the family, and only the chosen face is
+    // bound. Matching the asset id alone made the rest look unused, so the
+    // cleanup sheet offered the Vietnamese and bold faces for the trash.
+    const declared = this.#assets.declarations.find(
+      (asset) => asset.id === assetId,
+    );
     return Object.values(presets ?? {}).some(
-      (preset) => preset.face?.assetId === assetId,
+      (preset) =>
+        preset.face?.assetId === assetId ||
+        (declared?.kind === "font" && preset.family === declared.family),
     );
   }
 
@@ -1049,12 +1058,19 @@ export class EditorDocument {
     );
     if (entries.length === 0) return;
     await this.#adoptCuts(entries);
-    let next = presets;
+    // Re-read after the await: an author can edit the tokens while the bytes
+    // are in flight, and writing the pre-await snapshot would drop that edit.
+    let next = this.#typeTokens();
+    let added = false;
     for (const role of missing) {
+      if (next[role] !== undefined) continue;
       const cut = trio.roles[role];
-      if (cut !== undefined) next = { ...next, [role]: rolePreset(cut) };
+      if (cut !== undefined) {
+        next = { ...next, [role]: rolePreset(cut) };
+        added = true;
+      }
     }
-    this.setTypes(next);
+    if (added) this.setTypes(next);
   }
 
   /** One token from one cut. A chosen role rewrites that role's token — the
@@ -1078,12 +1094,15 @@ export class EditorDocument {
         .filter((other) => other.id !== cut.id)
         .map((other) => ({ cut: other, role: role ?? "body" })),
     ]);
+    // The same re-read as `addTypeTokensFromTrio`: a token edited or created
+    // while the bytes were fetched must survive this write.
+    const current = this.#typeTokens();
     if (role !== null) {
-      this.setTypes({ ...presets, [role]: rolePreset(cut) });
+      this.setTypes({ ...current, [role]: rolePreset(cut) });
       return role;
     }
-    const id = freePresetId(presets);
-    this.setTypes({ ...presets, [id]: rolePreset(cut) });
+    const id = freePresetId(current);
+    this.setTypes({ ...current, [id]: rolePreset(cut) });
     return id;
   }
 

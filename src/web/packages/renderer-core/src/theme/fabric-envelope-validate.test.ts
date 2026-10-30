@@ -1289,6 +1289,33 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
+  it("refuses font-only keys on a non-font asset", () => {
+    // The schema splits a font reference from every other kind. The decider
+    // used to be one bag for all kinds, so an image could carry a family and
+    // validate in code while every published tool refused it.
+    const result = validateFabricThemeEnvelope({
+      ...envelope(),
+      assets: [
+        {
+          id: "logo",
+          kind: "image",
+          path: "assets/logo.png",
+          family: "Inter",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "unknown-field",
+          path: "/assets/0/family",
+        }),
+      ]),
+    });
+  });
+
   it("refuses a format that disagrees with the path extension", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
@@ -1496,6 +1523,85 @@ describe("Fabric theme envelope validation", () => {
           }),
         );
     }
+  });
+
+  it("refuses a run's leading and tracking values the inspector refuses", () => {
+    const withRunStyle = (
+      style: Record<string, unknown>,
+    ): Record<string, unknown> => ({
+      ...envelope(),
+      bindings: {},
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid", color: "transparent" },
+          },
+          text: { name: "Text", value: { kind: "solid", color: "#fff" } },
+        },
+        typeTokens: { body: { family: "Inter" } },
+      },
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            type: "Textbox",
+            id: "label",
+            fill: "#fff",
+            yunariPaint: { fill: "palette.text" },
+            yunariText: {
+              runs: [
+                {
+                  kind: "literal",
+                  text: "CPU",
+                  typeToken: "typeTokens.body",
+                  style: {
+                    color: { ref: "palette.text" },
+                    ...style,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    // A positive multiplier and negative tracking are what the inspector
+    // writes, so they stay valid.
+    expect(
+      validateFabricThemeEnvelope(
+        withRunStyle({
+          lineHeight: { value: 1.18 },
+          letterSpacing: { value: -2 },
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+
+    for (const bad of [0, -1, Number.NaN]) {
+      const result = validateFabricThemeEnvelope(
+        withRunStyle({ lineHeight: { value: bad } }),
+      );
+      expect(result.ok, `lineHeight ${String(bad)}`).toBe(false);
+      if (!result.ok)
+        expect(result.issues).toContainEqual(
+          expect.objectContaining({
+            path: "/scene/objects/0/yunariText/runs/0/style/lineHeight",
+          }),
+        );
+    }
+
+    const tracking = validateFabricThemeEnvelope(
+      withRunStyle({ letterSpacing: { value: "wide" } }),
+    );
+    expect(tracking.ok).toBe(false);
+    if (!tracking.ok)
+      expect(tracking.issues).toContainEqual(
+        expect.objectContaining({
+          code: "wrong-type",
+          path: "/scene/objects/0/yunariText/runs/0/style/letterSpacing",
+        }),
+      );
   });
 
   it("requires the theme to declare the language its text is written in", () => {

@@ -489,10 +489,12 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
       continue;
     }
 
+    const isFont = asset["kind"] === "font";
+
     issues.unknownKeys(
       asset,
       path,
-      knownKeysFor("assetReference"),
+      knownKeysFor(isFont ? "fontAssetReference" : "nonFontAssetReference"),
       "An asset reference",
     );
 
@@ -517,16 +519,7 @@ function validateAssets(issues: Issues, value: unknown): Set<string> {
 
     validateAssetPath(issues, asset["kind"], asset["path"], `${path}/path`);
 
-    if (asset["kind"] === "font") validateFontAsset(issues, asset, path);
-    else if ("subset" in asset) {
-      // The key list is shared by every kind, so the font-only key needs its
-      // own refusal here rather than reaching the unknown-key check.
-      issues.add(
-        "unknown-field",
-        `${path}/subset`,
-        'An asset reference has no "subset" property.',
-      );
-    }
+    if (isFont) validateFontAsset(issues, asset, path);
 
     if (
       asset["sha256"] !== undefined &&

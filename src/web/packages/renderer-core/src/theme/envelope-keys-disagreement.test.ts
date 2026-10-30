@@ -66,12 +66,8 @@ const KNOWN_KEY_SHAPES: Partial<Record<KnownKeyShape, readonly string[][]>> = {
   binding: [["$defs", "binding"]],
   typeToken: [["$defs", "typeToken"]],
   fontFaceReference: [["$defs", "fontFaceReference"]],
-  // One bag in code, two in the schema: a font asset declares the non-font
-  // keys plus its own, so the merged list is the union of both.
-  assetReference: [
-    ["$defs", "nonFontAssetReference"],
-    ["$defs", "fontAssetReference"],
-  ],
+  nonFontAssetReference: [["$defs", "nonFontAssetReference"]],
+  fontAssetReference: [["$defs", "fontAssetReference"]],
   // Only the palette's entries are `{name, value}` wrappers now; a type token
   // is the entry itself, so its key set is compared through `typeToken` above.
   globalEntry: [["$defs", "paletteGroup", "additionalProperties"]],

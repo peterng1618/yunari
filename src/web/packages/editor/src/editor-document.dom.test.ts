@@ -898,6 +898,7 @@ function presetDocument(presets: TypeTokens): {
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachGlobals: () => {}, saveState },
+          canvas: { getObjects: () => [] },
         },
       } as unknown as EditorShell,
       envelope: {
@@ -1143,6 +1144,64 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
+  it("keeps a token edited while add three's bytes are in flight", async () => {
+    const existing: TypeTokens = { heading: { family: "Segoe UI" } };
+    const { document } = presetDocument(existing);
+    let release: () => void = () => {};
+    let calls = 0;
+    assetBytesMock.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return { bytes: new Uint8Array([1]), filename: "face.woff2" };
+    });
+
+    const adding = document.addTypeTokensFromTrio(trio);
+    await vi.waitFor(() => expect(assetBytesMock).toHaveBeenCalled());
+    // The author's edit lands after the pre-await snapshot but before the
+    // roles are written. The add must merge onto the live tokens, not clobber.
+    document.setTypes({
+      ...presetsOf(document),
+      custom: { family: "Georgia" },
+    });
+    release();
+    await adding;
+
+    expect(presetsOf(document).custom).toEqual({ family: "Georgia" });
+    expect(presetsOf(document).body).toMatchObject({ family: "Inter" });
+    document.destroy();
+  });
+
+  it("keeps a token edited while a single cut's bytes are in flight", async () => {
+    const { document } = presetDocument({});
+    let release: () => void = () => {};
+    assetBytesMock.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { bytes: new Uint8Array([1]), filename: "face.woff2" };
+    });
+
+    const adding = document.addTypeTokenFromCut(
+      cutFor("body", "Inter", 400),
+      null,
+    );
+    await vi.waitFor(() => expect(assetBytesMock).toHaveBeenCalled());
+    document.setTypes({
+      ...presetsOf(document),
+      custom: { family: "Georgia" },
+    });
+    release();
+    const id = await adding;
+
+    expect(presetsOf(document).custom).toEqual({ family: "Georgia" });
+    expect(presetsOf(document)[id]).toMatchObject({ family: "Inter" });
+    document.destroy();
+  });
+
   it("a single cut creates a role-first token", async () => {
     const { document } = presetDocument({});
     assetBytesMock.mockResolvedValue({
@@ -1314,6 +1373,9 @@ describe("EditorDocument preset actions", () => {
     expect((document.snapshot().assets ?? []).map((asset) => asset.id)).toEqual(
       family.map((entry) => fontAssetId(entry)),
     );
+    // The token binds one face, but the family's other weights and subsets are
+    // what that token chooses between. They are held, not offered for cleanup.
+    expect(document.unusedAssets()).toEqual([]);
 
     // The declarations are the only dedupe: a second apply from the same
     // family asks the host for nothing.

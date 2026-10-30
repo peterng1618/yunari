@@ -469,6 +469,44 @@ function sceneTypeReferences(
               );
             }
           }
+          const lineHeight = style?.["lineHeight"];
+          if (lineHeight !== undefined) {
+            const value = isRecord(lineHeight)
+              ? lineHeight["value"]
+              : undefined;
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/lineHeight`,
+                  "A text run's lineHeight must be a finite number.",
+                ),
+              );
+            } else if (value <= 0) {
+              issues.push(
+                issue(
+                  "out-of-range",
+                  `${path}/yunariText/runs/${index}/style/lineHeight`,
+                  "A text run's lineHeight must be above 0.",
+                ),
+              );
+            }
+          }
+          const letterSpacing = style?.["letterSpacing"];
+          if (letterSpacing !== undefined) {
+            const value = isRecord(letterSpacing)
+              ? letterSpacing["value"]
+              : undefined;
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/letterSpacing`,
+                  "A text run's letterSpacing must be a finite number.",
+                ),
+              );
+            }
+          }
           const color = style?.["color"];
           const colorRef = isRecord(color) ? color["ref"] : undefined;
           if (
