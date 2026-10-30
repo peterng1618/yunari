@@ -1,5 +1,6 @@
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { useMemo } from "react";
+import { destructiveMarker } from "../../object-actions.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /** Which library the row belongs to, and where the menu was asked for. */
@@ -57,7 +58,7 @@ export function PresetContextMenu({
           <ContextMenu.Popup className="editor-shell-menu-popup">
             <ContextMenu.Item
               data-testid="preset-menu-delete"
-              className="text-hot"
+              {...destructiveMarker({ destructive: true })}
               onClick={() => {
                 if (target !== undefined) onDelete(target);
               }}
