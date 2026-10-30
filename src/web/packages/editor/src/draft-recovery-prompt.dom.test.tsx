@@ -164,6 +164,6 @@ describe("the draft recovery prompt", () => {
     // drifted, which is the divergence this reads for.
     const button = answerNamed(uiCopy.draftRecovery.restore);
     expect(button.className).toContain("px-[var(--space-12)]");
-    expect(button.className).toContain("enabled:hover:border-accent");
+    expect(button.className).toContain("enabled:hover:border-muted");
   });
 });

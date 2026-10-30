@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -95,6 +95,13 @@ const SOURCE_TOKENS = [
 ] as const;
 
 describe("shell token stylesheet", () => {
+  function sourceFiles(directory: string): readonly string[] {
+    return readdirSync(directory).flatMap((name) => {
+      const file = join(directory, name);
+      return statSync(file).isDirectory() ? sourceFiles(file) : [file];
+    });
+  }
+
   /** The defect this exists to prevent.
    *
    *  A `var(--yunari-x)` naming a token no declaration in scope provides is
@@ -147,11 +154,10 @@ describe("shell token stylesheet", () => {
     ).toBeGreaterThan(0);
 
     const sourceRoot = fileURLToPath(new URL("..", import.meta.url));
-    const unreferenced = readdirSync(sourceRoot, { recursive: true })
-      .map(String)
+    const unreferenced = sourceFiles(sourceRoot)
       .filter((file) => /\.(ts|tsx)$/.test(file))
       .flatMap((file) => {
-        const source = readFileSync(join(sourceRoot, file), "utf8");
+        const source = readFileSync(file, "utf8");
         return [...source.matchAll(/var\((--space-[a-z0-9-]+)/g)].flatMap(
           (match) => {
             const token = match[1];

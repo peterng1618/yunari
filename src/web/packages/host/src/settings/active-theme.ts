@@ -104,7 +104,7 @@ function normalizeMap(parsed: unknown): Record<string, unknown> {
 }
 
 export function createActiveThemeStore(directory: string): ActiveThemeStore {
-  const stored = createJsonFile(directory, FILE, {
+  const stored = createJsonFile<Record<string, unknown>>(directory, FILE, {
     normalize: normalizeMap,
     empty: () => ({}),
   });

@@ -425,7 +425,7 @@ describe("the library chooser", () => {
     );
     if (button === null) throw new Error("no open button");
     expect(button.className).toContain("px-[var(--space-12)]");
-    expect(button.className).toContain("enabled:hover:border-accent");
+    expect(button.className).toContain("enabled:hover:border-muted");
     expect(button.className).toContain("disabled:text-faint");
 
     await pressButton("[data-yunari-library-cancel]");

@@ -153,7 +153,7 @@ function asLevels(parsed: unknown): unknown {
 export function createThemeSettingsStore(
   directory: string,
 ): ThemeSettingsStore {
-  const levels = createJsonFile(directory, FILE, {
+  const levels = createJsonFile<Levels>(directory, FILE, {
     normalize: (parsed) => normalizeLevels(asLevels(parsed)),
     empty: () => ({}),
   });

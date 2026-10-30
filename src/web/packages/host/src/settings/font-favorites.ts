@@ -63,13 +63,19 @@ export function normalizeFontFavorites(input: unknown): readonly string[] {
 export function createFontFavoritesStore(
   directory: string,
 ): FontFavoritesStore {
-  const stored = createJsonFile(directory, FILE, {
-    normalize: normalizeFontFavorites,
-    empty: () => [],
-  });
+  const stored = createJsonFile<{ readonly favorites: readonly string[] }>(
+    directory,
+    FILE,
+    {
+      normalize: (parsed) => ({ favorites: normalizeFontFavorites(parsed) }),
+      empty: () => ({ favorites: [] }),
+    },
+  );
 
   return {
-    read: () => stored.read(),
+    async read() {
+      return (await stored.read()).favorites;
+    },
 
     async write(input) {
       const normalized = normalizeFontFavorites(input);

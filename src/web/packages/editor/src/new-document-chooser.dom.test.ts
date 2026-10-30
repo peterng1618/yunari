@@ -426,7 +426,7 @@ describe("the new-document chooser", () => {
     );
     if (button === null) throw new Error("no create button");
     expect(button.className).toContain("px-[var(--space-12)]");
-    expect(button.className).toContain("enabled:hover:border-accent");
+    expect(button.className).toContain("enabled:hover:border-muted");
   });
 });
 

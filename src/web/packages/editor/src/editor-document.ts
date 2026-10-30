@@ -571,10 +571,14 @@ export class EditorDocument {
     const declared = this.#assets.declarations.find(
       (asset) => asset.id === assetId,
     );
+    const family =
+      declared !== undefined && "family" in declared
+        ? declared.family
+        : undefined;
     return Object.values(presets ?? {}).some(
       (preset) =>
         preset.face?.assetId === assetId ||
-        (declared?.kind === "font" && preset.family === declared.family),
+        (family !== undefined && preset.family === family),
     );
   }
 
