@@ -2037,6 +2037,29 @@ describe("Host theme routes", () => {
       expect(Buffer.from(answer.bytesBase64, "base64")).toEqual(bytes);
     });
 
+    it("refuses a trim range whose end is not after its start", async () => {
+      const res = await request(
+        normalizing.server,
+        "POST",
+        "/api/themes/normalize-video?startMs=5000&endMs=5000",
+        new Uint8Array([1, 2, 3]),
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.text()).toBe("That trim is not a usable range.");
+    });
+
+    it("refuses a half-specified trim", async () => {
+      const res = await request(
+        normalizing.server,
+        "POST",
+        "/api/themes/normalize-video?startMs=5000",
+        new Uint8Array([1, 2, 3]),
+      );
+
+      expect(res.status).toBe(400);
+    });
+
     it("refuses a normalized output above the store's per-asset bound", async () => {
       // The route had no output check at all, so a conforming video the writer
       // would refuse above 80 MiB crossed here and failed only at save. The

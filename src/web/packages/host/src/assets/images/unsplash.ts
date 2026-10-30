@@ -13,9 +13,13 @@ const API = `https://api.unsplash.com/`;
 const PER_PAGE = 30;
 const LICENCE = "Unsplash License";
 const PHOTO_ID = /^[A-Za-z0-9_-]+$/;
+/** A descriptor-safe slug: Unsplash joins words with hyphens. */
+const PHOTO_SLUG = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
 
 interface UnsplashPhoto {
   readonly id?: unknown;
+  /** The page's own slug, e.g. `hong-kong-skyline-and-victoria-harbour-mKo913hcVLs`. */
+  readonly slug?: unknown;
   readonly alt_description?: unknown;
   readonly description?: unknown;
   readonly premium?: unknown;
@@ -234,6 +238,11 @@ export const unsplashSource: AssetSource = {
     const full = textOf(details.urls?.full);
     if (trigger === undefined || full === undefined) return undefined;
 
+    // The slug is the author-facing name; the id alone is a byte address. An
+    // unexpected slug falls back to the id rather than becoming a path.
+    const slug = textOf(details.slug);
+    const name = slug !== undefined && PHOTO_SLUG.test(slug) ? slug : resultId;
+
     // The API guideline's download trigger, before the image itself.
     await ctx.fetch(trigger, { headers: auth(key), signal: ctx.signal });
 
@@ -243,7 +252,7 @@ export const unsplashSource: AssetSource = {
     return {
       bytes: new Uint8Array(await image.arrayBuffer()),
       contentType: "image/jpeg",
-      filename: `${resultId}.jpg`,
+      filename: `${name}.jpg`,
     };
   },
 };

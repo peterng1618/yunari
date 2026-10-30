@@ -260,6 +260,9 @@ export const PREVIEW_GLYPH: LucideIcon = Maximize2;
  *  pair is a square with a plus and the refresh arrows. */
 export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
 export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
+/** The Wallpaper Engine toolbar's re-read: the same arrows as Replace, used for
+ *  their literal meaning. */
+export const REFRESH_GLYPH: LucideIcon = RefreshCw;
 
 /** The store cell's four actions, from the facts band: a folder for
  *  opening the item, a monitor for assigning it to a display, a download for

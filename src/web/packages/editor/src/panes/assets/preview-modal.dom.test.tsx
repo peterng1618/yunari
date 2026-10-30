@@ -133,10 +133,26 @@ it("draws the stage and a 270px right panel", async () => {
   ).not.toBeNull();
   expect(
     modal.querySelector("[data-yunari-asset-preview-group='file']"),
-  ).not.toBeNull();
+  ).toBeNull();
   expect(
     modal.querySelector("[data-yunari-asset-preview-group='attribution']"),
   ).not.toBeNull();
+  // A long name wraps instead of being cut with an ellipsis.
+  const heading = [...modal.querySelectorAll("span")].find(
+    (candidate) => candidate.textContent === assetFileName(IMAGE),
+  );
+  expect(heading?.className).toContain("break-words");
+  expect(heading?.className).not.toContain("truncate");
+});
+
+it("draws no redundant file or usage prose", async () => {
+  const modal = await open(IMAGE);
+
+  expect(modal.textContent).not.toContain("Local file");
+  expect(modal.textContent).not.toContain(
+    "No object, background or type token",
+  );
+  expect(modal.textContent).not.toContain("Recycle Bin");
 });
 
 it("offers Remove, Replace, Background and Place for an image", async () => {

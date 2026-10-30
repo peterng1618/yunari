@@ -133,6 +133,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     'two hidden `type="file"` inputs, driven by their own buttons',
   ],
   [
+    "panes/assets/video-trim-modal.tsx",
+    "two range inputs: a drag is the value, with no draft to compose or commit",
+  ],
+  [
     "panes/composition/composition-pane.tsx",
     "a copy: the inline rename field is uncontrolled and keeps its own Enter, Escape and blur",
   ],

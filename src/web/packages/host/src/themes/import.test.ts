@@ -280,7 +280,7 @@ describe("importThemePackage", () => {
     const imported = await importThemePackage(
       packageBytes({
         envelope: videoEnvelope("family-room", "Living Room"),
-        assets: { "assets/clip.mp4": fixture("long.mp4") },
+        assets: { "assets/clip.mp4": fixture("too-long.mp4") },
       }),
       { store },
     );
@@ -288,7 +288,7 @@ describe("importThemePackage", () => {
     expect(imported).toEqual({
       ok: false,
       message:
-        "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum",
+        "assets/clip.mp4: duration 61500 ms exceeds the 60000 ms maximum",
     });
     await expect(fs.stat(path.join(library, "family-room"))).rejects.toThrow();
   });

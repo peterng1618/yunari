@@ -403,11 +403,11 @@ describe("submissionFiles", () => {
   });
 
   it("refuses a video past the duration cap before a submission is built", async () => {
-    // The committed 31.5 s fixture, read rather than regenerated.
+    // The committed 61.5 s fixture, read rather than regenerated.
     const long = new Uint8Array(
       readFileSync(
         new URL(
-          "../../../theme-package/test-fixtures/long.mp4",
+          "../../../theme-package/test-fixtures/too-long.mp4",
           import.meta.url,
         ),
       ),
@@ -434,7 +434,7 @@ describe("submissionFiles", () => {
     expect(result).toEqual({
       ok: false,
       message:
-        "assets/clip.mp4: duration 31500 ms exceeds the 30000 ms maximum",
+        "assets/clip.mp4: duration 61500 ms exceeds the 60000 ms maximum",
     });
   });
 
