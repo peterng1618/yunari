@@ -2024,7 +2024,6 @@ export const uiCopy = {
     /** Each pane's own chooser, named by what it lists rather than by the pane
      * it sits in — the section heading already says Paint tokens or Type
      * tokens. */
-    colourToken: "Colour token",
     typeToken: "Type token",
     paint: "Paint",
     addColour: "Add colour",
@@ -2040,7 +2039,6 @@ export const uiCopy = {
     typeTokens: "Type tokens",
     addType: "Add type",
     deleteType: "Delete type",
-    previewFont: "Preview font",
     applyFont: "Apply font",
     applyTrio: "Apply trio",
     unitDisplay: "Unit display",
@@ -2155,10 +2153,8 @@ export const uiCopy = {
     weight: "Weight",
     lineHeight: "Line height",
     letterSpacing: "Letter spacing",
-    /** The curated face a preset adopts, and the trio whose faces are written
-        across the presets. */
+    /** The curated face a preset adopts. */
     fontFace: "Font face",
-    fontTrioAdopt: "Font trio",
     fontBound: "Bound to a packaged face",
     unbindFont: "Unbind",
   },

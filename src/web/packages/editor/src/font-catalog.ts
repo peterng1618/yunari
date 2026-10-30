@@ -43,10 +43,6 @@ export function fontTrio(id: string): FontTrio | undefined {
   return BY_ID.get(id);
 }
 
-export function fontTrios(): readonly FontTrio[] {
-  return TRIOS;
-}
-
 /** Every distinct curated face, for the picker. Deduplicated by the generator:
  * 261 of them, because a heading is clamped to the pairing's own recommendation
  * rather than to a uniform 700, which is what the design doc's measured 238

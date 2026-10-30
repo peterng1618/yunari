@@ -1,4 +1,5 @@
 import { formatColor, parseColor } from "@yunari/renderer-core";
+import { solidOf } from "../../packages/editor/src/new-fabric-theme-globals.js";
 
 /**
  * The paints the editor spec's fixture documents are authored with.
@@ -36,6 +37,7 @@ export const BARS_END_PAINT = "#334455";
 /** The fixtures' accent: the palette entry and every object's resolved fill. */
 export const ACCENT_PAINT = "#00b8d9";
 
-/** The plate/ink pair the reorder fixture's palette declares. */
+/** The plate/ink pair the reorder fixture's palette declares. `INK_PAINT` is
+ * the starter palette's text solid, read from its owner rather than restated. */
 export const PLATE_PAINT = "#101318";
-export const INK_PAINT = "#ecf5ff";
+export const INK_PAINT = solidOf.text!;
