@@ -265,7 +265,7 @@ export type TextRun =
   | {
       readonly kind: "literal";
       readonly text: string;
-      readonly typeToken?: `typeTokens.${string}`;
+      readonly typeToken: `typeTokens.${string}`;
       readonly style?: StyleMap;
     }
   | {
@@ -274,7 +274,7 @@ export type TextRun =
       readonly bindingId: string;
       readonly precision?: number;
       readonly unitDisplay?: "none" | "short" | "long";
-      readonly typeToken?: `typeTokens.${string}`;
+      readonly typeToken: `typeTokens.${string}`;
       readonly style?: StyleMap;
     };
 

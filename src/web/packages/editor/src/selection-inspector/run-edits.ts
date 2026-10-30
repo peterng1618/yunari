@@ -346,7 +346,10 @@ export function writeTextLayout(
  */
 export function appendRun(target: RunTarget): boolean {
   const last = authoredRunsOf(target.object).at(-1);
-  const inherited = last === undefined ? {} : lookOfRun(last);
+  const inherited =
+    last === undefined
+      ? { typeToken: "typeTokens.body" as const }
+      : lookOfRun(last);
   replaceRuns(target, [
     ...authoredRunsOf(target.object),
     { kind: "literal", text: "", ...inherited },

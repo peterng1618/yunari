@@ -238,7 +238,13 @@ describe("binding a text run to a sensor", () => {
 
   it("previews a format in the document's own language", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "value", bindingId: "clock-date" }],
+      runs: [
+        {
+          kind: "value",
+          bindingId: "clock-date",
+          typeToken: "typeTokens.body",
+        },
+      ],
       locale: "ja",
     });
     await choose(
@@ -906,7 +912,12 @@ describe("which palette token a run's colour is set in", () => {
   } as unknown as FabricGlobals;
 
   const inBars: readonly TextRun[] = [
-    { kind: "literal", text: "42", style: { color: { ref: "palette.bars" } } },
+    {
+      kind: "literal",
+      text: "42",
+      typeToken: "typeTokens.body",
+      style: { color: { ref: "palette.bars" } },
+    },
   ];
 
   it("lists each token under the name its own owner gives it", async () => {
@@ -973,7 +984,9 @@ describe("which binding a value run carries", () => {
 
   it("marks a run that names a binding this object never declared", async () => {
     const box = mountRunEditor({
-      runs: [{ kind: "value", bindingId: "ghost" }],
+      runs: [
+        { kind: "value", bindingId: "ghost", typeToken: "typeTokens.body" },
+      ],
     });
 
     expect(box.binding().problem).toBe("undeclared");
@@ -993,7 +1006,7 @@ describe("which binding a value run carries", () => {
           text: "Free space",
           typeToken: "typeTokens.60-600",
         },
-        { kind: "value", bindingId: "disk.free" },
+        { kind: "value", bindingId: "disk.free", typeToken: "typeTokens.body" },
       ],
     });
     await click(box.pick<HTMLElement>('[data-yunari-run-tab="2"]'));
@@ -1068,7 +1081,9 @@ describe("which readings a run may name", () => {
     // options would show the run as reading nothing and leave no way back to
     // the key the document holds.
     const box = mountRunEditor({
-      runs: [{ kind: "value", bindingId: "saved" }],
+      runs: [
+        { kind: "value", bindingId: "saved", typeToken: "typeTokens.body" },
+      ],
       declared: [{ id: "saved", semanticKey: "retired.key" }],
       descriptors: () => [fan],
     });

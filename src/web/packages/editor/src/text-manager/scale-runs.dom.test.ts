@@ -34,6 +34,7 @@ function sizeOf(object: IText, index = 0): unknown {
 const SIZED: TextRun = {
   kind: "literal",
   text: "CPU",
+  typeToken: "typeTokens.body",
   style: { fontSize: { value: 46 } },
 };
 

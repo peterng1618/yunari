@@ -51,9 +51,15 @@ function tokenOverflowsBox(): boolean {
 
 function runs(): readonly TextRun[] {
   return [
-    { kind: "literal", text: "MEM " },
-    { kind: "value", bindingId: "m", precision: 0, unitDisplay: "none" },
-    { kind: "literal", text: " %" },
+    { kind: "literal", text: "MEM ", typeToken: "typeTokens.body" },
+    {
+      kind: "value",
+      bindingId: "m",
+      precision: 0,
+      unitDisplay: "none",
+      typeToken: "typeTokens.body",
+    },
+    { kind: "literal", text: " %", typeToken: "typeTokens.body" },
   ];
 }
 
