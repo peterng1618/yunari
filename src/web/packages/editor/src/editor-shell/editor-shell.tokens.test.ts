@@ -83,6 +83,7 @@ function declarationBlock(palette: string): string {
 const SOURCE_TOKENS = [
   "--shell-backdrop",
   "--shell-surface",
+  "--shell-popover",
   "--shell-surface-strong",
   "--shell-edge",
   "--shell-text",
@@ -483,8 +484,8 @@ describe("shell token stylesheet", () => {
 
     // **One token is not a colour, and a `--color-*` name for it would compile
     // a broken utility** — Tailwind's namespaces are per type, so a font stack
-    // belongs in `--font-*`. Measured: the file declares twelve `--shell-*`
-    // tokens and eleven of them are colours, which the count below pins so
+    // belongs in `--font-*`. Measured: the file declares thirteen `--shell-*`
+    // tokens and twelve of them are colours, which the count below pins so
     // this exclusion cannot quietly grow to swallow one.
     const NOT_A_COLOUR = new Set(["--shell-display"]);
     const declared = [...css.matchAll(/^\s*(--shell-[a-z-]+)\s*:/gm)].map(
@@ -493,7 +494,7 @@ describe("shell token stylesheet", () => {
     const colours = [...new Set(declared)].filter(
       (token) => !NOT_A_COLOUR.has(token),
     );
-    expect(colours, "the exclusion set is hiding a colour").toHaveLength(11);
+    expect(colours, "the exclusion set is hiding a colour").toHaveLength(12);
 
     for (const token of colours) {
       expect(

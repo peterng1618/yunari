@@ -127,8 +127,9 @@ function numberInput(options: NumberInputOptions): NumberInput {
   };
 
   // `change`, never per keystroke: a half-typed `1` of `1000` is not an edit.
-  const refuse = (restoreTo = last): void => {
+  const refuse = (restoreTo = last, reason = invalidMessage): void => {
     show(restoreTo);
+    alert.textContent = reason;
     if (alert.parentElement === null) options.host.append(alert);
     options.onReject?.();
   };
@@ -140,9 +141,18 @@ function numberInput(options: NumberInputOptions): NumberInput {
     // a non-integer is refused rather than rounded: both are a different
     // mistake from a value that is merely too big, and the field still has to
     // tell them apart. `Number.isInteger` also rejects `NaN` and `Infinity`.
+    // One vocabulary with the inspector's own controls: the reason names what
+    // was wrong rather than saying only that something was.
     const next = raw === "" ? Number.NaN : Number(raw);
     if (!Number.isInteger(next)) {
-      refuse();
+      refuse(
+        last,
+        raw.trim() === ""
+          ? uiCopy.controls.valueRequired
+          : Number.isFinite(next)
+            ? uiCopy.controls.wholeNumber
+            : uiCopy.controls.notANumber,
+      );
       return;
     }
     // Landing on the bound teaches it; reverting to the old value hides it.

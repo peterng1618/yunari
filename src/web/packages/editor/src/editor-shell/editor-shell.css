@@ -33,6 +33,9 @@ body,
    palette ahead of the bundle would have been. */
 :root {
   --shell-surface: #eff9f2bf;
+  /* A popover's own ground: the drawing fixes it at 95%, so a cell behind it
+     does not read as part of the menu. */
+  --shell-popover: #eff9f2f2;
   --shell-surface-strong: #f8fffbdf;
   --shell-edge: #26463833;
   --shell-text: #102119;
@@ -151,6 +154,7 @@ body,
   :root {
     --shell-backdrop: #0b0e12;
     --shell-surface: #12161c;
+    --shell-popover: #12161cf2;
     --shell-surface-strong: #171c23;
     --shell-edge: #242b34;
     --shell-text: #e8ecf3;
@@ -198,6 +202,7 @@ body,
 .editor-shell-palette-swatch {
   --shell-backdrop: #f5f1e8;
   --shell-surface: #fffdf7;
+  --shell-popover: #fffdf7f2;
   --shell-surface-strong: #fffdf7;
   --shell-edge: #14120e;
   --shell-text: #14120e;
@@ -268,6 +273,7 @@ body,
 [data-shell-palette="graphite"] {
   --shell-backdrop: #0b0e12; /* --bg: the drawn ground is flat */
   --shell-surface: #12161c; /* --hdr and --panel, one value across the shell */
+  --shell-popover: #12161cf2;
   --shell-surface-strong: #171c23; /* --panel2 */
   --shell-edge: #242b34; /* --edge */
   --shell-text: #e8ecf3; /* --text */
@@ -322,6 +328,7 @@ body,
 [data-shell-palette="ember"] {
   --shell-backdrop: #e9cdb4;
   --shell-surface: #f7e2d2;
+  --shell-popover: #f7e2d2f2;
   --shell-surface-strong: #fbeade;
   --shell-edge: #8a4a24;
   --shell-text: #2e1a0f;
@@ -357,6 +364,7 @@ body,
 [data-shell-palette="moss"] {
   --shell-backdrop: #cfe0bb;
   --shell-surface: #e4efd9;
+  --shell-popover: #e4efd9f2;
   --shell-surface-strong: #eff6e7;
   --shell-edge: #4a6b2c;
   --shell-text: #1c2a12;
@@ -388,6 +396,7 @@ body,
 [data-shell-palette="plum"] {
   --shell-backdrop: #dccdef;
   --shell-surface: #ece3f7;
+  --shell-popover: #ece3f7f2;
   --shell-surface-strong: #f3ecfb;
   --shell-edge: #5f3f86;
   --shell-text: #241634;
@@ -418,6 +427,7 @@ body,
 }
 [data-shell-palette="light"] {
   --shell-surface: #eff9f2bf;
+  --shell-popover: #eff9f2f2;
   --shell-surface-strong: #f8fffbdf;
   --shell-edge: #26463833;
   --shell-text: #102119;
@@ -558,7 +568,7 @@ body,
   --field-label-width: 72px;
   --layer-rename-min-height: 22px;
   --view-readout-min-width: 56px;
-  --compact-layer-panel-width: 280px;
+  --compact-layer-panel-width: 246px;
   /* How wide the Host mode's sections run. A settings form is read, not
      scanned, and its rows are label-and-well pairs that a 2560px window would
      stretch past reading. The measure is its own. */
@@ -592,6 +602,7 @@ body,
 @theme inline {
   --color-shell-backdrop: var(--shell-backdrop);
   --color-shell-surface: var(--shell-surface);
+  --color-shell-popover: var(--shell-popover);
   --color-shell-surface-strong: var(--shell-surface-strong);
   --color-shell-edge: var(--shell-edge);
   --color-shell-text: var(--shell-text);
@@ -3069,8 +3080,8 @@ body,
   }
   .editor-shell-body {
     grid-template-areas: "rail panel stage";
-    /* 280px rather than the wide layout's 246px, because the stage is sharing
-       a narrow window with it. The bound column is what gives way first. */
+    /* 246px, DESIGN.md §7.3's default: the compact layout does not buy the
+       bound column room by taking it from the stage. */
     grid-template-columns: 46px var(--compact-layer-panel-width) minmax(0, 1fr);
   }
   .editor-shell-body[data-collapsed="true"] {

@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { useEffect, useRef } from "react";
 import { tooltip } from "../../editor-shell/controls/tooltip.js";
+import { destructiveMarker } from "../../object-actions.js";
 import {
   type ControlProps,
   describedBy,
@@ -52,8 +53,10 @@ export function useControlTooltip(
  * `label`, sets it as the `aria-label` and mounts {@link useControlTooltip} on
  * it, so neither can be changed without the other.
  *
- * `--hot` marks the destructive ones and only those; a destructive control
- * whose action is refused goes `--faint` rather than dimming red.
+ * `--hot` marks the destructive ones and only those, through the registry's
+ * `destructiveMarker`. The mark is not a class: a control whose action is
+ * refused goes `--faint` because the marker's rule excludes disabled and
+ * aria-disabled buttons.
  */
 export function ControlIconButton(
   // No `hint`: this control's tooltip is its label, so there is nowhere a hint
@@ -88,16 +91,15 @@ export function ControlIconButton(
   const ref = useRef<HTMLButtonElement>(null);
   useControlTooltip(ref, label, shortcut);
 
-  const tone = blocked
-    ? "text-faint"
-    : destructive === true
-      ? "text-hot"
-      : "text-muted";
+  const tone = blocked ? "text-faint" : "text-muted";
 
   return (
     <span className="inline-flex items-center gap-[var(--space-6)]">
       <button
         {...data}
+        {...(destructive === true
+          ? destructiveMarker({ destructive: true })
+          : {})}
         ref={ref}
         id={ids.control}
         type="button"

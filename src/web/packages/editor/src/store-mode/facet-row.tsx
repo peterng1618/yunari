@@ -124,7 +124,7 @@ function FacetButton(props: {
           <Popover.Popup
             aria-label={facet.name}
             data-yunari-facet-popup={facet.id}
-            className="flex max-h-[var(--available-height)] w-[16rem] flex-col gap-[var(--space-4)] overflow-y-auto rounded-xl border border-edge bg-panel p-[var(--space-8)] shadow-[var(--elev-2)]"
+            className="flex max-h-[var(--available-height)] w-[16rem] flex-col gap-[var(--space-4)] overflow-y-auto rounded-xl border border-edge bg-[var(--shell-popover)] p-[var(--space-8)] shadow-[var(--elev-2)]"
           >
             {/* The sentence the surface puts above the groups, where the facet
                 has one. It is the facet's own data rather than a Shape special

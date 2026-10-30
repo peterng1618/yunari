@@ -614,6 +614,23 @@ function bound(value: number, min: number, max: number): number {
 }
 
 /**
+ * A number the author typed in full, or nothing.
+ *
+ * `Number` accepts `""`, `" "`, `"0x10"` and `"1e5"`, so a finite check after
+ * it would commit a value the author never wrote — and the sibling path branch
+ * and `ControlNumber.parse` both refuse those. A plain decimal with an optional
+ * sign and fraction is the one grammar all three callers share.
+ */
+function parsedGeometryNumber(value: string | number): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(value.trim())) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
  * Writes one of a shape's own geometry fields, and hands back whether the edit
  * applied. The rules that parse, bound and adopt geometry live here with the
  * fields that describe them; `index.ts` is the funnel that asks for them.
@@ -628,7 +645,9 @@ export function writeShapeGeometryField(
   value: string | number,
 ): boolean {
   if (fieldId === "shape-sides" && object instanceof Polygon) {
-    const sides = bound(Number(value), MIN_POLYGON_SIDES, MAX_POLYGON_SIDES);
+    const typed = parsedGeometryNumber(value);
+    if (typed === undefined) return false;
+    const sides = bound(typed, MIN_POLYGON_SIDES, MAX_POLYGON_SIDES);
     const { minX, minY, width, height } = boundsOf(object.points);
     object.set(
       "points",
@@ -666,8 +685,8 @@ export function writeShapeGeometryField(
       // wrote `NaN` for an unreadable number, which is an endpoint nothing can
       // select or draw. The funnel is public, so the guard belongs here and not
       // only in the control that happens to call it.
-      const endpoint = Number(value);
-      if (!Number.isFinite(endpoint)) return false;
+      const endpoint = parsedGeometryNumber(value);
+      if (endpoint === undefined) return false;
       object.set(key, endpoint);
       return true;
     }
@@ -679,10 +698,9 @@ export function writeShapeGeometryField(
       // Both angles are the object's own Fabric properties, so the write is the
       // same one a save makes and a reopen reads — there is no second copy of
       // the sweep for this panel to disagree with.
-      object.set(
-        key,
-        bound(Number(value), MIN_SWEEP_DEGREES, MAX_SWEEP_DEGREES),
-      );
+      const typed = parsedGeometryNumber(value);
+      if (typed === undefined) return false;
+      object.set(key, bound(typed, MIN_SWEEP_DEGREES, MAX_SWEEP_DEGREES));
       return true;
     }
   }
@@ -737,9 +755,9 @@ function parsedPoints(text: string): { x: number; y: number }[] | undefined {
 function parsedPoint(line: string): { x: number; y: number } | undefined {
   const [x, y, ...rest] = line.split(/[\s,]+/).filter((token) => token !== "");
   if (x === undefined || y === undefined || rest.length > 0) return undefined;
-  const point = { x: Number(x), y: Number(y) };
-  return Number.isFinite(point.x) && Number.isFinite(point.y)
-    ? point
+  const point = { x: parsedGeometryNumber(x), y: parsedGeometryNumber(y) };
+  return point.x !== undefined && point.y !== undefined
+    ? { x: point.x, y: point.y }
     : undefined;
 }
 
