@@ -5096,6 +5096,38 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("re-reads a panel's clip when its display is turned", async () => {
+      const compared: string[] = [];
+      const hosting = host({
+        panels: managerOver([], [], [], [], compared),
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+      });
+
+      try {
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        expect(added.status).toBe(201);
+
+        const turned = await request(
+          hosting.server,
+          "PATCH",
+          "/api/displays/strip",
+          json({ rotation: 90 }),
+        );
+        expect(turned.status).toBe(200);
+
+        // The uploaded clip carries the angle; the page picks the rest up by
+        // itself, so the re-read is what the runner must be asked for.
+        expect(compared).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("refuses a model no driver claims, before writing a record", async () => {
       // A record nothing can open would be a row in the list that never shows
       // anything and cannot say why.

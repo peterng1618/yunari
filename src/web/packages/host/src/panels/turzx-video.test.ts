@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice } from "./panel-device.js";
@@ -51,6 +53,30 @@ const threeByteClip = async () => ({
 
 const still = { offsetX: 0, offsetY: 0 };
 
+/**
+ * A run that records the arguments and writes the output ffmpeg would have.
+ *
+ * The source is random so the transcode cache never answers a second case: a
+ * cached clip would skip the run these assertions read.
+ */
+function recordingRun(written: readonly number[] = [1]) {
+  const calls: string[][] = [];
+
+  return {
+    calls,
+    run: async (args: readonly string[]) => {
+      calls.push([...args]);
+      await writeFile(args[args.length - 1]!, Uint8Array.from(written));
+      return { code: 0, stderr: "" };
+    },
+  };
+}
+
+/** The `-vf` argument, which is where the picture's composition is decided. */
+function filterOf(args: readonly string[]): string {
+  return args[args.indexOf("-vf") + 1] ?? "";
+}
+
 describe("transcodeForPanel", () => {
   it("refuses a transcode the encoder failed", async () => {
     const result = await transcodeForPanel(Uint8Array.of(1), {
@@ -58,6 +84,87 @@ describe("transcodeForPanel", () => {
       verifyForTest: true,
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("fits the box the mount puts the clip in, then turns it", async () => {
+    const upright = recordingRun();
+    const bytes = randomBytes(16);
+    await transcodeForPanel(bytes, {
+      run: upright.run,
+      verifyForTest: true,
+    });
+    expect(filterOf(upright.calls[0]!)).toBe(
+      "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480",
+    );
+
+    // A quarter turn swaps the layer's box before it turns, so the crop is
+    // portrait and the turn comes after it.
+    const turned = recordingRun();
+    await transcodeForPanel(randomBytes(16), {
+      run: turned.run,
+      verifyForTest: true,
+      rotation: 90,
+    });
+    expect(filterOf(turned.calls[0]!)).toBe(
+      "scale=480:800:force_original_aspect_ratio=increase:force_divisible_by=2,crop=480:800,transpose=1",
+    );
+
+    const counter = recordingRun();
+    await transcodeForPanel(randomBytes(16), {
+      run: counter.run,
+      verifyForTest: true,
+      rotation: 270,
+    });
+    expect(filterOf(counter.calls[0]!)).toMatch(/,transpose=2$/);
+
+    const upsideDown = recordingRun();
+    await transcodeForPanel(randomBytes(16), {
+      run: upsideDown.run,
+      verifyForTest: true,
+      rotation: 180,
+    });
+    expect(filterOf(upsideDown.calls[0]!)).toMatch(/,hflip,vflip$/);
+    expect(filterOf(upsideDown.calls[0]!)).toContain("crop=800:480");
+  });
+
+  it("refuses an angle the panel cannot compose, without encoding", async () => {
+    const recorded = recordingRun();
+    const result = await transcodeForPanel(randomBytes(16), {
+      run: recorded.run,
+      verifyForTest: true,
+      rotation: 45,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(recorded.calls).toHaveLength(0);
+  });
+
+  it("encodes again when only the mounting angle changed", async () => {
+    const bytes = randomBytes(16);
+
+    const upright = recordingRun([1]);
+    expect(
+      (
+        await transcodeForPanel(bytes, {
+          run: upright.run,
+          verifyForTest: true,
+        })
+      ).ok,
+    ).toBe(true);
+
+    // The same source and pan on a turned glass is a different clip: a cache
+    // keyed without the angle would serve the upright file.
+    const turned = recordingRun([2]);
+    expect(
+      (
+        await transcodeForPanel(bytes, {
+          run: turned.run,
+          verifyForTest: true,
+          rotation: 90,
+        })
+      ).ok,
+    ).toBe(true);
+    expect(turned.calls).toHaveLength(1);
   });
 });
 
@@ -82,6 +189,18 @@ describe("panelCrop", () => {
     expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
   });
 
+  it("crops the box the mounting angle puts the layer in", () => {
+    // A 90° mount lays the layer out in 480×800 before turning it onto the
+    // glass, so the source window is portrait too.
+    const crop = panelCrop({ width: 1920, height: 1080 }, 0, 0, {
+      width: 480,
+      height: 800,
+    });
+
+    expect(crop.width / crop.height).toBeCloseTo(480 / 800, 2);
+    expect(crop.x + crop.width).toBeLessThanOrEqual(1920);
+  });
+
   it("treats a non-finite offset as centred", () => {
     const source = { width: 1920, height: 1080 };
     expect(panelCrop(source, Number.NaN, Number.POSITIVE_INFINITY)).toEqual(
@@ -91,6 +210,32 @@ describe("panelCrop", () => {
 });
 
 describe("a panel's video", () => {
+  it("hands the display's mounting angle to the transcode", async () => {
+    const angles: number[] = [];
+    const { transport } = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "file_rev_done",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const panel = await opened(transport, {
+      transcode: async (_bytes, _placement, rotation) => {
+        angles.push(rotation);
+        return threeByteClip();
+      },
+      sleep: async () => {},
+    });
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), still, 90);
+      expect(angles).toEqual([90]);
+    } finally {
+      await panel.close();
+    }
+  });
+
   it("uploads only when the device size differs, then starts and inits", async () => {
     const { writes, transport } = fakeTransport(
       "chs_5inch.dev1_rom1.88", // HELLO

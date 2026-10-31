@@ -350,11 +350,12 @@ describe("createPanelManager", () => {
     await manager.stop("strip");
   });
 
-  it("restarts the runner when a save's clip or its pan changed", async () => {
+  it("restarts the runner when a save's clip, its pan or its angle changed", async () => {
     let opens = 0;
-    let clip = {
+    let clip: PanelVideoSource = {
       bytes: Uint8Array.of(7),
       placement: { offsetX: 0, offsetY: 0 },
+      rotation: 0,
     };
     const start = vi.fn(async () => {});
     h.family = familyOver(async () => {
@@ -380,6 +381,16 @@ describe("createPanelManager", () => {
     clip = { bytes: Uint8Array.of(8), placement: { offsetX: 0.5, offsetY: 0 } };
     await manager.refreshVideo("strip");
     expect(opens).toBe(3);
+
+    // The same clip on a turned glass is a different stream, so the runner
+    // re-uploads it rather than keeping the upright copy playing.
+    clip = {
+      bytes: Uint8Array.of(8),
+      placement: { offsetX: 0.5, offsetY: 0 },
+      rotation: 90,
+    };
+    await manager.refreshVideo("strip");
+    expect(opens).toBe(4);
 
     await manager.stop("strip");
   });

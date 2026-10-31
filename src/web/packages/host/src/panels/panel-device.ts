@@ -61,17 +61,26 @@ export interface PanelVideoPlacement {
   readonly offsetY: number;
 }
 
-/** A video background and the placement it was authored with. */
+/** A video background, the placement it was authored with, and the display it
+ *  plays on. */
 export interface PanelVideoSource {
   readonly bytes: Uint8Array;
   readonly placement: PanelVideoPlacement;
+  /** Whole degrees clockwise the display turns the composition; absent means
+   *  upright. The device plays the clip itself, so the page's own turn does not
+   *  reach it — the adapter has to put the angle into the pixels. */
+  readonly rotation?: number;
 }
 
 /** The video half of a panel that takes frames rather than stills. */
 export interface PanelVideo {
   /** Plays `video` (an MP4). The adapter owns every conversion the device
-   *  needs, including the authored pan. */
-  start(video: Uint8Array, placement: PanelVideoPlacement): Promise<void>;
+   *  needs, including the authored pan and the display's mounting angle. */
+  start(
+    video: Uint8Array,
+    placement: PanelVideoPlacement,
+    rotation?: number,
+  ): Promise<void>;
   presentOverlay(png: Uint8Array): Promise<void>;
   stop(): Promise<void>;
 }

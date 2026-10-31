@@ -70,6 +70,7 @@ const VIDEO_DIRECTORY = "/mnt/SDCARD/video";
 type Transcode = (
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
+  rotation: number,
 ) => Promise<TranscodeResult>;
 
 /** One panel this host is driving, by the port it holds.
@@ -233,7 +234,8 @@ class TurzxPanel implements PanelDevice {
     private readonly sleep: (ms: number) => Promise<void>,
   ) {
     this.video = {
-      start: (mp4, placement) => this.startVideo(mp4, placement),
+      start: (mp4, placement, rotation = 0) =>
+        this.startVideo(mp4, placement, rotation),
       presentOverlay: (png) => this.presentOverlay(png),
       stop: () => this.enqueue(() => this.send(TURZX_COMMAND.stopVideo)),
     };
@@ -264,9 +266,10 @@ class TurzxPanel implements PanelDevice {
   private async startVideo(
     mp4: Uint8Array,
     placement: PanelVideoPlacement,
+    rotation: number,
   ): Promise<void> {
     await this.enqueue(async () => {
-      const transcoded = await this.transcode(mp4, placement);
+      const transcoded = await this.transcode(mp4, placement, rotation);
       if (!transcoded.ok) throw new Error(transcoded.message);
 
       const remotePath = `${VIDEO_DIRECTORY}/yunari-${sha256(transcoded.bytes).slice(0, 16)}.mp4`;
@@ -684,7 +687,8 @@ export async function openTurzxPanel(
       }));
   const transcode: Transcode =
     options.transcode ??
-    ((bytes, placement) => transcodeForPanel(bytes, { placement }));
+    ((bytes, placement, rotation) =>
+      transcodeForPanel(bytes, { placement, rotation }));
   const sleep = options.sleep ?? wait;
 
   const candidates = ports.filter(hasIds);
