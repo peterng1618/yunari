@@ -8,7 +8,7 @@ import {
   type FabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createThemeOriginsStore,
   type ThemeOriginsStore,
@@ -380,6 +380,45 @@ describe("installCatalogueItem", () => {
     const stored = await store.read("aurora-copy");
     expect(stored?.envelope.metadata?.name).toBe("Living Room 2");
     expect(stored?.envelope.id).toBe("aurora-copy");
+  });
+
+  it("answers a failed update with the step, not the filesystem's path", async () => {
+    await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
+      expectFree: true,
+    });
+    await origins.write("aurora-copy", {
+      catalogueId: "aurora",
+      version: "1.0.0",
+      installedAt: new Date(0).toISOString(),
+    });
+    const failing: ThemeStore = {
+      ...store,
+      write: async () => {
+        throw Object.assign(
+          new Error(
+            "EPERM: operation not permitted, mkdir 'C:\\Users\\a\\.yunari\\themes\\aurora-copy'",
+          ),
+          { code: "EPERM" },
+        );
+      },
+    };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const result = await installCatalogueItem(REQUEST, {
+        store: failing,
+        origins,
+        fetch: serving(packageOf("living-room", "Living Room 2")),
+      });
+
+      expect(result.ok ? "" : result.stage).toBe("package");
+      // The person is shown the step; the platform's path stays in the log.
+      expect(result.ok ? "" : result.message).not.toContain("C:\\");
+      expect(result.ok ? "" : result.message).toContain("library");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("bumps the origin's version", async () => {

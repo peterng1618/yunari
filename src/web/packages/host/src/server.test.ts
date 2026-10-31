@@ -889,6 +889,47 @@ describe("Host theme routes", () => {
     }
   });
 
+  it("accepts a video at the import bound and refuses one byte above it", async () => {
+    // The importer accepts a normalized video up to MAX_ASSET_BYTES. Base64 on
+    // the save wire is four characters per three bytes, and the route's cap
+    // must carry that plus the document; the old 96 MiB body held only ~72 MiB.
+    const encoded = 4 * Math.ceil(MAX_ASSET_BYTES / 3);
+    expect(encoded).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+
+    const base = createValidPackage("living-room", "Living Room");
+    const envelope: FabricThemeEnvelope = {
+      ...base.envelope,
+      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+    };
+    // Zero bytes encode as "A"; building the string avoids an 80 MiB buffer.
+    const body = (padding: string, overwrite = false): string =>
+      JSON.stringify({
+        envelope,
+        assets: { "assets/clip.mp4": `${"A".repeat(encoded - 4)}${padding}` },
+        ...(overwrite ? { overwrite: true } : {}),
+      });
+
+    // 80 MiB is two bytes past a three-byte group: its final quantum is "AAA=".
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      body("AAA="),
+    );
+    expect(saved.status).toBe(200);
+
+    // One more byte completes the group, so the wire length is unchanged and
+    // the writer's own per-asset bound must answer, not the transport's.
+    const refused = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      body("AAAA", true),
+    );
+    expect(refused.status).toBe(413);
+    expect(refused.text()).toContain("80 MB");
+  }, 60_000);
+
   it("refuses a save built from a document the stored theme has moved past", async () => {
     // Two tabs open the same theme; the first one saves an edit.
     const opened = await request(
@@ -2072,7 +2113,7 @@ describe("Host theme routes", () => {
     it("refuses a normalized output above the store's per-asset bound", async () => {
       // The route had no output check at all, so a conforming video the writer
       // would refuse above 80 MiB crossed here and failed only at save. The
-      // size is also below the 96 MB whole-theme ceiling, which is the gap.
+      // route now applies the writer's own per-asset bound.
       expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
       const base = new Uint8Array(
         await fs.readFile(
@@ -11558,7 +11599,7 @@ describe("Host Wallpaper Engine routes", () => {
           "POST",
           "/api/wallpaper-engine/mpkg",
           mobilePackageBytes([
-            ["pad.bin", new Uint8Array(MAX_THEME_UPLOAD_BYTES)],
+            ["pad.bin", new Uint8Array(MAX_ASSET_BYTES + 1)],
             ["wallpaper.mp4", video],
           ]),
         );
@@ -11575,9 +11616,8 @@ describe("Host Wallpaper Engine routes", () => {
     });
 
     it("refuses a normalized output above the store's per-asset bound", async () => {
-      // The old check used the 96 MB whole-theme ceiling, so a video between
-      // 80 and 96 MB imported and then could not be saved. The bound is now
-      // the writer's own `MAX_ASSET_BYTES`, which is lower.
+      // The import bound is the writer's own `MAX_ASSET_BYTES`, so a video it
+      // yields can always be saved within the whole-theme wire ceiling.
       expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
       const size = MAX_ASSET_BYTES + 1;
       expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);

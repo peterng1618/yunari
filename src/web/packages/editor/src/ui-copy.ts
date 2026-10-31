@@ -1072,6 +1072,8 @@ export const uiCopy = {
      *  (`install-item.ts`). */
     install: {
       noCatalogueVersion: "This item has no catalogue version to install.",
+      unreachable:
+        "This PC could not be reached to install that item. Check Yunari is running, then try again.",
       refused: (status: number): string =>
         `The host refused the install (${status}).`,
       notRefreshed:

@@ -144,6 +144,7 @@ import {
   createThemeStore,
   isValidThemeId,
   MAX_ASSET_BYTES,
+  MAX_THEME_WIRE_BYTES,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeStore,
@@ -457,16 +458,17 @@ const WEATHER_ICON_DIR = path.join(
   "vendor",
   "weather-icons",
 );
-/** A save is JSON with base64 assets, so the wire is a third larger than the
- *  archive it replaced; the store enforces its own bounds on the decoded side.
- *  This is the whole-theme upload ceiling, not one asset's. */
-export const MAX_THEME_UPLOAD_BYTES = 96 * 1024 * 1024;
+/** The whole-theme upload ceiling, derived by the store from every decoded
+ *  bound it enforces: a save is JSON with base64 assets, so the wire is a third
+ *  larger than the assets plus the document and credits caps. A theme the store
+ *  can persist is therefore never refused by the transport first. */
+export const MAX_THEME_UPLOAD_BYTES = MAX_THEME_WIRE_BYTES;
 /** A source video or `.mpkg` is normalized after it arrives, so the author may
  *  bring a file larger than the theme it becomes. This is the source ceiling;
  *  the normalized output must fit the store's `MAX_ASSET_BYTES` instead. */
 export const MAX_VIDEO_SOURCE_BYTES = 512 * 1024 * 1024;
 /** The one sentence both video import routes answer over the store's per-asset
- *  bound. The save route's base64 body is a separate ceiling (vg-753). */
+ *  bound. The save route's body ceiling is derived from that same bound. */
 const VIDEO_OVER_ASSET_BOUND = `That video is larger than the ${
   MAX_ASSET_BYTES / (1024 * 1024)
 } MB one theme asset may carry; re-encode it and try again.`;
@@ -482,10 +484,11 @@ class LargeBodyBusyError extends Error {}
 /**
  * One slot for theme-sized bodies, by default.
  *
- * A body is buffered whole before it is parsed, and two 96 MB imports in flight
- * at once is a memory cost an idle host should not be asked to pay. The second
- * caller is refused rather than queued: the browser retries a 429, whereas a
- * queued request would hold its socket for as long as the first one took.
+ * A body is buffered whole before it is parsed, and two theme-sized imports in
+ * flight at once is a memory cost an idle host should not be asked to pay.
+ * The second caller is refused rather than queued: the browser retries a 429,
+ * whereas a queued request would hold its socket for as long as the first one
+ * took.
  */
 export function createLargeBodyGate(maxConcurrent = 1): {
   run<T>(work: () => Promise<T>): Promise<T>;
@@ -4103,9 +4106,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendJson(response, 200, { ok: false, message: normalized.message });
         return;
       }
-      // The source and the theme have different ceilings: a package may exceed
-      // the whole-theme upload bound, but the video the theme carries must fit
-      // the store's per-asset bound or the save would refuse it later.
+      // The package and the theme have different ceilings: the package's
+      // archive bound is not the theme's, but the video the theme carries must
+      // fit the store's per-asset bound or the save would refuse it later.
       if (normalized.bytes.byteLength > MAX_ASSET_BYTES) {
         sendJson(response, 200, { ok: false, message: VIDEO_OVER_ASSET_BOUND });
         return;

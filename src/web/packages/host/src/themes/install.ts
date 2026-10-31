@@ -4,6 +4,7 @@ import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import { downloadPackage } from "./download.js";
 import { importThemePackage, type ThemeImportResult } from "./import.js";
 import {
+  storeRefusalMessage,
   type ThemeStore,
   ThemeTooLargeError,
   ThemeValidationError,
@@ -284,10 +285,7 @@ async function replaceCatalogueCopy(
       { overwrite: true },
     );
   } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return { ok: false, message: storeRefusalMessage(error) };
   }
 
   const { thumbnail } = parsed;

@@ -34,7 +34,10 @@ export interface InstallControl {
  *
  * Every refusal is the host's own words, for the reason `theme-import.ts`
  * carries out its refusals: the host knows which part of the install failed, and
- * a sentence composed here would hide it.
+ * a sentence composed here would hide it. The one exception is a request that
+ * never reached the host: the browser's "Failed to fetch" names no step and
+ * tells the person nothing they can do, so that failure is logged and answered
+ * with the app's own sentence.
  */
 export async function installItem(
   item: StoreItem,
@@ -65,10 +68,10 @@ export async function installItem(
       }),
     });
   } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    // The raw failure stays off the screen: `TypeError: Failed to fetch` is
+    // the browser's, names no step, and is the same sentence for every cause.
+    console.error("Yunari: the catalogue install request failed.", error);
+    return { ok: false, message: uiCopy.store.install.unreachable };
   }
 
   if (!response.ok) {

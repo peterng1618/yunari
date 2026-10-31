@@ -4,7 +4,12 @@ import {
   type ThemeCredits,
   themeVideoRefusals,
 } from "@yunari/theme-package";
-import { isValidThemeId, ThemeIdTakenError, type ThemeStore } from "./store.js";
+import {
+  isValidThemeId,
+  storeRefusalMessage,
+  ThemeIdTakenError,
+  type ThemeStore,
+} from "./store.js";
 import type { ThumbnailStore } from "./thumbnails.js";
 
 /**
@@ -48,7 +53,9 @@ export interface ThemeImportOptions {
  *
  * Every refusal is its owner's — the reader's for a package it will not read,
  * the store's for a write it would not take — because the reason is what the
- * author has to act on, and a sentence composed here would hide it.
+ * author has to act on, and a sentence composed here would hide it. The one
+ * translation is `storeRefusalMessage`: an `fs` failure's own text names a
+ * path inside the profile, so it is logged and answered with the step.
  */
 export async function importThemePackage(
   bytes: Uint8Array,
@@ -166,10 +173,7 @@ async function writeUnderFreeId(
       // else is the store's own answer to this document, and belongs to the
       // author rather than to the next candidate.
       if (!(error instanceof ThemeIdTakenError)) {
-        return {
-          ok: false,
-          message: error instanceof Error ? error.message : String(error),
-        };
+        return { ok: false, message: storeRefusalMessage(error) };
       }
     }
   }

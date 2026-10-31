@@ -218,6 +218,31 @@ export class ThemeTooLargeError extends Error {
 }
 
 /**
+ * A write failure as the person reads it.
+ *
+ * The store's own sentences — the typed errors above, and the plain ones
+ * `write` raises for its document checks — are answered verbatim, because each
+ * names the thing to change. A filesystem failure is not one of them: its
+ * message is the platform's, and it names an absolute path inside the
+ * profile, which tells the person nothing they can act on and puts a
+ * maintainer's detail on their screen. Node gives every `fs` failure an error
+ * `code`, so that is what tells the two apart — not the text. The raw error is
+ * logged where a maintainer can read it (`main.ts` prints through `console`
+ * too) and the answer names the step that failed.
+ */
+export function storeRefusalMessage(error: unknown): string {
+  if (typeof (error as NodeJS.ErrnoException | undefined)?.code === "string") {
+    console.error("Yunari: saving a theme to the library failed.", error);
+    return (
+      "This PC could not save the theme to its library. " +
+      "Try again, or restart Yunari."
+    );
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * How a removal reaches the platform's trash. The default is the real one;
  * a test substitutes a rename so the store's own decisions can be told apart
  * from the operating system's.
@@ -288,6 +313,13 @@ const MAX_TOTAL_ASSET_BYTES = 90 * 1024 * 1024;
  *  per-file refusal stays the author's sentence. */
 export const MAX_TRASH_UPLOAD_BYTES =
   4 * Math.ceil(MAX_TOTAL_ASSET_BYTES / 3) + 1024 * 1024;
+
+/** What a whole-theme save may carry on the wire: the same base64 assets a
+ *  trash request may carry, plus the document and attribution members a save
+ *  sends beside them. The save route reads this as its body limit, so a theme
+ *  this store can persist is refused by neither the transport nor the writer. */
+export const MAX_THEME_WIRE_BYTES =
+  MAX_TRASH_UPLOAD_BYTES + MAX_THEME_FILE_BYTES + MAX_CREDITS_FILE_BYTES;
 
 /** Bytes as an author reads them, and the exact bytes behind them. The
  *  platform does both, so there is no size table here to drift from the bounds
