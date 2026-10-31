@@ -98,28 +98,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Probe the web servers the browser suite starts
-        # Playwright starts each config `webServer` before the suite, and its
-        # reporter drops that child's stdout and stderr (the `pipe` options
-        # forward to a reporter that discards output with no test attached), so
-        # a server that exits early reports only an exit code. This runs the
-        # three commands on spare ports first, where `timeout` prints what each
-        # one said and rc 124 means it stayed up.
+      - name: Install the secret service the host protects its CA key with
         run: |
-          set -uo pipefail
-          probe() {
-            local out
-            out=$(mktemp)
-            set +e
-            timeout 8 "$@" >"$out" 2>&1
-            local rc=$?
-            set -e
-            echo "== $* (rc=$rc)"
-            sed -n '1,30p' "$out"
-          }
-          probe npx vite preview packages/player --port 4191 --strictPort --host 127.0.0.1
-          probe npx vite preview packages/editor --port 4192 --strictPort --host 127.0.0.1
-          probe node packages/host/bin/yunari.js --no-browser --port 4193 --app-dir /tmp/probe-host-app
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 gnome-keyring libsecret-tools
 
       - name: Display tests (browser)
         # Every project, not just desktop-chromium: the host specs live in their
@@ -130,7 +112,40 @@ jobs:
         # headless, and `host-pwa.spec.ts` installs a persistent profile. Without
         # a display those launch calls fail as "Missing X server or $DISPLAY",
         # which is a fact about the runner rather than about the product.
-        run: xvfb-run --auto-servernum npx playwright test
+        #
+        # The host keeps its CA key in the OS key protector and refuses to start
+        # without one, so the suite runs inside a session bus with an unlocked
+        # keyring: `secret-tool` then reaches the Secret Service the host asks
+        # for, which a bare runner has none of.
+        #
+        # The host a config `webServer` starts reports only an exit code when it
+        # fails: Playwright forwards its output to a reporter that discards what
+        # has no test attached. The preflight starts the same command where its
+        # message survives, and fails the step before Playwright's own opaque
+        # error can.
+        run: |
+          xvfb-run --auto-servernum dbus-run-session -- bash -euo pipefail -c '
+            eval "$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)"
+
+            out=$(mktemp)
+            node packages/host/bin/yunari.js --no-browser --port 4193 --app-dir /tmp/preflight-host-app >"$out" 2>&1 &
+            pid=$!
+            healthy=1
+            for _ in $(seq 1 40); do
+              if curl -fsS http://127.0.0.1:4193/api/health >/dev/null 2>&1; then healthy=0; break; fi
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 0.5
+            done
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            if [ "$healthy" -ne 0 ]; then
+              echo "::error::the host did not answer /api/health"
+              cat "$out"
+              exit 1
+            fi
+
+            npx playwright test
+          '
 
   licences:
     name: Licence notices present

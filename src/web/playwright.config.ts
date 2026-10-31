@@ -143,8 +143,10 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 60_000,
       // Playwright discards a web server's output by default, so a host that
-      // exits before answering reports only the exit code. These two make the
-      // failure legible in the CI log instead of a second blind run.
+      // exits before answering reports only the exit code. Piping it reaches
+      // the local `list` reporter; CI's `github` reporter drops output with no
+      // test attached, which is why the workflow also preflights the same
+      // command where its message survives.
       stdout: "pipe",
       stderr: "pipe",
     },
