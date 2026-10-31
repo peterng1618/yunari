@@ -1,5 +1,4 @@
-import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import {
   type AssignableGroup,
   DEFAULT_UNIT_PREFERENCES,
@@ -7,6 +6,7 @@ import {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import {
   type ControlOption,
   ControlSelect,
@@ -649,18 +649,18 @@ function HostSettings(props: {
               </p>
             ) : null}
             {/* **The rows are a choice, and the choice is which display the
-                questions below speak for** — never which theme it shows. The control set's
-                Segmented is the control for one of a small set, composed in its
-                bare form as the header's mode switch and the store's halves
-                are, and each row is dressed as the card rather than
-                as a segment. */}
+                questions below speak for** — never which theme it shows. The
+                set is too large for Segmented, so it is the control set's
+                choice row: each display is one radio in one labelled group,
+                and the chosen row lifts to `--stage` behind an accent border
+                (DESIGN.md rule 7). The theme it shows is a fact about the
+                choice, drawn at the row's right edge. */}
             {displays.length === 0 ? null : (
-              <ToggleGroup
-                value={[selected ?? ""]}
+              <RadioGroup
+                value={selected ?? ""}
                 aria-label={uiCopy.hostSettings.displays.label}
                 onValueChange={(next) => {
-                  const picked = next[0];
-                  if (picked !== undefined) setChosen(picked);
+                  if (next !== null) setChosen(next);
                 }}
                 className="flex flex-col gap-[var(--space-6)]"
               >
@@ -668,41 +668,43 @@ function HostSettings(props: {
                   const own = display.theme;
                   const shown = shownTheme(display, fallback);
                   return (
-                    <Toggle
+                    <ControlChoiceRow
                       key={display.id}
                       value={display.id}
-                      data-yunari-host-display={display.id}
-                      data-shape={display.shape}
-                      data-rotation={display.rotation}
-                      className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-left data-[pressed]:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-                    >
-                      <span className="min-w-0 flex-1 text-xs text-text">
-                        {display.label}
-                      </span>
-                      <span
-                        data-yunari-host-display-theme=""
-                        className={`flex-none text-xs ${own === null ? "text-faint" : "text-muted"}`}
-                      >
-                        {shown === null
-                          ? uiCopy.hostSettings.displays.nothing
-                          : nameOfTheme(shown)}
-                      </span>
-                      {/* A display with no theme of its own is served the
-                          default, so the row names the theme it shows *and*
-                          says where that answer came from: a name alone would
-                          read as a choice this display made. */}
-                      {own === null && shown !== null ? (
-                        <span
-                          data-yunari-host-display-follows=""
-                          className="flex-none text-2xs text-faint"
-                        >
-                          {uiCopy.hostSettings.displays.follows}
-                        </span>
-                      ) : null}
-                    </Toggle>
+                      label={display.label}
+                      data={{
+                        "data-yunari-host-display": display.id,
+                        "data-shape": display.shape,
+                        "data-rotation": String(display.rotation),
+                      }}
+                      detail={
+                        <>
+                          <span
+                            data-yunari-host-display-theme=""
+                            className={`text-xs ${own === null ? "text-faint" : "text-muted"}`}
+                          >
+                            {shown === null
+                              ? uiCopy.hostSettings.displays.nothing
+                              : nameOfTheme(shown)}
+                          </span>
+                          {/* A display with no theme of its own is served the
+                              default, so the row names the theme it shows *and*
+                              says where that answer came from: a name alone
+                              would read as a choice this display made. */}
+                          {own === null && shown !== null ? (
+                            <span
+                              data-yunari-host-display-follows=""
+                              className="flex-none text-2xs text-faint"
+                            >
+                              {uiCopy.hostSettings.displays.follows}
+                            </span>
+                          ) : null}
+                        </>
+                      }
+                    />
                   );
                 })}
-              </ToggleGroup>
+              </RadioGroup>
             )}
           </Group>
 

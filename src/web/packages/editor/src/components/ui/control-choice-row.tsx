@@ -22,11 +22,15 @@ import {
 type ChoiceShape = "row" | "card" | "chip";
 
 /**
- * One member of a closed set where every member has its own colour: a
- * `--radius-md` row at `--panel-2` carrying an adornment and a name, the chosen
- * one lifted to `--stage` behind an accent border — or, where the
- * surface shapes the choice as a tile, a `--radius-lg` card with
- * the adornment above the name (`ChoiceShape`).
+ * One member of a closed set: a `--radius-md` row at `--panel-2` carrying a
+ * name, the chosen one lifted to `--stage` behind an accent border — or, where
+ * the surface shapes the choice as a tile, a `--radius-lg` card with the
+ * caller's adornment above the name (`ChoiceShape`).
+ *
+ * The swatch is optional: it is what a member *looks like*, and a set whose
+ * members are not colours (the displays host mode lists) has none. A `detail`
+ * is the other half of what a member is not: a fact about the choice, drawn
+ * after the name at the row's right edge.
  *
  * It is a **radio**, and the group owns which one is checked: `Radio.Root`
  * derives `aria-checked` from the enclosing `RadioGroup`'s value, so a `checked`
@@ -43,12 +47,29 @@ type ChoiceShape = "row" | "card" | "chip";
 export function ControlChoiceRow(
   props: ControlProps & {
     readonly value: string;
-    readonly swatch: React.ReactNode;
+    readonly swatch?: React.ReactNode;
     readonly shape?: ChoiceShape | undefined;
+    /**
+     * A fact about the choice, drawn after its name and right-aligned — what the
+     * display shows, or where that answer came from. The name keeps the row's
+     * left edge, because the name is what the member *is*; the detail is what
+     * choosing it would tell the author.
+     */
+    readonly detail?: React.ReactNode;
   },
 ): React.JSX.Element {
-  const { label, id, disabled, refused, hint, data, value, swatch, shape } =
-    props;
+  const {
+    label,
+    id,
+    disabled,
+    refused,
+    hint,
+    data,
+    value,
+    swatch,
+    shape,
+    detail,
+  } = props;
   const ids = useControlIds(id);
   // The two shapes share everything but their geometry: the same 1px `--edge`
   // at `--panel-2`, the same glyph-only hover rule, the same focus outline and
@@ -88,7 +109,16 @@ export function ControlChoiceRow(
         {swatch}
         {/* A chip's whole visible content is the swatch; its name is the
             accessible label, and printing it is the row this shape replaces. */}
-        {shape === "chip" ? null : label}
+        {shape === "chip" ? null : detail === undefined ? (
+          label
+        ) : (
+          <span className="min-w-0 flex-1">{label}</span>
+        )}
+        {detail === undefined ? null : (
+          <span className="flex flex-none items-center gap-[var(--space-8)]">
+            {detail}
+          </span>
+        )}
       </Radio.Root>
       {/* The ids live in the row rather than in a `ControlRow`: a choice row is
           itself the whole row, so a label-and-control pair beside it would be a

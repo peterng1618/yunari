@@ -708,6 +708,39 @@ it("names each display, and the default for the ones with none", async () => {
 });
 
 /**
+ * **The rows are one choice, announced as one.** The set is too large for
+ * Segmented, so DESIGN.md rule 7 makes it choice rows — radios in one labelled
+ * radiogroup, whose value is the checked row — rather than independent toggles
+ * whose pressed state a screen reader would report three times.
+ */
+it("draws the displays as one radiogroup, with the chosen row checked", async () => {
+  const { container } = await mountHost(TWO_DISPLAYS);
+
+  const group = must(
+    container.querySelector<HTMLElement>('[role="radiogroup"]'),
+    "the display radiogroup",
+  );
+  expect(group.getAttribute("aria-label")).toBe(
+    uiCopy.hostSettings.displays.label,
+  );
+
+  const checkedOf = (): readonly string[] =>
+    Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')).map(
+      (radio) =>
+        `${radio.getAttribute("data-yunari-host-display")}:${radio.getAttribute("aria-checked")}`,
+    );
+
+  expect(checkedOf()).toEqual(["this-pc:true", "hallway:false"]);
+
+  await act(async () => displayRow(container, "hallway").click());
+
+  expect(
+    checkedOf(),
+    "choosing a display did not move the group's checked row",
+  ).toEqual(["this-pc:false", "hallway:true"]);
+});
+
+/**
  * The plan's first case: **a rectangular display's quarter-turn rotation is
  * written with its shape**, and the row is replaced from the host's answer
  * rather than optimistically.
