@@ -1,6 +1,6 @@
 name = "yunari-store"
 main = "src/index.ts"
-# 2026-08-22 is the newest date @cloudflare/vitest-pool-workers@0.23.0's bundled workerd supports; Task 5.2 may raise it only if the deploy requires it.
+# 2026-08-22 is the newest date `@cloudflare/vitest-plugin`'s bundled workerd has been verified against here; raise it only when a Worker feature needs a newer runtime.
 compatibility_date = "2026-08-22"
 compatibility_flags = ["nodejs_compat"]
 

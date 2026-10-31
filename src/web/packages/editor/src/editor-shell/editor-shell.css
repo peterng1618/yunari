@@ -1986,7 +1986,7 @@ body,
   /* the type scale — `--text-xs` 11px, the reading a hint or a
      panel row has. A chord mark is mono by the type scale and this size is the one
      every other chord mark in the shell already takes
-     (`.editor-shell-menu-key`, `.editor-shell-primary-key`). */
+     (`.editor-shell-menu-key`). */
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
   color: var(--shell-muted);
@@ -2218,21 +2218,6 @@ body,
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
 }
-/* The chord on the header's one filled control. It inherits that button's
-   own text colour rather than taking a shell role: the primary button's text is
-   the colour chosen against its accent fill, so the mark keeps the contrast the
-   word beside it has. */
-.editor-shell-primary-key {
-  margin-left: var(--space-8);
-  padding: 0 var(--space-4);
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-  border-radius: var(--radius-sm);
-  font-family: ui-monospace, monospace;
-  font-size: var(--text-xs);
-  line-height: var(--text-xs--line-height);
-  color: inherit;
-}
-
 /* Opt-in density primitives: a panel chooses a dense row rather than the shell
    forcing every control onto its own full-width line. */
 .yunari-field {
@@ -2532,14 +2517,14 @@ body,
    13px glyph, so the 28px is slack rather than tight, and the width is left
    where the ruling put it.
 
-   **Held here after the 2026-10-12 ruling narrowed it to 20px, because the
+   **Held at 28px after the 2026-10-12 ruling narrowed it to 20px, because the
    measurement that ruling asked for shows the lever cannot do what it was ruled
-   for.** Narrowing to 20px leaves the attended four-control row's own numbers
-   *identical* — the name is 28px short and the key 41px short at both widths —
-   because both columns are already at their floors and the freed 8px only
-   shortens how far the line overruns into the reserved strip (the role's
-   coverage falls 58px → 50px). So the value waits for a ruling that names a
-   lever the arithmetic can honour; `vg-260` carries the counts. */
+   for.** Narrowing to 20px leaves the attended row's own numbers *identical* at
+   the three-control shape it draws now — the name is 28px short and the key
+   41px short at both widths — because both columns are already at their floors
+   and the freed 8px only shortens how far the line overruns into the reserved
+   strip (the role's coverage falls 58px → 50px). The ruling that followed held
+   the column at 28px; `vg-260` carries the counts. */
 .yunari-layer-mark {
   flex: 0 0 28px;
   min-width: 0;

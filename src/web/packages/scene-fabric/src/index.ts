@@ -1,14 +1,5 @@
 export type { ArtboardSize, SceneBox } from "./artboard-crop.js";
-export {
-  bottom,
-  countable,
-  EDGE_TOLERANCE,
-  outsideBoxes,
-  outsideCount,
-  outsideEdges,
-  right,
-  sceneBoxesOf,
-} from "./artboard-crop.js";
+export { outsideCount, sceneBoxesOf } from "./artboard-crop.js";
 export {
   guardBoxWidth,
   scaleOf,
@@ -57,6 +48,7 @@ export { startSceneRefresh } from "./chart-refresh.js";
 export type { UnsupportedReporter } from "./fabric-nodes.js";
 export {
   applyAuthoredText,
+  isTextObject,
   type PlanTextObject,
   refreshBoundText,
   YUNARI_TEXT_PROPERTY,

@@ -31,13 +31,14 @@ are provenance, not notice rows.
 | `fabric` | 7.4.0 | MIT | scene graph |
 | `fflate` | 0.8.3 | MIT | theme ZIP packages |
 | `ffmpeg-static` | 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
+| `fontkit` | 2.0.4 | MIT | editor: reads a packaged face's glyph outlines when text is converted to paths |
 | `react` | 19.3.1 | MIT | editor shell chrome |
 | `react-dom` | 19.3.1 | MIT | editor shell chrome |
 | `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
 | `lucide-react` | 1.61.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
 | `lineicons` | 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
-| `systeminformation` | 5.33.16 | MIT | host hardware metrics (no dependencies of its own) |
-| `node-forge` | 1.4.0 | BSD-3-Clause OR GPL-2.0 | host: encodes and signs the local CA and leaf that give a display a secure origin; BSD-3-Clause is the one taken (no dependencies of its own) |
+| `systeminformation` | 5.33.19 | MIT | host hardware metrics (no dependencies of its own) |
+| `node-forge` | 1.4.2 | BSD-3-Clause OR GPL-2.0 | host: encodes and signs the local CA and leaf that give a display a secure origin; BSD-3-Clause is the one taken (no dependencies of its own) |
 | `undici` | 7.30.1 | MIT | host: pins the DNS address checked by a custom source's policy to the connection that fetches it |
 | `usb` | 3.2.1 | MIT | host: opens the bulk endpoint a USB panel is driven over. Native module with per-platform prebuilt binaries and no runtime dependencies |
 | `node-hid` | 3.4.0 | MIT OR X11 | host: writes the 64-byte control reports a Kraken Z's LCD takes; MIT is the one taken. The Lian Li panels use `usb` alone; this one is only for the HID interface Windows owns, which libusb cannot claim. Native module, prebuilt per platform |
@@ -121,7 +122,7 @@ its own nested copy of a name already listed above.
 | Package | Version | Licence | Use |
 |---|---|---|---|
 | `@biomejs/biome` | 2.5.14 | MIT OR Apache-2.0 | format/lint |
-| `@cloudflare/vitest-pool-workers` | 0.23.0 | MIT | Workers test pool |
+| `@cloudflare/vitest-plugin` | 1.4.11 | MIT | Workers test plugin |
 | `@cloudflare/workers-types` | 5.20261022.1 | MIT OR Apache-2.0 | Worker runtime types |
 | `@google/design.md` | 0.4.0 | Apache-2.0 | lints `DESIGN.md` in the design gate |
 | `@playwright/mcp` | 0.0.83 | Apache-2.0 | the Playwright MCP server used as an agent tool |
@@ -130,20 +131,20 @@ its own nested copy of a name already listed above.
 | `@tailwindcss/oxide-win32-x64-msvc` | 4.3.3 | MIT | editor dev: Tailwind's native binding for Windows (optional; installed there only) |
 | `@tailwindcss/vite` | 4.3.3 | MIT | editor dev |
 | `@types/culori` | 4.0.1 | MIT | types for culori 4, which ships none |
+| `@types/fontkit` | 2.0.9 | MIT | types for `fontkit` |
 | `@types/node` | 22.20.5 | MIT | types |
 | `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
 | `@types/react` | 19.3.0 | MIT | types |
 | `@types/react-dom` | 19.3.0 | MIT | types |
 | `canvas` | 3.2.3 | MIT | native raster test dependency; may carry linked-library obligations |
-| `jsdom` | 26.1.0 | MIT | DOM tests |
+| `jsdom` | 30.1.3 | MIT | DOM tests |
 | `jsqr` | 1.4.0 | Apache-2.0 | decodes the QR round-trip |
 | `tailwindcss` | 4.3.3 | MIT | editor dev styling |
 | `tsx` | 4.23.15 | MIT | runs scripts that import workspace TypeScript |
 | `typescript` | 7.0.2 | Apache-2.0 | build |
 | `vite` | 8.3.5 | MIT | build/dev |
 | `vitest` | 5.0.5 | MIT | tests |
-| `vitest` | 4.1.12 | MIT | nested under `packages/store-worker` — the pool peers on `^4.1.0` while the workspace runs 5.0.5 |
-| `wrangler` | 4.152.0 | MIT OR Apache-2.0 | Worker build/deploy |
+| `wrangler` | 4.156.0 | MIT OR Apache-2.0 | Worker build/deploy |
 
 Four entries were added on 2026-10-13 — `class-variance-authority`, `clsx` and
 `tailwind-merge` to the runtime/editor table and `@playwright/mcp` to this

@@ -1,15 +1,9 @@
 [
   {
-    "package": "node-forge",
-    "advisory": "GHSA-86w9-cpqp-85rv",
-    "reason": "No patched release exists (affected <=1.4.0). packages/host/src/tls/authority.ts creates, signs and serialises certificates with node-forge's pki API; it never calls a node-forge verifier. Certificates are validated with node:crypto's X509Certificate.verify() in loadOrCreateAuthority and by the browser that accepts the chain.",
-    "reviewed": "2026-10-26"
-  },
-  {
     "package": "zod",
     "advisory": "GHSA-mrhx-c7xc-m3w5",
-    "reason": "The zod override lifts every copy to ^4.6.6 except @google/design.md's, so the only vulnerable copy left is the zod v3 that this dev-only linter requires. The store-worker's production zod resolves to 4.6.7, which is why npm audit --omit=dev reports node-forge alone.",
-    "reviewed": "2026-10-26"
+    "reason": "The zod override pins every copy to 4.6.6 — the first release outside the advisory range — except @google/design.md's, so the only vulnerable copy left is the zod v3 that this dev-only linter requires. The store-worker's production zod resolves to 4.6.6, which is why npm audit --omit=dev reports no findings.",
+    "reviewed": "2026-10-31"
   },
   {
     "package": "@google/design.md",

@@ -1692,6 +1692,9 @@ export const uiCopy = {
      *  and moves nothing, so the row names the opening rather than the act the
      *  switch inside the surface performs. */
     open: "Open publishing",
+    /** The header control's word. It opens the surface that assigns this host to
+     *  a display; the switch inside is what starts or stops publishing. */
+    assign: "Assign to a display",
     start: "Publish to a phone",
     stop: "Stop publishing",
     starting: "Opening the LAN…",
@@ -1710,7 +1713,9 @@ export const uiCopy = {
     reserveAddress:
       "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
     warning:
-      "Plain HTTP on your own network — trusted networks only, never the internet.",
+      "Phone access is HTTPS. Plain HTTP is the fallback on your own network — trusted networks only, never the internet.",
+    fallback: (address: string, port: number): string =>
+      `Fallback http://${address}:${port}`,
     copy: "Copy link",
     copied: "Copied",
     expires: (at: string): string => `Pairing expires ${at}`,
@@ -1746,6 +1751,20 @@ export const uiCopy = {
     redo: "Redo",
     copy: "Copy",
     cut: "Cut",
+    outlineText: "Convert to paths",
+  },
+  /** Why a text object could not be frozen into vector paths. A refusal is
+   *  reported whole-object: partial geometry would silently drop a word. */
+  outline: {
+    empty: "This text has nothing to convert.",
+    fill: "A text filled with a gradient or pattern cannot be converted to paths; give it a solid colour first.",
+    noFont:
+      "This text is set in a face the theme does not declare, so its outlines cannot be read.",
+    badFont:
+      "A declared font file could not be read, so this text cannot be converted to paths.",
+    missingGlyph:
+      "A character in this text has no glyph in the face it is set in, so it cannot be converted to paths.",
+    locked: "Unlock the object before converting it to paths.",
   },
   /** One label per arrange action; keys mirror `ArrangeAction`. */
   arrangeLabels: {

@@ -66,6 +66,8 @@ import { createSelectionInspector } from "./selection-inspector/index.js";
 // The reference table owns the words for actions no menu prints, so the walk
 // reads the Keyboard tab through its carve-out rather than demanding the copy
 // table own the shortcut registry.
+import { shortcutSpokenLabel } from "./shortcut-manager/display.js";
+import { PRODUCT_SHORTCUTS } from "./shortcut-manager/index.js";
 import { SHORTCUT_LABELS } from "./shortcut-manager/reference.js";
 import type { ThemeLibraryEntry } from "./theme-library-client.js";
 import { ThemeLibraryChooser } from "./theme-library-dialog.js";
@@ -222,7 +224,8 @@ it("reads the shortcut sheet, the publish popover and the two dialogs", async ()
           !owned.has(text) &&
           !isStoredName(text) &&
           !isLensId(text) &&
-          !isShortcutWord(text),
+          !isShortcutWord(text) &&
+          !isOwnedChordTooltip(text, owned),
       ),
       surface.name,
     ).toEqual([]);
@@ -368,7 +371,11 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     );
     expect(
       modal.filter(
-        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+        (text) =>
+          !owned.has(text) &&
+          !isItemWord(text) &&
+          !isLensId(text) &&
+          !isOwnedChordTooltip(text, owned),
       ),
       "the item's own surface",
     ).toEqual([]);
@@ -640,6 +647,23 @@ function isLensId(text: string): boolean {
  *  not their owner. */
 function isShortcutWord(text: string): boolean {
   return (Object.values(SHORTCUT_LABELS) as readonly string[]).includes(text);
+}
+
+/**
+ * The publish trigger's tooltip is an owned word plus a live chord. Neither
+ * half is a literal this table lacks, so the joined sentence is owned by its
+ * parts; the chord is checked against the reference table's spoken labels rather
+ * than accepted as free text.
+ */
+function isOwnedChordTooltip(text: string, owned: Set<string>): boolean {
+  const match = /^(.+) \((.+)\)$/.exec(text);
+  if (match === null) return false;
+  return (
+    owned.has(match[1] ?? "") &&
+    PRODUCT_SHORTCUTS.some(
+      (binding) => shortcutSpokenLabel(binding.action) === match[2],
+    )
+  );
 }
 
 /**

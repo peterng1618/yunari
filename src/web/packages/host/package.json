@@ -26,7 +26,7 @@
     "@yunari/scene-fabric": "*",
     "@yunari/theme-package": "*",
     "ffmpeg-static": "5.3.0",
-    "node-forge": "1.4.0",
+    "node-forge": "1.4.2",
     "node-hid": "^3.4.0",
     "serialport": "^13.0.0",
     "systeminformation": "^5.33.13",

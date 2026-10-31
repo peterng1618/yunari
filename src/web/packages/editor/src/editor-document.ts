@@ -12,12 +12,14 @@ import {
   type FontTrioInfo,
   isTypeTokenRole,
 } from "@yunari/renderer-core";
+import { isLocked, isTextObject } from "@yunari/scene-fabric";
 import {
   checkDeclaredAssets,
   MAX_CREDITS_ENTRIES,
   type ThemeCredits,
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
+import { IText } from "fabric/es";
 import type { ArtboardPanel } from "./artboard-panel.js";
 import { assetBytes, familyCuts, trashAssets } from "./asset-finder/client.js";
 import {
@@ -54,6 +56,7 @@ import {
   PersistenceManager,
 } from "./persistence-manager/index.js";
 import type { SelectionInspector } from "./selection-inspector/index.js";
+import { textToOutlines } from "./text-outlines.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
 import { ThemeLibraryManager } from "./theme-library-manager/index.js";
 import { captureThumbnail } from "./thumbnail-capture.js";
@@ -787,14 +790,24 @@ export class EditorDocument {
    * *are* its bindings: a chart manager holding only what it was constructed
    * with draws every inserted card's sparkline with no series at all.
    */
-  addBindings(additions: Readonly<Record<string, readonly Binding[]>>): void {
-    this.#writeEnvelope({
-      ...this.#envelope,
-      bindings: { ...this.#envelope.bindings, ...additions },
-    });
-    const bindings = this.#envelope.bindings ?? {};
-    this.#consumers.runtime().setBindings(bindings);
-    this.#consumers.charts().setBindings(bindings);
+  addBindings(
+    additions: Readonly<Record<string, readonly Binding[]>>,
+    removed: readonly string[] = [],
+  ): void {
+    const bindings = Object.fromEntries(
+      Object.entries({ ...this.#envelope.bindings, ...additions }).filter(
+        ([id]) => !removed.includes(id),
+      ),
+    );
+    const { bindings: _previous, ...withoutBindings } = this.#envelope;
+    this.#writeEnvelope(
+      removed.length > 0 && Object.keys(bindings).length === 0
+        ? withoutBindings
+        : { ...withoutBindings, bindings },
+    );
+    const live = this.#envelope.bindings ?? {};
+    this.#consumers.runtime().setBindings(live);
+    this.#consumers.charts().setBindings(live);
     this.#onBindingsChange?.();
   }
 
@@ -822,6 +835,53 @@ export class EditorDocument {
         error instanceof Error ? error.message : String(error),
       );
     });
+  }
+
+  /** Replaces the selected text with the same object, frozen into paths.
+   *
+   *  The replacement keeps the object's id and name, so the layer row and any
+   *  selection that names it still resolve, but the binding keyed by that id is
+   *  removed: the paths are the reading now, and a live sensor can no longer
+   *  move them. The conversion itself is `text-outlines.ts`'s; this owns only
+   *  the scene swap and the envelope write. */
+  outlineText(): void {
+    const editor = this.#shell.editor;
+    const active = editor.canvas.getActiveObject();
+    if (active === undefined || !isTextObject(active)) return;
+    if (isLocked(active)) {
+      editor.errorManager.warn("outline", uiCopy.outline.locked);
+      return;
+    }
+    // A caret is an edit in progress. Exiting commits the typed text through
+    // the text manager's own handler first, so the conversion freezes what the
+    // author just wrote rather than the authoring view's token.
+    if (active instanceof IText && active.isEditing) active.exitEditing();
+    const outcome = textToOutlines(active, {
+      declarations: this.#assets.declarations.filter(
+        (asset): asset is FontAssetReference =>
+          asset.kind === "font" && "family" in asset,
+      ),
+      bytes: this.#assets.assets,
+    });
+    if (outcome.kind === "refused") {
+      editor.errorManager.warn("outline", outcome.reason);
+      return;
+    }
+    const parent = active.group;
+    const siblings =
+      parent === undefined ? editor.canvas.getObjects() : parent.getObjects();
+    const index = siblings.indexOf(active);
+    editor.canvas.discardActiveObject();
+    if (parent === undefined) editor.canvas.remove(active);
+    else parent.remove(active);
+    const at = index < 0 ? siblings.length : index;
+    if (parent === undefined) editor.canvas.insertAt(at, outcome.group);
+    else parent.insertAt(at, outcome.group);
+    editor.canvas.setActiveObject(outcome.group);
+    const id = active.get("id");
+    if (typeof id === "string") this.addBindings({}, [id]);
+    editor.historyManager.saveState();
+    editor.canvas.requestRenderAll();
   }
 
   /**

@@ -49,6 +49,8 @@ describe("unpublish and republish", () => {
       ).toBe(404);
 
     // Nothing else changed: counters, favourites, versions and objects stay.
+    // The refused download above must not have counted either — a withdrawal
+    // stops new installs, it does not rewrite the history it already has.
     expect(await downloads(env.DB, ITEM_ID)).toBe(4);
     expect(await favoriteCount(env.DB, ITEM_ID)).toBe(2);
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual(["1.0.0", "1.0.1"]);

@@ -50,6 +50,7 @@ function facadeStub(): EditorActionFacade {
     addShape: vi.fn(),
     addChart: vi.fn(),
     insertCard: vi.fn(),
+    outlineText: vi.fn(),
     arrange: vi.fn(() => true),
     canArrange: vi.fn(() => false),
     undo: vi.fn(),
@@ -361,6 +362,7 @@ it("reports a Fabric-free target for the action registry", () => {
     memberCount: 2,
     // ActiveSelection extends Group, but it is not a Group for ungrouping.
     isGroup: false,
+    text: false,
   });
 });
 
@@ -413,6 +415,25 @@ it("offers its constructions with nothing selected, and runs them through the fa
   expect(session.addText).toHaveBeenCalledTimes(1);
   bridge.run("new-shape:ellipse");
   expect(session.addShape).toHaveBeenCalledWith("ellipse");
+});
+
+it("offers the conversion for one text object and routes it through the façade", () => {
+  const text = new IText("AB", { id: "title" });
+  const { bridge, session } = bridgeFor(text);
+
+  expect(bridge.target().text).toBe(true);
+  expect(bridge.can("outline-text")).toBe(true);
+  bridge.run("outline-text");
+  expect(session.outlineText).toHaveBeenCalledTimes(1);
+});
+
+it("refuses the conversion for a group and for a locked text", () => {
+  const grouped = new Group([new IText("AB")]);
+  expect(bridgeFor(grouped).bridge.can("outline-text")).toBe(false);
+
+  const locked = new IText("AB");
+  locked.set("locked", true);
+  expect(bridgeFor(locked).bridge.can("outline-text")).toBe(false);
 });
 
 it("republishes when an object is deleted, so the row goes with it", () => {

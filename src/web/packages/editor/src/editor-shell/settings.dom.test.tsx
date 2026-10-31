@@ -1283,7 +1283,10 @@ describe("the modal's own language", () => {
 
     expect(resolved(style.fontSize), "the --text-2xs is 10px").toBe("10px");
     expect(style.fontWeight).toBe("600");
-    expect(style.letterSpacing).toBe("0.11em");
+    // jsdom serialises an em length as px and, for a font-size that arrives
+    // from a stylesheet, measures it against the sixteen-pixel base rather than
+    // the heading's own 10px. The rule under test is the 0.11em.
+    expect(Number.parseFloat(style.letterSpacing)).toBeCloseTo(0.11 * 16, 6);
   });
 
   it("gives the About row the 74px label column and right-aligned value", async () => {
@@ -1320,6 +1323,7 @@ describe("the modal's own language", () => {
     const style = getComputedStyle(row);
 
     expect(style.display).toBe("flex");
-    expect(style.gridTemplateColumns, "no 74px track reached it").toBe("");
+    // The initial value, which jsdom serialises as `none` rather than blank.
+    expect(style.gridTemplateColumns, "no 74px track reached it").toBe("none");
   });
 });

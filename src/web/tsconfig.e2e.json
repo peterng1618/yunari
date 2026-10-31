@@ -4,9 +4,9 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    // Installed by the host workspace only; named here rather than pulling Node
-    // globals into every browser program.
-    "types": ["./packages/host/node_modules/@types/node"]
+    // The host workspace declares @types/node; npm hoists it, and the type
+    // directive resolves it wherever it lands rather than naming one path.
+    "types": ["node"]
   },
   "include": ["tests/e2e/**/*.ts"]
 }

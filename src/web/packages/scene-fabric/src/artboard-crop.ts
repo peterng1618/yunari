@@ -11,10 +11,7 @@ import { type FabricObject, Group } from "fabric/es";
  *
  * The counting lives here rather than in the surface that reads it because it is
  * a fact about the scene, not about what an inspector chooses to say about it.
- * **The editor's artboard panel is the only reader left.** The player raised the
- * same figure as a crop notice until the user removed it on 2026-10-18:
- * a display says nothing about an overhang now, and
- * every one of them counts.
+ * The editor's artboard panel is its only reader.
  */
 
 /** One object in artboard units, as Fabric reports it for the scene plane. */
@@ -46,31 +43,29 @@ export interface ArtboardSize {
  * cropped over a rounding error; at the tightest fit this repo offers, a unit
  * is a fraction of a pixel.
  */
-export const EDGE_TOLERANCE = 1;
+const EDGE_TOLERANCE = 1;
 
 /**
  * Objects that can count. An object the author hid is not cropped, so counting
  * it would put a false cause next to the real one; an object with no area paints
  * nothing at any position. Both are the author's own doing.
  *
- * The exclusion lives here rather than in a branch of each reader because
- * `outsideCount`, `outsideEdges` and `outsideBoxes` all go through
- * `countedBoxes`, and both surfaces are handed boxes by `sceneBoxesOf`.
+ * The exclusion lives here rather than in a branch of each reader because the
+ * count goes through `countedBoxes`, and the panel is handed boxes by
+ * `sceneBoxesOf`.
  *
- * **Every overhang counts.** There was a third term — an author's mark that a
- * crop was deliberate — and the user removed it on 2026-10-18:
- * nothing is marked, so an object that runs off the
- * edge on purpose reads as a fault for as long as it stands.
+ * Every overhang counts: nothing marks a crop as deliberate, so an object that
+ * runs off the edge on purpose reads as a fault for as long as it stands.
  */
-export function countable(box: SceneBox): boolean {
+function countable(box: SceneBox): boolean {
   return box.visible && box.width > 0 && box.height > 0;
 }
 
-export function right(box: SceneBox): number {
+function right(box: SceneBox): number {
   return box.left + box.width;
 }
 
-export function bottom(box: SceneBox): number {
+function bottom(box: SceneBox): number {
   return box.top + box.height;
 }
 
@@ -85,7 +80,7 @@ function beyond(box: SceneBox, artboard: ArtboardSize): boolean {
 }
 
 /**
- * The boxes a crop notice is made of, in one traversal.
+ * The boxes the count is made of, in one traversal.
  *
  * `sceneBoxesOf` emits a group before its own children, so one pass with a
  * single depth watermark is enough to know that a box sits inside a group the
@@ -124,24 +119,6 @@ function countedBoxes(
   return { counted, outside };
 }
 
-/** Which edges ran off the frame, in a fixed order so a theme reads the same. */
-export function outsideEdges(
-  boxes: readonly SceneBox[],
-  artboard: ArtboardSize,
-): readonly ("left" | "right" | "top" | "bottom")[] {
-  const outside = countedBoxes(boxes, artboard).outside;
-  const edges: ("left" | "right" | "top" | "bottom")[] = [];
-  if (outside.some((box) => right(box) > artboard.width + EDGE_TOLERANCE)) {
-    edges.push("right");
-  }
-  if (outside.some((box) => bottom(box) > artboard.height + EDGE_TOLERANCE)) {
-    edges.push("bottom");
-  }
-  if (outside.some((box) => box.left < -EDGE_TOLERANCE)) edges.push("left");
-  if (outside.some((box) => box.top < -EDGE_TOLERANCE)) edges.push("top");
-  return edges;
-}
-
 /**
  * How many countable objects the artboard does not contain, out of how many it
  * could. The total is what makes the figure a proportion of the dashboard
@@ -153,14 +130,6 @@ export function outsideCount(
 ): { readonly outside: number; readonly counted: number } {
   const { counted, outside } = countedBoxes(boxes, artboard);
   return { outside: outside.length, counted };
-}
-
-/** The boxes the artboard does not contain, one per thing that is lost. */
-export function outsideBoxes(
-  boxes: readonly SceneBox[],
-  artboard: ArtboardSize,
-): readonly SceneBox[] {
-  return countedBoxes(boxes, artboard).outside;
 }
 
 /**

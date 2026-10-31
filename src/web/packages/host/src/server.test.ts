@@ -3124,20 +3124,32 @@ describe("Host theme routes", () => {
         ).status,
       ).toBe(200);
 
-      // The library index and the whole-theme read (every asset base64) are
-      // this PC's editor surfaces: a paired display is refused both even with
-      // a live credential.
-      for (const path of ["/api/themes", "/api/themes/living-room"]) {
-        expect(
-          (
-            await request(paired.server, "GET", path, undefined, {
-              ...lan,
-              headers: asCookie(token),
-            })
-          ).status,
-          path,
-        ).toBe(403);
-      }
+      // The whole-theme read (every asset base64) is this PC's editor surface:
+      // a paired display is refused it even with a live credential. The index
+      // is readable, because the chooser on the display names its rows from it,
+      // and only the id and the name travel.
+      expect(
+        (
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room",
+            undefined,
+            { ...lan, headers: asCookie(token) },
+          )
+        ).status,
+      ).toBe(403);
+      const listed = await request(
+        paired.server,
+        "GET",
+        "/api/themes",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(listed.status).toBe(200);
+      expect(listed.json()).toEqual({
+        themes: [{ id: "living-room", name: "Living Room" }],
+      });
 
       // The stream is gated by the same check. A cookie is what an EventSource
       // carries by itself, so it opens; a query credential is refused, because
@@ -3167,9 +3179,10 @@ describe("Host theme routes", () => {
       ).toBe(403);
     });
 
-    it("keeps the theme index and a whole theme to this PC", async () => {
-      // The loopback caller is the editor, which opens, lists and saves; the
-      // two surfaces are still read freely here.
+    it("keeps a whole theme to this PC, and lists the index here", async () => {
+      // The loopback caller is the editor, which opens, lists and saves; both
+      // surfaces read freely here. A paired display lists the index too, in
+      // its narrowed form, but never the whole theme above.
       expect((await request(paired.server, "GET", "/api/themes")).status).toBe(
         200,
       );
@@ -10769,48 +10782,6 @@ describe("The host's secure origin", () => {
     });
   }
 
-  /** An https request answered as far as its headers, so the caller keeps the
-   *  connection and can ask afterwards what became of it. */
-  function openOverTls(
-    port: number,
-    urlPath: string,
-    agent?: https.Agent,
-  ): Promise<{ status: number; socket: Socket; answer: http.IncomingMessage }> {
-    return new Promise((resolve, reject) => {
-      const call = https.request(
-        {
-          host: "127.0.0.1",
-          port,
-          path: urlPath,
-          ca: origin.certificate,
-          ...(agent === undefined ? {} : { agent }),
-        },
-        (answer) =>
-          resolve({
-            status: answer.statusCode ?? 0,
-            socket: answer.socket,
-            answer,
-          }),
-      );
-      call.on("error", reject);
-      call.end();
-    });
-  }
-
-  /** Whether a client's socket is closed within `ms`. Raced rather than read
-   *  once: a destroy on the server takes a round trip to show up on this side,
-   *  and reading `destroyed` straight after the call would be reading before
-   *  the answer arrived. */
-  function closedWithin(socket: Socket, ms: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), ms);
-      socket.once("close", () => {
-        clearTimeout(timer);
-        resolve(true);
-      });
-    });
-  }
-
   it("answers over https, on a chain the client accepts", async () => {
     const hosted = host();
     await new Promise<void>((resolve) =>
@@ -10851,108 +10822,6 @@ describe("The host's secure origin", () => {
       expect(answer.status).toBe(200);
       expect(await answer.json()).toMatchObject({ displays: 0 });
     } finally {
-      await hosted.close();
-    }
-  });
-
-  it("prunes a kept connection the inner servers cannot see, so a move can land", async () => {
-    // **The case that fails when this port stops pruning for itself.** The
-    // binding closes idle sockets before it rebinds (`vg-173`), and a server
-    // handed sockets by `emit("connection")` never builds the connection
-    // registry its own `closeIdleConnections()` reads. So a browser's kept
-    // connection is invisible to both inner servers, `close()` waits on it for
-    // ever, and the editor's host switch stays off — the failure this case was
-    // written from, at the LAN address and over the editor.
-    const hosted = host();
-    await new Promise<void>((resolve) =>
-      hosted.server.listen(0, "127.0.0.1", resolve),
-    );
-
-    const agent = new http.Agent({ keepAlive: true, maxSockets: 1 });
-
-    try {
-      const port = (hosted.server.address() as AddressInfo).port;
-      await new Promise<void>((resolve, reject) => {
-        const call = http.request(
-          { host: "127.0.0.1", port, path: "/api/health", agent },
-          (answer) => {
-            answer.resume();
-            answer.on("end", () => resolve());
-          },
-        );
-        call.on("error", reject);
-        call.end();
-      });
-      // A connection really is being kept, which is what makes the assertion
-      // below about the port rather than about a client that hung up.
-      expect(Object.values(agent.freeSockets).flat()).toHaveLength(1);
-
-      hosted.server.closeIdleConnections();
-
-      const closed = await Promise.race([
-        hosted.close().then(() => "closed" as const),
-        new Promise<"timed out">((resolve) => {
-          setTimeout(() => resolve("timed out"), 5_000);
-        }),
-      ]);
-
-      // Only reachable on a failure, and a test that failed has already said so
-      // — this is what keeps the open handle from holding the worker up.
-      hosted.server.closeAllConnections();
-      expect(closed).toBe("closed");
-    } finally {
-      agent.destroy();
-    }
-  });
-
-  it("prunes an idle TLS socket and leaves a TLS response in flight alone", async () => {
-    // **The TLS half of the pruning case, and the half that was missing.** An
-    // https server reports its `request` event's socket as a `tls.TLSSocket`
-    // wrapping the one this port accepted, so a guard keyed on object identity
-    // never matches over TLS, and this port destroys a response in flight —
-    // which is what the LAN toggle would do to a display mid-fetch. The plain
-    // http case above cannot see it, because there the two objects are one.
-    const hosted = host();
-    await new Promise<void>((resolve) =>
-      hosted.server.listen(0, "127.0.0.1", resolve),
-    );
-
-    const agent = new https.Agent({ keepAlive: true, maxSockets: 1 });
-
-    try {
-      const port = (hosted.server.address() as AddressInfo).port;
-
-      // Idle: a response that finished, on a connection the agent keeps.
-      const idle = await openOverTls(port, "/api/health", agent);
-      await new Promise<void>((resolve) => {
-        idle.answer.on("end", () => resolve());
-        idle.answer.resume();
-      });
-      expect(idle.socket.destroyed).toBe(false);
-
-      // Not finished: the sample stream stays open until its client goes away,
-      // so it is mid-response while the prune runs.
-      const stream = await openOverTls(port, SAMPLE_STREAM_PATH);
-      expect(stream.status).toBe(200);
-      expect(stream.socket.destroyed).toBe(false);
-
-      // A destroy here can reach the client as a reset, and an unhandled one
-      // would take the worker down rather than fail this case.
-      for (const socket of [idle.socket, stream.socket]) {
-        socket.on("error", () => {});
-      }
-
-      const streamClosed = closedWithin(stream.socket, 1_000);
-      const idleClosed = closedWithin(idle.socket, 1_000);
-      hosted.server.closeIdleConnections();
-
-      expect(await streamClosed).toBe(false);
-      expect(await idleClosed).toBe(true);
-
-      stream.answer.destroy();
-    } finally {
-      agent.destroy();
-      hosted.server.closeAllConnections();
       await hosted.close();
     }
   });

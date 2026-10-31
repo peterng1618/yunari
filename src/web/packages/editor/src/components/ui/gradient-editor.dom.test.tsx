@@ -212,6 +212,14 @@ async function typeAndEnter(
   await press(input, "Enter");
 }
 
+/** What a browser stores for a CSS value: jsdom serialises `rgb(a b c)` in the
+ *  legacy comma form, and the track's own `style` reads back the same way. */
+function storedBackground(css: string): string {
+  const probe = document.createElement("div");
+  probe.style.background = css;
+  return probe.style.background;
+}
+
 const valueNow = (mounted: Mounted, testId: string): number =>
   Number(mounted.find(testId).getAttribute("aria-valuenow"));
 
@@ -223,7 +231,7 @@ it("paints the track with the one gradient formula", async () => {
   const mounted = await mount({ stops, angle: 0 });
 
   expect(mounted.find("gradient-track").style.background).toBe(
-    gradientCss(stops, 0),
+    storedBackground(gradientCss(stops, 0)),
   );
   // The old standalone preview is gone: the track is the preview.
   expect(mounted.query("gradient-preview")).toBeNull();
@@ -481,8 +489,9 @@ it("maps the pointer through the padding box the marks are positioned in", async
     angle: 0,
   });
   const track = mounted.find("gradient-track");
-  track.style.borderLeftWidth = "1px";
-  track.style.borderRightWidth = "1px";
+  // A width with the initial `none` style is not a border; the edge is drawn.
+  track.style.borderLeft = "1px solid transparent";
+  track.style.borderRight = "1px solid transparent";
   stubRect(track, 200);
   const first = mounted.find("gradient-stop-0");
 

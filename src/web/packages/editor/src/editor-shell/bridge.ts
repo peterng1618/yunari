@@ -3,7 +3,7 @@ import {
   type FabricPalette,
   isObjectName,
 } from "@yunari/renderer-core";
-import { isLocked, YunariChart } from "@yunari/scene-fabric";
+import { isLocked, isTextObject, YunariChart } from "@yunari/scene-fabric";
 import { ActiveSelection, type FabricObject, Group } from "fabric/es";
 import { type ArrangeAction, applyArrange, canArrange } from "../arrange.js";
 import type { EditorInteraction } from "../editor-interaction.js";
@@ -313,6 +313,9 @@ export function createEditorShellBridge(input: {
       // ActiveSelection extends Group, so the negative case has to be explicit:
       // a bare multi-selection is not a Group for ungroup/group eligibility.
       isGroup: active instanceof Group && !(active instanceof ActiveSelection),
+      // A member of an ActiveSelection is not a single subject, so only a bare
+      // text object asks for the conversion.
+      text: active !== undefined && isTextObject(active),
     };
   };
   const canArrangeAction = (action: ArrangeAction): boolean =>
@@ -755,6 +758,14 @@ export function createEditorShellBridge(input: {
         const shape = constructedShape(action);
         if (shape === undefined) input.session.addText();
         else input.session.addShape(shape);
+        return;
+      }
+      if (action === "outline-text") {
+        // The document owns the font bytes and the bindings the frozen object
+        // stops using, so this routes through the façade rather than the
+        // editor the other commands act on.
+        input.session.outlineText();
+        notify();
         return;
       }
       if (action.startsWith("arrange:")) {

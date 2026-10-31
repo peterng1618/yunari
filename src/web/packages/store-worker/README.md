@@ -8,7 +8,7 @@ stays unverified. The code is the authority for every binding named below
 Run every command in this README from `src/web/packages/store-worker`
 (`wrangler.toml` lives there), except steps 9–10, which state their directory.
 Node 22 or newer (`engines` in `package.json`).
-Wrangler is this package's devDependency (4.152.0).
+Wrangler is this package's devDependency (4.156.0).
 
 ## 1. Prerequisites
 

@@ -45,6 +45,10 @@ export interface EditorActionFacade {
   openLibraryTheme(id: string, onAccepted?: () => void): Promise<void>;
   saveLibrary(): Promise<void>;
   addText(): void;
+  /** Freezes the selected text, as the author sees it, into vector paths. The
+   *  document owns the theme's fonts and the bindings the frozen object stops
+   *  using, so the conversion is its own. */
+  outlineText(): void;
   /** The canvas context menu's route to a primitive; the Add pane's own
       buttons call the same construction rather than a second copy of it. */
   addShape(kind: ShapeKind): void;
