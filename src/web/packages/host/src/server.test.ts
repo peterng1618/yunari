@@ -3124,20 +3124,32 @@ describe("Host theme routes", () => {
         ).status,
       ).toBe(200);
 
-      // The library index and the whole-theme read (every asset base64) are
-      // this PC's editor surfaces: a paired display is refused both even with
-      // a live credential.
-      for (const path of ["/api/themes", "/api/themes/living-room"]) {
-        expect(
-          (
-            await request(paired.server, "GET", path, undefined, {
-              ...lan,
-              headers: asCookie(token),
-            })
-          ).status,
-          path,
-        ).toBe(403);
-      }
+      // The whole-theme read (every asset base64) is this PC's editor surface:
+      // a paired display is refused it even with a live credential. The index
+      // is readable, because the chooser on the display names its rows from it,
+      // and only the id and the name travel.
+      expect(
+        (
+          await request(
+            paired.server,
+            "GET",
+            "/api/themes/living-room",
+            undefined,
+            { ...lan, headers: asCookie(token) },
+          )
+        ).status,
+      ).toBe(403);
+      const listed = await request(
+        paired.server,
+        "GET",
+        "/api/themes",
+        undefined,
+        { ...lan, headers: asCookie(token) },
+      );
+      expect(listed.status).toBe(200);
+      expect(listed.json()).toEqual({
+        themes: [{ id: "living-room", name: "Living Room" }],
+      });
 
       // The stream is gated by the same check. A cookie is what an EventSource
       // carries by itself, so it opens; a query credential is refused, because
@@ -3167,9 +3179,10 @@ describe("Host theme routes", () => {
       ).toBe(403);
     });
 
-    it("keeps the theme index and a whole theme to this PC", async () => {
-      // The loopback caller is the editor, which opens, lists and saves; the
-      // two surfaces are still read freely here.
+    it("keeps a whole theme to this PC, and lists the index here", async () => {
+      // The loopback caller is the editor, which opens, lists and saves; both
+      // surfaces read freely here. A paired display lists the index too, in
+      // its narrowed form, but never the whole theme above.
       expect((await request(paired.server, "GET", "/api/themes")).status).toBe(
         200,
       );

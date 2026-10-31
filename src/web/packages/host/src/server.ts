@@ -3932,12 +3932,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
         sendText(response, 405, "Only GET is supported.");
         return;
       }
-      // The library index is this PC's own surface. A display names one theme
-      // it was given through its document, asset and answers routes, so nothing
-      // the player does needs the list (S12, the same argument that gated the
-      // unused route beside it).
+      // A paired display chooses its own theme, so it reads the library it is
+      // offered — but only the two fields a chooser names a row by. Costs,
+      // ground, origin, facets and a template list describe this PC's library
+      // and stay the admin page's business (`vg-758`).
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
-        sendText(response, 403, "Themes are available on this PC only.");
+        const themes = await themeStore.list();
+        sendJson(response, 200, {
+          themes: themes.map((entry) => ({ id: entry.id, name: entry.name })),
+        });
         return;
       }
       // Templates travel beside the stored themes and are kept out of them: a
