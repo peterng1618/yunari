@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { KeyProtector } from "../settings/os-key-protector.js";
 import {
   createSecretStore,
+  KeyProtectorUnavailable,
   type SecretStore,
 } from "../settings/secret-store.js";
 import {
@@ -113,6 +114,17 @@ describe("the host's own certificate authority", () => {
     );
 
     expect(bad).toEqual([]);
+  });
+
+  it("reports an absent protector as its own fact, not a broken directory", async () => {
+    // A fresh folder and no keyring: the launcher degrades to http on this fact
+    // alone, so it must not be indistinguishable from a folder it cannot write.
+    const unavailable = createSecretStore(
+      directory,
+      createFakeProtector(false),
+    );
+
+    await expect(open(unavailable)).rejects.toThrow(KeyProtectorUnavailable);
   });
 
   it("signs a leaf that Node accepts as coming from the root", async () => {

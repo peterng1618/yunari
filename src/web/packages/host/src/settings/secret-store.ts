@@ -19,6 +19,16 @@ export interface SecretStore {
   remove(name: string): Promise<void>;
 }
 
+/**
+ * The machine has no OS key protector, and nothing has been stored yet.
+ *
+ * A different fact from a protector that is there and refused: this one is
+ * true of a headless Linux box with no Secret Service, and a caller may choose
+ * to run without secrets rather than refuse to start. The error is typed so
+ * that choice is made against the cause rather than against a message.
+ */
+export class KeyProtectorUnavailable extends Error {}
+
 const KEY_FILE = "secret.key";
 const KEY_VERSION = 1;
 /** The name becomes a path component, so nothing else is accepted. */
@@ -230,7 +240,7 @@ export function createSecretStore(
         }
 
         if (!(await protector.available())) {
-          throw new Error(
+          throw new KeyProtectorUnavailable(
             "The OS key protector is unavailable; refusing to store a secret.",
           );
         }

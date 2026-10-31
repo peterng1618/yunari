@@ -49,6 +49,11 @@ revoke it.
   never sent to a browser.
 - The TLS root's private key is stored encrypted in `settings/tls/`; only the
   certificate is in the clear. The leaf is reissued at startup and never stored.
+  The key is wrapped by the OS key protector (DPAPI on Windows, the Secret
+  Service on Linux). A machine with neither — a headless Linux box with no
+  keyring — starts the host http-only and says so: there is nowhere to keep the
+  root's key, and a LAN display then loses its wake lock and PWA install while
+  every loopback surface still works.
 - A pairing code is short and low-entropy by design: one live code, a bounded
   wrong-guess delay, and constant-time comparison. A successful claim consumes
   it; a wrong guess does not.

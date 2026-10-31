@@ -53,6 +53,7 @@ import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
+import { KeyProtectorUnavailable } from "./settings/secret-store.js";
 import { createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -315,29 +316,32 @@ export async function run(argv: readonly string[]): Promise<number> {
   // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
-  // The certificate is not optional, and the reason is the origin rather than
-  // any route: a phone at `http://<lan-ip>:<port>` is not a secure context, so
-  // it can neither hold a screen wake lock nor register the service worker an
-  // installable app needs (`vg-580`). Serving plain http
-  // would fail on the display and pass on this PC, which is the trap the row
-  // exists to remove — so a host that cannot produce a certificate refuses to
-  // start and says which directory it could not write, rather than starting
-  // into an origin that is known to be wrong.
-  let origin: SecureOrigin;
+  // The certificate is the whole reason the host serves https: a phone at
+  // `http://<lan-ip>:<port>` is not a secure context, so it can neither hold a
+  // screen wake lock nor register the service worker an installable app needs
+  // (`vg-580`). A machine with no OS key protector has nowhere to keep the
+  // root's private key, and there https is not a choice the host can make at
+  // all — it starts http-only and says what the display loses. Any other
+  // failure to prepare the certificate is a directory the host could not write,
+  // which is worth refusing over rather than starting into an origin that is
+  // known to be wrong.
+  let origin: SecureOrigin | undefined;
   try {
     origin = await createSecureOrigin(
       path.join(settingsDir, "tls"),
       localNames(),
     );
   } catch (error) {
-    console.error(
-      `Could not prepare a certificate in ${path.join(settingsDir, "tls")}: ` +
-        `${error instanceof Error ? error.message : String(error)}\n` +
-        "  The host serves https so a display can hold the screen awake and " +
-        "install as an app; without one it will not start.",
-    );
-    await held.lock.release();
-    return 1;
+    if (!(error instanceof KeyProtectorUnavailable)) {
+      console.error(
+        `Could not prepare a certificate in ${path.join(settingsDir, "tls")}: ` +
+          `${error instanceof Error ? error.message : String(error)}\n` +
+          "  The host serves https so a display can hold the screen awake and " +
+          "install as an app; without one it will not start.",
+      );
+      await held.lock.release();
+      return 1;
+    }
   }
 
   // The server needs the binding, and the binding needs the port the socket
@@ -373,12 +377,18 @@ export async function run(argv: readonly string[]): Promise<number> {
   const hosted = createHostServer({
     registry,
     // The leaf, signed by the root a display installs once. In memory only:
-    // a leaf is disposable, which is what makes a moved address free.
-    tls: { key: origin.key, cert: origin.chain },
-    // And the root itself, for the device that has to trust it before it can
-    // read anything else; the fingerprint is computed from these bytes where
-    // each is used.
-    caCertificate: origin.certificate,
+    // a leaf is disposable, which is what makes a moved address free. Absent
+    // when there is no protector to keep the root's key, and the server then
+    // answers http alone.
+    ...(origin === undefined
+      ? {}
+      : {
+          tls: { key: origin.key, cert: origin.chain },
+          // And the root itself, for the device that has to trust it before it
+          // can read anything else; the fingerprint is computed from these
+          // bytes where each is used.
+          caCertificate: origin.certificate,
+        }),
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
     // The host's own windows on its local monitors.
@@ -587,48 +597,63 @@ export async function run(argv: readonly string[]): Promise<number> {
     );
   }
 
-  console.log(`  Dashboard  ${localSecure}`);
-  console.log(`  Editor     ${localSecure}/editor`);
-  console.log(
-    style(
-      "2",
-      `  Same two over plain http, which needs no certificate installed:` +
-        `\n  ${localPlain}`,
-    ),
-  );
+  if (origin === undefined) {
+    console.log(`  Dashboard  ${localPlain}`);
+    console.log(`  Editor     ${localPlain}/editor`);
+    console.log(
+      style(
+        "33",
+        "  No OS key protector on this machine, so there is nowhere to keep a\n" +
+          "  certificate's private key: this host serves http only, and a\n" +
+          "  display on the LAN cannot hold the screen awake or install as an\n" +
+          "  app. A local display window is unaffected — loopback is a secure\n" +
+          "  context without a certificate.",
+      ),
+    );
+  } else {
+    console.log(`  Dashboard  ${localSecure}`);
+    console.log(`  Editor     ${localSecure}/editor`);
+    console.log(
+      style(
+        "2",
+        `  Same two over plain http, which needs no certificate installed:` +
+          `\n  ${localPlain}`,
+      ),
+    );
 
-  // The step that has to come before any of it, printed on every run rather
-  // than once: adding a second display is the common case and it is the same
-  // step. The path is named as well as the URL because a browser on this PC
-  // would meet the warning it is being asked to remove, while an installer can
-  // read the file directly.
-  //
-  // **Two addresses, because they are two different steps and one of them is a
-  // trap.** The root is fetched over plain http: the route answers before every
-  // gate and on both protocols on this same port, so the owner never has to
-  // bypass the certificate warning in order to install the certificate that
-  // removes it. `https://` is the origin to reload afterwards, and both lines
-  // say which is which.
-  console.log(
-    style(
-      "2",
-      [
-        `  Certificate  ${origin.certificatePath}`,
-        // Built by the authority from the PEM the route hands out, and printed
-        // here with no certificate to choose: the printed fingerprint and the
-        // served header are one reading of the same bytes.
-        ...origin.certificateLines,
-        `  This host serves https on the same port, and a display holds the`,
-        `  screen awake and installs as an app only there. Install this root`,
-        `  once per device, this PC included:`,
-        `    Fetch the root over http, so no warning is in the way:`,
-        `      http://${lan ?? displayHost}:${bound}${CA_CERTIFICATE_PATH}`,
-        `    Then open the display at:`,
-        `      https://${lan ?? displayHost}:${bound}`,
-        "  A device without it shows a certificate warning, not a broken display.",
-      ].join("\n"),
-    ),
-  );
+    // The step that has to come before any of it, printed on every run rather
+    // than once: adding a second display is the common case and it is the same
+    // step. The path is named as well as the URL because a browser on this PC
+    // would meet the warning it is being asked to remove, while an installer can
+    // read the file directly.
+    //
+    // **Two addresses, because they are two different steps and one of them is a
+    // trap.** The root is fetched over plain http: the route answers before every
+    // gate and on both protocols on this same port, so the owner never has to
+    // bypass the certificate warning in order to install the certificate that
+    // removes it. `https://` is the origin to reload afterwards, and both lines
+    // say which is which.
+    console.log(
+      style(
+        "2",
+        [
+          `  Certificate  ${origin.certificatePath}`,
+          // Built by the authority from the PEM the route hands out, and printed
+          // here with no certificate to choose: the printed fingerprint and the
+          // served header are one reading of the same bytes.
+          ...origin.certificateLines,
+          `  This host serves https on the same port, and a display holds the`,
+          `  screen awake and installs as an app only there. Install this root`,
+          `  once per device, this PC included:`,
+          `    Fetch the root over http, so no warning is in the way:`,
+          `      http://${lan ?? displayHost}:${bound}${CA_CERTIFICATE_PATH}`,
+          `    Then open the display at:`,
+          `      https://${lan ?? displayHost}:${bound}`,
+          "  A device without it shows a certificate warning, not a broken display.",
+        ].join("\n"),
+      ),
+    );
+  }
 
   // Say what the extended sensors will do, rather than leaving the display to
   // show gaps without explanation.

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createOsKeyProtector, type KeyProtector } from "./os-key-protector.js";
-import { createSecretStore } from "./secret-store.js";
+import { createSecretStore, KeyProtectorUnavailable } from "./secret-store.js";
 
 const keyFile = (dir: string) => path.join(dir, "secret.key");
 const secretFile = (dir: string, name: string) => path.join(dir, `${name}.bin`);
@@ -220,7 +220,11 @@ describe("secret store", () => {
     const refusingStore = createSecretStore(dir, unavailable);
 
     expect(await refusingStore.available()).toBe(false);
-    await expect(refusingStore.write("alpha", bytesOf(8))).rejects.toThrow();
+    // Typed, because a host with no protector may run without secrets where a
+    // directory it cannot write must still refuse to start.
+    await expect(refusingStore.write("alpha", bytesOf(8))).rejects.toThrow(
+      KeyProtectorUnavailable,
+    );
     expect(unavailable.wraps).toBe(0);
 
     await expect(readFile(keyFile(dir))).rejects.toMatchObject({
