@@ -58,7 +58,7 @@ import { uiCopy } from "./ui-copy.js";
  */
 
 /**
- * The name of the diagram a card unit's tile draws.
+ * The name of the mark a card unit's tile draws.
  *
  * A closed union, so the **library** owns the name and a ninth card cannot be
  * added without one; the pane owns the rendering, because it is a React surface
@@ -81,7 +81,7 @@ export interface CardUnit {
   readonly id: string;
   /** What the chooser's button says, and what a copy is named in the tree. */
   readonly label: string;
-  /** Which diagram the Add pane's tile draws for this unit. */
+  /** Which mark the Add pane's tile draws for this unit. */
   readonly diagram: CardDiagram;
   /** The card as the starter authored it — one group over its parts. */
   readonly build: () => ObjectJson;

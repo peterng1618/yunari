@@ -695,7 +695,8 @@ Rules:
 - **A group gets a generic glyph.** A card on the canvas is an arbitrary group of
   elements, so its row cannot depict it. It gets the stack glyph and its name. A
   *card unit* in the Add pane is not arbitrary — the card library is a fixed set
-  of eight — so a unit tile may carry a diagram of what it builds.
+  of eight — so its tile wears the unit's own glyph, one per unit, and no two
+  units share one.
 - **Destructive actions use `--hot`, never `--accent`.**
 
 ## Do's and Don'ts

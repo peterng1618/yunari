@@ -11,6 +11,9 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  CircuitBoard,
+  Clock,
+  Cpu,
   Download,
   Ellipse,
   Eye,
@@ -20,6 +23,8 @@ import {
   FolderInput,
   FolderOpen,
   Gauge,
+  Gpu,
+  HardDrive,
   Hexagon,
   Image as ImageIcon,
   Info,
@@ -33,8 +38,10 @@ import {
   LogOut,
   type LucideIcon,
   Maximize2,
+  MemoryStick,
   Minus,
   Monitor,
+  Network,
   OctagonAlert,
   Palette,
   Pencil,
@@ -52,6 +59,7 @@ import {
   SquarePlus,
   Star,
   Trash2,
+  TrendingUp,
   TriangleAlert,
   TriangleRight,
   Type,
@@ -63,6 +71,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
+import type { CardDiagram } from "../card-library.js";
 import type { ShapeKind } from "../new-object-defaults.js";
 import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";
@@ -238,6 +247,31 @@ export const SHAPE_GLYPHS: Readonly<Record<ShapeKind, LucideIcon>> = {
   path: Spline,
   arc: LoaderCircle,
   wedge: TriangleRight,
+};
+
+/**
+ * One glyph per card unit, keyed by the library's own `CardDiagram`, so a ninth
+ * card fails to compile here until it wears a mark.
+ *
+ * **The Add pane's card tiles draw these, the same vocabulary every other tile
+ * in that pane draws**, so a unit tile is not a second icon family.
+ *
+ * **No two units share a glyph**, because a mark two units share identifies
+ * neither. Lucide has no `vram`, so that unit takes the nearest drawing of the
+ * video adapter's memory: `CircuitBoard`, its board and components. `ram` is
+ * `MemoryStick`, the physical module, so the pair stay distinct; `storage` is
+ * `HardDrive`, the drive rather than the memory; and `network` is `Network`, the
+ * nodes and links the reading describes.
+ */
+export const CARD_UNIT_GLYPHS: Readonly<Record<CardDiagram, LucideIcon>> = {
+  time: Clock,
+  cpu: Cpu,
+  gpu: Gpu,
+  ram: MemoryStick,
+  vram: CircuitBoard,
+  trends: TrendingUp,
+  storage: HardDrive,
+  network: Network,
 };
 
 /** The settings column's other tabs. */

@@ -1,9 +1,13 @@
 import { Fragment, useEffect, useRef } from "react";
 import { tooltip } from "../../editor-shell/controls/tooltip.js";
-import { Glyph, KIND_GLYPHS, SHAPE_GLYPHS } from "../../editor-shell/icons.js";
+import {
+  CARD_UNIT_GLYPHS,
+  Glyph,
+  KIND_GLYPHS,
+  SHAPE_GLYPHS,
+} from "../../editor-shell/icons.js";
 import type { InsertableObject, InsertGroup } from "../../new-object-panel.js";
 import { chartFamilyGlyph } from "../composition/kind-mark.js";
-import { CARD_DIAGRAMS } from "./card-diagrams.js";
 
 /**
  * The Add pane's body: `insertGroups()`, drawn as tiles.
@@ -16,11 +20,11 @@ import { CARD_DIAGRAMS } from "./card-diagrams.js";
  * through the owner's own `insertObject`, which is what keeps the eligibility
  * gates and the refusals in one place.
  *
- * **A card unit is depicted; a primitive is its kind.** The distinction: the
- * library is a fixed set of eight, so a unit's tile may carry a diagram of what
- * it builds; a primitive's tile is the kind and nothing more. A card on the
- * canvas is still arbitrary, so nothing here licenses a diagram in the layer
- * tree.
+ * **Every tile wears the chrome vocabulary's own glyph** (`icons.ts`), so there
+ * is no second drawing anywhere for a tile and a row to drift apart in. A card
+ * unit's glyph is keyed by the library's `CardDiagram` name (`CARD_UNIT_GLYPHS`);
+ * a primitive's is its kind. A card on the canvas is still arbitrary, so nothing
+ * here licenses a diagram in the layer tree.
  *
  * The element contracts the imperative panel carried are on the tile's own
  * button: `data-yunari-panel-add="<shape>"` and
@@ -75,8 +79,8 @@ export function AddPane({
   );
 }
 
-/** One tile: the diagram or glyph, the name where a glyph alone would not say
- *  it, and the contract the surface is browsed by. */
+/** One tile: the glyph, the name where a glyph alone would not say it, and the
+ *  contract the surface is browsed by. */
 function InsertTile({
   object,
   onInsert,
@@ -120,21 +124,18 @@ function InsertTile({
   );
 }
 
-/** What the tile draws: a unit's diagram, a primitive's kind, a family's glyph.
+/** What the tile draws: a unit's glyph, a primitive's kind, a family's glyph.
  *
- * **Every mark but a card unit's is the chrome vocabulary's own** (`icons.ts`),
- * the same map the layer row's mark reads, so a primitive's tile and its row
- * agree by construction rather than by being copied — and there is no second
- * drawing anywhere for the two to drift apart in. Lucide has no `wedge` or
- * `arc`, and the approximation each takes lives once, in that map, beside the
- * reason for it.
+ * **Every mark is the chrome vocabulary's own** (`icons.ts`), the same map the
+ * layer row's mark reads, so a unit's tile and its row agree by construction
+ * rather than by being copied — and there is no second drawing anywhere for the
+ * two to drift apart in. Lucide has no `wedge` or `arc`, and the approximation
+ * each takes lives once, in that map, beside the reason for it.
  */
 function tileMark(object: InsertableObject): React.JSX.Element {
   switch (object.kind) {
-    case "card": {
-      const Diagram = CARD_DIAGRAMS[object.diagram];
-      return <Diagram />;
-    }
+    case "card":
+      return <Glyph icon={CARD_UNIT_GLYPHS[object.diagram]} size={20} />;
     case "shape":
       return <Glyph icon={SHAPE_GLYPHS[object.shape]} size={20} />;
     case "chart":
