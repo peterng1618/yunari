@@ -2517,14 +2517,14 @@ body,
    13px glyph, so the 28px is slack rather than tight, and the width is left
    where the ruling put it.
 
-   **Held here after the 2026-10-12 ruling narrowed it to 20px, because the
+   **Held at 28px after the 2026-10-12 ruling narrowed it to 20px, because the
    measurement that ruling asked for shows the lever cannot do what it was ruled
-   for.** Narrowing to 20px leaves the attended four-control row's own numbers
-   *identical* — the name is 28px short and the key 41px short at both widths —
-   because both columns are already at their floors and the freed 8px only
-   shortens how far the line overruns into the reserved strip (the role's
-   coverage falls 58px → 50px). So the value waits for a ruling that names a
-   lever the arithmetic can honour; `vg-260` carries the counts. */
+   for.** Narrowing to 20px leaves the attended row's own numbers *identical* at
+   the three-control shape it draws now — the name is 28px short and the key
+   41px short at both widths — because both columns are already at their floors
+   and the freed 8px only shortens how far the line overruns into the reserved
+   strip (the role's coverage falls 58px → 50px). The ruling that followed held
+   the column at 28px; `vg-260` carries the counts. */
 .yunari-layer-mark {
   flex: 0 0 28px;
   min-width: 0;
