@@ -7,6 +7,7 @@
  * and buy the count nothing but a fifth owner of one convention. */
 
 import {
+  type AssignableGroup,
   type ChartFamily,
   type ColourMode,
   DASHBOARD_THEME_KIND,
@@ -16,7 +17,6 @@ import {
 } from "@yunari/renderer-core";
 import type { VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
-import type { AssignableGroup } from "./host-settings-mode/client.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
 import type { InstallState } from "./store-mode/install-state.js";
 import type { CellAction } from "./store-mode/local-source.js";

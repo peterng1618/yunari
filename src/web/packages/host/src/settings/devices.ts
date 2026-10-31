@@ -1,3 +1,4 @@
+import { ASSIGNABLE_GROUPS, type AssignableGroup } from "@yunari/renderer-core";
 import { createJsonFile } from "./json-file.js";
 
 /**
@@ -10,10 +11,7 @@ import { createJsonFile } from "./json-file.js";
  * and "which GPU?" has one answer here.
  */
 
-/** Device groups a consumer can assign. */
-export const ASSIGNABLE_GROUPS = ["gpu", "system-disk", "data-disk"] as const;
-
-export type AssignableGroup = (typeof ASSIGNABLE_GROUPS)[number];
+/** Device groups a consumer can assign, owned by `renderer-core`. */
 
 interface DeviceSettings {
   /** Chosen device per group. An absent group means "the default device". */

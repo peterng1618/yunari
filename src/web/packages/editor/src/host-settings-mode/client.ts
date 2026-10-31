@@ -1,4 +1,6 @@
 import {
+  ASSIGNABLE_GROUPS,
+  type AssignableGroup,
   type DisplayShape,
   isMeasurementSystem,
   isTimeZoneName,
@@ -27,18 +29,8 @@ import {
  * — and this one is the machine's. Two owners, and the routes do not overlap.
  */
 
-/** The slots a theme's sensors are answered from. Spelled here rather than
- *  imported: the editor has no dependency on the host package. The three are
- *  the host's own `ASSIGNABLE_GROUPS`, and the routes filter to them on both
- *  sides, so a fourth would arrive at neither. */
-export type AssignableGroup = "gpu" | "system-disk" | "data-disk";
-
-const ASSIGNABLE_GROUPS: readonly AssignableGroup[] = [
-  "gpu",
-  "system-disk",
-  "data-disk",
-];
-
+/** The slots a theme's sensors are answered from, owned by `renderer-core` so
+ *  the host and the editor cannot drift. */
 function isAssignableGroup(value: string): value is AssignableGroup {
   return (ASSIGNABLE_GROUPS as readonly string[]).includes(value);
 }

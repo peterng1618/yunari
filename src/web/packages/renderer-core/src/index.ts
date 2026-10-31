@@ -333,6 +333,10 @@ export {
   cataloguePackageUrl,
   catalogueThumbnailUrl,
 } from "./theme/catalogue-location.js";
+export {
+  ASSIGNABLE_GROUPS,
+  type AssignableGroup,
+} from "./theme/device-groups.js";
 export type {
   Artboard,
   AssetKind,
