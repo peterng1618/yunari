@@ -1681,7 +1681,6 @@ body,
 .editor-shell,
 .editor-shell button,
 .editor-shell input,
-.editor-shell select,
 .editor-shell [role="menuitem"] {
   transition:
     background-color 140ms ease,
@@ -1711,7 +1710,6 @@ body,
     :is(
       button,
       input,
-      select,
       [tabindex]:not(:where([role="tabpanel"]))
     ):focus-visible {
     outline: 2px solid var(--shell-accent);
@@ -2239,10 +2237,8 @@ body,
   font-variant-numeric: tabular-nums;
 }
 .yunari-field input,
-.yunari-field select,
 .yunari-field textarea,
-.yunari-field-row input,
-.yunari-field-row select {
+.yunari-field-row input {
   width: auto;
   display: inline-block;
   margin: 0;
