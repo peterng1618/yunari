@@ -22,6 +22,7 @@ import {
 } from "../object-actions.js";
 import { paletteTokenIds } from "../palette-manager/token-list.js";
 import { typeTokenOf } from "../selection-inspector/appearance.js";
+import { uiCopy } from "../ui-copy.js";
 import {
   BACKGROUND_LAYER_ID,
   backgroundRow,
@@ -531,8 +532,16 @@ export function createEditorShellBridge(input: {
     // Anything else is refused rather than written: clearing on a too-long
     // name would make an author's typing vanish. The caller re-reads the
     // projection afterwards, so a refused rename reverts the row to the name
-    // the object actually carries.
-    else return;
+    // the object actually carries. The refusal is reported, because the
+    // inspector's name field refuses through the same message — one guard, one
+    // answer, whichever surface the author typed in.
+    else {
+      input.editor.errorManager.warn(
+        "controls",
+        uiCopy.inspectorFields.invalidName,
+      );
+      return;
+    }
     // The name is authored document state on the object, so this is a
     // committed edit like any other: one history entry (§67).
     canvas.requestRenderAll();
