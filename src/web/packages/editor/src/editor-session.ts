@@ -368,6 +368,7 @@ export class EditorSession {
     this.#artboard.render(
       this.#document.envelope.artboard,
       this.#document.envelope.metadata,
+      this.#document.credits(),
     );
     // The one walk behind both the figure beside a token and the users list in
     // the inspector, so the two cannot disagree about the scene.
@@ -1075,6 +1076,14 @@ export class EditorSession {
     this.#selection.render();
     this.#document.refreshBackgroundMedia();
     this.#announceAssetCount();
+    // An import adds or replaces a credit, and a removed asset prunes one, so
+    // the Document pane's attribution is redrawn by the same signal that moves
+    // the asset count rather than by a second subscription.
+    this.#artboard.render(
+      this.#document.envelope.artboard,
+      this.#document.envelope.metadata,
+      this.#document.credits(),
+    );
   }
 
   /** The initial count, before anything has moved. */

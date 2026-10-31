@@ -1,4 +1,5 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import { readThemeCredits, type ThemeCredits } from "@yunari/theme-package";
 import type { ThemeContent } from "./store.js";
 
 /**
@@ -25,6 +26,7 @@ export function encodeThemeContent(
 ): {
   readonly envelope: FabricThemeEnvelope;
   readonly assets: Readonly<Record<string, string>>;
+  readonly credits?: ThemeCredits;
   readonly base?: string;
 } {
   return {
@@ -35,6 +37,7 @@ export function encodeThemeContent(
         Buffer.from(bytes).toString("base64"),
       ]),
     ),
+    ...(content.credits === undefined ? {} : { credits: content.credits }),
     ...(base === undefined ? {} : { base }),
   };
 }
@@ -53,11 +56,12 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("That is not a theme.");
   }
-  const { envelope, assets, base, overwrite } = parsed as {
+  const { envelope, assets, base, overwrite, credits } = parsed as {
     readonly envelope?: unknown;
     readonly assets?: unknown;
     readonly base?: unknown;
     readonly overwrite?: unknown;
+    readonly credits?: unknown;
   };
   if (typeof envelope !== "object" || envelope === null) {
     throw new Error("A theme needs its document.");
@@ -74,6 +78,19 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
   }
   if (overwrite !== undefined && typeof overwrite !== "boolean") {
     throw new Error("A theme's overwrite flag is not a boolean.");
+  }
+  // The package's own reader validates the member, so the wire and the archive
+  // refuse the same shapes. A malformed member is the client's bug rather than
+  // an absent one: dropping it would silently lose attribution the save meant
+  // to keep.
+  let decodedCredits: ThemeCredits | undefined;
+  if (credits !== undefined) {
+    decodedCredits = readThemeCredits(
+      new TextEncoder().encode(JSON.stringify(credits)),
+    );
+    if (decodedCredits === undefined) {
+      throw new Error("A theme's credits are not a credits member.");
+    }
   }
 
   const decoded: Record<string, Uint8Array> = {};
@@ -93,7 +110,11 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
   }
 
   return {
-    content: { envelope: envelope as FabricThemeEnvelope, assets: decoded },
+    content: {
+      envelope: envelope as FabricThemeEnvelope,
+      assets: decoded,
+      ...(decodedCredits === undefined ? {} : { credits: decodedCredits }),
+    },
     ...(base === undefined ? {} : { base }),
     overwrite: overwrite === true,
   };

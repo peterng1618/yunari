@@ -1,5 +1,9 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import { readThemePackage, themeVideoRefusals } from "@yunari/theme-package";
+import {
+  readThemePackage,
+  type ThemeCredits,
+  themeVideoRefusals,
+} from "@yunari/theme-package";
 import { isValidThemeId, ThemeIdTakenError, type ThemeStore } from "./store.js";
 import type { ThumbnailStore } from "./thumbnails.js";
 
@@ -61,6 +65,7 @@ export async function importThemePackage(
   const landed = await writeUnderFreeId(
     parsed.envelope,
     parsed.assets,
+    parsed.credits,
     options.store,
   );
   if (!landed.ok) return landed;
@@ -141,13 +146,18 @@ function slugOf(name: string): string {
 async function writeUnderFreeId(
   envelope: FabricThemeEnvelope,
   assets: Readonly<Record<string, Uint8Array>>,
+  credits: ThemeCredits | undefined,
   store: ThemeStore,
 ): Promise<ThemeImportResult> {
   for (const id of importIdCandidates(envelope)) {
     try {
       await store.write(
         id,
-        { envelope: { ...envelope, id }, assets },
+        {
+          envelope: { ...envelope, id },
+          assets,
+          ...(credits === undefined ? {} : { credits }),
+        },
         { expectFree: true },
       );
       return { ok: true, id };

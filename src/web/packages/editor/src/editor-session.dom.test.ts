@@ -344,7 +344,12 @@ describe("EditorSession", () => {
     // back and handed to whoever mounts the session that shows it.
     await session.openLibraryTheme("living-room");
     expect(mockClient.open).toHaveBeenCalledWith("living-room");
-    expect(onOpenTheme).toHaveBeenCalledWith(envelope, {}, undefined);
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      envelope,
+      {},
+      undefined,
+      undefined,
+    );
 
     await session.savePackage();
     expect(onSaved).toHaveBeenCalled();
@@ -1875,7 +1880,12 @@ describe("a save the host refused", () => {
 
     await extensions.actionFacade().saveLibrary();
 
-    expect(onOpenTheme).toHaveBeenCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
     // Reloading is taking the stored version, not replacing it: nothing was
     // written a second time.
     expect(saves[1]).not.toHaveBeenCalled();
@@ -1971,11 +1981,21 @@ describe("a save the host refused", () => {
     const session = extensions.actionFacade();
 
     await session.openLibrary();
-    expect(onOpenTheme).toHaveBeenCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
 
     conflictMock.mockResolvedValueOnce("reload");
     await session.saveLibrary();
-    expect(onOpenTheme).toHaveBeenLastCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenLastCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
     extensions.destroy();
   });
 

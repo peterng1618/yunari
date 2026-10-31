@@ -1,5 +1,6 @@
 import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -19,7 +20,11 @@ interface CanvasEvents {
 
 export interface ArtboardPanel {
   readonly root: HTMLElement;
-  render(artboard: Artboard, metadata?: ThemeMetadata): void;
+  render(
+    artboard: Artboard,
+    metadata?: ThemeMetadata,
+    credits?: readonly ThemeCreditsEntry[],
+  ): void;
   /** Releases the canvas subscription and the React tree. */
   destroy(): void;
 }
@@ -64,6 +69,7 @@ export function createArtboardPanel(
 
   let current: Artboard | undefined;
   let metadata: ThemeMetadata | undefined;
+  let credits: readonly ThemeCreditsEntry[] = [];
 
   const reactRoot: Root = createRoot(root);
 
@@ -81,6 +87,7 @@ export function createArtboardPanel(
         createElement(DocumentPane, {
           artboard: shown,
           metadata,
+          credits,
           // Read at the moment of the draw: a fresh reading is what makes the
           // note follow the scene, and this is the only place that knows a draw
           // happened. It is also why an `object:modified` — or the frame of a
@@ -129,9 +136,11 @@ export function createArtboardPanel(
     render(
       artboard: Artboard,
       nextMetadata: ThemeMetadata | undefined = metadata,
+      nextCredits: readonly ThemeCreditsEntry[] = credits,
     ) {
       current = artboard;
       metadata = nextMetadata;
+      credits = nextCredits;
       draw();
     },
     destroy() {

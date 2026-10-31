@@ -269,6 +269,7 @@ export class EditorDocument {
     this.#library = new ThemeLibraryManager({
       snapshot: () => this.snapshot(),
       assets: this.#assets,
+      credits: () => this.#creditsPackage(),
       picture: () => this.picture(),
       // The baseline, not the document: a save in the same task has bumped no
       // revision, so the memo would answer for the old one.

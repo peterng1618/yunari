@@ -1,5 +1,6 @@
 import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { InspectorSection } from "../../components/ui/inspector-section.js";
 import { uiCopy } from "../../ui-copy.js";
 import { ArtboardFields } from "./artboard-fields.js";
@@ -32,12 +33,15 @@ interface DocumentPaneProps {
   /** The scene as `sceneBoxes` last read it, or `undefined` when the panel has
    *  none to read. */
   readonly boxes: readonly SceneBox[] | undefined;
+  /** The theme's attribution: what its imported assets came from and under what
+   *  terms. Empty for a theme that credits nothing. */
+  readonly credits: readonly ThemeCreditsEntry[];
   readonly onArtboard: (next: Artboard) => void;
   readonly onMetadata: (next: ThemeMetadata) => void;
 }
 
 export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
-  const { artboard, metadata, boxes } = props;
+  const { artboard, metadata, boxes, credits } = props;
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
       <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
@@ -53,6 +57,49 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
           onCommit={props.onArtboard}
         />
       </InspectorSection>
+      {credits.length === 0 ? null : (
+        <InspectorSection id="credits" title={uiCopy.panels.credits}>
+          <ul className="flex flex-col gap-[var(--space-6)]">
+            {credits.map((credit, index) => (
+              <li
+                // A credit's key is the asset it attributes where it has one;
+                // an older credit with no asset keeps its position in the list.
+                key={credit.assetId ?? `${credit.title}-${index}`}
+                data-yunari-credit={credit.assetId ?? credit.title}
+                className="flex flex-col gap-[var(--space-4)] text-xs"
+              >
+                <span className="text-text">{credit.title}</span>
+                <span className="text-muted">{byline(credit)}</span>
+                {credit.source?.url === undefined ? null : (
+                  <a
+                    className="truncate text-accent underline"
+                    href={credit.source.url}
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    {credit.source.url}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </InspectorSection>
+      )}
     </div>
   );
+}
+
+/** Who made the work, and the terms it is used under. The values are the
+ *  package's; only the two joining words are the editor's. A steam id is shown
+ *  as the identifier it is, because a workshop credit often has no other
+ *  author name. */
+function byline(credit: ThemeCreditsEntry): string {
+  const parts: string[] = [];
+  if (credit.author?.name !== undefined) {
+    parts.push(uiCopy.credits.by(credit.author.name));
+  } else if (credit.author?.steamId !== undefined) {
+    parts.push(uiCopy.credits.steam(credit.author.steamId));
+  }
+  parts.push(credit.license);
+  return parts.join(" · ");
 }

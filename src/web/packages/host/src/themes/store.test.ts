@@ -256,6 +256,83 @@ describe("ThemeStore", () => {
   });
 
   /**
+   * The attribution member is part of the folder, not of the document, so it
+   * survives a save and an open the way the assets do — and a save that carries
+   * none leaves none, rather than copying a previous version's forward.
+   */
+  it("round-trips the credits member and writes none when a save has none", async () => {
+    const store = createThemeStore(tmpDir);
+    const credits = {
+      format: "yunari-theme-credits" as const,
+      version: 1 as const,
+      entries: [
+        {
+          kind: "icon",
+          title: "Badge",
+          license: "ISC v2",
+          changes: "Imported unchanged",
+          assetId: "badge",
+        },
+      ],
+    };
+    const content = withAsset(
+      "with-credits",
+      "With credits",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+
+    await store.write("with-credits", { ...content, credits });
+    expect(
+      JSON.parse(
+        await fs.readFile(
+          path.join(tmpDir, "with-credits", "credits.json"),
+          "utf8",
+        ),
+      ),
+    ).toEqual(credits);
+    expect((await store.read("with-credits"))?.credits).toEqual(credits);
+
+    // A save that carries none is a folder with none: the staging folder is
+    // written whole, so the member cannot survive behind the document.
+    await store.write("with-credits", content, { overwrite: true });
+    expect(
+      await fs
+        .stat(path.join(tmpDir, "with-credits", "credits.json"))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
+    expect((await store.read("with-credits"))?.credits).toBeUndefined();
+  });
+
+  it("refuses a credits member the package reader would not accept", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "bad-credits",
+      "Bad credits",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+
+    await expect(
+      store.write("bad-credits", {
+        ...content,
+        credits: {
+          format: "yunari-theme-credits",
+          version: 2,
+          entries: [],
+        } as never,
+      }),
+    ).rejects.toThrow("not a credits member");
+    expect(
+      await fs
+        .stat(tmpDir)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+  });
+
+  /**
    * The regression that motivated this design: `list()` used to inflate every
    * package in the library to print one line each. It now reads only
    * `theme.json`, so an asset it cannot read costs the theme nothing in the

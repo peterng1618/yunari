@@ -5,6 +5,7 @@ import type {
   ThemeRemix,
   ValidationIssue,
 } from "@yunari/renderer-core";
+import { readThemeCredits, type ThemeCredits } from "@yunari/theme-package";
 
 /**
  * The host's library is a folder, so a save carries the document
@@ -70,6 +71,9 @@ export interface ThemeOrigin {
 export interface ThemeLibraryContent {
   readonly envelope: FabricThemeEnvelope;
   readonly assets: Readonly<Record<string, Uint8Array>>;
+  /** The attribution member the host keeps beside the document. Absent when the
+   *  stored theme credits nothing, which is not the same as an empty list. */
+  readonly credits?: ThemeCredits;
   /** The stored document this content came from. Sending it back is what lets
    *  the host tell a save made from what it stored from one made from a
    *  document that has since been overtaken. */
@@ -220,8 +224,18 @@ function readContent(json: unknown): ThemeLibraryContent {
   const body = json as {
     readonly envelope?: unknown;
     readonly assets?: unknown;
+    readonly credits?: unknown;
     readonly base?: unknown;
   };
+  // The package reader validates the member at this boundary too. A host that
+  // sends one this build cannot read costs the attribution and never the
+  // document: the theme is still the thing the author asked to open.
+  const credits =
+    body?.credits === undefined
+      ? undefined
+      : readThemeCredits(
+          new TextEncoder().encode(JSON.stringify(body.credits)),
+        );
   return {
     envelope: body?.envelope as FabricThemeEnvelope,
     assets: Object.fromEntries(
@@ -229,6 +243,7 @@ function readContent(json: unknown): ThemeLibraryContent {
         ([assetPath, encoded]) => [assetPath, fromBase64(encoded)],
       ),
     ),
+    ...(credits === undefined ? {} : { credits }),
     // A host that reports no base leaves the content without one, so the save
     // that follows is ungated rather than refused for a reason it cannot fix.
     ...(typeof body?.base === "string" ? { base: body.base } : {}),
@@ -392,6 +407,9 @@ export function createThemeLibraryClient(options?: {
                 toBase64(bytes),
               ]),
             ),
+            ...(content.credits === undefined
+              ? {}
+              : { credits: content.credits }),
             ...(content.base === undefined ? {} : { base: content.base }),
             overwrite: options?.overwrite === true,
           }),

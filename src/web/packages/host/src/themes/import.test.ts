@@ -48,11 +48,13 @@ function packageBytes(input: {
   readonly envelope: FabricThemeEnvelope;
   readonly assets?: Readonly<Record<string, Uint8Array>>;
   readonly thumbnail?: Uint8Array;
+  readonly credits?: Parameters<typeof writeThemePackage>[0]["credits"];
 }): Uint8Array {
   const written = writeThemePackage({
     envelope: input.envelope,
     assets: input.assets ?? {},
     ...(input.thumbnail === undefined ? {} : { thumbnail: input.thumbnail }),
+    ...(input.credits === undefined ? {} : { credits: input.credits }),
   });
   if (!written.ok) throw new Error(written.message);
   return written.bytes;
@@ -130,6 +132,34 @@ describe("importThemePackage", () => {
     const stored = await store.read("family-room");
     expect(stored?.envelope.id).toBe("family-room");
     expect(stored?.envelope.metadata?.name).toBe("Living Room");
+  });
+
+  it("keeps the package's attribution member in the stored folder", async () => {
+    const credits = {
+      format: "yunari-theme-credits" as const,
+      version: 1 as const,
+      entries: [
+        {
+          kind: "wallpaper",
+          title: "House on the hill",
+          author: { steamId: "76561198000000000" },
+          source: { workshopId: "123456" },
+          license: "unknown",
+          changes: "Imported unchanged",
+        },
+      ],
+    };
+
+    const imported = await importThemePackage(
+      packageBytes({
+        envelope: envelopeFor("credited", "Credited"),
+        credits,
+      }),
+      { store },
+    );
+
+    expect(imported).toEqual({ ok: true, id: "credited" });
+    expect((await store.read("credited"))?.credits).toEqual(credits);
   });
 
   it("lands a taken id under a suffixed one, and leaves the theme already there byte-for-byte unchanged", async () => {
