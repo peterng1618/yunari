@@ -111,10 +111,16 @@ const reached = (element: HTMLElement): boolean =>
 /** The elements a `<label for>` may name. `output` is one of them. */
 const LABELABLE = "button,input,meter,output,progress,select,textarea";
 
-afterEach(() => {
-  act(() => settingsRoot?.unmount());
+afterEach(async () => {
+  // React schedules follow-up work through a macrotask; unmounting and then
+  // letting that task run is what keeps it from firing after the worker has
+  // torn the jsdom environment down, where it reads `window` and throws.
+  await act(async () => {
+    settingsRoot?.unmount();
+    chromeRoot?.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   settingsRoot = undefined;
-  act(() => chromeRoot?.unmount());
   chromeRoot = undefined;
   localStorage.clear();
   document.body.replaceChildren();
