@@ -1,4 +1,4 @@
-import { type FabricObject, Point, util } from "fabric/es";
+import { type FabricObject, Group, Point, util } from "fabric/es";
 
 /** A point in the canvas plane. */
 export type CanvasPlanePoint = Readonly<{
@@ -43,6 +43,32 @@ export function parentPlanePointToCanvas({
     new Point(point.x, point.y),
     parent.calcTransformMatrix(),
   );
+}
+
+/** Recomputes an object's cached box, and everything nested under it.
+ *
+ * A cached box is not a transform, and two Fabric paths leave it stale:
+ *
+ * - Discarding an `ActiveSelection` re-enters each member into its real group,
+ *   and that re-entry applies the inverse matrix but does not refresh the box:
+ *   `Group._enterGroup` only cascades `setCoords` while `subTargetCheck` is on,
+ *   which an exit turns off first. The member then keeps the corners it had in
+ *   the selection's plane, and `getBoundingRect`/`getCoords` — what align,
+ *   distribute and the snap paths read — transform those world values through
+ *   the group's matrix a second time.
+ * - Reparenting rebases a destination's children (Fabric's
+ *   `FitContentLayout.shouldPerformLayout` always answers true), but neither
+ *   `Group.setCoords` nor the layout pass cascades while `subTargetCheck` is
+ *   false, so a nested row's `left`/`top` move under a cached box nothing
+ *   recomputed.
+ *
+ * Deepest first: a child's cached box is in its parent's plane, the parent's in
+ * its own parent's.
+ */
+export function refreshObjectCoords(object: FabricObject): void {
+  if (object instanceof Group)
+    for (const child of object.getObjects()) refreshObjectCoords(child);
+  object.setCoords();
 }
 
 /** Moves the object by a canvas-plane delta, expressed in the plane its

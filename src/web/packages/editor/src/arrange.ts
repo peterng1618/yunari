@@ -1,7 +1,10 @@
 import { isLocked } from "@yunari/scene-fabric";
 import { ActiveSelection, type FabricObject } from "fabric/es";
 import type { EditorInteraction } from "./editor-interaction.js";
-import { moveObjectByCanvasDelta } from "./object-plane.js";
+import {
+  moveObjectByCanvasDelta,
+  refreshObjectCoords,
+} from "./object-plane.js";
 
 export type ArrangeAction =
   | "align-left"
@@ -28,6 +31,10 @@ export function applyArrange(
   const objects = active.getObjects() as ArrangeObject[];
 
   editor.canvas.discardActiveObject();
+  // The discard re-enters each member into its group without refreshing the
+  // cached box, so every world read below would be the displaced selection
+  // plane. Refresh before measuring, not after moving.
+  for (const object of objects) refreshObjectCoords(object);
   if (action === "distribute-x" || action === "distribute-y")
     distribute(objects, action === "distribute-x" ? "x" : "y");
   else align(objects, action);

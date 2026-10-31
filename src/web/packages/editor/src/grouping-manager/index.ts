@@ -8,6 +8,7 @@ import {
 } from "fabric/es";
 import { findById } from "../editor-shell/layer-tree.js";
 import { newObjectName } from "../new-object-defaults.js";
+import { refreshObjectCoords } from "../object-plane.js";
 
 export interface GroupingManager {
   group(): Group | undefined;
@@ -413,7 +414,11 @@ export function createGroupingManager(
       // context must already be right when the panel renders.
       setContext([entry]);
       applyReachability(entry);
+      // A live selection is discarded by the call below; Fabric re-enters its
+      // members into their groups without refreshing their cached boxes.
+      const released = canvas.getActiveObjects();
       canvas.setActiveObject(selected);
+      for (const object of released) refreshObjectCoords(object);
       canvas.requestRenderAll();
       return selected;
     },
@@ -428,7 +433,12 @@ export function createGroupingManager(
       leave();
       // An entry can only have been destroyed by an operation that also clears
       // the context (`ungroup`), so `target` is still on the canvas here.
+      // Selecting the group discards a selection inside it; Fabric re-enters
+      // the members without refreshing the box they cached in the selection's
+      // plane, so refresh them before anything measures the scene.
+      const released = canvas.getActiveObjects();
       canvas.setActiveObject(target);
+      for (const object of released) refreshObjectCoords(object);
       canvas.requestRenderAll();
       return before;
     },

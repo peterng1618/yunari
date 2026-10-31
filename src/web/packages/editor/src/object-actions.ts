@@ -22,7 +22,7 @@ import {
   Ungroup,
   Unlock,
 } from "lucide-react";
-import { type ArrangeAction, applyArrange, arrangeMinimum } from "./arrange.js";
+import { type ArrangeAction, applyArrange } from "./arrange.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { KIND_GLYPHS, SHAPE_GLYPHS } from "./editor-shell/icons.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
@@ -143,7 +143,9 @@ const hasLockedSelection = (target: ObjectTarget): boolean =>
 /**
  * What an action surface needs to know about itself to gate a control.
  * Deliberately no per-id `can`: eligibility carries the whole rule, so a `can`
- * here would only ever re-enter `actionEnabled`.
+ * here would only ever re-enter `actionEnabled`. `canArrange` is the one
+ * exception, because the arrange refusal needs the live selection's members and
+ * cannot be stated from the projection.
  */
 export interface ActionGate {
   readonly target: () => ObjectTarget;
@@ -153,6 +155,8 @@ export interface ActionGate {
 /** The one predicate both action surfaces use, so they cannot drift. */
 export function actionEnabled(gate: ActionGate, id: ObjectCommandId): boolean {
   if (!objectAction(id).eligible(gate.target())) return false;
+  // Arrange's refusal is the gate's alone; the registry entry above only says
+  // there is a subject.
   return (
     !id.startsWith("arrange:") ||
     gate.canArrange(id.slice("arrange:".length) as ArrangeAction)
@@ -316,38 +320,20 @@ const ARRANGE_ICONS: Readonly<Record<ArrangeAction, LucideIcon>> = {
 };
 
 /**
- * Arrange's eligibility, as two numbers rather than a target: the toolbar
- * reads it from the shell snapshot's `selectedCount`, not from `target()`,
- * which is undefined until a bridge is set. The threshold comes from
- * `canArrange`'s own owner, so a control cannot advertise an action it refuses.
+ * Arrange is its own group: `canArrange` owns whether it can run, because that
+ * question needs the live selection's members — the projection's `locked` is
+ * the selection's own flag, not "any member locked", so a count/lock rule here
+ * would answer a different question. These entries state only the subject
+ * floor; `actionEnabled` asks the gate for the rest.
  */
-function arrangeEligible(
-  count: number,
-  locked: boolean,
-  id: ObjectActionId,
-): boolean {
-  return count >= arrangeMinimum(arrangeVerb(id)) && !locked;
-}
-
-/** The verb behind an `arrange:<verb>` id; this module owns that id format. */
-function arrangeVerb(id: ObjectActionId): ArrangeAction {
-  return id.slice("arrange:".length) as ArrangeAction;
-}
-
-/** Arrange is its own group: it needs two or more objects and its own owner. */
 export function arrangeActions(): readonly ObjectAction[] {
-  return (Object.keys(ARRANGE_ICONS) as ArrangeAction[]).map((action) => {
-    const id = `arrange:${action}` as const;
-    return {
-      id,
-      label: uiCopy.arrangeLabels[action],
-      icon: ARRANGE_ICONS[action],
-      // canArrange also refuses a locked member, so eligibility has to agree.
-      eligible: (target) =>
-        arrangeEligible(target.memberCount, target.locked, id),
-      run: (editor) => void applyArrange(editor, action),
-    };
-  });
+  return (Object.keys(ARRANGE_ICONS) as ArrangeAction[]).map((action) => ({
+    id: `arrange:${action}` as const,
+    label: uiCopy.arrangeLabels[action],
+    icon: ARRANGE_ICONS[action],
+    eligible: hasSelection,
+    run: (editor) => void applyArrange(editor, action),
+  }));
 }
 
 /**
