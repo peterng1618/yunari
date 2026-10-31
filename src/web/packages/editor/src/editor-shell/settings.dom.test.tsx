@@ -7,6 +7,8 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CredentialRow } from "../asset-finder/credentials-client.js";
+import { wellClasses } from "../components/ui/control-well.js";
+import { ACTION_BUTTON } from "../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
@@ -841,6 +843,53 @@ describe("Connections", () => {
       );
     expect(verify("no-check")?.disabled).toBe(true);
     expect(verify("has-check")?.disabled).toBe(false);
+  });
+
+  /**
+   * **The modal draws the control set's shapes, not its own.** A field is the
+   * Well — the one owner of the surface, the edge, the radius and the focus
+   * boundary — and an action is the shared labelled button the dialogs already
+   * draw. Both are compared against the owners' exported strings rather than
+   * against restated literals, so a restyle moves the modal with its owner.
+   */
+  it("draws its fields as wells and its actions as labelled buttons", async () => {
+    credentials.listCredentials.mockResolvedValue([
+      rowOf({ id: "demo", label: "Demo source" }),
+    ]);
+    const host = mount();
+    await press(gear(host));
+    await openConnections();
+
+    const credentialInput = document.querySelector<HTMLInputElement>(
+      '[data-yunari-credential-input="demo"]',
+    );
+    expect(
+      credentialInput?.parentElement?.className,
+      "the credential field is not in a Well",
+    ).toContain(wellClasses("dialog"));
+    for (const action of ["save", "clear", "verify"] as const) {
+      expect(
+        document.querySelector(`[data-yunari-credential-${action}="demo"]`)
+          ?.className,
+        `the ${action} action is not the shared labelled button`,
+      ).toContain(ACTION_BUTTON);
+    }
+
+    await openPreviews();
+    const ratioInput = document.querySelector<HTMLInputElement>(
+      "[data-yunari-preview-ratio-input]",
+    );
+    expect(
+      ratioInput?.parentElement?.className,
+      "the preview-ratio field is not in a Well",
+    ).toContain(wellClasses("dialog"));
+    for (const action of ["add", "reset"] as const) {
+      expect(
+        document.querySelector(`[data-yunari-preview-ratio-${action}]`)
+          ?.className,
+        `the ${action} action is not the shared labelled button`,
+      ).toContain(ACTION_BUTTON);
+    }
   });
 
   it("points a row at where its key is created, and adds nothing for a row without help", async () => {

@@ -14,7 +14,8 @@ import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
-import { Dialog } from "../components/ui/dialog.js";
+import { ControlWell } from "../components/ui/control-well.js";
+import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
   clearPreviewRatioTokens,
@@ -400,23 +401,28 @@ function PreviewsTab({
       />
       <div className="flex items-center gap-[var(--space-8)]">
         {shape === "circle" ? null : (
-          <input
-            type="text"
-            aria-label={uiCopy.settings.previewRatioField}
-            value={draft}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setReason(undefined);
-            }}
-            data-yunari-preview-ratio-input=""
-            className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
-          />
+          // The field is the control set's Well, not a box of its own: the
+          // well owns the surface, the edge, the radius and the focus
+          // boundary, and the input fills it.
+          <ControlWell density="dialog" widthClassName="min-w-0 flex-1">
+            <input
+              type="text"
+              aria-label={uiCopy.settings.previewRatioField}
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setReason(undefined);
+              }}
+              data-yunari-preview-ratio-input=""
+              className="h-full w-full min-w-0 bg-transparent font-mono text-sm text-text outline-none"
+            />
+          </ControlWell>
         )}
         <button
           type="button"
           onClick={add}
           data-yunari-preview-ratio-add=""
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+          className={ACTION_BUTTON}
         >
           {uiCopy.settings.previewRatioAdd}
         </button>
@@ -425,7 +431,7 @@ function PreviewsTab({
           disabled={atDefaults}
           onClick={reset}
           data-yunari-preview-ratio-reset=""
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+          className={ACTION_BUTTON}
         >
           {uiCopy.settings.previewRatioReset}
         </button>
@@ -557,26 +563,28 @@ function ConnectionsTab(): React.JSX.Element {
               </span>
             </div>
             <div className="flex items-center gap-[var(--space-8)]">
-              <input
-                type="password"
-                aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
-                placeholder={uiCopy.settings.connectionsPlaceholder}
-                value={drafts[row.id] ?? ""}
-                onChange={(event) =>
-                  setDrafts((current) => ({
-                    ...current,
-                    [row.id]: event.target.value,
-                  }))
-                }
-                data-yunari-credential-input={row.id}
-                className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
-              />
+              <ControlWell density="dialog" widthClassName="min-w-0 flex-1">
+                <input
+                  type="password"
+                  aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
+                  placeholder={uiCopy.settings.connectionsPlaceholder}
+                  value={drafts[row.id] ?? ""}
+                  onChange={(event) =>
+                    setDrafts((current) => ({
+                      ...current,
+                      [row.id]: event.target.value,
+                    }))
+                  }
+                  data-yunari-credential-input={row.id}
+                  className="h-full w-full min-w-0 bg-transparent font-mono text-sm text-text outline-none"
+                />
+              </ControlWell>
               <button
                 type="button"
                 disabled={busy === row.id || (drafts[row.id] ?? "") === ""}
                 onClick={() => save(row.id)}
                 data-yunari-credential-save={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsSave}
               </button>
@@ -585,7 +593,7 @@ function ConnectionsTab(): React.JSX.Element {
                 disabled={!row.set || busy === row.id}
                 onClick={() => void run(row.id, () => clearCredential(row.id))}
                 data-yunari-credential-clear={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsClear}
               </button>
@@ -594,7 +602,7 @@ function ConnectionsTab(): React.JSX.Element {
                 disabled={!row.set || !row.verify || busy === row.id}
                 onClick={() => void run(row.id, () => verifyCredential(row.id))}
                 data-yunari-credential-verify={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsVerify}
               </button>
