@@ -509,20 +509,22 @@ test.describe("text and text box elements", () => {
       0,
     );
 
-    // A Text has corners, not edges: the corner drag leaves `width` at the
-    // measured ink and puts the change on `scaleX`/`scaleY`, so no authored box
-    // is written for it.
+    // A Text has corners, not edges. The gesture is folded into the document at
+    // the commit: the runs' own size grows and the object returns to unit
+    // scale, because the model has no stretched text and an unboxed Text owns
+    // no width to bake. So the drag is read through the measured ink, not a
+    // scale left on the object.
     const widthBeforeDrag = committed.width;
     await dragHandle(page, placed.id, "br", 60, 40);
     await expect
-      .poll(async () => (await textState(page, placed.id))?.scaleX ?? 0)
-      .toBeGreaterThan(1.05);
+      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
+      .toBeGreaterThan(widthBeforeDrag + 20);
     const scaled = await textState(page, placed.id);
     if (scaled === undefined)
       throw new Error("the text vanished after scaling");
-    expect(scaled.width).toBe(widthBeforeDrag);
-    expect(scaled.scaleY).toBeGreaterThan(1.05);
-    expect(scaled.width * scaled.scaleX).toBeGreaterThan(widthBeforeDrag + 20);
+    expect(scaled.scaleX, "the commit leaves no scale on the object").toBe(1);
+    expect(scaled.scaleY).toBe(1);
+    expect(scaled.width).toBeGreaterThan(widthBeforeDrag + 20);
     const afterScale = await readObject(page, placed.name ?? "Text");
     expect(
       boxOf(afterScale),

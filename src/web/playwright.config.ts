@@ -106,7 +106,10 @@ export default defineConfig({
   // loaded machine reported locator timeouts as failures where the same case
   // passed alone, and the wall clock was the variable rather than the assertion
   // (issue #79). The suite still fails a case that never reaches its selector.
-  testTimeout: 60_000,
+  //
+  // The key is `timeout`, not the CLI's `testTimeout`: a config object with
+  // `testTimeout` is accepted silently and every test keeps the 30 s default.
+  timeout: 60_000,
   // The assertion budget is where the same load actually showed: `toHaveCount`
   // and friends kept Playwright's 5 s default, so a popup that took longer than
   // 5 s to draw failed a 60 s test. Raised with the same ruling (issue #79).

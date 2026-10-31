@@ -17,7 +17,7 @@ import { uiCopy as editorCopy } from "../../packages/editor/src/ui-copy.js";
 import { uiCopy } from "../../packages/player/src/ui-copy.js";
 import { canvasProp, sceneBounds, sceneProperty } from "./canvas-probe.js";
 import { openPaused } from "./clock.js";
-import { captureVisualReview } from "./editor-canvas.js";
+import { answerDialogIfShown, captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import {
   BADGE_INK,
@@ -379,6 +379,9 @@ test.describe("hosted player over the real host", () => {
     // Save to library goes through PUT /api/themes/:id, not a download.
     await page.getByRole("button", { name: "File", exact: true }).click();
     await page.getByRole("menuitem", { name: "Save to library" }).click();
+    // Assets nothing holds are offered for cleanup before either save writes;
+    // the sheet is answered the way an author answers it.
+    await answerDialogIfShown(page, "Save to library", 1_000);
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -960,6 +963,18 @@ test.describe("the clock the host reports", () => {
     );
 
     await page.goto(`${HOST}/?theme=${HOST_THEME_ID}&data=live`);
+    // The absence of the connection banner is true of the page before the
+    // player boots, so the artboard is what says the runtime is up.
+    await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.waitForFunction(
+      () => (window as unknown as { yunari?: unknown }).yunari !== undefined,
+      undefined,
+      {
+        timeout: 15_000,
+      },
+    );
     await expect(page.locator("#yunari-connection")).toHaveCount(0, {
       timeout: 15_000,
     });

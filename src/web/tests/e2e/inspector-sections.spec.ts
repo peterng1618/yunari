@@ -2092,7 +2092,7 @@ test.describe("the per-kind inspector column", () => {
     );
     await expect(field).toBeVisible();
 
-    // **The catalogue is the finder's Fonts body**, not the field: the field
+    // **The catalogue is the finder's Fonts tab**, not the field: the field
     // names the face and opens the browser that owns the list, so what the
     // press reaches is what this case asserts. The finder asks the host for its
     // sources first; the preview is not a host, and an empty listing is the
@@ -2102,32 +2102,19 @@ test.describe("the per-kind inspector column", () => {
       route.fulfill({ json: { sources: [] } }),
     );
     await field.locator("[data-yunari-open-font-picker]").click();
-    const body = page.locator('[data-yunari-asset-body="font-picker"]');
-    await expect(body).toBeVisible();
-
-    // The catalogue itself, not an empty list standing in for one.
-    const rows = body.locator("[data-yunari-font-face-row]");
-    await expect(rows.first()).toBeVisible();
-    expect(
-      await rows.first().getAttribute("data-yunari-font-family"),
-    ).toBeTruthy();
-    // The trio half and the facet choosers belong to the same control, so a
-    // body that reached only the face list would be a partial mount.
-    await expect(body.locator("[data-yunari-font-trio]")).toHaveCount(1);
-    await expect(body.locator("[data-yunari-font-sort]")).toHaveCount(1);
-
-    // Operable, not merely present: the search is bound to the query the rows
-    // are drawn from, so a term no family holds empties the window and clearing
-    // it fills the window again.
-    const search = body.locator('input[type="search"]');
-    await search.fill("zzzzzzzz");
-    await expect(rows).toHaveCount(0);
-    await search.fill("");
-    await expect.poll(async () => rows.count()).toBeGreaterThan(0);
+    await expect(
+      page.locator('[data-yunari-asset-tab="font"][data-active]'),
+      "the press lands on the Fonts tab",
+    ).toHaveCount(1);
+    // The body is drawn, saying no source answered — it is not the grid's
+    // empty sentence dressed up as a catalogue. The catalogue's own rows, sort,
+    // trio and search are `asset-finder.spec.ts`'s subject, against a host that
+    // serves one; repeating them here would let two fixtures drift apart.
+    await expect(page.locator("[data-yunari-asset-body]")).toBeVisible();
 
     // A shape has no face, so it is offered no field over one.
     await page.keyboard.press("Escape");
-    await expect(body).toBeHidden();
+    await expect(page.locator("[data-yunari-asset-frame]")).toBeHidden();
     await insert(page, "Rectangle", "shape");
     await expect(page.locator("[data-yunari-font-face-field]")).toHaveCount(0);
   });

@@ -15,6 +15,7 @@ import {
 } from "./frame-diff.js";
 import { GLASS_BAR, glassStripesPng } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * The editor preview `playwright.config.ts` starts, as `glass.spec.ts` does.
@@ -200,7 +201,7 @@ function packageFor(scene: Scene, backdrop: Backdrop): Uint8Array {
           license: { name: "MIT", attribution: "Yunari test fixture." },
         };
   const written = writeThemePackage({
-    envelope: {
+    envelope: withRoleTokens({
       schemaVersion: "2.0.0" as const,
       fabricVersion: "7.4.0" as const,
       id: `probe-${scene}-${backdrop}`,
@@ -231,7 +232,7 @@ function packageFor(scene: Scene, backdrop: Backdrop): Uint8Array {
       },
       assets: [asset],
       scene: { version: "7.4.0" as const, objects: objectsFor(scene) },
-    },
+    }),
     assets:
       backdrop === "photograph"
         ? { "assets/backdrop.jpg": photograph }

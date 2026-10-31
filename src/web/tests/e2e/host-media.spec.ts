@@ -209,6 +209,9 @@ async function publish(
 
   const response = await page.request.put(`${HOST}/api/themes/${id}`, {
     data: {
+      // A fixture is seeded, not authored: a previous run left a newer base,
+      // and the seed replaces it rather than failing the conflict rule.
+      overwrite: true,
       envelope: theme.envelope,
       assets: Object.fromEntries(
         Object.entries(theme.assets).map(([assetPath, bytes]) => [
@@ -765,8 +768,11 @@ test.describe("changing media on the real player", () => {
     // type and the declared path all have to have been right for this to decode.
     // `.src` is the resolved URL, which is what the browser actually requested;
     // the attribute is the unresolved root-relative form the resolver built.
+    // The glass still is extracted by a second, zero-sized probe video that the
+    // media owner appends while it measures; the live element is the first.
     const src = await page
       .locator("[data-yunari-background-media] video")
+      .first()
       .evaluate((element) => (element as HTMLVideoElement).src);
     expect(src).toBe(`${HOST}/api/themes/${id}/assets/loop.webm`);
 

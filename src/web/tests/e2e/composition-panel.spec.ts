@@ -22,6 +22,7 @@ import { selectLayer } from "./rebuild-driver.js";
 import { rulePx } from "./shell-tokens.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * The composition panel's browser contract, against the real editor.
@@ -670,7 +671,7 @@ function packageBytes(
   > = {},
 ): Buffer {
   const result = writeThemePackage({
-    envelope: {
+    envelope: withRoleTokens({
       schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id,
@@ -694,7 +695,7 @@ function packageBytes(
       },
       bindings,
       scene: { version: "7.4.0", objects },
-    },
+    }),
     assets: {},
   });
   if (!result.ok) throw new Error(result.message);

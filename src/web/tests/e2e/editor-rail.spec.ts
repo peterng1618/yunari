@@ -13,6 +13,7 @@ import { openEveryGroup, openPane, paneBody } from "./editor-rail.js";
 import { selectLayer } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * The contract of the shared `openPane` helper, against the real editor.
@@ -3258,18 +3259,19 @@ test("the store opens a library theme as the document, from the cell and its foo
 
   const CELL_NAME = "Cell theme";
   const FOOTER_NAME = "Footer theme";
-  const themeOf = (id: string, name: string): FabricThemeEnvelope => ({
-    schemaVersion: "2.0.0",
-    fabricVersion: "7.4.0",
-    id,
-    // No artboard paint: a theme's background is a palette token or nothing
-    // (`fabric-envelope-validate.ts`), and a local literal here would be a
-    // document the editor refuses to open — which is what this case's own first
-    // run proved, by failing at the canvas with the validator's sentence.
-    artboard: { width: 1920, height: 1080 },
-    metadata: { name, themeLanguage: "en", author: "huyng" },
-    scene: { version: "7.4.0", objects: [] },
-  });
+  const themeOf = (id: string, name: string): FabricThemeEnvelope =>
+    withRoleTokens({
+      schemaVersion: "2.0.0",
+      fabricVersion: "7.4.0",
+      id,
+      // No artboard paint: a theme's background is a palette token or nothing
+      // (`fabric-envelope-validate.ts`), and a local literal here would be a
+      // document the editor refuses to open — which is what this case's own first
+      // run proved, by failing at the canvas with the validator's sentence.
+      artboard: { width: 1920, height: 1080 },
+      metadata: { name, themeLanguage: "en", author: "huyng" },
+      scene: { version: "7.4.0", objects: [] },
+    });
   const fromCell = themeOf("store-from-cell", CELL_NAME);
   const fromFooter = themeOf("store-from-footer", FOOTER_NAME);
 
@@ -3583,14 +3585,16 @@ test("opening a library theme fits it to the phone's own canvas", async ({
   );
 
   const written = writeThemePackage({
-    envelope: {
+    // The validator requires the three role tokens, and this fixture is written
+    // whole rather than derived from the starter.
+    envelope: withRoleTokens({
       schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id: "store-open-phone",
       artboard: { width: 640, height: 480 },
       metadata: { name: "Phone theme", themeLanguage: "en" },
       scene: { version: "7.4.0", objects: [] },
-    },
+    }),
     assets: {},
   });
   if (!written.ok) throw new Error(written.message);

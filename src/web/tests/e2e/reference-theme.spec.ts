@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import type { FontAssetReference } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
@@ -23,6 +25,16 @@ import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
+/** The suite's decodable video: the host normalizes a picked video before it
+ * declares one, so a placeholder buffer would be refused rather than imported. */
+const CONFORMING_MP4 = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../packages/theme-package/test-fixtures/conforming.mp4",
+      import.meta.url,
+    ),
+  ),
+);
 
 /**
  * The reference composition, driven the way an author drives it.
@@ -293,6 +305,10 @@ async function savePackage(page: Page): Promise<{
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: "Save package" }).click();
+  // A document holding a file nothing refers to asks the cleanup question
+  // first, and the save waits on the answer. The sheet's confirm button is the
+  // save's own title; keeping the files is the answer that changes nothing.
+  await answerDialogIfShown(page, "Save package", 1_000);
   // **The download is the save's own signal**, so it is what this waits for:
   // building the package on a loaded CI runner outran the status line's 5 s
   // default, and the assertion failed while the same save was still landing.
@@ -2559,16 +2575,38 @@ test.describe("background media", () => {
     page,
   }, testInfo) => {
     desktop(testInfo);
-    // **Wiring only, and said so.** These bytes are not a decodable video, so
-    // no frame is claimed: what this proves is that a declared video asset
-    // reaches the media layer as a `<video>`. Fabric cannot see a DOM sibling,
-    // so a decoded frame is the media owner's business, not this file's.
+    // **Wiring only, and said so.** The bytes decode, but no frame is claimed:
+    // what this proves is that a declared video asset reaches the media layer
+    // as a `<video>`. Fabric cannot see a DOM sibling, so a decoded frame is
+    // the media owner's business, not this file's.
     await openEditor(page);
+    // The host owns the encoder and the envelope rules; it is not this file's
+    // subject. The route answers the suite's conforming bytes, so the wiring
+    // measured here is the editor's: trim, declare, land on the media layer.
+    await page.route("**/api/themes/normalize-video*", (route) =>
+      route.fulfill({
+        json: {
+          ok: true,
+          bytesBase64: CONFORMING_MP4.toString("base64"),
+          reencoded: false,
+        },
+      }),
+    );
     await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "loop.mp4",
       mimeType: "video/mp4",
-      buffer: Buffer.from("not a decodable video"),
+      buffer: CONFORMING_MP4,
+    });
+    // A picked video is trimmed before it is imported. The host normalizes it,
+    // so the surface runs the whole file; the import modal then names and lands
+    // it.
+    const trim = page.locator("[data-yunari-video-trim-modal]");
+    await expect(trim).toBeVisible();
+    await page.locator("[data-yunari-video-trim-whole]").click();
+    await expect(trim).toBeHidden();
+    await expect(page.locator("[data-yunari-import-video-modal]")).toBeHidden({
+      timeout: 30_000,
     });
     // The picture is the background layer's, so it is chosen where that layer
     // is selected.

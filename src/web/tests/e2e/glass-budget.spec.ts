@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { GLASS_ENVELOPE, glassStripesPng } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
 
@@ -43,7 +44,7 @@ function fixture(withMedia: boolean) {
         background: { color: GLASS_ENVELOPE.background.color },
       };
   const written = writeThemePackage({
-    envelope: { ...envelope, artboard },
+    envelope: withRoleTokens({ ...envelope, artboard }),
     assets: { "assets/stripes.png": glassStripesPng() },
   });
   if (!written.ok) throw new Error(written.message);
