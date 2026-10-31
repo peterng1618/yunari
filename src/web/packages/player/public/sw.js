@@ -14,14 +14,23 @@
  * page says the theme could not be loaded — which is what it says, and it is
  * true.
  *
+ * **The cache is keyed by the build it holds** (`vg-589`). A display runs for
+ * months and is redeployed repeatedly, and each build adds a content-hashed
+ * copy of the bundle; one fixed cache name would hold every build it ever ran.
+ * The name comes from the document's own bytes — the document names the
+ * build's hashed assets — and every other `yunari-shell-` cache is deleted when
+ * a new name is adopted. The package version cannot key this: two builds of one
+ * version are exactly the redeploy a display goes through.
+ *
  * Plain JavaScript on purpose: Vite copies `public/` verbatim, so this file is
  * the one the browser is given rather than a build of it.
  */
 
-// v2 because v1 keyed the document by its own URL and so holds a display's
-// session token. `activate` deletes every other `yunari-*` cache, which is
-// what clears a credential already on a display's disk.
-const SHELL_CACHE = "yunari-shell-v2";
+/** Every shell cache this worker owns starts with this. The worker script
+ *  itself usually does not change between builds, so `install` may never run
+ *  again; the name is therefore also adopted on every navigation, from the
+ *  fresh `no-store` document. */
+const SHELL_PREFIX = "yunari-shell-";
 /** Stable names, so they can be precached without a build-time list. The
  *  content-hashed bundle assets are cached as they are fetched instead. */
 const SHELL_FILES = ["/manifest.webmanifest", "/favicon.svg"];
@@ -39,26 +48,79 @@ const SHELL_FILES = ["/manifest.webmanifest", "/favicon.svg"];
  */
 const SHELL_DOCUMENT = "/";
 
+/** The cache this worker is filling, once it has read a document. `null` until
+ *  then, which is what a worker restarted after `activate` starts with. */
+let shellName = null;
+
+/** FNV-1a over the document, as the build's identity. */
+function buildName(html) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < html.length; index += 1) {
+    hash = Math.imul(hash ^ html.charCodeAt(index), 0x01000193);
+  }
+  return `${SHELL_PREFIX}${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+/** The current shell cache's name. A worker restarted after `activate` finds
+ *  the one cache it left; with none or several there is nothing safe to guess,
+ *  and the caller does without. */
+async function currentShell() {
+  if (shellName !== null) return shellName;
+
+  const shells = (await caches.keys()).filter((key) =>
+    key.startsWith(SHELL_PREFIX),
+  );
+  if (shells.length !== 1) throw new Error("no current shell cache");
+
+  shellName = shells[0];
+  return shellName;
+}
+
+/** Deletes every shell cache but the current one — the eviction a redeploy
+ *  needs, since nothing else ever removes a build's hashed assets. Deletes
+ *  nothing when the current cache cannot be told apart: the next navigation
+ *  names it and rotates then. */
+async function dropOtherShells() {
+  const shells = (await caches.keys()).filter((key) =>
+    key.startsWith(SHELL_PREFIX),
+  );
+
+  if (shellName === null) {
+    if (shells.length !== 1) return;
+    shellName = shells[0];
+  }
+
+  await Promise.all(
+    shells
+      .filter((key) => key !== shellName)
+      .map((key) => caches.delete(key)),
+  );
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_FILES))
-      .then(() => self.skipWaiting()),
+    fetch(SHELL_DOCUMENT, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`the shell document answered ${response.status}`);
+        }
+
+        // Read from a clone: the original is what goes into the cache, and a
+        // consumed body cannot be stored. The network answers first at runtime
+        // too; this copy is only what an offline load falls back to.
+        const name = buildName(await response.clone().text());
+        const cache = await caches.open(name);
+        await cache.addAll(SHELL_FILES);
+        await cache.put(SHELL_DOCUMENT, response);
+        shellName = name;
+        await self.skipWaiting();
+      }),
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key.startsWith("yunari-") && key !== SHELL_CACHE)
-            .map((key) => caches.delete(key)),
-        ),
-      )
+    dropOtherShells()
       // A display that is already open is controlled from here, which is what
       // makes the *next* navigation the one that fills the cache.
       .then(() => self.clients.claim()),
@@ -68,8 +130,29 @@ self.addEventListener("activate", (event) => {
 /** Best effort: a cache that refused an entry must not fail the request. */
 async function remember(cacheKey, response) {
   try {
-    const cache = await caches.open(SHELL_CACHE);
+    const cache = await caches.open(await currentShell());
     await cache.put(cacheKey, response);
+  } catch {
+    /* Not cacheable; the display still got its answer. */
+  }
+}
+
+/** Stores the document under the build its own bytes name, rotating the cache
+ *  on a redeploy. The document is fetched `no-store` on every load, so this is
+ *  the one place a new build is seen without a new worker script. */
+async function rememberDocument(response) {
+  try {
+    const name = buildName(await response.clone().text());
+    const cache = await caches.open(name);
+
+    if (name !== shellName) {
+      // Set before the deletion is awaited: an asset requested right behind the
+      // document must land in the cache that is about to be the only one.
+      shellName = name;
+      await dropOtherShells();
+    }
+
+    await cache.put(SHELL_DOCUMENT, response);
   } catch {
     /* Not cacheable; the display still got its answer. */
   }
@@ -102,7 +185,7 @@ self.addEventListener("fetch", (event) => {
           // Under `SHELL_DOCUMENT` and not under `request`: the request's URL
           // is the display's own and may name a theme, an old session token or
           // nothing at all.
-          if (response.ok) void remember(SHELL_DOCUMENT, response.clone());
+          if (response.ok) void rememberDocument(response.clone());
           return response;
         })
         .catch(async () => {
