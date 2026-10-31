@@ -450,8 +450,10 @@ it("maps a channel track's pointer through the padding box its handle sits in", 
   // the 25% point is `1 + 0.25 * 198`; a border-box reading would write 25.25%.
   const picker = await openPicker(PURE_RED);
   const hue = picker.find("picker-hue");
-  hue.style.borderLeftWidth = "1px";
-  hue.style.borderRightWidth = "1px";
+  // A border width alone computes to 0px while its style is the initial
+  // `none`; the edge must also be drawn, as a browser would require.
+  hue.style.borderLeft = "1px solid transparent";
+  hue.style.borderRight = "1px solid transparent";
   stubRect(hue, 200, 12);
 
   await pointer(hue, "pointerdown", 1 + 0.25 * 198, 6);

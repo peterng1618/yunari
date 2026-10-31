@@ -36,7 +36,7 @@ are provenance, not notice rows.
 | `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
 | `lucide-react` | 1.61.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
 | `lineicons` | 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
-| `systeminformation` | 5.33.16 | MIT | host hardware metrics (no dependencies of its own) |
+| `systeminformation` | 5.33.19 | MIT | host hardware metrics (no dependencies of its own) |
 | `node-forge` | 1.4.2 | BSD-3-Clause OR GPL-2.0 | host: encodes and signs the local CA and leaf that give a display a secure origin; BSD-3-Clause is the one taken (no dependencies of its own) |
 | `undici` | 7.30.1 | MIT | host: pins the DNS address checked by a custom source's policy to the connection that fetches it |
 | `usb` | 3.2.1 | MIT | host: opens the bulk endpoint a USB panel is driven over. Native module with per-platform prebuilt binaries and no runtime dependencies |
@@ -135,7 +135,7 @@ its own nested copy of a name already listed above.
 | `@types/react` | 19.3.0 | MIT | types |
 | `@types/react-dom` | 19.3.0 | MIT | types |
 | `canvas` | 3.2.3 | MIT | native raster test dependency; may carry linked-library obligations |
-| `jsdom` | 26.1.0 | MIT | DOM tests |
+| `jsdom` | 30.1.3 | MIT | DOM tests |
 | `jsqr` | 1.4.0 | Apache-2.0 | decodes the QR round-trip |
 | `tailwindcss` | 4.3.3 | MIT | editor dev styling |
 | `tsx` | 4.23.15 | MIT | runs scripts that import workspace TypeScript |

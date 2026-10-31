@@ -2,8 +2,8 @@
   {
     "package": "zod",
     "advisory": "GHSA-mrhx-c7xc-m3w5",
-    "reason": "The zod override lifts every copy to ^4.6.6 except @google/design.md's, so the only vulnerable copy left is the zod v3 that this dev-only linter requires. The store-worker's production zod resolves to 4.6.7, which is why npm audit --omit=dev reports node-forge alone.",
-    "reviewed": "2026-10-26"
+    "reason": "The zod override pins every copy to 4.6.6 — the first release outside the advisory range — except @google/design.md's, so the only vulnerable copy left is the zod v3 that this dev-only linter requires. The store-worker's production zod resolves to 4.6.6, which is why npm audit --omit=dev reports no findings.",
+    "reviewed": "2026-10-31"
   },
   {
     "package": "@google/design.md",
