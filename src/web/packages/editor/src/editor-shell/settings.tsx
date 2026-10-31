@@ -399,12 +399,19 @@ function PreviewsTab({
           setReason(undefined);
         }}
       />
-      <div className="flex items-center gap-[var(--space-8)]">
+      {/* The row wraps rather than squeezing the well to nothing: the settings
+          panel is narrow beside the tab column, and the actions are labelled
+          buttons of a fixed size, so on a wrapped line the field keeps a
+          usable width instead of losing its content box. */}
+      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
         {shape === "circle" ? null : (
           // The field is the control set's Well, not a box of its own: the
           // well owns the surface, the edge, the radius and the focus
           // boundary, and the input fills it.
-          <ControlWell density="dialog" widthClassName="min-w-0 flex-1">
+          <ControlWell
+            density="dialog"
+            widthClassName="min-w-[6rem] flex-1"
+          >
             <input
               type="text"
               aria-label={uiCopy.settings.previewRatioField}
@@ -562,8 +569,8 @@ function ConnectionsTab(): React.JSX.Element {
                   : uiCopy.settings.connectionsNotSet}
               </span>
             </div>
-            <div className="flex items-center gap-[var(--space-8)]">
-              <ControlWell density="dialog" widthClassName="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+              <ControlWell density="dialog" widthClassName="min-w-[6rem] flex-1">
                 <input
                   type="password"
                   aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
