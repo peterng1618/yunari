@@ -1310,33 +1310,12 @@ export function createPortListener(
   plain: http.Server,
   secure: https.Server,
 ): ListenableServer {
-  /** Sockets this port accepted, by the one name a connection has. */
-  const handed = new Map<string, net.Socket>();
-  /** Those with a response in flight, which are not idle. */
-  const answering = new Set<net.Socket>();
-
-  /**
-   * The four-tuple, which is what a connection *is*.
-   *
-   * **Object identity does not survive the handover.** An https server does not
-   * report the socket this port accepted: its `request` event carries a
-   * `tls.TLSSocket` wrapping it, so a set of accepted sockets never matches one
-   * of those, the mid-response guard is a no-op, and over TLS this port prunes
-   * a response in flight — the exact case the guard exists for. Measured over a
-   * real TLS socket: the two objects differ and their `remoteAddress`,
-   * `remotePort`, `localAddress` and `localPort` are equal; over plain http they
-   * are the same object. Nothing private is needed for that, and nothing
-   * private may be used: `TLSSocket#_parent` is not a contract.
-   */
-  const nameOf = (socket: net.Socket): string =>
-    `${socket.remoteAddress}:${socket.remotePort}:${socket.localAddress}:${socket.localPort}`;
+  /** Sockets this port accepted, so a move can drop them all. */
+  const accepted = new Set<net.Socket>();
 
   const listener = net.createServer({ pauseOnConnect: true }, (socket) => {
-    // Captured once: a closed socket stops reporting its own addresses, and a
-    // name recomputed from it then would not be the one it was filed under.
-    const name = nameOf(socket);
-    handed.set(name, socket);
-    socket.once("close", () => handed.delete(name));
+    accepted.add(socket);
+    socket.once("close", () => accepted.delete(socket));
 
     // Nothing bounds a socket that has said nothing: neither inner server has
     // seen it, so neither one's own timeout applies. Cleared at handover below,
@@ -1367,45 +1346,9 @@ export function createPortListener(
    *  handshake, short enough that a caller holding a slot says why. */
   listener.maxConnections = MAX_SOCKET_CONNECTIONS;
 
-  // **The pruning the binding asks for is this port's, not an inner server's.**
-  // A server handed sockets by `emit("connection")` never builds the connection
-  // registry its own `closeIdleConnections()` reads — that registry is made when
-  // a server *listens*, and neither inner server ever does. Measured: with the
-  // pruning delegated to them, the move's `close()` never resolved, because the
-  // browser's keep-alive socket was invisible to both inner servers and the port
-  // waited on it forever, so the editor's host switch stayed off (`vg-173`'s
-  // shape, arrived at from the other end). This port accepted the sockets, so
-  // this port closes them, and it learns which are mid-response from the inner
-  // servers' own `request` events rather than from a private field.
-  for (const owner of [plain, secure]) {
-    owner.on("request", (request, response) => {
-      const accepted = handed.get(nameOf(request.socket));
-
-      // Not one of ours, so not one this port will ever prune.
-      if (accepted === undefined) return;
-
-      const done = (): void => {
-        answering.delete(accepted);
-      };
-
-      answering.add(accepted);
-      // `finish` and not only `close`: a keep-alive response is finished and
-      // idle long before its socket closes, and the move is triggered from
-      // exactly that moment — a socket held until `close` would leave
-      // `server.close()` waiting on the connection that is asking to move.
-      response.once("finish", done);
-      response.once("close", done);
-    });
-  }
-
   return Object.assign(listener, {
-    closeIdleConnections(): void {
-      for (const socket of [...handed.values()]) {
-        if (!answering.has(socket)) socket.destroy();
-      }
-    },
     closeAllConnections(): void {
-      for (const socket of [...handed.values()]) socket.destroy();
+      for (const socket of accepted) socket.destroy();
     },
   }) as ListenableServer;
 }
