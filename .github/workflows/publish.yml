@@ -55,7 +55,11 @@ on:
 # dispatch false -> false, dispatch absent -> null -> dry run. Workflow level so
 # both jobs read the same decision.
 env:
-  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
+  # GitHub's expression language has no ternary; `&&`/`||` is how the choice is
+  # spelled. Loose equality cannot tell `false` from a missing input (both coerce
+  # to 0), so compare the serialised value: release -> false, dispatch true ->
+  # true, dispatch false -> false, dispatch absent -> an empty input -> false.
+  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' && 'true' || 'false' }}"
 
 concurrency:
   # One publish at a time, whatever the ref: the version is only known inside
