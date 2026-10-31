@@ -1,7 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { rmSync } from "node:fs";
+import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
-import { HOST_APP_DIR, HOST_PORT } from "./host-theme.js";
+import { HOST_PORT, HOST_THEMES_DIR } from "./host-theme.js";
 import { lanAddress } from "./lan-address.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -947,9 +949,18 @@ test.describe("changing media on the real player", () => {
   });
 });
 
+/** Its own app folder, so the second host owns its own lock and settings.
+ *  `HOST_APP_DIR` belongs to the project host Playwright already started, and
+ *  the host lock refuses two hosts on one folder — the arrangement that only
+ *  passed while the fixture's wipe deleted the live lock. The library is the
+ *  seeded one and is read, not written, by this host: `--themes-dir` separates
+ *  the content from the state beside it. */
+const LAN_APP_DIR = path.join(process.cwd(), ".e2e-host-app-media");
+
 /** A second host, bound so a paired display can reach it. Loopback-only hosts
  *  create no session store at all, so a session cannot be minted against one. */
 async function startLanHost(port: number): Promise<ChildProcess> {
+  rmSync(LAN_APP_DIR, { recursive: true, force: true });
   const child = spawn(
     "node",
     [
@@ -960,7 +971,9 @@ async function startLanHost(port: number): Promise<ChildProcess> {
       "--host",
       "0.0.0.0",
       "--app-dir",
-      HOST_APP_DIR,
+      LAN_APP_DIR,
+      "--themes-dir",
+      HOST_THEMES_DIR,
     ],
     { cwd: process.cwd(), stdio: "ignore" },
   );
@@ -972,8 +985,20 @@ async function startLanHost(port: number): Promise<ChildProcess> {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  child.kill();
+  await stopLanHost(child);
   throw new Error(`the LAN host never answered on ${port}`);
+}
+
+/** Kills the host and waits for it to exit, so its files are closed before the
+ *  app folder is removed. */
+async function stopLanHost(child: ChildProcess): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) {
+    await new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+      child.kill();
+    });
+  }
+  rmSync(LAN_APP_DIR, { recursive: true, force: true });
 }
 
 test.describe("a paired display fetching a theme asset", () => {
@@ -1038,7 +1063,7 @@ test.describe("a paired display fetching a theme asset", () => {
       ).toBe("image/svg+xml");
       expect(await paired.text()).toContain("<svg");
     } finally {
-      host.kill();
+      await stopLanHost(host);
     }
   });
 

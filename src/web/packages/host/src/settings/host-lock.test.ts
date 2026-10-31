@@ -102,9 +102,9 @@ describe("acquireHostLock", () => {
       throw new Error(held.reason);
     }
 
-    // Something removed this lock while this process ran — the e2e fixture wipes
-    // the folder mid-run, and a hand deletion does the same — so a second host
-    // took the folder. This process's exit must not hand the folder to a third.
+    // Something removed this lock while this process ran — a hand deletion, or
+    // a tool that takes the folder over — so a second host took it. This
+    // process's exit must not hand the folder to a third.
     const other = { pid: 4, port: 5228 };
     await writeFile(path.join(dir, FILE), JSON.stringify(other), "utf8");
 

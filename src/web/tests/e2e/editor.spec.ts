@@ -99,7 +99,7 @@ const EDITOR = "http://127.0.0.1:4174/";
 
 /**
  * The one real face the suite keeps on disk, cached by the host fixture before
- * any worker starts (`global-setup.ts` → `seedHostTheme` → `fontBytes`). The
+ * any worker starts (`seed-host.ts` → `seedHostTheme` → `fontBytes`). The
  * token inspector's import refuses bytes the browser cannot parse, so a
  * synthetic buffer is not a stand-in here.
  */

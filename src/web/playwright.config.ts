@@ -98,8 +98,6 @@ export default defineConfig({
   // import of `vitest`'s `test` is a hard error for the whole suite, not one
   // skipped file.
   testMatch: "**/*.spec.ts",
-  // Seeds the host fixture once; the config itself runs in every worker.
-  globalSetup: "./tests/e2e/global-setup.ts",
   retries: 0,
   fullyParallel: true,
   // 60 s, not Playwright's 30 s default: a run at the default worker count on a
@@ -145,7 +143,12 @@ export default defineConfig({
     {
       // The real Node host, not a preview server: hosted theme loading, package
       // asset serving and the SSE stream are otherwise never browser-tested.
-      command: `node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
+      //
+      // The seed is the command's first half, not a `globalSetup`: Playwright
+      // starts `webServer` plugins before global setup, so a global seed wiped
+      // the folder this host had already taken — its lock and every setting it
+      // wrote. In one shell the wipe lands before this host exists.
+      command: `npx tsx tests/e2e/seed-host.ts && node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
       // http, which the host still serves beside https on the same port.
       // The pairing link these specs drive is the one the host prints, and
       // what that link should carry belongs to the per-display-themes work;

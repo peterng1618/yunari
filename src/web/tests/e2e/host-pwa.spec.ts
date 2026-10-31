@@ -77,9 +77,9 @@ test.describe("the player as an installed app", () => {
 
     rmSync(APP_DIR, { recursive: true, force: true });
     mkdirSync(APP_DIR, { recursive: true });
-    // The host reads its library at startup, and the shared fixture is what
-    // globalSetup already seeded — copied rather than rebuilt so a display here
-    // is the same display the other host specs drive.
+    // The shared fixture is what `seed-host.ts` seeded before the project host
+    // started — copied rather than rebuilt so a display here is the same
+    // display the other host specs drive.
     cpSync(HOST_THEMES_DIR, path.join(APP_DIR, "themes"), { recursive: true });
 
     host = spawn(

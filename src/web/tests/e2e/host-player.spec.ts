@@ -3095,7 +3095,7 @@ test.describe("a paired display and the theme it is given", () => {
     rmSync(appDir, { recursive: true, force: true });
     mkdirSync(appDir, { recursive: true });
     // The same library the shared host serves, copied rather than rebuilt: the
-    // themes are `global-setup.ts`'s fixture and this host only has to serve it.
+    // themes are `seed-host.ts`'s fixture and this host only has to serve it.
     cpSync(HOST_THEMES_DIR, join(appDir, "themes"), { recursive: true });
 
     host = spawn(
@@ -4534,7 +4534,7 @@ async function recordCapabilities(
  * These cases are about the chrome the display draws, not about an authored
  * document, so none of them needs the editor: `seedHostTheme` has already put
  * this theme in the host's library by the time a worker starts
- * (`tests/e2e/global-setup.ts`).
+ * (`tests/e2e/seed-host.ts`).
  */
 async function openSeededDisplay(page: Page): Promise<void> {
   await page.goto(`${HOST}/?theme=${HOST_CHART_THEME_ID}`);
