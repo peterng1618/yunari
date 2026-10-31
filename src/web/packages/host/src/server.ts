@@ -1049,8 +1049,10 @@ function firstRunPage(): string {
     <!-- The host's own pages are separate documents from the two bundles, so
          they need their own copy of the mark: without a link the browser
          probes \`/favicon.ico\` and logs a 404 on every load. The same file the
-         editor and the player keep, taken rather than authored. -->
-    <link rel="icon" type="image/svg+xml" href="/settings/favicon.svg" />
+         editor and the player keep, taken rather than authored. This page is
+         served to a display over the LAN too, so it names the bundle-exempt
+         path rather than \`/settings\`, which is loopback-only. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
       html, body { margin: 0; height: 100%; }
       body {

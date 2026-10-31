@@ -69,22 +69,21 @@ describe("the host's own pages name an icon", () => {
     });
   }
 
-  it("the first-run page declares one", async () => {
-    expect(declared(await firstRunHtml())).not.toBe("");
+  it("the first-run page declares one a display on the LAN can fetch", async () => {
+    // `/` is served to a paired display over the LAN, unlike `/settings`, so
+    // the first-run page must name the bundle-exempt root rather than the
+    // loopback-only settings path.
+    expect(href(await firstRunHtml())).toBe("/favicon.svg");
   });
 });
 
 describe("the icon is the mark the host already ships", () => {
-  it("is served from the admin bundle's own root, so the path is the same for all three pages", () => {
-    // All three documents are served at `/` or `/settings`, both of which the
-    // host answers from the admin root. A relative href would resolve against
-    // whatever directory the document happened to be at, and `/` and `/settings`
-    // are different ones — which is the trap the editor's `./favicon.svg`
-    // avoids for its own bundle, and the reason this one is not relative.
+  it("is served from the bundle-exempt root, so a LAN display can fetch it", () => {
+    // All three pages name the same path, and it is the one the display guard
+    // exempts. `/settings` is loopback-only, so a display served the chooser or
+    // the first-run page over the LAN was refused the icon those pages declared.
     for (const site of FILES) {
-      expect(href(readFileSync(site.document, "utf8"))).toBe(
-        "/settings/favicon.svg",
-      );
+      expect(href(readFileSync(site.document, "utf8"))).toBe("/favicon.svg");
     }
   });
 

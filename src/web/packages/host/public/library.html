@@ -8,8 +8,10 @@
     <!-- The host's own pages are separate documents from the two bundles, so
          they need their own copy of the mark: without a link the browser
          probes `/favicon.ico` and logs a 404 on every load. The same file the
-         editor and the player keep, taken rather than authored. -->
-    <link rel="icon" type="image/svg+xml" href="/settings/favicon.svg" />
+         editor and the player keep, taken rather than authored. This page is
+         served to a display over the LAN, so it names the bundle-exempt path
+         rather than `/settings`, which is loopback-only. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- The settings page's own assets, absolute because this page is served
          at `/`. Sharing them is the point: the rows below are drawn by the
          module that draws the settings page's, so both show a picture. The
