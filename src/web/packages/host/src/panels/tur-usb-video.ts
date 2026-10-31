@@ -7,6 +7,13 @@ import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelGeometry } from "./panel-device.js";
+import {
+  type PanelVideoTurn,
+  turnedBox,
+  turnFilter,
+  turnRefusal,
+  videoTurn,
+} from "./panel-video-turn.js";
 
 /**
  * The TUR panel's own H.264 decoder, fed one elementary stream.
@@ -24,9 +31,10 @@ import type { PanelGeometry } from "./panel-device.js";
  * not a speed knob.
  *
  * The one addition is the fit: the wire frame is the panel's portrait geometry
- * (464×1920 for the 9.2"), the glass is a landscape strip, and a picture is
- * upright when the frame holds the landscape composition turned **90°
- * clockwise** (`transpose=1`). Measured on the attached panel.
+ * (464×1920 for the 9.2"), the glass is a landscape strip, and how the picture
+ * reaches the wire frame is the display record's mounting angle, applied by
+ * `panel-video-turn.ts`. The attached 9.2" is upright with a **90°** record
+ * (`transpose=1`), measured on hardware.
  */
 
 /** The vendor driver's default block size (`WinUsb.CheckH264Block`), used only
@@ -51,6 +59,8 @@ export interface EncodeOptions {
     readonly offsetX: number;
     readonly offsetY: number;
   };
+  /** Whole degrees clockwise the display turns the composition. */
+  readonly rotation?: number;
   /** Test seam for the spawn; production uses `encoderRun`. */
   readonly run?: Run;
   readonly verifyForTest?: typeof verifyFfmpeg;
@@ -64,6 +74,7 @@ export function panelH264Args(
     offsetX: 0,
     offsetY: 0,
   },
+  turn: PanelVideoTurn = "none",
 ): string[] {
   return [
     "-hide_banner",
@@ -75,7 +86,7 @@ export function panelH264Args(
     // Formatting the panel's own picture: cover the glass, pan the way the
     // theme authored it, then turn onto the wire's portrait frame.
     "-vf",
-    panelFilter(geometry, placement),
+    panelFilter(geometry, placement, turn),
     // The vendor's encode, verbatim. It fixes no frame rate, no bitrate and
     // no keyframe interval: the panel takes the stream's own pacing.
     "-c:v",
@@ -102,15 +113,20 @@ export function panelH264Args(
  * **The pan is `scene-fabric`'s `placement`, in ffmpeg expressions.** The same
  * rule applies here because the device, not the player page, is drawing: cover,
  * then pan within the overhang, and zoom first when the source's own aspect
- * leaves no overhang to pan through. The box is the landscape view
- * (`height × width`), because the turn comes after the crop.
+ * leaves no overhang to pan through.
+ *
+ * **The box is the one the mount puts the layer in.** A quarter turn swaps the
+ * wire geometry's edges, so the crop is the landscape 1920×464 on the attached
+ * 9.2" — whose record is 90° — and the turn comes after the crop.
  */
 function panelFilter(
   geometry: PanelGeometry,
   placement: { readonly offsetX: number; readonly offsetY: number },
+  turn: PanelVideoTurn,
 ): string {
-  const boxWidth = geometry.height;
-  const boxHeight = geometry.width;
+  const box = turnedBox(geometry, turn);
+  const boxWidth = box.width;
+  const boxHeight = box.height;
   const offsetX = Number.isFinite(placement.offsetX) ? placement.offsetX : 0;
   const offsetY = Number.isFinite(placement.offsetY) ? placement.offsetY : 0;
 
@@ -119,13 +135,14 @@ function panelFilter(
   // ffmpeg's `max` takes two arguments, so the four-way choice nests.
   const factor = `max(max(${boxWidth}/iw,${boxHeight}/ih),max(${floorX}/iw,${floorY}/ih))`;
 
-  return [
-    `scale=w='iw*${factor}':h='ih*${factor}'`,
-    `crop=${boxWidth}:${boxHeight}:` +
-      `x='clip((in_w-${boxWidth})/2-${boxWidth}*${offsetX},0,in_w-${boxWidth})':` +
-      `y='clip((in_h-${boxHeight})/2-${boxHeight}*${offsetY},0,in_h-${boxHeight})'`,
-    "transpose=1",
-  ].join(",");
+  return (
+    [
+      `scale=w='iw*${factor}':h='ih*${factor}'`,
+      `crop=${boxWidth}:${boxHeight}:` +
+        `x='clip((in_w-${boxWidth})/2-${boxWidth}*${offsetX},0,in_w-${boxWidth})':` +
+        `y='clip((in_h-${boxHeight})/2-${boxHeight}*${offsetY},0,in_h-${boxHeight})'`,
+    ].join(",") + turnFilter(turn)
+  );
 }
 
 /** One clip, ready to feed: the elementary stream and how long it plays. */
@@ -144,6 +161,11 @@ export async function encodePanelH264(
   geometry: PanelGeometry,
   options: EncodeOptions = {},
 ): Promise<PanelClip> {
+  const turn = videoTurn(options.rotation ?? 0);
+  if (turn === undefined) {
+    throw new Error(turnRefusal(options.rotation ?? 0));
+  }
+
   const executable = options.ffmpegPath ?? ffmpegStatic;
 
   if (executable === null) {
@@ -175,7 +197,7 @@ export async function encodePanelH264(
     await writeFile(input, mp4);
 
     const outcome = await (options.run ?? encoderRun(executable))(
-      panelH264Args(input, output, geometry, options.placement),
+      panelH264Args(input, output, geometry, options.placement, turn),
     );
 
     if (outcome.code !== 0) {

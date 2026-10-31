@@ -2,7 +2,7 @@ import forge from "node-forge";
 import { describe, expect, it } from "vitest";
 import { PACKET_KEY } from "./panel-protocol.js";
 import { TurUsbPanel } from "./tur-usb-panel.js";
-import { H264_BLOCK_BYTES } from "./tur-usb-video.js";
+import { type encodePanelH264, H264_BLOCK_BYTES } from "./tur-usb-video.js";
 
 /** The encrypted command block inside a 512-byte frame. */
 const CIPHER_BYTES = 504;
@@ -162,7 +162,7 @@ const MODEL = {
 
 function opened(
   fake: ReturnType<typeof fakePanel>,
-  encode?: () => Promise<{ h264: Uint8Array; seconds: number }>,
+  encode?: typeof encodePanelH264,
 ): TurUsbPanel {
   // The driver's device type is the usb library's, which a test cannot mint.
   return new TurUsbPanel(
@@ -256,6 +256,24 @@ describe("TurUsbPanel", () => {
     const afterStop = fake.writes.length;
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(fake.writes).toHaveLength(afterStop);
+  });
+
+  it("hands the display's mounting angle to the encoder", async () => {
+    const seen: (number | undefined)[] = [];
+    const fake = fakePanel();
+    const h264 = new Uint8Array(H264_BLOCK_BYTES).fill(0x11);
+    const panel = opened(fake, async (_mp4, _geometry, options) => {
+      seen.push(options?.rotation);
+      return { h264, seconds: 0 };
+    });
+    await panel.open();
+    fake.reset();
+    fake.setLevel(0);
+
+    await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 }, 90);
+    expect(seen).toEqual([90]);
+
+    await panel.video.stop();
   });
 
   it("reads a block's ack on the vendor's own 100 ms timeout", async () => {

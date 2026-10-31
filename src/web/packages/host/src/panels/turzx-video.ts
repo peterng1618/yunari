@@ -10,6 +10,13 @@ import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelVideoPlacement } from "./panel-device.js";
+import {
+  type PanelVideoTurn,
+  turnedBox,
+  turnFilter,
+  turnRefusal,
+  videoTurn,
+} from "./panel-video-turn.js";
 
 /**
  * The clip the 5" panel decodes itself: 800×480 H.264 in an MP4, no audio.
@@ -56,12 +63,9 @@ export async function transcodeForPanel(
   } = {},
 ): Promise<TranscodeResult> {
   const placement = options.placement ?? { offsetX: 0, offsetY: 0 };
-  const turn = turnOf(options.rotation ?? 0);
+  const turn = videoTurn(options.rotation ?? 0);
   if (turn === undefined) {
-    return {
-      ok: false,
-      message: `The panel turns its clip by quarter turns only; ${String(options.rotation)}° is not one.`,
-    };
+    return { ok: false, message: turnRefusal(options.rotation ?? 0) };
   }
 
   const cachePath = cached(sha256(bytes, placement, turn));
@@ -141,32 +145,12 @@ function cached(key: string): string {
 function sha256(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
-  turn: Turn,
+  turn: PanelVideoTurn,
 ): string {
   return createHash("sha256")
     .update(bytes)
     .update(`\0${placement.offsetX},${placement.offsetY},${turn}`)
     .digest("hex");
-}
-
-/** How the composition is turned onto the glass. */
-type Turn = "none" | "cw" | "half" | "ccw";
-
-/** The quarter turn a whole angle asks for, or `undefined` for an angle this
- *  device cannot compose. */
-function turnOf(rotation: number): Turn | undefined {
-  switch (rotation) {
-    case 0:
-      return "none";
-    case 90:
-      return "cw";
-    case 180:
-      return "half";
-    case 270:
-      return "ccw";
-    default:
-      return undefined;
-  }
 }
 
 /**
@@ -238,26 +222,16 @@ function clamp(value: number, low: number, high: number): number {
 function panelFilter(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
-  turn: Turn,
+  turn: PanelVideoTurn,
 ): string {
-  const turned = turn === "cw" || turn === "ccw";
-  const box = turned
-    ? { width: BOX.height, height: BOX.width }
-    : { width: BOX.width, height: BOX.height };
-  const turnFilter =
-    turn === "cw"
-      ? ",transpose=1"
-      : turn === "half"
-        ? ",hflip,vflip"
-        : turn === "ccw"
-          ? ",transpose=2"
-          : "";
+  const box = turnedBox(BOX, turn);
+  const turnSuffix = turnFilter(turn);
   const facts = readVideoFacts(bytes);
 
   if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
     return (
       `scale=${box.width}:${box.height}:force_original_aspect_ratio=increase` +
-      `:force_divisible_by=2,crop=${box.width}:${box.height}${turnFilter}`
+      `:force_divisible_by=2,crop=${box.width}:${box.height}${turnSuffix}`
     );
   }
 
@@ -268,7 +242,7 @@ function panelFilter(
     box,
   );
 
-  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnFilter}`;
+  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnSuffix}`;
 }
 
 function encodeArgs(input: string, output: string, filter: string): string[] {

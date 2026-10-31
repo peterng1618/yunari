@@ -134,8 +134,9 @@ own frame size and rate. **`bframes=0` is a compatibility requirement** — B-fr
 leave the panel's decoder waiting for frames it has not received. The host adds
 two things the vendor omits: `-pix_fmt yuv420p` (the decoder reads 4:2:0 only)
 and the theme's fit-and-pan filter, because the wire frame is portrait while the
-glass is a landscape strip. `transpose=1` (90° clockwise) is the measured upright
-orientation for the attached 9.2" with rotate mode 2.
+glass is a landscape strip. The display record's mounting angle decides the turn
+(`panel-video-turn.ts`): the attached 9.2" records 90°, which is the measured
+upright orientation with rotate mode 2.
 
 L-Connect does not hand this ffmpeg a theme's MP4: it converts the theme once
 and plays its own output from

@@ -226,7 +226,8 @@ export class TurUsbPanel implements PanelDevice {
     this.device = device;
     this.geometry = { width: model.width, height: model.height };
     this.video = {
-      start: (mp4, placement) => this.startVideo(mp4, placement),
+      start: (mp4, placement, rotation = 0) =>
+        this.startVideo(mp4, placement, rotation),
       presentOverlay: (png) => this.presentOverlay(png),
       stop: () => this.stopVideo(),
     };
@@ -332,18 +333,19 @@ export class TurUsbPanel implements PanelDevice {
    * long as playback is wanted (`WinUsb.PlayH264`, `isRepeat`). A stream that
    * simply stops is a clip that plays once and then rests on its last frame.
    *
-   * **The display's mounting angle is not applied here.** This family's picture
-   * is already turned onto the portrait wire — by the panel's own rotate mode
-   * and the encoder's fixed `transpose=1` — so a second turn composed with them
-   * is unmeasured. The TURZX adapter takes the angle instead.
+   * **The display's mounting angle reaches the encoder.** The page applies the
+   * record's angle to the overlay and the device plays the clip itself, so the
+   * encoder has to compose the same turn; 90° is what the attached 9.2" is
+   * upright at, with its own rotate mode unchanged.
    */
   private async startVideo(
     mp4: Uint8Array,
     placement: PanelVideoPlacement,
+    rotation: number,
   ): Promise<void> {
     if (!this.opened) throw new Error("The panel is not open.");
 
-    const clip = await this.encode(mp4, this.geometry, { placement });
+    const clip = await this.encode(mp4, this.geometry, { placement, rotation });
     const h264 = clip.h264;
     this.clipBytes = h264.length;
     this.clipMs = clip.seconds * 1000;
