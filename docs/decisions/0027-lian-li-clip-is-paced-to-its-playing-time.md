@@ -2,8 +2,8 @@
 
 - **Date:** 2026-10-31
 - **Status:** superseded by 0028, which keeps the vendor's loop and shortens
-  its reads instead. Kept for the pacing measurements; the pacing itself is
-  gone from the driver.
+  its reads instead. Its pacing is reinstated by 0029, which keeps the vendor's
+  loop as well. Kept for the pacing measurements.
 - **Paths:** `src/web/packages/host/src/panels/tur-usb-panel.ts`,
   `src/web/packages/host/src/panels/tur-usb-video.ts`
 

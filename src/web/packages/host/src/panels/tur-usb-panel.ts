@@ -208,6 +208,10 @@ export class TurUsbPanel implements PanelDevice {
   private videoLoop: { stopped: boolean } | undefined;
   /** The block size the panel asked to be fed in, learnt before playback. */
   private blockBytes = H264_BLOCK_BYTES;
+  /** The playing clip's length and byte count, so each block can wait its own
+   *  share of the playing time. Zero when ffmpeg reported no duration. */
+  private clipBytes = 0;
+  private clipMs = 0;
   /** Every write to the endpoint is queued behind this: a video feed runs on
    *  its own loop, and overlapping it with an overlay push is what the addon
    *  reports as "Cancelled". */
@@ -313,11 +317,15 @@ export class TurUsbPanel implements PanelDevice {
    * The host sends compressed blocks and then stops: motion no longer costs a
    * capture per frame, which is the whole reason this path exists.
    *
-   * **The feed is L-Connect's own.** The vendor asks the panel for its block
-   * size, tells it the clip's frame rate, and then hands it block after block
-   * with a 30 ms pause, flagging the file's final block and draining the ring
-   * only when an ack says the decoder has stopped reading. Copying that
-   * exactly is what this method does; nothing here invents a cadence.
+   * **The feed is L-Connect's own**, with one difference the panel itself
+   * demands. The vendor asks the panel for its block size, then hands it block
+   * after block with a 30 ms pause, flagging the file's final block and
+   * draining the ring only when an ack says the decoder has stopped reading.
+   * Unlike the vendor, this driver sends no `frame-rate` command before the
+   * blocks (see below) and holds each block back until its own share of the
+   * clip's playing time has passed: the vendor's loop feeds a realtime-encoded
+   * stream at about realtime, while a slower clip fed by the same loop arrives
+   * several times faster and leaves ghost trails of moving parts.
    *
    * **The feed never ends at end of file.** The panel drains a buffer while the
    * host writes, and the vendor's own driver rewinds and keeps sending for as
@@ -332,6 +340,8 @@ export class TurUsbPanel implements PanelDevice {
 
     const clip = await this.encode(mp4, this.geometry, { placement });
     const h264 = clip.h264;
+    this.clipBytes = h264.length;
+    this.clipMs = clip.seconds * 1000;
 
     this.stopVideoLoop();
 
@@ -344,12 +354,10 @@ export class TurUsbPanel implements PanelDevice {
     try {
       await this.exclusive(async () => {
         this.blockBytes = await this.queryBlockBytes();
-        // The vendor also sets the rate before playback, from the file itself.
-        if (clip.fps > 0) {
-          await this.request("frame-rate", READ_TIMEOUT_MS, {
-            parameter: clip.fps,
-          });
-        }
+        // **No frame-rate command here.** L-Connect's `SetFrameRate` sends
+        // command 15, but on this panel a 15 sent just before the blocks makes
+        // the decoder ghost moving parts; the same clip is clean when 15 is
+        // omitted and the stream's own timing is used. Measured 2026-10-31.
         await this.request("stop-play", READ_TIMEOUT_MS);
         await this.writeVideoBlock(h264, 0, loop);
       });
@@ -365,14 +373,19 @@ export class TurUsbPanel implements PanelDevice {
    *  answers zero or not at all (`WinUsb.CheckH264Block`). */
   private async queryBlockBytes(): Promise<number> {
     const reply = await this.request("h264-block", READ_TIMEOUT_MS);
-    if (reply === undefined || reply.length < 12) return H264_BLOCK_BYTES;
+    // **Match the reply by opcode.** A stale reply left by an earlier command
+    // answers this query with its own bytes; reading a block size out of a
+    // version string once produced a 1.8 GB block, which the panel refused.
+    if (reply === undefined || reply.length < 12 || reply[0] !== 17) {
+      return H264_BLOCK_BYTES;
+    }
 
     const size = new DataView(
       reply.buffer,
       reply.byteOffset,
       reply.byteLength,
     ).getUint32(8, false);
-    return size === 0 ? H264_BLOCK_BYTES : size;
+    return size > 0 && size <= MAX_PAYLOAD ? size : H264_BLOCK_BYTES;
   }
 
   private async feedVideo(
@@ -383,6 +396,9 @@ export class TurUsbPanel implements PanelDevice {
 
     while (!loop.stopped) {
       if (at >= h264.length) at = 0;
+
+      const blockBytes = Math.min(this.blockBytes, h264.length - at);
+      const started = performance.now();
 
       try {
         await this.exclusive(async () => {
@@ -408,6 +424,18 @@ export class TurUsbPanel implements PanelDevice {
 
         at = 0;
       }
+
+      // **The clip's playing time is the pace, kept outside the lock.**
+      // Handing this panel blocks faster than it plays makes its decoder leave
+      // ghost trails of moving parts (measured 2026-10-31: clean at realtime,
+      // ghosting from 1.1×). Sleeping under the lock would hold the overlay
+      // push for a whole block instead.
+      const playMs =
+        this.clipBytes > 0 ? (blockBytes / this.clipBytes) * this.clipMs : 0;
+      const spent = performance.now() - started;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(BLOCK_PAUSE_MS, playMs - spent)),
+      );
     }
   }
 

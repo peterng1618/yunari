@@ -128,12 +128,13 @@ function panelFilter(
   ].join(",");
 }
 
-/** One clip, ready to feed: the elementary stream and how fast it plays. */
+/** One clip, ready to feed: the elementary stream and how long it plays. */
 export interface PanelClip {
   readonly h264: Uint8Array;
-  /** The source's frame rate, or 0 when ffmpeg did not report one. The panel
-   *  is told this before playback, the way the vendor's app does. */
-  readonly fps: number;
+  /** The clip's length in seconds, or 0 when ffmpeg did not report one. The
+   *  feed paces each block to its own share, so the panel is never handed
+   *  stream faster than it plays. */
+  readonly seconds: number;
 }
 
 /** Throws with a sentence the runner can report; the caller falls back to
@@ -185,7 +186,7 @@ export async function encodePanelH264(
 
     return {
       h264: new Uint8Array(await readFile(output)),
-      fps: clipFps(outcome.stderr),
+      seconds: clipSeconds(outcome.stderr),
     };
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(
@@ -194,16 +195,19 @@ export async function encodePanelH264(
   }
 }
 
-/** ffmpeg names the first input stream's rate before it encodes a frame. */
-const FPS = /(\d+(?:\.\d+)?)\s+fps/;
+/** ffmpeg prints `Duration: HH:MM:SS.xx` once per input, before encoding. */
+const DURATION = /Duration:\s*(\d+):(\d{2}):(\d{2})\.(\d{2})/;
 
-export function clipFps(stderr: string): number {
-  const match = FPS.exec(stderr);
-  if (match?.[1] === undefined) return 0;
+export function clipSeconds(stderr: string): number {
+  const match = DURATION.exec(stderr);
+  if (match === null) return 0;
 
-  const fps = Math.round(Number(match[1]));
-  // The vendor app sends the clip's own rate and only when it is usable.
-  return fps > 0 && fps <= 60 ? fps : 0;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]) + Number(`0.${match[4]}`);
+  const total = hours * 3600 + minutes * 60 + seconds;
+  // A zero or absurd duration is not a length the feed can pace against.
+  return Number.isFinite(total) && total > 0 ? total : 0;
 }
 
 function encoderRun(executable: string): Run {

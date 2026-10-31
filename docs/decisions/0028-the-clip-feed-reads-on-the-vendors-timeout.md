@@ -1,7 +1,8 @@
 # 0028 — The clip feed reads on the vendor's own 100 ms timeout
 
 - **Date:** 2026-10-31
-- **Status:** accepted
+- **Status:** accepted; amended by 0029, which also paces each block to its
+  own playing time and drops the pre-block frame-rate command
 - **Supersedes:** 0027. Amends 0025 (its feed is right except for the ack
   read's timeout) and 0023 (the depth gate stays; the pre-write read does not).
 - **Paths:** `src/web/packages/host/src/panels/tur-usb-panel.ts`

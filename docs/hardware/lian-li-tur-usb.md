@@ -68,7 +68,7 @@ frame**.
 | 11 | `restart` | Not used. |
 | 13 | `rotate` | Parameter byte 8. The panel's own quarter-turn state, **persists across power cycles**. Mode 2 is upright for the 9.2" with the display record's 90° rotation. |
 | 14 | `brightness` | Parameter byte 8. Exists; this driver does not expose it. |
-| 15 | `frame-rate` | Parameter byte 8. Sent as 30 on open, then reset to the clip's own rate before video playback (1–60). |
+| 15 | `frame-rate` | Parameter byte 8. Sent as 30 on open, as the vendor does. **Not sent before playback**: a 15 immediately before the blocks makes the decoder leave ghost trails of moving parts (measured 2026-10-31); the stream's own timing is used instead. |
 | 17 | `h264-block` | Asks the block size this panel wants. Answer: big-endian uint32 at reply bytes 8–11; fall back to 202,752 when it is zero or unanswered. |
 | 38/39/40 | file open/write/delete | **Deliberately not used.** Storage writes are destructive and unneeded: this host never uploads a file. |
 | 51 | `clock` | Declared, never exercised. |
@@ -130,27 +130,43 @@ and the theme's fit-and-pan filter, because the wire frame is portrait while the
 glass is a landscape strip. `transpose=1` (90° clockwise) is the measured upright
 orientation for the attached 9.2" with rotate mode 2.
 
+L-Connect does not hand this ffmpeg a theme's MP4: it converts the theme once
+and plays its own output from
+`C:\ProgramData\Lian-Li\L-Connect 3\uploaded\vm-9.2-inch\landscape\*.h264`.
+Those files are all 464×1920, 24 fps (`tbr 48`), already turned upright, from
+1920×464 intermediates. A 1920×1080 stream sent to the panel unchanged renders
+as garbled colour bands (measured twice, including after a replug), so the fit
+and the transposition stay.
+
 ### Feed
 
-1. Ask `h264-block` (17) for the block size.
-2. Ask the clip's own frame rate from ffmpeg's stderr (`<n> fps`, clamped 1–60)
-   and send it as `frame-rate` (15).
-3. `stop-play` (123).
-4. Send `play-block` (121) for each block, length big-endian at 8–11, byte 12
+1. Ask `h264-block` (17) for the block size. Match the reply by opcode: a stale
+   reply read as a size once produced a 1.8 GB block, which the panel refused
+   and showed its logo.
+2. `stop-play` (123).
+3. Send `play-block` (121) for each block, length big-endian at 8–11, byte 12
    set to 1 only on the block that ends the file.
-5. Wait 30 ms, then read the ack. **The read's timeout is 100 ms**, the value
+4. Wait 30 ms, then read the ack. **The read's timeout is 100 ms**, the value
    `WinUsb.TLV3Read` passes to `reader.Read`; the block ack, the buffer-level
    poll and the reply flush all use it.
-6. If reply byte 8 is above 3, poll `buffer-level` (122) every 50 ms until
+5. If reply byte 8 is above 3, poll `buffer-level` (122) every 50 ms until
    depth ≤ 2, with a 30 s ceiling.
+6. Wait out the block's own share of the clip's playing time (block bytes over
+   total bytes, times ffmpeg's reported `Duration:`), minus the time the block
+   above already took, with 30 ms as the floor. **The wait is outside the
+   endpoint lock**, or the UI overlay stalls for a whole block.
 7. At end of file, rewind and keep sending — playback never stops at EOF.
 
 **The 100 ms read is part of the feed's clock.** A read with the command
 timeout (2 s) blocks for two seconds whenever the panel has nothing to say,
-and the decoder plays through its ring and stops inside that hole. The vendor
-never sends faster than this loop: write, 30 ms, read (≤100 ms), drain only
-above depth 3. Command replies outside the feed keep the 2 s timeout, because
-a cancelled write is what wedges the panel.
+and the decoder plays through its ring and stops inside that hole.
+
+**Feeding faster than the clip plays is the ghost's other cause.** Same clip,
+same loop, 2026-10-31: clean at 1.0×, ghost trails from 1.1× and heavy at 1.2×.
+The vendor's loop has no pace of its own; it stays near realtime only because
+L-Connect feeds an 11 Mbps clip, where one 202,752-byte block is ~0.14 s of
+video. A 2–4 MB clip over 8–29 s is fed 3–4× by that loop and ghosts. That is
+why the car clip looked fine and the others did not.
 
 ### Measured on the 9.2"
 
@@ -172,7 +188,21 @@ motion instead of a still with nudges. Before the read was shortened, a single
 flush read after a drain blocked 2,003 ms, which is the hole the picture broke
 on.
 
+Paced, with no frame-rate command, 2026-10-31: Wind-Mills (8.00 s, 1.4 MB
+source, 2,356,052-byte stream) with the overlay pushes on — 91 blocks, gaps p50
+696 ms (max 767), **no drain at all**, overlay pushes mean 63 ms (p50 57, max
+130). The glass was clean and smooth, and the same clip ghosted on the unpaced
+loop.
+
 ## Quirks and failure modes
+
+- **A `frame-rate` (15) sent just before the blocks ghosts moving parts.** The
+  same stream and the same loop are clean with the 15 omitted; the panel uses
+  the stream's own timing. A 15 at open, followed later by playback, is fine.
+- **Feeding faster than the clip plays ghosts too.** Clean at 1.0×; trails
+  appear from about 1.1× and are heavy at 1.4×. The vendor's loop has no pace
+  of its own and is near realtime only because L-Connect's own clips are ~11
+  Mbps.
 
 - **A cancelled bulk OUT wedges the device.** A transfer timeout does not hand
   back a partial count; the URB is cancelled mid-block and the panel's USB stack
