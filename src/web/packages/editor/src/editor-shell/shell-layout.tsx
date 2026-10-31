@@ -248,7 +248,16 @@ export function readStorage(): Storage | undefined {
   }
 }
 
-export function createShellLayout(root: HTMLElement): ShellLayout {
+export function createShellLayout(
+  root: HTMLElement,
+  options: {
+    /** Where an accepted mode change is reported. The shell owns the switch;
+     *  the boot owns what a surface reads fresh when it comes back into view —
+     *  the sensor catalogue, for one, so a source added on the Host page is
+     *  offered by the editor without a reload (`editor-main.ts`). */
+    readonly onModeChange?: (mode: ShellMode) => void;
+  } = {},
+): ShellLayout {
   const storage = readStorage();
   // The preview catalogue is read once, here, beside the palette and shortcut
   // reads: the camera opens on the author's list rather than on the defaults,
@@ -852,9 +861,16 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     }, []);
     const requestMode = (next: ShellMode): void => {
       if (next === mode) return;
+      // The one place a mode change lands: the boot's announcement reads the
+      // mode the switch actually took, not one a refused dirty-document guard
+      // would have stopped.
+      const switchTo = (chosen: ShellMode): void => {
+        setMode(chosen);
+        options.onModeChange?.(chosen);
+      };
       const session = mode === "editor" ? store.bridge?.session : undefined;
       if (session === undefined || session.isDirty() !== true) {
-        setMode(next);
+        switchTo(next);
         return;
       }
       void (async () => {
@@ -864,7 +880,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
           await session.saveLibrary();
           if (session.isDirty()) return;
         }
-        setMode(next);
+        switchTo(next);
       })().catch(() => undefined);
     };
     return <Shell mode={mode} onModeChange={requestMode} />;

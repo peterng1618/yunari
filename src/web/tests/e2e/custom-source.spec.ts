@@ -308,12 +308,12 @@ test("a source authored on the page is read on a display, and its deletion expla
   await openSources(page);
   await addSource(page);
 
-  // 2. The editor's catalogue is read at boot, so the key appears after the
-  //    page reopens — the same reopen an author does after adding a source.
+  // 2. Returning to the editor re-reads the catalogue, so the key the Host
+  //    page just wrote is offered by the visit that follows — no reload.
   const sensors = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/sensors",
   );
-  await page.reload();
+  await page.locator("#yunari-shell-modes-editor").click();
   await sensors;
   await editorReady(page);
 

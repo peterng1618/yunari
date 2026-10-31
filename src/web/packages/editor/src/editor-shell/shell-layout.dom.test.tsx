@@ -1547,6 +1547,33 @@ it("offers the three modes and marks the active one", async () => {
 });
 
 /**
+ * The boot reads what a returning mode must see fresh from this callback, so it
+ * has to fire for the mode the switch actually took and for nothing else: a
+ * press on the segment already showing is not a change, and a report there
+ * would make the sensor catalogue re-read for nothing.
+ */
+it("reports only the mode changes the switch actually made", async () => {
+  const root = document.createElement("div");
+  const seen: string[] = [];
+  const layout = createShellLayout(root, {
+    onModeChange: (mode) => seen.push(mode),
+  });
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(seen).toEqual(["themes"]);
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(seen, "the segment already showing reported a change").toEqual([
+    "themes",
+  ]);
+
+  await act(async () => modeSegments(root)[0]?.click());
+  expect(seen).toEqual(["themes", "editor"]);
+
+  layout.destroy();
+});
+
+/**
  * **A declined open leaves the author where they were** (A.7d, F2).
  *
  * The mode moves on the callback the store's open is handed, and the library
