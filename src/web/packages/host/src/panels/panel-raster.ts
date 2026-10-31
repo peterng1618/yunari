@@ -582,6 +582,11 @@ export async function setOverlayMode(
           made.id = id;
           made.textContent =
             "[data-yunari-background-media]{display:none !important}" +
+            // The board's plate carries the artboard's paint as its own layer,
+            // and it sits above the host fill. A theme whose paint is opaque —
+            // including the black fallback of one that declares no colour —
+            // would otherwise come back with the overlay and hide the clip.
+            "[data-yunari-artboard-plate]{background:transparent !important}" +
             "[data-yunari-display-disc]{background:transparent !important}" +
             "html,body{background:transparent !important}";
           document.head.append(made);

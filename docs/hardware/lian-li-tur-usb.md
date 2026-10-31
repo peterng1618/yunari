@@ -107,6 +107,13 @@ ghost unless the host clears it at open.
   push blanks the layer while the new PNG loads, so the driver enables once.
 - `stop-play` leaves the layer off; the next overlay push enables it again.
 - An overlay PNG carries alpha; that is what lets the video show through.
+- **The overlay capture also clears the artboard plate.** A theme's background
+  paint is its own DOM layer (`[data-yunari-artboard-plate]`) above the host
+  fill; a theme that declares no colour falls back to black there. A capture
+  that leaves the plate shown is an opaque PNG and hides the clip — measured
+  2026-11-01: a fresh theme with a video background was black behind its UI,
+  and the same clip played underneath once the plate was cleared. The demo
+  theme only worked because it declares `palette.none`.
 
 ## Video
 

@@ -174,6 +174,7 @@ describe("setOverlayMode", () => {
     expect(expression).toContain("if (true)");
     expect(expression).toContain("yunari-panel-overlay");
     expect(expression).toContain("[data-yunari-background-media]");
+    expect(expression).toContain("[data-yunari-artboard-plate]");
     expect(expression).toContain("[data-yunari-display-disc]");
     expect(expression).toContain('host.style.background = "transparent"');
     expect(expression).toContain('host.dataset["panelOverlayBackground"]');
@@ -215,9 +216,12 @@ describe("setOverlayMode", () => {
 
     const media = document.createElement("div");
     media.setAttribute("data-yunari-background-media", "");
+    const plate = document.createElement("div");
+    plate.setAttribute("data-yunari-artboard-plate", "");
+    plate.style.background = "#010203";
     const disc = document.createElement("div");
     disc.setAttribute("data-yunari-display-disc", "");
-    document.body.append(host, media, disc);
+    document.body.append(host, plate, media, disc);
 
     const { devtools, sent } = fakeDevtools();
 
