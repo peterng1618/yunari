@@ -1008,160 +1008,174 @@ export function createThemeStore(
       content: ThemeContent,
       options?: ThemeWriteOptions,
     ): Promise<ThemeStoreSave> {
-      // Before anything is created on disk, and before the base is compared:
-      // the claim is about the folder, not about a document, so it is settled
-      // by the folder's own existence.
-      if (options?.expectFree === true && (await occupied(directory, id))) {
-        throw new ThemeIdTakenError(id);
+      // A free-id save reserves the id before the first await. `occupied` alone
+      // is a check two concurrent claims both pass, and their staged renames
+      // then collide on the filesystem — the loser is refused with EPERM on
+      // Windows rather than with the taken id its caller retries past.
+      const claiming = options?.expectFree === true;
+      if (claiming) {
+        if (saving.has(id)) throw new ThemeIdTakenError(id);
+        saving.add(id);
       }
-      const stored = await readStoredOrAbsent(directory, id);
-      // Neither a base nor an overwrite says "first save", so a first save onto
-      // a stored id is a refusal rather than a silent replacement: the
-      // caller's conflict road is the one that asks the author what to do.
-      if (
-        options?.overwrite !== true &&
-        options?.base === undefined &&
-        stored !== undefined
-      ) {
-        throw new ThemeConflictError(id);
-      }
-      let reconstructFrom: StoredTheme | undefined;
-      if (options?.overwrite !== true && options?.base !== undefined) {
-        // A theme that is not stored cannot have been moved on, so a base
-        // against nothing is a first save rather than a stale one.
-        if (stored !== undefined && stored.contentId !== options.base) {
+      try {
+        // Before anything is created on disk, and before the base is compared:
+        // the claim is about the folder, not about a document, so it is settled
+        // by the folder's own existence.
+        if (claiming && (await occupied(directory, id))) {
+          throw new ThemeIdTakenError(id);
+        }
+        const stored = await readStoredOrAbsent(directory, id);
+        // Neither a base nor an overwrite says "first save", so a first save onto
+        // a stored id is a refusal rather than a silent replacement: the
+        // caller's conflict road is the one that asks the author what to do.
+        if (
+          options?.overwrite !== true &&
+          options?.base === undefined &&
+          stored !== undefined
+        ) {
           throw new ThemeConflictError(id);
         }
-        reconstructFrom = stored;
-      }
-      const envelope = checked(id, content, reconstructFrom !== undefined);
-      const serialized = JSON.stringify(envelope);
-      // The document bound `readStored` enforces holds on the way in too: a
-      // theme this store would refuse to open must never be written, or the
-      // save reports success and the next open finds nothing. Measured in the
-      // bytes `writeFile` will put on disk, and before the first `mkdir` — the
-      // library's included — so a refusal leaves no folder behind.
-      if (Buffer.byteLength(serialized, "utf8") > MAX_THEME_FILE_BYTES) {
-        throw new ThemeTooLargeError(id);
-      }
-      await fs.mkdir(directory, { recursive: true });
-      const target = path.join(directory, id);
-      const staging = path.join(directory, scratchName("staging", id));
-      const retired = path.join(directory, scratchName("retired", id));
-      // `rename` onto an existing directory succeeds on POSIX and fails on
-      // Windows, so an old folder is moved aside first and removed after — and
-      // a crash between the two leaves the theme recoverable under its
-      // `.retired-` name rather than gone.
-      let hadPrevious = false;
-      saving.add(id);
-
-      try {
-        const reusable = await reusableAssets(
-          directory,
-          id,
-          envelope,
-          stored?.envelope,
-        );
-        // A save that left an asset out has to have left out one the folder
-        // still holds. A hash proves the content is right, never that the file
-        // is *there*, and a theme committed without a declared file is a theme
-        // that renders nothing — so this refuses rather than quietly shipping a
-        // hole, and refuses before the staging folder exists, so nothing is left
-        // half-done.
-        const lost = declaredPaths(envelope).find(
-          (assetPath) =>
-            content.assets[assetPath] === undefined && !reusable.has(assetPath),
-        );
-        if (lost !== undefined) {
-          throw new Error(
-            `Asset "${lost}" is not in the library folder, so a save that ` +
-              "leaves an asset out cannot leave out this one. Send it in full.",
-          );
-        }
-        // A theme the store would refuse to read must not be written at all: the
-        // save would report success, and the next open would find nothing. An
-        // asset this save left out is weighed from the file it is replacing —
-        // the same measurement `read` takes from that file — so both paths
-        // judge the same theme by the same number. Beside the check above, and
-        // before the staging folder exists, so a refusal leaves the previous
-        // version byte-for-byte as it was.
-        const weighed = declaredPaths(envelope).map((assetPath) => {
-          const carried = content.assets[assetPath];
-          // `lost` above has already refused the case where there is no file to
-          // weigh, so the fallback is a number only in a world that cannot get
-          // here; it still weighs, and it still refuses rather than throwing on
-          // a missing one.
-          return [
-            assetPath,
-            carried?.byteLength ?? reusable.get(assetPath) ?? 0,
-          ] as const;
-        });
-        const tooBig = assetBounds(weighed.length, weighed);
-        if (tooBig !== undefined) {
-          throw new ThemeAssetLimitError(tooBig);
-        }
-        await fs.mkdir(path.join(staging, ASSETS_DIR), { recursive: true });
-        await fs.writeFile(path.join(staging, THEME_FILE), serialized);
-        // The staging folder is written whole, so a save that carries no
-        // attribution writes none: a stale member is never copied forward from
-        // the folder being replaced.
-        if (content.credits !== undefined) {
-          await fs.writeFile(
-            path.join(staging, CREDITS),
-            JSON.stringify(content.credits),
-          );
-        }
-        // The declaration, not the payload, is the list: every declared path
-        // ends up in the folder, whether the save carried its bytes or the
-        // folder being replaced already had them.
-        for (const assetPath of declaredPaths(envelope)) {
-          // The declaration is validated above, so a path cannot escape; this
-          // is the belt to that suspenders, because the write is a filesystem
-          // call and the check is not.
-          const file = path.join(staging, ...assetPath.split("/"));
-          await fs.mkdir(path.dirname(file), { recursive: true });
-          const bytes = content.assets[assetPath];
-          // Copied rather than written whenever the folder already holds these
-          // bytes: either the payload carried them unchanged, or it left them
-          // out and the check above proved the file is there. A copy keeps the
-          // file's own timestamps, so a save that did not write it leaves the
-          // same file in place for everything that watches one.
-          if (bytes === undefined || reusable.has(assetPath)) {
-            await fs.cp(path.join(target, ...assetPath.split("/")), file, {
-              preserveTimestamps: true,
-            });
-          } else {
-            await fs.writeFile(file, bytes);
+        let reconstructFrom: StoredTheme | undefined;
+        if (options?.overwrite !== true && options?.base !== undefined) {
+          // A theme that is not stored cannot have been moved on, so a base
+          // against nothing is a first save rather than a stale one.
+          if (stored !== undefined && stored.contentId !== options.base) {
+            throw new ThemeConflictError(id);
           }
+          reconstructFrom = stored;
+        }
+        const envelope = checked(id, content, reconstructFrom !== undefined);
+        const serialized = JSON.stringify(envelope);
+        // The document bound `readStored` enforces holds on the way in too: a
+        // theme this store would refuse to open must never be written, or the
+        // save reports success and the next open finds nothing. Measured in the
+        // bytes `writeFile` will put on disk, and before the first `mkdir` — the
+        // library's included — so a refusal leaves no folder behind.
+        if (Buffer.byteLength(serialized, "utf8") > MAX_THEME_FILE_BYTES) {
+          throw new ThemeTooLargeError(id);
+        }
+        await fs.mkdir(directory, { recursive: true });
+        const target = path.join(directory, id);
+        const staging = path.join(directory, scratchName("staging", id));
+        const retired = path.join(directory, scratchName("retired", id));
+        // `rename` onto an existing directory succeeds on POSIX and fails on
+        // Windows, so an old folder is moved aside first and removed after — and
+        // a crash between the two leaves the theme recoverable under its
+        // `.retired-` name rather than gone.
+        let hadPrevious = false;
+        saving.add(id);
+
+        try {
+          const reusable = await reusableAssets(
+            directory,
+            id,
+            envelope,
+            stored?.envelope,
+          );
+          // A save that left an asset out has to have left out one the folder
+          // still holds. A hash proves the content is right, never that the file
+          // is *there*, and a theme committed without a declared file is a theme
+          // that renders nothing — so this refuses rather than quietly shipping a
+          // hole, and refuses before the staging folder exists, so nothing is left
+          // half-done.
+          const lost = declaredPaths(envelope).find(
+            (assetPath) =>
+              content.assets[assetPath] === undefined &&
+              !reusable.has(assetPath),
+          );
+          if (lost !== undefined) {
+            throw new Error(
+              `Asset "${lost}" is not in the library folder, so a save that ` +
+                "leaves an asset out cannot leave out this one. Send it in full.",
+            );
+          }
+          // A theme the store would refuse to read must not be written at all: the
+          // save would report success, and the next open would find nothing. An
+          // asset this save left out is weighed from the file it is replacing —
+          // the same measurement `read` takes from that file — so both paths
+          // judge the same theme by the same number. Beside the check above, and
+          // before the staging folder exists, so a refusal leaves the previous
+          // version byte-for-byte as it was.
+          const weighed = declaredPaths(envelope).map((assetPath) => {
+            const carried = content.assets[assetPath];
+            // `lost` above has already refused the case where there is no file to
+            // weigh, so the fallback is a number only in a world that cannot get
+            // here; it still weighs, and it still refuses rather than throwing on
+            // a missing one.
+            return [
+              assetPath,
+              carried?.byteLength ?? reusable.get(assetPath) ?? 0,
+            ] as const;
+          });
+          const tooBig = assetBounds(weighed.length, weighed);
+          if (tooBig !== undefined) {
+            throw new ThemeAssetLimitError(tooBig);
+          }
+          await fs.mkdir(path.join(staging, ASSETS_DIR), { recursive: true });
+          await fs.writeFile(path.join(staging, THEME_FILE), serialized);
+          // The staging folder is written whole, so a save that carries no
+          // attribution writes none: a stale member is never copied forward from
+          // the folder being replaced.
+          if (content.credits !== undefined) {
+            await fs.writeFile(
+              path.join(staging, CREDITS),
+              JSON.stringify(content.credits),
+            );
+          }
+          // The declaration, not the payload, is the list: every declared path
+          // ends up in the folder, whether the save carried its bytes or the
+          // folder being replaced already had them.
+          for (const assetPath of declaredPaths(envelope)) {
+            // The declaration is validated above, so a path cannot escape; this
+            // is the belt to that suspenders, because the write is a filesystem
+            // call and the check is not.
+            const file = path.join(staging, ...assetPath.split("/"));
+            await fs.mkdir(path.dirname(file), { recursive: true });
+            const bytes = content.assets[assetPath];
+            // Copied rather than written whenever the folder already holds these
+            // bytes: either the payload carried them unchanged, or it left them
+            // out and the check above proved the file is there. A copy keeps the
+            // file's own timestamps, so a save that did not write it leaves the
+            // same file in place for everything that watches one.
+            if (bytes === undefined || reusable.has(assetPath)) {
+              await fs.cp(path.join(target, ...assetPath.split("/")), file, {
+                preserveTimestamps: true,
+              });
+            } else {
+              await fs.writeFile(file, bytes);
+            }
+          }
+
+          hadPrevious = await fs
+            .stat(target)
+            .then(() => true)
+            .catch(() => false);
+          if (hadPrevious) {
+            await fs.rename(target, retired);
+          }
+          await fs.rename(staging, target);
+        } catch (error) {
+          await fs.rm(staging, { recursive: true, force: true });
+          throw error;
+        } finally {
+          saving.delete(id);
         }
 
-        hadPrevious = await fs
-          .stat(target)
-          .then(() => true)
-          .catch(() => false);
         if (hadPrevious) {
-          await fs.rename(target, retired);
+          await fs.rm(retired, { recursive: true, force: true });
         }
-        await fs.rename(staging, target);
-      } catch (error) {
-        await fs.rm(staging, { recursive: true, force: true });
-        throw error;
+
+        const entry = await entryFor(directory, id, envelope);
+        if (entry === undefined) {
+          throw new Error("The theme could not be read back after saving.");
+        }
+        // The bytes just written are what the next save is based on, so the base
+        // is computed here rather than read back — a re-read would also be a
+        // second chance for something else to have moved underneath.
+        return { ...entry, base: contentId(serialized) };
       } finally {
-        saving.delete(id);
+        if (claiming) saving.delete(id);
       }
-
-      if (hadPrevious) {
-        await fs.rm(retired, { recursive: true, force: true });
-      }
-
-      const entry = await entryFor(directory, id, envelope);
-      if (entry === undefined) {
-        throw new Error("The theme could not be read back after saving.");
-      }
-      // The bytes just written are what the next save is based on, so the base
-      // is computed here rather than read back — a re-read would also be a
-      // second chance for something else to have moved underneath.
-      return { ...entry, base: contentId(serialized) };
     },
 
     /**

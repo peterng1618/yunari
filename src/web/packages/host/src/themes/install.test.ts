@@ -480,6 +480,61 @@ describe("installCatalogueItem", () => {
     expect(Object.keys(await origins.read())).toEqual(["aurora-copy"]);
   });
 
+  it("lands two items that resolve the same library id on distinct ids", async () => {
+    // Different catalogue items, same package id — the shape in which the
+    // import candidates are identical and neither item's queue entry covers the
+    // other. Both downloads finish together so both writes reach the free-id
+    // claim in the same instant, which is the race this pins.
+    let arrived = 0;
+    let releaseBoth!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    const fetcher: typeof fetch = async (input) => {
+      arrived += 1;
+      if (arrived === 2) releaseBoth();
+      await bothArrived;
+      return new Response(
+        new Uint8Array(packageOf("living-room", "Living Room")),
+      );
+    };
+
+    const [first, second] = await Promise.all([
+      installCatalogueItem(
+        {
+          ...REQUEST,
+          catalogueId: "aurora",
+          packageUrl: cataloguePackageUrl("aurora", "1.2.0"),
+        },
+        { store, origins, fetch: fetcher },
+      ),
+      installCatalogueItem(
+        {
+          ...REQUEST,
+          catalogueId: "borealis",
+          packageUrl: cataloguePackageUrl("borealis", "1.2.0"),
+        },
+        { store, origins, fetch: fetcher },
+      ),
+    ]);
+
+    // One wins the contested id; the other, refused by the store's free-id
+    // claim, asks for the next candidate instead of surfacing a filesystem
+    // refusal.
+    const ids = [first, second].map((result) =>
+      result.ok ? result.id : result.message,
+    );
+    expect(ids.sort()).toEqual(["living-room", "living-room-2"]);
+    expect((await store.list()).map((entry) => entry.id).sort()).toEqual([
+      "living-room",
+      "living-room-2",
+    ]);
+    expect(Object.keys(await origins.read()).sort()).toEqual([
+      "living-room",
+      "living-room-2",
+    ]);
+  });
+
   it("serialises two installs of one item", async () => {
     const [first, second] = await Promise.all([
       installCatalogueItem(
