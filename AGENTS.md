@@ -108,8 +108,8 @@ workflow/ffmpeg checks, design checks, typecheck, unit tests and the Worker
 suite. It must exit 0 and must not need the network.
 
 Node support is `>=22`; Vitest 5 accepts `^22.12 || ^24 || >=26`. CI pins Node
-24. `@yunari/store-worker` deliberately nests Vitest 4 because
-`@cloudflare/vitest-pool-workers` peers on `^4.1.0`; do not hoist or dedupe it.
+24. `@yunari/store-worker` runs on the workspace's Vitest 5: its test plugin,
+`@cloudflare/vitest-plugin`, peers on `^4.1.0 || ^5.0.0`.
 
 ## Non-obvious invariants
 

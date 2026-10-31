@@ -59,9 +59,9 @@ audit is a separate CI job.
 - Ports are fixed with `--strictPort`, and each config or own-host spec owns its
   port. Shared host state runs with `workers: 1`; preview projects keep full
   parallelism.
-- `@yunari/store-worker` nests Vitest 4 because
-  `@cloudflare/vitest-pool-workers` peers on `^4.1.0`. The workspace runs Vitest
-  5. Keep the nested version until the pool supports 5.
+- `@yunari/store-worker` runs on the workspace's Vitest 5. Its test plugin,
+  `@cloudflare/vitest-plugin`, peers on `^4.1.0 || ^5.0.0`, so there is no
+  nested copy to keep.
 
 ## Visual evidence
 

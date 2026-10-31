@@ -7,10 +7,7 @@
     // `document`, which TypeScript must resolve even though workerd has neither.
     // The declarations do coexist with workers-types under `skipLibCheck`.
     "lib": ["ES2022", "DOM"],
-    "types": [
-      "@cloudflare/workers-types",
-      "@cloudflare/vitest-pool-workers/types"
-    ]
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

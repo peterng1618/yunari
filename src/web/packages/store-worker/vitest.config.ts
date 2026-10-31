@@ -1,12 +1,10 @@
 import { fileURLToPath } from "node:url";
-import {
-  cloudflareTest,
-  readD1Migrations,
-} from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
-// 0.23.0 replaced the old `defineWorkersConfig` from `/config` with this Vite
-// plugin; the pool is now installed as a plugin rather than test.poolOptions.
+// `cloudflareTest` is the Vite plugin this suite runs on; it was renamed from
+// `@cloudflare/vitest-pool-workers` (vg-728). The plugin reads the same
+// wrangler config and Miniflare bindings, and peers on the workspace's vitest 5.
 export default defineConfig(async () => {
   // Resolve from this file, not process.cwd(): the config is also loaded from
   // the workspace root.
