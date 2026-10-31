@@ -63,7 +63,7 @@ function SaveCleanupDialog({
         </p>
       )}
       <div className="mb-[var(--space-6)] flex items-baseline gap-[var(--space-8)]">
-        <span className="text-2xs font-semibold tracking-[0.11em] text-faint uppercase">
+        <span className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
           {uiCopy.saveCleanup.heading}
         </span>
         <span className="font-mono text-[10px] text-faint">

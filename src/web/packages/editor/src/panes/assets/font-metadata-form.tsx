@@ -182,7 +182,7 @@ export function FontMetadataForm(props: {
       className="flex flex-col gap-[var(--space-8)] border-t border-edge-2 bg-panel-2 p-[var(--space-8)]"
     >
       <div className="flex flex-col gap-[var(--space-4)]">
-        <h4 className="text-2xs font-semibold uppercase tracking-[0.11em] text-faint">
+        <h4 className="text-2xs font-semibold uppercase tracking-[0.11em] text-muted">
           {uiCopy.panels.fontDetails}
         </h4>
         <span className="truncate text-xs text-muted">{filename}</span>

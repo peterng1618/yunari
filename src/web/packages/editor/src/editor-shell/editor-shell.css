@@ -1162,6 +1162,17 @@ body,
 .editor-shell-palette-swatch-accent {
   background: var(--shell-accent);
 }
+/* The publish chord, printed before the header's primary button. The header
+   rule puts the chord first, and its `margin-left: auto` is what keeps the pair
+   together at the right edge now that something sits ahead of the button. */
+.editor-shell-publish-chord {
+  margin-left: auto;
+  margin-right: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--shell-muted);
+  opacity: 0.7;
+}
 .editor-shell-primary {
   margin-left: auto;
   border: 1px solid var(--shell-primary-bg);
@@ -1414,18 +1425,22 @@ body,
 .editor-shell-dock button:hover {
   border-color: var(--muted);
 }
+/* A section heading is an eyebrow: the design's type scale reserves uppercase
+   for eyebrows alone, at `--text-2xs`, 600, `.11em`, muted. A pane's own name
+   overrides this rule below, because a name is a title rather than a label. */
 .editor-shell-panel h2,
 .editor-shell-inspector h2 {
   margin: 0 0 12px;
-  color: var(--shell-text);
+  color: var(--muted);
   /* UI sans, not the palette's display face: §2 gives headings to the UI sans
      and no clause grants chrome a serif. `--shell-display` still dresses the
      brand and a dialog's lead. */
   font-family: var(--font-ui);
-  font-size: var(--text-md);
-  line-height: var(--text-md--line-height);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.11em;
 }
 [data-shell-palette="editorial"] .editor-shell-panel h2,
 [data-shell-palette="editorial"] .editor-shell-inspector h2 {
@@ -2397,10 +2412,10 @@ body,
    toolbar. The section is the pane itself, so `data-yunari-panel` names it.
 
    The pane's own name overrides the panel-wide `h2` rule above it. That rule is
-   for a *section* heading inside a pane — uppercase, display serif, a hairline
-   under it — and a pane's name is neither: the design reserves uppercase for
-   section eyebrows and gives a panel title `--text-md` in the UI sans. The
-   selector is long because it has to out-rank
+   for a *section* heading inside a pane — an eyebrow, and the editorial palette
+   adds a hairline under it — and a pane's name is neither: the design reserves
+   uppercase for section eyebrows and gives a panel title `--text-md` in the UI
+   sans. The selector is long because it has to out-rank
    `[data-shell-palette="editorial"] .editor-shell-panel h2`. */
 .editor-shell-pane .editor-shell-pane-title .editor-shell-pane-name {
   margin: 0;

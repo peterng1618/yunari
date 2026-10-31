@@ -70,7 +70,7 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
       data-yunari-palette-fields=""
       className="flex flex-col gap-[var(--space-8)]"
     >
-      <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
+      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
         {entry.name}
       </h2>
       <ControlText

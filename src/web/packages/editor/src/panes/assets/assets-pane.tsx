@@ -770,7 +770,7 @@ export function AssetsPane({
         if (assets.length === 0) return null;
         return (
           <section key={section.id} className="mb-[var(--space-8)]">
-            <h3 className="mb-[var(--space-6)] text-[10px] uppercase tracking-[0.11em] text-faint">
+            <h3 className="mb-[var(--space-6)] text-[10px] uppercase tracking-[0.11em] text-muted">
               {section.label}
             </h3>
             <ul className="flex flex-col gap-[var(--space-4)]">

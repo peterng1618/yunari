@@ -115,7 +115,7 @@ function PillGroup(props: {
     >
       <span
         data-yunari-store-item-group-name=""
-        className="text-2xs font-semibold tracking-[0.11em] text-faint uppercase"
+        className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase"
       >
         {props.name}
       </span>

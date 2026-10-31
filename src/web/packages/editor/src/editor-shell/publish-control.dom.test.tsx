@@ -229,18 +229,20 @@ function popupOpen(): boolean {
   );
 }
 
-it("keeps the publish chord on the header control's tooltip, from the live table", async () => {
-  // The word is the control's name; the chord is hover-only, so it is read from
-  // the title rather than drawn into the bar. It is read from the live table
-  // because `publish.surface` is bound to the act the control performs — a
-  // printed chord that runs nothing is the state that was deliberately not
-  // shipped.
+it("prints the publish chord beside the header control, from the live table", async () => {
+  // DESIGN.md's header rule puts the publish chord before the button, and a
+  // chord is printed rather than hover-only. It is read from the live table
+  // because `publish.surface` is bound to the act the control performs.
   hostServing({ lan: true });
   const container = await mount();
 
   const trigger = headerControl(container);
   expect(trigger?.textContent).toBe(uiCopy.publish.assign);
-  expect(trigger?.querySelector("[data-yunari-publish-chord]")).toBeNull();
+  const printed = container.querySelector("[data-yunari-publish-chord]");
+  expect(printed?.textContent).toBe(shortcutLabel("publish.surface"));
+  // The trigger's own label carries the spoken form, so the caps are not read
+  // to a screen reader twice.
+  expect(printed?.getAttribute("aria-hidden")).toBe("true");
   expect(trigger?.getAttribute("title")).toContain(
     shortcutLabel("publish.surface"),
   );
@@ -262,6 +264,9 @@ it("keeps the publish chord on the header control's tooltip, from the live table
     setActiveShortcuts(resolveShortcuts({ "publish.surface": moved }));
   });
   expect(headerControl(container)?.getAttribute("title")).toContain("Ctrl+J");
+  expect(
+    container.querySelector("[data-yunari-publish-chord]")?.textContent,
+  ).toBe("Ctrl+J");
 });
 
 it("opens the surface without moving the host, and keeps every fact behind the press", async () => {
