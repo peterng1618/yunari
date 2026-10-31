@@ -2975,6 +2975,12 @@ describe("the local font import", () => {
       create.click();
       await settle();
     });
+    // The parse and the declaration are asynchronous; a fixed number of
+    // macrotasks is enough on an idle box and not on CI's, where the write can
+    // land after this test has ended and be counted by the next one.
+    await vi.waitFor(() => {
+      expect(manager.declarations).toHaveLength(1);
+    });
 
     expect(manager.declarations).toMatchObject([
       { kind: "font", family: "Inter", weight: 700, format: "ttf" },
@@ -3033,6 +3039,9 @@ describe("the local font import", () => {
     });
 
     // Cancel keeps the file the author gave us, and nothing else.
+    await vi.waitFor(() => {
+      expect(manager.declarations).toHaveLength(1);
+    });
     expect(manager.declarations).toMatchObject([
       { kind: "font", family: "Inter", weight: 700, format: "ttf" },
     ]);
@@ -3083,8 +3092,10 @@ describe("the local font import", () => {
     });
 
     // Refused before the declaration: the file the author picked is not kept.
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain(uiCopy.assets.creditsFull);
+    });
     expect(manager.declarations).toEqual([]);
-    expect(document.body.textContent).toContain(uiCopy.assets.creditsFull);
 
     extensions.destroy();
     vi.unstubAllGlobals();
@@ -3130,6 +3141,13 @@ describe("the local font import", () => {
     await act(async () => {
       create.click();
       await settle();
+    });
+    // The dialog closes only when the commit settles, so its absence is the
+    // write having landed — the same wait the tests above need on CI.
+    await vi.waitFor(() => {
+      expect(
+        document.body.querySelector("[data-yunari-font-create]"),
+      ).toBeNull();
     });
 
     await extensions.actionFacade().savePackage();
