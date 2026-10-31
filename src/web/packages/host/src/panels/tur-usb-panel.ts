@@ -27,6 +27,22 @@ const ENDPOINT = 1;
  *  fail politely: the transfer is cancelled, and enough cancellations make the
  *  endpoint refuse writes until the cable is replugged. */
 const READ_TIMEOUT_MS = 2_000;
+/**
+ * **A write is allowed to wait.** The panel NAKs bulk OUT while its H.264
+ * buffer drains, and a timeout does not hand back a partial byte count: the
+ * URB is cancelled mid-block, and the panel's USB stack then stops answering
+ * altogether — the device has to be replugged. The vendor's own pipe timeout
+ * is unbounded; five seconds is long enough to outlast a command's drain and
+ * short enough to notice a dead cable.
+ */
+const WRITE_TIMEOUT_MS = 5_000;
+/** A clip block waits far longer than a command: it is the transfer that
+ *  wedges the panel when it is cancelled, so it is better to sit out a drain
+ *  of tens of seconds than to break the device. */
+const BLOCK_WRITE_TIMEOUT_MS = 30_000;
+/** The level poll's read. Short so a saturated panel costs one cheap attempt
+ *  per poll rather than a two-second wait. */
+const LEVEL_READ_TIMEOUT_MS = 250;
 /** The device refuses a payload past this; measured in both drivers. */
 const MAX_PAYLOAD = 512_000;
 /** Bounded so a talkative device cannot hold the frame loop; the vendor's own
@@ -39,9 +55,19 @@ const MAX_QUEUED_REPLIES = 16;
  * measured upright with the display record's 90° rotation.
  */
 const ROTATE_MODE = 2;
-/** The vendor's pause between H.264 blocks. Shorter overruns the decoder's
- *  input buffer; the block ack's level is polled as a second guard. */
-const VIDEO_BLOCK_PAUSE_MS = 30;
+/** The vendor's own cadence, from `WinUsb.PlayH264`: a block goes out, the
+ *  driver waits 30 ms, then reads the ack, and only a depth above 3 makes it
+ *  drain. This host does not pace the feed any other way — the panel's
+ *  reported depth is the clock. */
+const BLOCK_PAUSE_MS = 30;
+/** The depth the vendor drains above (`PlayH264`: `ret[8] > 3`). */
+const ACK_DEPTH = 3;
+/** The depth it drains to (`waitBuffer(2)`). */
+const DRAIN_DEPTH = 2;
+const DRAIN_POLL_MS = 50;
+/** Bounded so a silent panel cannot hold the feed forever; the vendor waits
+ *  until playback is cancelled. */
+const DRAIN_WAIT_MS = 30_000;
 
 interface PanelShape {
   readonly id: string;
@@ -165,9 +191,18 @@ export class TurUsbPanel implements PanelDevice {
   private readonly device: PanelUsbDevice;
   private readonly started = Date.now() - 86_400_000;
   private opened = false;
+  /**
+   * Whether the PNG layer is showing. The panel keeps it across a push, so the
+   * enable is spent once rather than before every frame: re-enabling per push
+   * blanks the layer while the new PNG loads, and every push shares the
+   * endpoint the clip is being fed on.
+   */
+  private overlayShown = false;
   /** The background feed, while a video plays. Mutated by `stop` so the loop
    *  sees the cancellation without a second round of awaits. */
   private videoLoop: { stopped: boolean } | undefined;
+  /** The block size the panel asked to be fed in, learnt before playback. */
+  private blockBytes = H264_BLOCK_BYTES;
   /** Every write to the endpoint is queued behind this: a video feed runs on
    *  its own loop, and overlapping it with an overlay push is what the addon
    *  reports as "Cancelled". */
@@ -213,11 +248,12 @@ export class TurUsbPanel implements PanelDevice {
    */
   private async clearOverlay(): Promise<void> {
     await this.request("overlay-layer", READ_TIMEOUT_MS, { parameter: 1 });
+    this.overlayShown = true;
 
     const png = transparentPng(this.geometry.width, this.geometry.height);
     await this.device.nativeTransferOut(
       ENDPOINT,
-      READ_TIMEOUT_MS,
+      WRITE_TIMEOUT_MS,
       commandPacket(
         "push-png",
         this.elapsed(),
@@ -272,6 +308,12 @@ export class TurUsbPanel implements PanelDevice {
    * The host sends compressed blocks and then stops: motion no longer costs a
    * capture per frame, which is the whole reason this path exists.
    *
+   * **The feed is L-Connect's own.** The vendor asks the panel for its block
+   * size, tells it the clip's frame rate, and then hands it block after block
+   * with a 30 ms pause, flagging the file's final block and draining the ring
+   * only when an ack says the decoder has stopped reading. Copying that
+   * exactly is what this method does; nothing here invents a cadence.
+   *
    * **The feed never ends at end of file.** The panel drains a buffer while the
    * host writes, and the vendor's own driver rewinds and keeps sending for as
    * long as playback is wanted (`WinUsb.PlayH264`, `isRepeat`). A stream that
@@ -283,69 +325,192 @@ export class TurUsbPanel implements PanelDevice {
   ): Promise<void> {
     if (!this.opened) throw new Error("The panel is not open.");
 
-    const h264 = await this.encode(mp4, this.geometry, { placement });
+    const clip = await this.encode(mp4, this.geometry, { placement });
+    const h264 = clip.h264;
 
     this.stopVideoLoop();
-    await this.exclusive(() => this.request("stop-play", READ_TIMEOUT_MS));
 
     const loop = { stopped: false };
     this.videoLoop = loop;
 
     // The first block is awaited so an encoder or wire failure still reaches
     // the runner, which then falls back to still frames; the rest is fed in the
-    // background at the panel's own pace.
-    await this.exclusive(() => this.writeVideoBlock(h264, 0));
+    // background.
+    try {
+      await this.exclusive(async () => {
+        this.blockBytes = await this.queryBlockBytes();
+        // The vendor also sets the rate before playback, from the file itself.
+        if (clip.fps > 0) {
+          await this.request("frame-rate", READ_TIMEOUT_MS, {
+            parameter: clip.fps,
+          });
+        }
+        await this.request("stop-play", READ_TIMEOUT_MS);
+        await this.writeVideoBlock(h264, 0, loop);
+      });
+    } catch (error) {
+      this.stopVideoLoop();
+      throw error;
+    }
+
     void this.feedVideo(h264, loop);
+  }
+
+  /** The block size this panel wants, with the vendor's own default when it
+   *  answers zero or not at all (`WinUsb.CheckH264Block`). */
+  private async queryBlockBytes(): Promise<number> {
+    const reply = await this.request("h264-block", READ_TIMEOUT_MS);
+    if (reply === undefined || reply.length < 12) return H264_BLOCK_BYTES;
+
+    const size = new DataView(
+      reply.buffer,
+      reply.byteOffset,
+      reply.byteLength,
+    ).getUint32(8, false);
+    return size === 0 ? H264_BLOCK_BYTES : size;
   }
 
   private async feedVideo(
     h264: Uint8Array,
     loop: { stopped: boolean },
   ): Promise<void> {
-    try {
-      let at = H264_BLOCK_BYTES;
+    let at = this.blockBytes;
 
-      while (!loop.stopped) {
-        if (at >= h264.length) at = 0;
+    while (!loop.stopped) {
+      if (at >= h264.length) at = 0;
 
+      try {
         await this.exclusive(async () => {
-          if (!loop.stopped) await this.writeVideoBlock(h264, at);
+          if (!loop.stopped) await this.writeVideoBlock(h264, at, loop);
         });
+        at += this.blockBytes;
+      } catch (error) {
+        if (loop.stopped) return;
 
-        at += H264_BLOCK_BYTES;
-      }
-    } catch (error) {
-      // Nothing above is awaiting this loop, so a failure has to be said here:
-      // the panel keeps whatever it decoded last and the UI overlay goes on.
-      if (!loop.stopped) {
+        // Nothing above is awaiting this loop, so a failure has to be said
+        // here: the panel keeps whatever it decoded last and the UI overlay
+        // goes on.
         console.error(
-          `Panel video: ${error instanceof Error ? error.message : String(error)}`,
+          `Panel video: ${error instanceof Error ? error.message : String(error)}. Restarting the clip.`,
         );
+
+        try {
+          await this.resync();
+        } catch {
+          // The next block reports again; a panel that is really gone is the
+          // runner's problem, not this loop's.
+        }
+
+        at = 0;
       }
     }
   }
 
-  private async writeVideoBlock(h264: Uint8Array, at: number): Promise<void> {
-    const end = Math.min(at + H264_BLOCK_BYTES, h264.length);
+  /**
+   * Recovers from a cancelled block transfer.
+   *
+   * **The block is not rewritten.** A cancelled bulk OUT can leave the decoder
+   * holding part of a block, so writing the same bytes again duplicates them
+   * into the elementary stream — and a stream whose reference frames are
+   * wrong is the ghost trail, not a stutter. Stopping playback and starting
+   * again from the clip's first block hands the decoder a fresh keyframe.
+   */
+  private async resync(): Promise<void> {
+    await this.exclusive(async () => {
+      await this.clearHalt();
+      await this.request("stop-play", READ_TIMEOUT_MS);
+    });
+  }
+
+  private async writeVideoBlock(
+    h264: Uint8Array,
+    at: number,
+    loop: { stopped: boolean },
+  ): Promise<void> {
+    const end = Math.min(at + this.blockBytes, h264.length);
     const block = h264.subarray(at, end);
 
-    await this.writeFrame(
+    await this.device.nativeTransferOut(
+      ENDPOINT,
+      BLOCK_WRITE_TIMEOUT_MS,
       commandPacket(
         "play-block",
         this.elapsed(),
-        { payloadLength: block.length, lastBlock: end === h264.length },
+        // **The stream never ends.** The feed wraps and keeps sending while a
+        // clip is wanted, the way the vendor driver rewinds. The final block
+        // of each pass carries the vendor's end-of-file flag so the panel can
+        // finish the stream it was handed.
+        {
+          payloadLength: block.length,
+          lastBlock: end >= h264.length,
+        },
         block,
       ),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, VIDEO_BLOCK_PAUSE_MS));
+    await new Promise((resolve) => setTimeout(resolve, BLOCK_PAUSE_MS));
 
-    // Same flow control as the vendor driver: a level above 3 means the
-    // decoder has not drained, and the next block would be dropped.
-    const ack = await this.read(READ_TIMEOUT_MS);
-    if (ack !== undefined && ack[8] !== undefined && ack[8] > 3) {
-      await this.drain();
+    // **The ack is the flow control.** Its byte 8 is the decoder's depth: at
+    // or below the vendor's threshold the ring is draining, and above it the
+    // decoder has stopped reading — another block there is an overrun, which
+    // the panel plays out as a freeze.
+    const ack = await this.read(LEVEL_READ_TIMEOUT_MS);
+    const depth = ack?.[8];
+    if (depth !== undefined && depth > ACK_DEPTH) await this.drain(loop);
+  }
+
+  /** Waits until the decoder has room, polling the way `waitBuffer(2)` does.
+   *
+   *  **A long wait here is normal.** The ring holds blocks, and at this clip's
+   *  bitrate one block is about a second of picture: draining from four blocks
+   *  to two takes about two seconds of playback by construction. Only a drain
+   *  that never ends says the decoder has stopped. */
+  private async drain(loop?: { stopped: boolean }): Promise<void> {
+    const began = Date.now();
+    const deadline = began + DRAIN_WAIT_MS;
+    let drained = false;
+
+    while (!(loop?.stopped ?? false) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_MS));
+
+      // A panel that stops answering stops the drain as well: silence is not
+      // permission to keep writing.
+      const depth = await this.level();
+      if (depth === undefined || depth <= DRAIN_DEPTH) {
+        drained = true;
+        break;
+      }
     }
+
+    if (loop?.stopped ?? false) return;
+
+    if (!drained) {
+      // The decoder is not reading at all: the picture is starved until it
+      // starts again, and nothing else in this host can see that.
+      const waited = Date.now() - began;
+      console.error(
+        `Panel video: the decoder stopped draining after ${waited} ms.`,
+      );
+    }
+  }
+
+  /** The decoder's latest reported depth.
+   *
+   * **Flush first, then ask.** Every block queues an ack, so a plain read after
+   * the poll answers with an ack from an earlier block — a depth that says
+   * "room" exactly when there is none. Emptying the queue and then reading the
+   * one reply that follows the command is the only reading that describes the
+   * ring now. A short timeout keeps a saturated panel from turning each poll
+   * into a two-second wait. */
+  private async level(): Promise<number | undefined> {
+    await this.flushReplies();
+    await this.device.nativeTransferOut(
+      ENDPOINT,
+      WRITE_TIMEOUT_MS,
+      commandPacket("buffer-level", this.elapsed()),
+    );
+
+    return (await this.readOne(LEVEL_READ_TIMEOUT_MS))?.[8];
   }
 
   /** Stops feeding and tells the panel, in that order: a block written after
@@ -354,6 +519,8 @@ export class TurUsbPanel implements PanelDevice {
     this.stopVideoLoop();
     if (!this.opened) return;
     await this.exclusive(() => this.request("stop-play", READ_TIMEOUT_MS));
+    // A stopped clip leaves the layer off; the next overlay enables it again.
+    this.overlayShown = false;
   }
 
   private stopVideoLoop(): void {
@@ -389,7 +556,10 @@ export class TurUsbPanel implements PanelDevice {
     }
 
     await this.exclusive(async () => {
-      await this.request("overlay-layer", READ_TIMEOUT_MS, { parameter: 1 });
+      if (!this.overlayShown) {
+        await this.request("overlay-layer", READ_TIMEOUT_MS, { parameter: 1 });
+        this.overlayShown = true;
+      }
       await this.writeFrame(
         commandPacket(
           "push-png",
@@ -407,26 +577,16 @@ export class TurUsbPanel implements PanelDevice {
    *  down the LED MCU beside the panel. */
   private async writeFrame(write: Uint8Array): Promise<void> {
     try {
-      await this.device.nativeTransferOut(ENDPOINT, READ_TIMEOUT_MS, write);
+      await this.device.nativeTransferOut(ENDPOINT, WRITE_TIMEOUT_MS, write);
     } catch {
       await this.clearHalt();
-      await this.device.nativeTransferOut(ENDPOINT, READ_TIMEOUT_MS, write);
+      await this.device.nativeTransferOut(ENDPOINT, WRITE_TIMEOUT_MS, write);
     }
   }
 
   private async clearHalt(): Promise<void> {
     await this.device.clearHalt("out", ENDPOINT).catch(() => {});
     await this.device.clearHalt("in", ENDPOINT).catch(() => {});
-  }
-
-  private async drain(): Promise<void> {
-    // The vendor cadence: poll every 50 ms, stop at level 2, and give up after
-    // 30 s rather than holding the panel open forever.
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      const ack = await this.request("buffer-level", READ_TIMEOUT_MS);
-      if (ack === undefined || ack[8] === undefined || ack[8] <= 2) return;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
   }
 
   private elapsed(): number {
@@ -440,7 +600,7 @@ export class TurUsbPanel implements PanelDevice {
   ): Promise<Uint8Array | undefined> {
     await this.device.nativeTransferOut(
       ENDPOINT,
-      READ_TIMEOUT_MS,
+      WRITE_TIMEOUT_MS,
       commandPacket(command, this.elapsed(), fields),
     );
 

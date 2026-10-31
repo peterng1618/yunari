@@ -30,6 +30,7 @@ export type PanelCommand =
   | "play-block"
   | "stop-play"
   | "buffer-level"
+  | "h264-block"
   | "clock";
 
 /** The opcodes. Only non-destructive ones are named; firmware and storage
@@ -50,6 +51,9 @@ export const OPCODE: Readonly<Record<PanelCommand, number>> = {
   /** Ends any playback still running on the panel before a pushed frame. */
   "stop-play": 123,
   "buffer-level": 122,
+  /** The block size this panel wants the H.264 stream cut into. The vendor
+   *  driver sizes each clip block from the answer, not from a constant. */
+  "h264-block": 17,
   clock: 51,
 };
 

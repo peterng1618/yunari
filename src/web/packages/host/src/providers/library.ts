@@ -9,6 +9,7 @@ import {
   nameFor,
   volumesOf,
 } from "./library-devices.js";
+import { createLibraryWorker, type LibraryWorker } from "./library-worker.js";
 import type {
   ProviderHealth,
   SampleContext,
@@ -845,6 +846,9 @@ export class LibrarySensorProvider implements SensorProvider {
    */
   private tick: TickReads | undefined;
 
+  /** The worker that serves `systeminformation`'s blocking reads. */
+  private threaded: Promise<LibraryWorker> | undefined;
+
   constructor(private readonly library?: LibraryModule) {}
 
   /**
@@ -1006,8 +1010,13 @@ export class LibrarySensorProvider implements SensorProvider {
       return this.library;
     }
 
-    const imported = await import("systeminformation");
-    return (imported.default ?? imported) as unknown as LibraryModule;
+    // **The reads run on another thread.** Every family in this library shells
+    // out synchronously; on this host `graphics` blocked 124 ms and
+    // `networkStats` 124 ms per tick, which held a panel frame far longer than
+    // the frame itself takes to send. `library-worker.ts` owns the thread and
+    // falls back to an in-process copy when it dies.
+    this.threaded ??= createLibraryWorker();
+    return (await this.threaded).module;
   }
 
   async describe(): Promise<readonly SensorDescriptor[]> {

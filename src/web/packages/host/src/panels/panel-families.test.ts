@@ -89,9 +89,9 @@ describe("the manager's own boundary", () => {
 
 describe("a panel's cadence", () => {
   it("states the rate the runner should tick at, when the device has one", () => {
-    // The ring carried 12.9 FPS on this hardware, so the Kraken asks for a
-    // frame every 70 ms; CAM's own integration runs at 9 FPS.
-    expect(KRAKEN_FRAME_INTERVAL_MS).toBe(70);
+    // The glass drops a switch faster than about 140 ms on mode-2 frames, so
+    // the Kraken asks for one frame per 140 ms; see KRAKEN_FRAME_INTERVAL_MS.
+    expect(KRAKEN_FRAME_INTERVAL_MS).toBe(140);
     const device = {
       geometry: { width: 320, height: 320 },
       open: async () => {},

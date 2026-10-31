@@ -1,35 +1,37 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
-import type { PanelGeometry } from "./panel-device.js";
-import {
-  captureOverlay,
-  captureStill,
-  type Devtools,
-  screenshotParameters,
-} from "./panel-raster.js";
-
-const GEOMETRY: PanelGeometry = { width: 320, height: 480 };
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Devtools } from "./panel-raster.js";
+import { setOverlayMode, startScreencast } from "./panel-raster.js";
 
 interface Sent {
   readonly method: string;
   readonly params: Record<string, unknown>;
 }
 
-/** Records every request; a screenshot answers with a decodable image. */
+/** Records every request and lets a test push the events the browser would. */
 function fakeDevtools(): {
   readonly devtools: Devtools;
   readonly sent: Sent[];
+  readonly push: (method: string, params: Record<string, unknown>) => void;
 } {
   const sent: Sent[] = [];
+  const listeners = new Map<
+    string,
+    ((params: Record<string, unknown>) => void)[]
+  >();
 
   return {
     sent,
+    push: (method, params) => {
+      for (const listener of listeners.get(method) ?? []) listener(params);
+    },
     devtools: {
       send: async (method, params = {}) => {
         sent.push({ method, params });
-        return method === "Page.captureScreenshot"
-          ? { result: { data: Buffer.from("still").toString("base64") } }
-          : { result: {} };
+        return { result: {} };
+      },
+      on: (method, listener) => {
+        listeners.set(method, [...(listeners.get(method) ?? []), listener]);
       },
     },
   };
@@ -41,81 +43,131 @@ function request(sent: readonly Sent[], method: string): Sent {
   return found;
 }
 
-function expressionOf(sent: readonly Sent[]): string {
-  return String(request(sent, "Runtime.evaluate").params["expression"]);
+function frameEvent(data: string, sessionId: number): Record<string, unknown> {
+  return { data: Buffer.from(data).toString("base64"), sessionId };
 }
 
-function lastExpressionOf(sent: readonly Sent[]): string {
-  const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
-  const last = entries[entries.length - 1];
-  if (last === undefined) throw new Error("no Runtime.evaluate was sent");
-  return String(last.params["expression"]);
-}
+describe("startScreencast", () => {
+  it("acks a frame when it is consumed, not when it arrives", async () => {
+    const { devtools, sent, push } = fakeDevtools();
 
-function screenshotOf(sent: readonly Sent[]): Record<string, unknown> {
-  return request(sent, "Page.captureScreenshot").params;
-}
+    const cast = await startScreencast(devtools, "png");
 
-const CLIP = { x: 0, y: 0, width: 320, height: 480, scale: 1 };
-
-describe("screenshotParameters", () => {
-  it("asks for PNG with no quality and JPEG 85 with one", () => {
-    expect(screenshotParameters("png")).toEqual({ format: "png" });
-    expect(screenshotParameters("jpeg")).toEqual({
-      format: "jpeg",
-      quality: 85,
-    });
-  });
-});
-
-describe("captureStill", () => {
-  it("leaves overlay mode, clears the backdrop, then asks for JPEG 85", async () => {
-    const { devtools, sent } = fakeDevtools();
-
-    await captureStill(devtools, GEOMETRY, "jpeg");
-
-    expect(sent.map((entry) => entry.method)).toEqual([
-      "Runtime.evaluate",
-      "Emulation.setDefaultBackgroundColorOverride",
-      "Page.captureScreenshot",
-    ]);
-    // `if (false)` is the off branch: the style is removed rather than added.
-    expect(expressionOf(sent)).toContain("if (false)");
-    expect(expressionOf(sent)).toContain("style?.remove()");
-    expect(
-      request(sent, "Emulation.setDefaultBackgroundColorOverride").params,
-    ).toEqual({});
-    expect(screenshotOf(sent)).toEqual({
-      format: "jpeg",
-      quality: 85,
-      clip: CLIP,
-      captureBeyondViewport: false,
-    });
-  });
-
-  it("asks for PNG and no quality when the device states that encoding", async () => {
-    const { devtools, sent } = fakeDevtools();
-
-    await captureStill(devtools, GEOMETRY, "png");
-
-    expect(screenshotOf(sent)).toEqual({
+    expect(request(sent, "Page.startScreencast").params).toEqual({
       format: "png",
-      clip: CLIP,
-      captureBeyondViewport: false,
+      everyNthFrame: 1,
     });
+
+    push("Page.screencastFrame", frameEvent("one", 7));
+    await Promise.resolve();
+    // An unacknowledged frame is what holds the browser's next one back.
+    expect(
+      sent.some((entry) => entry.method === "Page.screencastFrameAck"),
+    ).toBe(false);
+
+    const frame = await cast.next(0);
+    expect(frame.sequence).toBe(1);
+    expect(Buffer.from(frame.bytes).toString()).toBe("one");
+    expect(request(sent, "Page.screencastFrameAck").params).toEqual({
+      sessionId: 7,
+    });
+  });
+
+  it("asks for JPEG 85 when the device renders that encoding itself", async () => {
+    const { devtools, sent } = fakeDevtools();
+
+    await startScreencast(devtools, "jpeg");
+
+    expect(request(sent, "Page.startScreencast").params).toEqual({
+      format: "jpeg",
+      quality: 85,
+      everyNthFrame: 1,
+    });
+  });
+
+  it("answers only with a frame newer than the one already handed over", async () => {
+    const { devtools, push } = fakeDevtools();
+    const cast = await startScreencast(devtools, "png");
+
+    push("Page.screencastFrame", frameEvent("one", 1));
+    const first = await cast.next(0);
+    expect(first.sequence).toBe(1);
+
+    // Nothing new yet: the call waits rather than handing back the same frame,
+    // which is what would put an old picture on the glass.
+    let settled = false;
+    const pending = cast.next(first.sequence).then((frame) => {
+      settled = true;
+      return frame;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    push("Page.screencastFrame", frameEvent("two", 2));
+    expect((await pending).sequence).toBe(2);
+  });
+
+  it("acks the frame it hands over, not the one it skipped", async () => {
+    const { devtools, sent, push } = fakeDevtools();
+    const cast = await startScreencast(devtools, "png");
+
+    push("Page.screencastFrame", frameEvent("one", 1));
+    push("Page.screencastFrame", frameEvent("two", 2));
+
+    const frame = await cast.next(0);
+    expect(frame.sequence).toBe(2);
+
+    const acks = sent.filter(
+      (entry) => entry.method === "Page.screencastFrameAck",
+    );
+    expect(acks.map((entry) => entry.params)).toEqual([{ sessionId: 2 }]);
+  });
+
+  it("refuses after a second with no frame", async () => {
+    vi.useFakeTimers();
+    try {
+      const { devtools } = fakeDevtools();
+      const cast = await startScreencast(devtools, "png");
+
+      const pending = cast.next(0);
+      const refused = expect(pending).rejects.toThrow(/no frame in 1000 ms/);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await refused;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops the page's stream once", async () => {
+    const { devtools, sent } = fakeDevtools();
+    const cast = await startScreencast(devtools, "png");
+
+    await cast.stop();
+    await cast.stop();
+
+    expect(
+      sent.filter((entry) => entry.method === "Page.stopScreencast"),
+    ).toHaveLength(1);
   });
 });
 
-describe("captureOverlay", () => {
-  it("enters overlay mode, asks for an alpha backdrop, then PNG", async () => {
+describe("setOverlayMode", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function expressionOf(sent: readonly Sent[]): string {
+    return String(request(sent, "Runtime.evaluate").params["expression"]);
+  }
+
+  it("enters overlay mode with an alpha backdrop", async () => {
     const { devtools, sent } = fakeDevtools();
 
-    await captureOverlay(devtools, GEOMETRY);
+    await setOverlayMode(devtools, true);
 
     expect(sent.map((entry) => entry.method)).toEqual([
       "Runtime.evaluate",
       "Emulation.setDefaultBackgroundColorOverride",
-      "Page.captureScreenshot",
     ]);
 
     const expression = expressionOf(sent);
@@ -131,18 +183,13 @@ describe("captureOverlay", () => {
     expect(
       request(sent, "Emulation.setDefaultBackgroundColorOverride").params,
     ).toEqual({ color: { r: 0, g: 0, b: 0, a: 0 } });
-    expect(screenshotOf(sent)).toEqual({
-      format: "png",
-      clip: CLIP,
-      captureBeyondViewport: false,
-    });
   });
 
   it("adds no second style on a repeat: the guard is in every entry script", async () => {
     const { devtools, sent } = fakeDevtools();
 
-    await captureOverlay(devtools, GEOMETRY);
-    await captureOverlay(devtools, GEOMETRY);
+    await setOverlayMode(devtools, true);
+    await setOverlayMode(devtools, true);
 
     const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
     expect(entries).toHaveLength(2);
@@ -174,7 +221,7 @@ describe("captureOverlay", () => {
 
     const { devtools, sent } = fakeDevtools();
 
-    await captureOverlay(devtools, GEOMETRY);
+    await setOverlayMode(devtools, true);
     const enter = new Function(expressionOf(sent)) as () => unknown;
     enter();
 
@@ -190,8 +237,11 @@ describe("captureOverlay", () => {
     expect(host.style.background).toBe("transparent");
     expect(host.dataset["panelOverlayBackground"]).toBe(saved);
 
-    await captureStill(devtools, GEOMETRY, "jpeg");
-    const exit = new Function(lastExpressionOf(sent)) as () => unknown;
+    await setOverlayMode(devtools, false);
+    const exits = sent.filter((entry) => entry.method === "Runtime.evaluate");
+    const exit = new Function(
+      String(exits[exits.length - 1]?.params["expression"]),
+    ) as () => unknown;
     exit();
 
     expect(host.style.background).toBe(saved);

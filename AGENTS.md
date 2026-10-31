@@ -181,3 +181,6 @@ EBADENGINE and takes the DOM suites unproven. CI pins Node 24.
 - `docs/architecture.md` — package boundaries and data flow.
 - `docs/development.md` — local setup, tests and tooling detail.
 - `docs/operations.md` — running, security, releases and store deployment.
+- `docs/hardware/` — per-device USB protocols, opcodes, media handling, firmware
+  facts and quirks; update the device's document when hardware teaches something
+  new.

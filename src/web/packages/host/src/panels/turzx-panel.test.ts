@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import type { PanelControlCommand, PanelDevice } from "./panel-device.js";
 import type { SerialTransport } from "./serial-transport.js";
@@ -34,6 +35,42 @@ function fakeTransport(...replies: string[]) {
       close: async () => {},
     } satisfies SerialTransport,
   };
+}
+
+/** A black RGBA→RGB PNG of `width`x`height`, as Chromium would write one. */
+function pngOf(width: number, height: number): Uint8Array {
+  const chunk = (kind: string, data: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    for (let index = 0; index < 4; index += 1) {
+      out[4 + index] = kind.charCodeAt(index);
+    }
+    out.set(data, 8);
+    return out;
+  };
+
+  const header = new Uint8Array(13);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, width);
+  view.setUint32(4, height);
+  header[8] = 8;
+  header[9] = 2;
+
+  const raw = new Uint8Array((width * 3 + 1) * height);
+  const parts = [
+    Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", new Uint8Array()),
+  ];
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+
+  return out;
 }
 
 /**
@@ -174,6 +211,20 @@ describe("openTurzxPanel", () => {
     );
     try {
       expect(device.stillFormat).toBe("png");
+    } finally {
+      await device.close();
+    }
+  });
+
+  it("decodes the rasteriser's own PNG when no decoder is injected", async () => {
+    const device = await opened(
+      fakeTransport("chs_5inch.dev1_rom1.88").transport,
+    );
+    try {
+      const { width, height } = device.geometry;
+      await expect(
+        device.present(pngOf(width, height)),
+      ).resolves.toBeUndefined();
     } finally {
       await device.close();
     }

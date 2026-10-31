@@ -16,19 +16,21 @@ import type { PanelGeometry } from "./panel-device.js";
  * that is what makes a video theme play at 30 fps instead of at the host's
  * capture cadence.
  *
- * Two vendor facts shape the encoder:
+ * **The encoder's flags are L-Connect's own.** `ThemeController.TransferH264`
+ * runs its bundled ffmpeg with `-vcodec libx264 -x264opts bframes=0 -threads 4
+ * -preset ultrafast`, and every frame rate and bitrate choice of this host's
+ * own was absent. A stream with B-frames leaves the panel's decoder waiting for
+ * frames it has not received, so `bframes=0` is a compatibility requirement,
+ * not a speed knob.
  *
- * - The wire frame is the panel's portrait geometry (464×1920 for the 9.2"),
- *   and the glass is a landscape strip. A picture is upright when the frame
- *   holds the landscape composition turned **90° clockwise** (`transpose=1`);
- *   measured on the attached panel, where the probe found the opposite
- *   turn for a hand-made clip and was corrected by the first integrated run.
- * - The vendor's own clips use `bframes=0` and `ultrafast`. A stream with
- *   B-frames leaves the panel's decoder waiting for frames it has not
- *   received, so the option is a compatibility requirement, not a speed knob.
+ * The one addition is the fit: the wire frame is the panel's portrait geometry
+ * (464×1920 for the 9.2"), the glass is a landscape strip, and a picture is
+ * upright when the frame holds the landscape composition turned **90°
+ * clockwise** (`transpose=1`). Measured on the attached panel.
  */
 
-/** The block the vendor driver reads at a time (`WinUsb.PlayH264`). */
+/** The vendor driver's default block size (`WinUsb.CheckH264Block`), used only
+ *  when the panel answers the block-size query with zero or not at all. */
 export const H264_BLOCK_BYTES = 202_752;
 
 const FFMPEG_STATIC_VERSION: string = createRequire(import.meta.url)(
@@ -70,18 +72,21 @@ export function panelH264Args(
     "-i",
     input,
     "-an",
+    // Formatting the panel's own picture: cover the glass, pan the way the
+    // theme authored it, then turn onto the wire's portrait frame.
     "-vf",
     panelFilter(geometry, placement),
-    "-r",
-    "30",
+    // The vendor's encode, verbatim. It fixes no frame rate, no bitrate and
+    // no keyframe interval: the panel takes the stream's own pacing.
     "-c:v",
     "libx264",
-    "-profile:v",
-    "high",
+    // The panel's decoder reads 4:2:0 only, and an authored clip may not be.
     "-pix_fmt",
     "yuv420p",
     "-x264opts",
-    "bframes=0:keyint=30",
+    "bframes=0",
+    "-threads",
+    "4",
     "-preset",
     "ultrafast",
     "-f",
@@ -123,13 +128,21 @@ function panelFilter(
   ].join(",");
 }
 
+/** One clip, ready to feed: the elementary stream and the rate it plays at. */
+export interface PanelClip {
+  readonly h264: Uint8Array;
+  /** The source's frame rate, or 0 when ffmpeg did not report one. The panel
+   *  is told this before playback, the way the vendor's app does. */
+  readonly fps: number;
+}
+
 /** Throws with a sentence the runner can report; the caller falls back to
  *  still frames rather than showing a black panel. */
 export async function encodePanelH264(
   mp4: Uint8Array,
   geometry: PanelGeometry,
   options: EncodeOptions = {},
-): Promise<Uint8Array> {
+): Promise<PanelClip> {
   const executable = options.ffmpegPath ?? ffmpegStatic;
 
   if (executable === null) {
@@ -170,12 +183,27 @@ export async function encodePanelH264(
       );
     }
 
-    return new Uint8Array(await readFile(output));
+    return {
+      h264: new Uint8Array(await readFile(output)),
+      fps: clipFps(outcome.stderr),
+    };
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(
       () => undefined,
     );
   }
+}
+
+/** ffmpeg names the first input stream's rate before it encodes a frame. */
+const FPS = /(\d+(?:\.\d+)?)\s+fps/;
+
+export function clipFps(stderr: string): number {
+  const match = FPS.exec(stderr);
+  if (match?.[1] === undefined) return 0;
+
+  const fps = Math.round(Number(match[1]));
+  // The vendor app sends the clip's own rate and only when it is usable.
+  return fps > 0 && fps <= 60 ? fps : 0;
 }
 
 function encoderRun(executable: string): Run {
@@ -187,7 +215,10 @@ function encoderRun(executable: string): Run {
         { windowsHide: true, maxBuffer: MAX_STDERR_BYTES },
         (error, _stdout, stderr) => {
           if (error === null) {
-            resolve({ code: 0, stderr: "" });
+            resolve({
+              code: 0,
+              stderr: typeof stderr === "string" ? stderr : "",
+            });
             return;
           }
 
