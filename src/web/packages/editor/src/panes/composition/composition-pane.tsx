@@ -174,11 +174,17 @@ function contextRows(
  * key reached the nudge and moved the selected object instead. Taking the keys
  * here and stopping propagation is what lets the list be a list: navigation
  * while focus is inside it, nudging while it is not.
+ *
+ * A shift-modified move also extends the selection across the rows it travels
+ * (`extend`), so the same range a shift-click draws is reachable from the
+ * keyboard. Focus still moves: the row the author just extended to is where
+ * the next key press acts.
  */
 function moveFocus(
   event: React.KeyboardEvent<HTMLDivElement>,
   row: LayerRow,
   bridge: EditorShellBridge | undefined,
+  extend: (to: number) => void,
 ): boolean {
   const rows = [
     ...(event.currentTarget
@@ -191,21 +197,27 @@ function moveFocus(
     const next = rows[index];
     if (next !== undefined) next.focus();
   };
+  /** One move: the shift gesture takes the range with it, a plain one moves
+   *  focus and leaves the selection alone. Out of range is still swallowed —
+   *  the key belongs to the list even at an end. */
+  const move = (index: number): boolean => {
+    if (index >= 0 && index < rows.length) {
+      if (event.shiftKey) extend(index);
+      focus(index);
+    }
+    return true;
+  };
   const expandable = row.hasChildren;
 
   switch (event.key) {
     case "ArrowDown":
-      focus(at + 1);
-      return true;
+      return move(at + 1);
     case "ArrowUp":
-      focus(at - 1);
-      return true;
+      return move(at - 1);
     case "Home":
-      focus(0);
-      return true;
+      return move(0);
     case "End":
-      focus(rows.length - 1);
-      return true;
+      return move(rows.length - 1);
     case "ArrowRight":
       // Expand a collapsed group, or step into an expanded one's first child.
       if (expandable && row.collapsed === true) {
@@ -337,33 +349,53 @@ export function CompositionPane({
   };
 
   /**
+   * The one range gesture: every rendered row from the anchor to `to`, over
+   * the rows as rendered — the projection's flat list is the order the author
+   * sees, and a shut group has no rows to range over. The anchor stays where
+   * it is, because extending changes the range, not where it starts.
+   *
+   * `fromId` seeds an anchor that does not exist yet — the row the gesture
+   * began on — so a first shift press starts where the author is rather than
+   * selecting nothing. Pointer clicks and keyboard moves both come through
+   * here, because "which rows" is a fact about this list and there is one
+   * answer to it.
+   */
+  const extendTo = (fromId: string, to: number): boolean => {
+    const ids = rows.map((row) => row.id);
+    const from =
+      anchor.current === undefined
+        ? ids.indexOf(fromId)
+        : ids.indexOf(anchor.current);
+    if (from < 0 || to < 0 || to >= ids.length) return false;
+    anchor.current = ids[from];
+    store.mutate(() =>
+      bridge?.selectLayers(
+        ids.slice(Math.min(from, to), Math.max(from, to) + 1),
+      ),
+    );
+    return true;
+  };
+
+  /**
    * What a row click selects, given the gesture.
    *
-   * `shift` takes the range from the anchor to this row **over the rows as
-   * rendered** — the projection's flat list is the order the author sees, and a
-   * shut group has no rows to range over. `ctrl`/`cmd` adds or removes one. A
-   * plain click replaces, which is what it has always done. The bridge takes the
-   * ids; this decides which ones, because "extend" is a fact about this list.
+   * A shift click draws the range from the anchor to this row through
+   * `extendTo`. `ctrl`/`cmd` adds or removes one. A plain click replaces,
+   * which is what it has always done. The bridge takes the ids; this decides
+   * which ones, because "extend" is a fact about this list.
    *
    * The three forms are the ruling's own (`vg-056`): shift extends a range and
-   * ctrl toggles, rather than one idiom or the other.
+   * ctrl toggles, rather than one idiom or the other. The keyboard's shift
+   * moves take the same range path, so the two gestures cannot disagree about
+   * what a range is.
    */
   const clickRow = (event: React.MouseEvent, id: string): void => {
     const ids = rows.map((row) => row.id);
-    const from =
-      anchor.current === undefined ? -1 : ids.indexOf(anchor.current);
-    if (event.shiftKey && from >= 0) {
+    if (event.shiftKey) {
       const to = ids.indexOf(id);
-      if (to >= 0) {
-        // A shift-click leaves the anchor where it is: it changes the range,
-        // not where the range starts.
-        store.mutate(() =>
-          bridge?.selectLayers(
-            ids.slice(Math.min(from, to), Math.max(from, to) + 1),
-          ),
-        );
-        return;
-      }
+      // A stale anchor has no range to draw; the click then does what a plain
+      // one does rather than swallowing the gesture.
+      if (to >= 0 && extendTo(id, to)) return;
     }
     anchor.current = id;
     if (event.ctrlKey || event.metaKey) {
@@ -601,9 +633,9 @@ export function CompositionPane({
                 // row's: without this the rename input's Enter would commit and
                 // then reopen the field as the event bubbles out.
                 if (event.target !== event.currentTarget) return;
-                // No arrow-key focus movement: the window-level nudge handler
-                // owns the arrow keys, and two owners for one key would nudge an
-                // object and move focus on the same press.
+                // Rename and selection are this row's own keys; arrow-key
+                // navigation belongs to `moveFocus` below, which stops the
+                // press before the canvas nudge can read it.
                 if (
                   !isBackground &&
                   (event.key === "F2" || event.key === "Enter")
@@ -627,7 +659,9 @@ export function CompositionPane({
                   store.mutate(() => bridge?.selectLayer(row.id));
                   return;
                 }
-                if (moveFocus(event, row, bridge)) {
+                if (
+                  moveFocus(event, row, bridge, (to) => extendTo(row.id, to))
+                ) {
                   // The nudge handler defers only for a text entry, and a row is
                   // a `div`, so without this an arrow key navigates the list
                   // AND nudges the selection.

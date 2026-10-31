@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Canvas, Group, Rect } from "fabric/es";
+import { ActiveSelection, Canvas, Group, Rect } from "fabric/es";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -249,10 +249,14 @@ function moveRule(
 }
 
 /** A key press on the focused row, awaited so React flushes a focus move. */
-async function pressOnFocused(host: HTMLElement, key: string): Promise<void> {
+async function pressOnFocused(
+  host: HTMLElement,
+  key: string,
+  init: KeyboardEventInit = {},
+): Promise<void> {
   await act(async () => {
     host.ownerDocument.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key, bubbles: true }),
+      new KeyboardEvent("keydown", { key, ...init, bubbles: true }),
     );
     await Promise.resolve();
   });
@@ -1055,6 +1059,98 @@ it("selects the focused row with Space, so the list can be driven without a mous
   expect(selectLayer).toHaveBeenCalledWith("second");
   // And the row that was in rename's way is not selected by it.
   expect(renameLayer).not.toHaveBeenCalled();
+  host.remove();
+});
+
+it("extends the selection with Shift+Arrow, Home and End", async () => {
+  // Space is a plain select that moves the anchor, so the selection and the
+  // range are two different answers: a plain arrow moves focus and selects
+  // nothing, and a shift arrow draws the range from the anchor to the row it
+  // lands on — the gesture arrange needs and a pointer could already make.
+  const selectLayers = vi.fn();
+  const host = await renderPanel(
+    [
+      { ...textRow, id: "first", name: "first" },
+      { ...textRow, id: "second", name: "second" },
+      { ...textRow, id: "third", name: "third" },
+    ],
+    { selectLayers },
+  );
+  document.body.append(host);
+  const rows = [...host.querySelectorAll<HTMLElement>('[role="treeitem"]')];
+  rows[0]!.focus();
+
+  await pressOnFocused(host, " ");
+  await pressOnFocused(host, "ArrowDown", { shiftKey: true });
+  expect(selectLayers).toHaveBeenLastCalledWith(["first", "second"]);
+  // Focus moves with the range; the anchor does not, so a second press grows
+  // the same range rather than starting a new one.
+  expect(host.ownerDocument.activeElement).toBe(rows[1]);
+  await pressOnFocused(host, "ArrowDown", { shiftKey: true });
+  expect(selectLayers).toHaveBeenLastCalledWith(["first", "second", "third"]);
+  expect(host.ownerDocument.activeElement).toBe(rows[2]);
+  await pressOnFocused(host, "ArrowUp", { shiftKey: true });
+  expect(selectLayers).toHaveBeenLastCalledWith(["first", "second"]);
+  await pressOnFocused(host, "End", { shiftKey: true });
+  expect(selectLayers).toHaveBeenLastCalledWith(["first", "second", "third"]);
+  await pressOnFocused(host, "Home", { shiftKey: true });
+  expect(selectLayers).toHaveBeenLastCalledWith(["first"]);
+
+  selectLayers.mockClear();
+  await pressOnFocused(host, "ArrowDown");
+  expect(selectLayers).not.toHaveBeenCalled();
+  expect(host.ownerDocument.activeElement).toBe(rows[1]);
+  host.remove();
+});
+
+/** vg-107: the pane's own half pins which ids a shift move asks for, but
+ *  "arrange is reachable" is a fact about the selection the real bridge builds
+ *  — a stub `canArrange` would answer true whatever the panel did. This one
+ *  runs the gesture against Fabric and asks the gate the arrange controls ask. */
+it("reaches arrange from the keyboard through Shift+Arrow", async () => {
+  const canvas = new Canvas(document.createElement("canvas"));
+  const alpha = new Rect({ left: 0, top: 0, width: 10, height: 10 });
+  const beta = new Rect({ left: 20, top: 0, width: 10, height: 10 });
+  alpha.set("id", "alpha");
+  beta.set("id", "beta");
+  canvas.add(alpha, beta);
+  const real = createEditorShellBridge({
+    editor: {
+      canvas,
+      groupingManager: { groupContext: () => [] },
+      historyManager: { attachGlobals: () => {}, saveState: () => undefined },
+    },
+    session: { subscribeDocumentChange: () => () => undefined } as never,
+    capture: () => undefined,
+  } as never);
+
+  const host = document.createElement("div");
+  await act(async () =>
+    (await Promise.resolve(createRoot(host))).render(
+      <CompositionPane bridge={real} />,
+    ),
+  );
+  document.body.append(host);
+  const rows = [...host.querySelectorAll<HTMLElement>('[role="treeitem"]')];
+  // The panel paints topmost-first, then the background beneath everything.
+  expect(rows.map((row) => row.getAttribute("data-yunari-layer"))).toEqual([
+    "beta",
+    "alpha",
+    "$background",
+  ]);
+
+  rows[0]!.focus();
+  await pressOnFocused(host, " ");
+  expect(canvas.getActiveObject()?.get("id")).toBe("beta");
+  expect(real.canArrange("align-left")).toBe(false);
+
+  await pressOnFocused(host, "ArrowDown", { shiftKey: true });
+  const active = canvas.getActiveObject();
+  expect(active).toBeInstanceOf(ActiveSelection);
+  expect(
+    (active as ActiveSelection).getObjects().map((object) => object.get("id")),
+  ).toEqual(["beta", "alpha"]);
+  expect(real.canArrange("align-left")).toBe(true);
   host.remove();
 });
 
