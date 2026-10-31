@@ -18,7 +18,7 @@ import {
   type SettingsFieldDescriptor,
   settingsFieldsFor,
 } from "@yunari/renderer-core";
-import { isSettingVisible } from "../editor-shell/controls/settings-field.js";
+import { isSettingVisible } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
 import type {
   ChartAspectView,
@@ -259,6 +259,7 @@ function settingRows(
       if (field.values !== undefined) {
         const values = field.values;
         rows.push({
+          descriptor: field,
           id,
           key: field.property,
           label: field.label,
@@ -283,6 +284,7 @@ function settingRows(
       const bound = ceilingOf(field, drawnEdge);
       if (bound !== undefined) {
         rows.push({
+          descriptor: field,
           id,
           key: field.property,
           label: field.label,
@@ -307,6 +309,7 @@ function settingRows(
         continue;
       }
       rows.push({
+        descriptor: field,
         id,
         key: field.property,
         label: field.label,
@@ -325,6 +328,7 @@ function settingRows(
 
     if (field.kind === "boolean") {
       rows.push({
+        descriptor: field,
         id,
         key: field.property,
         label: field.label,
@@ -337,6 +341,7 @@ function settingRows(
     }
 
     rows.push({
+      descriptor: field,
       id,
       key: field.property,
       label: field.label,

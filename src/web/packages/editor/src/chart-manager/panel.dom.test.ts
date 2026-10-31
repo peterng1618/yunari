@@ -12,7 +12,7 @@ import {
   settingsFieldsFor,
 } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { isSettingVisible } from "../editor-shell/controls/settings-field.js";
+import { isSettingVisible } from "../selection-inspector/setting-field.js";
 import type { ChartSettingView } from "./chart-fields.js";
 import {
   ASPECT_RATIOS,
