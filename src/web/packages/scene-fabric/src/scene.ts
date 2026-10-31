@@ -331,6 +331,7 @@ export function mountFabricScene(
           host.clientWidth,
           host.clientHeight,
           presentation.shape,
+          transform.rotation,
         ),
       });
     }
@@ -454,13 +455,33 @@ export function mountFabricScene(
   };
 }
 /** The display's own box in host pixels: the host rect for a rect display, the
- *  centred disc (`min(width, height)`) for a circle. */
+ *  centred disc (`min(width, height)`) for a circle.
+ *
+ *  **A media layer sized to it turns with the mount angle, about its centre.**
+ *  The screen's own surface — the disc and the letterbox — does not move: only
+ *  the content inside it turns. A turned rect layer is sized to the viewport
+ *  with its edges swapped, so after the quarter turn it still covers the glass;
+ *  the corners it gains fall outside the host's clip. */
 function displayBox(
   width: number,
   height: number,
   shape: DisplayShape,
+  rotation = 0,
 ): MediaBox {
-  if (shape === "rect") return { left: 0, top: 0, width, height };
+  const turn: Pick<MediaBox, "angle" | "angleOrigin"> =
+    rotation === 0 ? {} : { angle: rotation, angleOrigin: "centre" };
+  if (shape === "rect") {
+    if (rotation === 90 || rotation === 270) {
+      return {
+        left: (width - height) / 2,
+        top: (height - width) / 2,
+        width: height,
+        height: width,
+        ...turn,
+      };
+    }
+    return { left: 0, top: 0, width, height, ...turn };
+  }
   const diameter = Math.min(width, height);
   return {
     left: (width - diameter) / 2,
@@ -468,6 +489,7 @@ function displayBox(
     width: diameter,
     height: diameter,
     radius: "circle",
+    ...turn,
   };
 }
 
