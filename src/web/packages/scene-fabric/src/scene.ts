@@ -529,8 +529,13 @@ function displayBox(
   shape: DisplayShape,
   rotation = 0,
 ): MediaBox {
+  // A disc's box is the same disc at every angle, so a turn about its centre
+  // would move nothing and only rotate the picture inside a display-bounded
+  // layer that must fill the screen as it stands.
   const turn: Pick<MediaBox, "angle" | "angleOrigin"> =
-    rotation === 0 ? {} : { angle: rotation, angleOrigin: "centre" };
+    rotation === 0 || shape === "circle"
+      ? {}
+      : { angle: rotation, angleOrigin: "centre" };
   if (shape === "rect") {
     if (rotation === 90 || rotation === 270) {
       return {
