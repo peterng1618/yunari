@@ -61,14 +61,17 @@ export function FinderFrame(props: {
         >
           {/* The rail is the window's title bar: the tabs take its left, the
               corner keeps room for the way out. */}
-          <div className="flex h-12 flex-none items-center border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))]">
-            <Tabs.List className="flex gap-[var(--space-4)]">
+          {/* The tabs wrap rather than scroll on a phone: a rail that scrolls
+              can leave its last tab under the way out, and every category has
+              to be reachable by a finger. */}
+          <div className="flex min-h-12 flex-none flex-wrap items-center border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))]">
+            <Tabs.List className="flex flex-wrap gap-[var(--space-4)]">
               {props.tabs.map((tab) => (
                 <Tabs.Tab
                   key={tab.id}
                   value={tab.id}
                   data-yunari-asset-tab={tab.id}
-                  className="flex h-full items-center gap-[var(--space-6)] border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
+                  className="flex h-12 items-center gap-[var(--space-6)] border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
                 >
                   {tab.icon}
                   {tab.label}
