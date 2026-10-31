@@ -3668,3 +3668,48 @@ it("republishes an unpublished item and redraws it from the re-read", async () =
     "the redrawn modal does not offer Unpublish for a published row",
   ).not.toBeNull();
 });
+
+/**
+ * The strip's Themes-mode reading (#164): the region publishes what its own
+ * listing shows, and the shell places it. The count is the half's, after the
+ * facets and the query — not the editor's document, which is what the strip
+ * used to show in this mode.
+ */
+it("publishes the visible listing's count to the strip", async () => {
+  const seen: (number | undefined)[] = [];
+  await mount(
+    <StoreModeRegion
+      mode="themes"
+      client={clientListing(listing(3))}
+      onStatus={(count) => seen.push(count)}
+    />,
+  );
+  await settle();
+
+  expect(seen.at(-1), "the count the strip would show").toBe(3);
+});
+
+it("publishes no count for a listing that did not arrive", async () => {
+  const seen: (number | undefined)[] = [];
+  const client: ThemeLibraryClient = {
+    ...clientListing([]),
+    list: async () => {
+      throw new Error("the library could not be read");
+    },
+  };
+  await mount(
+    <StoreModeRegion
+      mode="themes"
+      client={client}
+      onStatus={(count) => seen.push(count)}
+    />,
+  );
+  await settle();
+
+  // A failed read is not an empty result: the strip draws nothing rather than
+  // claiming the library is empty.
+  expect(
+    seen.every((count) => count === undefined),
+    "a failed read published a count",
+  ).toBe(true);
+});

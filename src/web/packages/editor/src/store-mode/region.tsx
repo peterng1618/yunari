@@ -459,6 +459,10 @@ export function StoreModeRegion(props: {
    *  whose document is not this region's to replace — lists and reads items
    *  without one. */
   readonly onOpenTheme?: ((id: string) => void) | undefined;
+  /** The strip's store reading: the visible listing's count, or `undefined`
+   *  while the chosen half has not answered. The shell places it; the count is
+   *  this region's own. */
+  readonly onStatus?: ((count: number | undefined) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "themes" ? (
     <StoreRegion
@@ -466,6 +470,7 @@ export function StoreModeRegion(props: {
       {...(props.onOpenTheme === undefined
         ? {}
         : { onOpenTheme: props.onOpenTheme })}
+      {...(props.onStatus === undefined ? {} : { onStatus: props.onStatus })}
     />
   ) : null;
 }
@@ -478,6 +483,7 @@ export function StoreModeRegion(props: {
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
+  readonly onStatus?: ((count: number | undefined) => void) | undefined;
 }): React.JSX.Element {
   const [tab, setTab] = useState<StoreTab>("local");
   const [query, setQuery] = useState("");
@@ -591,6 +597,18 @@ function StoreRegion(props: {
     assignId === undefined
       ? undefined
       : listed?.find((item) => item.id === assignId);
+
+  // What the shell's strip reads for this mode: the visible listing, and nothing
+  // while the half has not answered (`none` covers a listing that failed, which
+  // is not an empty result). The cleanup withdraws the reading on unmount, so
+  // leaving the mode cannot leave the next visit's strip holding this visit's
+  // count.
+  const statusCount = body.kind === "none" ? undefined : sorted.length;
+  const onStatus = props.onStatus;
+  useEffect(() => {
+    onStatus?.(statusCount);
+    return () => onStatus?.(undefined);
+  }, [onStatus, statusCount]);
 
   /**
    * The one callback a cell's four actions and the modal's footer share.
