@@ -656,6 +656,10 @@ describe("ThemeStore", () => {
 
     expect(byId.get("night-sky")?.ground).toBe("#101014");
     expect(byId.get("film")?.ground).toBeUndefined();
+    // The same document's colour mode comes from the one owner of the
+    // media-behind-the-board rule, so a listing cannot carry no ground while
+    // the facet calls the board dark.
+    expect(byId.get("film")?.facets.colourMode).toBe("unclassified");
     // A board with no paint at all is the same absence as one with media.
     expect(byId.get("plain")?.ground).toBeUndefined();
   });

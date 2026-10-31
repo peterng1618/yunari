@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   type AssetKind,
+  backgroundPaintOf,
   cssArtboardPaint,
   type FabricThemeEnvelope,
   type FacetRecord,
@@ -11,7 +12,6 @@ import {
   type PerformanceCost,
   performanceCostsOf,
   readFabricThemeEnvelope,
-  resolveStyleValue,
   type ThemeRemix,
   type ValidationIssue,
   validateFabricThemeEnvelope,
@@ -769,25 +769,17 @@ async function storedEnvelope(
 }
 
 /**
- * The background layer's paint, read the document's own way and converted at
- * the CSS boundary — the resolver the plan and the player both read, so a
- * reference is resolved here exactly as it is on the artboard.
+ * The background layer's paint, converted at the CSS boundary — the resolver
+ * the plan and the player both read, so a reference is resolved here exactly as
+ * it is on the artboard.
  *
- * **Media behind the board is `undefined`, not the token's paint.** With a
- * background media layer a picture is the ground and the token is not what a
- * viewer sees, which is the same reason `facetRecordOf` answers `unclassified`
- * for that document.
+ * **Media behind the board is `undefined`, not the token's paint.**
+ * `backgroundPaintOf` owns that absence rule, and `facetRecordOf` reads the
+ * same answer to classify the colour mode, so a listing cannot show a ground
+ * the facet refuses to classify.
  */
 function groundOf(envelope: FabricThemeEnvelope): string | undefined {
-  if (envelope.background?.media !== undefined) return undefined;
-  return cssArtboardPaint(
-    resolveStyleValue(
-      envelope.background?.color,
-      envelope.globals ?? {},
-      "background",
-      [],
-    ),
-  );
+  return cssArtboardPaint(backgroundPaintOf(envelope));
 }
 
 /** One library line: what the document says, and when the folder changed. */

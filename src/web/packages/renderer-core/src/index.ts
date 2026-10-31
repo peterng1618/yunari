@@ -413,7 +413,7 @@ export type {
   FacetRecord,
   Orientation,
 } from "./theme/facet-record.js";
-export { facetRecordOf } from "./theme/facet-record.js";
+export { backgroundPaintOf, facetRecordOf } from "./theme/facet-record.js";
 export type { GlassSampling, GlassTreatment } from "./theme/glass.js";
 // The reader, the property name, the guard and the bound are the external
 // contract. The guard is external because a control that decides the membership

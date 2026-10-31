@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FabricThemeEnvelope } from "./fabric-envelope.js";
 import {
   ASPECT_BUCKETS,
+  backgroundPaintOf,
   facetRecordOf,
   PUBLISHED_BUCKETS,
 } from "./facet-record.js";
@@ -81,7 +82,15 @@ describe("facetRecordOf", () => {
       },
     } as unknown as Partial<FabricThemeEnvelope>);
 
+    // The owner answers no paint whatever the token says; the facet reads that
+    // as the third value, and the host's listing reads the same absence.
+    expect(backgroundPaintOf(document)).toBeUndefined();
     expect(facetRecordOf(document).colourMode).toBe("unclassified");
+  });
+
+  it("answers the paint when nothing is behind the board", () => {
+    // The absence above is about the media, not about the owner refusing paint.
+    expect(backgroundPaintOf(ground("#000000"))).toBe("#000000");
   });
 
   it("is unclassified for a ground it cannot read", () => {
