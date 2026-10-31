@@ -1756,6 +1756,30 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // The pairing page's one rule, imported rather than restated in the page.
+    // An unpaired device has no credential, so this answers before every gate
+    // for the same reason `/pair` does; it is one fixed path, not the admin
+    // root, so nothing else under the settings page becomes LAN-readable.
+    if (url.pathname === "/rotation.js" && request.method === "GET") {
+      if (bundles.admin === undefined) {
+        sendText(
+          response,
+          404,
+          "The pairing page is missing from this installation.",
+        );
+        return;
+      }
+
+      await serveStatic(
+        request,
+        response,
+        bundles.admin,
+        "/rotation.js",
+        "The pairing page is missing from this installation.",
+      );
+      return;
+    }
+
     // The store session: signing in, coming back, reading the state and
     // signing out. In a module of its own, because this file is already past
     // the size a reader can hold.

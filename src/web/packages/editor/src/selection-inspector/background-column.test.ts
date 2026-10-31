@@ -13,29 +13,39 @@ import { backgroundColumn, writeBackgroundField } from "./background-column.js";
  */
 
 describe("backgroundColumn", () => {
-  it("asks Content for colour and media, and Position for bounds, offsets and flips", () => {
-    const sections = backgroundColumn({
+  it("asks Content for colour and media, and adds Position once media exists", () => {
+    const bare = backgroundColumn({
       background: undefined,
       assets: [],
       globals: undefined,
     });
 
-    expect(sections.map((section) => section.id)).toEqual([
-      "content",
-      "position",
-    ]);
-    expect(sections[0]?.fields.map((field) => field.id)).toEqual([
+    // No media, no position: a picture is what a position places, and the
+    // first write would refuse, so the section is absent rather than refused.
+    expect(bare.map((section) => section.id)).toEqual(["content"]);
+    expect(bare[0]?.fields.map((field) => field.id)).toEqual([
       "background.color",
       "background.media",
     ]);
-    expect(sections[1]?.fields.map((field) => field.id)).toEqual([
+
+    const withMedia = backgroundColumn({
+      background: { media: { assetId: "a", bounds: "theme" } },
+      assets: [],
+      globals: undefined,
+    });
+
+    expect(withMedia.map((section) => section.id)).toEqual([
+      "content",
+      "position",
+    ]);
+    expect(withMedia[1]?.fields.map((field) => field.id)).toEqual([
       "background.bounds",
       "background.offsetX-offsetY",
       "background.flipX",
       "background.flipY",
     ]);
     expect(
-      sections[1]?.fields.find(
+      withMedia[1]?.fields.find(
         (field) => field.id === "background.offsetX-offsetY",
       ),
     ).toMatchObject({
@@ -88,9 +98,9 @@ describe("backgroundColumn", () => {
       globals: undefined,
     });
     const field = (id: string) =>
-      [...(sections[0]?.fields ?? []), ...(sections[1]?.fields ?? [])].find(
-        (entry) => entry.id === id,
-      );
+      sections
+        .flatMap((section) => section.fields)
+        .find((entry) => entry.id === id);
 
     expect(field("background.color")).toMatchObject({
       value: "",
@@ -100,12 +110,9 @@ describe("backgroundColumn", () => {
       control: "select",
       value: "",
     });
-    expect(field("background.bounds")).toMatchObject({ value: "theme" });
-    expect(field("background.offsetX-offsetY")).toMatchObject({
-      halves: [{ value: 0 }, { value: 0 }],
-    });
-    expect(field("background.flipX")).toMatchObject({ checked: false });
-    expect(field("background.flipY")).toMatchObject({ checked: false });
+    // The position fields are not here: the section waits for a media.
+    expect(field("background.bounds")).toBeUndefined();
+    expect(field("background.flipX")).toBeUndefined();
   });
 
   it("paints the stored palette reference and offers the document's tokens", () => {

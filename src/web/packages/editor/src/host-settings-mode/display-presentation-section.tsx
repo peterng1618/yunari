@@ -1,4 +1,4 @@
-import type { DisplayShape } from "@yunari/renderer-core";
+import { type DisplayShape, snapRotation } from "@yunari/renderer-core";
 import type * as React from "react";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
@@ -20,9 +20,10 @@ export interface DisplayPresentation {
 
 /** A circle's free angle snapped into the rect rule the store will enforce:
  *  `Math.round(rotation / 90) * 90 mod 360`, so 37 reads upright and 350 wraps
- *  to 0 rather than to a 360 the record refuses. */
+ *  to 0 rather than to a 360 the record refuses. The rule itself is
+ *  renderer-core's. */
 function snapQuarterTurn(rotation: number): number {
-  return (((Math.round(rotation / 90) * 90) % 360) + 360) % 360;
+  return snapRotation("rect", rotation);
 }
 
 /**

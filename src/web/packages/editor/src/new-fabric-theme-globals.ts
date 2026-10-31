@@ -64,24 +64,23 @@ export const newTypeToken: TypeToken = {
  * representations, not two authored facts.
  *
  * The artboard's own paint is `none`, because the backdrop is a packaged media
- * layer mounted below the canvas and an opaque artboard paint would hide it; the
- * letterbox bars outside it are `bars`. `background` survives that change as
- * the **surface token new objects take** — see the note on its entry.
+ * layer mounted below the canvas and an opaque artboard paint would hide it.
+ * `background` is the **surface token new objects take** — see the note on its
+ * entry.
  */
 export const starterPalette = {
   none: { name: "None", value: { kind: "solid", color: "transparent" } },
   // Not the artboard's paint any more — that is `none`, because the backdrop is
   // a media layer below the canvas. This is the **surface token new objects
   // take**: `new-object-defaults.ts` picks the first of
-  // `background | bars | scene | surface | track` the palette actually has, so
+  // `background | scene | surface | track` the palette actually has, so
   // deleting it silently repainted every inserted panel and chart track with
-  // `bars` — pure black. The artboard and the surface are two different jobs
-  // that happened to share a token.
+  // another token. The artboard and the surface are two different jobs that
+  // happened to share a token.
   background: {
     name: "Background",
     value: { kind: "solid", color: "#0c0e13" },
   },
-  bars: { name: "Letterbox bars", value: { kind: "solid", color: "#000000" } },
   text: { name: "Text", value: { kind: "solid", color: "#ecf5ff" } },
   dim: { name: "Muted text", value: { kind: "solid", color: "#a8bed0" } },
   panel: { name: "Panel", value: { kind: "solid", color: "#081523d9" } },

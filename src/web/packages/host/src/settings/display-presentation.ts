@@ -1,4 +1,9 @@
-import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
+import {
+  type DisplayPresentation,
+  type DisplayShape,
+  rotationAllowed,
+  snapRotation as snapByRule,
+} from "@yunari/renderer-core";
 
 /**
  * A presentation a display cannot hold, refused with the store's own words.
@@ -42,11 +47,10 @@ export function displayShape(value: unknown): DisplayShape {
   return value;
 }
 
-/** Where a stored angle lands once a shape's rule is applied to it. */
+/** Where a stored angle lands once a shape's rule is applied to it. The rule is
+ *  renderer-core's, which owns the transform that consumes the angle. */
 export function snapRotation(shape: DisplayShape, rotation: number): number {
-  return shape === "circle"
-    ? rotation % 360
-    : (Math.round(rotation / 90) * 90) % 360;
+  return snapByRule(shape, rotation);
 }
 
 /**
@@ -69,13 +73,8 @@ export function normalizePresentation(
 
   // The rectangle's set is exact, checked before any wrap: 360 is a full turn,
   // not a quarter, and normalising it to 0 first would silently store upright.
-  if (
-    resolved === "rect" &&
-    degrees !== 0 &&
-    degrees !== 90 &&
-    degrees !== 180 &&
-    degrees !== 270
-  ) {
+  // `rotationAllowed` is the one owner of that set (`vg-760`).
+  if (resolved === "rect" && !rotationAllowed(resolved, degrees)) {
     throw new DisplaySettingError(
       `A rectangular display turns in quarter turns, not ${String(rotation)} degrees.`,
     );

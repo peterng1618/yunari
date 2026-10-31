@@ -246,6 +246,32 @@ function assertFinite(value: number, name: string): void {
   }
 }
 
+/**
+ * Whether a display of this shape can hold the angle.
+ *
+ * **The one owner of the quarter-turn rule** (`vg-760`): a circle holds any
+ * whole degree below 360, a rectangle exactly 0, 90, 180 or 270. The host's
+ * store, the player's publish follower and the editor's presentation controls
+ * ask this rather than restating it, so the rule cannot drift between them.
+ */
+export function rotationAllowed(
+  shape: DisplayShape,
+  rotation: number,
+): boolean {
+  if (!Number.isInteger(rotation)) return false;
+  return shape === "circle"
+    ? rotation >= 0 && rotation < 360
+    : rotation === 0 || rotation === 90 || rotation === 180 || rotation === 270;
+}
+
+/** Where the shape's rule lands an angle: a circle wraps modulo a full turn,
+ *  a rectangle rounds to the nearest quarter and wraps the same way. */
+export function snapRotation(shape: DisplayShape, rotation: number): number {
+  return shape === "circle"
+    ? rotation % 360
+    : (((Math.round(rotation / 90) * 90) % 360) + 360) % 360;
+}
+
 /** Refuses an angle the display's shape cannot hold; never clamps it. */
 function readRotation(
   shape: DisplayShape,
@@ -259,14 +285,7 @@ function readRotation(
       `rotation must be a whole number of degrees; got ${rotation}.`,
     );
   }
-  const allowed =
-    shape === "circle"
-      ? rotation >= 0 && rotation < 360
-      : rotation === 0 ||
-        rotation === 90 ||
-        rotation === 180 ||
-        rotation === 270;
-  if (!allowed) {
+  if (!rotationAllowed(shape, rotation)) {
     throw new RangeError(
       `rotation ${rotation} is not valid for a ${shape} display.`,
     );
