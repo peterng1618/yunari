@@ -98,6 +98,29 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Probe the web servers the browser suite starts
+        # Playwright starts each config `webServer` before the suite, and its
+        # reporter drops that child's stdout and stderr (the `pipe` options
+        # forward to a reporter that discards output with no test attached), so
+        # a server that exits early reports only an exit code. This runs the
+        # three commands on spare ports first, where `timeout` prints what each
+        # one said and rc 124 means it stayed up.
+        run: |
+          set -uo pipefail
+          probe() {
+            local out
+            out=$(mktemp)
+            set +e
+            timeout 8 "$@" >"$out" 2>&1
+            local rc=$?
+            set -e
+            echo "== $* (rc=$rc)"
+            sed -n '1,30p' "$out"
+          }
+          probe npx vite preview packages/player --port 4191 --strictPort --host 127.0.0.1
+          probe npx vite preview packages/editor --port 4192 --strictPort --host 127.0.0.1
+          probe node packages/host/bin/yunari.js --no-browser --port 4193 --app-dir /tmp/probe-host-app
+
       - name: Display tests (browser)
         # Every project, not just desktop-chromium: the host specs live in their
         # own serial projects now, so naming one project would silently drop them.
