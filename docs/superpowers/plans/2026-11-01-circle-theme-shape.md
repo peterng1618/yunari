@@ -61,7 +61,7 @@ The `- **Paths:**` field must list, on continuation lines, exactly:
 
 - [ ] **Step 2: Verify the gate accepts the note**
 
-Run: `cd src/web && node scripts/reuse-gate.mjs --self-test`
+Run from the repository root: `node scripts/reuse-gate.mjs --self-test`
 Expected: exit 0.
 
 - [ ] **Step 3: Commit**
