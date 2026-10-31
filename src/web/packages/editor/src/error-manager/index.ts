@@ -14,6 +14,8 @@ type EditorErrorCategory =
   | "theme-library"
   | "paint"
   | "glass"
+  /** A text object that could not be frozen into vector paths. */
+  | "outline"
   /** The unsaved document the browser kept, and the boot that could not read
    *  it (`draft-store.ts`, `vg-511`). */
   | "draft";

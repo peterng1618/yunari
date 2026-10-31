@@ -1363,6 +1363,7 @@ export class EditorSession {
         editor.textManager.cancelPlacement();
         this.#document.insertCard(cardId);
       },
+      outlineText: () => this.#document.outlineText(),
       arrange: (action) => applyArrange(editor, action),
       canArrange: (action) => canArrange(editor, action),
       undo: () => void editor.historyManager.undo(),

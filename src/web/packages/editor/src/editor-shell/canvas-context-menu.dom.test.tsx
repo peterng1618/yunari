@@ -66,6 +66,7 @@ function facadeStub(): EditorActionFacade {
     addShape: vi.fn(),
     addChart: vi.fn(),
     insertCard: vi.fn(),
+    outlineText: vi.fn(),
     arrange: vi.fn(() => true),
     canArrange: vi.fn(() => true),
     undo: vi.fn(),

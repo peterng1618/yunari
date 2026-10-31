@@ -51,6 +51,7 @@ describe("object action registry", () => {
       "unlock",
       "group",
       "ungroup",
+      "outline-text",
       "delete",
     ]);
   });
@@ -76,6 +77,13 @@ describe("object action registry", () => {
     expect(
       objectAction("group").eligible(target({ kind: "group", memberCount: 2 })),
     ).toBe(true);
+  });
+
+  it("offers the conversion only for one unlocked text object", () => {
+    const outline = objectAction("outline-text");
+    expect(outline.eligible(target({ text: true }))).toBe(true);
+    expect(outline.eligible(target())).toBe(false);
+    expect(outline.eligible(target({ text: true, locked: true }))).toBe(false);
   });
 
   it("refuses arrange for a locked multi-selection, as canArrange does", () => {

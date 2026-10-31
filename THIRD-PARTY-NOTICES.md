@@ -31,6 +31,7 @@ are provenance, not notice rows.
 | `fabric` | 7.4.0 | MIT | scene graph |
 | `fflate` | 0.8.3 | MIT | theme ZIP packages |
 | `ffmpeg-static` | 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
+| `fontkit` | 2.0.4 | MIT | editor: reads a packaged face's glyph outlines when text is converted to paths |
 | `react` | 19.3.1 | MIT | editor shell chrome |
 | `react-dom` | 19.3.1 | MIT | editor shell chrome |
 | `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
@@ -130,6 +131,7 @@ its own nested copy of a name already listed above.
 | `@tailwindcss/oxide-win32-x64-msvc` | 4.3.3 | MIT | editor dev: Tailwind's native binding for Windows (optional; installed there only) |
 | `@tailwindcss/vite` | 4.3.3 | MIT | editor dev |
 | `@types/culori` | 4.0.1 | MIT | types for culori 4, which ships none |
+| `@types/fontkit` | 2.0.9 | MIT | types for `fontkit` |
 | `@types/node` | 22.20.5 | MIT | types |
 | `@types/node-forge` | 1.3.11 | MIT | types for `node-forge` |
 | `@types/react` | 19.3.0 | MIT | types |

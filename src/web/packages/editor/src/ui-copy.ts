@@ -1746,6 +1746,20 @@ export const uiCopy = {
     redo: "Redo",
     copy: "Copy",
     cut: "Cut",
+    outlineText: "Convert to paths",
+  },
+  /** Why a text object could not be frozen into vector paths. A refusal is
+   *  reported whole-object: partial geometry would silently drop a word. */
+  outline: {
+    empty: "This text has nothing to convert.",
+    fill: "A text filled with a gradient or pattern cannot be converted to paths; give it a solid colour first.",
+    noFont:
+      "This text is set in a face the theme does not declare, so its outlines cannot be read.",
+    badFont:
+      "A declared font file could not be read, so this text cannot be converted to paths.",
+    missingGlyph:
+      "A character in this text has no glyph in the face it is set in, so it cannot be converted to paths.",
+    locked: "Unlock the object before converting it to paths.",
   },
   /** One label per arrange action; keys mirror `ArrangeAction`. */
   arrangeLabels: {

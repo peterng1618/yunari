@@ -16,6 +16,7 @@ import {
   Group,
   Lock,
   type LucideIcon,
+  PenTool,
   Scissors,
   Trash2,
   Ungroup,
@@ -24,6 +25,7 @@ import {
 import { type ArrangeAction, applyArrange, arrangeMinimum } from "./arrange.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { KIND_GLYPHS, SHAPE_GLYPHS } from "./editor-shell/icons.js";
+import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import { SHAPE_KINDS, type ShapeKind } from "./new-object-defaults.js";
 import type { ProductShortcutId } from "./shortcut-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
@@ -38,6 +40,10 @@ export interface ObjectTarget {
   readonly memberCount: number;
   /** True when the active object is a Group (ungroup), false for a bare selection. */
   readonly isGroup: boolean;
+  /** True when the active object is a single text object. Absent reads as
+   *  false: a target projected before this question existed has no text to
+   *  convert. */
+  readonly text?: boolean;
 }
 
 export type ObjectActionId = ObjectCommandId | ConstructionActionId;
@@ -57,6 +63,7 @@ export type ObjectCommandId =
   | "unlock"
   | "group"
   | "ungroup"
+  | "outline-text"
   | `arrange:${ArrangeAction}`;
 
 /** A construction: it needs no subject, and the id names what it makes — the
@@ -86,7 +93,15 @@ interface ActionIdentity {
 interface ObjectAction extends ActionIdentity {
   readonly id: ObjectCommandId;
   readonly eligible: (target: ObjectTarget) => boolean;
-  readonly run: (editor: EditorInteraction) => void;
+  /** The session is the executor of document-owned actions — a conversion
+   *  reads the theme's font bytes and rewrites the envelope's bindings — while
+   *  every manager-backed action runs from the editor alone. The bridge always
+   *  passes the session it was built over; a caller that omits it cannot run
+   *  one of those actions and is told so rather than silently doing nothing. */
+  readonly run: (
+    editor: EditorInteraction,
+    session?: EditorActionFacade,
+  ) => void;
 }
 
 /**
@@ -261,6 +276,22 @@ export const OBJECT_ACTIONS: readonly ObjectAction[] = [
     shortcut: "edit.ungroup",
     eligible: (t) => t.isGroup,
     run: (e) => e.groupingManager.ungroup(),
+  },
+  {
+    id: "outline-text",
+    label: uiCopy.actions.outlineText,
+    icon: PenTool,
+    eligible: (t) => hasUnlockedSelection(t) && t.text === true,
+    // The conversion needs the theme's font bytes and the envelope's bindings,
+    // both of which live in the session's document rather than the shell.
+    run: (_editor, session) => {
+      if (session === undefined) {
+        throw new Error(
+          "Convert to paths needs the editor session, which owns the theme's fonts.",
+        );
+      }
+      session.outlineText();
+    },
   },
   {
     id: "delete",

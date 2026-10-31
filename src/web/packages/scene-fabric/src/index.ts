@@ -57,6 +57,7 @@ export { startSceneRefresh } from "./chart-refresh.js";
 export type { UnsupportedReporter } from "./fabric-nodes.js";
 export {
   applyAuthoredText,
+  isTextObject,
   type PlanTextObject,
   refreshBoundText,
   YUNARI_TEXT_PROPERTY,
