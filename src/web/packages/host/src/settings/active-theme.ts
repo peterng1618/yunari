@@ -1,6 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { DEFAULT_DISPLAY } from "./displays.js";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * Which saved theme each display shows. Consumer state, like the device
@@ -94,89 +93,25 @@ function asMap(parsed: unknown): Record<string, unknown> | undefined {
  * over the whole map, so writing back a file it could not read would persist
  * that failure as the loss of every other display's choice.
  */
-type StoredMap =
-  | { readonly map: Record<string, unknown> }
-  | { readonly failure: string };
-
-async function readMap(file: string): Promise<StoredMap> {
-  let raw: string;
-
-  try {
-    raw = await readFile(file, "utf8");
-  } catch (error) {
-    // A missing file is a fresh install; anything else — a permission, a
-    // directory, a bad sector — is a file we cannot account for.
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      (error as { code?: unknown }).code === "ENOENT"
-    ) {
-      return { map: {} };
-    }
-
-    return { failure: error instanceof Error ? error.message : String(error) };
-  }
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    // A present file that does not parse is not an empty one.
-    return { failure: error instanceof Error ? error.message : String(error) };
-  }
-
+function normalizeMap(parsed: unknown): Record<string, unknown> {
   const map = asMap(parsed);
-  return map === undefined
-    ? { failure: "the file does not hold an object" }
-    : { map };
+
+  if (map === undefined) {
+    throw new Error("the file does not hold an object");
+  }
+
+  return map;
 }
 
 export function createActiveThemeStore(directory: string): ActiveThemeStore {
-  const file = path.join(directory, FILE);
-
-  const save = async (map: Record<string, unknown>): Promise<void> => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(file, `${JSON.stringify(map, null, 2)}\n`, "utf8");
-  };
-
-  /** The map to edit, or a refusal: a mutator must not write over what it could not read. */
-  const editable = async (): Promise<Record<string, unknown>> => {
-    const stored = await readMap(file);
-
-    if ("failure" in stored) {
-      throw new Error(
-        `${file} could not be read, so it was not written: ${stored.failure}`,
-      );
-    }
-
-    return stored.map;
-  };
-
-  /**
-   * One write at a time.
-   *
-   * Every mutator is read-modify-write over the whole map, so two overlapping
-   * ones lose the earlier: the second reads a map the first has not saved yet
-   * and writes it back without the first display's entry. A link that rejects
-   * must not break the ones behind it.
-   */
-  let writing: Promise<unknown> = Promise.resolve();
-  const writeExclusively = <T>(work: () => Promise<T>): Promise<T> => {
-    const next = writing.then(work, work);
-    writing = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
-  };
+  const stored = createJsonFile<Record<string, unknown>>(directory, FILE, {
+    normalize: normalizeMap,
+    empty: () => ({}),
+  });
 
   return {
     async read(display, exists) {
-      const stored = await readMap(file);
-      if ("failure" in stored) return undefined;
-
-      const id = stored.map[display];
+      const id = (await stored.read())[display];
 
       if (typeof id !== "string" || !THEME_ID.test(id)) {
         return undefined;
@@ -188,12 +123,9 @@ export function createActiveThemeStore(directory: string): ActiveThemeStore {
     },
 
     async readAll(exists) {
-      const stored = await readMap(file);
-      if ("failure" in stored) return {};
-
       const chosen: Record<string, string> = {};
 
-      for (const [display, id] of Object.entries(stored.map)) {
+      for (const [display, id] of Object.entries(await stored.read())) {
         if (typeof id === "string" && THEME_ID.test(id) && (await exists(id))) {
           chosen[display] = id;
         }
@@ -209,17 +141,16 @@ export function createActiveThemeStore(directory: string): ActiveThemeStore {
 
       // The map is read first: the other displays' choices are not this write's
       // to drop.
-      await writeExclusively(async () => {
-        const map = await editable();
-        await save({ ...map, [display]: id });
-      });
+      await stored.mutate((map) => ({
+        next: { ...map, [display]: id },
+        result: undefined,
+      }));
     },
 
     async clear(display) {
-      await writeExclusively(async () => {
-        const map = await editable();
+      await stored.mutate((map) => {
         delete map[display];
-        await save(map);
+        return { next: map, result: undefined };
       });
     },
   };

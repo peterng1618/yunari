@@ -30,7 +30,7 @@ export function PanelFacts(props: {
   return (
     <span
       data-yunari-panel-facts=""
-      className="flex flex-col gap-[var(--space-2)] text-2xs text-muted"
+      className="flex flex-col gap-[var(--space-4)] text-2xs text-muted"
     >
       <span>
         {[

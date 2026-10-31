@@ -18,6 +18,7 @@ import {
 
 export * from "./archive-preflight";
 export * from "./credits";
+export * from "./theme-origin";
 export * from "./version-ladder";
 export * from "./video-envelope";
 

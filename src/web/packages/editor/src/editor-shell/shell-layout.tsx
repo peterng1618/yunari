@@ -821,9 +821,14 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
    * author in the editor rather than past a guard that did not complete.
    *
    * **A failed save is read off the document, not off a return value.**
-   * `savePackage()` resolves whether or not the save landed — the editor reports
+   * `saveLibrary()` resolves whether or not the save landed — the editor reports
    * its own failures — so the dirty mark is asked again after it. Still dirty
    * means the save did not happen, and the author stays where their work is.
+   *
+   * **Save means the library, not the package.** Leaving the editor is the same
+   * act as Ctrl+S, so the answer saves where the product stores a theme; a
+   * package download here would send the author to their Downloads folder for
+   * work that was only meant to be kept.
    *
    * The question and the save are a promise the switch cannot hand back: its
    * handler returns `void`, so the promise is settled where it is created rather
@@ -849,7 +854,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
         const choice = await confirmDocumentReplacement(uiCopy.modes.unsaved);
         if (choice === "cancel") return;
         if (choice === "save") {
-          await session.savePackage();
+          await session.saveLibrary();
           if (session.isDirty()) return;
         }
         setMode(next);

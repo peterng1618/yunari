@@ -93,9 +93,10 @@ async function mount(
 async function draw(
   artboard: Parameters<ArtboardPanel["render"]>[0],
   metadata?: Parameters<ArtboardPanel["render"]>[1],
+  credits?: Parameters<ArtboardPanel["render"]>[2],
 ): Promise<void> {
   if (panel === undefined) throw new Error("no panel mounted");
-  await act(async () => panel?.render(artboard, metadata));
+  await act(async () => panel?.render(artboard, metadata, credits));
 }
 
 /** React and floating-ui schedule outside `act`, so a popup is flushed with
@@ -261,6 +262,38 @@ describe("artboard panel", () => {
       width: 1000,
       height: 720,
     });
+  });
+
+  it("draws the theme's attribution only when it has one", async () => {
+    await mount();
+    await draw({ width: 1280, height: 720 });
+    expect(document.querySelector("[data-yunari-credit]")).toBeNull();
+
+    await draw({ width: 1280, height: 720 }, undefined, [
+      {
+        kind: "icon",
+        title: "Badge",
+        author: { name: "Lucide" },
+        license: "ISC v2",
+        changes: "Imported unchanged",
+      },
+      {
+        kind: "wallpaper",
+        title: "House",
+        author: { steamId: "76561198000000000" },
+        license: "unknown",
+        changes: "Imported unchanged",
+      },
+    ]);
+
+    const rows = [...document.querySelectorAll("[data-yunari-credit]")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain("Badge");
+    expect(rows[0]?.textContent).toContain("By Lucide");
+    expect(rows[0]?.textContent).toContain("ISC v2");
+    // A workshop credit often has no author name, so the id is named as the
+    // identifier it is rather than left off.
+    expect(rows[1]?.textContent).toContain("Steam 76561198000000000");
   });
 
   it("carries the document's content fit through an edit rather than resetting it", async () => {

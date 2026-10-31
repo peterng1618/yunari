@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
+import { destructiveMarker } from "../../object-actions.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /** One token a deletion may move references to. The name is what the list
@@ -67,7 +68,8 @@ export function TokenDelete(props: {
           }
           if (chosen !== undefined) onDelete(chosen);
         }}
-        className={`${plainButtonClasses} text-hot disabled:text-faint`}
+        className={plainButtonClasses}
+        {...destructiveMarker({ destructive: true })}
       >
         {label}
       </button>

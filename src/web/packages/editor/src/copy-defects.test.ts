@@ -20,7 +20,6 @@ import { Canvas, Textbox } from "fabric/es";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
-import { settingsField } from "./editor-shell/controls/settings-field.js";
 import type {
   HostingSnapshot,
   HostingStore,
@@ -31,6 +30,7 @@ import { SaveState } from "./editor-shell/save-state.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import type { PublishSurfaceStore } from "./editor-shell/shell-stores.js";
 import { projectRuns, RunEditor } from "./selection-inspector/runs.js";
+import { SettingField } from "./selection-inspector/setting-field.js";
 import type { RunEdits } from "./selection-inspector/view.js";
 import { shortcutLabel } from "./shortcut-manager/display.js";
 import { PRODUCT_SHORTCUTS } from "./shortcut-manager/index.js";
@@ -139,25 +139,34 @@ async function runReadingNote(
 }
 
 /** What an unauthored optional chart setting renders: the select's own first
- *  option, which is the gap's word rather than a placeholder value. A DOM
- *  factory with no React and no popup, so it is the one absence site this file
- *  can render for free. */
-function unsetSettingWord(): string {
-  const field = settingsField(
-    {
-      property: "yunari-test.optional",
-      label: "Optional setting",
-      kind: "select",
-      section: "content",
-      hint: "A descriptor that exists only to render the absent state.",
-      optional: true,
-      options: [{ value: "yes", label: "Yes" }],
-    },
-    { value: undefined, onChange: () => {} },
+ *  option, which is the gap's word rather than a placeholder value. */
+async function unsetSettingWord(): Promise<string> {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      createElement(SettingField, {
+        descriptor: {
+          property: "yunari-test.optional",
+          label: "Optional setting",
+          kind: "select",
+          section: "content",
+          hint: "A descriptor that exists only to render the absent state.",
+          optional: true,
+          options: [{ value: "yes", label: "Yes" }],
+        },
+        value: undefined,
+        onChange: () => {},
+      }),
+    ),
   );
-  // The unset option is appended first (`settings-field.ts`), so this is the
-  // word an author reads before the field has a value.
-  return field.querySelector("option")?.textContent?.trim() ?? "";
+  // The closed select prints the value it carries, which is the gap's own word.
+  const text =
+    host.querySelector("[data-yunari-value]")?.textContent?.trim() ?? "";
+  await act(async () => root.unmount());
+  host.remove();
+  return text;
 }
 
 /** What a placeholder reading looks like: the shapes an author would read as a
@@ -182,7 +191,7 @@ interface AbsentReading {
  * nothing), a sample that has not arrived and a binding this object does not
  * declare (both stated in words by `runs.tsx`'s `bindingStateOf`), and an
  * unauthored optional chart setting, whose select renders the table's own gap
- * word (`settings-field.ts:206`).
+ * word (`setting-field.tsx`'s optional select).
  *
  * **Not rendered here, the absence already owned and asserted elsewhere.** The
  * About tab's absent version is a row left out — `versionFacts` pushes no release
@@ -201,18 +210,12 @@ interface AbsentReading {
  * owned and already asserted and this net has nothing to add. The unread host and
  * the saved document are also rendered and asserted by their own files.
  *
- * **Not rendered here, and no test renders it.** `chart-fields.tsx:351`, the
- * chart select's gap option. Searched `panels.notSet` across every `*.test.ts`
- * and `*.test.tsx` under `packages/editor/src`: the only assertions naming it are
- * `settings.dom.test.tsx:594` (the About tab asserting its *absence*),
- * `usage.dom.test.ts:126` and `paint-list.dom.test.tsx:284` (the usage-figure
- * site, a different renderer), so no test renders this one.
- * Read `panel.ts` (`an unauthored select reads as ""`) and `control-select.tsx`
- * (`Select.Value` prints the selected item's label), so its trigger *would* render
- * the gap's word if a test mounted a `line` target with `dash` unauthored — it is
- * renderable without a popup, and it is bounded here only because that mount is a
- * `line` `ChartFieldTarget` (the `over()` harness in `chart-fields.dom.test.tsx`),
- * not a DOM factory.
+ * **The chart select's gap option is the same control.** `panel.ts` reads an
+ * unauthored select as `""`, and `setting-field.tsx` appends the gap's word to
+ * an optional select, so the reading above is that option — rendered with a
+ * descriptor of its own rather than a chart's. Mounting a `line` target with
+ * `dash` unauthored would reach it through `chart-fields.dom.test.tsx`'s
+ * `over()` harness, which is a `ChartFieldTarget`, not a DOM factory.
  */
 async function absentReadings(): Promise<AbsentReading[]> {
   return [
@@ -256,7 +259,7 @@ async function absentReadings(): Promise<AbsentReading[]> {
     },
     {
       name: "an unauthored optional chart setting",
-      text: unsetSettingWord(),
+      text: await unsetSettingWord(),
       expect: "gap",
     },
   ];

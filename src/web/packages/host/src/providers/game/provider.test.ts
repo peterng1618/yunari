@@ -646,6 +646,52 @@ describe("GameProvider classification", () => {
     h.provider.stop();
   });
 
+  it("serves a catalogued launcher's local art without the store", async () => {
+    vi.useFakeTimers();
+    const fake = countingStore();
+    let productReads = 0;
+    const gog: InstalledGame = {
+      source: "gog",
+      name: "Disco Elysium",
+      installDir: "C:\\Games\\Disco Elysium",
+      exes: ["C:\\Games\\Disco Elysium\\disco.exe"],
+      artwork: {
+        source: "gog",
+        id: "1207658924",
+        file: "C:\\Games\\Disco Elysium\\goggame-1207658924.ico",
+        extension: "ico",
+      },
+    };
+    const h = harness({
+      catalogue: async () => [gog],
+      store: fake.store,
+      productName: async () => {
+        productReads += 1;
+        return "Disco Elysium";
+      },
+    });
+    await h.sample(["game.running"]);
+    h.emit(
+      h.children[0] as FakeChild,
+      foregroundLine(99, "C:\\Games\\Disco Elysium\\disco.exe", "disco"),
+    );
+
+    const samples = await h.sample(["game.name", "game.artwork"]);
+
+    expect(samples.get("game.name")).toMatchObject({
+      status: "ok",
+      textValue: "Disco Elysium",
+    });
+    expect(samples.get("game.artwork")).toMatchObject({
+      status: "ok",
+      textValue: "/api/game/artwork/gog-1207658924.ico",
+    });
+    expect(fake.lookups()).toBe(0);
+    expect(fake.covers()).toBe(0);
+    expect(productReads).toBe(0);
+    h.provider.stop();
+  });
+
   it("turns running true only on the second fullscreen helper line", async () => {
     vi.useFakeTimers();
     const h = harness();

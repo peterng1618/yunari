@@ -1,4 +1,5 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import type { ThemeCredits, ThemeCreditsEntry } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
 import {
   AssetManager,
@@ -61,6 +62,18 @@ const UUID =
 
 const PNG = new Uint8Array([137, 80, 78, 71]);
 const OTHER = new Uint8Array([137, 80, 78, 72]);
+const CREDITS: ThemeCredits = {
+  format: "yunari-theme-credits",
+  version: 1,
+  entries: [
+    {
+      kind: "icon",
+      title: "Badge",
+      license: "ISC v2",
+      changes: "Imported unchanged",
+    },
+  ],
+};
 
 function declaration(id: string, sha256: string): LocalAssetReference {
   return { id, kind: "image", path: `assets/${id}.png`, sha256 };
@@ -108,6 +121,7 @@ function harness(options: {
   /** The document's cleanup question, which this manager asks before writing.
    *  Nothing unused by default, so an existing case is not about it. */
   readonly cleanup?: () => Promise<CleanupAnswer>;
+  readonly credits?: () => ThemeCredits | undefined;
 }) {
   const save = vi.fn(async () => "base-after-save");
   const open = vi.fn(async () => ({
@@ -132,6 +146,7 @@ function harness(options: {
       envelope: FabricThemeEnvelope,
       assets: Readonly<Record<string, Uint8Array>>,
       base?: string,
+      credits?: readonly ThemeCreditsEntry[],
     ) => Promise<void>
   >(async () => {});
   const errors: ErrorManager = { error: vi.fn(), warn };
@@ -151,6 +166,7 @@ function harness(options: {
   const manager = new ThemeLibraryManager({
     snapshot: () => envelope,
     assets: options.assets ?? assetsWith([], {}),
+    ...(options.credits === undefined ? {} : { credits: options.credits }),
     picture: options.picture ?? (async () => undefined),
     markSaved,
     announceChange,
@@ -370,6 +386,7 @@ describe("ThemeLibraryManager", () => {
       envelope,
       { "assets/backdrop.png": PNG },
       "base-from-reload",
+      undefined,
     );
   });
 
@@ -403,6 +420,7 @@ describe("ThemeLibraryManager", () => {
       envelope,
       { "assets/backdrop.png": PNG },
       "base-from-open",
+      undefined,
     );
     expect(manager.isStored()).toBe(true);
   });
@@ -533,8 +551,44 @@ describe("ThemeLibraryManager", () => {
       envelope,
       { "assets/backdrop.png": PNG },
       "base-from-open",
+      undefined,
     );
     expect(manager.isStored()).toBe(true);
+  });
+
+  it("hands an opened theme's credits to the session that mounts it", async () => {
+    const open = vi.fn(async () => ({
+      envelope,
+      assets: {},
+      base: "base",
+      credits: CREDITS,
+    }));
+    const { manager, onOpenTheme } = harness({ client: { open } });
+
+    await manager.openById("living-room");
+
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      envelope,
+      {},
+      "base",
+      CREDITS.entries,
+    );
+  });
+
+  it("sends the credits it holds with every library save", async () => {
+    const { manager, save } = harness({
+      base: "stored-base",
+      credits: () => CREDITS,
+    });
+
+    await manager.save();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith(
+      "living-room",
+      expect.objectContaining({ credits: CREDITS }),
+      expect.anything(),
+    );
   });
 
   it("asks before replacing the open document, and a refusal reads nothing", async () => {

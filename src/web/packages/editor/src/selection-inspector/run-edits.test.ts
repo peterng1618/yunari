@@ -1,8 +1,8 @@
-import type { TextRun } from "@yunari/renderer-core";
+import type { Binding, TextRun } from "@yunari/renderer-core";
 import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { RunTarget } from "./run-edits.js";
-import { writeRunStyle } from "./run-edits.js";
+import { insertReading, writeRunStyle } from "./run-edits.js";
 
 /**
  * A run's own size, leading and tracking are style writes, and the boundary is
@@ -19,11 +19,15 @@ const PLAIN: TextRun = {
 };
 
 /** The smallest object a run write needs — `ObjectWithText`'s two accesses. */
-function targetWith(run: TextRun): {
+function targetWith(run: TextRun | readonly TextRun[]): {
   readonly target: RunTarget;
   readonly written: () => readonly TextRun[];
+  readonly bindings: () => readonly Binding[];
 } {
-  let content: Record<string, unknown> = { runs: [run] };
+  let content: Record<string, unknown> = {
+    runs: Array.isArray(run) ? run : [run],
+  };
+  let bindings: readonly Binding[] = [];
   const object = {
     get: (name: string) =>
       name === YUNARI_TEXT_PROPERTY ? content : undefined,
@@ -37,10 +41,13 @@ function targetWith(run: TextRun): {
     target: {
       object,
       nodeId: "clock-label",
-      bindings: () => [],
-      setBindings: () => {},
+      bindings: () => bindings,
+      setBindings: (next) => {
+        bindings = next;
+      },
     },
     written: () => content["runs"] as readonly TextRun[],
+    bindings: () => bindings,
   };
 }
 
@@ -132,5 +139,102 @@ describe("writing a run's own style", () => {
     // No write at all: the run object is the one the object already held, so a
     // history entry and a repaint are not spent on it.
     expect(written()[0]).toBe(PLAIN);
+  });
+});
+
+describe("inserting a reading inline", () => {
+  it("splits the typed text around a value run and binds it", () => {
+    const { target, written, bindings } = targetWith(PLAIN);
+
+    expect(
+      insertReading(target, {
+        text: "Hi @ram x",
+        start: 3,
+        end: 7,
+        semanticKey: "ram.used.percent",
+      }),
+    ).toBe(true);
+
+    const runs = written();
+    expect(runs.map((run) => run.kind)).toEqual([
+      "literal",
+      "value",
+      "literal",
+    ]);
+    expect(runs[0]).toMatchObject({ text: "Hi " });
+    expect(runs[2]).toMatchObject({ text: " x" });
+    // The reading takes the prose's look, on every split piece.
+    for (const run of runs) {
+      expect(run.typeToken).toBe("typeTokens.body");
+      expect(run.style).toEqual({ color: { ref: "palette.ink" } });
+    }
+
+    const built = bindings();
+    expect(built).toHaveLength(1);
+    expect(built[0]?.semanticKey).toBe("ram.used.percent");
+    expect(built[0]?.id).toMatch(/^binding-/);
+    expect(runs[1]).toMatchObject({ kind: "value", bindingId: built[0]?.id });
+  });
+
+  it("leaves no empty literal when the range is the whole text", () => {
+    const { target, written } = targetWith(PLAIN);
+
+    expect(
+      insertReading(target, {
+        text: "@ram",
+        start: 0,
+        end: 4,
+        semanticKey: "ram.used.percent",
+      }),
+    ).toBe(true);
+
+    expect(written().map((run) => run.kind)).toEqual(["value"]);
+  });
+
+  it("refuses content a split cannot map, and writes nothing", () => {
+    const multi = targetWith([PLAIN, PLAIN]);
+    expect(
+      insertReading(multi.target, {
+        text: "@ram",
+        start: 0,
+        end: 4,
+        semanticKey: "ram.used.percent",
+      }),
+    ).toBe(false);
+    expect(multi.written()).toHaveLength(2);
+    expect(multi.bindings()).toEqual([]);
+
+    const valued = targetWith({
+      kind: "value",
+      bindingId: "load",
+      typeToken: "typeTokens.body",
+    });
+    expect(
+      insertReading(valued.target, {
+        text: "@ram",
+        start: 0,
+        end: 4,
+        semanticKey: "ram.used.percent",
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses a range outside the text and an empty key", () => {
+    for (const range of [
+      { text: "@ram", start: 0, end: 9 },
+      { text: "@ram", start: 3, end: 1 },
+      { text: "@ram", start: 0.5, end: 4 },
+      { text: "@ram", start: 0, end: 4, semanticKey: "" },
+    ]) {
+      const { target, written } = targetWith(PLAIN);
+      expect(
+        insertReading(target, {
+          semanticKey: "ram.used.percent",
+          ...range,
+        }),
+        JSON.stringify(range),
+      ).toBe(false);
+      expect(written()[0]).toBe(PLAIN);
+    }
   });
 });

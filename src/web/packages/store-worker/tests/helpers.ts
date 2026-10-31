@@ -101,6 +101,13 @@ export function candidate(
     id,
     metadata: { themeLanguage: "en", version },
     artboard: { width: 400, height: 300 },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: {
       version: "7.4.0",
       objects: [{ type: "Rect", id: "background" }],

@@ -44,7 +44,7 @@ export const SHORTCUT_LABELS = {
   // word is the row's own: `file.open` names the chord the action is bound to,
   // and the row it is printed beside is what a person reads.
   "file.open": uiCopy.file.importPackage,
-  "file.save": uiCopy.file.savePackage,
+  "file.save": uiCopy.file.saveLibrary,
   "file.findAssets": uiCopy.file.findAssets,
   "edit.undo": uiCopy.actions.undo,
   "edit.redo": uiCopy.actions.redo,

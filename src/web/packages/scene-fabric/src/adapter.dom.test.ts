@@ -108,7 +108,9 @@ function textNode(
   style: PlanNode["style"] = {},
   wrap = false,
 ): PlanNode {
-  const authored: TextContent = { runs: [{ kind: "literal", text }] };
+  const authored: TextContent = {
+    runs: [{ kind: "literal", text, typeToken: "typeTokens.body" }],
+  };
 
   return node({
     id,

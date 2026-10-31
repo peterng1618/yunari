@@ -34,6 +34,13 @@ const envelopeFor = (id: string): FabricThemeEnvelope => ({
   id,
   metadata: { name: "Living Room", themeLanguage: "en" },
   artboard: { width: 1920, height: 1080 },
+  globals: {
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "monospace", weight: "400" },
+    },
+  },
   scene: { version: "7.4.0", objects: [] },
 });
 
@@ -57,6 +64,19 @@ describe("thumbnails", () => {
     await store.write("living-room", PNG);
 
     expect(await store.read("living-room")).toEqual(PNG);
+  });
+
+  it("answers whether a picture is stored, without reading it", async () => {
+    const store = createThumbnailStore(dir);
+    expect(await store.has("living-room")).toBe(false);
+
+    await store.write("living-room", PNG);
+    expect(await store.has("living-room")).toBe(true);
+
+    await store.remove("living-room");
+    expect(await store.has("living-room")).toBe(false);
+    // A path that is not a theme id never names a file here.
+    expect(await store.has("../escape")).toBe(false);
   });
 
   it("puts the picture inside the theme's own folder, and nowhere else", async () => {

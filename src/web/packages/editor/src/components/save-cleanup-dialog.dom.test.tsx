@@ -217,7 +217,7 @@ describe("the save cleanup sheet", () => {
     for (const word of [uiCopy.saveCleanup.cancel, TITLE]) {
       const button = buttonNamed(word);
       expect(button.className).toContain("px-[var(--space-12)]");
-      expect(button.className).toContain("enabled:hover:border-accent");
+      expect(button.className).toContain("enabled:hover:border-muted");
     }
   });
 });

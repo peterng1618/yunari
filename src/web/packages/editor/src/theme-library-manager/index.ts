@@ -3,6 +3,7 @@ import type {
   ThemeMetadata,
   ThemeRemix,
 } from "@yunari/renderer-core";
+import type { ThemeCredits, ThemeCreditsEntry } from "@yunari/theme-package";
 import type { AssetManager } from "../asset-manager/index.js";
 import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
@@ -120,6 +121,10 @@ interface ThemeLibraryManagerOptions {
   readonly snapshot: () => FabricThemeEnvelope;
   /** The document's own declared bytes, which is what a save sends. */
   readonly assets: AssetManager;
+  /** The attribution member this document carries, or nothing. It travels with
+   *  every save because the stored folder is written whole: a save that sent no
+   *  credits would drop the ones the theme already had. */
+  readonly credits?: () => ThemeCredits | undefined;
   /** The picture a save ships, or the one this document arrived with: a
    *  capture that fails must cost the preview, not the theme. */
   readonly picture: () => Promise<Uint8Array | undefined>;
@@ -156,6 +161,7 @@ interface ThemeLibraryManagerOptions {
     envelope: FabricThemeEnvelope,
     assets: Readonly<Record<string, Uint8Array>>,
     base?: string,
+    credits?: readonly ThemeCreditsEntry[],
   ) => Promise<void>;
 }
 
@@ -293,7 +299,12 @@ export class ThemeLibraryManager {
     const opened = await client.open(id);
     if (options.onOpenTheme !== undefined) {
       this.#base = libraryBase(opened.base, opened.envelope.assets ?? []);
-      await options.onOpenTheme(opened.envelope, opened.assets, opened.base);
+      await options.onOpenTheme(
+        opened.envelope,
+        opened.assets,
+        opened.base,
+        opened.credits?.entries,
+      );
     }
   }
 
@@ -315,6 +326,8 @@ export class ThemeLibraryManager {
     await options.onOpenTheme?.(
       remixedEnvelope(opened.envelope, remixOf),
       opened.assets,
+      undefined,
+      opened.credits?.entries,
     );
     // Cleared only once the document has been handed over: a handover that
     // fails leaves the open document where it was, still gated by its base
@@ -335,6 +348,8 @@ export class ThemeLibraryManager {
     await options.onOpenTheme?.(
       duplicatedEnvelope(opened.envelope),
       opened.assets,
+      undefined,
+      opened.credits?.entries,
     );
     this.#base = undefined;
   }
@@ -351,12 +366,14 @@ export class ThemeLibraryManager {
   ): Promise<void> {
     const options = this.#options;
     const base = this.#base;
+    const credits = options.credits?.();
     this.#base = libraryBase(
       await client.save(
         current.id,
         {
           envelope: current,
           assets: this.#payload(base, overwrite),
+          ...(credits === undefined ? {} : { credits }),
           ...(base === undefined ? {} : { base: base.id }),
         },
         { overwrite },
@@ -438,7 +455,12 @@ export class ThemeLibraryManager {
     if (choice === "reload") {
       const opened = await client.open(current.id);
       this.#base = libraryBase(opened.base, opened.envelope.assets ?? []);
-      await options.onOpenTheme?.(opened.envelope, opened.assets, opened.base);
+      await options.onOpenTheme?.(
+        opened.envelope,
+        opened.assets,
+        opened.base,
+        opened.credits?.entries,
+      );
       return;
     }
     if (choice !== "overwrite") {

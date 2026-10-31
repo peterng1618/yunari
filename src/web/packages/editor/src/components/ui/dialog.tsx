@@ -20,7 +20,7 @@ import { destructiveMarker } from "../../object-actions.js";
  * the variant the library chooser's delete actually needs.
  */
 export const ACTION_BUTTON =
-  "rounded-sm border border-edge bg-panel-2 px-[var(--space-12)] py-[var(--space-6)] text-sm text-text enabled:hover:border-accent enabled:hover:text-accent disabled:text-faint";
+  "rounded-md border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-12)] py-[var(--space-6)] text-sm text-text enabled:hover:border-muted disabled:text-faint";
 
 /**
  * One command in a viewer's panel foot: a bordered box holding a 12px glyph and

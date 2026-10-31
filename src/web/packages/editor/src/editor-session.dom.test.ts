@@ -256,6 +256,13 @@ const envelope: FabricThemeEnvelope = {
   id: "theme",
   metadata: { themeLanguage: "en" },
   artboard: { width: 100, height: 100 },
+  globals: {
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "monospace", weight: "400" },
+    },
+  },
   scene: { version: "7.4.0", objects: [] },
 };
 
@@ -281,6 +288,7 @@ describe("EditorSession", () => {
         addText: vi.fn(),
         setAuthoringView: vi.fn(),
         setRepaint: vi.fn(),
+        setMentions: vi.fn(),
       },
       cropManager: idleCrop(),
       historyManager: { attachGlobals: () => {} },
@@ -337,13 +345,33 @@ describe("EditorSession", () => {
     // back and handed to whoever mounts the session that shows it.
     await session.openLibraryTheme("living-room");
     expect(mockClient.open).toHaveBeenCalledWith("living-room");
-    expect(onOpenTheme).toHaveBeenCalledWith(envelope, {}, undefined);
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      envelope,
+      {},
+      undefined,
+      undefined,
+    );
 
     await session.savePackage();
     expect(onSaved).toHaveBeenCalled();
 
     await session.saveLibrary();
     expect(mockClient.save).toHaveBeenCalled();
+
+    // Ctrl+S is the library save, not the package download: the chord reaches
+    // the same owner the menu row does, and the downloader is untouched.
+    const saveChord = registerMock.mock.calls.find(
+      ([action]) => action === "file.save",
+    )?.[1] as (() => void) | undefined;
+    expect(saveChord).toBeDefined();
+    saveMock.mockClear();
+    mockClient.save.mockClear();
+    saveChord?.();
+    await vi.waitFor(() => expect(mockClient.save).toHaveBeenCalledTimes(1));
+    expect(
+      saveMock,
+      "the save chord downloaded a package",
+    ).not.toHaveBeenCalled();
 
     extensions.destroy();
   });
@@ -378,6 +406,7 @@ describe("EditorSession", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {} },
@@ -446,6 +475,7 @@ describe("EditorSession", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {} },
@@ -503,6 +533,7 @@ describe("EditorSession", () => {
               addText: vi.fn(),
               setAuthoringView: vi.fn(),
               setRepaint: vi.fn(),
+              setMentions: vi.fn(),
             },
             cropManager: idleCrop(),
             historyManager: { attachGlobals: () => {} },
@@ -562,6 +593,7 @@ describe("EditorSession", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {} },
@@ -620,6 +652,7 @@ describe("EditorSession", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {} },
@@ -672,6 +705,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {} },
@@ -745,6 +779,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -828,6 +863,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -920,6 +956,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: {
@@ -998,6 +1035,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -1059,6 +1097,7 @@ describe("EditorSession", () => {
         addText: vi.fn(),
         setAuthoringView: vi.fn(),
         setRepaint: vi.fn(),
+        setMentions: vi.fn(),
       },
       cropManager: idleCrop(),
       historyManager: { attachGlobals: () => {} },
@@ -1140,6 +1179,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -1226,6 +1266,7 @@ describe("EditorSession", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -1391,6 +1432,7 @@ describe("EditorSession", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -1458,6 +1500,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -1706,6 +1749,7 @@ describe("a save the host refused", () => {
         addText: vi.fn(),
         setAuthoringView: vi.fn(),
         setRepaint: vi.fn(),
+        setMentions: vi.fn(),
       },
       cropManager: idleCrop(),
       historyManager: { attachGlobals: () => {} },
@@ -1853,7 +1897,12 @@ describe("a save the host refused", () => {
 
     await extensions.actionFacade().saveLibrary();
 
-    expect(onOpenTheme).toHaveBeenCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
     // Reloading is taking the stored version, not replacing it: nothing was
     // written a second time.
     expect(saves[1]).not.toHaveBeenCalled();
@@ -1949,11 +1998,21 @@ describe("a save the host refused", () => {
     const session = extensions.actionFacade();
 
     await session.openLibrary();
-    expect(onOpenTheme).toHaveBeenCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
 
     conflictMock.mockResolvedValueOnce("reload");
     await session.saveLibrary();
-    expect(onOpenTheme).toHaveBeenLastCalledWith(stored, {}, "base-as-stored");
+    expect(onOpenTheme).toHaveBeenLastCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+    );
     extensions.destroy();
   });
 
@@ -2006,6 +2065,7 @@ describe("a save that carries only what changed", () => {
         addText: vi.fn(),
         setAuthoringView: vi.fn(),
         setRepaint: vi.fn(),
+        setMentions: vi.fn(),
       },
       cropManager: idleCrop(),
       historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -2287,6 +2347,7 @@ describe("the Wallpaper Engine import transaction", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -2818,6 +2879,7 @@ describe("the local font import", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
@@ -2922,8 +2984,11 @@ describe("the local font import", () => {
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
-    expect(Object.values(presets)).toHaveLength(1);
-    expect(Object.values(presets)[0]).toMatchObject({
+    const faces = Object.values(presets).filter(
+      (preset) => preset.face !== undefined,
+    );
+    expect(faces).toHaveLength(1);
+    expect(faces[0]).toMatchObject({
       family: "Inter",
       weight: 700,
       face: { assetId: "Inter-Bold" },
@@ -2973,8 +3038,11 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     expect(
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens,
-    ).toBeUndefined();
+      Object.values(
+        (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
+          {},
+      ).filter((preset) => preset.face !== undefined),
+    ).toEqual([]);
     expect(saved?.[3]).toBeUndefined();
 
     extensions.destroy();
@@ -3067,8 +3135,11 @@ describe("the local font import", () => {
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
-    expect(Object.values(presets)).toHaveLength(1);
-    expect(Object.values(presets)[0]).toMatchObject({
+    const faces = Object.values(presets).filter(
+      (preset) => preset.face !== undefined,
+    );
+    expect(faces).toHaveLength(1);
+    expect(faces[0]).toMatchObject({
       face: { assetId: face.id },
     });
     const shipped = saved?.[3] as
@@ -3130,6 +3201,7 @@ describe("arming a text placement from every surface", () => {
         beginPlacement,
         setAuthoringView: vi.fn(),
         setRepaint: vi.fn(),
+        setMentions: vi.fn(),
       },
       cropManager: idleCrop(),
     };
@@ -3304,6 +3376,7 @@ describe("the session's disposal", () => {
             addText: vi.fn(),
             setAuthoringView: vi.fn(),
             setRepaint: vi.fn(),
+            setMentions: vi.fn(),
           },
           cropManager: idleCrop(),
           historyManager: { attachGlobals: () => {}, saveState: vi.fn() },

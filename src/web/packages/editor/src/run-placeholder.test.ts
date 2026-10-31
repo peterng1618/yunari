@@ -7,8 +7,16 @@ const bindings: readonly Binding[] = [
   { id: "unmapped", semanticKey: "gpu.temp" },
 ];
 
-const value = (bindingId: string): TextRun => ({ kind: "value", bindingId });
-const literal = (text: string): TextRun => ({ kind: "literal", text });
+const value = (bindingId: string): TextRun => ({
+  kind: "value",
+  bindingId,
+  typeToken: "typeTokens.body",
+});
+const literal = (text: string): TextRun => ({
+  kind: "literal",
+  text,
+  typeToken: "typeTokens.body",
+});
 
 describe("the authoring placeholder", () => {
   it("names the token a resolvable run will show", () => {

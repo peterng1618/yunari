@@ -225,6 +225,25 @@ test.describe("the header's publish surface", () => {
     // those numbers — a surface a person cannot reach is the defect, and a
     // scrollbar would not be the repair.
     const windowWidth = await page.evaluate(() => window.innerWidth);
+
+    // **The compact header is a layout, not a clipped row.** Below the
+    // breakpoint the brand and the menubar stand down, so the mode switch and
+    // the publish control are the two regions the header keeps — and the
+    // control the author presses is inside the window rather than past it.
+    await expect(page.locator(".editor-shell-header strong")).toBeHidden();
+    await expect(page.locator(".editor-shell-menubar")).toBeHidden();
+    await expect(page.locator(".editor-shell-mode-switch")).toBeVisible();
+    await expect(publish).toBeVisible();
+    const publishBox = await publish.boundingBox();
+    expect(
+      (publishBox?.x ?? 0) + (publishBox?.width ?? 0),
+      "the publish trigger ends inside the window",
+    ).toBeLessThanOrEqual(windowWidth + 1);
+    expect(
+      publishBox?.x ?? -1,
+      "the publish trigger begins inside the window",
+    ).toBeGreaterThanOrEqual(0);
+
     for (const [what, where] of [
       ["the publish surface", facts],
       ["the address", facts.locator("code")],

@@ -119,7 +119,7 @@ and a `project` input and uploads the PNGs as an artifact.
 
 ## Scratch
 
-Agent scratch belongs in `src/web/.agent-scratch/` or `/tmp` (drive-root
-`C:\tmp` on Windows). `npm run scratch:check` sweeps the tree for residue
-elsewhere. Do not commit scratch, coverage, Playwright output or downloaded
-binaries.
+Agent scratch belongs outside the tree: `os.tmpdir()` (`C:\tmp` on Windows)
+or a harness scratch directory. `npm run scratch:check` sweeps the tree for
+residue inside it. Do not commit scratch, coverage, Playwright output or
+downloaded binaries.

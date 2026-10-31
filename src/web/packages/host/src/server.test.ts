@@ -155,10 +155,15 @@ function createValidPackage(
     id,
     artboard: { width: 1920, height: 1080 },
     metadata: { name, themeLanguage: "en" },
-    ...(semanticKey === undefined
-      ? {}
-      : {
-          globals: {
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+      ...(semanticKey === undefined
+        ? {}
+        : {
             palette: {
               none: {
                 name: "None",
@@ -169,14 +174,8 @@ function createValidPackage(
                 value: { kind: "solid" as const, color: "#e8ecf3" },
               },
             },
-            typeTokens: {
-              "11-400": {
-                family: "system-ui, sans-serif",
-                weight: "400",
-              },
-            },
-          },
-        }),
+          }),
+    },
     scene: {
       version: "7.4.0",
       objects:
@@ -198,7 +197,7 @@ function createValidPackage(
                     {
                       kind: "value" as const,
                       bindingId: "readout-value",
-                      typeToken: "typeTokens.11-400" as const,
+                      typeToken: "typeTokens.body" as const,
                       style: { color: { ref: "palette.ink" as const } },
                     },
                   ],
@@ -241,6 +240,13 @@ function createPackageWithAsset(
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
     metadata: { themeLanguage: "en" },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
     assets: [
       {
@@ -1073,22 +1079,25 @@ describe("Host theme routes", () => {
       hosted.server,
       "PUT",
       "/api/themes/living-room",
-      themeBody({
-        envelope: {
-          ...document,
-          assets: Array.from({ length: 129 }, (_unused, index) => ({
-            id: `asset-${index}`,
-            kind: "image",
-            path: `assets/a${index}.png`,
-          })),
+      themeBody(
+        {
+          envelope: {
+            ...document,
+            assets: Array.from({ length: 129 }, (_unused, index) => ({
+              id: `asset-${index}`,
+              kind: "image",
+              path: `assets/a${index}.png`,
+            })),
+          },
+          assets: Object.fromEntries(
+            Array.from({ length: 129 }, (_unused, index) => [
+              `assets/a${index}.png`,
+              new Uint8Array(1),
+            ]),
+          ),
         },
-        assets: Object.fromEntries(
-          Array.from({ length: 129 }, (_unused, index) => [
-            `assets/a${index}.png`,
-            new Uint8Array(1),
-          ]),
-        ),
-      }),
+        { overwrite: true },
+      ),
     );
     expect(tooMany.status).toBe(413);
     expect(tooMany.text()).toContain("at most 128");
@@ -6120,7 +6129,6 @@ describe("A local monitor is specified rather than paired", () => {
       );
       expect(poll.status).toBe(200);
       expect((poll.json() as { display: unknown }).display).toEqual({
-        id: "left-screen",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -6819,6 +6827,57 @@ describe("The templates the host serves", () => {
     // Only a theme with a file can be displayed. Accepting the id here would
     // point every display at a package that does not exist.
     expect(res.status).toBe(404);
+  });
+
+  it("says which themes have a picture, so a row requests only those", async () => {
+    const library = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-listed-thumbs-"),
+    );
+    try {
+      const store = createThemeStore(library);
+      await store.write("pictured", createValidPackage("pictured", "Pictured"));
+      await store.write("bare", createValidPackage("bare", "Bare"));
+      const thumbnails = createThumbnailStore(library);
+      await thumbnails.write(
+        "pictured",
+        new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+          0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63,
+          0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84,
+          0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+          0xae, 0x42, 0x60, 0x82,
+        ]),
+      );
+      const listed = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: library, editor: library, admin: ADMIN_DIR },
+        themeStore: store,
+        thumbnails,
+        activeTheme: createActiveThemeStore(library),
+      });
+      try {
+        const body = (
+          await request(listed.server, "GET", "/api/themes/active")
+        ).json() as {
+          themes: readonly { id: string; thumbnail?: true }[];
+        };
+
+        // The absence is the truth: a theme with no picture has no key at all,
+        // so the page draws its stand-in without asking for an image.
+        expect(body.themes.map(({ id, thumbnail }) => [id, thumbnail])).toEqual(
+          [
+            ["bare", undefined],
+            ["pictured", true],
+          ],
+        );
+      } finally {
+        await listed.close();
+      }
+    } finally {
+      await fs.rm(library, { recursive: true, force: true });
+    }
   });
 });
 
@@ -9386,6 +9445,39 @@ describe("An admin write keeps the platform's words off the wire", () => {
     }
   });
 
+  it("forgets a removed theme's answers, and reports the removal when they cannot be", async () => {
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const hosted = await host({
+      themeStore: {
+        ...createThemeStore(os.tmpdir()),
+        remove: () => Promise.resolve(true),
+      },
+      themeSettings: {
+        ...createThemeSettingsStore(os.tmpdir()),
+        removeTheme: refusedWrite(),
+      },
+    });
+
+    try {
+      const answer = await request(
+        hosted.server,
+        "DELETE",
+        "/api/themes/living-room",
+      );
+
+      // The answers belong to a document nobody can open again. As with the
+      // origin sweep, the folder is already in the trash, so a failed cleanup
+      // is logged and the removal stands.
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toEqual({ ok: true });
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      await hosted.close();
+    }
+  });
+
   it("answers a fixed sentence when the trash refuses with a path-bearing message", async () => {
     const logged = vi
       .spyOn(console, "error")
@@ -9570,7 +9662,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: 5227,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
 
     // A `DisplayRecord` carries `tokenHash`, so a route that forwards `list()`
@@ -9581,8 +9673,8 @@ describe("The hosting route answers where a phone should point (§145)", () => {
     await displays.create("Kitchen phone", token);
     const withOne = await request(hosted.server, "GET", "/api/hosting");
     const peers = (
-      withOne.json() as { sessions: readonly Record<string, unknown>[] }
-    ).sessions;
+      withOne.json() as { displays: readonly Record<string, unknown>[] }
+    ).displays;
     expect(peers).toHaveLength(1);
     expect(peers[0]).not.toHaveProperty("tokenHash");
     expect(JSON.stringify(peers)).not.toContain(hashToken(token));
@@ -9619,7 +9711,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: null,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
   });
 
@@ -9664,7 +9756,7 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       name: null,
       port: 5227,
       refusal: null,
-      sessions: [],
+      displays: [],
     });
 
     // And the move does happen, once that answer has finished.
@@ -9986,7 +10078,6 @@ describe("The published endpoint", () => {
         id: null,
         revision: 0,
         display: {
-          id: LOCAL_DISPLAY_ID,
           theme: null,
           shape: "rect",
           rotation: 0,
@@ -10038,7 +10129,9 @@ describe("The published endpoint", () => {
         hosted.server,
         "PUT",
         "/api/themes/living-room",
-        themeBody(createValidPackage("living-room", "Renamed")),
+        themeBody(createValidPackage("living-room", "Renamed"), {
+          overwrite: true,
+        }),
       );
       const second = await publishedOf();
       expect(second.id).toBe("living-room");
@@ -10086,7 +10179,6 @@ describe("The published endpoint", () => {
       );
       expect(own.status).toBe(200);
       expect((own.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,
@@ -10108,7 +10200,6 @@ describe("The published endpoint", () => {
         },
       );
       expect((fallback.json() as { display: unknown }).display).toEqual({
-        id: "hallway-phone",
         theme: "living-room",
         shape: "rect",
         rotation: 0,
@@ -10155,7 +10246,6 @@ describe("The published endpoint", () => {
       );
       expect(linked.status).toBe(200);
       expect((linked.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -10174,7 +10264,6 @@ describe("The published endpoint", () => {
         },
       );
       expect((assigned.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,
@@ -10220,7 +10309,6 @@ describe("The published endpoint", () => {
       );
       expect(answer.status).toBe(200);
       expect((answer.json() as { display: unknown }).display).toEqual({
-        id: "kitchen-tablet",
         theme: "studio",
         shape: "rect",
         rotation: 0,
@@ -12319,6 +12407,21 @@ describe("The game box art route", () => {
     expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
   });
 
+  it("serves a launcher's own icon as image/x-icon", async () => {
+    const running = launch({ gameArtwork: source(["gog-1207658924"]) });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/gog-1207658924.ico",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/x-icon");
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
   it("404s a malformed name before the source is asked", async () => {
     let reads = 0;
     const running = launch({
@@ -12339,6 +12442,11 @@ describe("The game box art route", () => {
       "12345678901.jpg",
       "10.JPG",
       "..%2F10.jpg",
+      "10.ico",
+      "gog-1207658924.jpg",
+      "gog-1207658924.png",
+      "gog-.ico",
+      "gog-1234567890123.ico",
     ]) {
       expect(
         (await request(running.server, "GET", `/api/game/artwork/${name}`))
@@ -12356,6 +12464,16 @@ describe("The game box art route", () => {
     expect(
       (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
         .status,
+    ).toBe(404);
+    // A catalogue key never falls through to the app-id cover cache.
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/game/artwork/gog-1207658924.ico",
+        )
+      ).status,
     ).toBe(404);
   });
 

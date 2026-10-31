@@ -33,12 +33,16 @@ body,
    palette ahead of the bundle would have been. */
 :root {
   --shell-surface: #eff9f2bf;
+  /* A popover's own ground: the drawing fixes it at 95%, so a cell behind it
+     does not read as part of the menu. */
+  --shell-popover: #eff9f2f2;
   --shell-surface-strong: #f8fffbdf;
   --shell-edge: #26463833;
   --shell-text: #102119;
   --shell-muted: #4f6659;
   --shell-backdrop: linear-gradient(145deg, #d8ebe4, #afd4d1);
   --shell-accent: #1c6b4f;
+  --shell-attention: #9a4a00;
   --shell-warm: #8a5a2b;
   --shell-danger: color-mix(in srgb, #ff7e6e 40%, var(--shell-text));
   --shell-primary-bg: var(--shell-accent);
@@ -51,6 +55,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -151,11 +156,13 @@ body,
   :root {
     --shell-backdrop: #0b0e12;
     --shell-surface: #12161c;
+    --shell-popover: #12161cf2;
     --shell-surface-strong: #171c23;
     --shell-edge: #242b34;
     --shell-text: #e8ecf3;
     --shell-muted: #8a97ab;
     --shell-accent: #72e0c0;
+    --shell-attention: #ff9f45;
     --shell-warm: #f3aa64;
     --shell-danger: #ff7e6e;
     --shell-primary-bg: var(--shell-accent);
@@ -170,6 +177,7 @@ body,
     --muted: var(--shell-muted);
     --faint: #5a6675;
     --accent: var(--shell-accent);
+    --attention: var(--shell-attention);
     --warn: var(--shell-warm);
     --hot: var(--shell-danger);
     --stage: var(--shell-backdrop);
@@ -198,11 +206,13 @@ body,
 .editor-shell-palette-swatch {
   --shell-backdrop: #f5f1e8;
   --shell-surface: #fffdf7;
+  --shell-popover: #fffdf7f2;
   --shell-surface-strong: #fffdf7;
   --shell-edge: #14120e;
   --shell-text: #14120e;
   --shell-muted: #5a5449;
   --shell-accent: #14120e;
+  --shell-attention: #9a4a00;
   --shell-warm: #8a5a2b;
   --shell-danger: #a4291f;
   --shell-primary-bg: var(--shell-accent);
@@ -216,8 +226,8 @@ body,
      an alias is substituted where it is declared, so a root-only declaration
      would pin a subtree that re-declares `--shell-*` — the swatch chip — to
      the live palette. Nothing is renamed and no `--shell-*` is removed; this
-     block's thirteen lines are repeated in each palette below for that reason.
-     All thirteen of the roles are declared though three of them have no
+     block's fourteen lines are repeated in each palette below for that reason.
+     All fourteen of the roles are declared though three of them have no
      consumer yet, on the user's instruction: a DESIGN.md-named token the code
      lacks gets declared rather than worked around, which reverses the earlier
      "nothing declared for nothing" ruling recorded here.
@@ -240,6 +250,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -268,11 +279,13 @@ body,
 [data-shell-palette="graphite"] {
   --shell-backdrop: #0b0e12; /* --bg: the drawn ground is flat */
   --shell-surface: #12161c; /* --hdr and --panel, one value across the shell */
+  --shell-popover: #12161cf2;
   --shell-surface-strong: #171c23; /* --panel2 */
   --shell-edge: #242b34; /* --edge */
   --shell-text: #e8ecf3; /* --text */
   --shell-muted: #8a97ab; /* --muted */
   --shell-accent: #72e0c0; /* --accent */
+  --shell-attention: #ff9f45;
   --shell-warm: #f3aa64; /* no palette token: --warn is the product's own */
   --shell-danger: #ff7e6e; /* --hot */
   --shell-primary-bg: var(--shell-accent); /* the chip's `background` */
@@ -290,6 +303,7 @@ body,
   --muted: var(--shell-muted);
   --faint: #5a6675; /* --faint, the literal */
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -322,11 +336,13 @@ body,
 [data-shell-palette="ember"] {
   --shell-backdrop: #e9cdb4;
   --shell-surface: #f7e2d2;
+  --shell-popover: #f7e2d2f2;
   --shell-surface-strong: #fbeade;
   --shell-edge: #8a4a24;
   --shell-text: #2e1a0f;
   --shell-muted: #6d5138;
   --shell-accent: #8f4208;
+  --shell-attention: #0b5f66;
   /* The 4.5:1 rather than the pastel: `#ff7e6e` read at 1.98:1 on this paper.
      The hue is held and the lightness deepened; `#b81400` measures 5.34:1 on
      `--shell-surface` and 4.88:1 on the cluster's 95% fill over the canvas. */
@@ -348,6 +364,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -357,11 +374,13 @@ body,
 [data-shell-palette="moss"] {
   --shell-backdrop: #cfe0bb;
   --shell-surface: #e4efd9;
+  --shell-popover: #e4efd9f2;
   --shell-surface-strong: #eff6e7;
   --shell-edge: #4a6b2c;
   --shell-text: #1c2a12;
   --shell-muted: #4f6242;
   --shell-accent: #38601a;
+  --shell-attention: #8a4a00;
   /* Deepened as ember's, from `#e8c56a` at 1.40:1: 5.47:1 on the surface,
      4.99:1 on the cluster fill. */
   --shell-warm: #7a5800;
@@ -379,6 +398,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -388,11 +408,13 @@ body,
 [data-shell-palette="plum"] {
   --shell-backdrop: #dccdef;
   --shell-surface: #ece3f7;
+  --shell-popover: #ece3f7f2;
   --shell-surface-strong: #f3ecfb;
   --shell-edge: #5f3f86;
   --shell-text: #241634;
   --shell-muted: #5a4870;
   --shell-accent: #543484;
+  --shell-attention: #9a4a00;
   /* Deepened as ember's, from `#ffb2a1` at 1.39:1: 5.19:1 on the surface,
      4.74:1 on the cluster fill. */
   --shell-warm: #b82100;
@@ -410,6 +432,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -418,6 +441,7 @@ body,
 }
 [data-shell-palette="light"] {
   --shell-surface: #eff9f2bf;
+  --shell-popover: #eff9f2f2;
   --shell-surface-strong: #f8fffbdf;
   --shell-edge: #26463833;
   --shell-text: #102119;
@@ -426,6 +450,7 @@ body,
   /* The one palette that never declared an accent and inherited editorial's
      ink, which on mint read as a gap rather than as a choice. */
   --shell-accent: #1c6b4f;
+  --shell-attention: #9a4a00;
   /* `--warn` had no source here either: `--shell-warm` fell through to the
      baseline's editorial brown, so it is declared at the value it already
      resolved to rather than changed to a different hue in passing. */
@@ -447,6 +472,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -478,6 +504,10 @@ body,
    most of this block is referenced by nothing yet — the declared-and-never-
    consumed state the ratchet in `design-tokens.gated.json` exists to shrink. */
 @theme static {
+  /* The chrome's UI sans stack, the one DESIGN.md section 2 calls "UI sans".
+     A token so the normative front matter transcribes it rather than a string
+     no check can see. */
+  --font-ui: system-ui, sans-serif;
   --spacing: 0.25rem;
   --space-4: 4px;
   --space-6: 6px;
@@ -558,7 +588,7 @@ body,
   --field-label-width: 72px;
   --layer-rename-min-height: 22px;
   --view-readout-min-width: 56px;
-  --compact-layer-panel-width: 280px;
+  --compact-layer-panel-width: 246px;
   /* How wide the Host mode's sections run. A settings form is read, not
      scanned, and its rows are label-and-well pairs that a 2560px window would
      stretch past reading. The measure is its own. */
@@ -592,11 +622,13 @@ body,
 @theme inline {
   --color-shell-backdrop: var(--shell-backdrop);
   --color-shell-surface: var(--shell-surface);
+  --color-shell-popover: var(--shell-popover);
   --color-shell-surface-strong: var(--shell-surface-strong);
   --color-shell-edge: var(--shell-edge);
   --color-shell-text: var(--shell-text);
   --color-shell-muted: var(--shell-muted);
   --color-shell-accent: var(--shell-accent);
+  --color-shell-attention: var(--shell-attention);
   --color-shell-warm: var(--shell-warm);
   --color-shell-danger: var(--shell-danger);
   --color-shell-primary-bg: var(--shell-primary-bg);
@@ -619,6 +651,7 @@ body,
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
+  --color-attention: var(--attention);
   --color-warn: var(--warn);
   --color-hot: var(--hot);
   --color-hdr: var(--hdr);
@@ -770,9 +803,7 @@ body,
   height: 100%;
   color: var(--shell-text);
   background: var(--shell-backdrop);
-  font:
-    var(--text-md) / 1.4 system-ui,
-    sans-serif;
+  font: var(--text-md) / 1.4 var(--font-ui);
 }
 /* the header rule: the header is the window's top edge. A full-width 42px strip at
    elevation 0 with a hairline along its foot, rather than the floating glass
@@ -1031,6 +1062,34 @@ body,
 .editor-shell-menu-popup [role="menuitemradio"]:focus-visible {
   background: color-mix(in srgb, var(--shell-text) 12%, transparent);
   outline: none;
+}
+/* The inline `@` list the text manager opens at the caret. It is the menu
+   popup's paint built outside Base UI — document coordinates because Fabric's
+   caret rectangle already carries the canvas element's offset — so it states
+   its own box rather than borrowing a component's. Its rows are choice rows. */
+.editor-shell-text-mentions {
+  position: absolute;
+  z-index: 60;
+  min-width: var(--menu-min-width);
+  max-width: calc(var(--menu-min-width) * 2);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--shell-edge);
+  background: var(--shell-surface);
+  color: var(--shell-text);
+  box-shadow: var(--elev-2);
+}
+.editor-shell-text-mentions [role="option"] {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  cursor: pointer;
+}
+.editor-shell-text-mentions [role="option"][aria-selected="true"] {
+  background: color-mix(in srgb, var(--shell-text) 12%, transparent);
 }
 /* The chosen display's tick, in the gutter before the label. A fixed width so
    the labels stay left-aligned whether or not one is showing: picking a
@@ -1357,7 +1416,10 @@ body,
 .editor-shell-inspector h2 {
   margin: 0 0 12px;
   color: var(--shell-text);
-  font-family: var(--shell-display);
+  /* UI sans, not the palette's display face: §2 gives headings to the UI sans
+     and no clause grants chrome a serif. `--shell-display` still dresses the
+     brand and a dialog's lead. */
+  font-family: var(--font-ui);
   font-size: var(--text-md);
   line-height: var(--text-md--line-height);
   text-transform: uppercase;
@@ -1946,8 +2008,7 @@ body,
   cursor: pointer;
 }
 .editor-shell-dialog > button:hover {
-  border-color: var(--shell-accent);
-  color: var(--shell-accent);
+  border-color: var(--shell-muted);
 }
 
 /* The settings modal's own navigation and body. A `150px` column of three
@@ -3054,21 +3115,28 @@ body,
    feature value cannot be a custom property — the query is resolved from
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
-  /* The row does not fit a phone-width window — the brand, the three-label
-     mode switch, the menubar and the publish control are wider together than
-     the glass — and `overflow: hidden` is what keeps that fact inside the
-     header: without it the whole document widens, `documentElement.scrollWidth`
-     exceeds the viewport, and every popup positioned against the viewport then
-     believes there is room past the edge. Which of the four regions a
-     compact header keeps is a ruling this file does not make; the row's own
-     reachability is tracked on vg-707. */
+  /* **The compact header keeps the mode switch and the publish control.** The
+     brand and the menubar are the two regions that stand down: together with
+     the switch and the publish control they measure more than the glass, while
+     the switch alone plus publish fit. The menubar's actions stay on their
+     shortcuts, and the header is not where a phone-width author edits a
+     document's menus. The row does not wrap: the publish control is the
+     editor's one filled accent button and belongs at the right edge. */
+  .editor-shell-header strong,
+  .editor-shell-menubar {
+    display: none;
+  }
   .editor-shell-header {
+    justify-content: space-between;
+    /* Kept as the last line of defence at widths below the two controls'
+       min-content, where clipping is still better than a document that
+       widens and drags every viewport-positioned popup with it. */
     overflow: hidden;
   }
   .editor-shell-body {
     grid-template-areas: "rail panel stage";
-    /* 280px rather than the wide layout's 246px, because the stage is sharing
-       a narrow window with it. The bound column is what gives way first. */
+    /* 246px, DESIGN.md §7.3's default: the compact layout does not buy the
+       bound column room by taking it from the stage. */
     grid-template-columns: 46px var(--compact-layer-panel-width) minmax(0, 1fr);
   }
   .editor-shell-body[data-collapsed="true"] {

@@ -1,11 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import {
   ASSIGNABLE_GROUPS,
   type AssignableGroup,
   DEVICE_ID_PATTERN,
 } from "./devices.js";
 import { DEFAULT_DISPLAY } from "./displays.js";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * The answers a particular theme needed, stored per display and per theme.
@@ -99,28 +98,32 @@ function isLevel(value: unknown): boolean {
  * and a level that normalises to `{}` is dropped rather than written, so a
  * hand-edited file cannot introduce a display or a theme nothing else accepts
  * and no empty level reaches the disk.
+ *
+ * Both levels are built through `Object.fromEntries` rather than by assignment:
+ * `__proto__` is a legal theme id, and `level[id] = answers` would reach the
+ * prototype and lose the entry instead of storing it.
  */
 function normalizeLevels(input: unknown): Levels {
   if (!isObject(input)) return {};
 
-  const levels: Levels = {};
+  const pairs: [string, Record<string, ThemeAnswers>][] = [];
 
   for (const [display, rawLevel] of Object.entries(input)) {
     if (!DEVICE_ID_PATTERN.test(display) || !isObject(rawLevel)) continue;
 
-    const level: Record<string, ThemeAnswers> = {};
+    const level: [string, ThemeAnswers][] = [];
 
     for (const [id, rawAnswers] of Object.entries(rawLevel)) {
       if (!THEME_ID.test(id)) continue;
 
       const answers = normalizeAnswers(rawAnswers);
-      if (Object.keys(answers).length > 0) level[id] = answers;
+      if (Object.keys(answers).length > 0) level.push([id, answers]);
     }
 
-    if (Object.keys(level).length > 0) levels[display] = level;
+    if (level.length > 0) pairs.push([display, Object.fromEntries(level)]);
   }
 
-  return levels;
+  return Object.fromEntries(pairs);
 }
 
 /**
@@ -147,24 +150,13 @@ function asLevels(parsed: unknown): unknown {
     : parsed;
 }
 
-async function readLevels(file: string): Promise<Levels> {
-  try {
-    return normalizeLevels(asLevels(JSON.parse(await readFile(file, "utf8"))));
-  } catch {
-    // No file, or an unreadable one: nothing has been answered.
-    return {};
-  }
-}
-
 export function createThemeSettingsStore(
   directory: string,
 ): ThemeSettingsStore {
-  const file = path.join(directory, FILE);
-
-  const save = async (all: Levels): Promise<void> => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(file, `${JSON.stringify(all, null, 2)}\n`, "utf8");
-  };
+  const levels = createJsonFile<Levels>(directory, FILE, {
+    normalize: (parsed) => normalizeLevels(asLevels(parsed)),
+    empty: () => ({}),
+  });
 
   return {
     async read(display, themeId) {
@@ -172,7 +164,7 @@ export function createThemeSettingsStore(
         return {};
       }
 
-      return (await readLevels(file))[display]?.[themeId] ?? {};
+      return (await levels.read())[display]?.[themeId] ?? {};
     },
 
     async write(display, themeId, answers) {
@@ -185,39 +177,48 @@ export function createThemeSettingsStore(
       }
 
       const normalized = normalizeAnswers(answers);
-      const all = await readLevels(file);
-      // The whole map is normalized on the way out, so a theme that answered
-      // nothing leaves no entry behind and the other displays keep theirs.
-      await save(
-        normalizeLevels({
+
+      return levels.mutate((all) => ({
+        next: normalizeLevels({
           ...all,
           [display]: { ...all[display], [themeId]: normalized },
         }),
-      );
-
-      return normalized;
+        // The whole map is normalized on the way out, so a theme that answered
+        // nothing leaves no entry behind and the other displays keep theirs.
+        result: normalized,
+      }));
     },
 
     async removeTheme(themeId) {
       if (!THEME_ID.test(themeId)) return;
 
-      const all = await readLevels(file);
-      // Nothing to remove is no write: a file that could not be read reads as
-      // `{}`, and saving that would replace the file that is actually there.
-      if (!Object.values(all).some((level) => themeId in level)) return;
+      // A file that cannot be read is nothing to remove, and must not be
+      // replaced by the emptiness the read fell back to. `Object.hasOwn`, not
+      // `in`: `constructor` is a legal theme id, and `in` walks the prototype
+      // chain, so it would find an entry that is not there.
+      const all = await levels.read();
+      if (!Object.values(all).some((level) => Object.hasOwn(level, themeId))) {
+        return;
+      }
 
-      for (const level of Object.values(all)) delete level[themeId];
-      await save(normalizeLevels(all));
+      await levels.mutate((current) => {
+        for (const level of Object.values(current)) {
+          if (Object.hasOwn(level, themeId)) delete level[themeId];
+        }
+
+        return { next: normalizeLevels(current), result: undefined };
+      });
     },
 
     async removeDisplay(display) {
       if (!DEVICE_ID_PATTERN.test(display)) return;
 
-      const all = await readLevels(file);
-      if (!(display in all)) return;
+      if (!Object.hasOwn(await levels.read(), display)) return;
 
-      delete all[display];
-      await save(all);
+      await levels.mutate((current) => {
+        delete current[display];
+        return { next: current, result: undefined };
+      });
     },
   };
 }

@@ -11,7 +11,7 @@ import {
   settingsFieldsFor,
 } from "@yunari/renderer-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { isSettingVisible } from "../editor-shell/controls/settings-field.js";
+import { isSettingVisible } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ChartEdits } from "./chart-fields.js";
 import { CHART_PALETTE } from "./chart-fields-fixture.js";

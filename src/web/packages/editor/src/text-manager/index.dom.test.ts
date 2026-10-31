@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import type { SemanticKeyDescriptor, TextRun } from "@yunari/renderer-core";
 import { applyAuthoredText, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
 import { Canvas, IText, Textbox } from "fabric/es";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveRuntime } from "../live-runtime.js";
 import {
   createTextManager,
@@ -770,6 +771,29 @@ describe("placing a text by click or drag", () => {
     manager.destroy();
   });
 
+  it("cancels an idle arm without placing, and the next press selects", () => {
+    // Choosing another tool while the text tile is armed: the arm must not
+    // outlive that choice, or the author's next press on the canvas would place
+    // a text instead of selecting the object they just made (`vg-714`).
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.skipTargetFind = false;
+    canvas.selection = true;
+    canvas.defaultCursor = "default";
+
+    manager.beginPlacement(port);
+    expect(canvas.skipTargetFind).toBe(true);
+
+    manager.cancelPlacement();
+
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    expect(canvas.defaultCursor).toBe("default");
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
   it("cancels on Space before the viewport's pan can claim the canvas", () => {
     // Space is the viewport's pan key and claims the same three properties.
     // The gesture has to stand down first, or the pan captures the crosshair
@@ -1136,5 +1160,208 @@ describe("what a text object an author inserts can do", () => {
     // And the clip the object carries is the box, so the overflow is cut off
     // rather than merely reported. This is the visible half of the finding.
     expect(object.clipPath?.height).toBeCloseTo(box.height, 6);
+  });
+});
+
+/**
+ * The inline `@` list: a typed at-sign opens the readings a value run can
+ * name, typing filters them, and Tab takes one. The accepted reading is a
+ * structured run, never characters, so what follows it formats and reports a
+ * missing source like any other binding.
+ */
+describe("inline reading insert", () => {
+  const RAM: SemanticKeyDescriptor = {
+    key: "ram.used.percent",
+    family: "memory",
+    label: "RAM used",
+    expectedTier: "baseline",
+  };
+  const GPU: SemanticKeyDescriptor = {
+    key: "gpu.load.percent",
+    family: "gpu",
+    label: "GPU load",
+    expectedTier: "extended",
+  };
+  const PLAIN: TextRun = {
+    kind: "literal",
+    text: "Hi",
+    typeToken: "typeTokens.body",
+  };
+
+  afterEach(() => {
+    for (const overlay of document.querySelectorAll(
+      ".editor-shell-text-mentions",
+    )) {
+      overlay.remove();
+    }
+  });
+
+  /** A text with the given runs, added to its own canvas and left selected. */
+  function authored(runs: readonly TextRun[] = [PLAIN]): {
+    readonly canvas: Canvas;
+    readonly text: IText;
+  } {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const text = new IText("Hi", { id: "mention-text" });
+    text.set(YUNARI_TEXT_PROPERTY, { runs });
+    canvas.add(text);
+    canvas.setActiveObject(text);
+    return { canvas, text };
+  }
+
+  /** Puts Fabric's caret in the text once the manager is listening for it. */
+  function edit(text: IText): HTMLTextAreaElement {
+    text.enterEditing();
+    const textarea = text.hiddenTextarea;
+    if (textarea === null) throw new Error("Fabric did not create a textarea");
+    return textarea;
+  }
+
+  /** What the browser would do with a keystroke, for Fabric's own listener. */
+  function type(textarea: HTMLTextAreaElement, value: string): void {
+    textarea.value = value;
+    textarea.selectionStart = textarea.selectionEnd = value.length;
+    textarea.dispatchEvent(
+      new InputEvent("input", { data: value.slice(-1), bubbles: true }),
+    );
+  }
+
+  function press(textarea: HTMLTextAreaElement, key: string): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", {
+      key,
+      cancelable: true,
+      bubbles: true,
+    });
+    textarea.dispatchEvent(event);
+    return event;
+  }
+
+  function options(): readonly HTMLElement[] {
+    return [
+      ...document.querySelectorAll<HTMLElement>(
+        ".editor-shell-text-mentions [role='option']",
+      ),
+    ];
+  }
+
+  it("opens on a typed @, filters as the author types, and takes a reading with Tab", () => {
+    const { canvas, text } = authored();
+    const insert = vi.fn(() => true);
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert,
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    expect(options().map((row) => row.textContent)).toEqual([
+      "RAM used",
+      "GPU load",
+    ]);
+
+    type(textarea, "Hi @gp");
+    expect(options().map((row) => row.textContent)).toEqual(["GPU load"]);
+
+    const tab = press(textarea, "Tab");
+    expect(tab.defaultPrevented).toBe(true);
+    expect(insert).toHaveBeenCalledWith(text, {
+      text: "Hi @gp",
+      start: 3,
+      end: 6,
+      semanticKey: "gpu.load.percent",
+    });
+    expect(text.isEditing).toBe(false);
+  });
+
+  it("moves the highlight with the arrow keys", () => {
+    const { canvas, text } = authored();
+    const insert = vi.fn(
+      (_object: IText, _range: { readonly semanticKey: string }) => true,
+    );
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert,
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    press(textarea, "ArrowDown");
+    expect(options().map((row) => row.getAttribute("aria-selected"))).toEqual([
+      "false",
+      "true",
+    ]);
+
+    press(textarea, "Tab");
+    expect(insert.mock.calls[0]?.[1]).toMatchObject({
+      semanticKey: "gpu.load.percent",
+    });
+  });
+
+  it("keeps Space a space rather than accepting", () => {
+    const { canvas, text } = authored();
+    const insert = vi.fn(() => true);
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert,
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    type(textarea, "Hi @ra");
+    const space = press(textarea, " ");
+    expect(space.defaultPrevented).toBe(false);
+    expect(insert).not.toHaveBeenCalled();
+    expect(options()).toEqual([]);
+  });
+
+  it("closes on Escape without ending the edit", () => {
+    const { canvas, text } = authored();
+    const insert = vi.fn(() => true);
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert,
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    type(textarea, "Hi @ra");
+    const escape = press(textarea, "Escape");
+    expect(escape.defaultPrevented).toBe(true);
+    expect(options()).toEqual([]);
+    expect(text.isEditing).toBe(true);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("closes when the at-sign is deleted", () => {
+    const { canvas, text } = authored();
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert: vi.fn(() => true),
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    type(textarea, "Hi @ra");
+    expect(options()).toHaveLength(1);
+    type(textarea, "Hi ");
+    expect(options()).toEqual([]);
+  });
+
+  it("does not open for content a split cannot map", () => {
+    const { canvas, text } = authored([PLAIN, PLAIN]);
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert: vi.fn(() => true),
+    });
+    const textarea = edit(text);
+
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      insert: vi.fn(() => true),
+    });
+
+    type(textarea, "Hi @");
+    type(textarea, "Hi @ra");
+    expect(options()).toEqual([]);
   });
 });

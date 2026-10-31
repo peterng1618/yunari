@@ -592,6 +592,13 @@ describe("native editor shell", () => {
       id: "theme",
       artboard: { width: 100, height: 100 },
       metadata: { themeLanguage: "en" },
+      globals: {
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "monospace", weight: "400" },
+        },
+      },
     };
     const panel = new Rect({ id: "header", width: 40, height: 20 });
     panel.set("name", "Header rule");
@@ -657,6 +664,11 @@ function envelopeWith(
     artboard: ARTBOARD,
     background,
     globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
       palette: {
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
@@ -686,7 +698,9 @@ function legacyTextEnvelope(): NonNullable<
         ink: { name: "Ink", value: { kind: "solid", color: "#112233" } },
       },
       typeTokens: {
+        heading: { family: "Inter", weight: 600 },
         body: { family: "Inter", weight: 400 },
+        mono: { family: "Consolas, monospace", weight: 400 },
       },
     },
     metadata: { themeLanguage: "en" },

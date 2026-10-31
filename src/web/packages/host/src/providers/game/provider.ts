@@ -23,7 +23,7 @@ import type {
   SensorProvider,
 } from "../provider.js";
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
-import { findBoxArt } from "./box-art.js";
+import { catalogueArtworkUrl, findBoxArt } from "./box-art.js";
 import {
   type InstalledGame,
   readInstalledGames,
@@ -46,8 +46,9 @@ import type { StoreLookupResult } from "./store-metadata.js";
  * are each read once per demand window. `game.running` follows the classifier:
  * a catalogue match, a runtime marker, or two fullscreen samples of a known
  * engine window class. A Steam match still gives the name and, when Steam's
- * cache holds it, the local box art URL. `game.app` names the executable for
- * every process, game or not; a store lookup happens only when a name or
+ * cache holds it, the local box art URL; a catalogued launcher game names itself
+ * and serves the picture its launcher installed. `game.app` names the executable
+ * for every process, game or not; a store lookup happens only when a name or
  * artwork key is demanded and neither the catalogue nor Steam names the app.
  * A store failure is a gap for that key, never the provider's
  * failure, so presence keeps answering.
@@ -135,10 +136,10 @@ export interface GameStore {
   cover(appId: number, signal?: AbortSignal): Promise<string | undefined>;
 }
 
-/** What one demand window resolved: a catalogue name, a Steam app or a store match. */
+/** What one demand window resolved: a catalogue game, a Steam app or a store match. */
 interface GameIdentity {
-  /** The catalogue's name for the foreground game; it outranks every lookup. */
-  readonly catalogueName?: string;
+  /** The catalogue's entry for the foreground game; it outranks every lookup. */
+  readonly catalogue?: InstalledGame;
   readonly steam?: SteamApp;
   readonly store?: { readonly id: number; readonly name: string };
   /** The lookup had no answer, so "no such game" would be a false reason. */
@@ -540,7 +541,7 @@ export class GameProvider implements SensorProvider {
 
     if (catalogueGame !== undefined) {
       return {
-        catalogueName: catalogueGame.name,
+        catalogue: catalogueGame,
         ...(steam === undefined ? {} : { steam }),
       };
     }
@@ -593,8 +594,9 @@ export class GameProvider implements SensorProvider {
   }
 
   /**
-   * A local image stays first: only a matched app whose Steam cache is empty
-   * asks the store. The cover is fetched only for a demanded artwork key.
+   * A local image stays first: Steam's cache, then a launcher's own picture.
+   * Only a matched app with neither asks the store, and the cover is fetched
+   * only for a demanded artwork key.
    */
   async #artworkUrl(
     identity: GameIdentity | undefined,
@@ -611,6 +613,10 @@ export class GameProvider implements SensorProvider {
 
       const appId = Number.parseInt(steam.appId, 10);
       return this.#cover(appId);
+    }
+
+    if (identity?.catalogue !== undefined) {
+      return catalogueArtworkUrl(identity.catalogue);
     }
 
     const match = identity?.store;
@@ -671,7 +677,7 @@ export class GameProvider implements SensorProvider {
 
     if (semanticKey === "game.name") {
       const name =
-        identity?.catalogueName ??
+        identity?.catalogue?.name ??
         identity?.steam?.name ??
         identity?.store?.name;
 

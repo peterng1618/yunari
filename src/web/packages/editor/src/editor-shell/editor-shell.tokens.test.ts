@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { shellPalettes } from "./palette.js";
@@ -72,8 +73,8 @@ function declarationBlock(palette: string): string {
 }
 
 /** The `--shell-*` tokens a palette block must declare: every *source* a
- *  `--shell-*` role or its the palette alias can name. The eleven colours plus the
- *  primary button's pair.
+ *  `--shell-*` role or its the palette alias can name. The twelve colours plus
+ *  the primary button's pair.
  *
  *  `--shell-display` is deliberately absent: it is declared once on the
  *  baseline and inherited, it is not a colour, and requiring it per block
@@ -82,11 +83,13 @@ function declarationBlock(palette: string): string {
 const SOURCE_TOKENS = [
   "--shell-backdrop",
   "--shell-surface",
+  "--shell-popover",
   "--shell-surface-strong",
   "--shell-edge",
   "--shell-text",
   "--shell-muted",
   "--shell-accent",
+  "--shell-attention",
   "--shell-warm",
   "--shell-danger",
   "--shell-primary-bg",
@@ -94,6 +97,13 @@ const SOURCE_TOKENS = [
 ] as const;
 
 describe("shell token stylesheet", () => {
+  function sourceFiles(directory: string): readonly string[] {
+    return readdirSync(directory).flatMap((name) => {
+      const file = join(directory, name);
+      return statSync(file).isDirectory() ? sourceFiles(file) : [file];
+    });
+  }
+
   /** The defect this exists to prevent.
    *
    *  A `var(--yunari-x)` naming a token no declaration in scope provides is
@@ -132,6 +142,38 @@ describe("shell token stylesheet", () => {
       base?.at ?? Number.MAX_SAFE_INTEGER,
       "the :root control block must precede the palette blocks, or the base wins",
     ).toBeLessThan(graphiteBlockAt());
+  });
+
+  it("references only spacing steps the @theme block declares", () => {
+    const declaredSpacing = new Set(
+      [...themeBody().matchAll(/(--space-[a-z0-9-]+)\s*:/g)].flatMap((match) =>
+        match[1] === undefined ? [] : [match[1]],
+      ),
+    );
+    expect(
+      declaredSpacing.size,
+      "the @theme block declares no spacing",
+    ).toBeGreaterThan(0);
+
+    const sourceRoot = fileURLToPath(new URL("..", import.meta.url));
+    const unreferenced = sourceFiles(sourceRoot)
+      .filter((file) => /\.(ts|tsx)$/.test(file))
+      .flatMap((file) => {
+        const source = readFileSync(file, "utf8");
+        return [...source.matchAll(/var\((--space-[a-z0-9-]+)/g)].flatMap(
+          (match) => {
+            const token = match[1];
+            return token === undefined || declaredSpacing.has(token)
+              ? []
+              : [`${file}: ${token}`];
+          },
+        );
+      });
+
+    // A `var()` naming a step no declaration provides is invalid at
+    // computed-value time, so the declaration using it is dropped rather than
+    // falling back — invisible in review, jsdom and a class assertion.
+    expect(unreferenced).toEqual([]);
   });
 
   /** Choosing a palette the stylesheet does not name leaves the shell on
@@ -443,8 +485,8 @@ describe("shell token stylesheet", () => {
 
     // **One token is not a colour, and a `--color-*` name for it would compile
     // a broken utility** — Tailwind's namespaces are per type, so a font stack
-    // belongs in `--font-*`. Measured: the file declares twelve `--shell-*`
-    // tokens and eleven of them are colours, which the count below pins so
+    // belongs in `--font-*`. Measured: the file declares fourteen `--shell-*`
+    // tokens and thirteen of them are colours, which the count below pins so
     // this exclusion cannot quietly grow to swallow one.
     const NOT_A_COLOUR = new Set(["--shell-display"]);
     const declared = [...css.matchAll(/^\s*(--shell-[a-z-]+)\s*:/gm)].map(
@@ -453,7 +495,7 @@ describe("shell token stylesheet", () => {
     const colours = [...new Set(declared)].filter(
       (token) => !NOT_A_COLOUR.has(token),
     );
-    expect(colours, "the exclusion set is hiding a colour").toHaveLength(11);
+    expect(colours, "the exclusion set is hiding a colour").toHaveLength(13);
 
     for (const token of colours) {
       expect(
@@ -469,14 +511,14 @@ describe("shell token stylesheet", () => {
    *  `--shell-*` layer exists. An alias is substituted where it is declared, so
    *  a role declared once at `:root` would resolve the root's palette and pin a
    *  subtree that re-declares `--shell-*` — the swatch chip — to it. Every
-   *  palette therefore declares all thirteen, and each colour role that can hold
+   *  palette therefore declares all fourteen, and each colour role that can hold
    *  a plain colour gets a utility name so a React surface writes `bg-panel-2`
    *  rather than an arbitrary value; `--bg` and `--stage` cannot, and say why
    *  below.
    *
    *  `--stage`, `--hdr` and `--edge-2` were declared ahead of their consumers
    *  on the user's instruction, reversing the earlier "nothing declared for
-   *  nothing" ruling recorded here: the palette names all thirteen roles, and the gap
+   *  nothing" ruling recorded here: the palette names all fourteen roles, and the gap
    *  was the detail pass every later plan composes from. A colour declared for
    *  nothing is still the defect this plan exists to remove — the reversal is
    *  the user's, and the three now have a named consumer path. */
@@ -493,6 +535,7 @@ describe("shell token stylesheet", () => {
       "--muted",
       "--faint",
       "--accent",
+      "--attention",
       "--warn",
       "--hot",
     ];

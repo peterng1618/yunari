@@ -2,10 +2,10 @@ import jsQR from "jsqr";
 import { describe, expect, it } from "vitest";
 import { QUIET_ZONE_MODULES, qrMatrix } from "./qr-code.js";
 
-/** The payload this has to carry: what `main.ts` composes for a paired phone —
- *  a LAN address, the host's port, and the 43 characters `pairing.ts` mints
- *  from 32 bytes of CSPRNG. 77 characters, measured (the icon set probe). */
-const URL = `http://192.168.1.42:5227/?session=${"a".repeat(43)}`;
+/** The payload this has to carry: what `main.ts` prints for a paired phone —
+ *  a LAN address, the host's port, and the six characters `pairing-code.ts`
+ *  mints. The URL is arbitrary beyond that shape; the decode is the claim. */
+const URL = "http://192.168.1.42:5227/pair?code=ABC234";
 
 /** One block per module, at `scale` pixels a side, as the RGBA bytes a decoder
  *  reads. Written by hand rather than through a canvas: the decode is the claim,
@@ -64,7 +64,7 @@ describe("qrMatrix", () => {
   });
 
   it("sizes the symbol for the payload, not for a guess", () => {
-    // 77 bytes at error-correction M is QR version 5: 4 × 5 + 17 = 37 modules.
-    expect(qrMatrix(URL).length).toBe(37 + QUIET_ZONE_MODULES * 2);
+    // 41 bytes at error-correction M is QR version 3: 4 × 3 + 17 = 29 modules.
+    expect(qrMatrix(URL).length).toBe(29 + QUIET_ZONE_MODULES * 2);
   });
 });

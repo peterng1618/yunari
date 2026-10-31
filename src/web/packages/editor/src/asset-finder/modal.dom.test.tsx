@@ -648,11 +648,38 @@ describe("AssetFinder's media preview", () => {
 });
 
 describe("AssetFinder chips", () => {
-  it("draws no chip row for one source", async () => {
-    await render([lucide]);
+  it("draws a lone source's own chip, so the kind-off sentence has a control", async () => {
+    // One palette source beside one gradient source: switching the palette one
+    // off under All and filtering to Palettes leaves a single visible source,
+    // which is the state the threshold used to hide.
+    await render([colorhunt, uigradients]);
     await settle();
 
-    expect(document.querySelector("[data-yunari-asset-chip]")).toBeNull();
+    const chip = (): HTMLButtonElement | null =>
+      document.querySelector<HTMLButtonElement>(
+        '[data-yunari-asset-chip="colorhunt"]',
+      );
+    expect(chip()).not.toBeNull();
+
+    await act(async () => chip()?.click());
+    await settle();
+
+    // Choosing the kind with its only source off has no question to ask, so it
+    // must not issue an empty search and then blame the author's query.
+    await act(async () => tab("colour").click());
+    searchAssets.mockClear();
+    await act(async () => kindButton("palette").click());
+    await settle();
+
+    expect(searchAssets).not.toHaveBeenCalled();
+    expect(
+      document.querySelector("[data-yunari-asset-kind-off]")?.textContent,
+    ).toContain(uiCopy.assets.kindSourcesOff);
+    expect(chip()).not.toBeNull();
+
+    await act(async () => chip()?.click());
+    await settle();
+    expect(searchAssets.mock.calls.at(-1)?.[0]?.enabled).toEqual(["colorhunt"]);
   });
 
   it("still switches a chip where the browser refuses storage", async () => {

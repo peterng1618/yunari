@@ -51,6 +51,9 @@ export type FabricEnvelopeValidationResult =
   | { readonly ok: false; readonly issues: readonly ValidationIssue[] };
 
 export interface FabricEnvelopeValidationOptions {
+  /** Required by default: a persisted theme always carries `heading`, `body`
+   *  and `mono` (DESIGN.md §2). A reader opts out only when it is validating a
+   *  deliberately partial fixture, never a document it will store. */
   readonly requireTrioRoles?: boolean;
 }
 
@@ -126,7 +129,7 @@ export function validateFabricThemeEnvelope(
   fontPresetFaces(
     input["globals"],
     input["assets"],
-    options.requireTrioRoles === true,
+    options.requireTrioRoles !== false,
     issues,
   );
   const sceneIndex = scene(input["scene"], issues);
@@ -465,6 +468,44 @@ function sceneTypeReferences(
                   "out-of-range",
                   `${path}/yunariText/runs/${index}/style/fontSize`,
                   "A text run's fontSize must be above 0.",
+                ),
+              );
+            }
+          }
+          const lineHeight = style?.["lineHeight"];
+          if (lineHeight !== undefined) {
+            const value = isRecord(lineHeight)
+              ? lineHeight["value"]
+              : undefined;
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/lineHeight`,
+                  "A text run's lineHeight must be a finite number.",
+                ),
+              );
+            } else if (value <= 0) {
+              issues.push(
+                issue(
+                  "out-of-range",
+                  `${path}/yunariText/runs/${index}/style/lineHeight`,
+                  "A text run's lineHeight must be above 0.",
+                ),
+              );
+            }
+          }
+          const letterSpacing = style?.["letterSpacing"];
+          if (letterSpacing !== undefined) {
+            const value = isRecord(letterSpacing)
+              ? letterSpacing["value"]
+              : undefined;
+            if (typeof value !== "number" || !Number.isFinite(value)) {
+              issues.push(
+                issue(
+                  "wrong-type",
+                  `${path}/yunariText/runs/${index}/style/letterSpacing`,
+                  "A text run's letterSpacing must be a finite number.",
                 ),
               );
             }

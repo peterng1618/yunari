@@ -16,6 +16,11 @@ import {
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { cssArtboardPaint } from "@yunari/scene-fabric";
+import {
+  CREDITS,
+  readThemeCredits,
+  type ThemeCredits,
+} from "@yunari/theme-package";
 import { readContainedFile } from "./contained-read.js";
 import { moveToTrash } from "./trash.js";
 
@@ -68,12 +73,21 @@ interface ThemeStoreRecord extends ThemeStoreEntry {
   readonly base: string;
   readonly envelope: FabricThemeEnvelope;
   readonly assets: Readonly<Record<string, Uint8Array>>;
+  /** The package's attribution member, kept beside the document so reopening a
+   *  theme from the library does not lose what it credits. Absent when the
+   *  folder holds none, exactly as an author-less document has no `author`. */
+  readonly credits?: ThemeCredits;
 }
 
-/** What a theme folder holds: the document, and the bytes it declares. */
+/** What a theme folder holds: the document, the bytes it declares, and the
+ *  attribution those bytes arrived with. */
 export interface ThemeContent {
   readonly envelope: FabricThemeEnvelope;
   readonly assets: Readonly<Record<string, Uint8Array>>;
+  /** The package's `credits.json`, when the caller has one. Absent means the
+   *  stored folder holds none: the staging folder is written whole, so an
+   *  omitted member is not carried over from the copy being replaced. */
+  readonly credits?: ThemeCredits;
 }
 
 /**
@@ -256,6 +270,9 @@ type ScratchKind = "staging" | "retired";
  *  for the archive's envelope (95 MiB) so neither format accepts a theme the
  *  other would refuse. */
 const MAX_THEME_FILE_BYTES = 32 * 1024 * 1024;
+/** The attribution member's own ceiling. The reader caps the list at 256
+ *  entries; this bounds the bytes a hostile folder can make the host buffer. */
+const MAX_CREDITS_FILE_BYTES = 1024 * 1024;
 /** One asset's ceiling, and the trash route's own per-file cap: the bytes an
  *  editor sends it are the bytes this store would have accepted. */
 export const MAX_ASSET_BYTES = 80 * 1024 * 1024;
@@ -480,6 +497,22 @@ async function readDeclaredAsset(
     : undefined;
 }
 
+/**
+ * The folder's `credits.json`, or nothing.
+ *
+ * The package reader is the only parser, so a member this host writes and a
+ * member a package carried are read the same way. A file that is absent, too
+ * large or not a credits member answers nothing rather than refusing the theme:
+ * the document is what the author opened, and a malformed attribution file is
+ * not grounds to make a working theme unopenable.
+ */
+async function readStoredCredits(
+  root: string,
+): Promise<ThemeCredits | undefined> {
+  const bytes = await readContainedFile(root, CREDITS, MAX_CREDITS_FILE_BYTES);
+  return bytes === undefined ? undefined : readThemeCredits(bytes);
+}
+
 /** What the document says each path holds, for the assets it says it hashes. */
 function declaredHashes(
   envelope: FabricThemeEnvelope,
@@ -494,7 +527,6 @@ function declaredHashes(
   }
   return hashes;
 }
-
 /**
  * The declared paths the previous folder already holds correctly, with the size
  * of each, so a save can copy them across instead of rewriting them and weigh
@@ -582,6 +614,17 @@ function checked(
         declared.some((assetPath) => content.assets[assetPath] === undefined)))
   ) {
     throw new Error("Assets must exactly match the theme declaration.");
+  }
+  // The same reader a package's member goes through, so this store cannot hold
+  // an attribution file the reader would refuse to hand back. Validated before
+  // the folder is staged, so a refused member leaves the previous copy whole.
+  if (
+    content.credits !== undefined &&
+    readThemeCredits(
+      new TextEncoder().encode(JSON.stringify(content.credits)),
+    ) === undefined
+  ) {
+    throw new Error("A theme's credits are not a credits member.");
   }
   return envelope;
 }
@@ -861,12 +904,20 @@ export function createThemeStore(
           assets[assetPath] = new Uint8Array(bytes);
         }
 
-        return { ok: true, ...entry, base: stored.contentId, envelope, assets };
+        const credits = await readStoredCredits(path.join(directory, id));
+
+        return {
+          ok: true,
+          ...entry,
+          base: stored.contentId,
+          envelope,
+          assets,
+          ...(credits === undefined ? {} : { credits }),
+        };
       } catch {
         return undefined;
       }
     },
-
     /**
      * The document alone, unhashed: a route that serves or inspects the
      * document does not need every declared asset, and one that wants the
@@ -964,6 +1015,16 @@ export function createThemeStore(
         throw new ThemeIdTakenError(id);
       }
       const stored = await readStoredOrAbsent(directory, id);
+      // Neither a base nor an overwrite says "first save", so a first save onto
+      // a stored id is a refusal rather than a silent replacement: the
+      // caller's conflict road is the one that asks the author what to do.
+      if (
+        options?.overwrite !== true &&
+        options?.base === undefined &&
+        stored !== undefined
+      ) {
+        throw new ThemeConflictError(id);
+      }
       let reconstructFrom: StoredTheme | undefined;
       if (options?.overwrite !== true && options?.base !== undefined) {
         // A theme that is not stored cannot have been moved on, so a base
@@ -1041,6 +1102,15 @@ export function createThemeStore(
         }
         await fs.mkdir(path.join(staging, ASSETS_DIR), { recursive: true });
         await fs.writeFile(path.join(staging, THEME_FILE), serialized);
+        // The staging folder is written whole, so a save that carries no
+        // attribution writes none: a stale member is never copied forward from
+        // the folder being replaced.
+        if (content.credits !== undefined) {
+          await fs.writeFile(
+            path.join(staging, CREDITS),
+            JSON.stringify(content.credits),
+          );
+        }
         // The declaration, not the payload, is the list: every declared path
         // ends up in the folder, whether the save carried its bytes or the
         // folder being replaced already had them.

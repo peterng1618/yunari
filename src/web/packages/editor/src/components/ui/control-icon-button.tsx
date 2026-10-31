@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { useEffect, useRef } from "react";
 import { tooltip } from "../../editor-shell/controls/tooltip.js";
+import { destructiveMarker } from "../../object-actions.js";
 import {
   type ControlProps,
   describedBy,
@@ -52,11 +53,17 @@ export function useControlTooltip(
  * `label`, sets it as the `aria-label` and mounts {@link useControlTooltip} on
  * it, so neither can be changed without the other.
  *
- * `--hot` marks the destructive ones and only those; a destructive control
- * whose action is refused goes `--faint` rather than dimming red.
+ * `--hot` marks the destructive ones and only those, through the registry's
+ * `destructiveMarker`. The mark is not a class: a control whose action is
+ * refused goes `--faint` because the marker's rule excludes disabled and
+ * aria-disabled buttons.
  */
 export function ControlIconButton(
-  props: ControlProps & {
+  // No `hint`: this control's tooltip is its label, so there is nowhere a hint
+  // could be rendered that would not be a second tooltip owner. Omitting the
+  // prop is the contract half of the choice — a caller cannot hand it one and
+  // then wonder why it vanished.
+  props: Omit<ControlProps, "hint"> & {
     readonly destructive?: boolean;
     readonly shortcut?: { readonly printed: string; readonly spoken: string };
     /** A press that does nothing, without native `disabled`: the control keeps
@@ -84,16 +91,15 @@ export function ControlIconButton(
   const ref = useRef<HTMLButtonElement>(null);
   useControlTooltip(ref, label, shortcut);
 
-  const tone = blocked
-    ? "text-faint"
-    : destructive === true
-      ? "text-hot"
-      : "text-muted";
+  const tone = blocked ? "text-faint" : "text-muted";
 
   return (
     <span className="inline-flex items-center gap-[var(--space-6)]">
       <button
         {...data}
+        {...(destructive === true
+          ? destructiveMarker({ destructive: true })
+          : {})}
         ref={ref}
         id={ids.control}
         type="button"
@@ -115,7 +121,7 @@ export function ControlIconButton(
           if (blocked) return;
           onClick();
         }}
-        className={`inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent ${tone} hover:border-edge hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+        className={`inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent ${tone} enabled:hover:border-edge enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
       >
         {children}
       </button>

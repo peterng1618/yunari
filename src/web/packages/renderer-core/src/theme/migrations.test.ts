@@ -28,6 +28,13 @@ function envelope(
     id: "theme",
     metadata: { themeLanguage: "en" },
     artboard: { width: 400, height: 300 },
+    globals: {
+      typeTokens: {
+        heading: { family: "Inter", weight: 700 },
+        body: { family: "Inter", weight: 400 },
+        mono: { family: "Consolas, monospace", weight: 400 },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
   };
 }
@@ -211,10 +218,10 @@ describe("readFabricThemeEnvelope", () => {
       },
     };
 
-    expect(readFabricThemeEnvelope(noRoles).ok).toBe(true);
+    expect(readFabricThemeEnvelope(noRoles).ok).toBe(false);
     expect(
-      readFabricThemeEnvelope(noRoles, { requireTrioRoles: true }).ok,
-    ).toBe(false);
+      readFabricThemeEnvelope(noRoles, { requireTrioRoles: false }).ok,
+    ).toBe(true);
   });
 });
 

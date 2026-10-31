@@ -13,6 +13,7 @@ import {
 } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
 import { cpuCard } from "./new-fabric-theme-cards.js";
+import { starterTypeTokens } from "./new-fabric-theme-globals.js";
 import type { ObjectJson } from "./new-fabric-theme-objects.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -499,6 +500,7 @@ describe("a theme whose vocabulary is not the starter's", () => {
     },
     typeTokens: {
       label: { family: "Inter, sans-serif" },
+      ...starterTypeTokens,
     },
   } as FabricGlobals;
 
@@ -613,13 +615,12 @@ describe("a theme whose vocabulary is not the starter's", () => {
   });
 
   /**
-   * A theme older than the role ids still has a face, and a run must name one:
-   * the validator refuses a run whose `typeToken` does not resolve, so there is
-   * no literal home for it. The card lands on the theme's own token and says
-   * so; only the face moves, because the run's size, leading and tracking are
-   * its own `style`.
+   * A card names a role, and a theme always carries the role ids, so the copy
+   * keeps its own face instead of falling back to whatever token the document
+   * happened to list first. Only the geometry stays the card's own: the run's
+   * size, leading and tracking are its own `style`.
    */
-  it("maps a type reference to the theme's token and keeps the card's own size", () => {
+  it("keeps the role the theme declares, and the card's own size", () => {
     const copied = instantiateCard({
       unit: unit(CPU_CARD),
       globals: FOREIGN,
@@ -627,15 +628,21 @@ describe("a theme whose vocabulary is not the starter's", () => {
       origin: { left: 0, top: 0 },
     });
 
+    const declared = new Set([
+      "typeTokens.heading",
+      "typeTokens.body",
+      "typeTokens.mono",
+    ]);
     for (const run of runsOf(copied.card)) {
-      expect(run["typeToken"]).toBe("typeTokens.label");
+      expect(declared.has(String(run["typeToken"]))).toBe(true);
     }
     const value = runsOf(copied.card).find((run) => run["kind"] === "value");
     expect(value?.["style"]).toMatchObject({ fontSize: { value: 90 } });
-    expect(copied.substitutions).toContainEqual({
-      from: "typeTokens.heading",
-      to: "typeTokens.label",
-    });
+    expect(
+      copied.substitutions.filter((entry) =>
+        entry.from.startsWith("typeTokens."),
+      ),
+    ).toEqual([]);
   });
 
   it("refuses a type reference the theme has no token for, and names it", async () => {

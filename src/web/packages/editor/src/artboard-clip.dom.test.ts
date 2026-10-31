@@ -376,6 +376,11 @@ describe("the stage's artboard paint", () => {
       artboard: ARTBOARD,
       background,
       globals: {
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "monospace", weight: "400" },
+        },
         palette: {
           none: {
             name: "None",

@@ -269,6 +269,7 @@ export class EditorDocument {
     this.#library = new ThemeLibraryManager({
       snapshot: () => this.snapshot(),
       assets: this.#assets,
+      credits: () => this.#creditsPackage(),
       picture: () => this.picture(),
       // The baseline, not the document: a save in the same task has bumped no
       // revision, so the memo would answer for the old one.
@@ -481,24 +482,12 @@ export class EditorDocument {
 
       if (choice === "cancel") return false;
       if (choice === "save") {
-        // A replacement's save asks the same cleanup question, and a cleanup
-        // that stops there stops the replacement too: a save the author
-        // cancelled must not go on to discard the document behind it.
-        const cleanup = await this.confirmAssetCleanup();
-        if (!cleanup.proceed) {
-          if (cleanup.message !== undefined) {
-            this.#source.onError?.(cleanup.message);
-          }
-          return false;
-        }
-        await this.#persistence.save(
-          this.snapshot(),
-          this.#assets.assets,
-          undefined,
-          this.#creditsPackage(),
-        );
-        this.#dirty = undefined;
-        this.#source.onSaved("Theme package saved");
+        // Save means the library, not a package download. The library manager
+        // owns the cleanup question, the base and the failure report; a save
+        // that did not land leaves the dirty mark in place, and a replacement
+        // must not discard the document behind it.
+        await this.#library.save();
+        if (this.isDirty()) return false;
       }
     }
     return true;
@@ -576,8 +565,21 @@ export class EditorDocument {
     const presets = this.#envelope.globals?.typeTokens as
       | TypeTokens
       | undefined;
+    // A font is held by its family, not by its exact file: applying one cut
+    // adopts every weight and subset of the family, and only the chosen face is
+    // bound. Matching the asset id alone made the rest look unused, so the
+    // cleanup sheet offered the Vietnamese and bold faces for the trash.
+    const declared = this.#assets.declarations.find(
+      (asset) => asset.id === assetId,
+    );
+    const family =
+      declared !== undefined && "family" in declared
+        ? declared.family
+        : undefined;
     return Object.values(presets ?? {}).some(
-      (preset) => preset.face?.assetId === assetId,
+      (preset) =>
+        preset.face?.assetId === assetId ||
+        (family !== undefined && preset.family === family),
     );
   }
 
@@ -882,23 +884,18 @@ export class EditorDocument {
       id,
       replacement,
     );
+    // Before the fan-out, so a chart repaints against the paint it now names.
     this.#consumers.charts().reassignPaletteReferences(from, to);
-    // The artboard did not change, so nothing writes it: the colour the token
-    // painted now lives in the background layer, so the shell is told the new
-    // bag directly or the stage keeps painting the deleted token.
-    this.#writeEnvelope({
-      ...this.#envelope,
-      ...(background === undefined ? {} : { background }),
-      globals: { ...this.#envelope.globals, palette },
-    });
-    // After the globals fan-out: the new bag still names the token the palette
-    // no longer has, so it has to be repainted against the palette it now names.
-    this.#globalsChanged();
-    this.#shell.setBackground(background);
-    this.#consumers.palette().render(palette);
-    // A deletion is a discrete globals commit with no gesture to settle behind
-    // it; without an entry of its own a later undo's globals restore reverts it.
-    this.#shell.editor.historyManager.saveState();
+    this.#deleteGlobalsEntry(
+      { ...this.#envelope.globals, palette },
+      {
+        // The artboard did not change, so nothing writes it: the colour the
+        // token painted now lives in the background layer, and the shell is
+        // told that bag directly or the stage keeps painting the deleted token.
+        background,
+        repaint: () => this.#consumers.palette().render(palette),
+      },
+    );
   }
 
   setTypes(typeTokens: TypeTokens): void {
@@ -922,12 +919,48 @@ export class EditorDocument {
       id,
       replacement,
     );
+    this.#deleteGlobalsEntry(
+      { ...this.#envelope.globals, typeTokens },
+      { repaint: () => this.#consumers.types().render(typeTokens) },
+    );
+  }
+
+  /**
+   * Commits a globals bag that lost one entry of a keyed library.
+   *
+   * A palette token and a type preset are the same operation over different
+   * keys: repoint what named them, write the reduced bag, fan it out, repaint
+   * the pane that owns the library, and record the delete as its own undo step.
+   * A deletion is a discrete commit with no gesture to settle behind it;
+   * without an entry of its own, a later undo's globals restore reverts it.
+   *
+   * The palette's call site does the two things that are its own: chart series
+   * are re-pointed before this call, and the background layer holds the token as
+   * a colour reference, so its rewritten background rides the same envelope and
+   * reaches the stage after the fan-out.
+   */
+  #deleteGlobalsEntry(
+    globals: FabricGlobals,
+    commit: {
+      /** Present only when the deleted entry also rewrote the background. */
+      readonly background?: Background | undefined;
+      readonly repaint: () => void;
+    },
+  ): void {
+    const { background, repaint } = commit;
+    // Present even when it rewrote nothing: the shell is told the stage's bag
+    // either way, and only a delete that names the background layer passes it.
+    const namesBackground = "background" in commit;
     this.#writeEnvelope({
       ...this.#envelope,
-      globals: { ...this.#envelope.globals, typeTokens },
+      ...(background === undefined ? {} : { background }),
+      globals,
     });
+    // After the globals fan-out: the new bag still names the entry the library
+    // no longer has, so it has to be repainted against what it now names.
     this.#globalsChanged();
-    this.#consumers.types().render(typeTokens);
+    if (namesBackground) this.#shell.setBackground(background);
+    repaint();
     this.#shell.editor.historyManager.saveState();
   }
 
@@ -1061,12 +1094,19 @@ export class EditorDocument {
     );
     if (entries.length === 0) return;
     await this.#adoptCuts(entries);
-    let next = presets;
+    // Re-read after the await: an author can edit the tokens while the bytes
+    // are in flight, and writing the pre-await snapshot would drop that edit.
+    let next = this.#typeTokens();
+    let added = false;
     for (const role of missing) {
+      if (next[role] !== undefined) continue;
       const cut = trio.roles[role];
-      if (cut !== undefined) next = { ...next, [role]: rolePreset(cut) };
+      if (cut !== undefined) {
+        next = { ...next, [role]: rolePreset(cut) };
+        added = true;
+      }
     }
-    this.setTypes(next);
+    if (added) this.setTypes(next);
   }
 
   /** One token from one cut. A chosen role rewrites that role's token — the
@@ -1090,12 +1130,15 @@ export class EditorDocument {
         .filter((other) => other.id !== cut.id)
         .map((other) => ({ cut: other, role: role ?? "body" })),
     ]);
+    // The same re-read as `addTypeTokensFromTrio`: a token edited or created
+    // while the bytes were fetched must survive this write.
+    const current = this.#typeTokens();
     if (role !== null) {
-      this.setTypes({ ...presets, [role]: rolePreset(cut) });
+      this.setTypes({ ...current, [role]: rolePreset(cut) });
       return role;
     }
-    const id = freePresetId(presets);
-    this.setTypes({ ...presets, [id]: rolePreset(cut) });
+    const id = freePresetId(current);
+    this.setTypes({ ...current, [id]: rolePreset(cut) });
     return id;
   }
 

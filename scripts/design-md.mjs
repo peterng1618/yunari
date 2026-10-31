@@ -13,7 +13,8 @@
  *
  * `--sync` — the front matter's `spacing`, `rounded` and `typography` groups and
  * `editor-shell.css`'s `@theme static` block declare the same tokens with the
- * same values. The front matter is written *from* the CSS (design D4), and this
+ * same values. Every `typography` entry's `fontFamily` transcribes the single
+ * `--font-ui` stack, so a missing field or a different stack is a finding too. The front matter is written *from* the CSS (design D4), and this
  * is what stops the two parting: a step added to one and not the other, or a
  * value edited in one, is a finding rather than a surface that renders slightly
  * wrong with no error anywhere. Only that one block is read — not `:root`, not
@@ -65,8 +66,8 @@ function frontMatterText(design) {
  * matter. A deliberately small reader for a file this repo authors: top-level
  * `key:` opens a group, two-space `key: value` is a spacing/rounded step, and
  * under `typography` a two-space `key:` opens an entry whose four-space
- * `fontSize`/`lineHeight` carry its values. Any other key (`omitted`, `name`,
- * `fontFamily`) is ignored, not an error.
+ * `fontFamily`/`fontSize`/`lineHeight` carry its values. Any other key (`omitted`,
+ * `name`) is ignored, not an error.
  */
 function parseFrontMatter(design) {
   const groups = {
@@ -94,11 +95,17 @@ function parseFrontMatter(design) {
       if (indent <= 2) {
         const open = /^([^\s:]+)\s*:\s*$/.exec(trimmed);
         if (open) {
-          entry = { fontSize: undefined, lineHeight: undefined };
+          entry = {
+            fontFamily: undefined,
+            fontSize: undefined,
+            lineHeight: undefined,
+          };
           groups.typography.set(open[1], entry);
         }
       } else if (entry !== null) {
-        const field = /^(fontSize|lineHeight)\s*:\s*(.+)$/.exec(trimmed);
+        const field = /^(fontFamily|fontSize|lineHeight)\s*:\s*(.+)$/.exec(
+          trimmed,
+        );
         if (field) entry[field[1]] = field[2].trim();
       }
     }
@@ -187,6 +194,30 @@ export function checkSync(read, _opts = {}) {
       });
     }
   }
+
+  // Every typography entry transcribes the one UI sans stack. The format does
+  // not require the field and the linter does not miss it, so this check is
+  // what keeps the normative table from naming a face the chrome does not use.
+  const fontUi = have.get("--font-ui");
+  for (const [key, entry] of parseFrontMatter(read?.design).typography) {
+    const what = `text-${key}-fontFamily`;
+    if (entry.fontFamily === undefined) {
+      findings.push({
+        what,
+        why: `DESIGN.md's \`typography.${key}\` declares no \`fontFamily\`; every entry transcribes \`--font-ui\``,
+      });
+    } else if (fontUi === undefined) {
+      findings.push({
+        what,
+        why: `DESIGN.md's \`typography.${key}\` declares a \`fontFamily\` but editor-shell.css's \`@theme static\` declares no \`--font-ui\``,
+      });
+    } else if (normalise(entry.fontFamily) !== normalise(fontUi)) {
+      findings.push({
+        what,
+        why: `DESIGN.md's \`typography.${key}\` declares \`${entry.fontFamily}\` but editor-shell.css's \`--font-ui\` is \`${fontUi}\``,
+      });
+    }
+  }
   return findings;
 }
 
@@ -247,10 +278,37 @@ function selfTest() {
   sync(
     "the line-height companion is its own token",
     {
-      css: "@theme static {\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n",
-      design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n",
+      css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n",
+      design:
+        "typography:\n  md:\n    fontFamily: system-ui, sans-serif\n    fontSize: 13px\n    lineHeight: 1.3\n",
     },
     ["text-md--line-height"],
+  );
+  sync(
+    "a missing fontFamily is a finding",
+    {
+      css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.3;\n}\n",
+      design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n",
+    },
+    ["text-md-fontFamily"],
+  );
+  sync(
+    "a fontFamily that disagrees with --font-ui is a finding",
+    {
+      css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.3;\n}\n",
+      design:
+        "typography:\n  md:\n    fontFamily: serif\n    fontSize: 13px\n    lineHeight: 1.3\n",
+    },
+    ["text-md-fontFamily"],
+  );
+  sync(
+    "a fontFamily agreeing with --font-ui is not a finding",
+    {
+      css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.3;\n}\n",
+      design:
+        "typography:\n  md:\n    fontFamily: system-ui, sans-serif\n    fontSize: 13px\n    lineHeight: 1.3\n",
+    },
+    [],
   );
   sync(
     "agreement is not a finding",

@@ -197,7 +197,7 @@ export function SelectControl(
                 is 418 entries, so every zone past the fold was unreachable by
                 any means. `.editor-shell-menu-popup` states the same rule for
                 menus, which is where the failure was found the first time. */}
-            <Select.Popup className="max-h-[var(--available-height)] min-w-[10rem] overflow-y-auto rounded-md border border-edge bg-panel p-[var(--space-6)] text-sm text-text shadow-[var(--elev-2)]">
+            <Select.Popup className="max-h-[var(--available-height)] min-w-[10rem] overflow-y-auto rounded-md border border-edge bg-[var(--shell-popover)] p-[var(--space-6)] text-sm text-text shadow-[var(--elev-2)]">
               {optionRuns(options).map((run) => {
                 const items = run.options.map((option) => (
                   <Select.Item
@@ -224,7 +224,7 @@ export function SelectControl(
                   items
                 ) : (
                   <Select.Group key={run.group}>
-                    <Select.GroupLabel className="px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-2)] text-2xs uppercase tracking-wide text-faint">
+                    <Select.GroupLabel className="px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-4)] text-2xs uppercase tracking-wide text-faint">
                       {run.group}
                     </Select.GroupLabel>
                     {items}

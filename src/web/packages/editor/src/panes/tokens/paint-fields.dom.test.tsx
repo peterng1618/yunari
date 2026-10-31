@@ -511,6 +511,21 @@ it("refuses a value that is not a colour, and associates the reason with the fie
   expect(described).toContain("not-a-colour");
 });
 
+it("clears the invalid state when the author types back a paintable value", async () => {
+  const { host } = await mount(AUTHORED_RGB_PALETTE, "background");
+  const field = await openPicker(host);
+
+  await typeAndEnter(field, "not-a-colour");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+
+  // The state is derived from the current text rather than latched on the
+  // refused commit, so restoring a value the document can paint clears it.
+  await typeAndEnter(field, AUTHORED_RGB_HEX);
+  expect(field.getAttribute("aria-invalid")).toBeNull();
+  const described = field.getAttribute("aria-describedby") ?? "";
+  expect(described).not.toContain("not-a-colour");
+});
+
 it("shows an authored rgb() token as its hex form, in the trigger and the field", async () => {
   // Review Focus 1: the picker's one field is a colour, not a copy of the
   // document's spelling. The stored value's shape stays untouched elsewhere.

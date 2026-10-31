@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PAIRING_STORAGE_KEY } from "../../player/src/host-refind.js";
+import { snapQuarterTurn } from "../public/rotation.js";
 
 /**
  * `/pair.html`'s exchange, and what it leaves behind in storage.
@@ -32,7 +33,12 @@ const BODY_HTML = PAGE.slice(
   PAGE.indexOf("</body>"),
 ).replace(/<script[\s\S]*?<\/script>/, "");
 
-const SCRIPT = PAGE.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+/** The page's script, with its one import replaced by a parameter: the harness
+ *  runs the page's own code, and the imported rule is handed to it the way the
+ *  browser would. */
+const SCRIPT = (
+  PAGE.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ""
+).replace(/import[^;]*from "\/rotation\.js";/, "");
 
 /** The key the page clears, read out of its own script. The page has no build
  *  step, so it cannot import the player's constant; this is the contract
@@ -44,7 +50,11 @@ const AsyncFunction = Object.getPrototypeOf(
   async (): Promise<void> => undefined,
 ).constructor as new (
   ...parameters: string[]
-) => (fetch: unknown, location: unknown) => Promise<void>;
+) => (
+  fetch: unknown,
+  location: unknown,
+  quarterTurn: (degrees: number) => number,
+) => Promise<void>;
 
 function json(body: unknown): Response {
   return {
@@ -66,10 +76,14 @@ async function pair(): Promise<readonly string[]> {
     throw new Error(`the page fetched ${input}, which no case stubs`);
   });
 
-  await new AsyncFunction("fetch", "location", SCRIPT)(fetchStub, {
-    search: "",
-    replace: (url: string) => replaced.push(url),
-  });
+  await new AsyncFunction("fetch", "location", "quarterTurn", SCRIPT)(
+    fetchStub,
+    {
+      search: "",
+      replace: (url: string) => replaced.push(url),
+    },
+    snapQuarterTurn,
+  );
 
   const form = document.querySelector("form") as HTMLFormElement;
   form.dispatchEvent(new Event("submit", { cancelable: true }));
@@ -97,10 +111,14 @@ describe("pairing a display", () => {
     // assignment is keyed by the old id.
     document.body.innerHTML = BODY_HTML;
 
-    await new AsyncFunction("fetch", "location", SCRIPT)(vi.fn(), {
-      search: "?reason=unpaired",
-      replace: () => undefined,
-    });
+    await new AsyncFunction("fetch", "location", "quarterTurn", SCRIPT)(
+      vi.fn(),
+      {
+        search: "?reason=unpaired",
+        replace: () => undefined,
+      },
+      snapQuarterTurn,
+    );
 
     const status = document.querySelector<HTMLElement>("#status");
     expect(status?.hidden).toBe(false);
@@ -111,10 +129,14 @@ describe("pairing a display", () => {
   it("says nothing when it was opened to pair a new display", async () => {
     document.body.innerHTML = BODY_HTML;
 
-    await new AsyncFunction("fetch", "location", SCRIPT)(vi.fn(), {
-      search: "",
-      replace: () => undefined,
-    });
+    await new AsyncFunction("fetch", "location", "quarterTurn", SCRIPT)(
+      vi.fn(),
+      {
+        search: "",
+        replace: () => undefined,
+      },
+      snapQuarterTurn,
+    );
 
     expect(document.querySelector<HTMLElement>("#status")?.hidden).toBe(true);
   });
@@ -140,9 +162,10 @@ describe("pairing a display", () => {
     document.body.innerHTML = BODY_HTML;
     // No submit here: this case is the shape control alone, and the page's
     // claim does not fire until the form is sent.
-    await new AsyncFunction("fetch", "location", SCRIPT)(
+    await new AsyncFunction("fetch", "location", "quarterTurn", SCRIPT)(
       vi.fn(async () => json({})),
       { search: "", replace: () => {} },
+      snapQuarterTurn,
     );
 
     const shape = document.querySelector("#shape") as HTMLSelectElement;

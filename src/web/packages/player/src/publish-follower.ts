@@ -23,7 +23,11 @@
  * existing mount instead of reloading.
  */
 
-import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
+import {
+  type DisplayPresentation,
+  type DisplayShape,
+  rotationAllowed,
+} from "@yunari/renderer-core";
 
 interface PublishFollowerSession {
   readonly pageUrl: string;
@@ -167,10 +171,7 @@ export function followPublished(
         if (
           (shape === "rect" || shape === "circle") &&
           typeof rotation === "number" &&
-          Number.isInteger(rotation) &&
-          rotation >= 0 &&
-          rotation < 360 &&
-          (shape === "circle" || rotation % 90 === 0)
+          rotationAllowed(shape, rotation)
         ) {
           if (
             lastPresentation === undefined ||

@@ -380,6 +380,10 @@ export const uiCopy = {
     ellipsis: "Ellipsis",
     overflowVisible: "Visible",
   },
+  /** The inline `@` list's own name, so the popup announces what it offers. */
+  textMentions: {
+    label: "Readings",
+  },
   menus: {
     /** The menubar's own name, so a screen reader reaching the three menus is
      *  told what the group is before it reads each one. */
@@ -1888,6 +1892,13 @@ export const uiCopy = {
     short: "Short",
     long: "Long",
   },
+  /** The Document pane's attribution section. The title, author, licence and
+   *  address are the package's data; these three words are the only copy the
+   *  editor adds around them. */
+  credits: {
+    by: (name: string): string => `By ${name}`,
+    steam: (id: string): string => `Steam ${id}`,
+  },
   /** Panel copy. Panel factories own their DOM contract; this owns the words. */
   panels: {
     layers: "Layers",
@@ -2046,6 +2057,9 @@ export const uiCopy = {
      *  size, the paint and the media the board is drawn on. */
     themeMetadata: "Theme metadata",
     artboard: "Artboard",
+    /** The Document pane's third section: the attribution the theme's imported
+     *  assets arrived with. It is drawn only when the theme credits anything. */
+    credits: "Credits",
     language: "Theme language",
     /** The sample's own row label, one word because it shares the 72px label
      * column every other field on this panel uses. */

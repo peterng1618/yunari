@@ -181,7 +181,7 @@ export function FontMetadataForm(props: {
       data-yunari-font-details=""
       className="flex flex-col gap-[var(--space-8)] border-t border-edge-2 bg-panel-2 p-[var(--space-8)]"
     >
-      <div className="flex flex-col gap-[var(--space-2)]">
+      <div className="flex flex-col gap-[var(--space-4)]">
         <h4 className="text-2xs font-semibold uppercase tracking-[0.11em] text-faint">
           {uiCopy.panels.fontDetails}
         </h4>

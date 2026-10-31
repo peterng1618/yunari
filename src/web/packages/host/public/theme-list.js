@@ -269,16 +269,11 @@ export function themeList(
   const column = document.createElement("div");
   column.className = "theme-list";
 
-  const addDisplay = ({ id, label, kind, theme, isDefault }) => {
+  const addDisplay = ({ id, label, theme, isDefault }) => {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "theme-option";
     row.dataset.display = id;
-    // The kind is published on the row for a page that wants it, and is not read
-    // back by the warning below: that asks the `displays` array for the row
-    // `selected` names, which is the one fact the two would have to share. The
-    // default row is the fallback rather than a display, so it carries none.
-    if (kind !== undefined) row.dataset.kind = kind;
     row.setAttribute("aria-pressed", String(id === selected));
     row.append(rowText(label, heldText(theme, isDefault)));
     row.addEventListener("click", () => onSelect?.(id));
@@ -295,7 +290,6 @@ export function themeList(
     addDisplay({
       id: display.id,
       label: display.label,
-      kind: display.kind,
       theme: display.theme,
     });
   }
@@ -344,18 +338,22 @@ export function themeList(
     row.dataset.theme = theme.id;
     row.setAttribute("aria-pressed", String(theme.id === showing));
 
-    const shot = document.createElement("img");
-    shot.className = "theme-shot";
-    // The row already names the theme, so the picture adds nothing to read.
-    shot.alt = "";
-    shot.src = `/api/themes/${encodeURIComponent(theme.id)}/thumbnail`;
-    // No picture is a normal state, not a broken one: the element is swapped
-    // for one of the same size, because an `<img>` whose source failed keeps
-    // drawing the browser's own broken-image glyph over the space.
-    shot.addEventListener("error", () => {
-      shot.replaceWith(placeholder());
-    });
-    row.append(shot);
+    // The listing says whether a picture exists, so a theme without one draws
+    // the fallback directly: requesting an image that is not there logged a 404
+    // per theme on every clean load (`vg-655`). No picture is a normal state,
+    // not a broken one — and an `<img>` whose source failed keeps drawing the
+    // browser's own broken-image glyph over the space, which is why the
+    // fallback is the element rather than an error handler.
+    if (theme.thumbnail === true) {
+      const shot = document.createElement("img");
+      shot.className = "theme-shot";
+      // The row already names the theme, so the picture adds nothing to read.
+      shot.alt = "";
+      shot.src = `/api/themes/${encodeURIComponent(theme.id)}/thumbnail`;
+      row.append(shot);
+    } else {
+      row.append(placeholder());
+    }
 
     const named = theme.name ?? theme.id;
     // Two themes can share a display name; the id tells them apart.

@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { createJsonFile } from "./json-file.js";
 
 /**
  * Which physical device answers a theme's abstract sensor (§145, "device
@@ -99,24 +98,17 @@ export function normalizeDeviceSettings(input: unknown): DeviceSettings {
 export function createDeviceSettingsStore(
   directory: string,
 ): DeviceSettingsStore {
-  const file = path.join(directory, FILE);
+  const stored = createJsonFile(directory, FILE, {
+    normalize: normalizeDeviceSettings,
+    empty: () => EMPTY_DEVICE_SETTINGS,
+  });
 
   return {
-    async read(): Promise<DeviceSettings> {
-      try {
-        return normalizeDeviceSettings(
-          JSON.parse(await readFile(file, "utf8")),
-        );
-      } catch {
-        // No file, or an unreadable one, means defaults. Never fail a poll.
-        return EMPTY_DEVICE_SETTINGS;
-      }
-    },
+    read: () => stored.read(),
 
-    async write(input: unknown): Promise<DeviceSettings> {
+    async write(input) {
       const normalized = normalizeDeviceSettings(input);
-      await mkdir(directory, { recursive: true });
-      await writeFile(file, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
+      await stored.write(normalized);
       return normalized;
     },
   };

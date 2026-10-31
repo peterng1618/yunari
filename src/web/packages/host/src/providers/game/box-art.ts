@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { InstalledGame } from "./catalogue/catalogue.js";
 import {
   readSteamApps,
   resolveSteamRoot,
@@ -7,9 +8,10 @@ import {
 } from "./steam-library.js";
 
 /**
- * The running Steam game's box art, read from the cache Steam writes itself.
+ * The running Steam game's box art, read from the cache Steam writes itself,
+ * and a launcher's own icon for a catalogued game.
  *
- * The file lives at `<steam>/appcache/librarycache/<appId>/library_600x900.jpg`.
+ * The Steam file lives at `<steam>/appcache/librarycache/<appId>/library_600x900.jpg`.
  * Only that name is served: the same folder holds a header, a hero and a logo,
  * and a route keyed by app id must not become a listing of Steam's cache.
  * The bytes never leave this machine, so a display's library
@@ -19,11 +21,26 @@ import {
 export const GAME_ARTWORK_PREFIX = "/api/game/artwork/";
 /** A decimal app id of 1–10 digits; the path segment is the whole allow-list. */
 export const GAME_APP_ID = /^\d{1,10}$/;
+/** A launcher's own picture: `<source>-<id>`, never a Steam app id. */
+export const GAME_ARTWORK_KEY = /^(?:\d{1,10}|gog-\d{1,12})$/;
 export const MAX_BOX_ART_BYTES = 5 * 1024 * 1024;
 const BOX_ART_FILE = "library_600x900.jpg";
 
+export function isCatalogueArtworkKey(key: string): boolean {
+  return key.includes("-") && GAME_ARTWORK_KEY.test(key);
+}
+
 export function gameArtworkUrl(appId: string): string {
   return `${GAME_ARTWORK_PREFIX}${appId}.jpg`;
+}
+
+/** The route a catalogued game's own local picture is served under. */
+export function catalogueArtworkUrl(game: InstalledGame): string | undefined {
+  const artwork = game.artwork;
+
+  return artwork === undefined
+    ? undefined
+    : `${GAME_ARTWORK_PREFIX}${artwork.source}-${artwork.id}.${artwork.extension}`;
 }
 
 /**
@@ -143,12 +160,11 @@ function sniffImage(bytes: Uint8Array): CoverExtension | undefined {
 }
 
 /**
- * The canonical path when the file resolves inside the cache directory, so the
- * caller stats and reads exactly what containment approved. A junction or
- * symlink named `<appId>.<ext>` must not turn the route into a read of an
- * arbitrary user file.
+ * The canonical path when the file resolves inside the directory, so the caller
+ * stats and reads exactly what containment approved. A junction or symlink must
+ * not turn a route read into an arbitrary user file.
  */
-async function resolveInCoverCache(
+async function resolveWithin(
   directory: string,
   file: string,
 ): Promise<string | undefined> {
@@ -189,7 +205,7 @@ export async function readCachedCover(
   const id = Number(appId);
   if (!Number.isInteger(id) || id <= 0) return undefined;
 
-  const real = await resolveInCoverCache(
+  const real = await resolveWithin(
     cacheDir,
     path.join(cacheDir, `${id}.${extension}`),
   );
@@ -207,26 +223,60 @@ export async function readCachedCover(
 export interface GameArtworkOptions {
   readonly steamRoot?: () => Promise<string | undefined>;
   readonly loadSteamApps?: (root: string) => Promise<readonly SteamApp[]>;
+  /** The installed catalogue, for a launcher's own picture. */
+  readonly catalogue?: () => Promise<readonly InstalledGame[]>;
 }
 
 /**
  * The route's view of the local library: an id must be an installed app before
- * its cache file is read, so an arbitrary id cannot probe the filesystem.
+ * its cache file is read, and a catalogue key must name a game that carries its
+ * launcher's picture, so an arbitrary key cannot probe the filesystem.
  */
 export function createGameArtwork(
   options: GameArtworkOptions = {},
 ): GameArtworkSource {
   const resolveRoot = options.steamRoot ?? (() => resolveSteamRoot());
   const loadSteamApps = options.loadSteamApps ?? readSteamApps;
-  // ponytail: the root and its apps are held for the process's life. A game
-  // installed while the host runs appears after a restart; add a TTL here when
-  // that matters.
+  const loadCatalogue = options.catalogue;
+  // ponytail: the root, its apps and the catalogue are held for the process's
+  // life. A game installed while the host runs appears after a restart; add a
+  // TTL here when that matters.
   let root: string | undefined;
   let apps: readonly SteamApp[] | undefined;
+  let games: readonly InstalledGame[] | undefined;
+
+  async function readCatalogueArtwork(
+    key: string,
+  ): Promise<Uint8Array | undefined> {
+    if (loadCatalogue === undefined) return undefined;
+
+    if (games === undefined) {
+      try {
+        games = await loadCatalogue();
+      } catch {
+        // A failed read is not cached: the next request retries rather than
+        // disabling launcher art for the rest of the process's life.
+        return undefined;
+      }
+    }
+
+    const game = games.find(
+      (entry) =>
+        entry.artwork !== undefined &&
+        `${entry.artwork.source}-${entry.artwork.id}` === key,
+    );
+    const file = game?.artwork?.file;
+
+    if (game === undefined || file === undefined) return undefined;
+
+    const real = await resolveWithin(game.installDir, file);
+    return real === undefined ? undefined : readBoxArt(real);
+  }
 
   return {
-    async read(appId) {
-      if (!GAME_APP_ID.test(appId)) return undefined;
+    async read(key) {
+      if (isCatalogueArtworkKey(key)) return readCatalogueArtwork(key);
+      if (!GAME_APP_ID.test(key)) return undefined;
 
       root ??= await resolveRoot().catch(() => undefined);
       if (root === undefined) return undefined;
@@ -241,9 +291,9 @@ export function createGameArtwork(
         }
       }
 
-      if (!apps.some((app) => app.appId === appId)) return undefined;
+      if (!apps.some((app) => app.appId === key)) return undefined;
 
-      const file = await locateBoxArt(appId, [root]);
+      const file = await locateBoxArt(key, [root]);
       return file === undefined ? undefined : readBoxArt(file);
     },
   };

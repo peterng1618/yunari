@@ -70,7 +70,7 @@ const RUN_CLASSES = "flex flex-col gap-[var(--space-4)]";
 
 /** The eyebrow, over a run's rows. */
 const RUN_HEADING_CLASSES =
-  "px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-2)] text-2xs font-semibold tracking-[0.11em] text-faint uppercase";
+  "px-[var(--space-8)] pt-[var(--space-6)] pb-[var(--space-4)] text-2xs font-semibold tracking-[0.11em] text-faint uppercase";
 
 const facetOptionId = (facetId: string, optionId: string): string =>
   `${facetTriggerId(facetId)}-${optionId}`;
@@ -124,7 +124,7 @@ function FacetButton(props: {
           <Popover.Popup
             aria-label={facet.name}
             data-yunari-facet-popup={facet.id}
-            className="flex max-h-[var(--available-height)] w-[16rem] flex-col gap-[var(--space-4)] overflow-y-auto rounded-xl border border-edge bg-panel p-[var(--space-8)] shadow-[var(--elev-2)]"
+            className="flex max-h-[var(--available-height)] w-[16rem] flex-col gap-[var(--space-4)] overflow-y-auto rounded-xl border border-edge bg-[var(--shell-popover)] p-[var(--space-8)] shadow-[var(--elev-2)]"
           >
             {/* The sentence the surface puts above the groups, where the facet
                 has one. It is the facet's own data rather than a Shape special

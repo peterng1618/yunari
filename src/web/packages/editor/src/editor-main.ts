@@ -7,6 +7,7 @@ import {
   loadFontAssets,
   startSceneRefresh,
 } from "@yunari/scene-fabric";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { AssetManager } from "./asset-manager/index.js";
 import { EditorSession } from "./editor-session.js";
 import {
@@ -88,24 +89,36 @@ async function start(): Promise<void> {
    *  nothing in the boot writes (vg-511). */
   let refusedDraftRestore: string | undefined;
   /** The open document as the autosave asks it. `isDirty` is the session's own,
-   *  pulled rather than held, so nothing here re-derives what "saved" means. */
+   *  pulled rather than held, so nothing here re-derives what "saved" means.
+   *  **One source per mounted document**: the autosave compares this object to
+   *  notice a switch, and a fresh object every tick would make every tick look
+   *  like one (`vg-541`). */
+  let draftSource:
+    | { readonly active: ActiveEditor; readonly source: DraftSource }
+    | undefined;
   const draftDocument = (): DraftSource | undefined => {
     if (active === undefined) return undefined;
-    const extensions = active.extensions;
-    return {
-      isDirty: () => extensions.isDirty(),
-      draft: () => {
-        const content = extensions.snapshot();
-        return {
-          name: documentNameOf({
-            name: content.metadata?.name,
-            id: content.id,
-          }),
-          savedAt: new Date().toISOString(),
-          content,
-        };
-      },
-    };
+    if (draftSource?.active !== active) {
+      const extensions = active.extensions;
+      draftSource = {
+        active,
+        source: {
+          isDirty: () => extensions.isDirty(),
+          draft: () => {
+            const content = extensions.snapshot();
+            return {
+              name: documentNameOf({
+                name: content.metadata?.name,
+                id: content.id,
+              }),
+              savedAt: new Date().toISOString(),
+              content,
+            };
+          },
+        },
+      };
+    }
+    return draftSource.source;
   };
   const autosave = startDraftAutosave({
     store: draftStore,
@@ -184,6 +197,9 @@ async function start(): Promise<void> {
     readonly envelope: FabricThemeEnvelope;
     readonly assets?: Readonly<Record<string, Uint8Array>>;
     readonly thumbnail?: Uint8Array;
+    /** The attribution the theme arrived with, which every later import is
+     *  added to. Absent for a document built here rather than opened. */
+    readonly credits?: readonly ThemeCreditsEntry[];
     /** The stored document this one came from, when it came from the library.
      *  A new session is built on every mount, so the base has to arrive with
      *  the document rather than be remembered by the one being replaced. */
@@ -244,6 +260,7 @@ async function start(): Promise<void> {
       // The package's own picture, so a theme keeps the look its author saw
       // even where this machine cannot render one.
       ...(next.thumbnail === undefined ? {} : { thumbnail: next.thumbnail }),
+      ...(next.credits === undefined ? {} : { credits: next.credits }),
       ...(next.base === undefined ? {} : { libraryBase: next.base }),
       ...(next.unsaved === true ? { unsaved: true } : {}),
       assetManager,
@@ -313,12 +330,14 @@ async function start(): Promise<void> {
         envelope: FabricThemeEnvelope,
         assets: Readonly<Record<string, Uint8Array>>,
         base?: string,
+        credits?: readonly ThemeCreditsEntry[],
       ) => {
         await mount({
           input: envelopeInputFor(envelope),
           envelope,
           assets,
           ...(base === undefined ? {} : { base }),
+          ...(credits === undefined ? {} : { credits }),
         });
         status.textContent = openedStatusText({
           name: envelope.metadata?.name,
@@ -498,6 +517,9 @@ async function start(): Promise<void> {
         input: envelopeInputFor(content.envelope),
         envelope: content.envelope,
         assets: content.assets,
+        ...(content.credits === undefined
+          ? {}
+          : { credits: content.credits.entries }),
         ...(content.base === undefined ? {} : { base: content.base }),
       });
       status.textContent = openedStatusText({

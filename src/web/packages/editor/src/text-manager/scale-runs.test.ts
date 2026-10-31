@@ -6,12 +6,12 @@ const BOARD = 1080;
 
 function literal(
   size: number | undefined,
-  typeToken?: `typeTokens.${string}`,
+  typeToken: `typeTokens.${string}` = "typeTokens.body",
 ): TextRun {
   return {
     kind: "literal",
     text: "CPU",
-    ...(typeToken === undefined ? {} : { typeToken }),
+    typeToken,
     ...(size === undefined ? {} : { style: { fontSize: { value: size } } }),
   };
 }

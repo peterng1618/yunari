@@ -18,6 +18,7 @@ import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
 import { serializeThemePackage } from "./persist.js";
 import { PersistenceManager } from "./persistence-manager/index.js";
+import type { ThemeLibraryClient } from "./theme-library-client.js";
 import { fontAssetId } from "./type-preset-apply.js";
 import type { TypeTokens } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
@@ -81,6 +82,7 @@ function documentWith(
     readonly envelope?: FabricThemeEnvelopeInput;
     readonly onSaved?: (message?: string) => void;
     readonly onError?: (message: string) => void;
+    readonly client?: ThemeLibraryClient;
   } = {},
 ): EditorDocument {
   return new EditorDocument({
@@ -100,6 +102,7 @@ function documentWith(
       assetManager: seams.assetManager ?? new AssetManager(),
       ...(credits === undefined ? {} : { credits }),
       ...(seams.unsaved === true ? { unsaved: true } : {}),
+      ...(seams.client === undefined ? {} : { libraryClient: seams.client }),
       onNew: async () => {},
       onNewFromStarter: async () => {},
       onSaved: seams.onSaved ?? (() => {}),
@@ -122,6 +125,18 @@ function managerWith(assets: readonly LocalAssetReference[]): AssetManager {
     ),
   );
   return manager;
+}
+
+/** The host's library, stubbed: a replacement's save must reach this and not a
+ *  package download. */
+function libraryClient(): ThemeLibraryClient {
+  return {
+    list: vi.fn(async () => []),
+    open: vi.fn(),
+    save: vi.fn(async () => "base-after-save"),
+    assign: vi.fn(async () => undefined),
+    listDisplays: vi.fn(async () => ({ default: null, displays: [] })),
+  } as unknown as ThemeLibraryClient;
 }
 
 /** A declaration the release's export check accepts. */
@@ -611,22 +626,21 @@ describe("EditorDocument save cleanup", () => {
   it("a replacement's save asks too, and a cancel aborts the replacement", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onError = vi.fn();
+    const client = libraryClient();
     replacementMock.mockResolvedValue("save");
     cleanupMock.mockResolvedValue("cancel");
-    const save = vi
-      .spyOn(PersistenceManager.prototype, "save")
-      .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
       unsaved: true,
       onError,
+      client,
     });
 
     expect(await document.confirmReplacement()).toBe(false);
 
     expect(cleanupMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: uiCopy.file.savePackage,
+        title: uiCopy.file.saveLibrary,
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
@@ -640,7 +654,7 @@ describe("EditorDocument save cleanup", () => {
         themeBytes: expect.any(Number),
       }),
     );
-    expect(save).not.toHaveBeenCalled();
+    expect(client.save).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
@@ -651,29 +665,47 @@ describe("EditorDocument save cleanup", () => {
   it("a refused trash aborts a replacement's save", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onError = vi.fn();
+    const client = libraryClient();
     replacementMock.mockResolvedValue("save");
     cleanupMock.mockResolvedValue("remove");
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin refused it.",
     });
-    const save = vi
-      .spyOn(PersistenceManager.prototype, "save")
-      .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
       envelope: bareEnvelope(),
       unsaved: true,
       onError,
+      client,
     });
 
     expect(await document.confirmReplacement()).toBe(false);
 
     expect(onError).toHaveBeenCalledWith("The Recycle Bin refused it.");
-    expect(save).not.toHaveBeenCalled();
+    expect(client.save).not.toHaveBeenCalled();
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
     ]);
+    document.destroy();
+  });
+
+  it("a replacement's save stores to the library and downloads nothing", async () => {
+    const client = libraryClient();
+    replacementMock.mockResolvedValue("save");
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, { unsaved: true, client });
+
+    expect(await document.confirmReplacement()).toBe(true);
+
+    expect(client.save).toHaveBeenCalledTimes(1);
+    expect(
+      save,
+      "the replacement's save exported a package",
+    ).not.toHaveBeenCalled();
+    expect(document.isDirty()).toBe(false);
     document.destroy();
   });
 });
@@ -866,6 +898,7 @@ function presetDocument(presets: TypeTokens): {
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachGlobals: () => {}, saveState },
+          canvas: { getObjects: () => [] },
         },
       } as unknown as EditorShell,
       envelope: {
@@ -1111,6 +1144,64 @@ describe("EditorDocument preset actions", () => {
     document.destroy();
   });
 
+  it("keeps a token edited while add three's bytes are in flight", async () => {
+    const existing: TypeTokens = { heading: { family: "Segoe UI" } };
+    const { document } = presetDocument(existing);
+    let release: () => void = () => {};
+    let calls = 0;
+    assetBytesMock.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return { bytes: new Uint8Array([1]), filename: "face.woff2" };
+    });
+
+    const adding = document.addTypeTokensFromTrio(trio);
+    await vi.waitFor(() => expect(assetBytesMock).toHaveBeenCalled());
+    // The author's edit lands after the pre-await snapshot but before the
+    // roles are written. The add must merge onto the live tokens, not clobber.
+    document.setTypes({
+      ...presetsOf(document),
+      custom: { family: "Georgia" },
+    });
+    release();
+    await adding;
+
+    expect(presetsOf(document).custom).toEqual({ family: "Georgia" });
+    expect(presetsOf(document).body).toMatchObject({ family: "Inter" });
+    document.destroy();
+  });
+
+  it("keeps a token edited while a single cut's bytes are in flight", async () => {
+    const { document } = presetDocument({});
+    let release: () => void = () => {};
+    assetBytesMock.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { bytes: new Uint8Array([1]), filename: "face.woff2" };
+    });
+
+    const adding = document.addTypeTokenFromCut(
+      cutFor("body", "Inter", 400),
+      null,
+    );
+    await vi.waitFor(() => expect(assetBytesMock).toHaveBeenCalled());
+    document.setTypes({
+      ...presetsOf(document),
+      custom: { family: "Georgia" },
+    });
+    release();
+    const id = await adding;
+
+    expect(presetsOf(document).custom).toEqual({ family: "Georgia" });
+    expect(presetsOf(document)[id]).toMatchObject({ family: "Inter" });
+    document.destroy();
+  });
+
   it("a single cut creates a role-first token", async () => {
     const { document } = presetDocument({});
     assetBytesMock.mockResolvedValue({
@@ -1282,6 +1373,9 @@ describe("EditorDocument preset actions", () => {
     expect((document.snapshot().assets ?? []).map((asset) => asset.id)).toEqual(
       family.map((entry) => fontAssetId(entry)),
     );
+    // The token binds one face, but the family's other weights and subsets are
+    // what that token chooses between. They are held, not offered for cleanup.
+    expect(document.unusedAssets()).toEqual([]);
 
     // The declarations are the only dedupe: a second apply from the same
     // family asks the host for nothing.

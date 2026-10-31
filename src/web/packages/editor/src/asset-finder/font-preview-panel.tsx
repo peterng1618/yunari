@@ -257,7 +257,7 @@ export function FontPreviewPanel({
                     onClick={() => {
                       onChange({ ...state, cutId: cut.id });
                     }}
-                    className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-2)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
+                    className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-6)] py-[var(--space-4)] text-[10px] text-muted aria-pressed:border-accent aria-pressed:text-accent"
                   >
                     {copy.cutLabel(
                       cut.weight,
@@ -271,7 +271,7 @@ export function FontPreviewPanel({
           </div>
 
           <div className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] p-[var(--space-8)]">
-            <span className="flex min-w-0 flex-col gap-[var(--space-2)]">
+            <span className="flex min-w-0 flex-col gap-[var(--space-4)]">
               <span className="text-[11px]">{copy.newPreset}</span>
               <span className="text-[10px] text-muted">
                 {copy.newPresetSummary(
@@ -292,7 +292,7 @@ export function FontPreviewPanel({
                     role: event.target.value as FontRole,
                   });
                 }}
-                className="rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-4)] py-[var(--space-2)] text-[10px]"
+                className="rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-4)] py-[var(--space-4)] text-[10px]"
               >
                 {ROLES.map((option) => (
                   <option key={option} value={option}>
@@ -372,7 +372,7 @@ export function FontPreviewPanel({
                 <div
                   key={roleName}
                   data-yunari-font-scope-row={roleName}
-                  className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)]"
+                  className="flex flex-col gap-[var(--space-4)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)]"
                 >
                   <span className="flex items-center gap-[var(--space-6)]">
                     <span className="text-[10px]">{copy.role[roleName]}</span>

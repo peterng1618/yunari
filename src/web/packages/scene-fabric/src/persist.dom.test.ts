@@ -1220,6 +1220,13 @@ describe("the Fabric theme envelope", () => {
       id: "theme",
       artboard: { width: 400, height: 300 },
       metadata: { themeLanguage: "en" },
+      globals: {
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "monospace", weight: "400" },
+        },
+      },
       bindings: { rect: [] },
     });
 

@@ -2,6 +2,7 @@ import {
   type Binding,
   type ChartContent,
   removeSetting,
+  type SettingsFieldDescriptor,
   writeSetting,
 } from "@yunari/renderer-core";
 import type * as React from "react";
@@ -9,7 +10,7 @@ import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
-import { ControlToggle } from "../components/ui/control-toggle.js";
+import { SettingField } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
 
 /**
@@ -69,6 +70,7 @@ export interface ChartOptionView {
 /** The kind of control one descriptor asked for, and the value it holds. */
 export type ChartSettingView =
   | {
+      readonly descriptor: SettingsFieldDescriptor;
       readonly id: string;
       /** The descriptor's own `property`, which is the `data-*` hook's value. */
       readonly key: string;
@@ -86,6 +88,7 @@ export type ChartSettingView =
       readonly clearable: boolean;
     }
   | {
+      readonly descriptor: SettingsFieldDescriptor;
       readonly id: string;
       readonly key: string;
       readonly label: string;
@@ -116,6 +119,7 @@ export type ChartSettingView =
       readonly clearable: boolean;
     }
   | {
+      readonly descriptor: SettingsFieldDescriptor;
       readonly id: string;
       readonly key: string;
       readonly label: string;
@@ -125,6 +129,7 @@ export type ChartSettingView =
       readonly value: boolean;
     }
   | {
+      readonly descriptor: SettingsFieldDescriptor;
       readonly id: string;
       readonly key: string;
       readonly label: string;
@@ -371,86 +376,6 @@ function ChartSeriesRow(props: {
   );
 }
 
-/** One descriptor: a number box, a switch, or a picker. */
-function ChartSettingRow(props: {
-  readonly row: ChartSettingView;
-  readonly write: (path: readonly string[], value: unknown) => void;
-}): React.JSX.Element {
-  const { row, write } = props;
-  const data = { "data-yunari-chart-setting": row.key };
-
-  switch (row.control) {
-    case "number":
-      return (
-        <ControlNumber
-          label={row.label}
-          hint={row.hint}
-          id={row.id}
-          data={data}
-          value={row.value}
-          {...(row.min === undefined ? {} : { min: row.min })}
-          {...(row.max === undefined ? {} : { max: row.max })}
-          onCommit={(value) => write(row.path, value)}
-          {...(row.clearable
-            ? { onClear: () => write(row.path, undefined) }
-            : {})}
-        />
-      );
-    case "slider":
-      return (
-        <ControlSlider
-          label={row.label}
-          hint={row.hint}
-          id={row.id}
-          data={data}
-          value={row.value}
-          min={row.min}
-          max={row.max}
-          {...(row.values === undefined ? {} : { values: row.values })}
-          {...(row.integer === undefined ? {} : { integer: row.integer })}
-          {...(row.decimals === undefined ? {} : { decimals: row.decimals })}
-          {...(row.suffix === undefined ? {} : { suffix: row.suffix })}
-          onCommit={(value) => write(row.path, value)}
-          {...(row.clearable
-            ? { onClear: () => write(row.path, undefined) }
-            : {})}
-        />
-      );
-    case "toggle":
-      return (
-        <ControlToggle
-          label={row.label}
-          hint={row.hint}
-          id={row.id}
-          data={data}
-          checked={row.value}
-          onChange={(value) => write(row.path, value)}
-        />
-      );
-    case "select":
-      return (
-        <ControlSelect
-          label={row.label}
-          hint={row.hint}
-          id={row.id}
-          data={data}
-          value={row.value}
-          // A select has no empty value of its own, and the absent state is one
-          // the `optional` fields promise — so it gets a choice of its own
-          // rather than being the one state the author cannot return to.
-          options={
-            row.clearable
-              ? [{ id: "", name: uiCopy.panels.notSet }, ...row.options]
-              : row.options
-          }
-          onChange={(value) =>
-            write(row.path, row.clearable && value === "" ? undefined : value)
-          }
-        />
-      );
-  }
-}
-
 /** The chart's own settings, and the series it reads. */
 export function ChartContentFields(props: {
   readonly view: ChartContentFieldsView;
@@ -512,7 +437,29 @@ export function ChartContentFields(props: {
       ))}
 
       {view.rows.map((row) => (
-        <ChartSettingRow key={row.id} row={row} write={write} />
+        <SettingField
+          key={row.id}
+          descriptor={row.descriptor}
+          id={row.id}
+          value={row.value}
+          {...(row.control === "slider"
+            ? {
+                bounds: {
+                  min: row.min,
+                  max: row.max,
+                  ...(row.values === undefined ? {} : { values: row.values }),
+                  ...(row.decimals === undefined
+                    ? {}
+                    : { decimals: row.decimals }),
+                  ...(row.integer === undefined
+                    ? {}
+                    : { integer: row.integer }),
+                  ...(row.suffix === undefined ? {} : { suffix: row.suffix }),
+                },
+              }
+            : {})}
+          onChange={(next) => write(row.path, next)}
+        />
       ))}
     </div>
   );

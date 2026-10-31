@@ -650,7 +650,6 @@ const CONTENT_TOKENS = ["text", "ink", "foreground", "primary", "accent"];
     both sides, so the candidate is spelled in lower case. */
 const SURFACE_TOKENS = [
   "background",
-  "bars",
   "scene",
   "surface",
   "track",

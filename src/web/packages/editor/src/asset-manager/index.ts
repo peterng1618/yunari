@@ -266,6 +266,21 @@ export class AssetManager {
       throw new Error("The file's bytes are not a font the browser can read.");
     }
 
+    // A face already in the library is the same asset, not a second one: the
+    // bytes, family, weight and style are what a face *is*, so re-importing it
+    // binds the declaration that already carries its credit.
+    const digest = await sha256(bytes);
+    const sameFace = this.#declarations.find(
+      (asset) =>
+        asset.kind === "font" &&
+        "family" in asset &&
+        asset.family === checked.family &&
+        asset.weight === checked.weight &&
+        asset.style === checked.style &&
+        asset.sha256 === digest,
+    );
+    if (sameFace !== undefined) return this.amendFont(sameFace.id, checked);
+
     // `import` has already validated the MIME type and allocated the path;
     // amending it is what writes the facts the file cannot answer.
     const imported = await this.import(file);

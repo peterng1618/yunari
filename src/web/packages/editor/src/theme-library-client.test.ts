@@ -99,6 +99,44 @@ describe("ThemeLibraryClient", () => {
     });
   });
 
+  it("carries the credits member both ways", async () => {
+    const credits = {
+      format: "yunari-theme-credits" as const,
+      version: 1 as const,
+      entries: [
+        {
+          kind: "icon",
+          title: "Badge",
+          license: "ISC v2",
+          changes: "Imported unchanged",
+        },
+      ],
+    };
+    const mockFetch = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return new Response(JSON.stringify({ base: "next" }), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify({ envelope, assets: {}, credits }), {
+          status: 200,
+        });
+      },
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.save("living-room", { envelope, assets: {}, credits });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ credits });
+
+    await expect(client.open("living-room")).resolves.toMatchObject({
+      credits,
+    });
+  });
+
   it("puts nothing on the wire for an asset the payload leaves out", async () => {
     // The last link in the chain, and the one that can be measured rather than
     // inferred: a save that carries no bytes for a declared asset produces a

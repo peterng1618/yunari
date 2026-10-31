@@ -16,6 +16,8 @@ export {
   computeArtboardTransform,
   documentToViewport,
   isFullyVisible,
+  rotationAllowed,
+  snapRotation,
   toCssTransform,
   viewportToDocument,
 } from "./artboard.js";

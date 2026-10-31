@@ -1090,7 +1090,10 @@ export function AssetFinder({
           ) : undefined
         }
         sources={
-          visibleSources.length > 1 ? (
+          // A lone source still draws its chip: the kind-off sentence says to
+          // turn one on above, and with the chip hidden there would be nothing
+          // above to turn on (`vg-710`).
+          visibleSources.length > 0 ? (
             <>
               {visibleSources.map((source) => {
                 const off = disabled.has(source.id);

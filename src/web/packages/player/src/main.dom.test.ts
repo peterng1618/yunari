@@ -84,6 +84,13 @@ function servedEnvelope(): unknown {
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
     metadata: { themeLanguage: "en" },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: { version: "0.0.1", objects: [] },
   };
 }
@@ -651,6 +658,11 @@ describe("the background the display mounts with", () => {
                 media: { assetId: "bg", bounds: "theme" },
               },
               globals: {
+                typeTokens: {
+                  heading: { family: "system-ui, sans-serif", weight: "600" },
+                  body: { family: "system-ui, sans-serif", weight: "400" },
+                  mono: { family: "monospace", weight: "400" },
+                },
                 palette: {
                   none: {
                     name: "None",
@@ -866,7 +878,9 @@ describe("the units a display paints with", () => {
       metadata: { themeLanguage: "en" },
       globals: {
         typeTokens: {
+          heading: { family: "Inter", weight: 600 },
           body: { family: "Inter" },
+          mono: { family: "Consolas, monospace" },
         },
         palette: {
           none: {
@@ -975,7 +989,11 @@ describe("an image reading on the display", () => {
           },
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
-        typeTokens: {},
+        typeTokens: {
+          heading: { family: "system-ui, sans-serif", weight: "600" },
+          body: { family: "system-ui, sans-serif", weight: "400" },
+          mono: { family: "monospace", weight: "400" },
+        },
       },
       bindings: {
         artwork: [{ id: "image", semanticKey: "media.artwork" }],
@@ -1094,6 +1112,13 @@ function mountedEnvelope(): unknown {
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
     metadata: { themeLanguage: "en" },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
   };
 }
@@ -1136,7 +1161,11 @@ function lineEnvelope(): unknown {
         none: { name: "None", value: { kind: "solid", color: "transparent" } },
         ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
       },
-      typeTokens: {},
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
     },
     bindings: { line: [{ id: "l", semanticKey: "cpu.load.total" }] },
     scene: {
@@ -1174,7 +1203,9 @@ function textOnlyEnvelope(): unknown {
         ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
       },
       typeTokens: {
+        heading: { family: "Inter", weight: 600 },
         body: { family: "Inter" },
+        mono: { family: "Consolas, monospace" },
       },
     },
     bindings: {
@@ -1788,7 +1819,9 @@ describe("the work one refresh frame does", () => {
           ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
         },
         typeTokens: {
+          heading: { family: "Inter", weight: 600 },
           body: { family: "Inter" },
+          mono: { family: "Consolas, monospace" },
         },
       },
       bindings: {

@@ -20,27 +20,27 @@ rounded:            # --radius-*
   xl: 10px
 typography:         # --text-* with their stated line-height companions
   2xs:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 10px
     lineHeight: 1.2
   xs:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 11px
     lineHeight: 1.3
   sm:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 12px
     lineHeight: 1.4
   md:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 13px
     lineHeight: 1.3
   lg:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 15px
     lineHeight: 1.3
   xl:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 19px
     lineHeight: 1.2
 omitted:
@@ -96,6 +96,7 @@ palette resolves it:
 | `--muted` | Secondary text, labels, inactive icons |
 | `--faint` | Tertiary: counts, hints, disabled glyphs |
 | `--accent` | The one thing the author should do or has done |
+| `--attention` | Work in flight: unsaved or unpublished changes, a pending operation, a reading awaiting the author |
 | `--warn` | Something needs attention; not an error |
 | `--hot` | Destructive. Delete, and only delete |
 
@@ -106,6 +107,12 @@ the primary button. Two accents in one region means neither is the accent.
 **`--hot` marks destructive affordances only.** It never marks "important", and
 a disabled destructive control stays `--faint` rather than dimming red.
 
+**`--attention` marks work in flight, never an action or a fault.** It appears
+only on an unsaved or unpublished indicator, an operation still running, or a
+reading that is stale and waiting for the author. It never fills a button,
+never shares an element with `--accent`, and does not stand in for `--warn`
+(something needs attention) or `--hot` (destructive).
+
 ## Typography
 
 Three families, each with one job.
@@ -115,6 +122,10 @@ Three families, each with one job.
 | UI sans (`system-ui` stack) | Everything a person reads as language | Labels, menus, headings, panel copy |
 | UI mono (`ui-monospace` stack) | Everything a machine produced or will parse | Values, coordinates, token names, chord marks, counts |
 | Theme fonts | The author's typography | Inside the artboard only; never in chrome |
+
+The UI sans stack is the `--font-ui` token in `editor-shell.css`'s `@theme
+static` block, and every `typography` entry's `fontFamily` above transcribes
+it; `--sync` fails when one drifts from the other.
 
 **Values are mono; labels are sans.** This is the largest difference from a
 form-shaped panel, and it is not decorative: a mono value is scannable by column
@@ -492,6 +503,14 @@ ink is `--text` rather than the accent, because accent is rationed to one filled
 element per region. The store mode's facet popover is where it is drawn; its
 trigger is the well with chevron, and the count beside a value is how many items
 are behind it.
+
+**The inline reading list is a popup of choice rows, not a new control.** Typing
+`@` in a text opens it at the caret; each row is one reading, filtered as the
+author keeps typing. `↑`/`↓` move the highlight, `Tab` takes the highlighted
+reading, `Space` stays a space, and `Escape` closes the list before it ends the
+edit. The accepted reading becomes a value run, so it formats, carries its unit
+and reports a missing source like any other binding — it is never copied in as
+characters.
 
 **The colour area and the gradient track take their sizes from the panel
 rhythm; both channels are `role="slider"`.** The keyboard moves one channel at a

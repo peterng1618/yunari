@@ -268,6 +268,10 @@ export function insertObject(
   object: InsertableObject,
 ): void {
   constructing(editor, () => {
+    // Choosing another tile is choosing another tool: an armed text placement
+    // must not outlive it, or the author's next press on the canvas places a
+    // text instead of selecting the object they just made.
+    if (object.kind !== "text") editor.textManager.cancelPlacement();
     switch (object.kind) {
       case "text": {
         const addText = actions?.addText;

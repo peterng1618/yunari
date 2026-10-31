@@ -23,6 +23,10 @@ import {
   resolveTextSegments,
 } from "./plan.js";
 
+/** Every run the author authors carries a role; a run without one is
+    unreadable as text, so test fixtures name the body role explicitly. */
+const BODY = "typeTokens.body" as const;
+
 /**
  * The pure decisions a render plan is made of.
  *
@@ -192,6 +196,7 @@ describe("default type size", () => {
   const unroled: Globals = { typeTokens: { custom: { family: "Inter" } } };
   const literal = (typeToken?: `typeTokens.${string}`): TextRun => ({
     kind: "literal",
+    typeToken: BODY,
     text: "CPU",
     ...(typeToken === undefined ? {} : { typeToken }),
   });
@@ -284,6 +289,12 @@ describe("style resolution (§75)", () => {
 });
 
 describe("text (§89)", () => {
+  // Every run carries a role now, so the fixture document defines the one the
+  // fixtures use. A test that wants an unresolvable role authors its own.
+  const fixtureGlobals: Globals = {
+    typeTokens: { body: { family: "Inter" } },
+  };
+
   function segments(
     source: SampleSource,
     bindings: readonly Binding[],
@@ -303,7 +314,7 @@ describe("text (§89)", () => {
         runs,
         bindings,
         { source, ...overrides },
-        {},
+        fixtureGlobals,
         issues,
       ),
       issues,
@@ -314,7 +325,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.temp": ok(61.4, "°C", "cpu.temp") }),
       [{ id: "b", semanticKey: "cpu.temp" }],
-      [{ kind: "value", bindingId: "b", precision: 0 }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b", precision: 0 }],
     );
 
     expect(result.segments.map((segment) => segment.text)).toEqual(["61°C"]);
@@ -339,7 +350,7 @@ describe("text (§89)", () => {
       segments(
         source,
         [{ id: "b", semanticKey: "time.now" }],
-        [{ kind: "value", bindingId: "b" }],
+        [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       ).segments.map((segment) => segment.text),
     ).toEqual(["14:07"]);
 
@@ -348,7 +359,7 @@ describe("text (§89)", () => {
       segments(
         source,
         [{ id: "b", semanticKey: "time.now", format: "dddd, DD MMMM" }],
-        [{ kind: "value", bindingId: "b" }],
+        [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       ).segments.map((segment) => segment.text),
     ).toEqual(["Thursday, 24 September"]);
   });
@@ -360,7 +371,7 @@ describe("text (§89)", () => {
     const result = segments(
       source,
       [{ id: "b", semanticKey: "time.now", timeZone: "Asia/Tokyo" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     // 14:07 +07:00 is 16:07 in Tokyo, which is the reading the author asked for.
@@ -383,7 +394,7 @@ describe("text (§89)", () => {
           timeZone: "Asia/Tokyo",
         },
       ],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments[0]!.text).toBe("15:12");
@@ -396,7 +407,7 @@ describe("text (§89)", () => {
     const result = segments(
       source,
       [{ id: "b", semanticKey: "date.today", format: "dddd" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { themeLanguage: "ja" },
     );
 
@@ -418,7 +429,7 @@ describe("text (§89)", () => {
           timeZone: "Asia/Tokyo",
         },
       ],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { themeLanguage: "en" },
     );
 
@@ -434,7 +445,7 @@ describe("text (§89)", () => {
     const result = segments(
       source,
       [{ id: "b", semanticKey: "date.today", format: "DD/MM/YYYY HH:mm" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { themeLanguage: "ar" },
     );
 
@@ -448,7 +459,7 @@ describe("text (§89)", () => {
     const result = segments(
       source,
       [{ id: "b", semanticKey: "cpu.model", format: "HH:mm" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     // An unknown key reports whatever it likes; no format is applied to it.
@@ -458,7 +469,9 @@ describe("text (§89)", () => {
   it("converts a temperature for the consumer, once, after the author's scale", () => {
     const source = storeWith({ "cpu.temp": ok(61.4, "°C", "cpu.temp") });
     const bindings = [{ id: "b", semanticKey: "cpu.temp", scale: 2 }];
-    const runs = [{ kind: "value", bindingId: "b", precision: 1 }] as const;
+    const runs = [
+      { kind: "value", typeToken: BODY, bindingId: "b", precision: 1 },
+    ] as const;
 
     // The author's scale is part of the reading, so the preference converts what
     // that produces (122.8 °C → 253.04 °F), never the value it started from.
@@ -481,7 +494,7 @@ describe("text (§89)", () => {
     const result = segments(
       source,
       [{ id: "b", semanticKey: "cpu.clock" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { units: { clock: "ghz" } },
     );
 
@@ -503,9 +516,9 @@ describe("text (§89)", () => {
         { id: "gpu", semanticKey: "gpu.clock" },
       ],
       [
-        { kind: "value", bindingId: "cpu" },
-        { kind: "literal", text: " / " },
-        { kind: "value", bindingId: "gpu" },
+        { kind: "value", typeToken: BODY, bindingId: "cpu" },
+        { kind: "literal", typeToken: BODY, text: " / " },
+        { kind: "value", typeToken: BODY, bindingId: "gpu" },
       ],
       { units: { clock: "ghz" } },
     );
@@ -522,7 +535,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.clock": ok(3845, "MHz", "cpu.clock") }),
       [{ id: "b", semanticKey: "cpu.clock" }],
-      [{ kind: "value", bindingId: "b", precision: 0 }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b", precision: 0 }],
       { units: { clock: "ghz" } },
     );
 
@@ -535,7 +548,7 @@ describe("text (§89)", () => {
         "disk.nvme0.read": ok(500, "MB/s", "disk.nvme0.read"),
       }),
       [{ id: "b", semanticKey: "disk.nvme0.read" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments[0]!.text).toBe("500 MB/s");
@@ -551,7 +564,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.load": ok(42) }),
       [binding],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments.map((segment) => segment.text)).toEqual(["42%"]);
@@ -581,7 +594,7 @@ describe("text (§89)", () => {
         "custom.thermostat.room": ok(20, "°C", "custom:thermostat:room"),
       }),
       [{ id: "b", semanticKey: "custom.thermostat.room", unit: "°F" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { descriptors: [descriptor] },
     );
 
@@ -604,7 +617,7 @@ describe("text (§89)", () => {
         "custom.thermostat.room": ok(20, "°C", "custom:thermostat:room"),
       }),
       [{ id: "b", semanticKey: "custom.thermostat.room", unit: "GHz" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
       { descriptors: [descriptor] },
     );
 
@@ -631,9 +644,9 @@ describe("text (§89)", () => {
         { id: "temp", semanticKey: "cpu.temp" },
       ],
       [
-        { kind: "value", bindingId: "ram" },
-        { kind: "literal", text: " / " },
-        { kind: "value", bindingId: "temp" },
+        { kind: "value", typeToken: BODY, bindingId: "ram" },
+        { kind: "literal", typeToken: BODY, text: " / " },
+        { kind: "value", typeToken: BODY, bindingId: "temp" },
       ],
       { measurement: "imperial" },
     );
@@ -652,8 +665,8 @@ describe("text (§89)", () => {
       storeWith({ "cpu.temp": ok(61.4, "°C", "cpu.temp") }),
       [{ id: "b", semanticKey: "cpu.temp" }],
       [
-        { kind: "literal", text: "CPU " },
-        { kind: "value", bindingId: "b", precision: 0 },
+        { kind: "literal", typeToken: BODY, text: "CPU " },
+        { kind: "value", typeToken: BODY, bindingId: "b", precision: 0 },
       ],
     );
 
@@ -672,12 +685,12 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.temp": stale }),
       [{ id: "b", semanticKey: "cpu.temp" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments[0]).toEqual({
       text: MISSING_VALUE_TEXT,
-      style: {},
+      style: { fontFamily: "Inter" },
       status: "stale",
       message: "last read 12 s ago",
     });
@@ -687,7 +700,7 @@ describe("text (§89)", () => {
     const result = segments(
       emptySampleSource,
       [{ id: "b", semanticKey: "gpu.hotspot" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments[0]!.text).toBe(MISSING_VALUE_TEXT);
@@ -700,7 +713,7 @@ describe("text (§89)", () => {
     const result = segments(
       emptySampleSource,
       [],
-      [{ kind: "value", bindingId: "ghost" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "ghost" }],
     );
 
     expect(result.segments[0]!.text).toBe(MISSING_VALUE_TEXT);
@@ -713,7 +726,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "ram.used": ok(2_147_483_648, "B", "ram.used") }),
       [{ id: "b", semanticKey: "ram.used", scale: 1 / 1_073_741_824 }],
-      [{ kind: "value", bindingId: "b", precision: 1 }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b", precision: 1 }],
     );
 
     expect(result.segments[0]!.text).toBe("2.0 B");
@@ -723,7 +736,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.load.total": ok(45.678) }),
       [{ id: "b", semanticKey: "cpu.load.total", precision: 0 }],
-      [{ kind: "value", bindingId: "b", precision: 2 }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b", precision: 2 }],
     );
 
     expect(result.segments[0]!.text).toBe("45.68%");
@@ -733,7 +746,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ "cpu.load.total": ok(45) }),
       [{ id: "b", semanticKey: "cpu.load.total", unitDisplay: "none" }],
-      [{ kind: "value", bindingId: "b", precision: 0 }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b", precision: 0 }],
     );
 
     expect(result.segments[0]!.text).toBe("45");
@@ -760,9 +773,9 @@ describe("text (§89)", () => {
         { id: "b2", semanticKey: "pump.running" },
       ],
       [
-        { kind: "value", bindingId: "b1" },
-        { kind: "literal", text: " / " },
-        { kind: "value", bindingId: "b2" },
+        { kind: "value", typeToken: BODY, bindingId: "b1" },
+        { kind: "literal", typeToken: BODY, text: " / " },
+        { kind: "value", typeToken: BODY, bindingId: "b2" },
       ],
     );
 
@@ -784,7 +797,7 @@ describe("text (§89)", () => {
     const result = segments(
       storeWith({ x: empty }),
       [{ id: "b", semanticKey: "x" }],
-      [{ kind: "value", bindingId: "b" }],
+      [{ kind: "value", typeToken: BODY, bindingId: "b" }],
     );
 
     expect(result.segments[0]).toMatchObject({

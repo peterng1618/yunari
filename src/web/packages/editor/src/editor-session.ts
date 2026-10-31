@@ -88,6 +88,7 @@ import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
+import { insertReading } from "./selection-inspector/run-edits.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
@@ -368,6 +369,7 @@ export class EditorSession {
     this.#artboard.render(
       this.#document.envelope.artboard,
       this.#document.envelope.metadata,
+      this.#document.credits(),
     );
     // The one walk behind both the figure beside a token and the users list in
     // the inspector, so the two cannot disagree about the scene.
@@ -601,6 +603,25 @@ export class EditorSession {
     // authored runs belong. The runtime owns what an object paints, so the
     // put-back goes through it rather than a second repaint path here.
     options.shell.editor.textManager.setRepaint(() => this.#runtime.refresh());
+    // An inline `@` names a reading. The run write is the document's, because
+    // it owns the node's bindings, and the readings offered are the catalogue's.
+    options.shell.editor.textManager.setMentions({
+      descriptors,
+      insert: (object, range) => {
+        const nodeId = object.get("id");
+        if (typeof nodeId !== "string" || nodeId === "") return false;
+
+        return insertReading(
+          {
+            object,
+            nodeId,
+            bindings: () => this.#document.envelope.bindings?.[nodeId] ?? [],
+            setBindings: (next) => this.#document.setBindings(nodeId, next),
+          },
+          range,
+        );
+      },
+    });
     this.#newObjects = createNewObjectPanel(
       options.panelHosts.add,
       options.shell.editor,
@@ -676,7 +697,10 @@ export class EditorSession {
     });
     this.#document.refreshBackgroundMedia();
     this.#shortcuts.register("file.save", () => {
-      void this.#document.save();
+      // Save, not export: the library is where the product stores a theme, and
+      // Ctrl+S must not download a package. The package save stays its own File
+      // row, with no chord.
+      void this.#document.saveLibrary();
     });
     // The File menu's row carries this chord, and the row reads *Import
     // package*: the chord does what the control it is printed beside does.
@@ -1072,6 +1096,14 @@ export class EditorSession {
     this.#selection.render();
     this.#document.refreshBackgroundMedia();
     this.#announceAssetCount();
+    // An import adds or replaces a credit, and a removed asset prunes one, so
+    // the Document pane's attribution is redrawn by the same signal that moves
+    // the asset count rather than by a second subscription.
+    this.#artboard.render(
+      this.#document.envelope.artboard,
+      this.#document.envelope.metadata,
+      this.#document.credits(),
+    );
   }
 
   /** The initial count, before anything has moved. */
@@ -1314,13 +1346,23 @@ export class EditorSession {
       // `#armText`. `insertCard` is not wrapped: the document reports that one
       // at its own owner.
       addText: () => this.#armText(),
+      // A non-text construction is another tool: the armed text placement is
+      // cancelled first, or the next canvas press would place a text instead of
+      // selecting what was just made.
       addShape: (kind) =>
-        constructing(editor, () =>
-          insertNewShape(editor, this.#document.envelope.globals, kind),
-        ),
+        constructing(editor, () => {
+          editor.textManager.cancelPlacement();
+          insertNewShape(editor, this.#document.envelope.globals, kind);
+        }),
       addChart: (family) =>
-        constructing(editor, () => this.charts.addChart(family)),
-      insertCard: (cardId) => this.#document.insertCard(cardId),
+        constructing(editor, () => {
+          editor.textManager.cancelPlacement();
+          this.charts.addChart(family);
+        }),
+      insertCard: (cardId) => {
+        editor.textManager.cancelPlacement();
+        this.#document.insertCard(cardId);
+      },
       arrange: (action) => applyArrange(editor, action),
       canArrange: (action) => canArrange(editor, action),
       undo: () => void editor.historyManager.undo(),
@@ -1420,24 +1462,27 @@ export class EditorSession {
    */
   #deleteType(id: string, replacement: string): void {
     this.#document.deleteType(id, replacement);
-    const selection = this.#options.tokenSelection;
-    const token = selection?.get();
-    if (token?.kind === "preset" && token.id === id) selection?.clear();
+    this.#clearDeletedToken("preset", id);
   }
 
   /**
    * The one paint-token delete route, handed to the palette pane and the token
    * inspector.
-   *
-   * The document re-points the references; a token selection still naming the
-   * deleted paint is cleared here, so the object column comes back rather than
-   * the right column staying suppressed over a token that no longer exists.
    */
   #deletePalette(id: string, replacement: string): void {
     this.#document.deletePalette(id, replacement);
+    this.#clearDeletedToken("paint", id);
+  }
+
+  /**
+   * A token still selected in the inspector when it is deleted is cleared, so
+   * the object column comes back rather than the right column staying
+   * suppressed over a token that no longer exists.
+   */
+  #clearDeletedToken(kind: TokenRef["kind"], id: string): void {
     const selection = this.#options.tokenSelection;
     const token = selection?.get();
-    if (token?.kind === "paint" && token.id === id) selection?.clear();
+    if (token?.kind === kind && token.id === id) selection?.clear();
   }
 
   destroy(): void {

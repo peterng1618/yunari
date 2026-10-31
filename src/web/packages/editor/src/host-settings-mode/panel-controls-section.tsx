@@ -312,7 +312,7 @@ export function PanelControlsSection(props: {
 
               {holds("panel-settings") ? (
                 <div className="flex flex-col gap-[var(--space-6)]">
-                  <div className="flex flex-col gap-[var(--space-2)]">
+                  <div className="flex flex-col gap-[var(--space-4)]">
                     <span className="text-xs text-muted">
                       {copy.settingsHeading}
                     </span>
@@ -466,7 +466,7 @@ export function PanelControlsSection(props: {
               thing here nobody can infer. A write-only command has no reply —
               "Sent" is the host confirming the bytes went, not the panel
               talking — so the label names which of the two is showing. */}
-              <div className="flex flex-col gap-[var(--space-2)]">
+              <div className="flex flex-col gap-[var(--space-4)]">
                 <span className="text-2xs text-faint">
                   {reply === undefined || reply === ""
                     ? copy.commandLabel

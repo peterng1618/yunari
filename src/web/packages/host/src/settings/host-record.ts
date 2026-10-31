@@ -88,9 +88,13 @@ export async function readOrMintHostRecord(
 
   // A half-usable record is written whole, so the file a later run reads is one
   // a display could store and a person could read.
+  // A hostname that trims to nothing still needs a name: storing the empty
+  // string would leave a record every later run rewrites, so the id's own
+  // prefix stands in — unique, stable and short enough to read.
+  const id = stored.id ?? randomBytes(8).toString("hex");
   const record: HostRecord = {
-    id: stored.id ?? randomBytes(8).toString("hex"),
-    name: stored.name ?? usableName(hostname()) ?? "",
+    id,
+    name: stored.name ?? usableName(hostname()) ?? id.slice(0, 8),
   };
 
   await mkdir(settingsDir, { recursive: true });

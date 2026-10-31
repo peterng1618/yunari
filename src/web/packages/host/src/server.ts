@@ -35,9 +35,10 @@ import type {
   SourceTestResult,
 } from "./providers/custom/provider.js";
 import {
-  GAME_APP_ID,
+  GAME_ARTWORK_KEY,
   GAME_ARTWORK_PREFIX,
   type GameArtworkSource,
+  isCatalogueArtworkKey,
   readCachedCover,
 } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -1755,6 +1756,30 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
+    // The pairing page's one rule, imported rather than restated in the page.
+    // An unpaired device has no credential, so this answers before every gate
+    // for the same reason `/pair` does; it is one fixed path, not the admin
+    // root, so nothing else under the settings page becomes LAN-readable.
+    if (url.pathname === "/rotation.js" && request.method === "GET") {
+      if (bundles.admin === undefined) {
+        sendText(
+          response,
+          404,
+          "The pairing page is missing from this installation.",
+        );
+        return;
+      }
+
+      await serveStatic(
+        request,
+        response,
+        bundles.admin,
+        "/rotation.js",
+        "The pairing page is missing from this installation.",
+      );
+      return;
+    }
+
     // The store session: signing in, coming back, reading the state and
     // signing out. In a module of its own, because this file is already past
     // the size a reader can hold.
@@ -3022,7 +3047,6 @@ export function createHostServer(options: HostServerOptions): HostServer {
         id: live?.id ?? null,
         revision: published.revision(),
         display: {
-          id: display,
           theme,
           shape: presentation.shape,
           rotation: presentation.rotation,
@@ -3602,13 +3626,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // The running Steam game's box art is local bytes, so the app id is the
-    // whole allow-list: only an installed app or a cover the store provider
-    // cached has a file, and anything else is a 404 rather than a filesystem
-    // probe. A display reads it through the same credential as media artwork;
-    // loopback is this PC. The name is not content-addressed, so the cache is
-    // bounded rather than immutable. The downloaded cover is read only, never
-    // fetched: the provider is the one owner of the store's CDN.
+    // The running game's art is local bytes, so the key is the whole allow-list:
+    // an installed Steam app, a cover the store provider cached, or a catalogued
+    // game that carries its launcher's icon. Anything else is a 404 rather than
+    // a filesystem probe. A display reads it through the same credential as media
+    // artwork; loopback is this PC. The name is not content-addressed, so the
+    // cache is bounded rather than immutable. The downloaded cover is read only,
+    // never fetched: the provider is the one owner of the store's CDN.
     if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -3616,20 +3640,19 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       const name = url.pathname.slice(GAME_ARTWORK_PREFIX.length);
-      const extension = name.endsWith(".jpg")
-        ? "jpg"
-        : name.endsWith(".png")
-          ? "png"
-          : undefined;
+      const dot = name.lastIndexOf(".");
+      const extension = dot === -1 ? undefined : name.slice(dot + 1);
+      const appId = dot === -1 ? name : name.slice(0, dot);
 
-      if (extension === undefined) {
-        sendText(response, 404, "Not found.");
-        return;
-      }
-
-      const appId = name.slice(0, -(extension.length + 1));
-
-      if (!GAME_APP_ID.test(appId)) {
+      // Steam's box art and a launcher's icon are different sources, so the key
+      // form and the extension must agree before either is read.
+      if (
+        (extension !== "jpg" && extension !== "png" && extension !== "ico") ||
+        !GAME_ARTWORK_KEY.test(appId) ||
+        (isCatalogueArtworkKey(appId)
+          ? extension !== "ico"
+          : extension === "ico")
+      ) {
         sendText(response, 404, "Not found.");
         return;
       }
@@ -3643,18 +3666,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       // Local library art first: it costs no network, and Steam only writes the
-      // JPEG. A cached remote cover is the fallback for a non-Steam game.
-      let bytes =
-        extension === "jpg" && gameArtwork !== undefined
+      // JPEG while a launcher's picture is served as it was installed. A cached
+      // remote cover is the fallback for a non-Steam game, keyed by app id only.
+      const local =
+        (extension === "jpg" || extension === "ico") &&
+        gameArtwork !== undefined
           ? await gameArtwork.read(appId)
           : undefined;
-      let contentType = "image/jpeg";
+      let bytes = local;
+      let contentType =
+        extension === "png"
+          ? "image/png"
+          : extension === "ico"
+            ? "image/x-icon"
+            : "image/jpeg";
 
-      if (bytes === undefined) {
+      if (bytes === undefined && !isCatalogueArtworkKey(appId)) {
         const cached = await readCachedCover(
           gameCoverCacheDir,
           appId,
-          extension,
+          extension === "png" ? "png" : "jpg",
         );
 
         if (cached !== undefined) {
@@ -3781,7 +3812,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         // hosting, not about credentials.
         sendJson(response, 200, {
           ...(await binding.state()),
-          sessions: ((await displays?.list()) ?? []).map(peerOf),
+          displays: ((await displays?.list()) ?? []).map(peerOf),
         });
         return;
       }
@@ -3798,7 +3829,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
       sendJson(response, 200, {
         ...((await binding?.state()) ?? NO_HOSTING),
-        sessions: ((await displays?.list()) ?? []).map(peerOf),
+        displays: ((await displays?.list()) ?? []).map(peerOf),
       });
       return;
     }
@@ -4184,9 +4215,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         const available = await themeStore.list();
+        // A theme with no picture has none to request: the page draws its
+        // fallback directly when the listing says so, instead of costing a 404
+        // per theme on every clean load (`vg-655`).
+        const listed = await Promise.all(
+          available.map(async (theme) => ({
+            ...theme,
+            ...(thumbnails !== undefined && (await thumbnails.has(theme.id))
+              ? { thumbnail: true as const }
+              : {}),
+          })),
+        );
         sendJson(response, 200, {
           ...(await activeThemeMap(activeTheme, available)),
-          themes: available,
+          themes: listed,
           templates: SHIPPED_TEMPLATES,
         });
         return;
@@ -4960,6 +5002,16 @@ export function createHostServer(options: HostServerOptions): HostServer {
             console.error(error);
           }
 
+          // A removed theme's per-display answers are answers about a document
+          // nobody can open again. Like the origin, their failure cannot undo
+          // the removal: the folder is already in the trash, so it is logged
+          // and the removal stands.
+          try {
+            await themeSettings?.removeTheme(rawId);
+          } catch (error) {
+            console.error(error);
+          }
+
           // A display must not be told to reload a document that no longer
           // exists. Clearing moves the revision, so a page showing it falls
           // back to its assignment.
@@ -5218,6 +5270,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
     request.on("close", drop);
     request.on("error", drop);
+    // A display that goes away mid-frame surfaces the reset on the response,
+    // not only the request: a write into a socket the client closed raises
+    // here, and an unhandled `error` would take the host down with it.
+    response.on("error", drop);
   }
 
   /**

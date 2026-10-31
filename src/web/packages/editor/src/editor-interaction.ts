@@ -7,6 +7,7 @@ import type { GroupingManager } from "./grouping-manager/index.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import type {
   TextCreationOptions,
+  TextMentionPort,
   TextPlacementPort,
 } from "./text-manager/index.js";
 import type { ViewportManager } from "./viewport-manager/index.js";
@@ -38,6 +39,8 @@ export interface EditorInteraction {
     addText(options?: TextCreationOptions): IText;
     /** Arms the one-shot placement gesture the session's text route owns. */
     beginPlacement(port: TextPlacementPort): void;
+    /** Cancels an armed placement, as choosing another tool does. */
+    cancelPlacement(): void;
     /**
      * Installs who paints an object's authoring view when the author starts
      * editing it. The session owns the run display that comes from, and the
@@ -50,6 +53,11 @@ export interface EditorInteraction {
      * asked for rather than done here.
      */
     setRepaint(paint: (object: IText) => void): void;
+    /**
+     * Installs the readings an inline `@` may insert, and the write that adds
+     * one. The session owns the node's bindings, so the manager asks for it.
+     */
+    setMentions(port: TextMentionPort): void;
   };
   readonly layerManager: {
     bringToFront(object?: FabricObject): void;

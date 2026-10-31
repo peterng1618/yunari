@@ -276,6 +276,66 @@ export function writeRunSource(
   return true;
 }
 
+/**
+ * Replaces a range of typed text with a reading, the inline `@` insert's write.
+ *
+ * The run takes the look of the text it replaces, which is the only default
+ * that is never wrong: the reading lands where the author was typing, so it
+ * should read as that prose did. A binding belongs to the node, so the new
+ * value run and its binding are written together, exactly as `writeRunSource`
+ * does for an existing run.
+ *
+ * Only a text with one literal run is accepted. Fabric hands back one flat
+ * string with no record of which run each character came from, which is why an
+ * in-place edit of several runs is refused (`text-manager`'s `keepTypedText`);
+ * splitting a range of that string would guess at the boundaries it cannot see.
+ */
+export function insertReading(
+  target: RunTarget,
+  range: {
+    readonly text: string;
+    readonly start: number;
+    readonly end: number;
+    readonly semanticKey: string;
+  },
+): boolean {
+  const runs = authoredRunsOf(target.object);
+  if (runs.length !== 1) return false;
+
+  const base = runs[0];
+  if (base === undefined || base.kind !== "literal") return false;
+
+  const { text, start, end, semanticKey } = range;
+  if (
+    semanticKey === "" ||
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start ||
+    end > text.length
+  ) {
+    return false;
+  }
+
+  const look = lookOfRun(base);
+  const before = text.slice(0, start);
+  const after = text.slice(end);
+  const id = `binding-${crypto.randomUUID()}`;
+
+  const next: TextRun[] = [
+    ...(before === ""
+      ? []
+      : [{ kind: "literal" as const, text: before, ...look }]),
+    { kind: "value", bindingId: id, ...look },
+    ...(after === ""
+      ? []
+      : [{ kind: "literal" as const, text: after, ...look }]),
+  ];
+  replaceRuns(target, next);
+  target.setBindings([...target.bindings(), { id, semanticKey }]);
+  return true;
+}
+
 /** How a value run's reading is written out. Clearing it means the key's own default. */
 export function writeBindingFormat(
   target: RunTarget,
@@ -346,7 +406,10 @@ export function writeTextLayout(
  */
 export function appendRun(target: RunTarget): boolean {
   const last = authoredRunsOf(target.object).at(-1);
-  const inherited = last === undefined ? {} : lookOfRun(last);
+  const inherited =
+    last === undefined
+      ? { typeToken: "typeTokens.body" as const }
+      : lookOfRun(last);
   replaceRuns(target, [
     ...authoredRunsOf(target.object),
     { kind: "literal", text: "", ...inherited },

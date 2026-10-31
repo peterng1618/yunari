@@ -276,7 +276,11 @@ async function replaceCatalogueCopy(
   try {
     await options.store.write(
       id,
-      { envelope: { ...parsed.envelope, id }, assets: parsed.assets },
+      {
+        envelope: { ...parsed.envelope, id },
+        assets: parsed.assets,
+        ...(parsed.credits === undefined ? {} : { credits: parsed.credits }),
+      },
       { overwrite: true },
     );
   } catch (error) {
