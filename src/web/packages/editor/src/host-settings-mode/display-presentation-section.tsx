@@ -122,6 +122,9 @@ export function DisplayPresentationSection(props: {
           <ControlSegmented
             id="yunari-host-display-shape"
             label={uiCopy.hostSettings.displays.shape}
+            // The settings surface's row height, as the name field above takes
+            // it: a section whose rows are 32px and 26px reads as two sections.
+            density="settings"
             data={{ "data-yunari-host-display-shape": "" }}
             value={editable.shape}
             options={[
@@ -136,6 +139,7 @@ export function DisplayPresentationSection(props: {
           <ControlSlider
             id="yunari-host-display-rotation"
             label={uiCopy.hostSettings.displays.rotation}
+            density="settings"
             data={{ "data-yunari-host-display-rotation": "" }}
             value={editable.rotation}
             // A degree mark is a unit, not copy (`ui-copy.test.ts` keeps

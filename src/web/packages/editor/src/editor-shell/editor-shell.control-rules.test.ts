@@ -474,3 +474,21 @@ describe("the layer row's control reserve", () => {
     ).toEqual(["1", "2", "3"]);
   });
 });
+
+/** `ControlIconButton` draws its hover in Tailwind classes rather than a rule in
+ *  the stylesheet, so the cases above cannot see it. This reads the component:
+ *  the border it acquires is the whole of the glyph-only hover rule, and
+ *  `--edge` is the weaker border the wells carry at rest. */
+describe("the glyph-only hover rule in ControlIconButton", () => {
+  const source = readFileSync(
+    fileURLToPath(
+      new URL("../components/ui/control-icon-button.tsx", import.meta.url),
+    ),
+    "utf8",
+  );
+
+  it("acquires --muted on hover, never --edge", () => {
+    expect(source).toContain("enabled:hover:border-muted");
+    expect(source).not.toContain("enabled:hover:border-edge");
+  });
+});
