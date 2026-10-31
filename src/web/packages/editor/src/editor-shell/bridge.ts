@@ -3,7 +3,12 @@ import {
   type FabricPalette,
   isObjectName,
 } from "@yunari/renderer-core";
-import { isLocked, isTextObject, YunariChart } from "@yunari/scene-fabric";
+import {
+  isLocked,
+  isTextObject,
+  parentGroupOf,
+  YunariChart,
+} from "@yunari/scene-fabric";
 import { ActiveSelection, type FabricObject, Group } from "fabric/es";
 import { type ArrangeAction, applyArrange, canArrange } from "../arrange.js";
 import type { EditorInteraction } from "../editor-interaction.js";
@@ -470,13 +475,13 @@ export function createEditorShellBridge(input: {
     // entry the author never asked for.
     if (!(target instanceof Group)) return;
     // `enterGroup` enters the group *around* the object it is handed, one hop up
-    // `ownerGroup`. A group inside another therefore has to be reached through
+    // `parentGroupOf`. A group inside another therefore has to be reached through
     // one of its own children: handing over the group itself would enter its
     // owner, and the panel would dim the rows around the parent the author did
     // not press while the row they did press named something else. A nested
     // group with no children has nothing to reach it through, so it stays shut.
     const entry =
-      target.parent instanceof Group ? target.getObjects()[0] : target;
+      parentGroupOf(target) === undefined ? target : target.getObjects()[0];
     if (entry === undefined) return;
     input.editor.groupingManager.enterGroup({ object: entry });
     // Unconditional, as in `selectLayer`: the manager announces a context change

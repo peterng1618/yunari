@@ -23,7 +23,19 @@ import {
  *   orphaning the child.
  */
 export function holderOf(canvas: Canvas, object: FabricObject): Canvas | Group {
-  return object.parent instanceof Group ? object.parent : canvas;
+  return parentGroupOf(object) ?? canvas;
+}
+
+/**
+ * The group that owns `object`, or `undefined` when the canvas holds it.
+ *
+ * The narrower half of `holderOf`, for a caller with no canvas in scope that
+ * must decide what a top-level object means. It is the Fabric fact itself, not
+ * the projection tree's answer by id — `layer-tree.ownerOf` answers that
+ * separate question.
+ */
+export function parentGroupOf(object: FabricObject): Group | undefined {
+  return object.parent instanceof Group ? object.parent : undefined;
 }
 
 /**
