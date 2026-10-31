@@ -364,20 +364,26 @@ function FacetFixture(props: {
  *  reads `list()` and none of the library's other four members — opening a
  *  theme is the shell's own route, through the session's client rather than
  *  this one. */
-function clientListing(
-  entries: readonly ThemeLibraryEntry[],
-  onList?: () => void,
+function clientWithList(
+  list: () => Promise<readonly ThemeLibraryEntry[]>,
 ): ThemeLibraryClient {
   return {
-    list: async () => {
-      onList?.();
-      return entries;
-    },
+    list,
     open: () => Promise.reject(new Error("the region lists; the shell opens")),
     save: () => Promise.reject(new Error("the store does not save")),
     assign: () => Promise.reject(new Error("the store does not assign")),
     listDisplays: async () => ({ default: null, displays: [] }),
   };
+}
+
+function clientListing(
+  entries: readonly ThemeLibraryEntry[],
+  onList?: () => void,
+): ThemeLibraryClient {
+  return clientWithList(async () => {
+    onList?.();
+    return entries;
+  });
 }
 
 /** A listing of `count` themes, all 1920×1080 and dark, named so the sort has
@@ -406,6 +412,12 @@ async function mountStore(
       {...(onOpenTheme === undefined ? {} : { onOpenTheme })}
     />,
   );
+}
+
+/** The region over a client whose read a case drives itself: the failure and
+ *  the retry are the listing's own answers, not the entries it holds. */
+async function mountClient(client: ThemeLibraryClient): Promise<HTMLElement> {
+  return mount(<StoreModeRegion mode="themes" client={client} />);
 }
 
 /** The cells the gallery draws, in order. */
@@ -1995,17 +2007,126 @@ it("names the identifier of a kind the store skipped", async () => {
 });
 
 /**
+ * **A failed read is not an empty library.** The two look the same on screen
+ * and mean opposite things — nothing held against nobody having answered — so
+ * the surface states the failure and offers the read again, and neither empty
+ * sentence may stand in for it.
+ */
+it("states a failed library read instead of claiming the library is empty", async () => {
+  await mountClient(
+    clientWithList(() => Promise.reject(new Error("The host refused it."))),
+  );
+  await settle();
+
+  const failure = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-store-failure]"),
+    "failure state",
+  );
+  expect(
+    failure.textContent,
+    "a failed read does not say the read failed",
+  ).toContain(uiCopy.store.unreadable.local);
+  expect(
+    document.body.querySelector("[data-yunari-store-empty]"),
+    "a failed read was drawn as an empty library",
+  ).toBeNull();
+  expect(
+    document.body.textContent,
+    "a failed read tells the reader the library is empty",
+  ).not.toContain(uiCopy.store.empty.library);
+  expect(
+    document.body.querySelector("[data-yunari-store-retry]"),
+    "a failed read offers no way to read again",
+  ).not.toBeNull();
+});
+
+/**
+ * **An actually empty library still draws its empty sentence**, and no
+ * failure: a successful read that held nothing is the one case the empty
+ * sentence describes.
+ */
+it("draws the empty-library state when the read succeeded with no themes", async () => {
+  await mountStore([]);
+  await settle();
+
+  const empty = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-store-empty]"),
+    "empty state",
+  );
+  expect(
+    empty.textContent,
+    "an empty successful read does not say the library is empty",
+  ).toContain(uiCopy.store.empty.library);
+  expect(
+    document.body.querySelector("[data-yunari-store-failure]"),
+    "an empty successful read was drawn as a failure",
+  ).toBeNull();
+});
+
+/**
+ * **The retry is the same read again.** A failure's one way forward must reach
+ * the host rather than redrawing the sentence, and a read that lands replaces
+ * the failure with what it answered.
+ */
+it("re-reads the library when the failed read's retry is pressed", async () => {
+  let reads = 0;
+  await mountClient(
+    clientWithList(async () => {
+      reads += 1;
+      if (reads === 1) throw new Error("The host refused it.");
+      return [
+        fixtureEntry({
+          id: "retried",
+          name: "Retried",
+          ground: DARK_GROUND,
+        }),
+      ];
+    }),
+  );
+  await settle();
+
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-retry]",
+      ),
+      "retry control",
+    ).click(),
+  );
+  await settle();
+
+  expect(reads, "the retry did not read the library again").toBe(2);
+  expect(
+    cells().map((cell) => cell.getAttribute("data-yunari-store-cell")),
+    "the retried read's items were not drawn",
+  ).toEqual(["retried"]);
+  expect(
+    document.body.querySelector("[data-yunari-store-failure]"),
+    "the failure outlived the read that replaced it",
+  ).toBeNull();
+});
+
+/**
  * **A failed read is not an empty catalogue.** The two look the same on screen
  * and mean opposite things — nothing published against nobody having answered —
- * so the listing stays unset and the body draws nothing, exactly as the local
- * half does (`:558-563`).
+ * so the surface states the failure rather than standing an empty sentence over
+ * it.
  */
-it("leaves the online half unset when the catalogue read failed", async () => {
+it("states a failed catalogue read instead of claiming the store is empty", async () => {
   await mountStore([]);
 
   await showOnline();
+  await settle();
 
   expect(cells(), "a failed read was drawn as a listing").toEqual([]);
+  const failure = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-store-failure]"),
+    "failure state",
+  );
+  expect(
+    failure.textContent,
+    "a failed read does not say the read failed",
+  ).toContain(uiCopy.store.unreadable.online);
   expect(
     document.body.querySelector("[data-yunari-store-empty]"),
     "a failed read was drawn as an empty catalogue",
@@ -2014,6 +2135,10 @@ it("leaves the online half unset when the catalogue read failed", async () => {
     document.body.querySelector("[data-yunari-store-refusal]"),
     "a failed read claimed something it could not read",
   ).toBeNull();
+  expect(
+    document.body.querySelector("[data-yunari-store-retry]"),
+    "a failed read offers no way to read again",
+  ).not.toBeNull();
 });
 
 /**

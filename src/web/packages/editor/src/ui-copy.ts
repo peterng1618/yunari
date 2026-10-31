@@ -1176,6 +1176,17 @@ export const uiCopy = {
       catalogueHint: "Themes published to the store will appear here.",
       filter: "No themes match these filters.",
     },
+    /** **A read that failed is not one of the empties.** The library and the
+     *  catalogue each have an empty sentence for a successful read that held
+     *  nothing; neither may be drawn when nobody answered, because saying a
+     *  half is empty to someone whose host refused the request is a fabricated
+     *  fact. This is the sentence that says the read failed instead. */
+    unreadable: {
+      local: "Your themes could not be read.",
+      online: "The store could not be read.",
+    },
+    /** The failure's one way forward: read the same listing again. */
+    retry: "Try again",
     /** The sort well, whose keys are per half because the two share none: the
      *  catalogue knows when an item was published and how often it was taken,
      *  and the host's library knows only what the author wrote. */

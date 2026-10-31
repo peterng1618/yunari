@@ -356,8 +356,12 @@ function pageItems(
  * **"Nothing" is a state and not an oversight.** A listing that has not arrived
  * yet draws nothing rather than the first-run sentence — a store that flashed
  * "No themes are saved on this PC yet" before its own list landed would be lying
- * for a frame. A read that failed stays in this state too, whichever half it
- * was: an empty array would claim the half is empty.
+ * for a frame.
+ *
+ * **A read that failed is its own state, not "nothing" and not an empty.** It
+ * says the read failed and offers the same read again, because silence would
+ * leave a host refusal and an empty half looking identical. Drawing either
+ * empty sentence over it would assert a fact the read never answered.
  *
  * **The empties are different sentences because they have different answers**
  * (R124): a library with nothing in it is not a filter that matched nothing, and
@@ -366,6 +370,7 @@ function pageItems(
  */
 type Body =
   | { readonly kind: "none" }
+  | { readonly kind: "failed" }
   | { readonly kind: "empty-library" }
   | { readonly kind: "empty-catalogue" }
   | { readonly kind: "empty-filter" }
@@ -427,6 +432,32 @@ function Empty(props: {
       {props.hint === undefined ? null : (
         <p className="text-xs text-faint">{props.hint}</p>
       )}
+    </div>
+  );
+}
+
+/** The failure a read that did not arrive draws: the half's own sentence and
+ *  the one way forward, the same read again. It is deliberately not the
+ *  `Empty` component — a failure is not one of the empties, and a data
+ *  attribute that named it one would let a reader mistake the two. */
+function Failure(props: {
+  readonly message: string;
+  readonly onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <div
+      data-yunari-store-failure=""
+      className="flex flex-1 flex-col items-center justify-center gap-[var(--space-8)] px-[var(--space-32)] text-center"
+    >
+      <p className="text-sm text-muted">{props.message}</p>
+      <button
+        type="button"
+        data-yunari-store-retry=""
+        onClick={props.onRetry}
+        className="text-xs text-accent underline"
+      >
+        {uiCopy.store.retry}
+      </button>
     </div>
   );
 }
@@ -503,6 +534,11 @@ function StoreRegion(props: {
   const [items, setItems] = useState<readonly StoreItem[] | undefined>(
     undefined,
   );
+  /** Whether the library's read failed, and a counter whose change asks for it
+   *  again. The two are separate facts: a retry clears the failure and reads,
+   *  where the failure is what the body states. */
+  const [listingFailed, setListingFailed] = useState(false);
+  const [listingAttempt, setListingAttempt] = useState(0);
 
   // One client and one source for the life of the region: a client built per
   // render would be a new one every time, and the listing would reach a host the
@@ -531,22 +567,25 @@ function StoreRegion(props: {
 
   useEffect(() => {
     let live = true;
+    // A retry reads again from a clean slate: the failed read's absence must
+    // not outlive the attempt that replaced it.
+    setListingFailed(false);
+    setItems(undefined);
     source.list().then(
       (listed) => {
         if (live) setItems(listed);
       },
       () => {
-        // **A failed listing is not a fact about the library**, so nothing is
-        // drawn for it: `items` stays unset and the body stays empty rather than
-        // claiming the library is empty. The reason has no surface here — the
-        // shell's notices belong to the editor's error manager, which is reached
-        // through a canvas this region does not have.
+        // **A failed listing is not a fact about the library**, so `items`
+        // stays unset rather than becoming an empty array. The failure is its
+        // own body state, not this region's silence.
+        if (live) setListingFailed(true);
       },
     );
     return () => {
       live = false;
     };
-  }, [source]);
+  }, [source, listingAttempt]);
 
   // The online half chooses its source: the catalogue, or the author's own rows.
   const online = useMineListing(items, {
@@ -566,9 +605,19 @@ function StoreRegion(props: {
   const total = pageCount(sorted.length, size);
   const current = Math.min(Math.max(page, 1), Math.max(total, 1));
 
+  // Which half's read is being drawn, and how to ask that half again. The
+  // online half chooses its own source, so its retry follows the same choice.
+  const failed = tab === "local" ? listingFailed : online.failed;
+  const retry =
+    tab === "local"
+      ? () => setListingAttempt((current) => current + 1)
+      : online.retry;
+
   const body: Body =
     listed === undefined
-      ? { kind: "none" }
+      ? failed
+        ? { kind: "failed" }
+        : { kind: "none" }
       : listed.length === 0
         ? tab === "local"
           ? { kind: "empty-library" }
@@ -601,12 +650,12 @@ function StoreRegion(props: {
    *  page, not over it. */
   const inlineAssign = openItem !== undefined && assignId === openItem.id;
 
-  // What the shell's strip reads for this mode: the visible listing, and nothing
-  // while the half has not answered (`none` covers a listing that failed, which
-  // is not an empty result). The cleanup withdraws the reading on unmount, so
-  // leaving the mode cannot leave the next visit's strip holding this visit's
-  // count.
-  const statusCount = body.kind === "none" ? undefined : sorted.length;
+  // What the shell's strip reads for this mode: the visible listing, and
+  // nothing while the half has not answered or its read failed — neither is a
+  // count of zero. The cleanup withdraws the reading on unmount, so leaving the
+  // mode cannot leave the next visit's strip holding this visit's count.
+  const statusCount =
+    body.kind === "none" || body.kind === "failed" ? undefined : sorted.length;
   const onStatus = props.onStatus;
   useEffect(() => {
     onStatus?.(statusCount);
@@ -728,6 +777,16 @@ function StoreRegion(props: {
       {/* The gallery's own scroller, so the header and the pager stay still
           while the grid moves — the pane body's model. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[var(--space-16)]">
+        {body.kind === "failed" ? (
+          <Failure
+            message={
+              tab === "local"
+                ? uiCopy.store.unreadable.local
+                : uiCopy.store.unreadable.online
+            }
+            onRetry={retry}
+          />
+        ) : null}
         {body.kind === "empty-library" ? (
           <Empty
             lead={uiCopy.store.empty.library}
