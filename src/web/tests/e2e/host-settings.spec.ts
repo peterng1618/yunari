@@ -559,6 +559,56 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
   });
 
   /**
+   * Pressing this PC's own row is the one press that leaves the chooser: `/` is
+   * one-shot for the caller's own screen, so the write makes the reload resolve
+   * to that screen's dashboard instead of the chooser again. Every other chooser
+   * case avoids this press — they need to stay on the page — which is why the
+   * write and the hand-off are asserted here, together.
+   *
+   * The assignment is read from the host rather than the row, because the reload
+   * is the thing under test and it throws the page's own copy away. The landing
+   * URL also names its source, so `map` is what says the host resolved the
+   * assignment rather than the page having carried a `?theme=` link in.
+   */
+  test("gives this PC's own screen a theme, and hands the browser to its dashboard", async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(
+      !isDesktopSurface(testInfo),
+      "one desktop pass owns the shared host state",
+    );
+
+    resetStores();
+    await page.goto(`${HOST}/`);
+    await expect(
+      page.locator('#themes [data-display="this-pc"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('#themes [data-display="this-pc"]'),
+    ).toContainText("Uses the default");
+
+    await chooseTheme(page, HOST_THEME_ID, "this-pc");
+
+    // The page reloads on a successful write; this is that reload following the
+    // host's redirect to the theme the assignment named.
+    await expect(page).toHaveURL(/[?&]theme=e2e-hosted\b/);
+    await expect(page).toHaveURL(/[?&]theme-source=map\b/);
+    await expect(page.locator("#artboard")).toBeVisible({ timeout: 30_000 });
+
+    const after = (await (
+      await request.get(`${HOST}/api/themes/active`)
+    ).json()) as {
+      default: string | null;
+      displays: { id: string; theme: string | null }[];
+    };
+    expect(after.displays.find((row) => row.id === "this-pc")?.theme).toBe(
+      HOST_THEME_ID,
+    );
+    expect(after.default).toBeNull();
+  });
+
+  /**
    * The assignment says what a theme will cost the display it is being given
    * to, before the press. A video background with no glass is the only cost
    * whose answer depends on that display, so this is the case the whole table
