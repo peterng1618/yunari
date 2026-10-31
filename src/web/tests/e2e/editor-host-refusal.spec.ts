@@ -313,6 +313,12 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   const refusal = (await probe.text()).trim();
   expect(refusal, "the host refused with an empty sentence").not.toBe("");
 
+  // `mkdtemp` mints a fresh random suffix per call, so the probe's sentence and
+  // the sheet's cannot be compared byte for byte. What the sheet owes is the
+  // host's own wording: the same message with only that suffix normalised.
+  const stable = (text: string): string =>
+    text.replace(/yunari-trash-[A-Za-z0-9]+/g, "yunari-trash-<random>");
+
   const downloads: string[] = [];
   page.on("download", (download) =>
     downloads.push(download.suggestedFilename()),
@@ -322,7 +328,13 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
     .getByRole("button", { name: uiCopy.file.savePackage, exact: true })
     .click();
 
-  await expect(page.locator("#status-message")).toHaveText(refusal);
+  await expect
+    .poll(
+      async () =>
+        stable((await page.locator("#status-message").textContent()) ?? ""),
+      { message: "the sheet did not repeat the host's own sentence" },
+    )
+    .toBe(stable(refusal));
   await expect(dialog).toBeHidden();
   // Nothing was written and nothing pruned: the declaration and its card are
   // still the document's, which is what "the save stopped" means here.
