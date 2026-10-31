@@ -32,6 +32,7 @@ import { createSelectionColumnRoot } from "./column.js";
 import { writeGlassField } from "./glass.js";
 import { createInspectorRoot } from "./inspector.js";
 import { writePanelField, writeShapeGeometryField } from "./panel.js";
+import { createPendingPreview } from "./pending-preview.js";
 import {
   type ChartFieldsPort,
   type ColumnContext,
@@ -279,6 +280,11 @@ export function createSelectionInspector(
    */
   let targetRevision = 0;
   let described: FabricObject | undefined;
+
+  /** The one slider preview that has been written but neither committed nor
+   *  cancelled. A republish or another field's edit ends that gesture, and the
+   *  previewed value becomes the one edit it always was (`pending-preview.ts`). */
+  const pendingPreview = createPendingPreview();
 
   /**
    * The revision the background's column is published at. The background is
@@ -672,6 +678,10 @@ export function createSelectionInspector(
    */
   const edits: SelectionEdits = {
     commit(expectedRevision, fieldId, value) {
+      // **Another field's unsettled preview ends here.** Its value already sits
+      // in the document; the save is what makes it the one edit that gesture
+      // made, before this commit records its own.
+      if (pendingPreview.settleOther(fieldId)) commit();
       // Routed by prefix, so a background field can never reach `writeField`'s
       // Fabric path: there is no object for it to write.
       if (fieldId.startsWith("background.")) {
@@ -691,6 +701,7 @@ export function createSelectionInspector(
           return false;
         }
         backgroundRevision += 1;
+        pendingPreview.discard(fieldId);
         render();
         return true;
       }
@@ -698,6 +709,7 @@ export function createSelectionInspector(
         render();
         return false;
       }
+      pendingPreview.discard(fieldId);
       commit();
       render();
       return true;
@@ -706,12 +718,20 @@ export function createSelectionInspector(
       // The background's controls commit on change: there is no gesture whose
       // in-flight value would be previewed.
       if (fieldId.startsWith("background.")) return false;
+      // A different field's preview ends when this gesture starts.
+      if (pendingPreview.settleOther(fieldId)) commit();
       if (!applyField(expectedRevision, fieldId, value, false)) return false;
+      if (described !== undefined)
+        pendingPreview.record(described, fieldId, value);
       editor.canvas.requestRenderAll();
       return true;
     },
     cancelPreview(expectedRevision, fieldId, value) {
       if (fieldId.startsWith("background.")) return;
+      if (pendingPreview.settleOther(fieldId)) commit();
+      // The cancel is this field's own end: its preview must not be saved as
+      // the edit it just took back.
+      pendingPreview.discard(fieldId);
       if (!applyField(expectedRevision, fieldId, value, false)) return;
       editor.canvas.requestRenderAll();
       render();
@@ -984,6 +1004,12 @@ export function createSelectionInspector(
    * container.
    */
   const render = (): void => {
+    // A republish replaces the control that owned a held gesture, so a preview
+    // still in flight is the edit that gesture made: it is saved before the
+    // column moves on. A history restore replaced the document instead, and the
+    // value the preview wrote is not what the restored document holds.
+    if (restoring) pendingPreview.clear();
+    else if (pendingPreview.settle()) commit();
     // Another surface owns the column (the token inspector, while a token is
     // selected), so nothing is projected into a column nobody can see.
     if (suppressed) return;
