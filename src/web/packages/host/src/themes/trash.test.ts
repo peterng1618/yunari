@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  moveFilesToTrash,
   runTrashRoutes,
   TrashRefusal,
   type TrashRoute,
@@ -235,5 +236,55 @@ describe("runTrashRoutes", () => {
 
     await expect(refused).rejects.toBeInstanceOf(TrashRefusal);
     await expect(refused).rejects.toThrow(/no trash command/);
+  });
+});
+
+/**
+ * The cases above assert the strings each route is built from. This hands a file
+ * the test created to the module itself, so the platform's own trash is the
+ * only thing that can make its source path disappear.
+ *
+ * The module exposes no restore, so the trashed copy is not reclaimed here: the
+ * file is disposable, and the move is what the route promises. A platform with
+ * no route is a stated skip rather than a pass, which is the difference between
+ * "not available here" and "ran and worked".
+ */
+describe("the platform's own trash", () => {
+  const plan = trashPlan(process.platform, "probe", "file");
+
+  if (!plan.ok) {
+    it.skip(`no trash route for ${process.platform}: ${plan.reason}`, () => {});
+    return;
+  }
+
+  it("moves a file this test created out of its temp directory", async (context) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-trash-"));
+    const file = path.join(directory, "moved-me.txt");
+    await fs.writeFile(file, "not an authored theme");
+
+    try {
+      // The control: a missing precondition would otherwise make the ENOENT
+      // below pass for the wrong reason.
+      await expect(fs.stat(file)).resolves.toBeDefined();
+
+      try {
+        await moveFilesToTrash([file]);
+      } catch (error: unknown) {
+        // A machine with neither `gio` nor `trash-put` says so with the module's
+        // own sentence. That is the route being unavailable, not the move being
+        // proved, so it skips rather than passing.
+        if (
+          error instanceof TrashRefusal &&
+          error.message.includes("has no trash command")
+        ) {
+          context.skip(error.message);
+        }
+        throw error;
+      }
+
+      await expect(fs.stat(file)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   });
 });
