@@ -17,7 +17,7 @@ import {
   type SemanticKeyDescriptor,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
@@ -433,6 +433,7 @@ function previewOf(
   pattern: string,
   zone: string | undefined,
   locale: string | undefined,
+  now: number,
 ): string {
   const instant = describeSemanticKey(semanticKey)?.instant;
   const shown = pattern === "" ? (instant?.defaultFormat ?? "") : pattern;
@@ -440,9 +441,26 @@ function previewOf(
   // zone at all; "" is a valid option id and not a valid IANA name.
   const pinned = zone === undefined || zone === "" ? undefined : zone;
   return (
-    formatInstant(instantIn(Date.now()), shown, pinned, locale) ??
+    formatInstant(instantIn(now), shown, pinned, locale) ??
     uiCopy.inspectorFields.unresolved
   );
+}
+
+/**
+ * The instant a live preview reads.
+ *
+ * A format preview is a clock, not a value the render that drew it owns: without
+ * a tick it shows the last render's instant forever. One interval per mounted
+ * preview re-reads the wall each second; it is created with the preview and
+ * cleared with it, so a run with no format carries no timer.
+ */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
 }
 
 /**
@@ -464,6 +482,7 @@ function RunFormatField(props: {
   const { index, format, formatDefault, semanticKey, zone, locale } = props;
   const ids = useControlIds(`yunari-run-format-${index}`);
   const [draft, setDraft] = useState<string | null>(null);
+  const now = useNow();
   const shown = draft ?? format;
 
   const commit = (): void => {
@@ -507,7 +526,7 @@ function RunFormatField(props: {
         className="yunari-run-preview text-xs text-muted"
         data-yunari-run-format-preview={String(index)}
       >
-        {previewOf(semanticKey, shown, zone, locale)}
+        {previewOf(semanticKey, shown, zone, locale, now)}
       </span>
       <p
         className="yunari-run-note text-xs text-faint"
