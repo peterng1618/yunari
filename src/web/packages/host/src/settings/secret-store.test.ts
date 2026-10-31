@@ -52,6 +52,10 @@ describe("secret store", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  // The box is shared with one worker per file in a full run, and this case is
+  // 256 write/read pairs of its own: on the loaded runs that exceeded the old
+  // 60 s ceiling twice while passing alone in seconds. The budget, not the
+  // work, is what had to grow.
   it("round-trips every byte length from 0 through 255", async () => {
     for (let length = 0; length <= 255; length += 1) {
       const plaintext = bytesOf(length);
@@ -62,7 +66,7 @@ describe("secret store", () => {
       expect(read?.length).toBe(length);
       expect(read ? read.equals(Buffer.from(plaintext)) : false).toBe(true);
     }
-  }, 60_000);
+  }, 120_000);
 
   it("keeps an empty secret distinct from an absent one", async () => {
     await store.write("empty", new Uint8Array(0));
