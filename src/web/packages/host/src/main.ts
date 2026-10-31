@@ -697,7 +697,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     // a page that read `/api/pairing/code` in between minted its own; minting
     // here would replace it and refuse the claim that follows (R16: a read never
     // moves the live code).
-    const code = pairingCodes.current() ?? pairingCodes.mint();
+    const code = pairingCodes.currentOrMint();
     console.log(style("2", "\n  This host is reachable on this network at:"));
     console.log(`  ${networkSecure}/`);
     console.log(

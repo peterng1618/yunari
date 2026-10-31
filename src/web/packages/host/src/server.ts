@@ -2000,7 +2000,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       // under whoever is typing it (R16). Only an absent or expired window
       // mints one.
       if (url.pathname === "/api/pairing/code" && request.method === "GET") {
-        const live = pairingCodes.current() ?? pairingCodes.mint();
+        const live = pairingCodes.currentOrMint();
         sendJson(response, 200, { code: live.code, expiresAt: live.expiresAt });
         return;
       }
