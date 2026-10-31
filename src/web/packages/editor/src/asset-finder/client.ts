@@ -104,6 +104,13 @@ export async function searchAssets(
   }
 }
 
+/** The host route one source's own bytes are read from. `id` may be a row's
+ *  `<source>:`-namespaced id or a cut's own id; the host strips one prefix. One
+ *  spelling, because a specimen loads the same bytes Apply writes. */
+export function assetBytesUrl(source: string, id: string): string {
+  return `/api/assets/bytes?source=${encodeURIComponent(source)}&id=${encodeURIComponent(id)}`;
+}
+
 export async function assetBytes(
   source: string,
   id: string,
@@ -112,11 +119,7 @@ export async function assetBytes(
   const { fetcher, url } = request(options);
 
   try {
-    const response = await fetcher(
-      url(
-        `/api/assets/bytes?source=${encodeURIComponent(source)}&id=${encodeURIComponent(id)}`,
-      ),
-    );
+    const response = await fetcher(url(assetBytesUrl(source, id)));
     if (!response.ok) return undefined;
 
     return {
