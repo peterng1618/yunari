@@ -7,7 +7,7 @@
   "description": "Desktop authoring experience. Adds interaction overlays and inspectors on top of the shared renderer.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/check-css-prefixes.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
