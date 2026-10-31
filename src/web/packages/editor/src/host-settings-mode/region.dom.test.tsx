@@ -2069,6 +2069,44 @@ it("does not offer a panel that is already a display", async () => {
   expect(container.textContent).toContain(uiCopy.hostSettings.panels.allAdded);
 });
 
+it("states why a held port cannot be added", async () => {
+  // The host sees the device but another process holds its port. The row is
+  // the report: no add button, and the host's own sentence for the reason.
+  const reason =
+    'TURZX 5" Panel could not be opened: Access denied. Another program holding it — the TURZX vendor app is the usual one — has to be closed first.';
+  const { container } = await mountHost({
+    ...ONE_PANEL,
+    panels: [
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "PANEL0002",
+        label: 'TURZX 5" Panel',
+        held: false,
+        status: "disconnected",
+        reason,
+        commands: [],
+      },
+    ],
+  });
+
+  const row = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-panel="7531:262:PANEL0002"]',
+    ),
+    "the held port's row",
+  );
+
+  expect(row.textContent).toContain(reason);
+  expect(
+    row.querySelector("[data-yunari-panel-add]"),
+    "a port the host cannot open is still offered",
+  ).toBeNull();
+  expect(container.textContent).not.toContain(
+    uiCopy.hostSettings.panels.allAdded,
+  );
+});
+
 it("states the chosen panel's hardware record and warns on a firmware mismatch", async () => {
   // The record is the driver's statement about this hardware; a device
   // answering a firmware it does not name is the fact a person needs before

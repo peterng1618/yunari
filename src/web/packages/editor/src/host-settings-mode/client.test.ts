@@ -325,6 +325,8 @@ it("reads a panel's hardware record, dropping what it cannot print", async () =>
           },
           model: "chs_5inch",
           firmware: "1.90",
+          status: "disconnected",
+          reason: "Another program holds the port.",
           commands: ["brightness", "startVideo", "status"],
         },
         {
@@ -362,6 +364,8 @@ it("reads a panel's hardware record, dropping what it cannot print", async () =>
     },
     model: "chs_5inch",
     firmware: "1.90",
+    status: "disconnected",
+    reason: "Another program holds the port.",
     commands: ["brightness", "status"],
   });
   expect(panels[1]?.support).toBeUndefined();

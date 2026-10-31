@@ -140,27 +140,71 @@ async function quietlyClose(transport: SerialTransport): Promise<void> {
 }
 
 /**
+ * The open refusal an owner can act on: the TURZX vendor app is the usual
+ * holder, and the sentence is the same one the start path shows.
+ */
+function heldReason(message: string): string {
+  return (
+    `${LABEL} could not be opened: ${message}. Another program holding it — the ` +
+    "TURZX vendor app is the usual one — has to be closed first."
+  );
+}
+
+/** The codes a held COM port answers with on Windows and Linux. */
+const HELD_OPEN_CODES = new Set(["EBUSY", "EACCES", "EPERM"]);
+
+/**
+ * The named reason when `error` means another process holds the port, or
+ * nothing when the port merely vanished. The two must not be conflated: a
+ * missing panel needs its cable checked, a held one needs the vendor app shut.
+ */
+function heldOpenReason(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  const held =
+    (code !== undefined && HELD_OPEN_CODES.has(code)) ||
+    /access (?:is )?denied|permission denied|busy|being used/i.test(message);
+
+  return held ? heldReason(message) : undefined;
+}
+
+/**
  * Every attached panel, one hint each.
  *
  * A port with no USB ids is invisible to a record, so it is not opened. A port
- * another program holds fails to open and is skipped here; `openTurzxPanel`
- * turns that same failure into the sentence an owner can act on.
+ * another program holds is reported as `disconnected` with the reason the
+ * start path gives, rather than dropped: the owner can see it plugged in. A
+ * recorded panel is stated only while its port is still in the listing — the
+ * recording stands in for a port the host cannot reopen, not for a cable that
+ * is gone.
  */
 export async function attachedTurzxPanels(
   options: TurzxOptions = {},
 ): Promise<readonly PanelHint[]> {
   const ports = await (options.ports ?? listSerialPorts)();
   const open = options.open ?? openSerialPort;
+  const present = new Set(ports.map((port) => port.path));
+  const hints: PanelHint[] = [];
+
   // A panel this host is driving is stated from what opening it already told
-  // us: its port cannot be reopened to ask again.
-  const hints: PanelHint[] = [...heldPanels.values()].map((panel) => ({
-    vendorId: panel.vendorId,
-    productId: panel.productId,
-    serial: panel.serial,
-    label: LABEL,
-    model: panel.model,
-    firmware: panel.firmware,
-  }));
+  // us: its port cannot be reopened to ask again. Once the port leaves the
+  // listing, the entry is what keeps an unplugged panel looking attached.
+  for (const [path, panel] of heldPanels) {
+    if (!present.has(path)) {
+      heldPanels.delete(path);
+      continue;
+    }
+
+    hints.push({
+      vendorId: panel.vendorId,
+      productId: panel.productId,
+      serial: panel.serial,
+      label: LABEL,
+      model: panel.model,
+      firmware: panel.firmware,
+    });
+  }
 
   for (const port of ports) {
     if (!hasIds(port)) continue;
@@ -169,7 +213,18 @@ export async function attachedTurzxPanels(
     let transport: SerialTransport;
     try {
       transport = await open(port.path);
-    } catch {
+    } catch (error) {
+      const reason = heldOpenReason(error);
+      if (reason !== undefined) {
+        hints.push({
+          vendorId: port.vendorId,
+          productId: port.productId,
+          serial: port.serialNumber ?? "",
+          label: LABEL,
+          status: "disconnected",
+          reason,
+        });
+      }
       continue;
     }
 
@@ -786,7 +841,9 @@ export async function openTurzxPanel(
     try {
       transport = await open(port.path);
     } catch (error) {
-      held = error instanceof Error ? error.message : String(error);
+      // Only a port another process holds earns the vendor-app sentence; one
+      // that vanished is the missing-panel answer below.
+      held = heldOpenReason(error);
       continue;
     }
 
@@ -826,12 +883,7 @@ export async function openTurzxPanel(
     return new TurzxPanel(transport, decode, port.path, transcode, sleep);
   }
 
-  if (held !== undefined) {
-    throw new Error(
-      `${LABEL} could not be opened: ${held}. Another program holding it — the ` +
-        "TURZX vendor app is the usual one — has to be closed first.",
-    );
-  }
+  if (held !== undefined) throw new Error(held);
 
   throw notAttached();
 }

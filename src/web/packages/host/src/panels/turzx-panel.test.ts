@@ -126,7 +126,40 @@ describe("attachedTurzxPanels", () => {
     ]);
   });
 
-  it("skips a port with no usable USB ids and a port another program holds", async () => {
+  it("reports a held port with the reason the product shows elsewhere", async () => {
+    // The vendor app refuses the open; the port is still physically present.
+    // Dropping it here is what left Host settings with no row and no reason.
+    const hints = await attachedTurzxPanels({
+      ports: async () => [
+        {
+          path: "COM5",
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serialNumber: "S1",
+        },
+      ],
+      open: async () => {
+        throw Object.assign(new Error("Opening COM5: Access denied"), {
+          code: "EACCES",
+        });
+      },
+      sleep: async () => {},
+    });
+
+    expect(hints).toEqual([
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "S1",
+        label: 'TURZX 5" Panel',
+        status: "disconnected",
+        reason:
+          'TURZX 5" Panel could not be opened: Opening COM5: Access denied. Another program holding it — the TURZX vendor app is the usual one — has to be closed first.',
+      },
+    ]);
+  });
+
+  it("skips a port with no usable USB ids and a port that vanished", async () => {
     const hints = await attachedTurzxPanels({
       ports: async () => [
         { path: "COM1" },
@@ -138,7 +171,9 @@ describe("attachedTurzxPanels", () => {
         },
       ],
       open: async () => {
-        throw new Error("Access denied");
+        throw Object.assign(new Error("Opening COM5: File not found"), {
+          code: "ENOENT",
+        });
       },
       sleep: async () => {},
     });
@@ -192,13 +227,58 @@ describe("a panel this host is driving", () => {
         await attachedTurzxPanels({
           ports: async () => ports,
           open: async () => {
-            throw new Error("Access denied");
+            throw Object.assign(new Error("Opening COM5: File not found"), {
+              code: "ENOENT",
+            });
           },
         }),
       ).toEqual([]);
     } finally {
       // The map is module state: a case that left an entry would seed the
       // next one with a panel no transport is driving.
+      await panel.close();
+    }
+  });
+
+  it("stops reporting a panel whose port disappeared, and probes it when it returns", async () => {
+    // The recording exists because the driven port cannot be reopened. Once the
+    // port is gone the recording is no longer evidence of anything attached.
+    const ports = [
+      {
+        path: "COM5",
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serialNumber: "S1",
+      },
+    ];
+    const panel = await openTurzxPanel({
+      ports: async () => ports,
+      open: async () => fakeTransport("chs_5inch.dev1_rom1.88").transport,
+    });
+
+    try {
+      expect(
+        await attachedTurzxPanels({
+          ports: async () => [],
+          open: async () => {
+            throw new Error("the port is gone");
+          },
+        }),
+      ).toEqual([]);
+
+      const reopened: string[] = [];
+      const hints = await attachedTurzxPanels({
+        ports: async () => ports,
+        open: async (path) => {
+          reopened.push(path);
+          return fakeTransport("chs_5inch.dev1_rom1.88").transport;
+        },
+      });
+
+      // The stale recording must not stand in for the probe after a replug.
+      expect(reopened).toEqual(["COM5"]);
+      expect(hints.map((hint) => hint.serial)).toEqual(["S1"]);
+    } finally {
       await panel.close();
     }
   });

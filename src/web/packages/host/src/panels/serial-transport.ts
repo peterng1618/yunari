@@ -91,8 +91,16 @@ export interface SerialPortLike {
   close(callback?: (error: Error | null | undefined) => void): unknown;
   on(event: "data", listener: (chunk: Buffer) => void): unknown;
   on(event: "error", listener: (error: Error) => void): unknown;
+  on(
+    event: "close",
+    listener: (error: Error | null | undefined) => void,
+  ): unknown;
   off(event: "data", listener: (chunk: Buffer) => void): unknown;
   off(event: "error", listener: (error: Error) => void): unknown;
+  off(
+    event: "close",
+    listener: (error: Error | null | undefined) => void,
+  ): unknown;
 }
 
 /**
@@ -157,12 +165,26 @@ class OpenSerialPort implements SerialTransport {
   };
 
   /**
-   * A disconnect mid-read must not wait out the read cap.
-   *
-   * What arrived is still handed over, and the next write or read surfaces the
-   * disconnection itself — a cabled gadget that vanished is not a reply.
+   * An error settles a waiting read with what arrived and leaves the next write
+   * or read to surface the fault. `serialport` reports an unplug through
+   * `close`, so this is not by itself the end of the handle.
    */
   private readonly onPortError = (): void => {
+    this.settleArrival();
+  };
+
+  /**
+   * `serialport` v5 reports an unplug as a close carrying a disconnect error.
+   * Marking the port closed stops the next write from queueing on an `open`
+   * event that never comes; what a waiting read already holds is handed over.
+   */
+  private readonly onPortClosed = (): void => {
+    this.closed = true;
+    this.settleArrival();
+  };
+
+  /** Hands over what arrived before the wire stopped, then stops waiting. */
+  private settleArrival(): void {
     this.discarding = false;
     if (this.quiet !== undefined) {
       clearTimeout(this.quiet);
@@ -175,12 +197,13 @@ class OpenSerialPort implements SerialTransport {
     }
 
     this.seal();
-  };
+  }
 
   constructor(private readonly port: SerialPort) {
-    // A port that disconnects emits `error`; without a listener Node throws.
-    // The disconnect still surfaces through the next write or an empty read.
+    // A port that disconnects emits `close`; an `error` without a listener
+    // would otherwise throw. Both mean no reply is coming.
     this.port.on("error", this.onPortError);
+    this.port.on("close", this.onPortClosed);
     this.port.on("data", this.onData);
   }
 
@@ -312,6 +335,7 @@ class OpenSerialPort implements SerialTransport {
     this.discarding = false;
     this.port.off("data", this.onData);
     this.port.off("error", this.onPortError);
+    this.port.off("close", this.onPortClosed);
     if (this.quiet !== undefined) {
       clearTimeout(this.quiet);
       this.quiet = undefined;

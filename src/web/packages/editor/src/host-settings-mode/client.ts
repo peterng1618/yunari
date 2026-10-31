@@ -249,6 +249,11 @@ export interface PanelHint {
   readonly model?: string;
   /** The firmware version the device answers, when it answers one. */
   readonly firmware?: string;
+  /** The host's state for a present device it cannot drive, when it states one.
+   *  A port another process holds is `disconnected`. */
+  readonly status?: PanelConnectionStatus;
+  /** Why the host cannot drive it, in the host's own words. */
+  readonly reason?: string;
   /** The commands this host can send it; empty for a picture-only panel. */
   readonly commands: readonly PanelCommandKind[];
 }
@@ -298,6 +303,15 @@ function isPanelCommandKind(value: unknown): value is PanelCommandKind {
   return (PANEL_COMMAND_KINDS as readonly unknown[]).includes(value);
 }
 
+/** One of the host's three panel states, or nothing when the answer is not one. */
+function isPanelConnectionStatus(
+  value: unknown,
+): value is PanelConnectionStatus {
+  return (
+    value === "connected" || value === "connecting" || value === "disconnected"
+  );
+}
+
 /** The attached panels worth offering. An entry is kept only where it carries
  *  the ids a record needs — a row the add route would refuse is not a choice. */
 function readPanelHints(input: unknown): readonly PanelHint[] {
@@ -313,6 +327,8 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
       readonly support?: unknown;
       readonly model?: unknown;
       readonly firmware?: unknown;
+      readonly status?: unknown;
+      readonly reason?: unknown;
       readonly commands?: unknown;
     };
 
@@ -341,6 +357,12 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
             ...(typeof panel.model === "string" ? { model: panel.model } : {}),
             ...(typeof panel.firmware === "string"
               ? { firmware: panel.firmware }
+              : {}),
+            ...(isPanelConnectionStatus(panel.status)
+              ? { status: panel.status }
+              : {}),
+            ...(typeof panel.reason === "string"
+              ? { reason: panel.reason }
               : {}),
             // An older host names no commands: read it as a picture-only panel,
             // which is what the host before the field could drive.
@@ -817,9 +839,7 @@ export function createHostSettingsClient(options?: {
       const body = (await response.json()) as { readonly status?: unknown };
       // An answer this build cannot read is the state it just failed to enter;
       // the caller re-reads the map anyway, so nothing is invented here.
-      return body?.status === "connected" ||
-        body?.status === "connecting" ||
-        body?.status === "disconnected"
+      return isPanelConnectionStatus(body?.status)
         ? body.status
         : "disconnected";
     },

@@ -255,6 +255,50 @@ describe("the serial transport's read", () => {
   });
 });
 
+describe("the serial transport's disconnect", () => {
+  it("marks the port closed when serialport reports its close", async () => {
+    // `serialport` v5 reports an unplug through `close`, not `error`. Without a
+    // listener the handle stays "open" to the seam and the next write queues on
+    // an open event that never comes.
+    const port = new FakePort();
+    const transport = transportOver(port);
+    expect(
+      port.listenerCount("close"),
+      "the disconnect event is not listened for",
+    ).toBe(1);
+
+    const reading = transport.read(5000);
+    await Promise.resolve();
+    port.isOpen = false;
+    port.emit(
+      "close",
+      Object.assign(new Error("disconnected"), { disconnected: true }),
+    );
+
+    expect((await reading).length).toBe(0);
+    await expect(transport.write(Uint8Array.of(1))).rejects.toMatchObject({
+      code: "ERR_SERIAL_PORT_CLOSED",
+    });
+
+    await transport.close();
+    expect(port.listenerCount("close")).toBe(0);
+  });
+
+  it("hands over what arrived before the close", async () => {
+    const port = new FakePort();
+    const transport = transportOver(port);
+    const reading = transport.read(5000);
+
+    await Promise.resolve();
+    port.emit("data", Buffer.from("par"));
+    port.isOpen = false;
+    port.emit("close", null);
+
+    expect(decode(await reading)).toBe("par");
+    await transport.close();
+  });
+});
+
 describe("the serial transport's write", () => {
   it("resolves a write while the port is open", async () => {
     const port = new FakePort();
