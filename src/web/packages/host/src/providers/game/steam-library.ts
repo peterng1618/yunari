@@ -267,7 +267,7 @@ async function readText(file: string): Promise<string | undefined> {
 export async function readSteamApps(
   steamRoot: string,
 ): Promise<readonly SteamApp[]> {
-  const rootVdf = path.win32.join(steamRoot, "steamapps", "libraryfolders.vdf");
+  const rootVdf = path.join(steamRoot, "steamapps", "libraryfolders.vdf");
   const vdf = await readText(rootVdf);
   const listed =
     vdf === undefined ? [steamRoot] : parseLibraryFolders(vdf, steamRoot);
@@ -276,7 +276,7 @@ export async function readSteamApps(
   const seen = new Set<string>();
 
   for (const library of libraries) {
-    const appsDir = path.win32.join(library, "steamapps");
+    const appsDir = path.join(library, "steamapps");
     let entries: readonly Dirent[];
 
     try {
@@ -289,7 +289,7 @@ export async function readSteamApps(
       if (!entry.isFile()) continue;
       if (!/^appmanifest_\d+\.acf$/i.test(entry.name)) continue;
 
-      const text = await readText(path.win32.join(appsDir, entry.name));
+      const text = await readText(path.join(appsDir, entry.name));
       const manifest = text === undefined ? undefined : parseAppManifest(text);
 
       if (manifest === undefined || seen.has(manifest.appId)) continue;
@@ -298,7 +298,7 @@ export async function readSteamApps(
       apps.push({
         appId: manifest.appId,
         name: manifest.name,
-        installDir: path.win32.join(appsDir, "common", manifest.installDir),
+        installDir: path.join(appsDir, "common", manifest.installDir),
       });
     }
   }
