@@ -6,7 +6,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useControlTooltip } from "../../components/ui/control-icon-button.js";
-import { useComposingGuard } from "../../components/ui/control-well.js";
+import {
+  hitTargetClasses,
+  useComposingGuard,
+} from "../../components/ui/control-well.js";
 import type { EditorShellBridge } from "../../editor-shell/bridge.js";
 import {
   ENTER_GLYPH,
@@ -56,6 +59,13 @@ function roleText(role: LayerRole): string {
  * asks its own children how much room beside the key they need
  * (`:has(... button:nth-child(n))`), and a wrapper would put every button at
  * position one of its own parent.
+ *
+ * **The 20px box is the paint; the target is 24×24.** the layer row's central rule
+ * requires a dense target of at least 24×24, and the row's own rhythm is 20px,
+ * so the extra area is `hitTargetClasses`' centred `::before` — the control
+ * set's one owner of that rule. The row is 26px tall and the two controls it
+ * can draw beside each other are 4px apart, so the widened area never overlaps
+ * a neighbouring target.
  */
 function RowIconButton({
   label,
@@ -79,6 +89,7 @@ function RowIconButton({
       type="button"
       aria-label={label}
       aria-expanded={expanded}
+      className={hitTargetClasses}
       onClick={onClick}
     >
       {children}

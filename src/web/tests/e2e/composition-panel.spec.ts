@@ -194,6 +194,95 @@ test("every row carries a role and a mark, and the role adds no height", async (
 });
 
 /**
+ * DESIGN.md's 24×24 dense-target rule against the row's own 20px rhythm.
+ *
+ * The twisty's paint box is the row's 20px square; the extra area is
+ * `hitTargetClasses`' centred `::before`, so the rendered box is what this case
+ * reads — not the class, which a later rule could override while the name still
+ * sat in `className`. The corners are hit-tested because a pseudo-element larger
+ * than its button is only a target where the pointer actually lands, and the
+ * row is 26px tall with 4px between two controls, so a target may widen into the
+ * gap but never into a neighbouring row or control.
+ */
+test("the row's twisty paints at 20px and takes a 24×24 target", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  const measured = await page
+    .locator(".yunari-layer-row > button:first-child")
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          // Only a row the pointer can actually reach is measurable: the tree
+          // scrolls, and the pane's header floats over the rows that have gone
+          // under it, so a scrolled-out or covered twisty answers another
+          // element at its own centre.
+          const box = button.getBoundingClientRect();
+          if (box.top < 0 || box.bottom > window.innerHeight) return false;
+          // The centre may land on the twisty's own glyph, so the whole
+          // subtree counts as reachable; anything else means another element
+          // covers the row.
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return hit !== null && button.contains(hit);
+        })
+        .map((button) => {
+          const box = button.getBoundingClientRect();
+          const target = getComputedStyle(button, "::before");
+          const rowBox = button
+            .closest(".yunari-layer-row")
+            ?.getBoundingClientRect();
+          const half = 12;
+          const cx = box.left + box.width / 2;
+          const cy = box.top + box.height / 2;
+          return {
+            paint: [Math.round(box.width), Math.round(box.height)],
+            target: [
+              Number.parseFloat(target.width),
+              Number.parseFloat(target.height),
+            ],
+            insideRow:
+              rowBox !== undefined &&
+              cy - half >= rowBox.top &&
+              cy + half <= rowBox.bottom,
+            // A pixel inside each edge of the 24px box: the horizontal ones sit
+            // outside the button's own 20px border box, so only the `::before`
+            // can receive them.
+            hits: [
+              { x: cx - half + 1, y: cy },
+              { x: cx + half - 1, y: cy },
+              { x: cx, y: cy - half + 1 },
+              { x: cx, y: cy + half - 1 },
+            ].every(({ x, y }) => document.elementFromPoint(x, y) === button),
+          };
+        }),
+    );
+
+  expect(
+    measured.length,
+    "no twisty in the viewport to measure",
+  ).toBeGreaterThan(0);
+  for (const row of measured) {
+    expect(
+      row.paint,
+      "the twisty's paint box left the row's 20px rhythm",
+    ).toEqual([20, 20]);
+    expect(row.target, "the twisty's target is not 24×24").toEqual([24, 24]);
+    expect(row.insideRow, "the target reaches into the neighbouring row").toBe(
+      true,
+    );
+    expect(row.hits, "a corner of the target does not receive the press").toBe(
+      true,
+    );
+  }
+});
+
+/**
  * `vg-265`: the row's state slot is absolutely positioned over the row's right
  * edge and always carries its own surface, so the slot covers the last glyphs
  * of the role on a row that draws no key — the role is *covered*, not clipped,
