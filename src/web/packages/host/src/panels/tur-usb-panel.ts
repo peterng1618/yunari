@@ -40,9 +40,6 @@ const WRITE_TIMEOUT_MS = 5_000;
  *  wedges the panel when it is cancelled, so it is better to sit out a drain
  *  of tens of seconds than to break the device. */
 const BLOCK_WRITE_TIMEOUT_MS = 30_000;
-/** The level poll's read. Short so a saturated panel costs one cheap attempt
- *  per poll rather than a two-second wait. */
-const LEVEL_READ_TIMEOUT_MS = 250;
 /** The device refuses a payload past this; measured in both drivers. */
 const MAX_PAYLOAD = 512_000;
 /** Bounded so a talkative device cannot hold the frame loop; the vendor's own
@@ -56,19 +53,18 @@ const MAX_QUEUED_REPLIES = 16;
  */
 const ROTATE_MODE = 2;
 /** The vendor's own cadence, from `WinUsb.PlayH264`: a block goes out, the
- *  driver waits 30 ms, then reads the ack, and only a depth above 3 makes it
- *  drain. This host does not pace the feed any other way — the panel's
- *  reported depth is the clock. */
+ *  driver sleeps 30 ms, then reads the ack, and only a depth above 3 makes it
+ *  drain. Nothing else paces the feed. */
 const BLOCK_PAUSE_MS = 30;
 /**
- * **The feed leads the picture by 10%, and never by more.** A stream handed
- * over faster than it plays fills the decoder's ring and then starves: the
- * ring shows four blocks of picture (about two seconds), the host stops to let
- * it drain, and the glass runs dry before the feed resumes — the periodic
- * freeze. Sending a little ahead of realtime keeps the ring shallow without
- * letting it empty. The depth gate below is the ceiling; this is the pace.
+ * **The vendor's own read timeout: 100 ms** (`WinUsb.TLV3Read` passes 100 to
+ * `reader.Read`). It is the second half of the vendor's block cadence, and it
+ * is what keeps this host's loop tight: a read that waits two seconds leaves
+ * the decoder's ring empty for two seconds, which is the freeze this feed
+ * used to show. Reads of the block acknowledgement, the buffer level and the
+ * reply flush all use it.
  */
-const FEED_LEAD = 0.9;
+const VENDOR_READ_TIMEOUT_MS = 100;
 /** The depth the vendor drains above (`PlayH264`: `ret[8] > 3`). */
 const ACK_DEPTH = 3;
 /** The depth it drains to (`waitBuffer(2)`). */
@@ -212,10 +208,6 @@ export class TurUsbPanel implements PanelDevice {
   private videoLoop: { stopped: boolean } | undefined;
   /** The block size the panel asked to be fed in, learnt before playback. */
   private blockBytes = H264_BLOCK_BYTES;
-  /** The playing clip's length, so each block can wait its own share. Zero
-   *  when the encoder did not report a duration: the fixed pause is used. */
-  private clipBytes = 0;
-  private clipMs = 0;
   /** Every write to the endpoint is queued behind this: a video feed runs on
    *  its own loop, and overlapping it with an overlay push is what the addon
    *  reports as "Cancelled". */
@@ -340,8 +332,6 @@ export class TurUsbPanel implements PanelDevice {
 
     const clip = await this.encode(mp4, this.geometry, { placement });
     const h264 = clip.h264;
-    this.clipBytes = h264.length;
-    this.clipMs = clip.seconds * 1000;
 
     this.stopVideoLoop();
 
@@ -394,9 +384,6 @@ export class TurUsbPanel implements PanelDevice {
     while (!loop.stopped) {
       if (at >= h264.length) at = 0;
 
-      const blockBytes = Math.min(this.blockBytes, h264.length - at);
-      const started = performance.now();
-
       try {
         await this.exclusive(async () => {
           if (!loop.stopped) await this.writeVideoBlock(h264, at, loop);
@@ -421,18 +408,6 @@ export class TurUsbPanel implements PanelDevice {
 
         at = 0;
       }
-
-      // **The pace is kept outside the endpoint's lock.** Sleeping under it
-      // would hold the UI overlay for a whole block's playing time, and the
-      // overlay is the only other writer this panel has.
-      const playMs =
-        this.clipBytes > 0
-          ? (blockBytes / this.clipBytes) * this.clipMs * FEED_LEAD
-          : 0;
-      const spent = performance.now() - started;
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.max(BLOCK_PAUSE_MS, playMs - spent)),
-      );
     }
   }
 
@@ -482,7 +457,9 @@ export class TurUsbPanel implements PanelDevice {
     // or below the vendor's threshold the ring is draining, and above it the
     // decoder has stopped reading — another block there is an overrun, which
     // the panel plays out as a freeze.
-    const ack = await this.read(LEVEL_READ_TIMEOUT_MS);
+    await new Promise((resolve) => setTimeout(resolve, BLOCK_PAUSE_MS));
+
+    const ack = await this.read(VENDOR_READ_TIMEOUT_MS);
     const depth = ack?.[8];
     if (depth !== undefined && depth > ACK_DEPTH) await this.drain(loop);
   }
@@ -538,7 +515,7 @@ export class TurUsbPanel implements PanelDevice {
       commandPacket("buffer-level", this.elapsed()),
     );
 
-    return (await this.readOne(LEVEL_READ_TIMEOUT_MS))?.[8];
+    return (await this.readOne(VENDOR_READ_TIMEOUT_MS))?.[8];
   }
 
   /** Stops feeding and tells the panel, in that order: a block written after
@@ -652,7 +629,7 @@ export class TurUsbPanel implements PanelDevice {
 
   private async flushReplies(): Promise<void> {
     for (let attempt = 0; attempt < MAX_QUEUED_REPLIES; attempt += 1) {
-      const reply = await this.readOne(READ_TIMEOUT_MS);
+      const reply = await this.readOne(VENDOR_READ_TIMEOUT_MS);
       if (reply === undefined || reply.length === 0) return;
     }
   }

@@ -138,33 +138,39 @@ orientation for the attached 9.2" with rotate mode 2.
 3. `stop-play` (123).
 4. Send `play-block` (121) for each block, length big-endian at 8–11, byte 12
    set to 1 only on the block that ends the file.
-5. **Wait the block's own share of the clip's playing time** (10% ahead of
-   realtime, 30 ms floor, measured from the write), then read the ack.
+5. Wait 30 ms, then read the ack. **The read's timeout is 100 ms**, the value
+   `WinUsb.TLV3Read` passes to `reader.Read`; the block ack, the buffer-level
+   poll and the reply flush all use it.
 6. If reply byte 8 is above 3, poll `buffer-level` (122) every 50 ms until
-   depth ≤ 2, with a 30 s ceiling. With a paced feed this is a ceiling that
-   is never reached, not the clock.
+   depth ≤ 2, with a 30 s ceiling.
 7. At end of file, rewind and keep sending — playback never stops at EOF.
 
-**The clip's playing time is the clock; the ring depth is the ceiling.** A
-feed that writes blocks as fast as the acks allow runs about ten times
-realtime (48 ms between blocks, measured 2026-10-31), fills the ring to four,
-then stalls in a drain for ~2.2 s while it waits for the decoder to play back
-down to two — and the glass runs dry before the feed resumes. That is the
-picture that pauses for a second or two and then jumps. Paced to the clip's own
-length, the same block stream is uniform and no drain fires.
+**The 100 ms read is part of the feed's clock.** A read with the command
+timeout (2 s) blocks for two seconds whenever the panel has nothing to say,
+and the decoder plays through its ring and stops inside that hole. The vendor
+never sends faster than this loop: write, 30 ms, read (≤100 ms), drain only
+above depth 3. Command replies outside the feed keep the 2 s timeout, because
+a cancelled write is what wedges the panel.
 
 ### Measured on the 9.2"
 
-With the vendor's feed: no cancelled block, no restart and no drain timeout over
-ten minutes; depth oscillates 2–4 in a steady ~2.07 s drain. Camera frames of
-the glass 16 s apart differed (PSNR 24 dB), so the picture advanced.
+With the vendor's feed (but still the 2 s command timeout on reads at that
+point): no cancelled block, no restart and no drain timeout over ten minutes;
+depth oscillated 2–4 in a steady ~2.07 s drain. Camera frames of the glass 16 s
+apart differed (PSNR 24 dB), so the picture advanced.
 
 Unpaced, on 2026-10-31: block gaps were 48 ms for five blocks, then a 2.17 s
 hole, repeating; overlay pushes took 100 ms and 1,300 ms in alternation. Filmed
 at 30 fps the glass barely changed across 21 s (frame-difference median 0.35,
 maximum 1.39 on an 8-bit grey crop) — a still picture with occasional nudges.
-Paced to the clip: gaps p50 142 ms with a 195 ms maximum, overlay pushes ~60 ms,
-and the same film showed continuous motion (median 0.63, maximum 45.7).
+
+With the vendor's loop and the 100 ms reads, same panel, same clip: block gaps
+uniform at ~200 ms, short drains of ~170 ms every ~200–300 ms, overlay pushes
+mean 159 ms (p50 159, max 265). The film's per-second frame difference held at
+0.6–0.8 across the clip, against 0.35–0.8 alternating before — continuous
+motion instead of a still with nudges. Before the read was shortened, a single
+flush read after a drain blocked 2,003 ms, which is the hole the picture broke
+on.
 
 ## Quirks and failure modes
 

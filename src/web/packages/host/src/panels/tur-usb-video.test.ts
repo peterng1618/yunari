@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   clipFps,
-  clipSeconds,
   encodePanelH264,
   H264_BLOCK_BYTES,
   panelH264Args,
@@ -58,21 +57,6 @@ describe("panelH264Args", () => {
 
   it("uses the vendor's block size only as a fallback", () => {
     expect(H264_BLOCK_BYTES).toBe(202_752);
-  });
-});
-
-describe("clipSeconds", () => {
-  it("reads the input's length from ffmpeg's report", () => {
-    expect(
-      clipSeconds(
-        "Input #0, mov,mp4,m4a, from 'in.mp4':\n  Duration: 00:01:02.50, start: 0.000000, bitrate: 19986 kb/s",
-      ),
-    ).toBe(62.5);
-  });
-
-  it("reports no length when ffmpeg names none", () => {
-    expect(clipSeconds("Stream #0:0: Video: h264")).toBe(0);
-    expect(clipSeconds("Duration: 00:00:00.00, start: 0")).toBe(0);
   });
 });
 

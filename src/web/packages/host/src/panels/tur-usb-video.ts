@@ -134,11 +134,6 @@ export interface PanelClip {
   /** The source's frame rate, or 0 when ffmpeg did not report one. The panel
    *  is told this before playback, the way the vendor's app does. */
   readonly fps: number;
-  /** The source's playing time in seconds, or 0 when ffmpeg did not report it.
-   *  **The feed is paced by this**: a stream handed to the panel faster than it
-   *  plays fills the decoder's ring and then starves the picture, and a full
-   *  ring is the freeze the vendor's own drain exists to avoid. */
-  readonly seconds: number;
 }
 
 /** Throws with a sentence the runner can report; the caller falls back to
@@ -191,7 +186,6 @@ export async function encodePanelH264(
     return {
       h264: new Uint8Array(await readFile(output)),
       fps: clipFps(outcome.stderr),
-      seconds: clipSeconds(outcome.stderr),
     };
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(
@@ -202,27 +196,6 @@ export async function encodePanelH264(
 
 /** ffmpeg names the first input stream's rate before it encodes a frame. */
 const FPS = /(\d+(?:\.\d+)?)\s+fps/;
-
-/** ffmpeg reports the input's length once, before it encodes anything. */
-const DURATION = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
-
-/**
- * The clip's playing time, from ffmpeg's input report.
- *
- * A stream whose length is unknown is fed at the vendor's fixed pause instead;
- * the driver's depth gate is then the only ceiling, which is what the panel
- * had before the feed was paced.
- */
-export function clipSeconds(stderr: string): number {
-  const match = DURATION.exec(stderr);
-  if (match === null) return 0;
-
-  const seconds =
-    Number(match[1] ?? 0) * 3600 +
-    Number(match[2] ?? 0) * 60 +
-    Number(match[3] ?? 0);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
-}
 
 export function clipFps(stderr: string): number {
   const match = FPS.exec(stderr);

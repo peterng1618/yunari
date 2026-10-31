@@ -1,7 +1,9 @@
 # 0027 — The Lian Li clip is paced to its own playing time
 
 - **Date:** 2026-10-31
-- **Status:** accepted
+- **Status:** superseded by 0028, which keeps the vendor's loop and shortens
+  its reads instead. Kept for the pacing measurements; the pacing itself is
+  gone from the driver.
 - **Paths:** `src/web/packages/host/src/panels/tur-usb-panel.ts`,
   `src/web/packages/host/src/panels/tur-usb-video.ts`
 

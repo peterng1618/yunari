@@ -52,6 +52,8 @@ function fakePanel() {
   const opcodes: number[] = [];
   let queue: Uint8Array[] = [];
   let reads = 0;
+  /** The timeout each IN transfer was given. */
+  const inTimeouts: number[] = [];
   /** What the panel reports as its decoder's depth while nothing is queued;
    *  negative means the panel answers nothing. */
   let level = -1;
@@ -92,7 +94,8 @@ function fakePanel() {
       writes.push(data);
       return data.length;
     },
-    nativeTransferIn: async () => {
+    nativeTransferIn: async (_endpoint: number, timeout: number) => {
+      inTimeouts.push(timeout);
       reads += 1;
       const queued = queue.shift();
       if (queued !== undefined) return queued;
@@ -113,6 +116,7 @@ function fakePanel() {
       writes.length = 0;
       opcodes.length = 0;
       reads = 0;
+      inTimeouts.length = 0;
       queue = [];
       level = -1;
       failBlockAt = 0;
@@ -135,6 +139,9 @@ function fakePanel() {
     get reads() {
       return reads;
     },
+    get inTimeouts() {
+      return inTimeouts;
+    },
   };
 }
 
@@ -155,13 +162,13 @@ const MODEL = {
 
 function opened(
   fake: ReturnType<typeof fakePanel>,
-  encode?: () => Promise<{ h264: Uint8Array; fps: number; seconds: number }>,
+  encode?: () => Promise<{ h264: Uint8Array; fps: number }>,
 ): TurUsbPanel {
   // The driver's device type is the usb library's, which a test cannot mint.
   return new TurUsbPanel(
     fake.device as unknown as never,
     MODEL,
-    encode ?? (async () => ({ h264: new Uint8Array(), fps: 0, seconds: 0 })),
+    encode ?? (async () => ({ h264: new Uint8Array(), fps: 0 })),
   );
 }
 
@@ -217,7 +224,7 @@ describe("TurUsbPanel", () => {
   it("feeds video blocks until stopped, then sends StopPlay", async () => {
     const fake = fakePanel();
     const h264 = new Uint8Array(H264_BLOCK_BYTES + 4).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -251,11 +258,43 @@ describe("TurUsbPanel", () => {
     expect(fake.writes).toHaveLength(afterStop);
   });
 
+  it("reads a block's ack on the vendor's own 100 ms timeout", async () => {
+    const fake = fakePanel();
+    const h264 = new Uint8Array(H264_BLOCK_BYTES * 2).fill(0x11);
+    const panel = opened(fake, async () => ({ h264, fps: 0 }));
+    await panel.open();
+    fake.reset();
+    fake.setLevel(0);
+
+    await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 });
+
+    const deadline = Date.now() + 2_000;
+    while (!fake.writes.some((write) => write.length > 512)) {
+      if (Date.now() > deadline) {
+        throw new Error("the feed never wrote a block");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const before = fake.inTimeouts.length;
+    while (fake.inTimeouts.length === before) {
+      if (Date.now() > deadline) {
+        throw new Error("the feed never read a block's ack");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const readTimeouts = fake.inTimeouts.slice(before);
+    await panel.video.stop();
+
+    // `WinUsb.TLV3Read` passes 100 to `reader.Read`. A two-second read is a
+    // two-second hole in the feed, and the decoder's ring empties inside it.
+    expect(Math.max(...readTimeouts)).toBe(100);
+  });
+
   it("asks the panel for its block size and cuts the clip to it", async () => {
     const fake = fakePanel();
     const size = 1_000;
     const h264 = new Uint8Array(size * 3).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -275,7 +314,7 @@ describe("TurUsbPanel", () => {
   it("sets the panel's frame rate to the clip's own and flags its final block", async () => {
     const fake = fakePanel();
     const h264 = Uint8Array.of(0x11, 0x22, 0x33);
-    const panel = opened(fake, async () => ({ h264, fps: 24, seconds: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 24 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -294,7 +333,7 @@ describe("TurUsbPanel", () => {
   it("drains the decoder when a block's ack reports a full ring", async () => {
     const fake = fakePanel();
     const h264 = new Uint8Array(H264_BLOCK_BYTES * 2).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0 }));
     await panel.open();
     fake.reset();
 
@@ -330,7 +369,7 @@ describe("TurUsbPanel", () => {
     h264[0] = 0xaa;
     h264[H264_BLOCK_BYTES] = 0xbb;
     h264[2 * H264_BLOCK_BYTES] = 0xcc;
-    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
