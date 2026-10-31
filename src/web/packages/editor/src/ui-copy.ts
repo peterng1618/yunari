@@ -442,6 +442,11 @@ export const uiCopy = {
       follows: "Follows this PC",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
+      /** The file the host keeps its displays and their credentials in could not
+       *  be read. The list is empty because of that, not because none exists,
+       *  and every write refuses — so this names the file and the repair. */
+      unreadable:
+        "display-clients.json could not be read, so this host cannot list or change displays. Repair or remove that file in the host's settings folder.",
       /** The section that edits the selected display's name and glass. */
       presentation: "Display settings",
       name: "Name",

@@ -227,6 +227,7 @@ function HostSettings(props: {
     | {
         readonly default: string | null;
         readonly displays: readonly ThemedDisplay[];
+        readonly unreadable?: boolean;
       }
     | undefined
   >(undefined);
@@ -634,6 +635,19 @@ function HostSettings(props: {
             name={uiCopy.hostSettings.displays.heading}
             hint={uiCopy.hostSettings.displays.hint}
           >
+            {/* **An unreadable file is not an empty one.** The host fails closed
+                and answers no displays either way, so this is the only word
+                that tells the person the list is missing rather than empty —
+                and it names the file every write will refuse to touch. */}
+            {map?.unreadable === true ? (
+              <p
+                role="alert"
+                data-yunari-host-displays-unreadable=""
+                className="m-0 text-xs text-warn"
+              >
+                {uiCopy.hostSettings.displays.unreadable}
+              </p>
+            ) : null}
             {/* **The rows are a choice, and the choice is which display the
                 questions below speak for** — never which theme it shows. The control set's
                 Segmented is the control for one of a small set, composed in its

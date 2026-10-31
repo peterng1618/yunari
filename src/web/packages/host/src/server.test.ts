@@ -6054,6 +6054,39 @@ describe("A local monitor is specified rather than paired", () => {
     });
   });
 
+  it("tells the settings page when the display file cannot be read", async () => {
+    const hosting = host({ activeTheme: createActiveThemeStore(dir) });
+
+    try {
+      const healthy = await request(
+        hosting.server,
+        "GET",
+        "/api/themes/active",
+      );
+      expect(
+        (healthy.json() as { displayFileUnreadable: boolean })
+          .displayFileUnreadable,
+      ).toBe(false);
+
+      await fs.writeFile(path.join(dir, "display-clients.json"), "{ not json");
+      const corrupt = await request(
+        hosting.server,
+        "GET",
+        "/api/themes/active",
+      );
+
+      // The list fails closed, so this flag is the only thing that
+      // distinguishes an empty host from one whose records are missing and
+      // whose writes all refuse.
+      expect(
+        (corrupt.json() as { displayFileUnreadable: boolean })
+          .displayFileUnreadable,
+      ).toBe(true);
+    } finally {
+      await hosting.close();
+    }
+  });
+
   it("refuses a second local display for a monitor one already holds", async () => {
     const first = await request(
       hosted.server,

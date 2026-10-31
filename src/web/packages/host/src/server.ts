@@ -1558,14 +1558,22 @@ export function createHostServer(options: HostServerOptions): HostServer {
   ): Promise<{
     readonly default: string | null;
     readonly displays: readonly ActiveDisplay[];
+    /** True when `display-clients.json` is there and unusable. The list is then
+     *  fail-closed and empty, and every write refuses — two facts a settings
+     *  surface must be able to tell apart from an empty library of displays. */
+    readonly displayFileUnreadable: boolean;
   }> {
     const holds = await store.readAll(async (id) =>
       available.some((entry) => entry.id === id),
     );
-    const records = (await displays?.list()) ?? [];
+    // Through `state()` rather than `list()`: the second half is what a settings
+    // surface needs, and asking twice could see two different files.
+    const displayState = await displays?.state();
+    const records = displayState?.displays ?? [];
 
     return {
       default: holds[DEFAULT_DISPLAY] ?? null,
+      displayFileUnreadable: displayState?.unreadable === true,
       displays: [
         {
           id: LOCAL_DISPLAY_ID,

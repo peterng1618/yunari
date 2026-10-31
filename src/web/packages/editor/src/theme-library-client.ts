@@ -196,6 +196,11 @@ export interface ThemeLibraryClient {
   listDisplays(): Promise<{
     readonly default: string | null;
     readonly displays: readonly ThemedDisplay[];
+    /** True when the host's display file is there and unusable: the list is
+     *  empty because it could not be read, not because no display exists, and
+     *  every write to it will refuse. Optional so a client that predates the
+     *  answer reads as "nothing to report" rather than a fabricated failure. */
+    readonly unreadable?: boolean;
   }>;
 }
 
@@ -496,6 +501,7 @@ export function createThemeLibraryClient(options?: {
     async listDisplays(): Promise<{
       readonly default: string | null;
       readonly displays: readonly ThemedDisplay[];
+      readonly unreadable?: boolean;
     }> {
       const response = await fetcher(`${baseUrl}/api/themes/active`);
       if (!response.ok) {
@@ -507,11 +513,13 @@ export function createThemeLibraryClient(options?: {
       const body = (await response.json()) as {
         readonly default?: unknown;
         readonly displays?: unknown;
+        readonly displayFileUnreadable?: unknown;
       };
       return {
         // A host that names no default is one where nothing falls back, which
         // is `null` rather than a theme id invented here.
         default: typeof body?.default === "string" ? body.default : null,
+        ...(body?.displayFileUnreadable === true ? { unreadable: true } : {}),
         displays: Array.isArray(body?.displays)
           ? (body.displays as readonly ThemedDisplay[]).map(
               ({ id, label, kind, theme, shape, rotation, panel }) => ({
