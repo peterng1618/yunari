@@ -7,7 +7,8 @@ import { AssetManager } from "./asset-manager/index.js";
 import type { CuratedFontFace } from "./font-catalog.js";
 import { watchDeclaredFontFaces } from "./font-face-registration.js";
 
-const WOFF2 = new Uint8Array([1, 2, 3, 4]);
+/** The `wOF2` signature, which is what an import checks; the face is stubbed. */
+const WOFF2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32]);
 
 function face(family: string): CuratedFontFace {
   return {

@@ -2927,7 +2927,8 @@ describe("the local font import", () => {
   }
 
   function fontFile(): File {
-    const bytes = new TextEncoder().encode("ttf");
+    // TrueType's signature, which is what the manager checks its bytes for.
+    const bytes = new Uint8Array([0x00, 0x01, 0x00, 0x00]);
     return Object.assign(
       new File([bytes as unknown as BlobPart], "Inter-Bold.ttf", {
         type: "font/ttf",

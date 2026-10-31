@@ -7,6 +7,10 @@ import { fontTrio } from "../font-catalog.js";
 import { AssetManager, assetFileName, assetReferencedBy } from "./index.js";
 
 const PNG = new Uint8Array([137, 80, 78, 71]);
+/** Each font format's signature, which is what a font import checks: a real
+ *  face is too large to carry in a test and the parser is stubbed anyway. */
+const WOFF2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32]);
+const TTF = new Uint8Array([0x00, 0x01, 0x00, 0x00]);
 
 function file(bytes: Uint8Array | string, name: string, type: string): File {
   const source =
@@ -143,7 +147,7 @@ describe("AssetManager", () => {
     const manager = new AssetManager();
 
     const asset = await manager.import(
-      file(new Uint8Array([0, 1, 2]), "metric.woff2", "font/woff2"),
+      file(WOFF2, "metric.woff2", "font/woff2"),
     );
 
     expect(asset).toMatchObject({
@@ -151,9 +155,7 @@ describe("AssetManager", () => {
       kind: "font",
       path: "assets/metric.woff2",
     });
-    expect(manager.assets["assets/metric.woff2"]).toEqual(
-      new Uint8Array([0, 1, 2]),
-    );
+    expect(manager.assets["assets/metric.woff2"]).toEqual(WOFF2);
   });
 
   it("refuses an extension the theme cannot declare", async () => {
@@ -221,7 +223,7 @@ describe("AssetManager", () => {
     const manager = new AssetManager();
 
     const asset = await manager.importFont(
-      file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+      file(TTF, "Inter-Bold.ttf", "font/ttf"),
       { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
       async () => undefined,
     );
@@ -244,9 +246,50 @@ describe("AssetManager", () => {
     expect("subset" in (JSON.parse(JSON.stringify(asset)) as object)).toBe(
       false,
     );
-    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(
-      new Uint8Array([0, 1, 2]),
+    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(TTF);
+  });
+
+  it("accepts a font whose media type is empty or wrong when its signature matches", async () => {
+    // A Windows shell reports no type for a `.woff2`, and some report one the
+    // table never uses; the leading bytes, not `File.type`, make it a font.
+    const manager = new AssetManager();
+
+    const empty = await manager.importFont(
+      file(TTF, "Inter-Bold.ttf", ""),
+      { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+      async () => undefined,
     );
+    const wrong = await manager.importFont(
+      file(WOFF2, "Inter-Regular.woff2", "application/octet-stream"),
+      { family: "Inter", weight: 400, style: "normal", licence: "unknown" },
+      async () => undefined,
+    );
+
+    expect(empty).toMatchObject({
+      kind: "font",
+      path: "assets/Inter-Bold.ttf",
+    });
+    expect(wrong).toMatchObject({
+      kind: "font",
+      path: "assets/Inter-Regular.woff2",
+    });
+  });
+
+  it("refuses a font whose bytes do not match its extension", async () => {
+    // A real mismatch still fails even when the browser names the media type
+    // the extension claims: a PNG renamed `.woff2` is not a font.
+    const manager = new AssetManager();
+
+    await expect(
+      manager.importFont(
+        file(PNG, "logo.woff2", "font/woff2"),
+        { family: "Logo", weight: 400, style: "normal", licence: "unknown" },
+        async () => undefined,
+      ),
+    ).rejects.toThrow("bytes do not match its extension");
+
+    expect(manager.declarations).toEqual([]);
+    expect(manager.assets).toEqual({});
   });
 
   it("refuses a file whose bytes do not parse as a font", async () => {
@@ -483,10 +526,7 @@ describe("AssetManager", () => {
     await manager.adoptFont(other, new Uint8Array([9]));
     const before = manager.declarations.length;
 
-    await manager.replace(
-      "other",
-      file(new Uint8Array([7, 7]), "other.woff2", "font/woff2"),
-    );
+    await manager.replace("other", file(WOFF2, "other.woff2", "font/woff2"));
 
     expect(manager.declarations).toHaveLength(before);
     // The catalogue owns family, weight, licence and source; the file owns the
@@ -495,9 +535,7 @@ describe("AssetManager", () => {
       family: "Other",
       license: face.license,
     });
-    expect(manager.assets["assets/other.woff2"]).toEqual(
-      new Uint8Array([7, 7]),
-    );
+    expect(manager.assets["assets/other.woff2"]).toEqual(WOFF2);
   });
 });
 

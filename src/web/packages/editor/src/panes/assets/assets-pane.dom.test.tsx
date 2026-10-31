@@ -361,8 +361,9 @@ function file(name: string, type: string, bytes: string): File {
 const IMAGE_FILE = file("logo.png", "image/png", "png-one");
 const OTHER_IMAGE_FILE = file("logo.png", "image/png", "png-two");
 const SVG_FILE = file("mark.svg", "image/svg+xml", "<svg/>");
-const FONT_FILE = file("body.woff2", "font/woff2", "woff2");
-const OTHER_FONT_FILE = file("Roboto-Light.ttf", "font/ttf", "ttf");
+// The bytes are each format's signature, which is what the manager checks.
+const FONT_FILE = file("body.woff2", "font/woff2", "wOF2");
+const OTHER_FONT_FILE = file("Roboto-Light.ttf", "font/ttf", "true");
 const VIDEO_FILE = file("clip.mp4", "video/mp4", "mp4");
 const PACKAGE_FILE = file("night.mpkg", "application/octet-stream", "PKGM0014");
 
