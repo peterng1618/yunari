@@ -30,6 +30,7 @@ const BLUE = Uint8Array.of(1, 2, 4);
 const SOURCE = {
   bytes: Uint8Array.of(7),
   placement: { offsetX: 0, offsetY: 0 },
+  rotation: 90,
 };
 
 describe("createPanelRunner", () => {
@@ -287,7 +288,11 @@ describe("createPanelRunner", () => {
     const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
     await expect(runner.tick()).resolves.toBe(true);
 
-    expect(start).toHaveBeenCalledWith(SOURCE.bytes, SOURCE.placement);
+    expect(start).toHaveBeenCalledWith(
+      SOURCE.bytes,
+      SOURCE.placement,
+      SOURCE.rotation,
+    );
     expect(presentOverlay).toHaveBeenCalledWith(Uint8Array.of(2));
     expect(present).not.toHaveBeenCalled();
 

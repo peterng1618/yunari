@@ -565,9 +565,14 @@ export async function run(argv: readonly string[]): Promise<number> {
       const asset = await themeStore.readAsset(themeId, declared.path);
       if (asset === undefined) return undefined;
 
+      // The device decodes the clip itself, so the record's mounting angle has
+      // to travel with the bytes: the page's own turn never reaches it.
+      const display = await displays.find(displayId);
+
       return {
         bytes: asset.bytes,
         placement: { offsetX: media.offsetX ?? 0, offsetY: media.offsetY ?? 0 },
+        rotation: display?.rotation ?? 0,
       };
     },
     onError: (displayId, message) => {

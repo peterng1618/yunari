@@ -2289,6 +2289,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
           return;
         }
 
+        // A panel's clip is uploaded with the angle it was encoded for, so a
+        // record that turned the glass re-uploads it; the page picks up the
+        // angle for itself from its own poll. Only a changed clip restarts the
+        // runner, which is the same comparison a theme save uses.
+        try {
+          await options.panels?.refreshVideo(id);
+        } catch (error) {
+          console.error(
+            `Panel ${id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
         // The answer is the record itself, so a surface redraws one row without
         // refetching the list it already has.
         sendJson(response, 200, peerOf(updated));

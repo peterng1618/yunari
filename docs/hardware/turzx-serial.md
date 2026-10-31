@@ -6,7 +6,8 @@
 - **Firmware verified:** `rom1.88` (HELLO answers
   `chs_5inch.dev1_rom1.88\0`)
 - **Transport:** USB CDC serial, 115200 8N1 with RTS/CTS
-- **Native geometry:** 800×480 landscape, no rotation
+- **Native geometry:** 800×480 landscape; the panel has no orientation command,
+  so a display record's rotation is composed into the picture by the host
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
 - **Last hardware verification:** 2026-10-30 (probed on `COM5`)
@@ -123,14 +124,22 @@ an error, and the runner falls back to static frames.
 The transcode:
 
 ```
--i <in> -an -vf <crop from placement,scale=800:480> -r 30 -c:v libx264
+-i <in> -an -vf <crop from placement,scale=800:480[,turn]> -r 30 -c:v libx264
 -profile:v high -pix_fmt yuv420p -crf 23 -movflags +faststart -f mp4 <out>
 ```
 
 The crop window comes from `scene-fabric`'s `placement()` so the panel shows the
 same edge the player does; when the source size cannot be read, a centred cover
-is used. Encodes are cached under the temp directory keyed by source hash and
-pan, so a reboot re-encodes.
+is used.
+
+**The clip turns with the display's mounting angle.** The device decodes the
+file itself and never sees the page, so the record's `rotation` is composed into
+the pixels. A 90°/270° mount lays the layer out in the swapped 480×800 box and
+then turns it (`transpose=1` / `transpose=2`), exactly as the player's
+display-bounded media layer does; 180° is `hflip,vflip` in the upright box. An
+angle that is not a quarter turn is refused rather than encoded. Encodes are
+cached under the temp directory keyed by source hash, pan and angle, so a reboot
+re-encodes.
 
 ## Video overlay
 

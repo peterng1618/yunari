@@ -331,6 +331,11 @@ export class TurUsbPanel implements PanelDevice {
    * host writes, and the vendor's own driver rewinds and keeps sending for as
    * long as playback is wanted (`WinUsb.PlayH264`, `isRepeat`). A stream that
    * simply stops is a clip that plays once and then rests on its last frame.
+   *
+   * **The display's mounting angle is not applied here.** This family's picture
+   * is already turned onto the portrait wire — by the panel's own rotate mode
+   * and the encoder's fixed `transpose=1` — so a second turn composed with them
+   * is unmeasured. The TURZX adapter takes the angle instead.
    */
   private async startVideo(
     mp4: Uint8Array,

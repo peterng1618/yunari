@@ -628,7 +628,8 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Whether two reads describe the same clip and the same authored pan. */
+/** Whether two reads describe the same clip, the same authored pan and the same
+ *  display angle: a turned glass shows a different stream. */
 function sameVideo(
   first: PanelVideoSource | undefined,
   second: PanelVideoSource | undefined,
@@ -638,6 +639,7 @@ function sameVideo(
   return (
     first.placement.offsetX === second.placement.offsetX &&
     first.placement.offsetY === second.placement.offsetY &&
+    (first.rotation ?? 0) === (second.rotation ?? 0) &&
     sameBytes(first.bytes, second.bytes)
   );
 }

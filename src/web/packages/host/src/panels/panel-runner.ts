@@ -202,7 +202,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
     if (source !== undefined && video !== undefined) {
       try {
-        await video.start(source.bytes, source.placement);
+        await video.start(source.bytes, source.placement, source.rotation);
         playing = true;
         overlay = true;
       } catch (error) {

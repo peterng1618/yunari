@@ -74,16 +74,27 @@ export async function transcodeForPanel(
     readonly verifyForTest?: boolean;
     /** The theme's authored pan; centred cover when absent. */
     readonly placement?: PanelVideoPlacement;
+    /** Whole degrees clockwise the display turns the composition. */
+    readonly rotation?: number;
     /** The host's disposable cache directory; temp when the caller has none. */
     readonly cacheDir?: string;
   } = {},
 ): Promise<TranscodeResult> {
   const placement = options.placement ?? { offsetX: 0, offsetY: 0 };
   const cacheDirectory = options.cacheDir ?? DEFAULT_CACHE_DIRECTORY;
-  const cachePath = cached(cacheDirectory, sha256(bytes, placement));
+  const turn = turnOf(options.rotation ?? 0);
+  if (turn === undefined) {
+    return {
+      ok: false,
+      message: `The panel turns its clip by quarter turns only; ${String(options.rotation)}° is not one.`,
+    };
+  }
 
-  // The pan changes the pixels, so it is part of the key: the same source
-  // authored at a different offset is a different clip.
+  const cachePath = cached(cacheDirectory, sha256(bytes, placement, turn));
+
+  // The pan and the turn change the pixels, so both are part of the key: the
+  // same source authored at another offset or played on another mount is a
+  // different clip.
   const cachedBytes = await readFile(cachePath).catch(() => undefined);
   if (cachedBytes !== undefined) {
     // A hit is a use: eviction drops the least recently used clip first.
@@ -121,7 +132,7 @@ export async function transcodeForPanel(
     await writeFile(input, bytes);
 
     const outcome = await (options.run ?? runFfmpeg(executable))(
-      encodeArgs(input, output, panelFilter(bytes, placement)),
+      encodeArgs(input, output, panelFilter(bytes, placement, turn)),
     );
     if (outcome.code !== 0) {
       return {
@@ -246,11 +257,35 @@ async function evict(directory: string, keep: string): Promise<void> {
   }
 }
 
-function sha256(bytes: Uint8Array, placement: PanelVideoPlacement): string {
+function sha256(
+  bytes: Uint8Array,
+  placement: PanelVideoPlacement,
+  turn: Turn,
+): string {
   return createHash("sha256")
     .update(bytes)
-    .update(`\0${placement.offsetX},${placement.offsetY}`)
+    .update(`\0${placement.offsetX},${placement.offsetY},${turn}`)
     .digest("hex");
+}
+
+/** How the composition is turned onto the glass. */
+type Turn = "none" | "cw" | "half" | "ccw";
+
+/** The quarter turn a whole angle asks for, or `undefined` for an angle this
+ *  device cannot compose. */
+function turnOf(rotation: number): Turn | undefined {
+  switch (rotation) {
+    case 0:
+      return "none";
+    case 90:
+      return "cw";
+    case 180:
+      return "half";
+    case 270:
+      return "ccw";
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -275,9 +310,10 @@ export function panelCrop(
   source: { readonly width: number; readonly height: number },
   offsetX: number,
   offsetY: number,
+  box: { readonly width: number; readonly height: number } = BOX,
 ): PanelCrop {
   const rect = placement({
-    box: BOX,
+    box,
     source,
     offsetX: Number.isFinite(offsetX) ? offsetX : 0,
     offsetY: Number.isFinite(offsetY) ? offsetY : 0,
@@ -285,8 +321,8 @@ export function panelCrop(
 
   const scaleX = rect.width / source.width;
   const scaleY = rect.height / source.height;
-  const width = Math.max(1, Math.round(BOX.width / scaleX));
-  const height = Math.max(1, Math.round(BOX.height / scaleY));
+  const width = Math.max(1, Math.round(box.width / scaleX));
+  const height = Math.max(1, Math.round(box.height / scaleY));
 
   return {
     x: clamp(
@@ -310,25 +346,48 @@ function clamp(value: number, low: number, high: number): number {
 
 /**
  * The decode-and-fit filter: the authored pan when the source size is known,
- * centred cover when the facts cannot be read.
+ * centred cover when the facts cannot be read, then the display's own turn.
+ *
+ * **A quarter turn swaps the box the layer is laid out in.** The player fits a
+ * display-bounded media layer to a box turned with the composition — 480×800
+ * on a 90° mount, then the layer itself turns about its centre and covers the
+ * 800×480 glass. Turning the source before the crop would show a different part
+ * of the clip, so the crop window is the turned box's and the turn comes last.
  */
 function panelFilter(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
+  turn: Turn,
 ): string {
+  const turned = turn === "cw" || turn === "ccw";
+  const box = turned
+    ? { width: BOX.height, height: BOX.width }
+    : { width: BOX.width, height: BOX.height };
+  const turnFilter =
+    turn === "cw"
+      ? ",transpose=1"
+      : turn === "half"
+        ? ",hflip,vflip"
+        : turn === "ccw"
+          ? ",transpose=2"
+          : "";
   const facts = readVideoFacts(bytes);
 
   if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
-    return "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480";
+    return (
+      `scale=${box.width}:${box.height}:force_original_aspect_ratio=increase` +
+      `:force_divisible_by=2,crop=${box.width}:${box.height}${turnFilter}`
+    );
   }
 
   const crop = panelCrop(
     { width: facts.width, height: facts.height },
     placement.offsetX,
     placement.offsetY,
+    box,
   );
 
-  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=800:480`;
+  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnFilter}`;
 }
 
 function encodeArgs(input: string, output: string, filter: string): string[] {
