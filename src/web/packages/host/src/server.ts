@@ -1995,6 +1995,18 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // The owner's explicit renewal: a new window replaces the live one and
+      // clears the penalty table, so a code that has run its ten minutes is not
+      // a host restart. A read still never rotates — only this POST does.
+      if (url.pathname === "/api/pairing/code" && request.method === "POST") {
+        const fresh = pairingCodes.mint();
+        sendJson(response, 200, {
+          code: fresh.code,
+          expiresAt: fresh.expiresAt,
+        });
+        return;
+      }
+
       // A read, not a rotation: a second read of a live window answers the same
       // code rather than minting another, so nothing can move the code out from
       // under whoever is typing it (R16). Only an absent or expired window

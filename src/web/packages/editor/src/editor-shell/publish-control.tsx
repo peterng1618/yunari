@@ -1,5 +1,5 @@
 import { Popover } from "@base-ui/react/popover";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { displayUrl } from "../hosting-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
@@ -31,15 +31,18 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
 /** The one control that carries the warning, so a fixed id is the whole address. */
 const WARNING_ID = "yunari-publish-warning";
 
-/** When the code stops being the answer, in the reader's own clock: the host
- *  answers an instant, and an instant is not what a person reads. A value the
- *  clock cannot parse is shown as it arrived rather than as a wrong time. */
-function expiryOf(at: string): string {
-  const when = new Date(at);
+/** What is left of the window, as mm:ss in the reader's own clock. The host
+ *  answers an instant; a countdown is what a person can watch run out. An
+ *  instant the clock cannot parse, or one that has passed, answers nothing and
+ *  the card says the code has expired rather than printing a wrong duration. */
+export function remainingOf(at: string, now: number): string {
+  const when = Date.parse(at);
+  if (Number.isNaN(when)) return "";
 
-  return Number.isNaN(when.getTime())
-    ? at
-    : when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const seconds = Math.max(0, Math.ceil((when - now) / 1000));
+  if (seconds === 0) return "";
+
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 export function PublishControl({
@@ -70,6 +73,22 @@ export function PublishControl({
   const known = state.kind === "known" ? state : undefined;
   const open = known?.answer.lan === true;
 
+  // **A countdown only while the card is on screen and a window is live.** The
+  // host owns the deadline; this only reads the clock, so a closed surface costs
+  // no timer and a stale one catches up the moment it opens again.
+  const [clock, setClock] = useState<number>(() => Date.now());
+  const [minting, setMinting] = useState(false);
+  const shownCode = known?.pairing;
+  const expiresAt = shownCode?.expiresAt;
+
+  useEffect(() => {
+    if (!surfaceOpen || expiresAt === undefined) return;
+
+    setClock(Date.now());
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [surfaceOpen, expiresAt]);
+
   // Unknown is a real state, not a blank: until the host has answered the editor
   // has nothing to say. No host at all says the same nothing, for its own
   // reason. Neither is drawn as "not publishing".
@@ -97,6 +116,7 @@ export function PublishControl({
         }
       : undefined;
   const code = known.pairing;
+  const left = code === undefined ? "" : remainingOf(code.expiresAt, clock);
   const label = open
     ? uiCopy.publish.stop
     : pending === true
@@ -213,8 +233,22 @@ export function PublishControl({
                       {code.code}
                     </span>
                     <span className="editor-shell-publish-expiry">
-                      {uiCopy.publish.expires(expiryOf(code.expiresAt))}
+                      {left === ""
+                        ? uiCopy.publish.expired
+                        : uiCopy.publish.expiresIn(left)}
                     </span>
+                    <button
+                      type="button"
+                      className="editor-shell-publish-mint"
+                      data-yunari-new-code=""
+                      disabled={minting}
+                      onClick={() => {
+                        setMinting(true);
+                        void hosting.renew().finally(() => setMinting(false));
+                      }}
+                    >
+                      {uiCopy.publish.newCode}
+                    </button>
                     {/* **The symbol, which now carries the code rather than a
                         credential.** The page it opens asks for nothing else,
                         so a phone with a camera pairs in one scan and the

@@ -16,11 +16,13 @@ import {
 } from "../shortcut-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
 import { HostingStore } from "./hosting-store.js";
-import { PublishControl } from "./publish-control.js";
+import { PublishControl, remainingOf } from "./publish-control.js";
 import { PublishSurfaceStore } from "./shell-stores.js";
 
 const CODE = "ABC234";
+const MINTED = "XYZ789";
 const EXPIRES = "2026-10-08T00:00:00.000Z";
+const MINTED_EXPIRES = "2026-10-08T00:10:00.000Z";
 const ADDRESS = "192.168.1.42";
 const PORT = 5227;
 /** The URL the symbol carries: the page a phone opens, with the code in it.
@@ -74,23 +76,38 @@ function hostServing(options: {
    *  that follows — the shape `vg-173` gives a host that cannot rebind while
    *  its answer is still on the socket. */
   readonly refusalAfterPut?: string;
-}): { readonly putCalls: () => number } {
+  /** When the host's code stops being the answer. Defaults to the past, so the
+   *  card shows an expired window unless a case is about the countdown. */
+  readonly expiresAt?: string;
+}): { readonly putCalls: () => number; readonly mintCalls: () => number } {
   const where = options.address ?? ADDRESS;
   const named = options.name ?? null;
   const at = options.port ?? PORT;
   let lan = options.lan;
   let refusal: string | null = null;
   let puts = 0;
+  let mints = 0;
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      // The code is read, never minted: the editor has no mint left, and the
-      // host is the only thing that owns the window.
       if (url.startsWith("/api/pairing/code")) {
+        // **Only the POST rotates.** The GET is the read the card does when it
+        // opens; the POST is the owner's renewal, and a stub that answered both
+        // the same would not prove the button did anything.
+        if (init?.method === "POST") {
+          mints += 1;
+          return new Response(
+            JSON.stringify({ code: MINTED, expiresAt: MINTED_EXPIRES }),
+            { status: 200 },
+          );
+        }
         return new Response(
-          JSON.stringify({ code: CODE, expiresAt: EXPIRES }),
+          JSON.stringify({
+            code: CODE,
+            expiresAt: options.expiresAt ?? EXPIRES,
+          }),
           {
             status: 200,
           },
@@ -123,7 +140,7 @@ function hostServing(options: {
     }),
   );
 
-  return { putCalls: () => puts };
+  return { putCalls: () => puts, mintCalls: () => mints };
 }
 
 let root: Root | undefined;
@@ -478,4 +495,50 @@ it("falls back to the address when the host has no name to offer", async () => {
     expect(popupText()).toContain(`https://${ADDRESS}:${PORT}`),
   );
   expect(popupText()).not.toContain("null");
+});
+
+it("counts the live window down instead of printing its expiry instant", async () => {
+  // A deadline in the reader's own clock, with slack for jsdom's mount: the
+  // copy says how long is left, not the instant the host answered.
+  const expiresAt = new Date(Date.now() + 125_000).toISOString();
+  hostServing({ lan: true, expiresAt });
+  const container = await mount();
+  await openSurface(container);
+
+  await vi.waitFor(() =>
+    expect(popupText()).toMatch(/Pairing code expires in 0[12]:\d{2}/),
+  );
+  expect(popupText()).not.toContain("Pairing expires ");
+});
+
+it("says a window has expired, and offers a new code from the card", async () => {
+  const fake = hostServing({ lan: true });
+  const container = await mount();
+  await openSurface(container);
+
+  // The default expiry is behind the clock, so the card says the code is dead
+  // rather than counting a window that has already closed.
+  await vi.waitFor(() => expect(popupText()).toContain(uiCopy.publish.expired));
+
+  const button = document.querySelector("[data-yunari-new-code]");
+  expect(button?.textContent).toBe(uiCopy.publish.newCode);
+  await act(async () => (button as HTMLElement | null)?.click());
+
+  // The mint replaces the code the card prints, without a host restart.
+  await vi.waitFor(() =>
+    expect(document.querySelector("[data-yunari-pair-code]")?.textContent).toBe(
+      MINTED,
+    ),
+  );
+  expect(fake.mintCalls()).toBe(1);
+});
+
+it("formats what is left of a window as mm:ss, and nothing once it is gone", () => {
+  const at = Date.parse("2026-10-08T00:00:00.000Z");
+
+  expect(remainingOf("2026-10-08T00:02:05.000Z", at)).toBe("02:05");
+  expect(remainingOf("2026-10-08T00:10:00.000Z", at)).toBe("10:00");
+  // The same instant, or one already passed, is not a duration a card can show.
+  expect(remainingOf("2026-10-08T00:00:00.000Z", at)).toBe("");
+  expect(remainingOf("not a date", at)).toBe("");
 });

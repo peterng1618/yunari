@@ -184,6 +184,24 @@ describe("the one-time pairing code", () => {
     expect(store.currentOrMint().code).toBe("BBBBBB");
   });
 
+  it("mint replaces the live window, invalidating the code already shown", async () => {
+    const drawn = ["AAAAAA", "BBBBBB"];
+    const store = createPairingCodeStore({
+      randomCode: () => drawn.shift() ?? "CCCCCC",
+      wait: async () => {},
+    });
+
+    const shown = store.mint();
+    const fresh = store.mint();
+
+    // The owner's renewal: the old characters stop being an answer even though
+    // their window had not closed, and the new ones are the one live code.
+    expect(fresh.code).not.toBe(shown.code);
+    expect(store.current()?.code).toBe(fresh.code);
+    expect(await store.claim(shown.code, "127.0.0.1")).toBe(false);
+    expect(await store.claim(fresh.code, "127.0.0.1")).toBe(true);
+  });
+
   it("forgets the penalty when a new code replaces the window", async () => {
     const waited: number[] = [];
     const store = fast(waited);

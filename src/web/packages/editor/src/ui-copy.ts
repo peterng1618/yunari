@@ -1730,7 +1730,14 @@ export const uiCopy = {
       `Fallback http://${address}:${port}`,
     copy: "Copy link",
     copied: "Copied",
-    expires: (at: string): string => `Pairing expires ${at}`,
+    /** The live window, counted down in the reader's own clock. The host answers
+     *  an instant; a person reads a duration, and a deadline they can watch is
+     *  what says a code has run out. */
+    expiresIn: (left: string): string => `Pairing code expires in ${left}`,
+    expired: "Pairing code expired",
+    /** The renewal action beside the countdown: it replaces the window rather
+     *  than leaving the owner to restart the host when ten minutes pass. */
+    newCode: "New code",
   },
   /** The View menu. Each setting names itself and its current value; the values
    *  are listed here rather than composed from a number and a unit, so the menu
