@@ -244,6 +244,69 @@ describe("SnapManager", () => {
     snapping.destroy();
   });
 
+  it("snaps a rectangle inside an entered group at the root distance", () => {
+    // The same rectangle, dragged the same two units short of the same
+    // neighbour, once at the root and once inside the group it was entered
+    // through. A group member's `left`/`top` are group-local, so the movement
+    // plan must be stated in the canvas plane and converted back to the group's
+    // plane on the way in; otherwise the raw intent is refused as a
+    // non-translation and the drag lands raw.
+    const drag = (
+      wrapped: boolean,
+    ): { left: number; top: number; anchorLeft: number } => {
+      const { canvas, snapping, logged } = setup();
+      const anchor = new Rect({
+        id: "a",
+        left: 100,
+        top: 20,
+        width: 40,
+        height: 40,
+      });
+      const dragged = new Rect({
+        id: "b",
+        left: 98,
+        top: 150,
+        width: 40,
+        height: 40,
+      });
+      if (wrapped) {
+        // `subTargetCheck`/`interactive` are what entering a group sets; without
+        // them Fabric's layout does not refresh the children's cached coords.
+        const group = new Group([dragged], {
+          subTargetCheck: true,
+          interactive: true,
+        });
+        canvas.add(anchor, group);
+      } else {
+        canvas.add(anchor, dragged);
+      }
+      canvas.setActiveObject(dragged);
+
+      canvas.fire("mouse:down" as never, { target: dragged } as never);
+      move(canvas, dragged);
+      // Fabric fires the group's layout after the canvas handler; do the same,
+      // so the assertion is the geometry the author is left looking at.
+      dragged.fire("moving" as never, {} as never);
+
+      expect(logged).not.toHaveBeenCalled();
+      const bounds = dragged.getBoundingRect();
+      const anchorLeft = anchor.getBoundingRect().left;
+      snapping.destroy();
+      return { left: bounds.left, top: bounds.top, anchorLeft };
+    };
+
+    const root = drag(false);
+    const grouped = drag(true);
+
+    // Both land on the neighbour's edge, at the same distance from the raw aim.
+    expect(root.left).toBe(root.anchorLeft);
+    expect(grouped.left).toBe(grouped.anchorLeft);
+    expect({ left: grouped.left, top: grouped.top }).toEqual({
+      left: root.left,
+      top: root.top,
+    });
+  });
+
   it("detaches every listener on destroy", () => {
     const { canvas, snapping } = setup();
     const dragged = new Rect({

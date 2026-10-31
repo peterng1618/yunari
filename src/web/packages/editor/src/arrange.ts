@@ -1,6 +1,7 @@
 import { isLocked } from "@yunari/scene-fabric";
-import { ActiveSelection, type FabricObject, Point, util } from "fabric/es";
+import { ActiveSelection, type FabricObject } from "fabric/es";
 import type { EditorInteraction } from "./editor-interaction.js";
+import { moveObjectByCanvasDelta } from "./object-plane.js";
 
 export type ArrangeAction =
   | "align-left"
@@ -97,11 +98,13 @@ function align(
         : action === "align-bottom"
           ? current.top + current.height
           : current.top + current.height / 2;
-    move(
+    moveObjectByCanvasDelta({
       object,
-      horizontal ? target - position : 0,
-      horizontal ? 0 : target - position,
-    );
+      delta: {
+        x: horizontal ? target - position : 0,
+        y: horizontal ? 0 : target - position,
+      },
+    });
   }
 }
 
@@ -120,11 +123,13 @@ function distribute(objects: readonly ArrangeObject[], axis: "x" | "y"): void {
   let next = end(first, axis) + gap;
 
   for (const object of inner) {
-    move(
+    moveObjectByCanvasDelta({
       object,
-      axis === "x" ? next - start(object, axis) : 0,
-      axis === "y" ? next - start(object, axis) : 0,
-    );
+      delta: {
+        x: axis === "x" ? next - start(object, axis) : 0,
+        y: axis === "y" ? next - start(object, axis) : 0,
+      },
+    });
     next += size(object, axis) + gap;
   }
 }
@@ -141,30 +146,4 @@ function end(object: ArrangeObject, axis: "x" | "y"): number {
 function size(object: ArrangeObject, axis: "x" | "y"): number {
   const bounds = object.getBoundingRect();
   return axis === "x" ? bounds.width : bounds.height;
-}
-
-/** Moves by a canvas-plane delta, expressed in the plane `left`/`top` live in.
- *
- * `getBoundingRect()` is a canvas coordinate, while `left`/`top` are the
- * parent's plane — for a grouped object the two differ by the group's
- * transform. Writing the one into the other moved a group member by its group's
- * translation a second time, which reads as objects thrown off the canvas.
- *
- * The delta is therefore converted through the parent's inverse with its offset
- * ignored — a delta is a vector, not a point — and added to `left`/`top`,
- * which is a pure translation of the anchor. Going through
- * `setPositionByOrigin(centre, …)` instead is not equivalent: entering a group
- * bakes the group's angle and scale onto the children, and the centre read is
- * then no longer the exact inverse of the write. */
-function move(object: ArrangeObject, dx: number, dy: number): void {
-  const parent = object.parent;
-  const delta = parent
-    ? util.transformPoint(
-        new Point(dx, dy),
-        util.invertTransform(parent.calcTransformMatrix()),
-        true,
-      )
-    : new Point(dx, dy);
-  object.set({ left: object.left + delta.x, top: object.top + delta.y });
-  object.setCoords();
 }

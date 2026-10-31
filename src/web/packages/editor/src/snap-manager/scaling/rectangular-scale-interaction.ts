@@ -3,11 +3,14 @@
 import {
   type Canvas,
   type FabricObject,
-  Point,
   type TPointerEvent,
   type Transform,
 } from "fabric/es";
 
+import {
+  canvasPointToParentPlane,
+  parentPlanePointToCanvas,
+} from "../../object-plane.js";
 import { getObjectExactBounds, type ObjectBounds } from "../bounds.js";
 import {
   createRectangularScaleValues,
@@ -105,8 +108,14 @@ export function applyRectangularScalePlan({
   });
   transform.scaleX = target.scaleX;
   transform.scaleY = target.scaleY;
+  // The projection's anchor is a canvas point; a group member's position is
+  // written in its own plane. Writing the canvas point into the child moved it
+  // by the group's transform a second time.
   target.setPositionByOrigin(
-    new Point(projection.fixedAnchor.x, projection.fixedAnchor.y),
+    canvasPointToParentPlane({
+      object: target,
+      point: projection.fixedAnchor,
+    }),
     transform.originX,
     transform.originY,
   );
@@ -150,7 +159,10 @@ export function readFinalRectangularScaleGeometry({
   const bounds = getObjectExactBounds({ object: target });
   if (!bounds) throw new Error("Rectangular scale needs exact final bounds");
 
-  const anchor = target.getPointByOrigin(transform.originX, transform.originY);
+  const anchor = parentPlanePointToCanvas({
+    object: target,
+    point: target.getPointByOrigin(transform.originX, transform.originY),
+  });
 
   return Object.freeze({
     bounds,

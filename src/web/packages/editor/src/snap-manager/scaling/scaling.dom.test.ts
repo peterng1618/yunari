@@ -56,9 +56,9 @@ function setup({
     strokeWidth: 0,
   });
   if (grouped) {
-    // `_enterGroup` sets both `group` and `parent` on the child, which is what
-    // the guard reads. The group is unrotated, so only the guard can stop this
-    // child from snapping — a removal of the guard turns the test red.
+    // Wrapping the same rectangle in a group leaves its world geometry
+    // unchanged, so the only difference from the root case is the plane its
+    // `left`/`top` live in.
     canvas.add(
       anchor,
       new Group([resized], { subTargetCheck: true, interactive: true }),
@@ -191,17 +191,22 @@ describe("scale snapping", () => {
     snapped.destroy();
   });
 
-  it("refuses a group child, whose bounds plane is the group's", () => {
-    const { snapped, resized, down, resize } = setup({ grouped: true });
-    down();
+  it("snaps a group child at the same width as the same rectangle at the root", () => {
+    const root = setup();
+    root.down();
+    expect(root.resize({}, SNAPPING_MULTIPLIER)).toBe(306);
+    const rootWidth = root.resized.getScaledWidth();
+    root.snapped.destroy();
 
-    // The step that snaps above must leave the raw width here: the child's
-    // bounds are read in the canvas plane while the plan would be applied in the
-    // child's own plane, so the two disagree as soon as the group is rotated or
-    // scaled. Guarded, so no session starts and nothing re-plans.
-    expect(resize({}, SNAPPING_MULTIPLIER)).toBe(306);
-    expect(resized.getScaledWidth()).toBe(306);
-    snapped.destroy();
+    const grouped = setup({ grouped: true });
+    grouped.down();
+    expect(grouped.resize({}, SNAPPING_MULTIPLIER)).toBe(306);
+    // The projection is in the canvas plane and the applied anchor is converted
+    // into the child's own plane, so the group's transform does not change the
+    // distance at which the same raw step snaps.
+    expect(grouped.resized.getScaledWidth()).toBe(rootWidth);
+    expect(rootWidth).toBe(310);
+    grouped.snapped.destroy();
   });
 
   it("refuses a handle whose behaviour was replaced", () => {
