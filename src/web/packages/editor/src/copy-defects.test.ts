@@ -292,12 +292,12 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * The publish surface's capability strings, each against the control that runs
  * it — **and the boundary of that claim, stated rather than implied.**
  *
- * **Proven here:** `uiCopy.publish.start`, the header control's word, against
+ * **Proven here:** `uiCopy.publish.assign`, the header control's word, against
  * the control that opens the surface (`[data-yunari-publish]`, present and
- * enabled); and the `⌘⇧P` chord, printed from the live table, against the
- * `publish.surface` binding the table owns. The chord is the case the brief
- * flags: plan 2 drew the button alone and plan 5 bound `publish.surface`, so the
- * printed chord now runs the action.
+ * enabled); and the `⌘⇧P` chord, read from the tooltip from the live table,
+ * against the `publish.surface` binding the table owns. The chord is the case
+ * the brief flags: plan 2 drew the button alone and plan 5 bound
+ * `publish.surface`, so the chord now runs the action.
  *
  * **Proven elsewhere, named.** The rail's `add` slot reveals the Add pane, and
  * `shell-layout.dom.test.tsx` proves it: its `segment()` helper composes the
@@ -349,14 +349,14 @@ it("maps the publish surface's capability strings to controls that can run them"
   );
   expect(trigger).not.toBeNull();
   expect(trigger?.disabled).toBe(false);
-  expect(trigger?.textContent).toContain(uiCopy.publish.start);
+  expect(trigger?.textContent).toBe(uiCopy.publish.assign);
 
-  // The chord is printed only because the table binds the act it prints: the
-  // chip is empty the moment `publish.surface` is unbound, and what it prints is
-  // the live table's own label, so a rebind reaches it.
-  const chip = host.querySelector("[data-yunari-publish-chord]");
-  expect(chip?.textContent).not.toBe("");
-  expect(chip?.textContent).toBe(shortcutLabel("publish.surface"));
+  // The chord stays off the bar and is reachable on the tooltip, only because
+  // the table binds the act it names: a rebind reaches the title, and the word
+  // is the live table's own label.
+  expect(trigger?.getAttribute("title")).toContain(
+    shortcutLabel("publish.surface"),
+  );
   expect(
     PRODUCT_SHORTCUTS.some((binding) => binding.action === "publish.surface"),
   ).toBe(true);

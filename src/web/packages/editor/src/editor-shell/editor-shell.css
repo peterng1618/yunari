@@ -1986,7 +1986,7 @@ body,
   /* the type scale — `--text-xs` 11px, the reading a hint or a
      panel row has. A chord mark is mono by the type scale and this size is the one
      every other chord mark in the shell already takes
-     (`.editor-shell-menu-key`, `.editor-shell-primary-key`). */
+     (`.editor-shell-menu-key`). */
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
   color: var(--shell-muted);
@@ -2218,21 +2218,6 @@ body,
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
 }
-/* The chord on the header's one filled control. It inherits that button's
-   own text colour rather than taking a shell role: the primary button's text is
-   the colour chosen against its accent fill, so the mark keeps the contrast the
-   word beside it has. */
-.editor-shell-primary-key {
-  margin-left: var(--space-8);
-  padding: 0 var(--space-4);
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-  border-radius: var(--radius-sm);
-  font-family: ui-monospace, monospace;
-  font-size: var(--text-xs);
-  line-height: var(--text-xs--line-height);
-  color: inherit;
-}
-
 /* Opt-in density primitives: a panel chooses a dense row rather than the shell
    forcing every control onto its own full-width line. */
 .yunari-field {

@@ -112,21 +112,18 @@ export function PublishControl({
         type="button"
         className="editor-shell-primary"
         data-yunari-publish=""
+        title={
+          chord === ""
+            ? uiCopy.publish.assign
+            : `${uiCopy.publish.assign} (${chord})`
+        }
+        aria-label={
+          chord === ""
+            ? undefined
+            : `${uiCopy.publish.assign} (${shortcutSpokenLabel("publish.surface")})`
+        }
       >
-        {uiCopy.publish.start}
-        {/* The mark, and plan 2 left it off because there was nothing to
-            run. It is the same action id the press answers to through the
-            chord, so the mark and the act cannot disagree — a printed chord
-            that ran nothing is the state this row exists to end. */}
-        {chord === "" ? null : (
-          <kbd
-            className="editor-shell-primary-key"
-            data-yunari-publish-chord=""
-            aria-label={shortcutSpokenLabel("publish.surface")}
-          >
-            {chord}
-          </kbd>
-        )}
+        {uiCopy.publish.assign}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner
@@ -200,7 +197,7 @@ export function PublishControl({
                     printed. The plain one is what a device that has not
                     installed the root certificate can still open. */}
                 <span className="editor-shell-publish-note">
-                  {`Fallback http://${shown.address}:${shown.port}`}
+                  {uiCopy.publish.fallback(shown.address, shown.port)}
                 </span>
                 {code === undefined ? null : (
                   <>

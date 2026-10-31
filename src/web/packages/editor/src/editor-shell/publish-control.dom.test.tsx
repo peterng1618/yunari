@@ -212,19 +212,24 @@ function popupOpen(): boolean {
   );
 }
 
-it("prints the publish chord on the header control, from the live table", async () => {
-  // The mark, and plan 2 left it off because there was nothing to run. It is
-  // printed here and only here because this is the commit that binds
-  // `publish.surface` to the act the control itself performs — a printed chord
-  // that runs nothing is the state that was deliberately not shipped.
+it("keeps the publish chord on the header control's tooltip, from the live table", async () => {
+  // The word is the control's name; the chord is hover-only, so it is read from
+  // the title rather than drawn into the bar. It is read from the live table
+  // because `publish.surface` is bound to the act the control performs — a
+  // printed chord that runs nothing is the state that was deliberately not
+  // shipped.
   hostServing({ lan: true });
   const container = await mount();
 
-  const chip = container.querySelector("[data-yunari-publish-chord]");
-  expect(chip?.textContent).toBe(shortcutLabel("publish.surface"));
+  const trigger = headerControl(container);
+  expect(trigger?.textContent).toBe(uiCopy.publish.assign);
+  expect(trigger?.querySelector("[data-yunari-publish-chord]")).toBeNull();
+  expect(trigger?.getAttribute("title")).toContain(
+    shortcutLabel("publish.surface"),
+  );
   // The mark is a picture of a key, so what a screen reader is told is what the
   // caps are *called*, not the glyphs they print.
-  expect(chip?.getAttribute("aria-label")).toBe(
+  expect(trigger?.getAttribute("aria-label")).toContain(
     shortcutSpokenLabel("publish.surface"),
   );
 
@@ -239,9 +244,7 @@ it("prints the publish chord on the header control, from the live table", async 
   await act(async () => {
     setActiveShortcuts(resolveShortcuts({ "publish.surface": moved }));
   });
-  expect(
-    container.querySelector("[data-yunari-publish-chord]")?.textContent,
-  ).toBe("Ctrl+J");
+  expect(headerControl(container)?.getAttribute("title")).toContain("Ctrl+J");
 });
 
 it("opens the surface without moving the host, and keeps every fact behind the press", async () => {
@@ -254,7 +257,7 @@ it("opens the surface without moving the host, and keeps every fact behind the p
   expect(popupOpen()).toBe(false);
   expect(container.querySelector("code")).toBeNull();
   expect(container.querySelector("[data-yunari-qr]")).toBeNull();
-  expect(headerControl(container)?.textContent).toContain(uiCopy.publish.start);
+  expect(headerControl(container)?.textContent).toBe(uiCopy.publish.assign);
   expect(hostSwitch()).toBeNull();
 
   // **The press is free of side effects.** This is the whole of F1: an author

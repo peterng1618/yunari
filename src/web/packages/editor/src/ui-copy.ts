@@ -1692,6 +1692,9 @@ export const uiCopy = {
      *  and moves nothing, so the row names the opening rather than the act the
      *  switch inside the surface performs. */
     open: "Open publishing",
+    /** The header control's word. It opens the surface that assigns this host to
+     *  a display; the switch inside is what starts or stops publishing. */
+    assign: "Assign to a display",
     start: "Publish to a phone",
     stop: "Stop publishing",
     starting: "Opening the LAN…",
@@ -1710,7 +1713,9 @@ export const uiCopy = {
     reserveAddress:
       "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
     warning:
-      "Plain HTTP on your own network — trusted networks only, never the internet.",
+      "Phone access is HTTPS. Plain HTTP is the fallback on your own network — trusted networks only, never the internet.",
+    fallback: (address: string, port: number): string =>
+      `Fallback http://${address}:${port}`,
     copy: "Copy link",
     copied: "Copied",
     expires: (at: string): string => `Pairing expires ${at}`,
