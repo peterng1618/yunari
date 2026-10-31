@@ -3,6 +3,7 @@ import type { AssetResult, FontCut } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { assetBytesUrl } from "./client.js";
 import { cardModelOf, FinderCard } from "./finder-card.js";
 
 (
@@ -21,6 +22,8 @@ afterEach(async () => {
   host?.remove();
   host = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, "fonts");
 });
 
 function mount(element: ReactElement): void {
@@ -30,6 +33,29 @@ function mount(element: ReactElement): void {
   act(() => {
     root?.render(element);
   });
+}
+
+/** jsdom has neither `FontFace` nor `document.fonts`, so a tile test that wants
+ *  to see the faces received supplies both. */
+function stubFonts() {
+  const fonts = { add: vi.fn(), delete: vi.fn() };
+  const faces: FakeFontFace[] = [];
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: fonts,
+  });
+  class FakeFontFace {
+    readonly load = vi.fn(async () => undefined);
+    constructor(
+      readonly family: string,
+      readonly source: string,
+      readonly descriptors: FontFaceDescriptors,
+    ) {
+      faces.push(this);
+    }
+  }
+  vi.stubGlobal("FontFace", FakeFontFace);
+  return { fonts, faces };
 }
 
 const paletteResult: AssetResult = {
@@ -237,7 +263,51 @@ it("opens the preview for an image on a double press", () => {
   expect(onPreview).toHaveBeenCalledOnce();
 });
 
+it("draws a family tile in its lead cut's face, loaded from the host route", () => {
+  const { faces } = stubFonts();
+  const lead: FontCut = { ...cut("Manrope", 700), source: "google-fonts" };
+  const family: AssetResult = {
+    id: "google-fonts:cut:manrope-700",
+    name: "Manrope",
+    kind: "font",
+    preview: "",
+    subtitle: "sans · 2 cuts",
+    licence: "OFL-1.1",
+    sourceUrl: "",
+    // The family's id names the 700 cut; the 400 that the provider listed first
+    // is not the face the row is addressed by.
+    font: { cuts: [cut("Manrope", 400), lead] },
+  };
+
+  mount(
+    <FinderCard
+      model={cardModelOf(family, "Google fonts")}
+      selected={false}
+      busy={false}
+      failed={false}
+      done={false}
+      tabStop
+      onSelect={() => {}}
+      onKeyDown={() => {}}
+      focus={() => {}}
+    />,
+  );
+
+  const glyph = document.querySelector<HTMLElement>(
+    '[data-yunari-asset-preview="font"] > span',
+  );
+  expect(glyph?.textContent).toBe("Manrope");
+  expect(glyph?.style.fontFamily).toBe("Manrope");
+  expect(glyph?.style.fontWeight).toBe("700");
+  expect(faces.map((face) => face.family)).toEqual(["Manrope"]);
+  expect(faces[0]?.descriptors.weight).toBe("700");
+  expect(faces[0]?.source).toBe(
+    `url("${assetBytesUrl("google-fonts", "cut:manrope-700")}")`,
+  );
+});
+
 it("names each trio row by that row's family, centred", () => {
+  const { faces } = stubFonts();
   const trioResult: AssetResult = {
     id: "curated-fonts:trio:inter",
     name: "Inter / Poppins / Fira Code",
@@ -286,4 +356,21 @@ it("names each trio row by that row's family, centred", () => {
     "Fira Code",
   ]);
   expect(rows.every((row) => row.className.includes("text-center"))).toBe(true);
+  // Each row is drawn in the face its own role names, not the fallback family.
+  // A family with a space is serialised quoted by CSSStyleDeclaration.
+  expect(rows.map((row) => row.style.fontFamily)).toEqual([
+    "Inter",
+    "Poppins",
+    '"Fira Code"',
+  ]);
+  expect(rows.map((row) => row.style.fontWeight)).toEqual([
+    "700",
+    "400",
+    "400",
+  ]);
+  expect(faces.map((face) => face.family)).toEqual([
+    "Inter",
+    "Poppins",
+    "Fira Code",
+  ]);
 });

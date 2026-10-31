@@ -1430,6 +1430,9 @@ export const uiCopy = {
     fontPreview: {
       trioTitle: "Trio preview",
       familyTitle: "Font family",
+      /** The star is the on/off channel; each state names the press it makes. */
+      favorite: "Add to favorites",
+      unfavorite: "Remove from favorites",
       sampleLabel: "Sample text",
       sampleDefault: "Runtime at a glance",
       sampleReset: "Reset",

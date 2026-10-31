@@ -26,6 +26,13 @@ export interface FontActions {
     cut: FontCut,
     family: readonly FontCut[],
   ) => void;
+  /** The author's favourite trios live on the host, so the pane reads and
+   *  writes them through the session's client rather than holding a second
+   *  list. Both ports are absent when this host keeps no favourites store. */
+  readonly listFavorites?: () => Promise<readonly string[]>;
+  readonly saveFavorites?: (
+    ids: readonly string[],
+  ) => Promise<readonly string[]>;
 }
 
 export interface FontFilterState {

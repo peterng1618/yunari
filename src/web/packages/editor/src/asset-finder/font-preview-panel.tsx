@@ -1,6 +1,8 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useControlTooltip } from "../components/ui/control-icon-button.js";
+import { Glyph, STAR_GLYPH } from "../editor-shell/icons.js";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import { assetBytesUrl } from "./client.js";
@@ -87,6 +89,35 @@ export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
       };
 }
 
+/** A trio's favourite toggle: the filled star is the on/off channel, and one
+ *  word per state is both the accessible name and the tooltip. */
+function TrioFavoriteButton({
+  favorite,
+  onToggle,
+}: {
+  readonly favorite: boolean;
+  readonly onToggle: () => void;
+}): React.JSX.Element {
+  const ref = useRef<HTMLButtonElement>(null);
+  const label = favorite
+    ? uiCopy.assets.fontPreview.unfavorite
+    : uiCopy.assets.fontPreview.favorite;
+  useControlTooltip(ref, label);
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-pressed={favorite}
+      aria-label={label}
+      data-yunari-font-favorite=""
+      onClick={onToggle}
+      className="ml-auto inline-flex size-[26px] flex-none items-center justify-center rounded-[var(--radius-md)] border border-transparent text-muted enabled:hover:border-edge enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      <Glyph icon={STAR_GLYPH} size={13} filled={favorite} />
+    </button>
+  );
+}
+
 /** Holds the specimen faces resident while the panel draws them, and frees
  *  every face it added on unmount or when the selection changes.
  *
@@ -137,11 +168,18 @@ export function FontPreviewPanel({
   selected,
   presets,
   state,
+  favorite,
   onChange,
 }: {
   readonly selected: FontResult;
   readonly presets: TypeTokens;
   readonly state: FontPreviewState;
+  /** The selected trio's favourite state and its one write. Absent for a
+   *  family, or when the session offers no favourites store. */
+  readonly favorite?: {
+    readonly on: boolean;
+    readonly toggle: () => void;
+  };
   readonly onChange: (next: FontPreviewState) => void;
 }): React.JSX.Element {
   const copy = uiCopy.assets.fontPreview;
@@ -180,6 +218,12 @@ export function FontPreviewPanel({
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">
           {trio === undefined ? copy.familyTitle : copy.trioTitle}
         </span>
+        {trio === undefined || favorite === undefined ? null : (
+          <TrioFavoriteButton
+            favorite={favorite.on}
+            onToggle={favorite.toggle}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-[var(--space-4)]">

@@ -5,6 +5,8 @@ import type {
   AssetResult,
   AssetSearchAnswer,
   AssetSourceListing,
+  FontCut,
+  FontTrioInfo,
 } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -144,6 +146,48 @@ const photo: AssetResult = {
   subtitle: "Lake · 2400×1600",
   licence: "Unsplash License",
   sourceUrl: "https://unsplash.com/photos/1",
+};
+
+const fontCut = (family: string, weight: number): FontCut => ({
+  id: `cut:${family.toLowerCase()}-${weight}`,
+  source: "curated-fonts",
+  family,
+  weight,
+  style: "normal",
+  subset: "latin",
+  format: "woff2",
+  previewUrl: "",
+  licence: "OFL-1.1",
+  sourceUrl: "",
+});
+
+const fontHeading = fontCut("Inter", 700);
+const fontBody = fontCut("Poppins", 400);
+const fontMono = fontCut("Fira Code", 400);
+
+const fontTrio: FontTrioInfo = {
+  id: "inter-poppins",
+  name: "Inter · Poppins",
+  description: "",
+  roles: {
+    heading: fontHeading,
+    body: fontBody,
+    mono: fontMono,
+  },
+};
+
+const fontTrioResult: AssetResult = {
+  id: `curated-fonts:${fontTrio.id}`,
+  name: fontTrio.name,
+  kind: "font",
+  preview: "",
+  subtitle: "",
+  licence: "OFL-1.1",
+  sourceUrl: "",
+  font: {
+    cuts: [fontHeading, fontBody, fontMono],
+    trio: fontTrio,
+  },
 };
 
 const page = (
@@ -432,6 +476,49 @@ describe("AssetFinder tabs", () => {
     ).not.toBeNull();
     expect(document.querySelector("[data-yunari-asset-chip]")).toBeNull();
     expect(searchAssets).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssetFinder's Fonts favourites", () => {
+  it("reads the host's list and writes a star press through the same store", async () => {
+    searchAssets.mockResolvedValue({
+      pages: [page("curated-fonts", [fontTrioResult])],
+    });
+    const listFavorites = vi.fn(async () => ["another-trio"]);
+    const saveFavorites = vi.fn(async (ids: readonly string[]) => ids);
+
+    await render([curatedFonts], {
+      initialCategory: "font",
+      font: {
+        onApplyTrio: () => {},
+        onAddTrioPresets: () => {},
+        onAddPreset: () => {},
+        onApplyToSelected: () => {},
+        listFavorites,
+        saveFavorites,
+      },
+    });
+    await settle();
+    expect(listFavorites).toHaveBeenCalledOnce();
+
+    const trioCard = card(`curated-fonts:${fontTrio.id}`);
+    await act(async () => trioCard.click());
+
+    const star = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-font-favorite]",
+    );
+    expect(star?.getAttribute("aria-pressed")).toBe("false");
+    await act(async () => star?.click());
+
+    expect(saveFavorites).toHaveBeenCalledWith([
+      "another-trio",
+      "inter-poppins",
+    ]);
+    expect(
+      document
+        .querySelector("[data-yunari-font-favorite]")
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });
 

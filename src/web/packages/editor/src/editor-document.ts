@@ -357,6 +357,12 @@ export class EditorDocument {
     return [...this.#credits];
   }
 
+  /** The credit an asset already carries, where one was recorded. The match is
+   *  the id the import wrote; a legacy credit has none and answers nothing. */
+  creditForAsset(assetId: string): ThemeCreditsEntry | undefined {
+    return this.#credits.find((entry) => entry.assetId === assetId);
+  }
+
   /** Whether one more credit can be held: the package writer refuses a list
    *  past its cap, so the refusal happens before the bytes are declared rather
    *  than at the next save. A prune can free a slot, but only by removing the

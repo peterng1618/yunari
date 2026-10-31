@@ -1,4 +1,5 @@
 import type { AssetReference } from "@yunari/renderer-core";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import type * as React from "react";
 import { useState } from "react";
 import {
@@ -30,6 +31,10 @@ export type PlacedOrLocalAsset = AssetReference & {
  *  own closures, so the modal owns no document write and no picker. */
 export interface AssetPreviewInput {
   readonly asset: PlacedOrLocalAsset;
+  /** The package's credit for this asset, where the caller can reach one. The
+   *  declaration carries a licence and a source but never the author, so the
+   *  credit is what answers who made the work. */
+  readonly credit: ThemeCreditsEntry | undefined;
   /** The manager's own blob URL for a picture; the pane's held URL for a video,
    *  which `AssetManager.previewUrl` deliberately answers `undefined` for. */
   readonly previewUrl: string | undefined;
@@ -119,10 +124,12 @@ function ratioOf(width: number, height: number): string {
   return `${width / divisor}:${height / divisor}`;
 }
 
-/** The attribution pills: the declaration's own licence and source, each once.
- *  Nothing recorded is said rather than left blank. */
+/** The attribution pills: the declaration's licence and source and the
+ *  package credit's author, licence and source, each once. Nothing recorded is
+ *  said rather than left blank. */
 function attributionReadings(
   asset: PlacedOrLocalAsset,
+  credit: ThemeCreditsEntry | undefined,
 ): readonly PillReading[] {
   const readings: PillReading[] = [];
   const seen = new Set<string>();
@@ -132,8 +139,11 @@ function attributionReadings(
     readings.push({ id, name, mono, proposed: false });
   };
   add("license", asset.license?.name, false);
+  add("credit-license", credit?.license, false);
   add("attribution", asset.license?.attribution, false);
+  add("credit-author", credit?.author?.name, false);
   add("source", asset.sourceUrl, true);
+  add("credit-source", credit?.source?.url, true);
   if (readings.length === 0) {
     readings.push({
       id: "none",
@@ -254,7 +264,7 @@ function AssetPreviewModal({
             proposed: false,
           },
         ];
-  const attribution = attributionReadings(asset);
+  const attribution = attributionReadings(asset, input.credit);
 
   return (
     <Dialog

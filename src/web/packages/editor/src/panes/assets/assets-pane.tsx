@@ -1,5 +1,5 @@
 import type { FontAssetReference } from "@yunari/renderer-core";
-import type { VideoTrimRange } from "@yunari/theme-package";
+import type { ThemeCreditsEntry, VideoTrimRange } from "@yunari/theme-package";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -70,6 +70,10 @@ interface AssetsPaneProps {
   readonly onChanged?: () => void;
   /** Opens the finder. Optional so the pane draws without a shell. */
   readonly onFindAssets?: () => void;
+  /** The package's credit for a declared asset, where the caller can reach one.
+   *  The preview reads it so Attribution shows the author the declaration does
+   *  not carry; optional so a pane mounted without a document still draws. */
+  readonly creditFor?: (assetId: string) => ThemeCreditsEntry | undefined;
   /** Writes the asset as the artboard's background media — envelope state the
    *  pane cannot reach itself. */
   readonly onBackground?: (asset: LocalAssetReference) => void;
@@ -242,6 +246,7 @@ export function AssetsPane({
   subscribeDocumentChange,
   onChanged,
   onFindAssets,
+  creditFor,
   onBackground,
   onFontCommit,
   onImportVideo,
@@ -606,6 +611,7 @@ export function AssetsPane({
     setChosenId(asset.id);
     void openAssetPreview({
       asset,
+      credit: creditFor?.(asset.id),
       previewUrl:
         asset.kind === "video" ? videoUrl : manager.previewUrl(asset.id),
       inUse: referenced(asset.id),

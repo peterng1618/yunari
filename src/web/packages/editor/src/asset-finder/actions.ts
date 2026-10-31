@@ -3,7 +3,10 @@ import type {
   AssetPreset,
   AssetResult,
 } from "@yunari/renderer-core";
-import type { ThemeCreditsEntry } from "@yunari/theme-package";
+import {
+  MAX_CREDITS_ENTRIES,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { type AssetManager, mimeOf } from "../asset-manager/index.js";
 import type { EditorDocument } from "../editor-document.js";
 import {
@@ -44,9 +47,11 @@ export async function importFinderResult(input: {
     return { ok: false, message: uiCopy.assets.unknownAssetFile };
 
   // Checked before the bytes are declared: an over-cap entry would leave the
-  // document unable to save, and no surface can remove one.
-  const credit = creditOf(input.result);
-  if (!input.document.canAddCredit(credit))
+  // document unable to save, and no surface can remove one. The id arrives with
+  // the declaration, so a fresh import always needs a free slot; asking
+  // `canAddCredit` here would let a legacy credit sharing the title match and
+  // hide the full list.
+  if (input.document.credits().length >= MAX_CREDITS_ENTRIES)
     return { ok: false, message: uiCopy.assets.creditsFull };
 
   try {
@@ -66,7 +71,9 @@ export async function importFinderResult(input: {
         ? {}
         : { sourceUrl: input.result.sourceUrl }),
     });
-    input.document.addCredit(credit);
+    // The declaration's id is the credit's link to the asset it attributes;
+    // without it no surface can join the two, and a removal cannot prune it.
+    input.document.addCredit(creditOf(input.result, reference.id));
     input.place(reference.id);
     return { ok: true };
   } catch (error) {
@@ -118,7 +125,10 @@ export function applyPreset(
 
 /** The attribution an imported result carries (R7). An image's subtitle
  *  is its photographer; an icon's is a style, which is not an author. */
-export function creditOf(result: AssetResult): ThemeCreditsEntry {
+export function creditOf(
+  result: AssetResult,
+  assetId?: string,
+): ThemeCreditsEntry {
   return {
     kind: result.kind,
     title: result.name,
@@ -128,5 +138,6 @@ export function creditOf(result: AssetResult): ThemeCreditsEntry {
     license: result.licence,
     changes: "Imported unchanged",
     ...(result.sourceUrl === "" ? {} : { source: { url: result.sourceUrl } }),
+    ...(assetId === undefined ? {} : { assetId }),
   };
 }

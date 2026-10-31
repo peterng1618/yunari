@@ -640,6 +640,9 @@ export class EditorSession {
         this.#document.subscribeDocumentChange(listener),
       onChanged: () => this.#declarationsChanged(),
       onFindAssets: () => options.onFindAssets?.(),
+      // The preview reads the package's credit for the asset it shows, so an
+      // author and a licence the declaration never carries still surface.
+      creditFor: (assetId) => this.#document.creditForAsset(assetId),
       onFontCommit: (input) => this.#commitFont(input),
       onImportVideo: (file, isPackage, onStep, trim) =>
         this.importPickedVideo(file, {
@@ -939,13 +942,20 @@ export class EditorSession {
     },
   ): Promise<ImportOutcome> {
     const credit = options.credit;
-    if (credit !== undefined && !this.#document.canAddCredit(credit)) {
+    // A fresh declaration always needs a free slot: the credit gains the
+    // declaration's own id below, so a legacy credit sharing its title must not
+    // mask a full list.
+    if (
+      credit !== undefined &&
+      this.#document.credits().length >= MAX_CREDITS_ENTRIES
+    ) {
       return { ok: false, message: uiCopy.assets.creditsFull };
     }
 
     try {
       const reference = await this.#assets.import(file, options.metadata);
-      if (credit !== undefined) this.#document.addCredit(credit);
+      if (credit !== undefined)
+        this.#document.addCredit({ ...credit, assetId: reference.id });
       const background = this.#document.envelope.background;
       this.#document.setBackground({
         ...background,
@@ -1156,6 +1166,7 @@ export class EditorSession {
       token?.kind === "preset"
         ? token.id
         : this.#options.selection?.get().selectionPresetId;
+    const favorites = this.#options.favoritesClient;
     const run = (action: () => Promise<unknown>): void => {
       void document.runFontAction(async () => {
         await action();
@@ -1181,6 +1192,14 @@ export class EditorSession {
             onApplyToSelected: (cut: FontCut, family: readonly FontCut[]) => {
               run(() => document.applyCutToPreset(selected, cut, family));
             },
+          }),
+      // A host that keeps no favourites store answers 404; the client reads
+      // that as no favourites, so the pane draws no star rather than failing.
+      ...(favorites === undefined
+        ? {}
+        : {
+            listFavorites: () => favorites.list(),
+            saveFavorites: (ids: readonly string[]) => favorites.save(ids),
           }),
     };
   }

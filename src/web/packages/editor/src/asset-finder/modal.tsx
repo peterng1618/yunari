@@ -281,6 +281,12 @@ export function AssetFinder({
     cutId: undefined,
     role: "body" as FontRole,
   });
+  /** The author's favourite trio ids, read from the host when the Fonts tab is
+   *  first drawn. `undefined` until the read settles; a host that keeps no
+   *  store reads as no favourites rather than as a failure. */
+  const [favorites, setFavorites] = useState<readonly string[] | undefined>(
+    undefined,
+  );
   /** The Wallpaper Engine library, fetched on the tab's first activation, and
    *  the tab's own filter, selection and completed writes. */
   const [library, setLibrary] = useState<WallpaperEngineAnswer | undefined>();
@@ -508,6 +514,46 @@ export function AssetFinder({
       live = false;
     };
   }, [open, active, library, client]);
+
+  /** The favourites live on the host, not in the finder: read the stored list
+   *  when Fonts is first drawn and write it back through the same client. A
+   *  closed finder starts from the host's answer again. */
+  useEffect(() => {
+    if (!open) {
+      setFavorites(undefined);
+      return undefined;
+    }
+    if (active !== "font" || favorites !== undefined) return undefined;
+    const list = font?.listFavorites;
+    if (list === undefined) {
+      setFavorites([]);
+      return undefined;
+    }
+    let live = true;
+    void list().then((stored) => {
+      if (live) setFavorites(stored);
+    });
+    return () => {
+      live = false;
+    };
+    // `font` is read for its port only; its callbacks are rebuilt by the shell.
+  }, [open, active, favorites === undefined, font === undefined]);
+
+  const toggleFavorite = (trioId: string): void => {
+    const current = favorites ?? [];
+    const next = current.includes(trioId)
+      ? current.filter((id) => id !== trioId)
+      : [...current, trioId];
+    setFavorites(next);
+    const save = font?.saveFavorites;
+    if (save === undefined) return;
+    void save(next)
+      .then(setFavorites)
+      // A failed write leaves the host's list where it was; the star follows it.
+      .catch(() => {
+        setFavorites(current);
+      });
+  };
 
   const loadMore = (): void => {
     if (active === undefined) return;
@@ -775,6 +821,17 @@ export function AssetFinder({
     active === "font" && view.selection?.result.font !== undefined
       ? (view.selection.result as FontResult)
       : undefined;
+  /** The star belongs to a trio; a family has no favourite id. */
+  const favoriteTrioId = fontSelection?.font.trio?.id;
+  const favorite =
+    favoriteTrioId === undefined || font?.saveFavorites === undefined
+      ? undefined
+      : {
+          on: (favorites ?? []).includes(favoriteTrioId),
+          toggle: (): void => {
+            toggleFavorite(favoriteTrioId);
+          },
+        };
 
   const runFontAction = (action: FinderAction): void => {
     setRunning(action.id);
@@ -1167,6 +1224,7 @@ export function AssetFinder({
                   selected={fontSelection}
                   presets={font?.presets ?? {}}
                   state={fontPreview}
+                  {...(favorite === undefined ? {} : { favorite })}
                   onChange={setFontPreview}
                 />
               ),
