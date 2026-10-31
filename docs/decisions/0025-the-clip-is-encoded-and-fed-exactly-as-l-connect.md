@@ -1,7 +1,7 @@
 # 0025 — The clip is encoded and fed exactly as L-Connect does it
 
 - **Date:** 2026-10-31
-- **Status:** accepted
+- **Status:** accepted; amended by 0028 for the ack read's timeout
 - **Supersedes:** 0024. Amends 0023 (the depth read stays; the pre-write gate
   and the realtime pacing do not).
 - **Paths:** `src/web/packages/host/src/panels/tur-usb-video.ts`,
