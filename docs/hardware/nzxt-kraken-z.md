@@ -149,6 +149,13 @@ that is the invariant the two-bucket ring exists to satisfy.
   bulk ~52 ms, the five bucket commands ~22 ms, the 10 ms settle and the PNG
   decode the rest. The glass's ~140 ms ceiling is the larger number, so the
   device, not the host, sets the rate.
+- **A mode-3 frame (103,424 bytes) reaches the glass about every 120 ms — a
+  20 ms faster ceiling than mode 2's.** Measured 2026-10-31 with the same
+  barcode harness: at 120 ms every index appeared (145 updates, no skips), at
+  115 ms 2 of ~145 were missing, and at 110 ms about 6%. The 10 ms settle made
+  no difference at mode 3. The same payload inside 401-slot buckets kept the
+  120 ms ceiling, so **the payload's bytes set it, not the bucket's slot
+  count**. That is ~8.3 FPS against mode 2's 7.1, still under CAM's ~9.
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host
@@ -182,7 +189,7 @@ that is the invariant the two-bucket ring exists to satisfy.
   but the byte's scale is unread).
 - Whether mode `0x03` has a bucket-size rule of its own, and whether other
   Kraken models share this exact bucket table.
-- Whether a paletted (103,424-byte) frame raises the glass's switch ceiling
-  above 140 ms, which would explain CAM's ~9 FPS. This driver has not measured
-  mode 3 at a paced cadence.
+- Why CAM's paced stream shows ~110 ms intervals when this firmware drops a
+  mode-3 switch about every 20th frame at that rate; CAM may accept the drops,
+  or drive the ring in a way this probe does not reproduce.
 - The meaning of status 18's conditions beyond "busy".

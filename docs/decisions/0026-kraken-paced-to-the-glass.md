@@ -85,5 +85,10 @@ This costs the nominal 14 FPS rate the old interval claimed — which the glass
 never showed — and buys a regular ~7 FPS with no dropped, repeated or torn
 frame. CAM's ~9 FPS comes from a paletted frame a quarter of the size; matching
 it would mean returning to 256 colours, which 0020 rejected for visible
-banding. Whether a paletted frame also raises the glass's switch ceiling is
-recorded as an open hardware question, not assumed.
+banding.
+
+**Measured afterwards:** a mode-3 frame does raise the ceiling, from 140 ms to
+about 120 ms (clean at 120 ms, ~1% of indices missing at 115 ms, ~6% at
+110 ms; unchanged with 401-slot buckets, so payload bytes set it). That is 8.3
+FPS against 7.1 — worth 1.2 frames, not the 256-colour banding of 0020. The
+decision stands.
