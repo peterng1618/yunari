@@ -113,11 +113,11 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  * `panes/document/tags-field.tsx` shipped owning its own Enter and Escape
  * (`vg-203`'s defect, one control later).
  *
- * **Three entries are copies rather than sanctions.** They reimplement the
- * decision — their own Enter, and for the rename field an Escape too — with no
- * composing guard, which is exactly the defect this walk exists to see. They
- * are named so the gap is visible rather than silent, and each belongs to a
- * surface this change does not own.
+ * **Two entries are copies rather than sanctions.** They reimplement the key
+ * decision — their own Enter, and for the rename field an Escape too — and take
+ * only the composing guard from `useComposingGuard`, because one has no Escape
+ * and the other is an uncontrolled field. They are named so the gap is visible
+ * rather than silent, and each belongs to a surface this change does not own.
  */
 const EXEMPT: readonly (readonly [string, string])[] = [
   [
@@ -126,7 +126,7 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   ],
   [
     "host-settings-mode/device-name-row.tsx",
-    "a copy: its own Enter and blur commit, with no Escape and no composing guard",
+    "a copy: its own Enter and blur commit, with no Escape; only the composing guard is shared",
   ],
   [
     "panes/assets/assets-pane.tsx",
@@ -138,11 +138,7 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   ],
   [
     "panes/composition/composition-pane.tsx",
-    "a copy: the inline rename field is uncontrolled and keeps its own Enter, Escape and blur",
-  ],
-  [
-    "selection-inspector/runs.tsx",
-    "a copy: the run format field keeps its own Enter and Escape, with no composing guard",
+    "a copy: the inline rename field is uncontrolled and keeps its own Enter, Escape and blur; only the composing guard is shared",
   ],
   ["store-mode/region.tsx", "the search well: a filter, not an authored value"],
   [

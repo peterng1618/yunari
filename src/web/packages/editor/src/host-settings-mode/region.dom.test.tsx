@@ -1042,6 +1042,42 @@ it("commits a device name on the way out, not on every keystroke", async () => {
   ).toBe(1);
 });
 
+it("does not commit a device name on the Enter of a composition", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    devices: DEVICES,
+  });
+  const field = nameField(container, "gpu-0");
+  await type(field, "Card");
+
+  await act(async () => {
+    field.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+  });
+  await enter(field);
+  expect(wrote.devices, "a half-typed IME word was committed").toEqual([]);
+
+  await act(async () => {
+    field.dispatchEvent(
+      new CompositionEvent("compositionend", { bubbles: true }),
+    );
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true }),
+    );
+  });
+  expect(
+    wrote.devices,
+    "an Enter still carrying the composition committed",
+  ).toEqual([]);
+
+  await enter(field);
+  expect(
+    wrote.devices[0]?.names["gpu-0"],
+    "the finished word did not commit",
+  ).toBe("Card");
+});
+
 /** The display form sends both fields for the same reason the device form does,
  *  and the units sentence says which screens the change has not reached yet. */
 it("writes both display fields together", async () => {

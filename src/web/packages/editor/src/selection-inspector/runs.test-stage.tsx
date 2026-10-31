@@ -284,10 +284,19 @@ export async function pointerDown(target: Element): Promise<void> {
   });
 }
 
-export async function press(target: Element, key: string): Promise<void> {
+export async function press(
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {},
+): Promise<void> {
   await act(async () => {
     target.dispatchEvent(
-      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      }),
     );
   });
 }

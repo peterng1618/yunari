@@ -15,6 +15,7 @@ import {
   click,
   mountRunEditor,
   optionsOf,
+  press,
   pressedLabel,
   segment,
   sourceLabel,
@@ -143,6 +144,45 @@ describe("binding a text run to a sensor", () => {
 
     await blur(input);
     expect(box.stored()[0]?.format).toBe("[It is ]dddd");
+    return box.dispose();
+  });
+
+  it("does not commit the format on the Enter of a composition", async () => {
+    const box = mountRunEditor({ runs: literalClock });
+    await choose(
+      box.host,
+      'data-yunari-run-source="0"',
+      sourceLabel("time.now"),
+    );
+
+    const input = box.pick<HTMLInputElement>('[data-yunari-run-format="0"]');
+    await typeInto(input, "dddd");
+    await act(async () => {
+      input.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true }),
+      );
+    });
+    await press(input, "Enter");
+    expect(
+      box.stored()[0]?.format,
+      "a half-typed IME word was committed",
+    ).toBeUndefined();
+
+    await act(async () => {
+      input.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true }),
+      );
+    });
+    await press(input, "Enter", { isComposing: true });
+    expect(
+      box.stored()[0]?.format,
+      "an Enter still carrying the composition committed",
+    ).toBeUndefined();
+
+    await press(input, "Enter");
+    expect(box.stored()[0]?.format, "the finished word did not commit").toBe(
+      "dddd",
+    );
     return box.dispose();
   });
 

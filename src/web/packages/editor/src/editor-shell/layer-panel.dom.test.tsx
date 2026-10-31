@@ -276,6 +276,63 @@ it("commits a rename typed into the field on Enter", async () => {
   expect(renameLayer).toHaveBeenCalledWith("wordmark", "Brand mark");
 });
 
+it("does not commit a rename on the Enter of a composition", async () => {
+  const renameLayer = vi.fn();
+  const host = await renderPanel([textRow], { renameLayer });
+  await act(async () =>
+    host
+      .querySelector<HTMLElement>('[data-yunari-layer="wordmark"]')
+      ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  const input = renameField(host);
+  await act(async () => {
+    typeInto(input, "Brand mark");
+    input.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+  });
+  await act(async () => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+  expect(
+    renameLayer,
+    "a half-typed IME word was committed",
+  ).not.toHaveBeenCalled();
+  expect(
+    renameField(host),
+    "a composing Enter closed the field",
+  ).not.toBeNull();
+
+  await act(async () => {
+    input.dispatchEvent(
+      new CompositionEvent("compositionend", { bubbles: true }),
+    );
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        isComposing: true,
+      }),
+    );
+  });
+  expect(
+    renameLayer,
+    "an Enter still carrying the composition committed",
+  ).not.toHaveBeenCalled();
+
+  await act(async () => {
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+  expect(renameLayer, "the finished word did not commit").toHaveBeenCalledWith(
+    "wordmark",
+    "Brand mark",
+  );
+});
+
 it("does not commit a rename cancelled with Escape", async () => {
   const renameLayer = vi.fn();
   const host = await renderPanel([textRow], { renameLayer });

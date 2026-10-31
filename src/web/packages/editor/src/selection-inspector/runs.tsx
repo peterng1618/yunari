@@ -27,6 +27,7 @@ import {
   ControlRow,
   ControlWell,
   useControlIds,
+  useDraftCommit,
 } from "../components/ui/control-well.js";
 import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
 import {
@@ -490,6 +491,7 @@ function RunFormatField(props: {
     setDraft(null);
     if (next !== format) props.onCommit(next);
   };
+  const keys = useDraftCommit({ draft, setDraft, commit });
 
   return (
     <>
@@ -508,16 +510,7 @@ function RunFormatField(props: {
             className="h-full w-full bg-transparent text-sm text-text outline-none"
             value={shown}
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              }
-              if (event.key === "Escape" && draft !== null) {
-                event.preventDefault();
-                setDraft(null);
-              }
-            }}
+            {...keys}
             onBlur={commit}
           />
         </ControlWell>

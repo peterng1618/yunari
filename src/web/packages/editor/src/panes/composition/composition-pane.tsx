@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useControlTooltip } from "../../components/ui/control-icon-button.js";
+import { useComposingGuard } from "../../components/ui/control-well.js";
 import type { EditorShellBridge } from "../../editor-shell/bridge.js";
 import {
   ENTER_GLYPH,
@@ -252,6 +253,7 @@ export function CompositionPane({
 
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const cancelled = useRef(false);
+  const composing = useComposingGuard();
   /** The row to focus once a cancelled rename field has unmounted. */
   const restoreFocus = useRef<HTMLElement | null>(null);
   // Which row the pointer is over and which holds the keyboard, so the two
@@ -667,8 +669,10 @@ export function CompositionPane({
                     }
                     commit(row.id, event.currentTarget.value);
                   }}
+                  onCompositionStart={composing.onCompositionStart}
+                  onCompositionEnd={composing.onCompositionEnd}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter")
+                    if (event.key === "Enter" && !composing.isComposing(event))
                       commit(row.id, event.currentTarget.value);
                     else if (event.key === "Escape") {
                       cancelled.current = true;
