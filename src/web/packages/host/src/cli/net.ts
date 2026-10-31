@@ -127,8 +127,8 @@ export const VIRTUAL_ADAPTER_PATTERNS: readonly RegExp[] = [
 /** This machine's adapters, and the interface its default IPv4 route leaves by. */
 export interface LanSource {
   readonly interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>;
-  /** The interface carrying the default IPv4 route, or `undefined` when this
-   *  platform will not say. */
+  /** The interface the platform measured as carrying the default IPv4 route, or
+   *  `undefined` when the route could not be read. A guess is never here. */
   readonly defaultRouteInterface: string | undefined;
 }
 
@@ -150,6 +150,80 @@ function isUnreachableAddress(address: string): boolean {
   );
 }
 
+/** The name `systeminformation.networkInterfaceDefault` invents when its
+ *  platform route query cannot run (`network.js` 5.33.19): the lowest non-zero
+ *  IPv6 `scopeid` among external adapters, else the first one enumerated. The
+ *  fallback runs before the platform block, so a returned name equal to this is
+ *  the only answer that could be a guess rather than a reading. Mirrored here so
+ *  the two can be told apart. */
+function fallbackDefaultInterface(
+  interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+): string | undefined {
+  let byScopeId: string | undefined;
+  let first: string | undefined;
+  let lowestScopeId = 9999;
+
+  for (const [name, addresses] of Object.entries(interfaces)) {
+    for (const address of addresses ?? []) {
+      if (address.internal !== false) continue;
+
+      first ??= name;
+
+      if (address.scopeid && address.scopeid < lowestScopeId) {
+        byScopeId = name;
+        lowestScopeId = address.scopeid;
+      }
+    }
+  }
+
+  return byScopeId ?? first;
+}
+
+/** Whether two dotted quads share `netmask`'s network. Node has no IPv4 subnet
+ *  predicate, and this is the whole arithmetic of one. */
+function sameSubnet(address: string, peer: string, netmask: string): boolean {
+  const toNumber = (dotted: string): number | undefined => {
+    const octets = dotted.split(".");
+    if (octets.length !== 4) return undefined;
+
+    let value = 0;
+    for (const octet of octets) {
+      if (!/^\d{1,3}$/.test(octet)) return undefined;
+
+      const number = Number(octet);
+      if (number > 255) return undefined;
+      value = value * 256 + number;
+    }
+    return value;
+  };
+
+  const value = toNumber(address);
+  const peerValue = toNumber(peer);
+  const mask = toNumber(netmask);
+
+  if (value === undefined || peerValue === undefined || mask === undefined) {
+    return false;
+  }
+
+  return (value & mask) === (peerValue & mask);
+}
+
+/** Whether `name` is on the default gateway's subnet, which is where a default
+ *  route has to point its traffic. The gateway is a separate reading from the
+ *  interface name, so it corroborates an answer the route query may not have
+ *  produced. */
+function carriesGateway(
+  interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+  name: string,
+  gateway: string,
+): boolean {
+  return (interfaces[name] ?? []).some(
+    (address) =>
+      address.family === "IPv4" &&
+      sameSubnet(address.address, gateway, address.netmask),
+  );
+}
+
 /** The adapters to rank, and the default route to rank them by.
  *
  *  The route is read through `systeminformation` — the host's existing OS reader
@@ -157,16 +231,16 @@ function isUnreachableAddress(address: string): boolean {
  *  the installed dependency already answers this on every platform the host
  *  runs on.
  *
- *  **Its answer must not be read as "the route was read".** Measured with
- *  `execSync` blocked so the platform query cannot run at all: it still returns
- *  a name — this machine answers `"Npcap Loopback Adapter"` — because before
- *  the platform block it has already picked a fallback from the adapters
- *  themselves (the lowest IPv6 `scopeid`, else the first non-internal one), and
- *  its `catch` is `util.noop()`. `""` comes back only when there is no
- *  non-internal interface at all. A returned name that is also a surviving
- *  candidate therefore looks like "the route decided it", and `lanAddress`'s
- *  tie-break warning is suppressed on exactly the machine where a wrong pick is
- *  invisible. Detecting that fallback is a gap this function does not close.
+ *  **A guess is not a reading.** When its platform route query throws,
+ *  `networkInterfaceDefault` swallows the error and returns a name it picked from
+ *  the adapters themselves (see `fallbackDefaultInterface`); on this machine that
+ *  is `"Npcap Loopback Adapter"`. Passing that through would let a guessed name
+ *  decide `rankLanAddresses`' pick and suppress `lanAddress`'s tie-break warning
+ *  on exactly the machine where a wrong pick is invisible. So the name is kept
+ *  only when it differs from the fallback — the platform block overwrote it — or
+ *  when the adapter it names actually carries the default gateway, read
+ *  separately through the same dependency. Anything else leaves the route
+ *  unknown and the warning on.
  *
  *  **No path through here rejects.** A throw from either read — the adapter list
  *  or the route — leaves the interfaces empty or the route unknown, so the host
@@ -182,10 +256,24 @@ export async function readLanSource(): Promise<LanSource> {
     const imported = await import("systeminformation");
     const si = (imported.default ?? imported) as {
       networkInterfaceDefault(): Promise<string>;
+      networkGatewayDefault(): Promise<string>;
     };
     const name = await si.networkInterfaceDefault();
 
-    defaultRouteInterface = name === "" ? undefined : name;
+    if (name === "") {
+      defaultRouteInterface = undefined;
+    } else if (name !== fallbackDefaultInterface(interfaces)) {
+      // Only the platform route block can overwrite the fallback, so this name
+      // was measured.
+      defaultRouteInterface = name;
+    } else {
+      // The name may be the dependency's own guess. Keep it only when the
+      // default gateway the route table reports sits on that adapter.
+      const gateway = await si.networkGatewayDefault();
+      defaultRouteInterface = carriesGateway(interfaces, name, gateway)
+        ? name
+        : undefined;
+    }
   } catch {
     // Nothing to rank, or nothing to rank by: either way the caller gets an
     // answer rather than a rejection.
