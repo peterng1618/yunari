@@ -54,7 +54,8 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * specs they cannot run under the preview projects, and they cannot share their
  * port — `publish-header` owns 4227, `publish-loop` owns 4229,
  * `editor-invalid-theme` owns 4231, `editor-overlarge-theme` owns 4237,
- * `editor-host-refusal` owns 4247, `host-secure-origin` owns 4233 and
+ * `editor-host-refusal` owns 4247, `host-move-stream` owns 4249,
+ * `host-secure-origin` owns 4233 and
  * `media-artwork` owns 4222. The display
  * runner's preview owns 4223 (`playwright.display.config.ts`), so
  * `custom-source` owns 4225 and `game-artwork` owns 4239; `game-metadata` owns
@@ -66,7 +67,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * context and `localhost` is one whatever the host does. It owns 4235.
  */
 const OWN_HOST_SPEC =
-  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|editor-host-refusal|host-secure-origin|host-pwa|media-artwork|game-artwork|game-metadata|custom-source)\.spec\.ts/;
+  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|editor-host-refusal|host-secure-origin|host-pwa|host-move-stream|media-artwork|game-artwork|game-metadata|custom-source)\.spec\.ts/;
 
 /**
  * The rebuild drives its own preview on its own port, under
