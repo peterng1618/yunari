@@ -80,7 +80,8 @@ support.
 ## Current limits
 
 - Windows is the first-class platform; sensor acquisition and helper processes
-  are built and tested there.
+  are built and tested there. Game presence is Windows-only: Epic, GOG and itch
+  libraries on Linux have no provider, because no Linux release is planned.
 - The npm package, winget package and packaged Windows executable do not exist
   yet. The install path documented in the root README is the release path, not
   something that works today.
