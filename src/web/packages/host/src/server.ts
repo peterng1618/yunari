@@ -1558,14 +1558,22 @@ export function createHostServer(options: HostServerOptions): HostServer {
   ): Promise<{
     readonly default: string | null;
     readonly displays: readonly ActiveDisplay[];
+    /** True when `display-clients.json` is there and unusable. The list is then
+     *  fail-closed and empty, and every write refuses — two facts a settings
+     *  surface must be able to tell apart from an empty library of displays. */
+    readonly displayFileUnreadable: boolean;
   }> {
     const holds = await store.readAll(async (id) =>
       available.some((entry) => entry.id === id),
     );
-    const records = (await displays?.list()) ?? [];
+    // Through `state()` rather than `list()`: the second half is what a settings
+    // surface needs, and asking twice could see two different files.
+    const displayState = await displays?.state();
+    const records = displayState?.displays ?? [];
 
     return {
       default: holds[DEFAULT_DISPLAY] ?? null,
+      displayFileUnreadable: displayState?.unreadable === true,
       displays: [
         {
           id: LOCAL_DISPLAY_ID,
@@ -1987,12 +1995,24 @@ export function createHostServer(options: HostServerOptions): HostServer {
         return;
       }
 
+      // The owner's explicit renewal: a new window replaces the live one and
+      // clears the penalty table, so a code that has run its ten minutes is not
+      // a host restart. A read still never rotates — only this POST does.
+      if (url.pathname === "/api/pairing/code" && request.method === "POST") {
+        const fresh = pairingCodes.mint();
+        sendJson(response, 200, {
+          code: fresh.code,
+          expiresAt: fresh.expiresAt,
+        });
+        return;
+      }
+
       // A read, not a rotation: a second read of a live window answers the same
       // code rather than minting another, so nothing can move the code out from
       // under whoever is typing it (R16). Only an absent or expired window
       // mints one.
       if (url.pathname === "/api/pairing/code" && request.method === "GET") {
-        const live = pairingCodes.current() ?? pairingCodes.mint();
+        const live = pairingCodes.currentOrMint();
         sendJson(response, 200, { code: live.code, expiresAt: live.expiresAt });
         return;
       }

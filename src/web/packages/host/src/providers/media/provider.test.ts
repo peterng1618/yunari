@@ -14,9 +14,12 @@ import {
   sniffArtworkExtension,
 } from "./artwork.js";
 import {
+  ARTWORK_TOO_LARGE_MESSAGE,
+  ARTWORK_UNREADABLE_MESSAGE,
   MEDIA_PROVIDER_KEYS,
   MediaProvider,
   NO_SESSION_MESSAGE,
+  WAITING_ARTWORK_MESSAGE,
 } from "./provider.js";
 import {
   parseSmtcAudio,
@@ -94,6 +97,15 @@ function artworkLine(overrides: Record<string, unknown> = {}): string {
     sha256: ARTWORK_SHA,
     ext: "png",
     base64: Buffer.from(ARTWORK_BYTES).toString("base64"),
+    ...overrides,
+  });
+}
+
+function artworkMissLine(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    kind: "artwork-miss",
+    sessionId: "Spotify.exe",
+    reason: "over",
     ...overrides,
   });
 }
@@ -619,6 +631,82 @@ describe("MediaProvider artwork", () => {
     );
     expect(second?.status).toBe("missing");
     expect(second?.textValue).toBeUndefined();
+  });
+
+  it("reports a definitive over-cap miss as unavailable, not an endless wait", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(child, sessionLine());
+    device.emit(child, artworkMissLine({ reason: "over" }));
+
+    const sample = (await device.sample(["media.artwork"])).get(
+      "media.artwork",
+    );
+
+    expect(sample).toMatchObject({
+      status: "unavailable",
+      message: ARTWORK_TOO_LARGE_MESSAGE,
+    });
+    expect(sample?.textValue).toBeUndefined();
+    // The helper has nothing left to read for this track, so no restart.
+    expect(device.killed).toHaveLength(0);
+  });
+
+  it("reports an exhausted artwork retry as unavailable with its own reason", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(child, sessionLine());
+    device.emit(child, artworkMissLine({ reason: "exhausted" }));
+
+    const sample = (await device.sample(["media.artwork"])).get(
+      "media.artwork",
+    );
+
+    expect(sample).toMatchObject({
+      status: "unavailable",
+      message: ARTWORK_UNREADABLE_MESSAGE,
+    });
+    expect(sample?.textValue).toBeUndefined();
+  });
+
+  it("keeps a merely-not-yet artwork miss as missing", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(child, sessionLine());
+
+    const sample = (await device.sample(["media.artwork"])).get(
+      "media.artwork",
+    );
+
+    expect(sample).toMatchObject({
+      status: "missing",
+      message: WAITING_ARTWORK_MESSAGE,
+    });
+    expect(sample?.textValue).toBeUndefined();
+  });
+
+  it("scopes a definitive miss to its track, not its session", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(child, sessionLine({ title: "Track A" }));
+    device.emit(child, artworkMissLine({ reason: "over" }));
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork")?.status,
+    ).toBe("unavailable");
+
+    // Same session, different track: nothing is known to be unreadable yet.
+    device.emit(child, sessionLine({ title: "Track B" }));
+    const next = (await device.sample(["media.artwork"])).get("media.artwork");
+    expect(next?.status).toBe("missing");
+    expect(next?.message).toBe(WAITING_ARTWORK_MESSAGE);
   });
 
   it("does not attach another session's artwork to the selected track", async () => {

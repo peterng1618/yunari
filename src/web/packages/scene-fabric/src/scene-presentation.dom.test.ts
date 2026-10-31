@@ -171,12 +171,37 @@ describe("mountFabricScene's display presentation", () => {
     element.remove();
   });
 
-  it("samples a rotated scene's host paint under a panel, not a turned copy", () => {
-    // The canvas is transparent behind a media-less theme, so a panel's
-    // backdrop is the host's own background. A panel is placed over the host
-    // point (100, 240) — the left half, below the centre — where the host
-    // gradient is red. A sampler that turns the board's paint with the
-    // composition reads the gradient's right half (blue) there.
+  /** Samples the glass backdrop at a viewport point, the way the player does:
+   *  one panel over the point, and the composite's own pixel read back. */
+  function sampleViewport(
+    scene: ReturnType<typeof mountFabricScene>,
+    x: number,
+    y: number,
+  ) {
+    const at = viewportToDocument(scene.transform(), { x, y });
+    scene.canvas.add(
+      new Rect({
+        left: at.x - 20,
+        top: at.y - 20,
+        width: 40,
+        height: 40,
+        originX: "left",
+        originY: "top",
+        fill: "transparent",
+        yunariGlass: { blurRadius: 0 },
+      }),
+    );
+    scene.canvas.renderAll();
+    return scene.canvas.getContext().getImageData(x, y, 1, 1).data;
+  }
+
+  it("turns the board's plate with the composition", () => {
+    // A media-less theme is the case the plate serves: the canvas is
+    // transparent, so a panel samples the artboard backdrop. The board is
+    // red on its left half and blue on its right. A 90° rect presentation maps
+    // the board's left half to the screen's bottom, so (100, 240) reads blue
+    // and (300, 60) reads red — the opposite of a screen-fixed gradient, which
+    // is what the plate used to be.
     const element = host();
     const scene = mountFabricScene({
       host: element,
@@ -194,24 +219,60 @@ describe("mountFabricScene's display presentation", () => {
       }),
       presentation: { shape: "rect", rotation: 90 },
     });
-    const at = viewportToDocument(scene.transform(), { x: 100, y: 240 });
-    scene.canvas.add(
-      new Rect({
-        left: at.x - 20,
-        top: at.y - 20,
-        width: 40,
-        height: 40,
-        originX: "left",
-        originY: "top",
-        fill: "transparent",
-        yunariGlass: { blurRadius: 0 },
-      }),
-    );
-    scene.canvas.renderAll();
 
-    const pixel = scene.canvas.getContext().getImageData(100, 240, 1, 1).data;
-    expect(pixel[0], "the host's left half is red").toBeGreaterThan(200);
-    expect(pixel[2]).toBeLessThan(60);
+    const turned = sampleViewport(scene, 100, 240);
+    expect(
+      turned[2],
+      "the board's right half is above the centre",
+    ).toBeGreaterThan(200);
+    expect(turned[0]).toBeLessThan(60);
+
+    const other = sampleViewport(scene, 300, 60);
+    expect(other[0], "and its left half below").toBeGreaterThan(200);
+    expect(other[2]).toBeLessThan(60);
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("puts the plate on its own turned DOM layer above the screen fill", () => {
+    // The picture is only half the rule: the DOM must carry the board's paint
+    // on the mapped board box, turned about its origin, while the host keeps
+    // the screen-fixed fill. The board is 400x300 at a 90° presentation inside
+    // a 400x300 host, so it scales to 300x225 at (312.5, 0).
+    const { element, scene } = mountPresented(
+      { shape: "rect", rotation: 90 },
+      {
+        background: {
+          kind: "gradient",
+          angle: 0,
+          stops: [
+            { offset: 0, color: "#ff0000" },
+            { offset: 1, color: "#0000ff" },
+          ],
+        },
+      },
+    );
+    const plate = element.querySelector<HTMLElement>(
+      "[data-yunari-artboard-plate]",
+    );
+    expect(plate).not.toBeNull();
+    expect(plate?.style.left).toBe("312.5px");
+    expect(plate?.style.top).toBe("0px");
+    expect(plate?.style.width).toBe("300px");
+    expect(plate?.style.height).toBe("225px");
+    expect(plate?.style.transformOrigin).toBe("0 0");
+    expect(plate?.style.transform, "the plate turns with the composition").toBe(
+      "rotate(90deg)",
+    );
+    expect(
+      plate?.style.background,
+      "and carries the board's own paint",
+    ).toContain("linear-gradient");
+    expect(
+      element.style.background,
+      "while the host keeps the screen-fixed letterbox fill",
+    ).toContain("linear-gradient");
 
     scene.dispose();
     element.remove();

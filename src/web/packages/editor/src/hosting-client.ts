@@ -104,19 +104,43 @@ export async function readPairingCode(
   fetcher: typeof fetch = fetch,
 ): Promise<PairingCode | undefined> {
   try {
-    const response = await fetcher("/api/pairing/code");
-    if (!response.ok) return undefined;
-
-    const body = (await response.json()) as {
-      code?: unknown;
-      expiresAt?: unknown;
-    };
-    if (!isString(body.code) || !isString(body.expiresAt)) return undefined;
-
-    return { code: body.code, expiresAt: body.expiresAt };
+    return await pairingAnswer(await fetcher("/api/pairing/code"));
   } catch {
     return undefined;
   }
+}
+
+/** Replaces the host's live window with a fresh one.
+ *
+ *  **The explicit renewal, and the only request that rotates the code.** A read
+ *  never does: the card's redraw must not move a code the owner is already
+ *  typing. The route is loopback-only like the read, and the store clears its
+ *  miss penalties with the old window. */
+export async function mintPairingCode(
+  fetcher: typeof fetch = fetch,
+): Promise<PairingCode | undefined> {
+  try {
+    return await pairingAnswer(
+      await fetcher("/api/pairing/code", { method: "POST" }),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** The one shape both code routes answer, read once so they cannot drift. */
+async function pairingAnswer(
+  response: Response,
+): Promise<PairingCode | undefined> {
+  if (!response.ok) return undefined;
+
+  const body = (await response.json()) as {
+    code?: unknown;
+    expiresAt?: unknown;
+  };
+  if (!isString(body.code) || !isString(body.expiresAt)) return undefined;
+
+  return { code: body.code, expiresAt: body.expiresAt };
 }
 
 /** Asks the host to serve the LAN, or to stop. The host owns the binding, so a

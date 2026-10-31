@@ -110,6 +110,8 @@ export interface TurzxOptions {
   readonly sleep?: (ms: number) => Promise<void>;
   /** Defaults to `transcodeForPanel`; the seam keeps uploads out of tests. */
   readonly transcode?: Transcode;
+  /** The host's disposable cache directory for encoded clips. */
+  readonly cacheDir?: string;
 }
 
 /** A port whose listing carries the ids the family row claims. */
@@ -764,7 +766,13 @@ export async function openTurzxPanel(
       }));
   const transcode: Transcode =
     options.transcode ??
-    ((bytes, placement) => transcodeForPanel(bytes, { placement }));
+    ((bytes, placement) =>
+      transcodeForPanel(bytes, {
+        placement,
+        ...(options.cacheDir === undefined
+          ? {}
+          : { cacheDir: options.cacheDir }),
+      }));
   const sleep = options.sleep ?? wait;
 
   const candidates = ports.filter(hasIds);
@@ -857,6 +865,6 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
       updatedAt: "2026-10-29",
     },
     attached: () => attachedTurzxPanels(),
-    open: () => openTurzxPanel(),
+    open: (options) => openTurzxPanel(options),
   },
 ];

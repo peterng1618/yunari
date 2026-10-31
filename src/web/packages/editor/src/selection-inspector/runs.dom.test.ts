@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { FabricGlobals, TextRun } from "@yunari/renderer-core";
+import type { Binding, FabricGlobals, TextRun } from "@yunari/renderer-core";
 import {
   formatInstant,
   instantIn,
@@ -1154,5 +1154,101 @@ describe("how a run's controls are named", () => {
     );
     expect(label?.textContent).toBe("Format");
     return box.dispose();
+  });
+});
+
+describe("the format preview's own clock", () => {
+  /** The clock run bound to a reading, already authoring a seconds format. */
+  const clockRun: readonly TextRun[] = [
+    {
+      kind: "value",
+      bindingId: "clock",
+      typeToken: "typeTokens.body",
+    },
+  ];
+  const clockBinding: Binding = {
+    id: "clock",
+    semanticKey: "time.now",
+    format: "HH:mm:ss",
+  };
+
+  /** A fake wall clock with a fake interval, but real timeouts: the stage flushes
+   *  React and floating-ui on macrotasks, which the timer under test does not
+   *  own. */
+  function fakeClock(at: string): void {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    vi.setSystemTime(new Date(at));
+  }
+
+  /** A value run whose reading is not an instant, so it has no format preview. */
+  const nonClockRun: readonly TextRun[] = [
+    { kind: "value", bindingId: "load", typeToken: "typeTokens.body" },
+  ];
+  const nonClockBinding: Binding = {
+    id: "load",
+    semanticKey: "cpu.load",
+  };
+
+  it("advances the preview once a second without a render", async () => {
+    fakeClock("2026-09-20T00:00:00Z");
+    try {
+      const box = mountRunEditor({
+        runs: clockRun,
+        declared: [clockBinding],
+      });
+      const preview = (): string | null =>
+        box.pick('[data-yunari-run-format-preview="0"]').textContent;
+
+      const start = Date.parse("2026-09-20T00:00:00Z");
+      const spell = (at: number): string =>
+        formatInstant(instantIn(at), "HH:mm:ss") ?? "";
+
+      expect(preview()).toBe(spell(start));
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+      // A preview that only recomputed when the inspector rendered would still
+      // read the instant it was drawn at.
+      expect(preview()).toBe(spell(start + 1000));
+
+      await box.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no tick behind when the editor unmounts", async () => {
+    const set = vi.spyOn(globalThis, "setInterval");
+    const clear = vi.spyOn(globalThis, "clearInterval");
+    const box = mountRunEditor({
+      runs: clockRun,
+      declared: [clockBinding],
+    });
+
+    const at = set.mock.calls.findIndex(([, delay]) => delay === 1000);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const tick = set.mock.results[at]?.value;
+
+    await box.dispose();
+    // The preview's interval went with the row.
+    expect(clear.mock.calls.some(([cleared]) => cleared === tick)).toBe(true);
+  });
+
+  it("sets no tick for a run with no format preview", async () => {
+    const set = vi.spyOn(globalThis, "setInterval");
+    const box = mountRunEditor({
+      runs: nonClockRun,
+      declared: [nonClockBinding],
+    });
+    try {
+      expect(
+        box.host.querySelector('[data-yunari-run-format-preview="0"]'),
+      ).toBeNull();
+      // Nothing here reads the wall clock on a tick, so nothing schedules one.
+      expect(set.mock.calls.map(([, delay]) => delay)).not.toContain(1000);
+    } finally {
+      await box.dispose();
+    }
   });
 });

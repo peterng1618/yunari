@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
+import { assetBytesUrl } from "./client.js";
 import {
   FontPreviewPanel,
   type FontResult,
@@ -106,6 +107,7 @@ function rerender(element: React.ReactElement): void {
  *  wants to see faces received and freed supplies both. */
 function stubFonts(load: () => Promise<unknown> = async () => undefined) {
   const fonts = { add: vi.fn(), delete: vi.fn() };
+  const faces: FakeFontFace[] = [];
   Object.defineProperty(document, "fonts", {
     configurable: true,
     value: fonts,
@@ -116,10 +118,12 @@ function stubFonts(load: () => Promise<unknown> = async () => undefined) {
       readonly family: string,
       readonly source: string,
       readonly descriptors: FontFaceDescriptors,
-    ) {}
+    ) {
+      faces.push(this);
+    }
   }
   vi.stubGlobal("FontFace", FakeFontFace);
-  return fonts;
+  return { fonts, faces };
 }
 
 const resting: FontPreviewState = {
@@ -382,7 +386,7 @@ describe("familyCutsOf", () => {
 });
 
 it("releases every face it added when the panel unmounts", () => {
-  const fonts = stubFonts();
+  const { fonts } = stubFonts();
 
   mount(panel({ selected: trio }));
   expect(fonts.add).toHaveBeenCalledTimes(3);
@@ -394,7 +398,7 @@ it("releases every face it added when the panel unmounts", () => {
 });
 
 it("releases the previous selection's faces when the selection moves", () => {
-  const fonts = stubFonts();
+  const { fonts } = stubFonts();
 
   mount(panel({ selected: trio }));
   expect(fonts.add).toHaveBeenCalledTimes(3);
@@ -405,6 +409,47 @@ it("releases the previous selection's faces when the selection moves", () => {
     fonts.add.mock.calls.slice(0, 3).map((call) => call[0]),
   );
   expect(fonts.add).toHaveBeenCalledTimes(5);
+});
+
+it("draws a specimen from the host route Apply reads its bytes from", () => {
+  // The fixtures' `previewUrl` is a remote CDN a browser may not reach. Every
+  // specimen reads the host's own asset route instead, which serves the bytes
+  // Apply writes — so the face drawn is the face the document will carry.
+  const { faces } = stubFonts();
+  mount(panel({ selected: trio }));
+
+  expect(faces.map((face) => face.source)).toEqual(
+    [heading, body, mono].map(
+      (cut) => `url("${assetBytesUrl(cut.source, cut.id)}")`,
+    ),
+  );
+  for (const face of faces) {
+    expect(face.source).toContain("/api/assets/bytes?source=");
+    expect(face.source).not.toContain("cdn.example");
+  }
+});
+
+it("carries the cut's own source and id into the specimen route", () => {
+  const { faces } = stubFonts();
+  const provider: FontCut = {
+    ...cut("Not Curated", 400),
+    id: "cut:not-curated-400",
+    source: "google-fonts",
+  };
+
+  mount(
+    panel({
+      selected: {
+        ...family,
+        id: `google-fonts:${provider.id}`,
+        font: { cuts: [provider] },
+      },
+    }),
+  );
+
+  expect(faces.map((face) => face.source)).toEqual([
+    `url("${assetBytesUrl("google-fonts", "cut:not-curated-400")}")`,
+  ]);
 });
 
 it("keeps the card drawn when a specimen will not load", async () => {

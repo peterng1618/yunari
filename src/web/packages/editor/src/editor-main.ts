@@ -74,7 +74,16 @@ async function start(): Promise<void> {
   let mode: "preview" | "live" = "preview";
   let active: ActiveEditor | undefined;
 
-  const layout = createShellLayout(root);
+  // **A source added on the Host page is offered without a reload.** The
+  // catalogue was read once at boot; returning to the editor reads the wire
+  // again, so a key from a source written while this page stayed open reaches
+  // the pickers on the visit that follows. The built-in table stays on a failed
+  // read, so a host that went away costs nothing.
+  const layout = createShellLayout(root, {
+    onModeChange: (next) => {
+      if (next === "editor") void sensors.refresh();
+    },
+  });
   const host = layout.hosts.canvas;
   const status = layout.hosts.status;
   // The draft: the unsaved document, kept in browser storage so a crash costs

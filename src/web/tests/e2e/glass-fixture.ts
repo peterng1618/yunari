@@ -117,6 +117,13 @@ export const GLASS_ENVELOPE = {
         value: { kind: "solid" as const, color: "rgba(255, 255, 255, 0.35)" },
       },
     },
+    // The envelope validator requires the three roles every theme resolves
+    // text through, whether or not this scene draws any.
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "ui-monospace, monospace", weight: "400" },
+    },
   },
   assets: [
     {

@@ -739,7 +739,13 @@ describe("the Assets pane's import", () => {
       role: null,
       withPreset: false,
     });
-    expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]);
+    // The declaration is written in a promise chain `drain` cannot bound: on a
+    // loaded CI runner the three turns it gives were not enough, and the case
+    // read an empty list while the commit had already been made. Waiting for
+    // the state is the assertion; the request above is the cause.
+    await vi.waitFor(() =>
+      expect(manager.declarations.map((asset) => asset.kind)).toEqual(["font"]),
+    );
     expect(host.querySelector("[data-yunari-font-details]")).toBeNull();
     expect(cardOf(host, "body")).not.toBeNull();
   });

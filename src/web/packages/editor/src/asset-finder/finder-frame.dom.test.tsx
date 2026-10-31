@@ -96,6 +96,11 @@ it("shows no Connections control when every keyed source is working", () => {
     </FinderFrame>,
   );
   expect(document.querySelector('[aria-label="Connections"]')).toBeNull();
+  // The slot is still reserved: the right group must not move when a keyed
+  // source later needs the button.
+  expect(
+    document.querySelector("[data-yunari-asset-connections-slot]"),
+  ).not.toBeNull();
 });
 
 it("shows Connections when a keyed source is in trouble", () => {

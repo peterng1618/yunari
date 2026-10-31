@@ -86,13 +86,28 @@ export function artboardBackdrop(
             : device,
           sampling,
         );
-      // **A display surface paints the paint, not this paint**. The plate
-      // is the host/disc box a panel actually sees, and it must not be turned
-      // with the composition; the board-mapped fill below would be.
-      if (surface !== undefined) return true;
       ctx.save();
       ctx.globalCompositeOperation = "destination-over";
-      fillRegionPaint(ctx, region, device, background);
+      if (surface === undefined) {
+        // No display surface to sit on: the board's paint is the whole
+        // backdrop and covers the region it is asked to.
+        fillRegionPaint(ctx, region, device, background);
+      } else if (screenRect === undefined) {
+        // **The board's plate, and it turns with the composition.** The
+        // sampler has already turned this context about the board's mapped
+        // centre, so clipping to the board's device box turns the fill with it.
+        // The screen's own fill is the `plate` below, composited after this and
+        // therefore underneath it; a display-bounded layer already covers the
+        // screen, so it contributes nothing here.
+        const local = regionLocal(device, region);
+        ctx.beginPath();
+        ctx.rect(local.left, local.top, local.width, local.height);
+        ctx.clip();
+        // Fill the board box itself, not the region: the context is turned, so
+        // the region-shaped rect would land somewhere else in the user space.
+        // The clip above already limits the paint to the board's quad.
+        fillArtboardPaint(ctx, local, local, background);
+      }
       ctx.restore();
       // True whatever the media did. The paint is a backdrop on its own, so a
       // panel is never left sampling nothing, and the sampler keeps this
@@ -103,10 +118,13 @@ export function artboardBackdrop(
 }
 
 /**
- * The display's own paint as a plate: the host rect for a rect display, the
- * disc on black for a circle. The caller composites it `destination-over`, so a
- * media frame kept from an earlier one is never overwritten — and so the black
- * outside the disc reaches only the pixels the disc's paint did not.
+ * The screen's own fill: the host rect for a rect display, the disc on black
+ * for a circle. **It is the letterbox, not the board's plate** — the board's
+ * paint is the caller's turned layer above this one — and it stays screen-fixed
+ * because the host and disc are the screen. The caller composites it
+ * `destination-over`, so a media frame kept from an earlier one is never
+ * overwritten — and so the black outside the disc reaches only the pixels the
+ * disc's paint did not.
  */
 function surfacePlate(
   surface: ArtboardSurface,

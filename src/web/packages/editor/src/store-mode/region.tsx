@@ -21,7 +21,7 @@ import {
   type ThemeLibraryClient,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import { AssignDisplay } from "./assign-display.js";
+import { AssignChoice, AssignDisplay } from "./assign-display.js";
 import {
   type Facet,
   type FacetOption,
@@ -459,6 +459,10 @@ export function StoreModeRegion(props: {
    *  whose document is not this region's to replace — lists and reads items
    *  without one. */
   readonly onOpenTheme?: ((id: string) => void) | undefined;
+  /** The strip's store reading: the visible listing's count, or `undefined`
+   *  while the chosen half has not answered. The shell places it; the count is
+   *  this region's own. */
+  readonly onStatus?: ((count: number | undefined) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "themes" ? (
     <StoreRegion
@@ -466,6 +470,7 @@ export function StoreModeRegion(props: {
       {...(props.onOpenTheme === undefined
         ? {}
         : { onOpenTheme: props.onOpenTheme })}
+      {...(props.onStatus === undefined ? {} : { onStatus: props.onStatus })}
     />
   ) : null;
 }
@@ -478,6 +483,7 @@ export function StoreModeRegion(props: {
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
+  readonly onStatus?: ((count: number | undefined) => void) | undefined;
 }): React.JSX.Element {
   const [tab, setTab] = useState<StoreTab>("local");
   const [query, setQuery] = useState("");
@@ -591,6 +597,21 @@ function StoreRegion(props: {
     assignId === undefined
       ? undefined
       : listed?.find((item) => item.id === assignId);
+  /** The choice opened from the page that is on screen: it belongs inside that
+   *  page, not over it. */
+  const inlineAssign = openItem !== undefined && assignId === openItem.id;
+
+  // What the shell's strip reads for this mode: the visible listing, and nothing
+  // while the half has not answered (`none` covers a listing that failed, which
+  // is not an empty result). The cleanup withdraws the reading on unmount, so
+  // leaving the mode cannot leave the next visit's strip holding this visit's
+  // count.
+  const statusCount = body.kind === "none" ? undefined : sorted.length;
+  const onStatus = props.onStatus;
+  useEffect(() => {
+    onStatus?.(statusCount);
+    return () => onStatus?.(undefined);
+  }, [onStatus, statusCount]);
 
   /**
    * The one callback a cell's four actions and the modal's footer share.
@@ -618,12 +639,14 @@ function StoreRegion(props: {
       return;
     }
     if (action === "assign") {
-      // **The choice never coexists with the modal it was opened from.** Both
-      // are modal dialogs portalled to `body`, and below they are React
-      // siblings — which Base UI's nested-dialog coordination never sees, so
-      // each believes it is the topmost: one Escape closes both, and two scrims
-      // stack. Closing the modal as the choice opens removes the pair rather
-      // than arbitrating it.
+      // **The choice stays inside the page it was opened from.** The theme's
+      // own surface keeps reading where it was and confirms the assignment
+      // beside the choice. From a cell there is no page to keep, so the choice
+      // opens as the dialog it is.
+      if (openId === id) {
+        setAssignId(id);
+        return;
+      }
       setOpenId(undefined);
       setAssignId(id);
     }
@@ -764,18 +787,34 @@ function StoreRegion(props: {
           // The vocabulary is the listing's, built here because the listing is
           // this surface's: the modal reads the set and never the items.
           vocabulary={settledTags(listed ?? [], openItem)}
-          onClose={() => setOpenId(undefined)}
+          onClose={() => {
+            setOpenId(undefined);
+            setAssignId(undefined);
+          }}
           onAction={onAction}
           install={install.control}
           submit={submit.control}
           {...(tab === "online" ? { onOpenItem: setOpenId } : {})}
           {...(remixParent === undefined ? {} : { remixParent })}
+          {...(inlineAssign
+            ? {
+                assign: (
+                  <AssignChoice
+                    item={openItem}
+                    client={client}
+                    // The page stays: a landed assignment is read beside the
+                    // choice that made it.
+                    onAssigned={() => undefined}
+                  />
+                ),
+              }
+            : {})}
           onUnpublish={online.onUnpublish}
           onRepublish={online.onRepublish}
         />
       )}
 
-      {assignItem === undefined ? null : (
+      {assignItem === undefined || inlineAssign ? null : (
         <AssignDisplay
           item={assignItem}
           client={client}

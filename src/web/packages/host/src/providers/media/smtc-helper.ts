@@ -181,7 +181,10 @@ function Get-AudioLine {
 /**
  * The artwork half. A retryable miss (no thumbnail yet, truncated image) is
  * re-read for up to 5 polls before its negative is cached; over-cap is
- * definitive at once and a thrown load is never cached. The stream arrives as
+ * definitive at once and a thrown load is never cached. A cached negative is
+ * emitted as an `artwork-miss` line, so the provider can answer `unavailable`
+ * with a reason instead of waiting for this track's picture forever. The
+ * stream arrives as
  * a bare `__ComObject`, so the read is chunked and the format sniffed from the
  * bytes. No public `DataReader` constructor exists to bind, hence the
  * reflected `IInputStream` overload. Comments inside the script are minimal
@@ -220,6 +223,11 @@ function Test-CompleteImage($buffer, $ext) {
     return ([int64][BitConverter]::ToUInt32($buffer, 4) + 8) -eq $buffer.Length
   }
   return $false
+}
+
+# A definitive negative: this track will not be read again.
+function Write-ArtworkMiss($id, $why) {
+  [Console]::Out.WriteLine(([ordered]@{kind='artwork-miss';sessionId=$id;reason=$why} | ConvertTo-Json -Compress))
 }
 
 function Get-ArtworkResult($session) {
@@ -283,6 +291,7 @@ function Try-EmitArtwork($session, $line) {
   if ($result['status'] -eq 'over') {
     $lastArtwork[$sessionId] = $key
     $artworkAttempts.Remove($sessionId)
+    Write-ArtworkMiss $sessionId 'over'
     return
   }
   $attempt = @{ key = $key; count = 0 }
@@ -293,6 +302,7 @@ function Try-EmitArtwork($session, $line) {
   if ($attempt['count'] -ge $ArtworkRetryLimit) {
     $lastArtwork[$sessionId] = $key
     $artworkAttempts.Remove($sessionId)
+    Write-ArtworkMiss $sessionId 'exhausted'
   }
 }
 `;
@@ -386,6 +396,7 @@ export const SMTC_SCRIPT: string = smtcScript();
 
 const STATES = new Set(["playing", "paused", "stopped"]);
 const EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const ARTWORK_MISS_REASONS = new Set(["over", "exhausted"]);
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function parseObject(line: string): Record<string, unknown> | undefined {
@@ -537,4 +548,32 @@ export function smtcArtworkLine(line: string): ArtworkBytes | undefined {
   }
 
   return { sessionId, sha256, bytes, ext };
+}
+
+/**
+ * A definitive artwork negative: the helper will not read this track again.
+ * `over` means the image exceeded the framing cap; `exhausted` means the
+ * retryable miss repeated past its limit. Both are facts about the track, so
+ * the provider answers `unavailable` with a reason rather than `missing`.
+ */
+export interface ArtworkMiss {
+  readonly sessionId: string;
+  readonly reason: "over" | "exhausted";
+}
+
+export function smtcArtworkMissLine(line: string): ArtworkMiss | undefined {
+  const record = parseObject(line);
+  if (record === undefined || record["kind"] !== "artwork-miss") {
+    return undefined;
+  }
+
+  const sessionId = record["sessionId"];
+  const reason = record["reason"];
+
+  if (typeof sessionId !== "string" || sessionId === "") return undefined;
+  if (typeof reason !== "string" || !ARTWORK_MISS_REASONS.has(reason)) {
+    return undefined;
+  }
+
+  return { sessionId, reason: reason as ArtworkMiss["reason"] };
 }

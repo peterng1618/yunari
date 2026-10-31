@@ -6054,6 +6054,39 @@ describe("A local monitor is specified rather than paired", () => {
     });
   });
 
+  it("tells the settings page when the display file cannot be read", async () => {
+    const hosting = host({ activeTheme: createActiveThemeStore(dir) });
+
+    try {
+      const healthy = await request(
+        hosting.server,
+        "GET",
+        "/api/themes/active",
+      );
+      expect(
+        (healthy.json() as { displayFileUnreadable: boolean })
+          .displayFileUnreadable,
+      ).toBe(false);
+
+      await fs.writeFile(path.join(dir, "display-clients.json"), "{ not json");
+      const corrupt = await request(
+        hosting.server,
+        "GET",
+        "/api/themes/active",
+      );
+
+      // The list fails closed, so this flag is the only thing that
+      // distinguishes an empty host from one whose records are missing and
+      // whose writes all refuse.
+      expect(
+        (corrupt.json() as { displayFileUnreadable: boolean })
+          .displayFileUnreadable,
+      ).toBe(true);
+    } finally {
+      await hosting.close();
+    }
+  });
+
   it("refuses a second local display for a monitor one already holds", async () => {
     const first = await request(
       hosted.server,
@@ -6559,6 +6592,54 @@ describe("A display with no camera pairs by typing the one-time code", () => {
     // And once it is spent, the next read is a new window rather than the spent
     // code again.
     expect(await shown()).not.toBe(first);
+  });
+
+  it("mints a fresh code on demand, invalidating the one already shown", async () => {
+    const first = await shown();
+
+    const answer = await request(hosted.server, "POST", "/api/pairing/code");
+    expect(answer.status).toBe(200);
+    const fresh = answer.json() as { code: string; expiresAt: string };
+
+    // The renewal is the one route that rotates: the ten-minute window starts
+    // again, and the code a person may already be typing stops being an answer.
+    expect(fresh.code).not.toBe(first);
+    expect(Date.parse(fresh.expiresAt)).toBeGreaterThan(Date.now());
+    expect((await claim({ code: first, label: "Kitchen tablet" })).status).toBe(
+      404,
+    );
+    expect(
+      (await claim({ code: fresh.code, label: "Kitchen tablet" })).status,
+    ).toBe(200);
+  });
+
+  it("keeps the mint on this PC, and refuses off loopback before minting one", async () => {
+    const minted: string[] = [];
+    const watching = host({
+      pairingCodes: {
+        ...codes,
+        mint: () => {
+          minted.push("mint");
+          return codes.mint();
+        },
+      },
+    });
+
+    try {
+      const refused = await request(
+        watching.server,
+        "POST",
+        "/api/pairing/code",
+        undefined,
+        LAN,
+      );
+      expect(refused.status).toBe(403);
+      expect(refused.text()).toBe("Pairing is available on this PC only.");
+      // The guard precedes the mint, as it does for the read.
+      expect(minted).toEqual([]);
+    } finally {
+      await watching.close();
+    }
   });
 
   it("keeps the code on this PC, and refuses off loopback before minting one", async () => {

@@ -20,11 +20,13 @@ import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
 import type { ArtworkCache } from "./artwork.js";
 import {
   type ArtworkBytes,
+  type ArtworkMiss,
   parseSmtcAudio,
   parseSmtcLine,
   type SmtcAudio,
   type SmtcSession,
   smtcArtworkLine,
+  smtcArtworkMissLine,
   smtcScript,
   smtcSessionIsCurrent,
 } from "./smtc-helper.js";
@@ -84,7 +86,11 @@ const UNIT_BY_KEY: ReadonlyMap<string, string | undefined> = new Map(
 export const NO_SESSION_MESSAGE = "No media session is playing.";
 const NO_AUDIO_ENDPOINT_MESSAGE = "This PC reports no output volume.";
 const WAITING_MESSAGE = "Waiting for the media helper.";
-const WAITING_ARTWORK_MESSAGE = "Waiting for this track's artwork.";
+export const WAITING_ARTWORK_MESSAGE = "Waiting for this track's artwork.";
+export const ARTWORK_TOO_LARGE_MESSAGE =
+  "This track's artwork is too large for the media helper to read.";
+export const ARTWORK_UNREADABLE_MESSAGE =
+  "This track's artwork could not be read from the media session.";
 const MEDIA_READ_FAILURE = "The media session could not be read.";
 
 /** No display asked for a media or audio key for this long, so the helper
@@ -106,6 +112,8 @@ const ARTWORK_TRACKS_CAP = 32;
 /** Track identities already re-requested after a selection found no held art,
  *  so a track with no thumbnail cannot restart the helper every poll. */
 const ARTWORK_REQUESTS_CAP = 32;
+/** Track identities the helper proved the picture cannot be read for. */
+const ARTWORK_MISS_CAP = 32;
 
 function trackKeyOf(session: SmtcSession): string {
   return [session.sessionId, session.title, session.artist, session.album].join(
@@ -187,6 +195,8 @@ export class MediaProvider implements SensorProvider {
   readonly #artworkByTrack = new Map<string, string>();
   /** Track identities whose missing art has already cost one helper restart. */
   readonly #artRequested = new Set<string>();
+  /** Track identities the helper answered with a definitive artwork miss. */
+  readonly #artworkMissByTrack = new Map<string, ArtworkMiss["reason"]>();
   /** The last artwork write, so a sample that follows a line sees its URL. */
   #artworkWrite: Promise<void> = Promise.resolve();
 
@@ -297,6 +307,9 @@ export class MediaProvider implements SensorProvider {
     const key = this.#trackKey;
 
     if (key === undefined || this.#artworkUrl !== undefined) return;
+    // The helper has already proved this track's picture cannot be read; a
+    // restart would only pay to reach the same negative.
+    if (this.#artworkMissByTrack.has(key)) return;
     if (this.#artRequested.has(key)) return;
 
     this.#artRequested.add(key);
@@ -317,6 +330,17 @@ export class MediaProvider implements SensorProvider {
     if (this.#artworkByTrack.size > ARTWORK_TRACKS_CAP) {
       const oldest = this.#artworkByTrack.keys().next().value;
       if (oldest !== undefined) this.#artworkByTrack.delete(oldest);
+    }
+  }
+
+  /** Records a definitive miss by track identity, keeping the newest handful. */
+  #rememberArtworkMiss(key: string, reason: ArtworkMiss["reason"]): void {
+    this.#artworkMissByTrack.delete(key);
+    this.#artworkMissByTrack.set(key, reason);
+
+    if (this.#artworkMissByTrack.size > ARTWORK_MISS_CAP) {
+      const oldest = this.#artworkMissByTrack.keys().next().value;
+      if (oldest !== undefined) this.#artworkMissByTrack.delete(oldest);
     }
   }
 
@@ -405,6 +429,7 @@ export class MediaProvider implements SensorProvider {
     this.#trackKey = undefined;
     this.#artworkUrl = undefined;
     this.#artworkByTrack.clear();
+    this.#artworkMissByTrack.clear();
     this.#artRequested.clear();
   }
 
@@ -442,6 +467,11 @@ export class MediaProvider implements SensorProvider {
         if (artwork !== undefined) this.#ingestArtwork(artwork);
         return;
       }
+      case "artwork-miss": {
+        const miss = smtcArtworkMissLine(line);
+        if (miss !== undefined) this.#ingestArtworkMiss(miss);
+        return;
+      }
       case "session": {
         const session = parseSmtcLine(line);
 
@@ -477,6 +507,8 @@ export class MediaProvider implements SensorProvider {
         const url = await this.#cache.put(artwork.bytes, artwork.ext);
 
         this.#rememberArtwork(key, url);
+        // A picture arrived for a track the helper had called unreadable.
+        this.#artworkMissByTrack.delete(key);
 
         // A track that changed while the write was in flight must not get the
         // previous picture under its new title.
@@ -485,6 +517,19 @@ export class MediaProvider implements SensorProvider {
         }
       })
       .catch(() => undefined);
+  }
+
+  /**
+   * A definitive miss belongs to the track the session is playing, which the
+   * session line that preceded it supplies. It is held for that track even
+   * when another one is selected, like the artwork itself.
+   */
+  #ingestArtworkMiss(miss: ArtworkMiss): void {
+    const session = this.#sessions.get(miss.sessionId)?.session;
+
+    if (session === undefined) return;
+
+    this.#rememberArtworkMiss(trackKeyOf(session), miss.reason);
   }
 
   /**
@@ -608,15 +653,35 @@ export class MediaProvider implements SensorProvider {
           value: session.durationS,
           ...(unit === undefined ? {} : { unit }),
         };
-      case "media.artwork":
-        return this.#artworkUrl === undefined
-          ? {
-              sensorId,
-              timestamp,
-              status: "missing",
-              message: WAITING_ARTWORK_MESSAGE,
-            }
-          : text(this.#artworkUrl);
+      case "media.artwork": {
+        if (this.#artworkUrl !== undefined) return text(this.#artworkUrl);
+
+        // A definitive miss is this track's answer, not a wait: the helper
+        // will not read it again.
+        const miss =
+          this.#trackKey === undefined
+            ? undefined
+            : this.#artworkMissByTrack.get(this.#trackKey);
+
+        if (miss === undefined) {
+          return {
+            sensorId,
+            timestamp,
+            status: "missing",
+            message: WAITING_ARTWORK_MESSAGE,
+          };
+        }
+
+        return {
+          sensorId,
+          timestamp,
+          status: "unavailable",
+          message:
+            miss === "over"
+              ? ARTWORK_TOO_LARGE_MESSAGE
+              : ARTWORK_UNREADABLE_MESSAGE,
+        };
+      }
       default:
         return {
           sensorId,

@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useEffect, useMemo } from "react";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
+import { assetBytesUrl } from "./client.js";
 import type { FontPreviewState } from "./fonts.js";
 
 /** The trio's roles, in the order the card reads them: a trio that omits a
@@ -89,9 +90,10 @@ export function faceStyle(cut: FontCut | undefined): React.CSSProperties {
 /** Holds the specimen faces resident while the panel draws them, and frees
  *  every face it added on unmount or when the selection changes.
  *
- * The source is the provider's own CORS-open `previewUrl`; the editor declares
- * no Content-Security-Policy, so a remote font origin is allowed. A load that
- * fails leaves the card on its fallback family rather than blocking the panel. */
+ * A cut's source is the host route the same bytes Apply writes are read from
+ * ({@link assetBytesUrl}), so a browser that cannot reach the provider's CDN
+ * still draws the face the document will carry. A load that fails leaves the
+ * card on its fallback family rather than blocking the panel. */
 export function useSpecimens(cuts: readonly FontCut[]): void {
   useEffect(() => {
     const fonts = typeof document === "undefined" ? undefined : document.fonts;
@@ -100,10 +102,14 @@ export function useSpecimens(cuts: readonly FontCut[]): void {
     const added: FontFace[] = [];
     for (const cut of cuts) {
       try {
-        const face = new FontFace(cut.family, `url(${cut.previewUrl})`, {
-          weight: String(cut.weight),
-          style: cut.style,
-        });
+        const face = new FontFace(
+          cut.family,
+          `url("${assetBytesUrl(cut.source, cut.id)}")`,
+          {
+            weight: String(cut.weight),
+            style: cut.style,
+          },
+        );
         fonts.add(face);
         added.push(face);
         void face.load().catch(() => undefined);

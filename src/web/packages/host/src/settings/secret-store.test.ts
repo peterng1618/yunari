@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createOsKeyProtector, type KeyProtector } from "./os-key-protector.js";
-import { createSecretStore } from "./secret-store.js";
+import { createSecretStore, KeyProtectorUnavailable } from "./secret-store.js";
 
 const keyFile = (dir: string) => path.join(dir, "secret.key");
 const secretFile = (dir: string, name: string) => path.join(dir, `${name}.bin`);
@@ -52,6 +52,10 @@ describe("secret store", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  // The box is shared with one worker per file in a full run, and this case is
+  // 256 write/read pairs of its own: on the loaded runs that exceeded the old
+  // 60 s ceiling twice while passing alone in seconds. The budget, not the
+  // work, is what had to grow.
   it("round-trips every byte length from 0 through 255", async () => {
     for (let length = 0; length <= 255; length += 1) {
       const plaintext = bytesOf(length);
@@ -62,7 +66,7 @@ describe("secret store", () => {
       expect(read?.length).toBe(length);
       expect(read ? read.equals(Buffer.from(plaintext)) : false).toBe(true);
     }
-  }, 60_000);
+  }, 120_000);
 
   it("keeps an empty secret distinct from an absent one", async () => {
     await store.write("empty", new Uint8Array(0));
@@ -216,7 +220,11 @@ describe("secret store", () => {
     const refusingStore = createSecretStore(dir, unavailable);
 
     expect(await refusingStore.available()).toBe(false);
-    await expect(refusingStore.write("alpha", bytesOf(8))).rejects.toThrow();
+    // Typed, because a host with no protector may run without secrets where a
+    // directory it cannot write must still refuse to start.
+    await expect(refusingStore.write("alpha", bytesOf(8))).rejects.toThrow(
+      KeyProtectorUnavailable,
+    );
     expect(unavailable.wraps).toBe(0);
 
     await expect(readFile(keyFile(dir))).rejects.toMatchObject({

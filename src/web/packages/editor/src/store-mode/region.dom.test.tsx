@@ -1486,8 +1486,13 @@ it("tells a theme no display holds apart from the theme that is the default", as
  * modal draws the cell's own four actions and reports them through the one
  * callback. Two answers to "what does assign mean" is the state this case
  * exists to keep out.
+ *
+ * **The page stays.** Ruled 2026-10-31: an author who assigns from a theme's
+ * own page is returned to that page, not to the gallery. The choice is drawn
+ * inside the modal rather than as a second modal over it, so one Escape still
+ * closes one surface and no second scrim stacks.
  */
-it("opens the same choice from the modal's own assign action", async () => {
+it("opens the choice inside the modal's own page", async () => {
   const host = twoDisplays();
   await mountOver(host);
 
@@ -1502,17 +1507,13 @@ it("opens the same choice from the modal's own assign action", async () => {
   );
 
   expect(
-    assignIsOpen(),
-    "the modal's own assign action does not open the display choice",
-  ).toBe(true);
-  // **The two dialogs never coexist.** Both are modal and portalled to `body`,
-  // and as React siblings Base UI never nests them, so each believes it is the
-  // topmost: one Escape closed both and two scrims stacked. The modal that
-  // opened the choice is gone rather than sitting under it.
+    document.body.querySelector("[data-yunari-store-item-assign]"),
+    "the modal's own assign action drew no choice inside the page",
+  ).not.toBeNull();
   expect(
     itemIsOpen(),
-    "the item's own modal stayed open under the display choice",
-  ).toBe(false);
+    "the item's own modal closed instead of keeping the page being read",
+  ).toBe(true);
   expect(
     document.body.querySelectorAll(".editor-shell-dialog-overlay").length,
     "two dialog scrims are stacked over the region",
@@ -1522,6 +1523,43 @@ it("opens the same choice from the modal's own assign action", async () => {
     "this-pc",
     "kitchen-tablet",
   ]);
+});
+
+/**
+ * The ruling's second half: the assignment lands without the page going away,
+ * and says where the theme went so the author is not left guessing whether the
+ * press did anything.
+ */
+it("confirms an assignment from the modal beside the choice it made", async () => {
+  const host = twoDisplays();
+  await mountOver(host);
+
+  await pressCellSurface("living-room");
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-item-action='assign']",
+      ),
+      "the modal's assign action",
+    ).click(),
+  );
+  await openDisplays();
+  await chooseDisplay("kitchen-tablet");
+
+  expect(host.writes).toEqual([
+    { display: "kitchen-tablet", id: "living-room" },
+  ]);
+  expect(itemIsOpen(), "the assignment closed the page it was made from").toBe(
+    true,
+  );
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>(
+        "[data-yunari-store-assign-confirmed]",
+      ),
+      "the assignment's confirmation",
+    ).textContent?.trim(),
+  ).toBe(uiCopy.store.assign.assigned("Kitchen tablet"));
 });
 
 /**
@@ -3667,4 +3705,49 @@ it("republishes an unpublished item and redraws it from the re-read", async () =
     statusAction("unpublish"),
     "the redrawn modal does not offer Unpublish for a published row",
   ).not.toBeNull();
+});
+
+/**
+ * The strip's Themes-mode reading (#164): the region publishes what its own
+ * listing shows, and the shell places it. The count is the half's, after the
+ * facets and the query — not the editor's document, which is what the strip
+ * used to show in this mode.
+ */
+it("publishes the visible listing's count to the strip", async () => {
+  const seen: (number | undefined)[] = [];
+  await mount(
+    <StoreModeRegion
+      mode="themes"
+      client={clientListing(listing(3))}
+      onStatus={(count) => seen.push(count)}
+    />,
+  );
+  await settle();
+
+  expect(seen.at(-1), "the count the strip would show").toBe(3);
+});
+
+it("publishes no count for a listing that did not arrive", async () => {
+  const seen: (number | undefined)[] = [];
+  const client: ThemeLibraryClient = {
+    ...clientListing([]),
+    list: async () => {
+      throw new Error("the library could not be read");
+    },
+  };
+  await mount(
+    <StoreModeRegion
+      mode="themes"
+      client={client}
+      onStatus={(count) => seen.push(count)}
+    />,
+  );
+  await settle();
+
+  // A failed read is not an empty result: the strip draws nothing rather than
+  // claiming the library is empty.
+  expect(
+    seen.every((count) => count === undefined),
+    "a failed read published a count",
+  ).toBe(true);
 });

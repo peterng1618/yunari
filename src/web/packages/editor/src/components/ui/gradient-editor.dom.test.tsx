@@ -404,7 +404,7 @@ it("marks the stop the wells edit, and moves the mark with the selection", async
   expect(first.getAttribute("data-selected")).toBeNull();
 });
 
-it("opens the stop's colour picker on a press that does not travel", async () => {
+it("leaves the picker closed on a press that does not travel", async () => {
   const mounted = await mount({
     stops: [
       { offset: 0, color: BLACK },
@@ -421,11 +421,40 @@ it("opens the stop's colour picker on a press that does not travel", async () =>
   await pointer(middle, "pointerup", 100, 0);
   await flush();
 
+  // A press selects, and the popover would take focus: the stop has to keep
+  // it, because its arrow keys are what move it.
   expect(
     mounted.query("colour-picker"),
-    "a click on a stop opens the picker that edits it",
+    "a single press does not open the picker",
+  ).toBeNull();
+  expect(middle.getAttribute("data-selected")).toBe("");
+  expect(mounted.change).not.toHaveBeenCalled();
+  expect(mounted.commit).not.toHaveBeenCalled();
+});
+
+it("opens the stop's colour picker on a double-click", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const middle = mounted.find("gradient-stop-1");
+
+  await act(async () => {
+    middle.dispatchEvent(
+      new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
+    );
+  });
+  await flush();
+
+  expect(
+    mounted.query("colour-picker"),
+    "a double-click on a stop opens the picker that edits it",
   ).not.toBeNull();
-  // The click is still a selection, not an edit.
   expect(mounted.change).not.toHaveBeenCalled();
   expect(mounted.commit).not.toHaveBeenCalled();
 });

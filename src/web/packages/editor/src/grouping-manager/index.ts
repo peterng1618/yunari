@@ -1,3 +1,4 @@
+import { parentGroupOf } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   type Canvas,
@@ -55,11 +56,6 @@ const idOf = (object: FabricObject): string | undefined => {
   const id = (object as { id?: unknown }).id;
   return typeof id === "string" ? id : undefined;
 };
-
-/** The nearest `Group` ancestor. Fabric keeps the owning group on `parent` even
- * while an `ActiveSelection` has taken the object off it, so one hop is the
- * whole walk. */
-const ownerGroup = (object: FabricObject): Group | undefined => object.parent;
 
 /** Fired on the canvas when the entered group changes; see `setContext`. */
 export const GROUP_CONTEXT_EVENT = "editor:group-context-changed";
@@ -388,7 +384,7 @@ export function createGroupingManager(
       // they are set here, after Fabric's own hit test has already run. So the
       // deepest child under the pointer is re-resolved once they are on, or the
       // gesture selects the group it was meant to enter.
-      const entry = ownerGroup(object) ?? object;
+      const entry = parentGroupOf(object) ?? object;
       // A double-click is also how a text box is edited, and `editor-shell`
       // routes every one of them here. A text box is not a group, so recording
       // it as an entry left the layer panel dimming every other row for a

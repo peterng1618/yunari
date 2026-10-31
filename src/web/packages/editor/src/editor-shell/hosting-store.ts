@@ -1,5 +1,6 @@
 import {
   type HostingAnswer,
+  mintPairingCode,
   type PairingCode,
   readHosting,
   readPairingCode,
@@ -97,6 +98,22 @@ export class HostingStore {
     } catch {
       this.#emit({ kind: "absent" });
     }
+  }
+
+  /** Replaces the code the card shows with a fresh window.
+   *
+   *  The owner's action, not a read: the host mints only here, and the previous
+   *  code stops being the answer. A refusal leaves the old code in place rather
+   *  than blanking a window the host may still hold. */
+  async renew(): Promise<void> {
+    const current = this.#snapshot;
+    if (current.kind !== "known" || !current.answer.lan) return;
+
+    const pairing = await mintPairingCode();
+    const latest = this.#snapshot;
+    if (pairing === undefined || latest.kind !== "known") return;
+
+    this.#emit({ ...latest, pairing });
   }
 
   /** Turns the LAN on or off, and reads where the host landed.

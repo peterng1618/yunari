@@ -39,6 +39,15 @@ export interface PairingCodeStore {
    */
   claim(code: string, source: string): Promise<boolean>;
   current(): PairingCode | undefined;
+  /**
+   * The live code, or a new one when the window closed.
+   *
+   * The start-up banner and the pairing route both read it: a banner that
+   * minted unconditionally replaced a code the route had just shown, and the
+   * claim that followed answered 404. One expression, in the store that owns
+   * the window, so the two callers cannot disagree again.
+   */
+  currentOrMint(): PairingCode;
 }
 
 /** The delay before a source's second guess, doubling per miss up to the cap.
@@ -72,17 +81,23 @@ export function createPairingCodeStore(
   const current = (): PairingCode | undefined =>
     live !== undefined && Date.parse(live.expiresAt) > now() ? live : undefined;
 
+  const mint = (): PairingCode => {
+    live = {
+      code: randomCode(),
+      expiresAt: new Date(now() + ttlMs).toISOString(),
+    };
+    misses.clear();
+    return live;
+  };
+
   return {
-    mint(): PairingCode {
-      live = {
-        code: randomCode(),
-        expiresAt: new Date(now() + ttlMs).toISOString(),
-      };
-      misses.clear();
-      return live;
-    },
+    mint,
 
     current,
+
+    currentOrMint(): PairingCode {
+      return current() ?? mint();
+    },
 
     async claim(code, source): Promise<boolean> {
       const missed = misses.get(source) ?? 0;

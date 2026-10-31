@@ -248,7 +248,16 @@ export function readStorage(): Storage | undefined {
   }
 }
 
-export function createShellLayout(root: HTMLElement): ShellLayout {
+export function createShellLayout(
+  root: HTMLElement,
+  options: {
+    /** Where an accepted mode change is reported. The shell owns the switch;
+     *  the boot owns what a surface reads fresh when it comes back into view —
+     *  the sensor catalogue, for one, so a source added on the Host page is
+     *  offered by the editor without a reload (`editor-main.ts`). */
+    readonly onModeChange?: (mode: ShellMode) => void;
+  } = {},
+): ShellLayout {
   const storage = readStorage();
   // The preview catalogue is read once, here, beside the palette and shortcut
   // reads: the camera opens on the author's list rather than on the defaults,
@@ -338,6 +347,12 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
      *  and never outlives it — otherwise the next visit's strip would mount
      *  holding the last visit's sentence. */
     const [hostStatus, setHostStatus] = useState<HostStatusLine | undefined>(
+      undefined,
+    );
+    /** The Themes mode's own reading, published by its region for the same
+     *  reason and through the same shape as the host's: the region owns what
+     *  the strip says, the shell owns where it goes. */
+    const [storeStatus, setStoreStatus] = useState<number | undefined>(
       undefined,
     );
     const applyOverrides = (next: ShortcutOverrides): void => {
@@ -748,6 +763,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 and a cancelled open leaves the author in the store. */}
             <StoreModeRegion
               mode={mode}
+              onStatus={setStoreStatus}
               onOpenTheme={(id) => {
                 void store.bridge?.session.openLibraryTheme(id, () =>
                   onModeChange("editor"),
@@ -763,16 +779,10 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
           </section>
         )}
         {/* The strip: readouts only, the counts on the left and the save
-            state and live mark on the right. The message span sits between the
-            counts and the diagnostic, so a report is added to the left's
-            reading rather than replacing it — the counts are what the author
-            has when the editor is simply open, and a message is a moment.
-
-            **It is one strip in every mode, and the Host mode's line is the
-            host's rather than the editor's**: there is no document to count
-            there, so its region publishes the two strings and this places them.
-            A mode that publishes none draws the editor's readouts, which is
-            what the store mode does. */}
+            state and live mark on the right. Each mode draws its own facts:
+            the editor's counts and its document state, the store's listing
+            count, the host's two strings. A mode that has not published its
+            reading draws nothing rather than another mode's numbers. */}
         <footer id="status" className="editor-shell-status">
           {mode === "this-pc" ? (
             <>
@@ -787,6 +797,12 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
                 {hostStatus?.status ?? null}
               </p>
             </>
+          ) : mode === "themes" ? (
+            storeStatus === undefined ? null : (
+              <span role="status" data-yunari-store-count="">
+                {uiCopy.statusBar.themes(storeStatus)}
+              </span>
+            )
           ) : (
             <>
               <StatusReadout store={store} />
@@ -845,9 +861,16 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
     }, []);
     const requestMode = (next: ShellMode): void => {
       if (next === mode) return;
+      // The one place a mode change lands: the boot's announcement reads the
+      // mode the switch actually took, not one a refused dirty-document guard
+      // would have stopped.
+      const switchTo = (chosen: ShellMode): void => {
+        setMode(chosen);
+        options.onModeChange?.(chosen);
+      };
       const session = mode === "editor" ? store.bridge?.session : undefined;
       if (session === undefined || session.isDirty() !== true) {
-        setMode(next);
+        switchTo(next);
         return;
       }
       void (async () => {
@@ -857,7 +880,7 @@ export function createShellLayout(root: HTMLElement): ShellLayout {
           await session.saveLibrary();
           if (session.isDirty()) return;
         }
-        setMode(next);
+        switchTo(next);
       })().catch(() => undefined);
     };
     return <Shell mode={mode} onModeChange={requestMode} />;

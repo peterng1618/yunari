@@ -327,6 +327,10 @@ describe("createDisplayStore", () => {
     expect(await store.list()).toEqual([]);
     expect(await store.find("kitchen-tablet")).toBeUndefined();
     expect(await store.authenticate("tok")).toBeUndefined();
+    // Empty and unreadable look identical to `list`, and a settings surface has
+    // to tell them apart: the records are missing, not absent, and every write
+    // below will refuse.
+    expect(await store.state()).toEqual({ displays: [], unreadable: true });
 
     await expect(store.create("Kitchen tablet", "tok")).rejects.toThrow(FILE);
     await expect(
@@ -356,9 +360,21 @@ describe("createDisplayStore", () => {
   it("treats a missing file as a fresh install", async () => {
     expect(await store.list()).toEqual([]);
     expect(await store.find("kitchen-tablet")).toBeUndefined();
+    // Missing is readable and empty, not unreadable: a fresh install must not
+    // be reported as a file that needs repairing.
+    expect(await store.state()).toEqual({ displays: [], unreadable: false });
     expect((await store.create("Kitchen tablet", "tok")).id).toBe(
       "kitchen-tablet",
     );
+  });
+
+  it("reports the records a readable file holds", async () => {
+    await store.create("Kitchen tablet", "tok");
+    const state = await store.state();
+    expect(state.unreadable).toBe(false);
+    expect(state.displays.map((display) => display.id)).toEqual([
+      "kitchen-tablet",
+    ]);
   });
 
   // Renaming: the label moves, the id does not.

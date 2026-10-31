@@ -55,7 +55,11 @@ on:
 # dispatch false -> false, dispatch absent -> null -> dry run. Workflow level so
 # both jobs read the same decision.
 env:
-  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
+  # GitHub's expression language has no ternary; `&&`/`||` is how the choice is
+  # spelled. Loose equality cannot tell `false` from a missing input (both coerce
+  # to 0), so compare the serialised value: release -> false, dispatch true ->
+  # true, dispatch false -> false, dispatch absent -> an empty input -> false.
+  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' && 'true' || 'false' }}"
 
 concurrency:
   # One publish at a time, whatever the ref: the version is only known inside
@@ -74,10 +78,14 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       dist_tag: ${{ steps.version.outputs.dist_tag }}
+    # `runner.temp` is a step context and not a job-env one; reading it here
+    # makes GitHub reject the whole workflow. These are the workspace's
+    # siblings, which are the same runner temp tree and still outside the
+    # checked-out repository the package must not be staged in.
     env:
-      STAGE: ${{ runner.temp }}/yunari-package
-      ASSETS: ${{ runner.temp }}/yunari-assets
-      SMOKE: ${{ runner.temp }}/yunari-smoke
+      STAGE: ${{ github.workspace }}/../yunari-package
+      ASSETS: ${{ github.workspace }}/../yunari-assets
+      SMOKE: ${{ github.workspace }}/../yunari-smoke
     steps:
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.
@@ -239,7 +247,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: yunari-release-assets
-          path: ${{ runner.temp }}/yunari-assets
+          path: ${{ env.ASSETS }}
           if-no-files-found: error
 
   publish:
@@ -251,14 +259,14 @@ jobs:
       contents: write
       id-token: write
     env:
-      ASSETS: ${{ runner.temp }}/yunari-assets
+      ASSETS: ${{ github.workspace }}/../yunari-assets
       VERSION: ${{ needs.install.outputs.version }}
       DIST_TAG: ${{ needs.install.outputs.dist_tag }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: yunari-release-assets
-          path: ${{ runner.temp }}/yunari-assets
+          path: ${{ env.ASSETS }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

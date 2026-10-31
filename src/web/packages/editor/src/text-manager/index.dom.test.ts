@@ -444,6 +444,28 @@ describe("a width the author dragged", () => {
     text.destroy();
   });
 
+  it("records a step's width unscaled, so a scaled drag does not compound", () => {
+    // `yunariText.box` is the size before `scaleX`; `assertBox` divides the
+    // stored number by the scale to get Fabric's `width`. A per-step write of
+    // `width * scaleX` handed the next pass a box that many units too large —
+    // `vg-233`, where a 240-unit drag landed at 177.6. The bake belongs to the
+    // commit, which reads the final width and resets the scale in one step.
+    const object = authoredReading();
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+
+    object.set({ width: 150, scaleX: 1.5 });
+    canvas.fire("object:resizing", {
+      transform: { target: object },
+    } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number };
+    };
+    expect(authored.box?.width).toBe(150);
+    text.destroy();
+  });
+
   it("records the first drag on a text that has no box yet", () => {
     // The editor's new text carries runs and no box until something states a
     // size. The resize handler used to return early on that shape, so the pass

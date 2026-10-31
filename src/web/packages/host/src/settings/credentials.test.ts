@@ -79,7 +79,15 @@ describe("credentials", () => {
   });
 
   afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+    // A reader the OS has not released yet makes Windows refuse the unlink
+    // with EBUSY; Node retries EBUSY/EPERM only when asked, and the test's own
+    // lock process is what normally holds it.
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   async function seed(contents: string): Promise<void> {

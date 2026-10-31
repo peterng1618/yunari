@@ -939,7 +939,8 @@ body,
    this, and a press that only meant "show me the address" must not stop a
    session. A secondary button, because the header already owns the one filled
    accent control. */
-.editor-shell-publish-toggle {
+.editor-shell-publish-toggle,
+.editor-shell-publish-mint {
   border: 1px solid var(--shell-edge);
   background: var(--shell-surface-strong);
   color: var(--shell-text);
@@ -955,7 +956,8 @@ body,
   border-color: var(--shell-primary-bg);
   color: var(--shell-primary-bg);
 }
-.editor-shell-publish-toggle:disabled {
+.editor-shell-publish-toggle:disabled,
+.editor-shell-publish-mint:disabled {
   opacity: 0.6;
   cursor: default;
 }

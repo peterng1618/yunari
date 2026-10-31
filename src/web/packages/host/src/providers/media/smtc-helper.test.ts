@@ -14,6 +14,7 @@ import {
   SMTC_SCRIPT,
   type SmtcSession,
   smtcArtworkLine,
+  smtcArtworkMissLine,
   smtcScript,
 } from "./smtc-helper.js";
 
@@ -147,13 +148,18 @@ describe("SMTC_SCRIPT", () => {
     expect(artwork).toContain(
       "if (-not (Test-CompleteImage $buffer $ext)) { return @{ status = 'retry' } }",
     );
-    // Over-cap is the one definitive answer.
+    // Over-cap is definitive at once.
     expect(artwork).toContain(
       `if ($chunks.Count -gt ${SMTC_ARTWORK_RAW_BYTES}) { return @{ status = 'over' } }`,
     );
     // Bounded retries: 5 attempts, about 5 s at one poll a second.
     expect(artwork).toContain("$ArtworkRetryLimit = 5");
     expect(artwork).toContain("$attempt['count'] -ge $ArtworkRetryLimit");
+
+    // A definitive negative is reported, so the provider need not wait.
+    expect(artwork).toContain("kind='artwork-miss'");
+    expect(artwork).toContain("Write-ArtworkMiss $sessionId 'over'");
+    expect(artwork).toContain("Write-ArtworkMiss $sessionId 'exhausted'");
 
     const emit = artwork.indexOf(
       "[Console]::Out.WriteLine(($result['line'] | ConvertTo-Json -Compress))",
@@ -348,6 +354,50 @@ describe("smtcArtworkLine", () => {
     for (const line of malformed) {
       expect(() => smtcArtworkLine(line), line).not.toThrow();
       expect(smtcArtworkLine(line), line).toBeUndefined();
+    }
+  });
+});
+
+describe("smtcArtworkMissLine", () => {
+  const missLine = (overrides: Record<string, unknown> = {}): string =>
+    JSON.stringify({
+      kind: "artwork-miss",
+      sessionId: "Spotify.exe",
+      reason: "over",
+      ...overrides,
+    });
+
+  it("reads both definitive reasons for their session", () => {
+    expect(smtcArtworkMissLine(missLine())).toEqual({
+      sessionId: "Spotify.exe",
+      reason: "over",
+    });
+    expect(smtcArtworkMissLine(missLine({ reason: "exhausted" }))).toEqual({
+      sessionId: "Spotify.exe",
+      reason: "exhausted",
+    });
+  });
+
+  it("returns undefined for malformed lines and never throws", () => {
+    const malformed: readonly string[] = [
+      "",
+      "not json",
+      "null",
+      "[]",
+      '{"kind":"artwork-miss"}',
+      missLine({ sessionId: undefined }),
+      missLine({ sessionId: "" }),
+      missLine({ sessionId: 7 }),
+      missLine({ reason: undefined }),
+      missLine({ reason: "" }),
+      missLine({ reason: "retry" }),
+      JSON.stringify({ kind: "artwork", sessionId: "Spotify.exe" }),
+      sessionLine(),
+    ];
+
+    for (const line of malformed) {
+      expect(() => smtcArtworkMissLine(line), line).not.toThrow();
+      expect(smtcArtworkMissLine(line), line).toBeUndefined();
     }
   });
 });

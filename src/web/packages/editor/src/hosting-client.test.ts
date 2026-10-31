@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { displayUrl, readHosting, readPairingCode } from "./hosting-client.js";
+import {
+  displayUrl,
+  mintPairingCode,
+  readHosting,
+  readPairingCode,
+} from "./hosting-client.js";
 
 const answer = (
   url: string,
@@ -112,6 +117,41 @@ describe("readPairingCode", () => {
     expect(
       await readPairingCode(answer("/api/pairing/code", { code: null })),
     ).toBeUndefined();
+  });
+});
+
+describe("mintPairingCode", () => {
+  it("is the POST that replaces the window, and reads the new code", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            code: "XYZ789",
+            expiresAt: "2026-10-18T10:20:00.000Z",
+          }),
+          { status: 200 },
+        ),
+    ) as unknown as typeof fetch;
+
+    expect(await mintPairingCode(fetcher)).toEqual({
+      code: "XYZ789",
+      expiresAt: "2026-10-18T10:20:00.000Z",
+    });
+    const call = (
+      fetcher as unknown as {
+        mock: { calls: [string, RequestInit | undefined][] };
+      }
+    ).mock.calls[0];
+    expect(call?.[0]).toBe("/api/pairing/code");
+    // The method is the whole difference from the read: only this rotates.
+    expect(call?.[1]).toEqual({ method: "POST" });
+  });
+
+  it("answers nothing when the host refuses the mint", async () => {
+    const refused = vi.fn(
+      async () => new Response("", { status: 403 }),
+    ) as unknown as typeof fetch;
+    expect(await mintPairingCode(refused)).toBeUndefined();
   });
 });
 

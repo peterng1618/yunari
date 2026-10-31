@@ -166,6 +166,42 @@ describe("the one-time pairing code", () => {
     expect(waited).toEqual([250]);
   });
 
+  it("keeps the code already shown, and mints only after its window", () => {
+    let clock = Date.parse("2026-10-18T10:00:00.000Z");
+    const drawn = ["AAAAAA", "BBBBBB"];
+    const store = createPairingCodeStore({
+      now: () => clock,
+      ttlMs: 60_000,
+      randomCode: () => drawn.shift() ?? "CCCCCC",
+    });
+
+    // The pair route answered this one first; the banner runs after the server,
+    // so minting unconditionally there replaced a code the person was typing.
+    const shown = store.mint();
+    expect(store.currentOrMint().code).toBe(shown.code);
+
+    clock += 60_000;
+    expect(store.currentOrMint().code).toBe("BBBBBB");
+  });
+
+  it("mint replaces the live window, invalidating the code already shown", async () => {
+    const drawn = ["AAAAAA", "BBBBBB"];
+    const store = createPairingCodeStore({
+      randomCode: () => drawn.shift() ?? "CCCCCC",
+      wait: async () => {},
+    });
+
+    const shown = store.mint();
+    const fresh = store.mint();
+
+    // The owner's renewal: the old characters stop being an answer even though
+    // their window had not closed, and the new ones are the one live code.
+    expect(fresh.code).not.toBe(shown.code);
+    expect(store.current()?.code).toBe(fresh.code);
+    expect(await store.claim(shown.code, "127.0.0.1")).toBe(false);
+    expect(await store.claim(fresh.code, "127.0.0.1")).toBe(true);
+  });
+
   it("forgets the penalty when a new code replaces the window", async () => {
     const waited: number[] = [];
     const store = fast(waited);

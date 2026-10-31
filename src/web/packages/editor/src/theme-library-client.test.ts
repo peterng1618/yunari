@@ -525,6 +525,32 @@ describe("ThemeLibraryClient", () => {
     expect(mockFetch).toHaveBeenCalledWith("/api/themes/active");
   });
 
+  it("passes on a display file the host could not read", async () => {
+    const mockFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            default: null,
+            displays: [],
+            displayFileUnreadable: true,
+          }),
+          { status: 200 },
+        ),
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    // Empty and unreadable are different facts and only the host can tell
+    // them apart, so the client carries its word rather than inferring from
+    // a count of zero.
+    await expect(client.listDisplays()).resolves.toEqual({
+      default: null,
+      displays: [],
+      unreadable: true,
+    });
+  });
+
   it("reads a panel display's connection and its command kinds", async () => {
     const mockFetch = vi.fn(
       async () =>

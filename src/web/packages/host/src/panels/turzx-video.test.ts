@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice } from "./panel-device.js";
@@ -50,6 +54,109 @@ const threeByteClip = async () => ({
 });
 
 const still = { offsetX: 0, offsetY: 0 };
+
+/** A cache directory outside the repository, removed by each case. */
+function cacheDir(): Promise<string> {
+  return mkdtemp(path.join(os.tmpdir(), "yunari-transcode-"));
+}
+
+/** A fake ffmpeg that succeeds and writes `encoded` at its output argument. */
+function encoder(encoded: Uint8Array, calls: { count: number }) {
+  return async (args: readonly string[]) => {
+    calls.count += 1;
+    await writeFile(args[args.length - 1]!, encoded);
+    return { code: 0, stderr: "" };
+  };
+}
+
+/** The cache key `transcodeForPanel` derives for a centred placement. */
+function cacheKey(bytes: Uint8Array): string {
+  return createHash("sha256")
+    .update(bytes)
+    .update("\0" + "0,0")
+    .digest("hex");
+}
+
+describe("the panel clip cache", () => {
+  it("transcodes the same clip once into the host cache", async () => {
+    const directory = await cacheDir();
+
+    try {
+      const calls = { count: 0 };
+      const encoded = Uint8Array.of(7, 8, 9);
+      const run = encoder(encoded, calls);
+      const first = await transcodeForPanel(Uint8Array.of(1, 2, 3), {
+        cacheDir: directory,
+        run,
+        verifyForTest: true,
+      });
+      const second = await transcodeForPanel(Uint8Array.of(1, 2, 3), {
+        cacheDir: directory,
+        run,
+        verifyForTest: true,
+      });
+
+      expect(calls.count).toBe(1);
+      expect(first).toEqual({ ok: true, bytes: encoded });
+      expect(second).toEqual(first);
+      expect(
+        (await readdir(directory)).some((name) => name.endsWith(".mp4")),
+      ).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("transcodes again when the clip changed", async () => {
+    const directory = await cacheDir();
+
+    try {
+      const calls = { count: 0 };
+      const run = encoder(Uint8Array.of(9), calls);
+      await transcodeForPanel(Uint8Array.of(1, 2, 3), {
+        cacheDir: directory,
+        run,
+        verifyForTest: true,
+      });
+      await transcodeForPanel(Uint8Array.of(1, 2, 4), {
+        cacheDir: directory,
+        run,
+        verifyForTest: true,
+      });
+
+      expect(calls.count).toBe(2);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("never reads a partial temp file as the clip", async () => {
+    const directory = await cacheDir();
+    const bytes = Uint8Array.of(1, 2, 3);
+
+    try {
+      // What an interrupted scratch write leaves beside the entry: the cache
+      // lookup only reads the final name, so these bytes are never served.
+      await writeFile(
+        path.join(directory, `.v1-${cacheKey(bytes)}.mp4.${process.pid}.1.tmp`),
+        Uint8Array.of(0, 0, 0),
+      );
+
+      const calls = { count: 0 };
+      const encoded = Uint8Array.of(9);
+      const result = await transcodeForPanel(bytes, {
+        cacheDir: directory,
+        run: encoder(encoded, calls),
+        verifyForTest: true,
+      });
+
+      expect(calls.count).toBe(1);
+      expect(result).toEqual({ ok: true, bytes: encoded });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("transcodeForPanel", () => {
   it("refuses a transcode the encoder failed", async () => {
@@ -151,6 +258,52 @@ describe("a panel's video", () => {
       ).toBe(false);
     } finally {
       await second.close();
+    }
+  });
+
+  it("reuses the host cache and uploads the clip once across two starts", async () => {
+    const directory = await cacheDir();
+
+    try {
+      const calls = { count: 0 };
+      const encoded = Uint8Array.of(9, 9, 9);
+      const { writes, transport } = fakeTransport(
+        "chs_5inch.dev1_rom1.88", // HELLO
+        "0", // GET_FILE_SIZE: nothing stored
+        "create_success",
+        "file_rev_done",
+        "play_video_success",
+        "seq_png_init_sucessneedReSend:0|renderCnt:1",
+        "3", // the second start: the encoded clip is already stored
+        "play_video_success",
+        "seq_png_init_sucessneedReSend:0|renderCnt:1",
+      );
+      const panel = await opened(transport, {
+        transcode: (bytes, placement) =>
+          transcodeForPanel(bytes, {
+            placement,
+            cacheDir: directory,
+            run: encoder(encoded, calls),
+            verifyForTest: true,
+          }),
+        sleep: async () => {},
+      });
+
+      try {
+        await panel.video!.start(Uint8Array.of(1, 2, 3), still);
+        await panel.video!.start(Uint8Array.of(1, 2, 3), still);
+      } finally {
+        await panel.close();
+      }
+
+      // The cache answers the second start, and the panel's own name+size
+      // check means neither start carries the clip twice.
+      expect(calls.count).toBe(1);
+      expect(
+        writes.filter((bytes) => bytes[0] === 0x6f && bytes[1] === 0xef),
+      ).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 

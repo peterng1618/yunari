@@ -505,8 +505,11 @@ it("renders no eyedropper where the browser has none, and Escape returns focus t
   });
   await flush();
 
-  expect(picker.query("colour-picker")).toBeNull();
-  expect(document.activeElement).toBe(picker.trigger);
+  // A closed popover stays mounted through its exit: Base UI schedules the
+  // unmount on an animation frame, which a few macrotask flushes can outrun.
+  // Wait for the removal itself instead of counting turns.
+  await vi.waitFor(() => expect(picker.query("colour-picker")).toBeNull());
+  await vi.waitFor(() => expect(document.activeElement).toBe(picker.trigger));
 
   await picker.close();
 });

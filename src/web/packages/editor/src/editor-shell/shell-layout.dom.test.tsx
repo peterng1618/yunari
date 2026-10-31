@@ -1547,6 +1547,33 @@ it("offers the three modes and marks the active one", async () => {
 });
 
 /**
+ * The boot reads what a returning mode must see fresh from this callback, so it
+ * has to fire for the mode the switch actually took and for nothing else: a
+ * press on the segment already showing is not a change, and a report there
+ * would make the sensor catalogue re-read for nothing.
+ */
+it("reports only the mode changes the switch actually made", async () => {
+  const root = document.createElement("div");
+  const seen: string[] = [];
+  const layout = createShellLayout(root, {
+    onModeChange: (mode) => seen.push(mode),
+  });
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(seen).toEqual(["themes"]);
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(seen, "the segment already showing reported a change").toEqual([
+    "themes",
+  ]);
+
+  await act(async () => modeSegments(root)[0]?.click());
+  expect(seen).toEqual(["themes", "editor"]);
+
+  layout.destroy();
+});
+
+/**
  * **A declined open leaves the author where they were** (A.7d, F2).
  *
  * The mode moves on the callback the store's open is handed, and the library
@@ -1597,6 +1624,18 @@ it("moves the shell only when the open's replacement is accepted", async () => {
   await vi.waitFor(() =>
     expect(openControl(), "the store drew no cell to open").not.toBeNull(),
   );
+  // The strip is the mode's own: the store's listing count, not the editor's
+  // document readouts (#164).
+  await vi.waitFor(() =>
+    expect(
+      root.querySelector("[data-yunari-store-count]")?.textContent,
+      "the store's own count in the strip",
+    ).toBe(uiCopy.statusBar.themes(1)),
+  );
+  expect(
+    root.querySelector("[data-yunari-status-objects]"),
+    "the editor's object count is still showing in the store mode",
+  ).toBeNull();
   const press = async (): Promise<void> => {
     const button = openControl();
     if (button === null) throw new Error("the store drew no cell to open");

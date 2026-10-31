@@ -136,6 +136,18 @@ export interface PanelSupport {
 }
 
 /**
+ * Host-owned directories a driver may use while opening a device.
+ *
+ * Drivers do not discover these themselves: the host knows where its own
+ * disposable data lives, and a driver that guessed would write beside a theme
+ * library or into the temp directory a reboot clears.
+ */
+export interface PanelOpenOptions {
+  /** The host's disposable cache directory, when it has one. */
+  readonly cacheDir?: string;
+}
+
+/**
  * One row of the panel registry: what a family is and how to reach it.
  *
  * A row is a lookup and a constructor, not a class hierarchy — the families
@@ -151,5 +163,5 @@ export interface PanelFamily {
   readonly commands: readonly PanelControlCommand["kind"][];
   /** Panels of this family attached right now, as record hints. */
   readonly attached: () => Promise<readonly PanelHint[]>;
-  readonly open: () => Promise<PanelDevice>;
+  readonly open: (options?: PanelOpenOptions) => Promise<PanelDevice>;
 }

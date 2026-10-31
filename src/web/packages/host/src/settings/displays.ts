@@ -115,6 +115,16 @@ export interface DisplayPatch {
 
 export interface DisplayStore {
   list(): Promise<readonly DisplayRecord[]>;
+  /**
+   * The list, and whether the file behind it could be read.
+   *
+   * `list()` fails closed to an empty list, which is right for a consumer that
+   * only needs identities: the display a request names is not there either way.
+   * A settings surface needs the second half — an unreadable file and an empty
+   * one look identical on screen and mean opposite things, and every write will
+   * refuse while the file stays unreadable.
+   */
+  state(): Promise<DisplayState>;
   create(
     label: string,
     token: string,
@@ -442,6 +452,14 @@ interface DisplayFileRead {
   readonly failure?: string;
 }
 
+/** What a settings surface reads: the records, and whether the file could be
+ *  read at all. The failure's own words stay in the host; a page names the file
+ *  and the repair rather than an operating-system string. */
+export interface DisplayState {
+  readonly displays: readonly DisplayRecord[];
+  readonly unreadable: boolean;
+}
+
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -663,6 +681,11 @@ export function createDisplayStore(
   return {
     async list(): Promise<readonly DisplayRecord[]> {
       return (await readDisplays(file)).displays;
+    },
+
+    async state(): Promise<DisplayState> {
+      const { displays, failure } = await readDisplays(file);
+      return { displays, unreadable: failure !== undefined };
     },
 
     create(label, token, presentation): Promise<DisplayRecord> {

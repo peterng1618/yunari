@@ -442,6 +442,11 @@ export const uiCopy = {
       follows: "Follows this PC",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
+      /** The file the host keeps its displays and their credentials in could not
+       *  be read. The list is empty because of that, not because none exists,
+       *  and every write refuses — so this names the file and the repair. */
+      unreadable:
+        "display-clients.json could not be read, so this host cannot list or change displays. Repair or remove that file in the host's settings folder.",
       /** The section that edits the selected display's name and glass. */
       presentation: "Display settings",
       name: "Name",
@@ -1242,6 +1247,10 @@ export const uiCopy = {
       default: "Default",
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",
+      /** What a landed assignment says where the choice stays on screen. It
+       *  names the display, so the confirmation is the assignment rather than
+       *  a bare "done" (`assign-display.tsx`). */
+      assigned: (where: string): string => `Assigned to ${where}`,
     },
     /** The pager: the per-page well, the two steps and the numerals' names.
      *
@@ -1660,6 +1669,9 @@ export const uiCopy = {
     objects: (count: number): string =>
       `${count} ${count === 1 ? "object" : "objects"}`,
     selected: (count: number): string => `${count} selected`,
+    /** The Themes mode's own reading: what the chosen half and filters show. */
+    themes: (count: number): string =>
+      `${count} ${count === 1 ? "theme" : "themes"}`,
   },
   /** The title-bar counts: one per pane's own list, so a pane whose list has
    *  not loaded prints nothing rather than a `0` (the same rule `statusBar`'s
@@ -1718,7 +1730,14 @@ export const uiCopy = {
       `Fallback http://${address}:${port}`,
     copy: "Copy link",
     copied: "Copied",
-    expires: (at: string): string => `Pairing expires ${at}`,
+    /** The live window, counted down in the reader's own clock. The host answers
+     *  an instant; a person reads a duration, and a deadline they can watch is
+     *  what says a code has run out. */
+    expiresIn: (left: string): string => `Pairing code expires in ${left}`,
+    expired: "Pairing code expired",
+    /** The renewal action beside the countdown: it replaces the window rather
+     *  than leaving the owner to restart the host when ten minutes pass. */
+    newCode: "New code",
   },
   /** The View menu. Each setting names itself and its current value; the values
    *  are listed here rather than composed from a number and a unit, so the menu

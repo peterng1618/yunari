@@ -45,6 +45,11 @@ export interface PanelManagerOptions {
    * timer, which is what the unit tests want.
    */
   readonly reconcileIntervalMs?: number;
+  /**
+   * The host's disposable cache directory, handed to a driver at open. Absent
+   * leaves the driver's own fallback, which is only for callers with no host.
+   */
+  readonly videoCacheDir?: string;
 }
 
 /** A command aimed at a display whose device is not being driven now. */
@@ -223,7 +228,11 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const device = await family.open();
+    const device = await family.open(
+      options.videoCacheDir === undefined
+        ? undefined
+        : { cacheDir: options.videoCacheDir },
+    );
 
     // A clip the device plays itself, when this display's theme has one. A
     // theme that cannot be read is a still panel, not a failed one.

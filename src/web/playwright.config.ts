@@ -102,6 +102,11 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   retries: 0,
   fullyParallel: true,
+  // 60 s, not Playwright's 30 s default: a run at the default worker count on a
+  // loaded machine reported locator timeouts as failures where the same case
+  // passed alone, and the wall clock was the variable rather than the assertion
+  // (issue #79). The suite still fails a case that never reaches its selector.
+  testTimeout: 60_000,
   // `workers` is deliberately left to Playwright's default (half the cores).
   // Hardcoding a count would oversubscribe a small CI runner, and oversubscription
   // is what turned the long `clock.runFor` waits into 30 s timeouts under load.
@@ -142,6 +147,13 @@ export default defineConfig({
       url: `http://127.0.0.1:${HOST_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 60_000,
+      // Playwright discards a web server's output by default, so a host that
+      // exits before answering reports only the exit code. Piping it reaches
+      // the local `list` reporter; CI's `github` reporter drops output with no
+      // test attached, which is why the workflow also preflights the same
+      // command where its message survives.
+      stdout: "pipe",
+      stderr: "pipe",
     },
   ],
 

@@ -65,8 +65,14 @@ window.PointerEvent ??= MouseEvent as never;
 
 // Every `setup` attaches its host so a field can hold focus; the body is
 // emptied between cases so the hosts (and the popups a control portals into it)
-// do not pile up.
-afterEach(() => {
+// do not pile up. Base UI unmounts a closed popup one animation frame after the
+// close, so an emptied body would outrun a pending unmount and React's
+// `removeChild` would land on a node the clear already detached
+// (`NotFoundError`). One frame lets those unmounts finish first.
+afterEach(async () => {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
   document.body.replaceChildren();
 });
 

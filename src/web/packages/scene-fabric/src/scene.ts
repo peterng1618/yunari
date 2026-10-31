@@ -146,8 +146,13 @@ export function mountFabricScene(
     shape: "rect",
   };
   /** The disc's own DOM element, created on the first circle presentation and
-   *  reused after: it is the disc's paint, behind the media layer. */
+   *  reused after: it is the screen's paint, behind the media layer. */
   let disc: HTMLDivElement | undefined;
+  /** The artboard's own paint as a DOM layer, sized to the mapped artboard box
+   *  and turned with the composition. It sits above the host/disc fill and
+   *  below the media layer, so the board's gradient turns while the letterbox
+   *  keeps the screen's own fill. */
+  let plate: HTMLDivElement | undefined;
   let disposed = false;
   // **Each reaches the other through a closure, and neither can be passed by
   // value.** The handle is built first with a `backdrop` that reads this, and
@@ -236,18 +241,29 @@ export function mountFabricScene(
   let currentTransform = fit();
 
   /**
-   * The display's shape as DOM: the disc's own paint, and the clip that makes
+   * The display's shape as DOM: the screen's own fill and the clip that makes
    * the canvas show it. A Fabric canvas is a rectangle whose painted content is
    * the composition, so `border-radius` would round the element and leave the
    * plate's corners inside it; the disc has to be the clip.
+   *
+   * **The screen fill is the letterbox, not the board's plate.** The board is
+   * the mapped artboard box, which turns with the composition; the host (rect)
+   * or disc (circle) is the screen and stays put. `applyBoardPlate` carries the
+   * plate, so a gradient theme's paint turns with the artwork and only the bars
+   * outside it keep this fill.
    */
-  function applyPresentation(paint: string): void {
+  function applyPresentation(
+    paint: string,
+    transform: ArtboardTransform,
+    board: { readonly width: number; readonly height: number },
+  ): void {
     const width = host.clientWidth;
     const height = host.clientHeight;
     const box = displayBox(width, height, presentation.shape);
+    applyBoardPlate(paint, transform, board);
     if (presentation.shape === "circle") {
       // Outside the disc is outside the screen, so the host is black and the
-      // disc itself carries the theme's paint.
+      // disc itself carries the screen's own paint.
       host.style.background = "#000";
       const discElement = presentationDisc();
       discElement.style.display = "";
@@ -260,11 +276,51 @@ export function mountFabricScene(
       element.style.clipPath = `circle(${box.width / 2}px at ${width / 2}px ${height / 2}px)`;
       return;
     }
-    // Rect: the host is the board's paint and its letterbox, exactly as before a
-    // record existed, and the disc is not part of the composition.
+    // Rect: the host is the screen around the board, exactly as before a record
+    // existed, and the disc is not part of the composition.
     host.style.background = paint;
     element.style.clipPath = "";
     if (disc !== undefined) disc.style.display = "none";
+  }
+
+  /**
+   * The board's paint as its own DOM layer: the mapped artboard box, turned
+   * about its origin — the same box and pivot the theme-bounded media layer
+   * uses. It is created once and kept beneath the media layer, so the gradient
+   * follows the composition instead of the screen.
+   */
+  function applyBoardPlate(
+    paint: string,
+    transform: ArtboardTransform,
+    board: { readonly width: number; readonly height: number },
+  ): void {
+    const plateElement = artboardPlate();
+    plateElement.style.display = transform.isDegenerate ? "none" : "";
+    plateElement.style.left = `${transform.offsetX}px`;
+    plateElement.style.top = `${transform.offsetY}px`;
+    plateElement.style.width = `${board.width * transform.scale}px`;
+    plateElement.style.height = `${board.height * transform.scale}px`;
+    plateElement.style.transform =
+      transform.rotation === 0 ? "" : `rotate(${transform.rotation}deg)`;
+    plateElement.style.background = paint;
+  }
+
+  function artboardPlate(): HTMLDivElement {
+    if (plate !== undefined) return plate;
+    const made = document.createElement("div");
+    made.dataset["yunariArtboardPlate"] = "";
+    made.style.position = "absolute";
+    made.style.transformOrigin = "0 0";
+    made.style.pointerEvents = "none";
+    plate = made;
+    // Between the screen fill and the media layer: the disc (prepended when the
+    // presentation is round) and the host fill paint beneath the plate, and the
+    // media layer and canvas paint over it.
+    const mediaLayer = host.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+    host.insertBefore(made, mediaLayer ?? element);
+    return made;
   }
 
   function presentationDisc(): HTMLDivElement {
@@ -305,11 +361,16 @@ export function mountFabricScene(
       ratio: window.devicePixelRatio,
     };
 
-    // The one artboard paint is the board's fill and the bars behind it (§53).
-    // It is the **host's**, which puts it behind the media layer, so a
-    // `"theme"`-fitted layer covers the board and the host's colour is what the
-    // reader sees in the letterbox.
-    applyPresentation(cssArtboardPaint(plan.artboard.background) ?? "#000");
+    // One resolved paint, two surfaces: the board's own plate turns with the
+    // composition, and the screen around it — the host rect or the disc —
+    // keeps a screen-fixed fill for the letterbox (§53). Both sit behind the
+    // media layer, so a `"theme"`-fitted layer covers the board and the screen
+    // fill is what the reader sees in the bars.
+    applyPresentation(
+      cssArtboardPaint(plan.artboard.background) ?? "#000",
+      transform,
+      geometry,
+    );
     // **The canvas paints nothing at all.** It sits above the media layer, so a
     // fill on it hides the media completely; what a glass panel samples instead
     // is the backdrop, which carries the paint. Cleared rather than left

@@ -69,8 +69,9 @@ export function GradientEditor({
 }): React.JSX.Element {
   const presets = usePresetLibrary();
   const [selected, setSelected] = useState(0);
-  // The popover belongs to the stop under the selection: a press that does not
-  // travel opens it, so the stop and the picker that edits it are one gesture.
+  // The popover belongs to the stop under the selection. It opens on a
+  // double-click or Enter and never on the first press: that press has to
+  // leave focus on the stop, whose arrow keys move it.
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const track = useRef<HTMLDivElement | null>(null);
@@ -96,18 +97,19 @@ export function GradientEditor({
   const ratioAt = (clientX: number): number | undefined =>
     track.current === null ? undefined : ratioAlong(track.current, clientX);
 
-  const endDrag = (opensPicker: boolean): void => {
+  const endDrag = (): void => {
     const gesture = drag.current;
     drag.current = null;
+    // A press that never travelled only selected the stop: the selection is
+    // what the wells and the picker edit, and the two ways to the picker are a
+    // double-click and Enter. A single press must not open it — the popover
+    // takes focus, so an author pressing a stop to move it by arrow would lose
+    // the stop to the picker instead.
     if (gesture?.moved === true) {
       // A drag adjusted the stop; opening a popover under the pointer would
       // cover the track the author is aiming along.
       onCommit?.();
-      return;
     }
-    // A press that never travelled is a selection, not an edit — and the
-    // selection is what the picker edits, so it is also how the picker opens.
-    if (opensPicker && gesture !== undefined) setPickerOpen(true);
   };
 
   const addAt = (offset: number): void => {
@@ -205,6 +207,10 @@ export function GradientEditor({
               boxShadow: "0 0 0 1px var(--edge)",
             }}
             onClick={() => setSelected(index)}
+            // The press-without-travel that opens the picker, as a second
+            // press rather than the first: the first still has to leave the
+            // stop focused for its arrow keys.
+            onDoubleClick={() => setPickerOpen(true)}
             onFocus={() => setSelected(index)}
             onPointerDown={(event) => {
               // The primary button owns the gesture; a secondary press is a
@@ -232,8 +238,8 @@ export function GradientEditor({
               if (offset !== undefined)
                 put(index, { offset, color: stop.color });
             }}
-            onPointerUp={() => endDrag(true)}
-            onPointerCancel={() => endDrag(false)}
+            onPointerUp={() => endDrag()}
+            onPointerCancel={() => endDrag()}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 // The pointer's press-without-travel, for a keyboard author:

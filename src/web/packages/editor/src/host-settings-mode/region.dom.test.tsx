@@ -143,6 +143,8 @@ interface Fixture {
   readonly places?: readonly WeatherPlace[];
   /** The display map's own refusal: a host that keeps its settings to itself. */
   readonly refuseDisplays?: boolean;
+  /** The host could not read its display file, so the list is fail-closed. */
+  readonly unreadableDisplays?: boolean;
   /** The custom sources the list route answers. */
   readonly sources?: readonly SourceRow[];
   /** The refusal a save answers with, in the route's own `field`/`reason`. */
@@ -208,6 +210,7 @@ function library(fixture: Fixture): ThemeLibraryClient {
       }
       return {
         default: fixture.fallback ?? null,
+        ...(fixture.unreadableDisplays === true ? { unreadable: true } : {}),
         displays: fixture.displays ?? [],
       };
     },
@@ -837,6 +840,26 @@ it("says nothing about presentation while no display has been read", async () =>
   expect(failed.container.textContent).not.toContain(
     uiCopy.hostSettings.displays.presentationAbsent,
   );
+});
+
+/** An unreadable file and an empty one answer the same list, so the region has
+ *  to name the file rather than draw an empty library that looks healthy. */
+it("names the display file when the host could not read it", async () => {
+  const corrupt = await mountHost({
+    ...TWO_DISPLAYS,
+    unreadableDisplays: true,
+  });
+  const alert = must(
+    corrupt.container.querySelector("[data-yunari-host-displays-unreadable]"),
+    "unreadable display-file alert",
+  );
+  expect(alert.getAttribute("role")).toBe("alert");
+  expect(alert.textContent).toBe(uiCopy.hostSettings.displays.unreadable);
+
+  const healthy = await mountHost(TWO_DISPLAYS);
+  expect(
+    healthy.container.querySelector("[data-yunari-host-displays-unreadable]"),
+  ).toBeNull();
 });
 
 /** This PC is the machine, not a paired screen: it has no record to present, so
