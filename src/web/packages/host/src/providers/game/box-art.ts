@@ -50,15 +50,15 @@ export function catalogueArtworkUrl(game: InstalledGame): string | undefined {
 async function insideCache(root: string, file: string): Promise<boolean> {
   try {
     const cache = await fs.realpath(
-      path.win32.join(root, "appcache", "librarycache"),
+      path.join(root, "appcache", "librarycache"),
     );
     const real = await fs.realpath(file);
-    const relative = path.win32.relative(cache, real);
+    const relative = path.relative(cache, real);
 
     return (
       relative !== "" &&
       !relative.startsWith("..") &&
-      !path.win32.isAbsolute(relative)
+      !path.isAbsolute(relative)
     );
   } catch {
     return false;
@@ -73,7 +73,7 @@ export async function locateBoxArt(
   if (!GAME_APP_ID.test(appId)) return undefined;
 
   for (const root of steamRoots) {
-    const file = path.win32.join(
+    const file = path.join(
       root,
       "appcache",
       "librarycache",
