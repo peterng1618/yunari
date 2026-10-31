@@ -12356,6 +12356,21 @@ describe("The game box art route", () => {
     expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
   });
 
+  it("serves a launcher's own icon as image/x-icon", async () => {
+    const running = launch({ gameArtwork: source(["gog-1207658924"]) });
+
+    const answer = await request(
+      running.server,
+      "GET",
+      "/api/game/artwork/gog-1207658924.ico",
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.headers["content-type"]).toBe("image/x-icon");
+    expect(answer.headers["cache-control"]).toBe("private, max-age=3600");
+    expect(Buffer.compare(answer.body, Buffer.from(BYTES))).toBe(0);
+  });
+
   it("404s a malformed name before the source is asked", async () => {
     let reads = 0;
     const running = launch({
@@ -12376,6 +12391,11 @@ describe("The game box art route", () => {
       "12345678901.jpg",
       "10.JPG",
       "..%2F10.jpg",
+      "10.ico",
+      "gog-1207658924.jpg",
+      "gog-1207658924.png",
+      "gog-.ico",
+      "gog-1234567890123.ico",
     ]) {
       expect(
         (await request(running.server, "GET", `/api/game/artwork/${name}`))
@@ -12393,6 +12413,16 @@ describe("The game box art route", () => {
     expect(
       (await request(running.server, "GET", "/api/game/artwork/999.jpg"))
         .status,
+    ).toBe(404);
+    // A catalogue key never falls through to the app-id cover cache.
+    expect(
+      (
+        await request(
+          running.server,
+          "GET",
+          "/api/game/artwork/gog-1207658924.ico",
+        )
+      ).status,
     ).toBe(404);
   });
 

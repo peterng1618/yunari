@@ -23,6 +23,8 @@ import { presentMonAdapter } from "./providers/frame/presentmon.js";
 import { FrameProvider } from "./providers/frame/provider.js";
 import { RtssAdapter } from "./providers/frame/rtss.js";
 import { createGameArtwork } from "./providers/game/box-art.js";
+import { readInstalledGames } from "./providers/game/catalogue/catalogue.js";
+import { defaultCatalogueSeams } from "./providers/game/catalogue/seams.js";
 import { GameProvider } from "./providers/game/provider.js";
 import { createSteamStore } from "./providers/game/store-metadata.js";
 import { LhmSensorProvider } from "./providers/lhm.js";
@@ -249,8 +251,15 @@ export async function run(argv: readonly string[]): Promise<number> {
       ? {}
       : { baseUrl: storeBaseUrl }),
   });
+  // One catalogue read serves both the provider's matching and the artwork
+  // route's lookup, so a launcher's entry is the same fact in both places.
+  const catalogueSeams = defaultCatalogueSeams(
+    steamRoot === undefined ? {} : { resolveSteamRoot: steamRoot },
+  );
+  const installedGames = () => readInstalledGames(catalogueSeams);
   const gameProvider = new GameProvider({
     ...(steamRoot === undefined ? {} : { steamRoot }),
+    catalogue: installedGames,
     store: gameStore,
     ...(fixedForeground === undefined || fixedForeground === ""
       ? {}
@@ -431,9 +440,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     sources: { store: customSources, provider: customProvider },
     assets: { credentials },
     artwork: mediaArtwork,
-    gameArtwork: createGameArtwork(
-      steamRoot === undefined ? {} : { steamRoot },
-    ),
+    gameArtwork: createGameArtwork({
+      ...(steamRoot === undefined ? {} : { steamRoot }),
+      catalogue: installedGames,
+    }),
     gameCoverCacheDir: gameMetadataCacheDir,
     onDisplayChange: (settings) => clockProvider.setTimeZone(settings.timeZone),
     activeTheme,

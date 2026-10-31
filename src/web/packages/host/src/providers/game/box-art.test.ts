@@ -9,6 +9,7 @@ import {
   readBoxArt,
   readCachedCover,
 } from "./box-art.js";
+import type { InstalledGame } from "./catalogue/catalogue.js";
 import type { SteamApp } from "./steam-library.js";
 
 /** Only its JPEG framing matters; nothing here decodes the bytes. */
@@ -262,5 +263,74 @@ describe("createGameArtwork", () => {
         },
       }).read("10"),
     ).toBeUndefined();
+  });
+
+  describe("catalogue art", () => {
+    const ICO = "goggame-1207658924.ico";
+
+    async function gogInstall(): Promise<{
+      readonly installDir: string;
+      readonly file: string;
+    }> {
+      const installDir = path.join(tmp, "gog");
+      await fs.mkdir(installDir, { recursive: true });
+      const file = path.join(installDir, ICO);
+      await fs.writeFile(file, BYTES);
+      return { installDir, file };
+    }
+
+    function gogGame(installDir: string, file: string): InstalledGame {
+      return {
+        source: "gog",
+        name: "Disco Elysium",
+        installDir,
+        exes: [],
+        artwork: { source: "gog", id: "1207658924", file, extension: "ico" },
+      };
+    }
+
+    function catalogueOf(game: InstalledGame) {
+      return createGameArtwork({ catalogue: async () => [game] });
+    }
+
+    it("serves a launcher's icon inside its install root", async () => {
+      const { installDir, file } = await gogInstall();
+
+      expect(
+        Array.from(
+          (await catalogueOf(gogGame(installDir, file)).read(
+            "gog-1207658924",
+          )) ?? [],
+        ),
+      ).toEqual(Array.from(BYTES));
+    });
+
+    it("refuses a launcher file outside the install root", async () => {
+      const { installDir } = await gogInstall();
+      const outside = path.join(tmp, "outside.ico");
+      await fs.writeFile(outside, BYTES);
+
+      expect(
+        await catalogueOf(gogGame(installDir, outside)).read("gog-1207658924"),
+      ).toBeUndefined();
+    });
+
+    it("refuses a key no catalogue game carries", async () => {
+      const { installDir, file } = await gogInstall();
+
+      expect(
+        await catalogueOf(gogGame(installDir, file)).read("gog-999"),
+      ).toBeUndefined();
+      expect(
+        await createGameArtwork({}).read("gog-1207658924"),
+      ).toBeUndefined();
+    });
+
+    it("treats a malformed catalogue key as no art", async () => {
+      expect(await createGameArtwork({}).read("gog-abc")).toBeUndefined();
+      expect(
+        await createGameArtwork({}).read("gog-1234567890123"),
+      ).toBeUndefined();
+    });
   });
 });

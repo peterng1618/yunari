@@ -122,6 +122,83 @@ describe("readGogGames", () => {
     ]);
   });
 
+  it("records the launcher's icon beside the install", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          gameName: "Disco Elysium",
+          gameId: "1207658924",
+          path: "C:\\Games\\Disco Elysium",
+          exe: "disco.exe",
+        },
+      ],
+      directories: {
+        "C:\\Games\\Disco Elysium": ["disco.exe", "goggame-1207658924.ico"],
+      },
+    });
+
+    await expect(readGogGames(seams)).resolves.toEqual([
+      {
+        source: "gog",
+        name: "Disco Elysium",
+        installDir: "C:\\Games\\Disco Elysium",
+        exes: ["C:\\Games\\Disco Elysium\\disco.exe"],
+        artwork: {
+          source: "gog",
+          id: "1207658924",
+          file: "C:\\Games\\Disco Elysium\\goggame-1207658924.ico",
+          extension: "ico",
+        },
+      },
+    ]);
+  });
+
+  it("falls back to the registry key and matches the name case-insensitively", async () => {
+    const seams = seamsOf({
+      powerShell: [
+        {
+          gameName: "A Space for the Unbound",
+          PSChildName: "1918442274",
+          path: "D:\\Games\\A Space for the Unbound",
+        },
+      ],
+      directories: {
+        "D:\\Games\\A Space for the Unbound": ["GOGGAME-1918442274.ICO"],
+      },
+    });
+
+    const games = await readGogGames(seams);
+
+    expect(games[0]?.artwork).toEqual({
+      source: "gog",
+      id: "1918442274",
+      file: "D:\\Games\\A Space for the Unbound\\GOGGAME-1918442274.ICO",
+      extension: "ico",
+    });
+  });
+
+  it("has no artwork without a goggame icon or a numeric id", async () => {
+    const withoutIcon = seamsOf({
+      powerShell: [
+        {
+          gameName: "No Icon",
+          gameId: "1207658924",
+          path: "C:\\Games\\No Icon",
+        },
+      ],
+      directories: { "C:\\Games\\No Icon": ["gog.ico", "game.exe"] },
+    });
+    const withoutId = seamsOf({
+      powerShell: [
+        { gameName: "No Id", gameId: "disco", path: "C:\\Games\\No Id" },
+      ],
+      directories: { "C:\\Games\\No Id": ["goggame-disco.ico"] },
+    });
+
+    expect((await readGogGames(withoutIcon))[0]?.artwork).toBeUndefined();
+    expect((await readGogGames(withoutId))[0]?.artwork).toBeUndefined();
+  });
+
   it("treats a registry answer that is not JSON as an empty list", async () => {
     const seams = seamsOf({ powerShell: undefined });
 

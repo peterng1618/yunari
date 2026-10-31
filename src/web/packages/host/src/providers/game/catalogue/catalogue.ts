@@ -7,11 +7,23 @@ import type { CatalogueSeams } from "./seams.js";
 import { readSteamGames } from "./steam.js";
 import { readXboxGames } from "./xbox.js";
 
+/**
+ * A picture the launcher itself installed. `source` and `id` form the artwork
+ * route key; `file` is read only after containment in the game's install root.
+ */
+export interface InstalledArtwork {
+  readonly source: "gog";
+  readonly id: string;
+  readonly file: string;
+  readonly extension: "ico";
+}
+
 export interface InstalledGame {
   readonly source: "steam" | "epic" | "gog" | "itch" | "xbox" | "appx";
   readonly name: string;
   readonly installDir: string;
   readonly exes: readonly string[];
+  readonly artwork?: InstalledArtwork;
 }
 
 function normalised(value: string): string {

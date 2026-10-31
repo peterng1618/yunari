@@ -35,9 +35,10 @@ import type {
   SourceTestResult,
 } from "./providers/custom/provider.js";
 import {
-  GAME_APP_ID,
+  GAME_ARTWORK_KEY,
   GAME_ARTWORK_PREFIX,
   type GameArtworkSource,
+  isCatalogueArtworkKey,
   readCachedCover,
 } from "./providers/game/box-art.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
@@ -3601,13 +3602,13 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // The running Steam game's box art is local bytes, so the app id is the
-    // whole allow-list: only an installed app or a cover the store provider
-    // cached has a file, and anything else is a 404 rather than a filesystem
-    // probe. A display reads it through the same credential as media artwork;
-    // loopback is this PC. The name is not content-addressed, so the cache is
-    // bounded rather than immutable. The downloaded cover is read only, never
-    // fetched: the provider is the one owner of the store's CDN.
+    // The running game's art is local bytes, so the key is the whole allow-list:
+    // an installed Steam app, a cover the store provider cached, or a catalogued
+    // game that carries its launcher's icon. Anything else is a 404 rather than
+    // a filesystem probe. A display reads it through the same credential as media
+    // artwork; loopback is this PC. The name is not content-addressed, so the
+    // cache is bounded rather than immutable. The downloaded cover is read only,
+    // never fetched: the provider is the one owner of the store's CDN.
     if (url.pathname.startsWith(GAME_ARTWORK_PREFIX)) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -3615,20 +3616,19 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       const name = url.pathname.slice(GAME_ARTWORK_PREFIX.length);
-      const extension = name.endsWith(".jpg")
-        ? "jpg"
-        : name.endsWith(".png")
-          ? "png"
-          : undefined;
+      const dot = name.lastIndexOf(".");
+      const extension = dot === -1 ? undefined : name.slice(dot + 1);
+      const appId = dot === -1 ? name : name.slice(0, dot);
 
-      if (extension === undefined) {
-        sendText(response, 404, "Not found.");
-        return;
-      }
-
-      const appId = name.slice(0, -(extension.length + 1));
-
-      if (!GAME_APP_ID.test(appId)) {
+      // Steam's box art and a launcher's icon are different sources, so the key
+      // form and the extension must agree before either is read.
+      if (
+        (extension !== "jpg" && extension !== "png" && extension !== "ico") ||
+        !GAME_ARTWORK_KEY.test(appId) ||
+        (isCatalogueArtworkKey(appId)
+          ? extension !== "ico"
+          : extension === "ico")
+      ) {
         sendText(response, 404, "Not found.");
         return;
       }
@@ -3642,18 +3642,26 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       // Local library art first: it costs no network, and Steam only writes the
-      // JPEG. A cached remote cover is the fallback for a non-Steam game.
-      let bytes =
-        extension === "jpg" && gameArtwork !== undefined
+      // JPEG while a launcher's picture is served as it was installed. A cached
+      // remote cover is the fallback for a non-Steam game, keyed by app id only.
+      const local =
+        (extension === "jpg" || extension === "ico") &&
+        gameArtwork !== undefined
           ? await gameArtwork.read(appId)
           : undefined;
-      let contentType = "image/jpeg";
+      let bytes = local;
+      let contentType =
+        extension === "png"
+          ? "image/png"
+          : extension === "ico"
+            ? "image/x-icon"
+            : "image/jpeg";
 
-      if (bytes === undefined) {
+      if (bytes === undefined && !isCatalogueArtworkKey(appId)) {
         const cached = await readCachedCover(
           gameCoverCacheDir,
           appId,
-          extension,
+          extension === "png" ? "png" : "jpg",
         );
 
         if (cached !== undefined) {
