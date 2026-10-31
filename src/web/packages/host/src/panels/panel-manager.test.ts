@@ -3,6 +3,7 @@ import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
 import type {
   PanelDevice,
   PanelFamily,
+  PanelOpenOptions,
   PanelVideoSource,
 } from "./panel-device.js";
 import {
@@ -78,7 +79,7 @@ function deviceOver(options: DeviceOptions = {}): PanelDevice {
   };
 }
 
-function familyOver(open: () => Promise<PanelDevice>): PanelFamily {
+function familyOver(open: PanelFamily["open"]): PanelFamily {
   return {
     id: "fake",
     label: "Fake panel",
@@ -124,6 +125,20 @@ const SOURCE: PanelVideoSource = {
 };
 
 describe("createPanelManager", () => {
+  it("hands the host's cache directory to the driver", async () => {
+    let seen: PanelOpenOptions | undefined;
+    h.family = familyOver(async (options) => {
+      seen = options;
+      return deviceOver();
+    });
+
+    const manager = managerOver({ videoCacheDir: "C:/host/cache/panel-video" });
+    await manager.start("strip");
+
+    expect(seen).toEqual({ cacheDir: "C:/host/cache/panel-video" });
+    await manager.stop("strip");
+  });
+
   it("serializes two refreshes: one device open at a time, last entry survives", async () => {
     const events: string[] = [];
     const devices: PanelDevice[] = [];

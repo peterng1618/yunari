@@ -536,6 +536,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   panels = createPanelManager({
     displays,
     pageFor: (displayId) => panelPageUrl(bound, displayId),
+    // A panel's encoded clip is disposable host data, kept beside the other
+    // caches so a restart reuses the transcode instead of paying for it again.
+    videoCacheDir: path.join(path.dirname(settingsDir), "cache", "panel-video"),
     // A panel that goes away — a restart, a power cut, a vendor app holding
     // the port — is opened again on this cadence, the same one the launcher
     // uses for local monitors.

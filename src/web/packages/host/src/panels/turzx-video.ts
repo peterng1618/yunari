@@ -1,6 +1,18 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -27,13 +39,24 @@ const FFMPEG_STATIC_VERSION: string = createRequire(import.meta.url)(
 /** ffmpeg's log goes to stderr; a runaway log must not fill the buffer. */
 const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 
-// ponytail: the cache lives under the temp dir, so a reboot re-encodes the
-// clip. Move it under the host's data directory when a start has to survive
-// temp cleanup.
-const CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
+/**
+ * Where a caller with no host directory keeps the cache. Production passes the
+ * host's own cache folder; the temp fallback only serves tests and direct use,
+ * because temp cleanup would throw away work the host could keep.
+ */
+const DEFAULT_CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
 /** Moves whenever the ffmpeg arguments or filter change: an output encoded by
  *  an older transform is not this clip, so it must not be served. */
 const TRANSCODE_VERSION = "v1";
+/**
+ * The cache's byte bound. Theme clips are multi-megabyte, so a count cap alone
+ * could hold gigabytes; 256 MiB keeps dozens of distinct clips and evicts by
+ * last use once a library grows past it.
+ */
+const PANEL_VIDEO_CACHE_BYTES = 256 * 1024 * 1024;
+
+/** Numbers one scratch file within this process, so two encodes cannot collide. */
+let scratchCount = 0;
 
 export type TranscodeResult =
   | { readonly ok: true; readonly bytes: Uint8Array }
@@ -51,15 +74,21 @@ export async function transcodeForPanel(
     readonly verifyForTest?: boolean;
     /** The theme's authored pan; centred cover when absent. */
     readonly placement?: PanelVideoPlacement;
+    /** The host's disposable cache directory; temp when the caller has none. */
+    readonly cacheDir?: string;
   } = {},
 ): Promise<TranscodeResult> {
   const placement = options.placement ?? { offsetX: 0, offsetY: 0 };
-  const cachePath = cached(sha256(bytes, placement));
+  const cacheDirectory = options.cacheDir ?? DEFAULT_CACHE_DIRECTORY;
+  const cachePath = cached(cacheDirectory, sha256(bytes, placement));
 
   // The pan changes the pixels, so it is part of the key: the same source
   // authored at a different offset is a different clip.
   const cachedBytes = await readFile(cachePath).catch(() => undefined);
   if (cachedBytes !== undefined) {
+    // A hit is a use: eviction drops the least recently used clip first.
+    const used = new Date();
+    await utimes(cachePath, used, used).catch(() => undefined);
     return { ok: true, bytes: new Uint8Array(cachedBytes) };
   }
 
@@ -111,9 +140,14 @@ export async function transcodeForPanel(
       };
     }
 
-    // A cache that cannot be written is not a failed transcode.
-    await mkdir(CACHE_DIRECTORY, { recursive: true }).catch(() => undefined);
-    await writeFile(cachePath, encoded).catch(() => undefined);
+    // A cache that cannot be written is not a failed transcode. The scratch
+    // file is renamed into place only once fsync says it is whole, so an
+    // interrupted write leaves a `.tmp` nobody reuses rather than a truncated
+    // clip under the key a later run would trust.
+    await writeAtomic(cacheDirectory, cachePath, encoded).catch(
+      () => undefined,
+    );
+    await evict(cacheDirectory, cachePath).catch(() => undefined);
 
     return { ok: true, bytes: encoded };
   } finally {
@@ -123,8 +157,93 @@ export async function transcodeForPanel(
   }
 }
 
-function cached(key: string): string {
-  return path.join(CACHE_DIRECTORY, `${TRANSCODE_VERSION}-${key}.mp4`);
+function cached(directory: string, key: string): string {
+  return path.join(directory, `${TRANSCODE_VERSION}-${key}.mp4`);
+}
+
+/**
+ * Writes `data` to `file` through a sibling scratch file.
+ *
+ * The bytes are fsynced before the rename, and the rename is one filesystem
+ * operation within the destination's own directory. A failed write removes its
+ * scratch; a crash leaves one behind, and no reader ever looks at a `.tmp` name.
+ */
+async function writeAtomic(
+  directory: string,
+  file: string,
+  data: Uint8Array,
+): Promise<void> {
+  await mkdir(directory, { recursive: true });
+
+  scratchCount += 1;
+  const scratch = path.join(
+    directory,
+    `.${path.basename(file)}.${process.pid}.${scratchCount}.tmp`,
+  );
+
+  const handle = await open(scratch, "w");
+  try {
+    await handle.writeFile(data);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+
+  try {
+    await rename(scratch, file);
+  } catch (error) {
+    await rm(scratch, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Drops the least recently used cached clips until the directory fits the bound.
+ *
+ * Only names this cache writes are candidates, so a scratch file or an unrelated
+ * file a person put in the cache directory is never counted or deleted. The
+ * file just written is kept even if it alone is over the bound: evicting the
+ * answer the caller is about to use would make a large clip re-encode forever.
+ */
+async function evict(directory: string, keep: string): Promise<void> {
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch {
+    return;
+  }
+
+  const entries: { file: string; size: number; used: number }[] = [];
+
+  for (const name of names) {
+    if (!name.startsWith(`${TRANSCODE_VERSION}-`) || !name.endsWith(".mp4")) {
+      continue;
+    }
+
+    const file = path.join(directory, name);
+    try {
+      const info = await stat(file);
+      entries.push({ file, size: info.size, used: info.mtimeMs });
+    } catch {
+      // A file that vanished is already gone; it costs nothing to skip.
+    }
+  }
+
+  let total = entries.reduce((sum, entry) => sum + entry.size, 0);
+  entries.sort((first, second) => first.used - second.used);
+
+  for (const entry of entries) {
+    if (total <= PANEL_VIDEO_CACHE_BYTES) break;
+    if (entry.file === keep) continue;
+
+    try {
+      await unlink(entry.file);
+      total -= entry.size;
+    } catch {
+      // Losing an eviction to a concurrent reader is fine: the next write
+      // prunes again.
+    }
+  }
 }
 
 function sha256(bytes: Uint8Array, placement: PanelVideoPlacement): string {
