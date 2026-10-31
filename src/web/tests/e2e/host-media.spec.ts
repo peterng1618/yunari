@@ -1,8 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { networkInterfaces } from "node:os";
 import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { HOST_APP_DIR, HOST_PORT } from "./host-theme.js";
+import { lanAddress } from "./lan-address.js";
 import { isDesktopSurface } from "./surface.js";
 
 /** Changing media on the real player, and the paired display that has to fetch
@@ -940,19 +940,6 @@ test.describe("changing media on the real player", () => {
       .toBeGreaterThan(200);
   });
 });
-
-/** The first non-loopback IPv4 this machine answers on. The paired half of the
- *  test needs a request the host does not consider loopback, or `allowed()`
- *  short-circuits and the session is never consulted. */
-function lanAddress(): string | undefined {
-  for (const addresses of Object.values(networkInterfaces())) {
-    for (const address of addresses ?? []) {
-      if (address.family === "IPv4" && !address.internal)
-        return address.address;
-    }
-  }
-  return undefined;
-}
 
 /** A second host, bound so a paired display can reach it. Loopback-only hosts
  *  create no session store at all, so a session cannot be minted against one. */

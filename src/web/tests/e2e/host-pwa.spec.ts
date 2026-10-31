@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { chromium, expect, test } from "@playwright/test";
 import { HOST_THEME_ID, HOST_THEMES_DIR, hostClient } from "./host-theme.js";
+import { requiredLanAddress } from "./lan-address.js";
 
 /**
  * The reading `vg-577` was filed for: the player installs as an app, and its
@@ -44,19 +45,6 @@ function spkiHash(pem: string): string {
     format: "der",
   });
   return createHash("sha256").update(der).digest("base64");
-}
-
-/** The first non-internal IPv4 address, which is the address a display uses. */
-function lanAddress(): string {
-  for (const interfaces of Object.values(os.networkInterfaces())) {
-    for (const candidate of interfaces ?? []) {
-      if (candidate.family === "IPv4" && !candidate.internal) {
-        return candidate.address;
-      }
-    }
-  }
-
-  throw new Error("no LAN address on this machine");
 }
 
 /** A paired display's URL: the session it was given, the theme it shows, and
@@ -140,7 +128,7 @@ test.describe("the player as an installed app", () => {
     await probe.dispose();
 
     authority = await readFile(CA_FILE, "utf8");
-    origin = `https://${lanAddress()}:${PORT}`;
+    origin = `https://${requiredLanAddress()}:${PORT}`;
 
     profileDir = path.join(os.tmpdir(), `yunari-pwa-profile-${PORT}`);
     rmSync(profileDir, { recursive: true, force: true });
