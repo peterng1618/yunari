@@ -418,6 +418,97 @@ describe("native editor shell", () => {
     expect(revived?.left).toBe(5);
   });
 
+  it("does not record the entered-group reachability as document state", async () => {
+    // Authoring inside a group, then undoing, left the artboard answering only
+    // to the entered group: every other object stayed `selectable: false` with
+    // no dim and nothing entered, and only the layer panel could reach them.
+    // The entry's flags had reached the snapshot the undo restored, because
+    // `selectable`/`evented` are persisted for authored locks.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const shell = await mount({ host, artboard: { width: 400, height: 300 } });
+    const canvas = shell.editor.canvas;
+    const child = new Rect({
+      id: "child",
+      left: 20,
+      top: 20,
+      width: 20,
+      height: 20,
+    });
+    const group = new Group([child]);
+    group.set("id", "card");
+    const outsider = new Rect({
+      id: "outsider",
+      left: 100,
+      top: 20,
+      width: 20,
+      height: 20,
+    });
+    canvas.add(group, outsider);
+
+    const grouping = shell.editor.groupingManager;
+    grouping.enterGroup({ object: group });
+    child.set({ left: 30 });
+    canvas.fire("object:modified", { target: child });
+    grouping.exitGroup();
+    // A second entry, so one undo lands on the one captured while entered.
+    outsider.set({ left: 120 });
+    canvas.fire("object:modified", { target: outsider });
+
+    await shell.editor.historyManager.undo();
+
+    const revived = canvas
+      .getObjects()
+      .find((object) => object.get("id") === "outsider");
+    expect(revived).toBeDefined();
+    // What the author's next click depends on.
+    expect([revived?.selectable, revived?.evented]).toEqual([true, true]);
+    expect(grouping.groupContext()).toEqual([]);
+  });
+
+  it("does not save the entered-group reachability into a document", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 600 },
+    });
+    const authored = createNewFabricTheme();
+    const shell = await mount({
+      host,
+      artboard: authored.artboard,
+      envelope: authored,
+    });
+    const canvas = shell.editor.canvas;
+    // A deliberate refusal to be picked, which a capture must keep.
+    const authoredLock = new Rect({
+      id: "authored-lock",
+      width: 10,
+      height: 10,
+    });
+    authoredLock.set({ selectable: false, evented: false });
+    canvas.add(authoredLock);
+    const entered = canvas
+      .getObjects()
+      .find((object) => object instanceof Group);
+    if (entered === undefined) throw new Error("the starter draws no group");
+    shell.editor.groupingManager.enterGroup({ object: entered });
+
+    const saved = shell.snapshot(authored) as unknown as {
+      scene: { objects: readonly Record<string, unknown>[] };
+    };
+    const disarmed = sceneNodes(saved.scene.objects)
+      .filter((object) => object.selectable === false)
+      .map((object) => String(object.id));
+
+    // Only the authored lock. The objects the entry put out of reach are view
+    // state and must not travel in a theme package.
+    expect(disarmed).toEqual(["authored-lock"]);
+    shell.editor.groupingManager.exitGroup();
+  });
+
   it("records a scale gesture as one entry, so one undo restores size and scale", async () => {
     // The shell's own `object:modified` save must run after the text manager's
     // commit: registered first, it recorded the interim scaled state, and one

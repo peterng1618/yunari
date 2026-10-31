@@ -4,6 +4,7 @@ import {
   type AssetReference,
   type Background,
   computeArtboardTransform,
+  cssArtboardPaint,
   type DisplayPresentation,
   type DisplayShape,
   type GlassSampling,
@@ -17,7 +18,6 @@ import {
   type SceneAdapterOptions,
 } from "./adapter.js";
 import { artboardBackdrop } from "./artboard-backdrop.js";
-import { cssArtboardPaint } from "./artboard-paint.js";
 import {
   type BackgroundMediaHandle,
   type BackgroundMediaSource,

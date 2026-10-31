@@ -1,6 +1,7 @@
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import {
+  type AssignableGroup,
   DEFAULT_UNIT_PREFERENCES,
   type UnitPreferences,
 } from "@yunari/renderer-core";
@@ -19,7 +20,6 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import {
-  type AssignableGroup,
   type AvailableDevice,
   createHostSettingsClient,
   type DeviceSettings,

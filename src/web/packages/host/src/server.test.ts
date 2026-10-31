@@ -14,6 +14,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import {
+  ASSIGNABLE_GROUPS,
   CATALOGUE_ORIGIN,
   cataloguePackageUrl,
   createAssetResolver,
@@ -66,7 +67,6 @@ import {
   type KnownCredential,
 } from "./settings/credentials-registry.js";
 import {
-  ASSIGNABLE_GROUPS,
   createDeviceSettingsStore,
   type DeviceSettingsStore,
 } from "./settings/devices.js";
@@ -8840,7 +8840,7 @@ describe("One tick at a time", () => {
 });
 
 it("keeps the assignable-device vocabulary in the one module that owns it", async () => {
-  // vg-189: the groups are `ASSIGNABLE_GROUPS`'s (`settings/devices.ts`), so
+  // vg-189: the groups are `ASSIGNABLE_GROUPS`'s (renderer-core), so
   // server.ts must not spell the union a second time — a copy is a second owner,
   // and a group added to the real owner would silently never reach it. The
   // runtime is identical whether the union is derived or copied, so the source is

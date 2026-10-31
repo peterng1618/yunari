@@ -1,10 +1,6 @@
 import { Gradient } from "fabric/es";
 import { describe, expect, it } from "vitest";
-import {
-  artboardPaintKey,
-  cssArtboardPaint,
-  fabricArtboardPaint,
-} from "./artboard-paint.js";
+import { artboardPaintKey, fabricArtboardPaint } from "./artboard-paint.js";
 
 describe("artboard paint key", () => {
   it("matches only paints that produce the same Fabric paint", () => {
@@ -80,27 +76,16 @@ describe("artboard paint", () => {
     expect(fabricArtboardPaint({ kind: "solid", color: "#102030" }, 1, 1)).toBe(
       "#102030",
     );
-    expect(cssArtboardPaint({ kind: "solid", color: "#102030" })).toBe(
-      "#102030",
-    );
-  });
-
-  it("uses the corresponding CSS gradient for letterbox bars", () => {
-    expect(cssArtboardPaint(gradient)).toBe(
-      "linear-gradient(90deg, #102030 0%, #d0e0f0 100%)",
-    );
   });
 
   it("points a rotated gradient the way the CSS form does", () => {
     // The stored angle is `90 - cssDegrees`, so 90 is CSS's `0deg`: the first
     // stop at the bottom, the last at the top. The canvas forms used `sin` for
     // y in screen coordinates, which mirrored every non-horizontal angle
-    // against the CSS preview and the editor's own gradient track.
+    // against the CSS preview and the editor's own gradient track. The CSS
+    // form's own cases live in renderer-core, where the conversion now lives.
     const vertical = { ...gradient, angle: 90 };
 
-    expect(cssArtboardPaint(vertical)).toBe(
-      "linear-gradient(0deg, #102030 0%, #d0e0f0 100%)",
-    );
     expect(fabricArtboardPaint(vertical, 800, 600)).toMatchObject({
       coords: { x1: 400, y1: 600, x2: 400, y2: 0 },
     });
@@ -108,6 +93,5 @@ describe("artboard paint", () => {
 
   it("passes Fabric-compatible solid colors through unchanged", () => {
     expect(fabricArtboardPaint("#102030", 1, 1)).toBe("#102030");
-    expect(cssArtboardPaint("rgb(16 32 48)")).toBe("rgb(16 32 48)");
   });
 });

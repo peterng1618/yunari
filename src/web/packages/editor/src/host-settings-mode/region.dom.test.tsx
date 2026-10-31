@@ -21,7 +21,7 @@
  * nothing, so nothing here is a claim about how the region looks. The layout it
  * follows is read by its own gate, not by this file.
  */
-import type { DisplayShape } from "@yunari/renderer-core";
+import type { AssignableGroup, DisplayShape } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -32,7 +32,6 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import {
-  type AssignableGroup,
   type DeviceSettings,
   type DisplayPreferences,
   type DisplayPreferencesWrite,

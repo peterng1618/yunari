@@ -1,6 +1,9 @@
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import { describeSemanticKey } from "@yunari/renderer-core";
-import { ASSIGNABLE_GROUPS, type AssignableGroup } from "./devices.js";
+import {
+  ASSIGNABLE_GROUPS,
+  type AssignableGroup,
+  describeSemanticKey,
+  type FabricThemeEnvelope,
+} from "@yunari/renderer-core";
 
 /**
  * Which device slots a theme actually needs answered.

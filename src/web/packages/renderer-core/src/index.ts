@@ -279,6 +279,12 @@ export {
 } from "./scene/plan.js";
 export type { SceneHandle } from "./scene/scene-handle.js";
 export {
+  artboardGradientLine,
+  artboardSolidColor,
+  cssArtboardPaint,
+  isArtboardGradient,
+} from "./theme/artboard-paint.js";
+export {
   ASSET_EXTENSIONS,
   themeAssetContentType,
 } from "./theme/asset-media-type.js";
@@ -327,6 +333,10 @@ export {
   cataloguePackageUrl,
   catalogueThumbnailUrl,
 } from "./theme/catalogue-location.js";
+export {
+  ASSIGNABLE_GROUPS,
+  type AssignableGroup,
+} from "./theme/device-groups.js";
 export type {
   Artboard,
   AssetKind,

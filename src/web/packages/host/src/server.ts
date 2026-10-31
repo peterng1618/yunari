@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  type AssignableGroup,
   CATALOGUE_ORIGIN,
   createBatch,
   type DisplayPresentation,
@@ -84,7 +85,6 @@ import {
   sourcesInUse,
 } from "./settings/credentials-registry.js";
 import {
-  type AssignableGroup,
   type DeviceSettingsStore,
   EMPTY_DEVICE_SETTINGS,
 } from "./settings/devices.js";
@@ -1469,8 +1469,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
         ? {}
         : await themeSettings.read(DEFAULT_DISPLAY, chosen);
 
-    // The group is the settings module's `AssignableGroup`, not a union
-    // re-spelled here: the owner is `ASSIGNABLE_GROUPS` (`settings/devices.ts`),
+    // The group is `AssignableGroup` from renderer-core, not a union
+    // re-spelled here: the owner is `ASSIGNABLE_GROUPS` (renderer-core),
     // and a fourth group added there must reach this path rather than needing a
     // second edit nobody would make (vg-189).
     const pick = (group: AssignableGroup): string | undefined =>

@@ -1,8 +1,5 @@
-import {
-  ASSIGNABLE_GROUPS,
-  type AssignableGroup,
-  DEVICE_ID_PATTERN,
-} from "./devices.js";
+import { ASSIGNABLE_GROUPS, type AssignableGroup } from "@yunari/renderer-core";
+import { DEVICE_ID_PATTERN } from "./devices.js";
 import { DEFAULT_DISPLAY } from "./displays.js";
 import { createJsonFile } from "./json-file.js";
 

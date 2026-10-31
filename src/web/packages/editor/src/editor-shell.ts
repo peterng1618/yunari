@@ -2,6 +2,7 @@ import {
   type Artboard,
   type AssetReference,
   type Background,
+  cssArtboardPaint,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
   type Globals,
@@ -20,7 +21,6 @@ import {
   type BackgroundMediaSource,
   createGlass,
   createSceneAdapter,
-  cssArtboardPaint,
   disposeScene,
   fabricArtboardPaint,
   mountBackgroundMedia,
@@ -329,9 +329,27 @@ function createNativeEditor(input: {
   // Before the history, because undo revives through it and a refusal raised
   // there is reported the same way a refusal raised on load is.
   const errors = createErrorManager(canvas);
+  // Constructed before the history it saves through: the capture seam below
+  // reads it, and the callbacks only reach the history once it exists.
+  const grouping = createGroupingManager({
+    canvas,
+    save: () => history.save(),
+    suspend: () => history.suspend(),
+  });
+  /** A capture reads the document, not the entered-group view state. The
+   *  entry's `selectable`/`evented` flags are persisted alongside the authored
+   *  ones, so every serialisation lends the manager's flags back first. */
+  const captured = <T>(read: () => T): T => {
+    const release = grouping.suspendReachability();
+    try {
+      return read();
+    } finally {
+      release();
+    }
+  };
   const history = new EditorHistory({
     canvas,
-    serialize: serialiseScene,
+    serialize: (target) => captured(() => serialiseScene(target)),
     revive: (target, scene) =>
       reviveScene(
         target,
@@ -365,11 +383,6 @@ function createNativeEditor(input: {
   canvas.on("object:modified", save);
   const objectLockManager = createObjectLockManager(canvas, save);
 
-  const grouping = createGroupingManager({
-    canvas,
-    save,
-    suspend: () => history.suspend(),
-  });
   /** Double-click enters the group the pointer resolved to, and leaves the one
    * already entered when the pointer was outside it — the same gesture both ways,
    * which is what makes the way out discoverable. Escape stays the keyboard
@@ -707,17 +720,23 @@ export async function mountEditorShell({
       viewport: editor.viewport,
       ...(scene === undefined ? {} : { scene }),
       snapshot(input) {
-        const next = serialiseThemeEnvelope(
-          editor.canvas,
-          dropDanglingBindings(editor.canvas, input),
-        );
-        const validation = validateFabricThemeEnvelope(next);
-        if (!validation.ok) {
-          throw new Error(
-            `Invalid theme: ${validation.issues[0]?.message ?? "unknown validation error"}`,
+        // A capture reads the document, not the entered-group view state.
+        const release = editor.groupingManager.suspendReachability();
+        try {
+          const next = serialiseThemeEnvelope(
+            editor.canvas,
+            dropDanglingBindings(editor.canvas, input),
           );
+          const validation = validateFabricThemeEnvelope(next);
+          if (!validation.ok) {
+            throw new Error(
+              `Invalid theme: ${validation.issues[0]?.message ?? "unknown validation error"}`,
+            );
+          }
+          return validation.envelope;
+        } finally {
+          release();
         }
-        return validation.envelope;
       },
       refreshGlass: () => glass.sync(),
       setArtboard(nextArtboard) {

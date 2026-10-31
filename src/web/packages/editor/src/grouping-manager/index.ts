@@ -27,6 +27,19 @@ export interface GroupingManager {
    * view: it reads the document, not the screen.
    */
   suspendDim(): () => void;
+  /**
+   * Lends the authored interaction flags to a capture and puts the entry's
+   * state back.
+   *
+   * `selectable`/`evented` are the artboard half of the entry, but they are also
+   * persisted — a theme's authored background is saved non-selectable, and the
+   * lock manager writes its own flags through the same save. A snapshot taken
+   * while a group is entered would therefore record everything outside it as
+   * unreachable. History would revive that as document state: an undo made
+   * while, or after, the group was entered leaves the canvas answering only to
+   * the entered group, with no dim and nothing the author can leave.
+   */
+  suspendReachability(): () => void;
   readonly groupContext: () => readonly FabricObject[];
   /** Releases the canvas listeners and the transient state they maintain. */
   destroy(): void;
@@ -254,6 +267,21 @@ export function createGroupingManager(
     restoreReachability(render);
   };
 
+  /**
+   * The entry's flags, lent to a capture. Restored here and re-taken on release,
+   * so the values the snapshot reads are the author's own — a background the
+   * theme authored non-selectable stays non-selectable — rather than the view
+   * state the entry put over them.
+   */
+  const suspendReachability = (): (() => void) => {
+    if (reachabilityTaken.size === 0) return () => {};
+    restoreReachability(false);
+    return () => {
+      const entry = context[0];
+      if (entry instanceof Group) applyReachability(entry);
+    };
+  };
+
   /** An object added to the root while a group is entered is outside it. */
   const onObjectAdded = (event: { target?: unknown }): void => {
     const entry = context[0];
@@ -405,6 +433,8 @@ export function createGroupingManager(
     groupContext: () => context,
 
     suspendDim,
+
+    suspendReachability,
 
     destroy(): void {
       canvas.off("object:added" as never, onObjectAdded as never);

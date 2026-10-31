@@ -314,4 +314,41 @@ describe("entering a group", () => {
     // on: a dim that had reached the objects would serialise as `opacity`.
     expect(JSON.stringify(serialiseScene(canvas))).toBe(before);
   });
+
+  it("lends the authored interaction flags to a capture", () => {
+    // `selectable`/`evented` are two things at once: the entry's artboard half,
+    // and persisted state for a theme's authored background or a locked object.
+    // A snapshot taken inside a group must record the second and not the first,
+    // or undo restores the entry as document state with nothing to leave.
+    const { canvas, group, outsider } = scene();
+    const authoredLock = new Rect({
+      id: "authored-lock",
+      width: 10,
+      height: 10,
+    });
+    authoredLock.set({ selectable: false, evented: false });
+    canvas.add(authoredLock);
+    const grouping = manager(canvas);
+    grouping.enterGroup({ object: group });
+
+    const release = grouping.suspendReachability();
+    const captured = serialiseScene(canvas) as unknown as {
+      objects: readonly Record<string, unknown>[];
+    };
+    release();
+
+    const node = (id: string) =>
+      captured.objects.find((object) => object.id === id);
+    // Fabric's defaults are stripped, so an ordinary object carries no flags —
+    // the entry's `selectable: false` must not have reached the document.
+    expect(node("outsider")).not.toHaveProperty("selectable");
+    expect(node("outsider")).not.toHaveProperty("evented");
+    // The authored one is document state and stays.
+    expect(node("authored-lock")?.selectable).toBe(false);
+    expect(node("authored-lock")?.evented).toBe(false);
+
+    // The view the author was looking at is back, not merely unsubscribed.
+    expect(outsider.selectable).toBe(false);
+    expect(paintedAt(outsider)).toBeCloseTo(0.45, 5);
+  });
 });
