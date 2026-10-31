@@ -142,12 +142,19 @@ export function FinderActionButton(props: {
 }
 
 /** The way to fix a key, drawn only while a keyed source is in trouble: a
- *  button that cannot help is not an availability. */
+ *  button that cannot help is not an availability.
+ *
+ *  The slot is reserved either way, so the toolbar's right group keeps its
+ *  place when the button appears and no control under the pointer moves. */
 export function ConnectionsButton(props: {
   readonly needs: boolean;
   readonly onOpen: () => void;
-}): React.JSX.Element | null {
-  if (!props.needs) return null;
+}): React.JSX.Element {
+  if (!props.needs) {
+    return (
+      <span data-yunari-asset-connections-slot="" className="w-7 flex-none" />
+    );
+  }
   return (
     <span className="flex w-7 flex-none items-center justify-center">
       <ControlIconButton
