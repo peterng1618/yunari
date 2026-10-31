@@ -1,4 +1,8 @@
-import type { TextContent, TextRun } from "@yunari/renderer-core";
+import type {
+  SemanticKeyDescriptor,
+  TextContent,
+  TextRun,
+} from "@yunari/renderer-core";
 import {
   guardBoxWidth,
   type PlanTextObject,
@@ -20,6 +24,9 @@ const SCALE_UNITY_EPSILON = 1e-4;
  * Below it the author meant a click, however unsteady their hand was.
  */
 export const PLACEMENT_DRAG_THRESHOLD = 4;
+
+/** How many readings the inline `@` list offers at once. */
+const MENTION_LIMIT = 8;
 
 /** What a placement gesture asks for: a corner, and a box when it was a drag. */
 export interface TextPlacement {
@@ -72,6 +79,28 @@ export interface TextCreationOptions {
   readonly [key: string]: unknown;
 }
 
+/**
+ * Where an inline `@` insert comes from: the readings to offer, and who writes
+ * the chosen one. The session owns the node's bindings, so the manager asks for
+ * the write rather than reaching into the document itself.
+ */
+export interface TextMentionPort {
+  readonly descriptors: () => readonly SemanticKeyDescriptor[];
+  /**
+   * Replaces the typed `@query` range with a value run for `semanticKey`.
+   * `false` refuses, and the typed text is then left as prose.
+   */
+  readonly insert: (
+    object: IText,
+    range: {
+      readonly text: string;
+      readonly start: number;
+      readonly end: number;
+      readonly semanticKey: string;
+    },
+  ) => boolean;
+}
+
 interface TextManager {
   /** The class the request chose: an `IText` with no box, a `Textbox` with one. */
   addText(options?: TextCreationOptions): IText;
@@ -91,6 +120,8 @@ interface TextManager {
   /** Paints the object's authored runs over what Fabric left behind, which is
       how a refused in-place edit puts back what it would have dropped. */
   setRepaint(paint: (object: IText) => void): void;
+  /** Installs the readings an inline `@` may insert, and the write that adds one. */
+  setMentions(port: TextMentionPort): void;
   destroy(): void;
 }
 
@@ -207,6 +238,241 @@ export function createTextManager(
   /** Repaints the authored runs, so a refused edit does not leave un-authored
       text standing on the canvas as though it had been kept. */
   let repaint: (object: IText) => void = () => {};
+
+  /**
+   * The inline `@` list. It opens on a typed `@`, filters on what follows,
+   * accepts with Tab, and leaves Space a space; the popup is anchored at the
+   * caret through Fabric's own textarea placement, because Fabric owns the
+   * editing session and publishes no caret rectangle.
+   */
+  let mentions: TextMentionPort | undefined;
+  let mention: { readonly target: IText; readonly start: number } | undefined;
+  let mentionOptions: readonly SemanticKeyDescriptor[] = [];
+  let mentionSelected = 0;
+  let mentionOverlay: HTMLDivElement | undefined;
+  let mentionTextarea: HTMLTextAreaElement | null = null;
+  /** Set while a reading's own write is leaving editing, so no refusal fires. */
+  let mentionCommitted: IText | undefined;
+
+  const closeMentions = (): void => {
+    mention = undefined;
+    mentionOptions = [];
+    mentionSelected = 0;
+    if (mentionOverlay === undefined) return;
+    mentionOverlay.hidden = true;
+    // Cleared as well as hidden: a hidden list left in the document is still in
+    // the accessibility tree's source and still what a stale query finds.
+    mentionOverlay.replaceChildren();
+  };
+
+  const detachMentions = (): void => {
+    const textarea = mentionTextarea;
+    if (textarea === null) return;
+    textarea.removeEventListener("keydown", onMentionKeyDown, true);
+    textarea.removeEventListener("input", onMentionInput);
+    mentionTextarea = null;
+  };
+
+  /** Fabric builds one hidden textarea per edit, so this follows the session. */
+  const attachMentions = (target: IText): void => {
+    const textarea = target.hiddenTextarea;
+    if (textarea === null || textarea === mentionTextarea) return;
+    detachMentions();
+    mentionTextarea = textarea;
+    // Capture, so Tab, Escape and the arrows are decided before Fabric's own
+    // keydown listener on the same element acts on them.
+    textarea.addEventListener("keydown", onMentionKeyDown, true);
+    textarea.addEventListener("input", onMentionInput);
+  };
+
+  /** The edit the list belongs to, or nothing once Fabric has left it. */
+  const mentionTarget = (): IText | undefined =>
+    mention !== undefined && mention.target.isEditing
+      ? mention.target
+      : undefined;
+
+  /**
+   * Puts the list just below the caret. Fabric keeps its hidden textarea on the
+   * caret — `_calcTextareaPosition` maps it through the object's transform, the
+   * viewport and the canvas element's document offset on every selection
+   * change — so its inline `left`/`top` are the caret rectangle in document
+   * coordinates, and `padding-top` is the caret line's height. Reading them
+   * keeps the overlay on the public side of Fabric's editing session.
+   */
+  const placeMentions = (target: IText): void => {
+    const overlay = mentionOverlay;
+    const textarea = target.hiddenTextarea;
+    if (overlay === undefined || textarea == null) return;
+
+    const left = Number.parseFloat(textarea.style.left);
+    const top = Number.parseFloat(textarea.style.top);
+    const line = Number.parseFloat(textarea.style.paddingTop);
+
+    overlay.style.left = `${Number.isFinite(left) ? left : 0}px`;
+    overlay.style.top = `${(Number.isFinite(top) ? top : 0) + (Number.isFinite(line) ? line : 0)}px`;
+  };
+
+  const renderMentions = (target: IText): void => {
+    const overlay = mentionOverlay;
+    if (overlay === undefined) return;
+
+    overlay.replaceChildren(
+      ...mentionOptions.map((descriptor, index) => {
+        const row = document.createElement("div");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", String(index === mentionSelected));
+        row.dataset["yunariMention"] = descriptor.key;
+        row.textContent = descriptor.label;
+        // The press must not take the caret out of Fabric's textarea; the commit
+        // reads the range from the edit itself.
+        row.addEventListener("mousedown", (event) => event.preventDefault());
+        row.addEventListener("click", () => acceptMention(descriptor));
+        return row;
+      }),
+    );
+    overlay.hidden = mentionOptions.length === 0;
+    placeMentions(target);
+  };
+
+  const refreshMentions = (target: IText): void => {
+    const active = mention;
+    if (active === undefined || active.target !== target) return;
+
+    const caret = target.selectionStart;
+    const text = target.text;
+
+    // The `@` or the caret may be gone: backspace over the at-sign closes the
+    // list rather than filtering a query nothing opened.
+    if (
+      !target.isEditing ||
+      caret <= active.start ||
+      text[active.start] !== "@"
+    ) {
+      closeMentions();
+      return;
+    }
+
+    const query = text.slice(active.start + 1, caret).toLowerCase();
+    if (/\s/.test(query)) {
+      // A space is a space: the query ended and what follows is prose.
+      closeMentions();
+      return;
+    }
+
+    const all = mentions?.descriptors() ?? [];
+    mentionOptions = all
+      .filter(
+        (descriptor) =>
+          descriptor.label.toLowerCase().includes(query) ||
+          descriptor.key.toLowerCase().includes(query),
+      )
+      .slice(0, MENTION_LIMIT);
+    mentionSelected = 0;
+    renderMentions(target);
+  };
+
+  const openMentions = (target: IText): void => {
+    if (mentions === undefined) return;
+
+    // The same limit the in-place edit lives under: one literal run is the only
+    // content whose typed text maps back to run offsets Fabric cannot report.
+    const authored = authoredOf(target);
+    if (authored?.runs.length !== 1 || authored.runs[0]?.kind !== "literal") {
+      return;
+    }
+
+    if (mentionOverlay === undefined) {
+      mentionOverlay = document.createElement("div");
+      mentionOverlay.className = "editor-shell-text-mentions";
+      mentionOverlay.setAttribute("role", "listbox");
+      mentionOverlay.setAttribute("aria-label", uiCopy.textMentions.label);
+      mentionOverlay.hidden = true;
+      document.body.append(mentionOverlay);
+    }
+
+    mention = { target, start: target.selectionStart - 1 };
+    refreshMentions(target);
+  };
+
+  const acceptMention = (descriptor: SemanticKeyDescriptor): void => {
+    const active = mention;
+    const target = active?.target;
+    const insert = mentions?.insert;
+
+    closeMentions();
+    if (active === undefined || target === undefined || insert === undefined) {
+      return;
+    }
+
+    const written = insert(target, {
+      text: target.text,
+      start: active.start,
+      end: target.selectionStart,
+      semanticKey: descriptor.key,
+    });
+
+    // A refusal leaves the typed `@query` as prose, which is also what the
+    // refused-edit warning below describes; nothing else is written.
+    if (!written) return;
+
+    mentionCommitted = target;
+    target.exitEditing();
+  };
+
+  function onMentionInput(event: Event): void {
+    const target = mention?.target ?? editing?.target;
+    if (target === undefined || !target.isEditing) return;
+
+    if (mention === undefined) {
+      // Only a `@` that the author just typed opens the list; an `@` already in
+      // the text, or one that arrived in a paste, is prose.
+      if ((event as InputEvent).data === "@") openMentions(target);
+      return;
+    }
+
+    refreshMentions(target);
+  }
+
+  function onMentionKeyDown(event: KeyboardEvent): void {
+    const target = mentionTarget();
+    if (target === undefined) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      // Fabric owns arrow keys for the caret; while the list is open they move
+      // the list instead, so the caret stays where the `@` was typed.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (mentionOptions.length === 0) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      mentionSelected =
+        (mentionSelected + step + mentionOptions.length) %
+        mentionOptions.length;
+      renderMentions(target);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const chosen = mentionOptions[mentionSelected];
+      if (chosen !== undefined) acceptMention(chosen);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      // The list closes first; Fabric's own Escape ends the edit on the next
+      // press, which is the one the author can still want.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeMentions();
+      return;
+    }
+
+    if (event.key === " " || event.key === "Enter") {
+      // Neither accepts: a space is a space and Enter is a newline.
+      closeMentions();
+    }
+  }
   /**
    * The text this edit's view painted, so an edit that changed nothing is told
    * apart from one that did.
@@ -234,11 +500,27 @@ export function createTextManager(
     // authoring view it paints afterwards. `entryText` stays that display,
     // because it is the one Fabric's own modification test used.
     editing = { target, painted: target.text, entryText: target.text };
+    attachMentions(target);
   };
 
   const onEditingExited = (event: { target?: unknown }): void => {
     const target = event.target;
     if (!(target instanceof IText)) return;
+
+    closeMentions();
+    detachMentions();
+
+    // A chosen reading is not typed text to keep: the runs and the binding are
+    // already written, so the refusal below would warn about the very shape an
+    // insertion is meant to produce. The repaint is still this side's, because
+    // Fabric leaves the flat typed string standing.
+    if (mentionCommitted === target) {
+      mentionCommitted = undefined;
+      editing = undefined;
+      repaint(target);
+      canvas.requestRenderAll();
+      return;
+    }
     const record = editing?.target === target ? editing : undefined;
     editing = undefined;
 
@@ -671,7 +953,14 @@ export function createTextManager(
     setRepaint(paint) {
       repaint = paint;
     },
+    setMentions(port) {
+      mentions = port;
+    },
     destroy() {
+      closeMentions();
+      detachMentions();
+      mentionOverlay?.remove();
+      mentionOverlay = undefined;
       canvas.off("mouse:dblclick" as never, onDoubleClick as never);
       canvas.off("text:editing:entered" as never, onEditingEntered as never);
       canvas.off("text:editing:exited" as never, onEditingExited as never);

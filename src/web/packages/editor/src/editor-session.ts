@@ -88,6 +88,7 @@ import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
+import { insertReading } from "./selection-inspector/run-edits.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
@@ -602,6 +603,25 @@ export class EditorSession {
     // authored runs belong. The runtime owns what an object paints, so the
     // put-back goes through it rather than a second repaint path here.
     options.shell.editor.textManager.setRepaint(() => this.#runtime.refresh());
+    // An inline `@` names a reading. The run write is the document's, because
+    // it owns the node's bindings, and the readings offered are the catalogue's.
+    options.shell.editor.textManager.setMentions({
+      descriptors,
+      insert: (object, range) => {
+        const nodeId = object.get("id");
+        if (typeof nodeId !== "string" || nodeId === "") return false;
+
+        return insertReading(
+          {
+            object,
+            nodeId,
+            bindings: () => this.#document.envelope.bindings?.[nodeId] ?? [],
+            setBindings: (next) => this.#document.setBindings(nodeId, next),
+          },
+          range,
+        );
+      },
+    });
     this.#newObjects = createNewObjectPanel(
       options.panelHosts.add,
       options.shell.editor,

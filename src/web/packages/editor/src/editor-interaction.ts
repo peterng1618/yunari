@@ -7,6 +7,7 @@ import type { GroupingManager } from "./grouping-manager/index.js";
 import type { HistoryGlobalsPort } from "./history-manager/index.js";
 import type {
   TextCreationOptions,
+  TextMentionPort,
   TextPlacementPort,
 } from "./text-manager/index.js";
 import type { ViewportManager } from "./viewport-manager/index.js";
@@ -50,6 +51,11 @@ export interface EditorInteraction {
      * asked for rather than done here.
      */
     setRepaint(paint: (object: IText) => void): void;
+    /**
+     * Installs the readings an inline `@` may insert, and the write that adds
+     * one. The session owns the node's bindings, so the manager asks for it.
+     */
+    setMentions(port: TextMentionPort): void;
   };
   readonly layerManager: {
     bringToFront(object?: FabricObject): void;

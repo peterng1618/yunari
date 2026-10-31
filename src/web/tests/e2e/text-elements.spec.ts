@@ -239,6 +239,24 @@ function runTextsOf(
   return (runs ?? []).map((run) => run.text ?? "");
 }
 
+type AuthoredRun = {
+  readonly kind?: string;
+  readonly text?: string;
+  readonly bindingId?: string;
+};
+
+/** The authored runs themselves, when the shape under test is the run list. */
+function runsOf(
+  authored: Record<string, unknown> | undefined,
+): readonly AuthoredRun[] {
+  const runs = (
+    authored?.["yunariText"] as
+      | { readonly runs?: readonly AuthoredRun[] }
+      | undefined
+  )?.runs;
+  return runs ?? [];
+}
+
 /** Saves through File ▸ Save to library and answers the host's own id. */
 async function saveToLibrary(page: Page): Promise<string> {
   const saved = page.waitForRequest(
@@ -652,6 +670,52 @@ test.describe("text and text box elements", () => {
     expect(runTextsOf(await readObject(page, placed.name ?? "Text"))).toEqual([
       TYPED_TEXT,
     ]);
+  });
+
+  test("an inline @ inserts a reading run rather than characters", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    test.setTimeout(120_000);
+
+    await page.goto(HOST_EDITOR);
+    await openBlank(page);
+    await placeText(page, { x: 300, y: 200 });
+    const placed = (await readScene(page)).at(-1);
+    if (placed === undefined) throw new Error("the click made nothing");
+
+    await typeInto(page, placed.id, "Load ");
+    await page.keyboard.type("@");
+    const list = page.locator(".editor-shell-text-mentions");
+    await expect(list).toBeVisible();
+    await page.keyboard.type("ram");
+    const first = list.locator("[role='option']").first();
+    await expect(first).toBeVisible();
+
+    // Tab takes the highlighted reading; the list closes and the edit ends.
+    await page.keyboard.press("Tab");
+    await expect(list).toBeHidden();
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.editing)
+      .toBe(false);
+
+    const authored = await readObject(page, placed.name ?? "Text");
+    const runs = runsOf(authored);
+    // The typed `@ram` is not prose: the reading is a value run beside the
+    // words the author typed, and the words are still there.
+    expect(runs.map((run) => run.kind)).toEqual(["literal", "value"]);
+    expect(runs[0]?.text).toBe("Load ");
+    expect(runs[1]?.bindingId).toMatch(/^binding-/);
+
+    // The binding is document state, not a canvas decoration.
+    const id = await saveToLibrary(page);
+    await page.goto(`${HOST_EDITOR}?theme=${id}`);
+    await expect.poll(async () => (await readScene(page)).length).toBe(1);
+    expect(
+      runsOf(await readObject(page, placed.name ?? "Text")).map(
+        (run) => run.kind,
+      ),
+    ).toEqual(["literal", "value"]);
   });
 
   test("Escape during placement creates nothing and leaves the history alone", async ({

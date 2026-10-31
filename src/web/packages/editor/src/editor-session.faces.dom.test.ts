@@ -163,6 +163,7 @@ function createSession(
           addText: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         historyManager: { attachGlobals: () => {}, saveState },

@@ -138,6 +138,7 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
           },
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
+          setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
         viewport: {

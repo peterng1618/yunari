@@ -504,6 +504,14 @@ element per region. The store mode's facet popover is where it is drawn; its
 trigger is the well with chevron, and the count beside a value is how many items
 are behind it.
 
+**The inline reading list is a popup of choice rows, not a new control.** Typing
+`@` in a text opens it at the caret; each row is one reading, filtered as the
+author keeps typing. `↑`/`↓` move the highlight, `Tab` takes the highlighted
+reading, `Space` stays a space, and `Escape` closes the list before it ends the
+edit. The accepted reading becomes a value run, so it formats, carries its unit
+and reports a missing source like any other binding — it is never copied in as
+characters.
+
 **The colour area and the gradient track take their sizes from the panel
 rhythm; both channels are `role="slider"`.** The keyboard moves one channel at a
 time with arrows 1, Shift/Page 10 and Home/End, and Escape closes and returns

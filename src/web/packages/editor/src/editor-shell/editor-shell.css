@@ -1063,6 +1063,34 @@ body,
   background: color-mix(in srgb, var(--shell-text) 12%, transparent);
   outline: none;
 }
+/* The inline `@` list the text manager opens at the caret. It is the menu
+   popup's paint built outside Base UI — document coordinates because Fabric's
+   caret rectangle already carries the canvas element's offset — so it states
+   its own box rather than borrowing a component's. Its rows are choice rows. */
+.editor-shell-text-mentions {
+  position: absolute;
+  z-index: 60;
+  min-width: var(--menu-min-width);
+  max-width: calc(var(--menu-min-width) * 2);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--shell-edge);
+  background: var(--shell-surface);
+  color: var(--shell-text);
+  box-shadow: var(--elev-2);
+}
+.editor-shell-text-mentions [role="option"] {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  cursor: pointer;
+}
+.editor-shell-text-mentions [role="option"][aria-selected="true"] {
+  background: color-mix(in srgb, var(--shell-text) 12%, transparent);
+}
 /* The chosen display's tick, in the gutter before the label. A fixed width so
    the labels stay left-aligned whether or not one is showing: picking a
    display moves *every* label, including the one the pointer is travelling

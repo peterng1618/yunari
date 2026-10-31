@@ -380,6 +380,10 @@ export const uiCopy = {
     ellipsis: "Ellipsis",
     overflowVisible: "Visible",
   },
+  /** The inline `@` list's own name, so the popup announces what it offers. */
+  textMentions: {
+    label: "Readings",
+  },
   menus: {
     /** The menubar's own name, so a screen reader reaching the three menus is
      *  told what the group is before it reads each one. */
