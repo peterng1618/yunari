@@ -142,24 +142,38 @@ export function readPreviewRatioTokens(
   }
 }
 
+/** Writes the list, and answers whether it will survive the reload.
+ *
+ *  A store that exists but refuses the write (a full quota, a browser policy)
+ *  is the same outcome as no store at all: the list lives for the session
+ *  only, and the surface that wrote it says so rather than letting the tab's
+ *  other state claim a persistence that did not happen. */
 export function writePreviewRatioTokens(
   storage: Storage | undefined,
   tokens: readonly string[],
-): void {
+): boolean {
+  if (storage === undefined) return false;
   try {
-    storage?.setItem(PREVIEW_RATIO_STORAGE_KEY, JSON.stringify(tokens));
+    storage.setItem(PREVIEW_RATIO_STORAGE_KEY, JSON.stringify(tokens));
+    return true;
   } catch {
-    // The author's list still lives for the session; only persistence failed.
+    return false;
   }
 }
 
 /** Removing the key is "the defaults again", the same absence-means-default
  *  rule `palette.ts` uses. */
-export function clearPreviewRatioTokens(storage: Storage | undefined): void {
+export function clearPreviewRatioTokens(
+  storage: Storage | undefined,
+): boolean {
+  if (storage === undefined) return false;
   try {
-    storage?.removeItem(PREVIEW_RATIO_STORAGE_KEY);
+    storage.removeItem(PREVIEW_RATIO_STORAGE_KEY);
+    return true;
   } catch {
-    // Nothing to undo: the key was never cleared, and the defaults still apply.
+    // Nothing to undo: the key was never cleared, and the defaults still apply
+    // for the session — but a reload would read the key that survived.
+    return false;
   }
 }
 

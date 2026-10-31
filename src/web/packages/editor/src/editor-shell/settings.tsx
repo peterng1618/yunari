@@ -286,11 +286,15 @@ function PreviewsTab({
   /** Why the last Add did nothing, as the refusal rule words it. `undefined` is "no refusal"
    *  and renders nothing — never an empty line standing in for one. */
   const [reason, setReason] = useState<string | undefined>(undefined);
+  /** Whether the last write will survive a reload. `undefined` until one has
+   *  been attempted; a store that exists but refuses the write reads the same
+   *  as a browser that has none, which is what the note below says. */
+  const [persisted, setPersisted] = useState<boolean | undefined>(undefined);
 
   /** Storage first, then the live list, as the Appearance tab writes its
    *  choice: a write that failed still leaves the session's list changed. */
   const commit = (next: readonly string[]): void => {
-    writePreviewRatioTokens(storage, next);
+    setPersisted(writePreviewRatioTokens(storage, next));
     setActivePreviewRatios(next);
   };
 
@@ -333,7 +337,7 @@ function PreviewsTab({
   const reset = (): void => {
     // Removing the key is what returns the list to the defaults; the live list
     // is set explicitly because the module never re-reads storage.
-    clearPreviewRatioTokens(storage);
+    setPersisted(clearPreviewRatioTokens(storage));
     setReason(undefined);
     setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
   };
@@ -433,7 +437,7 @@ function PreviewsTab({
           {reason}
         </p>
       )}
-      {storage === undefined ? (
+      {storage === undefined || persisted === false ? (
         <p className="text-sm text-muted">
           {uiCopy.settings.previewRatiosSessionOnly}
         </p>

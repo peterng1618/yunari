@@ -1170,6 +1170,33 @@ describe("Previews", () => {
     expect(localStorage.length).toBe(0);
   });
 
+  it("says the list is session-only once a store that exists refuses the write", async () => {
+    // A store that exists but throws (a full quota, a browser policy) is the
+    // same outcome as no store: the list lives for the session, and the tab
+    // must not go on reading as though the write had persisted.
+    const refusing = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => undefined,
+    } as unknown as Storage;
+    const host = mountWith(refusing);
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    expect(
+      tab.textContent,
+      "nothing has been attempted yet, so nothing is claimed",
+    ).not.toContain(uiCopy.settings.previewRatiosSessionOnly);
+
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+
+    expect(rows(tab)).toHaveLength(6);
+    expect(tab.textContent).toContain(uiCopy.settings.previewRatiosSessionOnly);
+  });
+
   it("adds a circle without asking for a ratio", async () => {
     const host = mount();
     await press(gear(host));
