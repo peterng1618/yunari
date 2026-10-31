@@ -57,6 +57,30 @@ describe("the display's chrome", () => {
     );
   });
 
+  it("reserves the notch above a top strip and the home indicator below a bottom one", () => {
+    // Swapping the two slots would satisfy every reference comparison that
+    // compares strips to each other, so each side is pinned to its own inset.
+    const top = putStrip({
+      side: "top",
+      id: "yunari-top",
+      text: "top",
+      background: "#003a4a",
+      color: "#7fdce9",
+    });
+    const bottom = putStrip({
+      side: "bottom",
+      id: "yunari-bottom",
+      text: "bottom",
+      background: "#003a4a",
+      color: "#7fdce9",
+    });
+
+    expect(top.style.cssText).toContain("env(safe-area-inset-top)");
+    expect(top.style.cssText).not.toContain("env(safe-area-inset-bottom)");
+    expect(bottom.style.cssText).toContain("env(safe-area-inset-bottom)");
+    expect(bottom.style.cssText).not.toContain("env(safe-area-inset-top)");
+  });
+
   it("replaces a strip of the same kind rather than stacking it", () => {
     // The availability strip is rebuilt on every refresh cadence and the
     // connection banner changes as the transport moves: one kind of notice is
