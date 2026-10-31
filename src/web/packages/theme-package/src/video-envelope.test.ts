@@ -211,6 +211,39 @@ describe("readVideoFacts", () => {
     ]);
   });
 
+  it("bounds the presentation, not just the media, when an edit list holds the last frame", () => {
+    const elst = boxAt(conforming, ["moov", "trak", "edts", "elst"]);
+    // The 2 s of media is unchanged; the edit list presents it for 60.5 s by
+    // extending its single segment. A player holds the last frame that long.
+    const crafted = patchUint32(conforming, elst.payload + 8, 60_500);
+
+    const facts = readVideoFacts(crafted)!;
+    expect(videoRefusals(PATH, facts)).toEqual([
+      `${PATH}: duration 60500 ms exceeds the 60000 ms maximum`,
+    ]);
+  });
+
+  it("does not let a shorter edit list hide longer media", () => {
+    const elst = boxAt(conforming, ["moov", "trak", "edts", "elst"]);
+    // 1 s of presentation over 2 s of media: still 2 s to decode and loop.
+    const crafted = patchUint32(conforming, elst.payload + 8, 1_000);
+
+    const facts = readVideoFacts(crafted)!;
+    expect(facts.durationMs).toBe(2_000);
+    expect(videoRefusals(PATH, facts)).toEqual([]);
+  });
+
+  it("reads the movie header's duration as a presentation bound", () => {
+    const mvhd = boxAt(conforming, ["moov", "mvhd"]);
+    // The track's own timing stays 2 s; the movie claims 60.5 s.
+    const crafted = patchUint32(conforming, mvhd.payload + 16, 60_500);
+
+    const facts = readVideoFacts(crafted)!;
+    expect(videoRefusals(PATH, facts)).toEqual([
+      `${PATH}: duration 60500 ms exceeds the 60000 ms maximum`,
+    ]);
+  });
+
   it("reads an exhausted box walk as unreadable, not as a video without audio", () => {
     // audio.mp4 has the video trak first. Enough free boxes between it and the
     // audio trak exhaust the walk's budget before the audio is reached.

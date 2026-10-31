@@ -40,6 +40,8 @@ export const VIDEO_TRIM = {
 export interface VideoFacts {
   readonly width: number;
   readonly height: number;
+  /** The longest of media, edit-list, track and movie duration, so a clip that
+   *  repeats or holds its media cannot present past the cap. */
   readonly durationMs: number;
   /** Measured average; a cadence that is not constant says so in `constantFrameRate`. */
   readonly frameRate: number;
@@ -60,6 +62,7 @@ const MAX_BOXES = 1024;
 const MAX_DEPTH = 8;
 const MAX_STSD_ENTRIES = 32;
 const MAX_STTS_ENTRIES = 100_000;
+const MAX_ELST_ENTRIES = 256;
 const MAX_SPS_BYTES = 4096;
 const VISUAL_SAMPLE_ENTRY_BYTES = 78;
 
@@ -88,6 +91,12 @@ interface Track {
   samples: number;
   /** `stts`'s total media time in `timescale` ticks: what the player actually decodes. */
   sampleTicks: number;
+  /** Sum of `elst` segment_durations in movie-timescale ticks: what the track
+   *  presents, which an edit can stretch past its media. `undefined` without an
+   *  edit list. */
+  editTicks: number | undefined;
+  /** `tkhd` duration in movie-timescale ticks. */
+  trackTicks: number | undefined;
   deltas: Set<number>;
   codec: string | undefined;
   width: number;
@@ -124,8 +133,17 @@ function readVideo(bytes: Uint8Array): VideoRead {
   const faststart = mdat !== undefined && moov.start < mdat.start;
 
   const tracks: Track[] = [];
+  let movieTimescale: number | undefined;
+  let movieTicks: number | undefined;
   for (const box of boxes(view, moov.start, moov.end, budget, 1)) {
     if (box.type === "trak") tracks.push(readTrak(view, box, budget));
+    else if (box.type === "mvhd") {
+      const timing = readTimescaleDuration(view, box);
+      if (timing !== undefined) {
+        movieTimescale = timing.timescale;
+        movieTicks = timing.duration;
+      }
+    }
   }
   if (budget.truncated) return unreadable(budget, mp4);
   const video = tracks.find((track) => track.handler === "vide");
@@ -142,9 +160,27 @@ function readVideo(bytes: Uint8Array): VideoRead {
       : (video.duration / timescale) * 1000;
   const sampleMs =
     video.sampleTicks > 0 ? (video.sampleTicks / timescale) * 1000 : undefined;
-  // The two fields can lie about each other. For a cap the larger wins: a
-  // duration under-reported by either one must not shorten the file.
-  const durationMsRaw = Math.max(mdhdMs ?? 0, sampleMs ?? 0);
+  // Edit-list and track durations are stated on the movie timeline, so a
+  // conversion with no movie timescale cannot bound the presentation. Refuse
+  // rather than ignore the claim.
+  const editMs = ticksToMs(video.editTicks, movieTimescale);
+  const trackMs = ticksToMs(video.trackTicks, movieTimescale);
+  const movieMs = ticksToMs(movieTicks, movieTimescale);
+  if (
+    (video.editTicks !== undefined && editMs === undefined) ||
+    (video.trackTicks !== undefined && trackMs === undefined)
+  )
+    return unreadable(budget, mp4);
+  // The fields can lie about each other. For a cap the larger wins: a duration
+  // under-reported by any one must not shorten the file, and an edit list that
+  // repeats or holds media presents longer than the sample table.
+  const durationMsRaw = Math.max(
+    mdhdMs ?? 0,
+    sampleMs ?? 0,
+    editMs ?? 0,
+    trackMs ?? 0,
+    movieMs ?? 0,
+  );
 
   const uniformDelta =
     video.deltas.size === 1 ? [...video.deltas][0] : undefined;
@@ -191,6 +227,17 @@ function unreadable(budget: Budget, mp4: boolean): VideoRead {
 function capCeil(value: number): number {
   const nearest = Math.round(value);
   return Math.abs(value - nearest) < 1e-6 ? nearest : Math.ceil(value);
+}
+
+/** Ticks to milliseconds, or `undefined` when either side is missing. A zero
+ *  timescale is not a unit, so it converts nothing. */
+function ticksToMs(
+  ticks: number | undefined,
+  timescale: number | undefined,
+): number | undefined {
+  return ticks === undefined || timescale === undefined || timescale <= 0
+    ? undefined
+    : (ticks / timescale) * 1000;
 }
 
 /** Every way `facts` breaks the envelope, in a fixed order. Empty means conforming. */
@@ -345,15 +392,27 @@ function readTrak(view: DataView, trak: BoxSpan, budget: Budget): Track {
     height: 0,
     profile: undefined,
     chromaFormat: undefined,
+    editTicks: undefined,
+    trackTicks: undefined,
   };
-  for (const mdia of boxes(view, trak.start, trak.end, budget, 1)) {
-    if (mdia.type !== "mdia") continue;
-    for (const box of boxes(view, mdia.start, mdia.end, budget, 2)) {
+  for (const child of boxes(view, trak.start, trak.end, budget, 1)) {
+    if (child.type === "edts") {
+      const editTicks = readEdts(view, child, budget);
+      if (editTicks !== undefined) track.editTicks = editTicks;
+      continue;
+    }
+    if (child.type === "tkhd") {
+      const timing = readTimescaleDuration(view, child);
+      if (timing !== undefined) track.trackTicks = timing.duration;
+      continue;
+    }
+    if (child.type !== "mdia") continue;
+    for (const box of boxes(view, child.start, child.end, budget, 2)) {
       if (box.type === "hdlr") {
         if (box.start + 12 <= box.end)
           track.handler = fourcc(view, box.start + 8);
       } else if (box.type === "mdhd") {
-        const timing = readMdhd(view, box);
+        const timing = readTimescaleDuration(view, box);
         if (timing !== undefined) {
           track.timescale = timing.timescale;
           track.duration = timing.duration;
@@ -373,7 +432,68 @@ function readTrak(view: DataView, trak: BoxSpan, budget: Budget): Track {
   return track;
 }
 
-function readMdhd(
+/** The sum of an `edts`'s edit-list segment durations, in movie-timescale
+ *  ticks. An edit can hold or repeat media, so this presentation length can
+ *  exceed the media the sample table carries. */
+function readEdts(
+  view: DataView,
+  edts: BoxSpan,
+  budget: Budget,
+): number | undefined {
+  for (const box of boxes(view, edts.start, edts.end, budget, 2)) {
+    if (box.type === "elst") return readElst(view, box, budget);
+  }
+  return undefined;
+}
+
+function readElst(
+  view: DataView,
+  box: BoxSpan,
+  budget: Budget,
+): number | undefined {
+  if (box.start + 8 > box.end) {
+    budget.truncated = true;
+    return undefined;
+  }
+  const version = view.getUint8(box.start);
+  // Only the two defined layouts can be read; an unknown one may claim any
+  // presentation length, so it is unreadable rather than ignored.
+  if (version !== 0 && version !== 1) {
+    budget.truncated = true;
+    return undefined;
+  }
+  const entryBytes = version === 1 ? 20 : 12;
+  const declared = view.getUint32(box.start + 4);
+  const count = Math.min(
+    declared,
+    Math.floor((box.end - box.start - 8) / entryBytes),
+    MAX_ELST_ENTRIES,
+  );
+  // Entries the budget dropped would under-report the presentation, so the
+  // untidy list is unreadable rather than short.
+  if (count < declared) {
+    budget.truncated = true;
+    return undefined;
+  }
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const offset = box.start + 8 + i * entryBytes;
+    total +=
+      version === 1
+        ? view.getUint32(offset) * 2 ** 32 + view.getUint32(offset + 4)
+        : view.getUint32(offset);
+    if (!Number.isSafeInteger(total)) {
+      budget.truncated = true;
+      return undefined;
+    }
+  }
+  return count > 0 ? total : undefined;
+}
+
+/** `mvhd`, `tkhd` and `mdhd` share the version/creation/modification/timescale/
+ *  duration prefix. Edit-list and track durations are on the movie timeline,
+ *  media duration on the track's own. */
+function readTimescaleDuration(
   view: DataView,
   box: BoxSpan,
 ): { timescale: number; duration: number } | undefined {
