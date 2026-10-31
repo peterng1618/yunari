@@ -55,7 +55,9 @@ on:
 # dispatch false -> false, dispatch absent -> null -> dry run. Workflow level so
 # both jobs read the same decision.
 env:
-  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(inputs.dry_run) != 'false' ? 'true' : 'false' }}"
+  # `inputs` is only in scope for a reusable workflow; this one also runs on a
+  # release event, so the dispatch input is read through the event payload.
+  DRY_RUN: "${{ github.event_name == 'workflow_dispatch' && toJSON(github.event.inputs.dry_run) != 'false' ? 'true' : 'false' }}"
 
 concurrency:
   # One publish at a time, whatever the ref: the version is only known inside
