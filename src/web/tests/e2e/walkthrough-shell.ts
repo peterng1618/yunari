@@ -557,7 +557,10 @@ export async function editCommits(page: Page): Promise<number> {
  *
  *  The four are the field's own surroundings and nothing else: the Composition
  *  pane the selection was made through, the selection itself, the document the
- *  shell names, and the field the draft lived in. */
+ *  shell names, and the name control the draft lived in — the heading before
+ *  the edit, the rename field while it is open. The field itself exists only
+ *  while editing (`selection-inspector/inspector.tsx`), so reading the input
+ *  alone would make the baseline leg false and the comparison vacuous. */
 export async function surroundingState(
   page: Page,
   id: string,
@@ -578,7 +581,10 @@ export async function surroundingState(
     // said nothing where a reader can see it. The other three legs read state
     // the same way, and `null` is what a hidden one contributes.
     document: (await chip.isVisible()) ? await chip.textContent() : null,
-    field: await page.locator(FIELD_SELECTOR).isVisible(),
+    field:
+      (await page
+        .locator(`${REGION_SELECTOR.inspector} ${HEADING_HOOK}`)
+        .isVisible()) || (await page.locator(FIELD_SELECTOR).isVisible()),
   };
 }
 
