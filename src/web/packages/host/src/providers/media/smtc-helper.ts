@@ -22,12 +22,17 @@ export interface SmtcSession {
   readonly positionS: number;
   readonly durationS: number;
   readonly app: string;
+  /**
+   * The session's identity: its AUMID plus a digest of its media properties.
+   * SMTC exposes no per-session id, so two windows of one app would otherwise
+   * collapse to the same key.
+   */
   readonly sessionId: string;
 }
 
 export interface ArtworkBytes {
-  /** The AUMID of the session the picture belongs to, so a caller can refuse
-   *  another session's art under the selected track's title. */
+  /** The identity of the session the picture belongs to, so a caller can
+   *  refuse another session's art under the selected track's title. */
   readonly sessionId: string;
   readonly sha256: string;
   readonly bytes: Uint8Array;
@@ -107,6 +112,8 @@ function Get-AppName($aumid) {
   return $name
 }
 
+function Get-SessionId($a,$t,$r,$b){$a+':'+([string]$t+[string]$r+[string]$b).GetHashCode()}
+
 function Get-SessionLine($session, $isCurrent = $false) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $playback = $session.GetPlaybackInfo()
@@ -120,7 +127,7 @@ function Get-SessionLine($session, $isCurrent = $false) {
   [ordered]@{
     kind = 'session'
     app = Get-AppName $session.SourceAppUserModelId
-    sessionId = $session.SourceAppUserModelId
+    sessionId = Get-SessionId $session.SourceAppUserModelId $properties.Title $properties.Artist $properties.AlbumTitle
     title = $properties.Title
     artist = $properties.Artist
     album = $properties.AlbumTitle
@@ -130,7 +137,7 @@ function Get-SessionLine($session, $isCurrent = $false) {
     current = $isCurrent
     positionS = [math]::Round($position, 3)
     durationS = [math]::Round($timeline.EndTime.TotalSeconds, 3)
-    # The artwork half reads this to tell "no thumbnail" from "broken emit".
+    # Distinguishes no thumbnail from a broken emit.
     hasArtwork = ($null -ne $properties.Thumbnail)
   }
 }
@@ -225,12 +232,11 @@ function Test-CompleteImage($buffer, $ext) {
   return $false
 }
 
-# A definitive negative: this track will not be read again.
 function Write-ArtworkMiss($id, $why) {
   [Console]::Out.WriteLine(([ordered]@{kind='artwork-miss';sessionId=$id;reason=$why} | ConvertTo-Json -Compress))
 }
 
-function Get-ArtworkResult($session) {
+function Get-ArtworkResult($session, $sessionId) {
   $properties = Wait-WinRt ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
   $thumbnail = $properties.Thumbnail
   if ($null -eq $thumbnail) { return @{ status = 'retry' } }
@@ -266,7 +272,7 @@ function Get-ArtworkResult($session) {
   $hex = -join ($hash | ForEach-Object { $_.ToString('x2') })
   @{ status = 'artwork'; line = [ordered]@{
     kind = 'artwork'
-    sessionId = $session.SourceAppUserModelId
+    sessionId = $sessionId
     sha256 = $hex
     ext = $ext
     base64 = [Convert]::ToBase64String($buffer)
@@ -278,7 +284,7 @@ function Try-EmitArtwork($session, $line) {
   $key = "$sessionId|$($line['title'])|$($line['artist'])|$($line['album'])"
   if ($lastArtwork.ContainsKey($sessionId) -and $lastArtwork[$sessionId] -eq $key) { return }
   try {
-    $result = Get-ArtworkResult $session
+    $result = Get-ArtworkResult $session $sessionId
   } catch {
     return
   }
@@ -310,9 +316,7 @@ function Try-EmitArtwork($session, $line) {
 const POLL = `
 $manager = $null
 while ($true) {
-  # Audio is read every poll and independently of any session: a machine with
-  # no media session still reports its volume, and a manager failure below
-  # does not stop this line.
+  # Audio is independent of any session and is read every poll.
   try {
     [Console]::Out.WriteLine((Get-AudioLine | ConvertTo-Json -Compress))
   } catch {
@@ -336,9 +340,7 @@ while ($true) {
   try {
     $raw = $manager.GetSessions()
     if ($null -eq $raw) { throw 'GetSessions returned null' }
-    # The WinRT IVectorView arrives as a bare __ComObject: member enumeration
-    # reads Count over its items (empty) and the foreach below sees nothing.
-    # Materialise it into a PowerShell array first.
+    # A bare __ComObject: materialise it so foreach sees its items.
     $sessions = @($raw | ForEach-Object { $_ })
   } catch {
     $sessions = $null
@@ -355,7 +357,7 @@ while ($true) {
       } catch {
         $currentId = $null
       }
-      # Per session, so one unreadable app does not hide the others.
+      # Per session, so one failure cannot hide the rest.
       foreach ($session in $sessions) {
         try {
           $isCurrent = ($null -ne $currentId) -and ($session.SourceAppUserModelId -eq $currentId)
@@ -366,6 +368,7 @@ while ($true) {
           [Console]::Out.WriteLine('{"kind":"error"}')
         }
       }
+      if($WantArtwork-and$lastArtwork.Count-gt64){$lastArtwork.Clear();$artworkAttempts.Clear()}
     }
   }
   Start-Sleep -Milliseconds 1000

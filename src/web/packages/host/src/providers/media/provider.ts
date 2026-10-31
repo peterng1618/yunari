@@ -533,29 +533,39 @@ export class MediaProvider implements SensorProvider {
   }
 
   /**
-   * The session every media key answers from: the first playing one, else the
-   * system's current one, else nothing. A session line not refreshed for
-   * `SESSION_TTL_MS` is dropped, so a helper that stops reporting does not
-   * leave a frozen position claimed as a reading.
+   * The session every media key answers from: the most recently seen playing
+   * one, else the most recently seen current one, else nothing. A session id
+   * includes its track, so a track change leaves the old id unreferenced until
+   * the TTL drops it; preferring the newest sighting keeps that stale entry
+   * from being selected. A session line not refreshed for `SESSION_TTL_MS` is
+   * dropped, so a helper that stops reporting does not leave a frozen position
+   * claimed as a reading.
    */
   #selected(now: number): SmtcSession | undefined {
     for (const [id, live] of this.#sessions) {
       if (now - live.seenAtMs > SESSION_TTL_MS) this.#sessions.delete(id);
     }
 
-    let playing: SmtcSession | undefined;
-    let current: SmtcSession | undefined;
+    let playing: LiveSession | undefined;
+    let current: LiveSession | undefined;
 
-    for (const { session } of this.#sessions.values()) {
-      if (playing === undefined && session.state === "playing") {
-        playing = session;
+    for (const live of this.#sessions.values()) {
+      const { session } = live;
+      if (
+        session.state === "playing" &&
+        (playing === undefined || live.seenAtMs >= playing.seenAtMs)
+      ) {
+        playing = live;
       }
-      if (current === undefined && session.sessionId === this.#currentId) {
-        current = session;
+      if (
+        session.sessionId === this.#currentId &&
+        (current === undefined || live.seenAtMs >= current.seenAtMs)
+      ) {
+        current = live;
       }
     }
 
-    const selected = playing ?? current;
+    const selected = (playing ?? current)?.session;
     const key = selected === undefined ? undefined : trackKeyOf(selected);
 
     if (key !== this.#trackKey) {
