@@ -138,20 +138,33 @@ orientation for the attached 9.2" with rotate mode 2.
 3. `stop-play` (123).
 4. Send `play-block` (121) for each block, length big-endian at 8–11, byte 12
    set to 1 only on the block that ends the file.
-5. Wait **30 ms**, read the ack. If reply byte 8 is above 3, poll
-   `buffer-level` (122) every 50 ms until depth ≤ 2, with a 30 s ceiling.
-6. At end of file, rewind and keep sending — playback never stops at EOF.
+5. **Wait the block's own share of the clip's playing time** (10% ahead of
+   realtime, 30 ms floor, measured from the write), then read the ack.
+6. If reply byte 8 is above 3, poll `buffer-level` (122) every 50 ms until
+   depth ≤ 2, with a 30 s ceiling. With a paced feed this is a ceiling that
+   is never reached, not the clock.
+7. At end of file, rewind and keep sending — playback never stops at EOF.
 
-**The ack depth is the clock.** A long drain is normal: at the clip's bitrate
-one block is roughly a second of picture, so draining from four to two takes
-about two seconds. Only a drain that hits the 30 s ceiling is a fault, and the
-driver logs exactly that.
+**The clip's playing time is the clock; the ring depth is the ceiling.** A
+feed that writes blocks as fast as the acks allow runs about ten times
+realtime (48 ms between blocks, measured 2026-10-31), fills the ring to four,
+then stalls in a drain for ~2.2 s while it waits for the decoder to play back
+down to two — and the glass runs dry before the feed resumes. That is the
+picture that pauses for a second or two and then jumps. Paced to the clip's own
+length, the same block stream is uniform and no drain fires.
 
 ### Measured on the 9.2"
 
 With the vendor's feed: no cancelled block, no restart and no drain timeout over
 ten minutes; depth oscillates 2–4 in a steady ~2.07 s drain. Camera frames of
 the glass 16 s apart differed (PSNR 24 dB), so the picture advanced.
+
+Unpaced, on 2026-10-31: block gaps were 48 ms for five blocks, then a 2.17 s
+hole, repeating; overlay pushes took 100 ms and 1,300 ms in alternation. Filmed
+at 30 fps the glass barely changed across 21 s (frame-difference median 0.35,
+maximum 1.39 on an 8-bit grey crop) — a still picture with occasional nudges.
+Paced to the clip: gaps p50 142 ms with a 195 ms maximum, overlay pushes ~60 ms,
+and the same film showed continuous motion (median 0.63, maximum 45.7).
 
 ## Quirks and failure modes
 

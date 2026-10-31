@@ -155,13 +155,13 @@ const MODEL = {
 
 function opened(
   fake: ReturnType<typeof fakePanel>,
-  encode?: () => Promise<{ h264: Uint8Array; fps: number }>,
+  encode?: () => Promise<{ h264: Uint8Array; fps: number; seconds: number }>,
 ): TurUsbPanel {
   // The driver's device type is the usb library's, which a test cannot mint.
   return new TurUsbPanel(
     fake.device as unknown as never,
     MODEL,
-    encode ?? (async () => ({ h264: new Uint8Array(), fps: 0 })),
+    encode ?? (async () => ({ h264: new Uint8Array(), fps: 0, seconds: 0 })),
   );
 }
 
@@ -217,7 +217,7 @@ describe("TurUsbPanel", () => {
   it("feeds video blocks until stopped, then sends StopPlay", async () => {
     const fake = fakePanel();
     const h264 = new Uint8Array(H264_BLOCK_BYTES + 4).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -255,7 +255,7 @@ describe("TurUsbPanel", () => {
     const fake = fakePanel();
     const size = 1_000;
     const h264 = new Uint8Array(size * 3).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -275,7 +275,7 @@ describe("TurUsbPanel", () => {
   it("sets the panel's frame rate to the clip's own and flags its final block", async () => {
     const fake = fakePanel();
     const h264 = Uint8Array.of(0x11, 0x22, 0x33);
-    const panel = opened(fake, async () => ({ h264, fps: 24 }));
+    const panel = opened(fake, async () => ({ h264, fps: 24, seconds: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
@@ -294,7 +294,7 @@ describe("TurUsbPanel", () => {
   it("drains the decoder when a block's ack reports a full ring", async () => {
     const fake = fakePanel();
     const h264 = new Uint8Array(H264_BLOCK_BYTES * 2).fill(0x11);
-    const panel = opened(fake, async () => ({ h264, fps: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
     await panel.open();
     fake.reset();
 
@@ -330,7 +330,7 @@ describe("TurUsbPanel", () => {
     h264[0] = 0xaa;
     h264[H264_BLOCK_BYTES] = 0xbb;
     h264[2 * H264_BLOCK_BYTES] = 0xcc;
-    const panel = opened(fake, async () => ({ h264, fps: 0 }));
+    const panel = opened(fake, async () => ({ h264, fps: 0, seconds: 0 }));
     await panel.open();
     fake.reset();
     fake.setLevel(0);
