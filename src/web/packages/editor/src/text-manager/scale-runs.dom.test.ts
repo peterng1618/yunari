@@ -149,22 +149,27 @@ describe("committing a canvas scale", () => {
     manager.destroy();
   });
 
-  it("keeps a scaled text box at its authored width", () => {
-    // Review finding 6, pinned: a corner drag can widen a Textbox, and the
-    // commit writes sizes and resets scales only — the authored box wins the
-    // repaint. Whether a corner drag should scale the box is a product decision
-    // (vg-761); until then this is deliberate, not accidental.
-    const box = { width: 180, height: 72 };
+  /**
+   * A boxed text with the Fabric default centre origin, the state a corner
+   * drag leaves it in, and the manager repainting from the authored runs.
+   */
+  function boxed(): {
+    readonly object: IText;
+    readonly canvas: Canvas;
+    readonly manager: ReturnType<typeof createTextManager>;
+  } {
     const object = new Textbox("CPU 48%", {
       id: "boxed",
-      left: 20,
-      top: 20,
-      width: box.width,
-      height: box.height,
+      left: 60,
+      top: 56,
+      width: 180,
+      height: 72,
+      originX: "center",
+      originY: "center",
     }) as unknown as IText;
     object.set(YUNARI_TEXT_PROPERTY, {
       runs: [SIZED],
-      box,
+      box: { width: 180, height: 72 },
     } satisfies TextContent);
     const canvas = scene(object);
     const manager = createTextManager(canvas, vi.fn());
@@ -173,17 +178,101 @@ describe("committing a canvas scale", () => {
         only: (candidate) => candidate === target,
       }),
     );
+    return { object, canvas, manager };
+  }
 
-    object.set({ width: 300, scaleX: 1.5, scaleY: 1.5 });
+  /** The visual left edge, which is what a corner drag must leave fixed. */
+  function renderedLeft(object: IText): number {
+    return object.left - (object.width * object.scaleX) / 2;
+  }
+
+  it("bakes a corner drag's scaled width into the authored box", () => {
+    // vg-770's ruling: a corner drag widens the authored box instead of
+    // letting the widened Textbox snap back when the handle scale resets.
+    // Fabric's `width` is the box *before* `scaleX`, so the drawn width the
+    // drag left is `width * scaleX`.
+    const { object, canvas, manager } = boxed();
+    const leftBefore = renderedLeft(object);
+
+    // The statement a `br` corner drag leaves behind: the transform anchor is
+    // the opposite corner, so the object's own centre moved with the scale.
+    object.set({
+      scaleX: 1.5,
+      scaleY: 1,
+      left: leftBefore + (object.width * 1.5) / 2,
+    });
+    canvas.fire("object:modified", { target: object } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as TextContent;
+    expect(authored.box?.width).toBeCloseTo(270, 6);
+    expect(object.scaleX).toBe(1);
+    // The repaint reads the box, so Fabric's own width re-wrapped at it.
+    expect(object.width).toBeCloseTo(270, 6);
+    // The opposite corner did not move.
+    expect(renderedLeft(object)).toBeCloseTo(leftBefore, 6);
+    manager.destroy();
+  });
+
+  it("does not compound the bake across two corner drags", () => {
+    // The stored box is unscaled once `scaleX` resets, so the next drag starts
+    // from that number rather than from the scale it replaced (vg-233).
+    const { object, canvas, manager } = boxed();
+    object.set({
+      scaleX: 1.5,
+      scaleY: 1,
+      left: renderedLeft(object) + (object.width * 1.5) / 2,
+    });
+    canvas.fire("object:modified", { target: object } as never);
+
+    const leftBefore = renderedLeft(object);
+    object.set({
+      scaleX: 1.2,
+      scaleY: 1,
+      left: leftBefore + (object.width * 1.2) / 2,
+    });
+    canvas.fire("object:modified", { target: object } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as TextContent;
+    expect(authored.box?.width).toBeCloseTo(324, 6);
+    expect(object.width).toBeCloseTo(324, 6);
+    expect(renderedLeft(object)).toBeCloseTo(leftBefore, 6);
+    manager.destroy();
+  });
+
+  it("writes a side handle's width into the authored box", () => {
+    // A side handle writes `width` rather than a scale, and the per-step
+    // resize handler records it; the commit must not undo it.
+    const { object, canvas, manager } = boxed();
+    const leftBefore = renderedLeft(object);
+
+    object.set("width", 240);
+    // Fabric's own width change keeps the opposite (left) edge fixed, so the
+    // centre origin moves out by half the added width.
+    object.set({ left: leftBefore + 240 / 2 });
+    canvas.fire("object:resizing", {
+      transform: { target: object },
+    } as never);
+    canvas.fire("object:modified", { target: object } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as TextContent;
+    expect(authored.box?.width).toBe(240);
+    expect(object.scaleX).toBe(1);
+    expect(object.width).toBeCloseTo(240, 6);
+    expect(renderedLeft(object)).toBeCloseTo(leftBefore, 6);
+    manager.destroy();
+  });
+
+  it("scales runs and leaves the authored width alone on a vertical drag", () => {
+    const { object, canvas, manager } = boxed();
+    object.set({ scaleX: 1, scaleY: 1.5 });
     canvas.fire("object:modified", { target: object } as never);
 
     expect(sizeOf(object)).toEqual({ value: 69 });
-    expect([object.scaleX, object.scaleY]).toEqual([1, 1]);
-    expect(object.width).toBe(box.width);
-    expect(
-      (object.get(YUNARI_TEXT_PROPERTY) as { box?: { width: number } }).box
-        ?.width,
-    ).toBe(box.width);
+    expect(object.scaleY).toBe(1);
+    expect(object.width).toBeCloseTo(180, 6);
+    expect((object.get(YUNARI_TEXT_PROPERTY) as TextContent).box?.width).toBe(
+      180,
+    );
     manager.destroy();
   });
 });

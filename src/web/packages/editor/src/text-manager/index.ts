@@ -635,9 +635,10 @@ export function createTextManager(
    * Only the target's authored runs are written — a sibling naming the same
    * token keeps painting from the role default.
    *
-   * A non-unit `scaleX` alone still resets: the model has no stretched text, so
-   * leaving it would paint stretched glyphs while the row reported the authored
-   * size. `scaleY` alone decides the size; a horizontal drag writes none.
+   * A non-unit `scaleX` on a `Textbox` writes the drawn width into the
+   * authored box before the reset; on a plain `IText` it is still only
+   * reset, because an unboxed text has no width to own. `scaleY` decides the
+   * size on both.
    */
   const commitScale = (target: IText): void => {
     if (
@@ -658,6 +659,29 @@ export function createTextManager(
     if (runs !== authored.runs) {
       target.set(YUNARI_TEXT_PROPERTY, { ...authored, runs });
     }
+
+    // The model has no stretched text, so a corner drag's drawn width is baked
+    // into the authored box rather than thrown away with the reset. `width` is
+    // the box *before* `scaleX` — `assertBox` divides the stored number by the
+    // scale — so the drawn width is `width * scaleX`. After the runs write,
+    // because `writeAuthoredBoxDimension` reads the authored content back.
+    //
+    // Only at the commit: `adoptResizedBox` runs on every step of the drag and
+    // writes the unscaled `width`, so baking there would multiply the box once
+    // per step (`vg-233`). Written with `scaleX` still on the object, and reset
+    // in the same synchronous step, so the stored box is unscaled from the
+    // moment the next pass reads it.
+    if (
+      target instanceof Textbox &&
+      Math.abs(target.scaleX - 1) > SCALE_UNITY_EPSILON
+    ) {
+      writeAuthoredBoxDimension(
+        target,
+        "width",
+        Math.abs(target.width * target.scaleX),
+      );
+    }
+
     target.set({ scaleX: 1, scaleY: 1 });
     repaint(target);
     canvas.requestRenderAll();
