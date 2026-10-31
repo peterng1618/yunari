@@ -3087,15 +3087,22 @@ body,
    feature value cannot be a custom property — the query is resolved from
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
-  /* The row does not fit a phone-width window — the brand, the three-label
-     mode switch, the menubar and the publish control are wider together than
-     the glass — and `overflow: hidden` is what keeps that fact inside the
-     header: without it the whole document widens, `documentElement.scrollWidth`
-     exceeds the viewport, and every popup positioned against the viewport then
-     believes there is room past the edge. Which of the four regions a
-     compact header keeps is a ruling this file does not make; the row's own
-     reachability is tracked on vg-707. */
+  /* **The compact header keeps the mode switch and the publish control.** The
+     brand and the menubar are the two regions that stand down: together with
+     the switch and the publish control they measure more than the glass, while
+     the switch alone plus publish fit. The menubar's actions stay on their
+     shortcuts, and the header is not where a phone-width author edits a
+     document's menus. The row does not wrap: the publish control is the
+     editor's one filled accent button and belongs at the right edge. */
+  .editor-shell-header strong,
+  .editor-shell-menubar {
+    display: none;
+  }
   .editor-shell-header {
+    justify-content: space-between;
+    /* Kept as the last line of defence at widths below the two controls'
+       min-content, where clipping is still better than a document that
+       widens and drags every viewport-positioned popup with it. */
     overflow: hidden;
   }
   .editor-shell-body {
