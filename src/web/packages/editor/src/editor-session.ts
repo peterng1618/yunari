@@ -433,6 +433,8 @@ export class EditorSession {
     // the owner has to exist by then.
     const descriptors = (): readonly SemanticKeyDescriptor[] =>
       options.sensors?.descriptors() ?? SEMANTIC_KEYS;
+    const measured = (): ReadonlySet<string> | undefined =>
+      options.sensors?.measured();
     this.charts = new ChartManager({
       editor: options.shell.editor,
       scene: options.shell.scene,
@@ -463,6 +465,9 @@ export class EditorSession {
       // The readings the run picker offers, pulled for the same reason: a
       // catalogue refreshed after mount is visible on the next projection.
       descriptors,
+      // Which of those readings this PC answers now; `undefined` until the host
+      // says, and then the picker leaves every key offered as it does today.
+      measured,
       // The shell owns the glass handle; the inspector writes the property and
       // asks it to re-resolve.
       refreshGlass: () => options.shell.refreshGlass(),

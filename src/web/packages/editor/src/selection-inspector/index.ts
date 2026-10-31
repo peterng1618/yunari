@@ -139,6 +139,8 @@ interface SelectionInspectorOptions {
    *  so a catalogue refreshed after mount reaches the next projection. Absent
    *  keeps the built-in vocabulary. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+  /** The keys the host answers now, or `undefined` before it has said. */
+  readonly measured?: () => ReadonlySet<string> | undefined;
   /**
    * Re-resolves the glass lifecycle. The handle belongs to the shell that
    * created it and re-resolves on its own only when the canvas gains or loses
@@ -883,6 +885,7 @@ export function createSelectionInspector(
       ...(options.descriptors === undefined
         ? {}
         : { descriptors: options.descriptors }),
+      ...(options.measured === undefined ? {} : { measured: options.measured }),
       ...(chartFields === undefined ? {} : { chartFields }),
     };
   };

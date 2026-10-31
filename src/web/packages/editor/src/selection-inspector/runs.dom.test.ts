@@ -1116,6 +1116,34 @@ describe("which readings a run may name", () => {
     return box.dispose();
   });
 
+  it("marks a key the host does not measure, and leaves a measured one offered", () => {
+    // The catalogue lists every key the vocabulary can name. What this PC
+    // answers is a separate fact, so an unmeasured key stays recognisable in
+    // the list but is not a choice; a measured one is offered as before.
+    const box = mountRunEditor({
+      runs: literalClock,
+      measured: new Set(["ram.used"]),
+    });
+    const sources = box.sources();
+
+    expect(sources.find((source) => source.id === "cpu.load")?.disabled).toBe(
+      true,
+    );
+    expect(
+      sources.find((source) => source.id === "ram.used")?.disabled,
+    ).toBeUndefined();
+    return box.dispose();
+  });
+
+  it("marks nothing when the host has not said what it measures", () => {
+    const box = mountRunEditor({ runs: literalClock });
+
+    expect(box.sources().some((source) => source.disabled === true)).toBe(
+      false,
+    );
+    return box.dispose();
+  });
+
   it("keeps a saved key the catalogue no longer lists, still selected", () => {
     // A theme may name a key this host stopped reporting. Dropping it from the
     // options would show the run as reading nothing and leave no way back to

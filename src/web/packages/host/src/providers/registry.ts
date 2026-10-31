@@ -111,6 +111,12 @@ export function groupByAsk(asks: readonly DisplayAsk[]): readonly AskGroup[] {
   }));
 }
 
+/** What this PC offers, and which of those keys it answers with an `ok` reading. */
+export interface MeasuredCatalogue {
+  readonly sensors: readonly DescribedSensor[];
+  readonly measured: readonly string[];
+}
+
 export class ProviderRegistry {
   /** Providers are ordered by precedence; the first provider to answer a key owns it. */
   constructor(private readonly providers: readonly SensorProvider[]) {}
@@ -212,6 +218,34 @@ export class ProviderRegistry {
       unmapped: semanticKeys.filter(
         (key) => !claimed.has(key) && !gap.has(key),
       ),
+    };
+  }
+
+  /**
+   * The catalogue, plus the keys this machine answers with an `ok` reading now.
+   *
+   * Composes the same `describe()` and `sample()` the display path uses rather
+   * than probing providers a second way. A provider's non-`ok` entry is a gap,
+   * not a reading, so its key is absent from `measured`.
+   */
+  async measure(nowMs: number): Promise<MeasuredCatalogue> {
+    const sensors = await this.describe();
+    const keys = [
+      ...new Set(sensors.map((sensor) => sensor.semanticKey)),
+    ].sort();
+
+    if (keys.length === 0) {
+      return { sensors, measured: [] };
+    }
+
+    const cycle = await this.sample(keys, nowMs);
+
+    return {
+      sensors,
+      measured: cycle.entries
+        .filter((entry) => entry.sample.status === "ok")
+        .map((entry) => entry.semanticKey)
+        .sort(),
     };
   }
 }

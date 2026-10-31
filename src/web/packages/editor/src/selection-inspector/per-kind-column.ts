@@ -213,6 +213,8 @@ export interface ColumnContext {
   readonly sampleSource: (() => SampleSource) | undefined;
   /** The readings a run may name; absent keeps the built-in vocabulary. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+  /** The keys the host answers now; absent means no host has said. */
+  readonly measured?: () => ReadonlySet<string> | undefined;
   /**
    * The chart owner's own fields, for a chart selection. Absent when no owner
    * is mounted: a column built without one still answers every other kind, and
@@ -407,6 +409,9 @@ function contentBody(
   // control, and counting one would make the section's own count lie.
   const id = target.get("id");
   const nodeId = typeof id === "string" && id.length > 0 ? id : "";
+  // `undefined` is the host not having answered, so it travels as an absent
+  // property rather than as an empty set that would mark every key unavailable.
+  const measured = context.measured?.();
   const runs = projectRuns(
     target as unknown as {
       get(name: string): unknown;
@@ -427,6 +432,7 @@ function contentBody(
       ...(context.descriptors === undefined
         ? {}
         : { descriptors: context.descriptors() }),
+      ...(measured === undefined ? {} : { measured }),
     },
   );
   if (runs !== undefined) extras.push({ kind: "runs", nodeId, runs });

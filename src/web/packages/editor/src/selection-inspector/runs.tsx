@@ -89,6 +89,12 @@ interface RunsProjection {
    * refreshed catalogue visible on the next render.
    */
   readonly descriptors?: readonly SemanticKeyDescriptor[];
+  /**
+   * The keys this PC answers now. Absent until the host has said: the picker
+   * then offers every catalogue key as it always has rather than marking a
+   * table it cannot verify.
+   */
+  readonly measured?: ReadonlySet<string>;
 }
 
 /** A run's description for a list: what it is, and what it says. */
@@ -341,10 +347,16 @@ export function projectRuns(
   ].flatMap(([group, descriptors]) =>
     descriptors.map((descriptor) => {
       known.add(descriptor.key);
+      // A key the host did not answer with an `ok` reading stays listed but is
+      // not a choice here. It is unavailable, never a zero reading: the host
+      // said what it measures, not what the sensor would have said.
+      const disabled =
+        context.measured !== undefined && !context.measured.has(descriptor.key);
       return {
         id: descriptor.key,
         name: descriptor.label,
         group,
+        ...(disabled ? { disabled: true } : {}),
       };
     }),
   );

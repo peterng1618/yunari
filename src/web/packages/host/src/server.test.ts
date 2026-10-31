@@ -3073,6 +3073,79 @@ describe("Host theme routes", () => {
     expect(body.unmapped).toEqual([]);
   });
 
+  it("reports the sensor keys this PC measures, and not one it cannot answer", async () => {
+    const at = Date.parse("2026-11-01T00:00:00Z");
+    const probe: SensorProvider = {
+      id: "probe",
+      label: "probe",
+      describe: () =>
+        Promise.resolve([
+          {
+            sensorId: "probe:cpu.load",
+            semanticKey: "cpu.load",
+            label: "CPU load",
+            tier: "baseline" as const,
+          },
+          {
+            sensorId: "probe:custom.fan",
+            semanticKey: "custom.fan",
+            label: "Fan speed",
+            tier: "baseline" as const,
+          },
+        ]),
+      sample: (keys, nowMs) =>
+        Promise.resolve(
+          keys.map((semanticKey) => ({
+            semanticKey,
+            sample:
+              semanticKey === "cpu.load"
+                ? {
+                    sensorId: "probe:cpu.load",
+                    timestamp: new Date(nowMs).toISOString(),
+                    status: "ok" as const,
+                    value: 12,
+                  }
+                : {
+                    sensorId: "probe:custom.fan",
+                    timestamp: new Date(nowMs).toISOString(),
+                    status: "missing" as const,
+                    message: "the source is not ok",
+                  },
+          })),
+        ),
+      health: () => ({ available: true }),
+    };
+    const measuring = createHostServer({
+      registry: new ProviderRegistry([probe]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      now: () => at,
+    });
+
+    try {
+      const res = await request(
+        measuring.server,
+        "GET",
+        "/api/sensors?measured=1",
+      );
+      const body = res.json() as {
+        sensors: readonly { semanticKey: string }[];
+        measured: readonly string[];
+      };
+
+      expect(res.status).toBe(200);
+      // The catalogue still lists both keys: the picker needs the name even
+      // when this PC cannot read it.
+      expect(body.sensors.map((sensor) => sensor.semanticKey)).toEqual([
+        "cpu.load",
+        "custom.fan",
+      ]);
+      // A source that is not `ok` is a gap, not a reading, so it is not measured.
+      expect(body.measured).toEqual(["cpu.load"]);
+    } finally {
+      await measuring.close();
+    }
+  });
+
   describe("LAN displays authenticate with their own credential (§145)", () => {
     let displays: ReturnType<typeof createDisplayStore>;
     let paired: ReturnType<typeof createHostServer>;

@@ -5009,6 +5009,15 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (url.pathname === "/api/sensors") {
+      // Measuring reads every provider, so only a caller that asked for it pays
+      // for it: a display loading the catalogue keeps the descriptor-only answer
+      // and does not start acquisition it will never use.
+      if (url.searchParams.get("measured") === "1") {
+        const catalogue = await registry.measure(now());
+        sendJson(response, 200, catalogue);
+        return;
+      }
+
       sendJson(response, 200, { sensors: await registry.describe() });
       return;
     }
