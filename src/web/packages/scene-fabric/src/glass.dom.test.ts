@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+import {
+  computeArtboardTransform,
+  viewportToDocument,
+} from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { artboardBackdrop } from "./artboard-backdrop.js";
 import { mountBackgroundMedia } from "./background-media.js";
@@ -50,29 +54,48 @@ const TWO_TONE_PAINT = {
   ],
 } as const;
 
-/** A panel over one point of the display's own surface, with no media layer. */
+/** A panel over one point of the display's own surface, with no media layer.
+ *  The board is mapped through a rect composition matrix — the display shape
+ *  only decides the screen clip — so a turned board and the screen fill around
+ *  it are both observably where the composition puts them. */
 function platePixel(
   shape: "rect" | "circle",
   angle: number,
   at: { readonly x: number; readonly y: number },
+  board: { readonly width: number; readonly height: number } = {
+    width: 200,
+    height: 200,
+  },
 ): readonly [number, number, number, number] {
+  const transform = computeArtboardTransform({
+    artboard: board,
+    viewport: { width: 200, height: 200 },
+    rotation: angle,
+  });
   const box =
     shape === "circle"
       ? { left: 0, top: 0, width: 200, height: 200, radius: "circle" as const }
       : { left: 0, top: 0, width: 200, height: 200 };
   const backdrop = artboardBackdrop({
     background: TWO_TONE_PAINT,
-    width: 200,
-    height: 200,
+    width: board.width,
+    height: board.height,
     media: undefined,
-    angle,
+    angle: transform.rotation,
     surface: { shape, box },
   });
   const s = stage({ texture: false, backdrop: () => backdrop });
+  s.canvas.setViewportTransform([...transform.matrix] as unknown as Parameters<
+    typeof s.canvas.setViewportTransform
+  >[0]);
+  // Fabric culls an object it judges off-screen; a turned viewport can make it
+  // judge one so and never fire `before:render`.
+  (s.canvas as unknown as { skipOffscreen: boolean }).skipOffscreen = false;
+  const at5 = viewportToDocument(transform, at);
   s.canvas.add(
     panel({
-      left: at.x - 20,
-      top: at.y - 20,
+      left: at5.x - 20,
+      top: at5.y - 20,
       width: 40,
       height: 40,
       fill: "transparent",
@@ -512,27 +535,53 @@ describe("glass composition", () => {
     ).toBeGreaterThan(200);
   });
 
-  it("samples a media-less rect display's host paint, which does not turn", () => {
-    // The surface behind the canvas is the host background: one DOM box the
-    // composition turns *inside*, never with it. The panel is at the host's
-    // left half below the centre. A sampler that turned the board's paint with
-    // the composition reads the gradient's right half there instead.
-    for (const angle of [0, 90]) {
-      const pixel = platePixel("rect", angle, { x: 40, y: 140 });
-      expect(pixel[0], `red at ${angle} degrees`).toBeGreaterThan(200);
-      expect(pixel[2], `not blue at ${angle} degrees`).toBeLessThan(60);
-    }
+  it("turns a media-less rect display's board plate with the composition", () => {
+    // The board's paint is the plate, and the plate turns with the composition;
+    // the host fill beneath it stays screen-fixed. The panel is at the host's
+    // left half below the centre: upright that is the gradient's red half,
+    // turned 90° clockwise it is the board's blue half.
+    const upright = platePixel("rect", 0, { x: 40, y: 140 });
+    expect(upright[0], "upright, the left half is red").toBeGreaterThan(200);
+    expect(upright[2]).toBeLessThan(60);
+    const turned = platePixel("rect", 90, { x: 40, y: 140 });
+    expect(turned[2], "turned, the board's right half is here").toBeGreaterThan(
+      200,
+    );
+    expect(turned[0]).toBeLessThan(60);
   });
 
-  it("samples a media-less circle display's disc paint, which does not turn", () => {
-    // The surface is the disc: the same paint, mapped across the disc box. The
-    // panel is at the host's right half above the centre, inside the disc. A
-    // sampler that turned the board's paint reads the left half (red) there.
-    for (const angle of [0, 45]) {
-      const pixel = platePixel("circle", angle, { x: 140, y: 40 });
-      expect(pixel[2], `blue at ${angle} degrees`).toBeGreaterThan(200);
-      expect(pixel[0], `not red at ${angle} degrees`).toBeLessThan(60);
-    }
+  it("turns a media-less circle display's board plate with the composition", () => {
+    // The disc is the screen; the plate inside it is still the board's paint.
+    // The panel is at the host's right half above the centre, inside the disc:
+    // blue upright, red after a quarter turn.
+    const upright = platePixel("circle", 0, { x: 140, y: 40 });
+    expect(upright[2], "upright, the right half is blue").toBeGreaterThan(200);
+    expect(upright[0]).toBeLessThan(60);
+    const turned = platePixel("circle", 90, { x: 140, y: 40 });
+    expect(turned[0], "turned, the board's left half is here").toBeGreaterThan(
+      200,
+    );
+    expect(turned[2]).toBeLessThan(60);
+  });
+
+  it("keeps the letterbox outside the rotated board on the screen's fill", () => {
+    // A 200x100 board turned 90° covers the middle band (x 50–150) of the
+    // 200x200 screen; the bars each side are outside the turned plate. The
+    // screen fill still runs left-to-right there, so the left bar is red and
+    // the right bar blue even though the board's paint is a quarter turn away.
+    const board = { width: 200, height: 100 };
+    const leftBar = platePixel("rect", 90, { x: 20, y: 100 }, board);
+    const rightBar = platePixel("rect", 90, { x: 180, y: 100 }, board);
+    expect(
+      leftBar[0],
+      "the left bar keeps the screen's red end",
+    ).toBeGreaterThan(200);
+    expect(leftBar[2]).toBeLessThan(60);
+    expect(
+      rightBar[2],
+      "and the right bar the screen's blue end",
+    ).toBeGreaterThan(200);
+    expect(rightBar[0]).toBeLessThan(60);
   });
 
   it("does not turn a display-bounded backdrop with the composition", () => {
