@@ -103,7 +103,8 @@ function collectArtworkLines(): Promise<Collection> {
         // Audio is a separate reading; this window classifies the media half.
         if (kind === "audio") return;
         lines.push(line);
-        if (kind === "artwork" || kind === "none") finish();
+        if (kind === "artwork" || kind === "artwork-miss" || kind === "none")
+          finish();
       },
       onExit: (reason, kind) => {
         if (kind !== "stopped") finish(reason);
@@ -166,6 +167,7 @@ interface WindowRecord {
   readonly hasArtwork?: unknown;
   readonly app?: unknown;
   readonly title?: unknown;
+  readonly reason?: unknown;
 }
 
 type WindowVerdict = "no-session" | "error" | "session";
@@ -173,6 +175,7 @@ type ArtworkExpectation =
   | "no-session"
   | "session-closed"
   | "no-thumbnail"
+  | "artwork-unreadable"
   | "artwork-expected";
 
 function recordsOf(lines: readonly string[]): WindowRecord[] {
@@ -203,9 +206,15 @@ function artworkExpectation(
   if (kinds[0] === "none") return "no-session";
 
   const sessionAcrossWindow =
-    kinds.every((kind) => kind === "session" || kind === "artwork") ||
-    kinds.at(-1) === "session";
+    kinds.every(
+      (kind) =>
+        kind === "session" || kind === "artwork" || kind === "artwork-miss",
+    ) || kinds.at(-1) === "session";
   if (!sessionAcrossWindow) return "session-closed";
+
+  // A definitive miss is the helper's terminal answer for this track: the
+  // artwork line is correctly absent, not delayed.
+  if (kinds.includes("artwork-miss")) return "artwork-unreadable";
 
   const thumbnailSeen = records.some(
     (record) => record.kind === "session" && record.hasArtwork === true,
@@ -263,6 +272,16 @@ describe("artwork window classification", () => {
         ]),
       ),
     ).toBe("artwork-expected");
+  });
+
+  it("treats a definitive artwork miss as a terminal negative", () => {
+    // The miss, not a still-pending thumbnail, is the helper's last word.
+    const records = recordsOf([
+      record({ kind: "session", hasArtwork: true }),
+      record({ kind: "artwork-miss", reason: "over" }),
+    ]);
+    expect(windowVerdict(records)).toBe("session");
+    expect(artworkExpectation(records)).toBe("artwork-unreadable");
   });
 
   it("classifies a successful window that ends on an artwork line", () => {
@@ -327,7 +346,9 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
 
     expect(verdict, "the helper reported an error line").not.toBe("error");
     for (const record of records) {
-      expect(["session", "artwork", "none"]).toContain(record.kind);
+      expect(["session", "artwork", "artwork-miss", "none"]).toContain(
+        record.kind,
+      );
     }
 
     const expectation = artworkExpectation(records);
@@ -337,7 +358,9 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
       context.skip(
         expectation === "session-closed"
           ? "the session closed before the window ended; artwork unverified"
-          : "the session reported no thumbnail; artwork unverified",
+          : expectation === "artwork-unreadable"
+            ? "the helper reported a definitive artwork miss; artwork unverified"
+            : "the session reported no thumbnail; artwork unverified",
       );
       return;
     }
@@ -451,6 +474,12 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(stdout).toContain("thrown=2");
     // Five retryable polls exhaust the limit; the next three do not read.
     expect(stdout).toContain("exhausted=5");
+    // A definitive negative reaches stdout as its own line: over-cap for the
+    // over track and the thrown-then-over track, exhausted for the retrying
+    // track. The retry that later succeeded emits no miss.
+    expect(stdout.split('"kind":"artwork-miss"').length - 1).toBe(3);
+    expect(stdout).toContain('"reason":"over"');
+    expect(stdout).toContain('"reason":"exhausted"');
     // A thumbnail present reports true, and an absent one false.
     expect(stdout).toContain("hasArtwork=True,False");
     // An AUMID with no registered DisplayName is its own display name.
