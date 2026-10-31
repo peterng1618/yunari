@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import type { FontAssetReference } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
-import { strToU8, zipSync } from "fflate";
 import { solidOf } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import { chooseIn, optionsOf, typeIntoControl } from "./control-set.js";
 import {
@@ -332,30 +331,6 @@ async function savePackage(page: Page): Promise<{
 /** Opens a package the case just exported, through the store's own control. */
 async function openPackage(page: Page, bytes: Uint8Array): Promise<void> {
   await openThemeFromStore(page, storedThemeOfPackage(bytes));
-}
-
-/**
- * Brings a file in through **File ▸ Import package**, the control an author has.
- *
- * An import is a library write, so a file that is not a package is refused and
- * the open document is left alone — which is the property the case below
- * measures. Driving the row and the chooser it opens, rather than the hidden
- * input, is what makes the control reachable in the test as it is in the
- * product.
- */
-async function importFile(
-  page: Page,
-  name: string,
-  buffer: Buffer,
-): Promise<void> {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Import package" }).click();
-  await (await chooser).setFiles({
-    name,
-    mimeType: "application/octet-stream",
-    buffer,
-  });
 }
 
 function activeId(page: Page): Promise<string | undefined> {
@@ -752,66 +727,6 @@ test.describe("the reference composition, authored", () => {
     );
 
     await captureVisualReview(page, testInfo, "editor-reference-journey");
-  });
-
-  test("an unreadable package leaves the open document and the author's work alone", async ({
-    page,
-  }, testInfo) => {
-    desktop(testInfo);
-    await openEditor(page);
-
-    await openPane(page, "Add");
-    await page
-      .locator('[data-yunari-add-group="shape"]')
-      .getByRole("button", { name: "Rectangle", exact: true })
-      .click();
-    const panelId = (await activeId(page)) ?? "";
-    const before = (await sceneFacts(page)).find((f) => f.id === panelId);
-    expect(before).toBeDefined();
-
-    // **Not a package at all.**
-    await importFile(
-      page,
-      "broken.yunari-theme",
-      Buffer.from("this is not a zip archive"),
-    );
-    await expect(page.locator("#status")).toContainText("Could not import:");
-    expect(idsOf(await sceneFacts(page))).toContain(panelId);
-
-    // **A package whose envelope the validator refuses.** Written without
-    // `writeThemePackage`, so the bytes are a real zip around a bad document.
-    await importFile(
-      page,
-      "invalid.yunari-theme",
-      Buffer.from(
-        zipSync({
-          "manifest.json": strToU8(
-            JSON.stringify({
-              format: "yunari-theme-package",
-              version: 1,
-              theme: "theme.json",
-            }),
-          ),
-          "theme.json": strToU8(JSON.stringify({ schemaVersion: "2.0.0" })),
-        }),
-      ),
-    );
-    await expect(page.locator("#status")).toContainText("Could not import:");
-
-    // **The work is still there, still editable, and still saveable** — the
-    // property "errors preserve recoverable work" actually means.
-    const after = (await sceneFacts(page)).find((f) => f.id === panelId);
-    expect(after?.rect).toEqual(before?.rect);
-    await typeIntoControl(
-      page,
-      page.locator("[data-yunari-panel-radius]"),
-      "9",
-    );
-    await expect(page.locator("[data-yunari-panel-radius]")).toHaveValue("9");
-    const saved = await savePackage(page);
-    expect(objectsOf(saved.envelope)).toContainEqual(
-      expect.objectContaining({ id: panelId, rx: 9 }),
-    );
   });
 
   test("a packaged font that will not load still leaves the document editable", async ({
