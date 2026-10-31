@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   type AssetKind,
+  cssArtboardPaint,
   type FabricThemeEnvelope,
   type FacetRecord,
   facetRecordOf,
@@ -15,7 +16,6 @@ import {
   type ValidationIssue,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
-import { cssArtboardPaint } from "@yunari/scene-fabric";
 import {
   CREDITS,
   readThemeCredits,

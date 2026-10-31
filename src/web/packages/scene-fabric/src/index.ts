@@ -17,7 +17,6 @@ export type { ArtboardBackdropOptions } from "./artboard-backdrop.js";
 export { artboardBackdrop } from "./artboard-backdrop.js";
 export {
   artboardPaintKey,
-  cssArtboardPaint,
   fabricArtboardPaint,
   fillArtboardPaint,
 } from "./artboard-paint.js";

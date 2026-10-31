@@ -1,36 +1,9 @@
+import {
+  artboardGradientLine,
+  artboardSolidColor,
+  isArtboardGradient,
+} from "@yunari/renderer-core";
 import { Gradient } from "fabric/es";
-
-/** The paint when it is one flat colour, whatever form it arrived in. */
-function solidColor(value: unknown): string | undefined {
-  if (typeof value === "string" && value.length > 0) return value;
-  if (isSolid(value)) return value.color;
-  return undefined;
-}
-
-/** The gradient's axis across a `width`x`height` box, which is the one piece of
- * geometry the Fabric and canvas forms share.
- *
- * **The stored angle is `90 - cssDegrees`** (`gradientCss`), so its direction in
- * the canvas's y-down space is `(cos, -sin)`: 0 is left-to-right and 90 is
- * bottom-to-top. A positive `sin` mirrored every rotated gradient against the
- * CSS preview and the gradient track, while a horizontal one agreed — which is
- * why the sign survived. */
-function gradientLine(
-  value: { readonly angle: number },
-  width: number,
-  height: number,
-): { x1: number; y1: number; x2: number; y2: number } {
-  const radians = (value.angle * Math.PI) / 180;
-  const dx = Math.cos(radians);
-  const dy = -Math.sin(radians);
-  const reach = Math.abs((width * dx) / 2) + Math.abs((height * dy) / 2);
-  return {
-    x1: width / 2 - dx * reach,
-    y1: height / 2 - dy * reach,
-    x2: width / 2 + dx * reach,
-    y2: height / 2 + dy * reach,
-  };
-}
 
 /** Converts the v2 palette paint owned by renderer-core at the Fabric boundary. */
 export function fabricArtboardPaint(
@@ -38,24 +11,16 @@ export function fabricArtboardPaint(
   width: number,
   height: number,
 ): string | Gradient<"linear"> | undefined {
-  const solid = solidColor(value);
+  const solid = artboardSolidColor(value);
   if (solid !== undefined) return solid;
-  if (!isGradient(value)) return undefined;
+  if (!isArtboardGradient(value)) return undefined;
 
   return new Gradient({
     type: "linear",
     gradientUnits: "pixels",
-    coords: gradientLine(value, width, height),
+    coords: artboardGradientLine(value, width, height),
     colorStops: [...value.stops],
   });
-}
-
-/** CSS is the matching paint form for letterbox bars outside the Fabric canvas. */
-export function cssArtboardPaint(value: unknown): string | undefined {
-  const solid = solidColor(value);
-  if (solid !== undefined) return solid;
-  if (!isGradient(value)) return undefined;
-  return `linear-gradient(${90 - value.angle}deg, ${value.stops.map((stop) => `${stop.color} ${stop.offset * 100}%`).join(", ")})`;
 }
 
 /**
@@ -85,11 +50,11 @@ export function fillArtboardPaint(
   },
   value: unknown,
 ): boolean {
-  const solid = solidColor(value);
+  const solid = artboardSolidColor(value);
   if (solid !== undefined) {
     ctx.fillStyle = solid;
-  } else if (isGradient(value)) {
-    const line = gradientLine(value, device.width, device.height);
+  } else if (isArtboardGradient(value)) {
+    const line = artboardGradientLine(value, device.width, device.height);
     const gradient = ctx.createLinearGradient(
       device.left + line.x1,
       device.top + line.y1,
@@ -110,41 +75,9 @@ export function fillArtboardPaint(
  * a Gradient. Two paints with the same key are interchangeable for `fabricArtboardPaint`. */
 export function artboardPaintKey(value: unknown): string {
   if (typeof value === "string") return `s:${value}`;
-  if (isSolid(value)) return `o:${value.color}`;
-  if (isGradient(value))
+  const solid = artboardSolidColor(value);
+  if (solid !== undefined) return `o:${solid}`;
+  if (isArtboardGradient(value))
     return `g:${value.angle}:${value.stops.map((stop) => `${stop.offset}/${stop.color}`).join(",")}`;
   return "none";
-}
-
-function isSolid(
-  value: unknown,
-): value is { readonly kind: "solid"; readonly color: string } {
-  const color =
-    typeof value === "object" && value !== null
-      ? (value as Record<string, unknown>)["color"]
-      : undefined;
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as Record<string, unknown>)["kind"] === "solid" &&
-    typeof color === "string" &&
-    color.length > 0
-  );
-}
-
-function isGradient(value: unknown): value is {
-  readonly kind: "gradient";
-  readonly angle: number;
-  readonly stops: readonly {
-    readonly offset: number;
-    readonly color: string;
-  }[];
-} {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as Record<string, unknown>)["kind"] === "gradient" &&
-    typeof (value as Record<string, unknown>)["angle"] === "number" &&
-    Array.isArray((value as Record<string, unknown>)["stops"])
-  );
 }
