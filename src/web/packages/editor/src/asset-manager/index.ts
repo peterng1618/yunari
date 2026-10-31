@@ -190,12 +190,16 @@ export class AssetManager {
   async import(
     file: File,
     metadata?: AssetImportMetadata,
+    /** Bytes the caller already read from `file`. `importFont` validates them
+     *  with the browser's parser first, and reading a chosen file twice is a
+     *  second copy of bytes the path already had. */
+    knownBytes?: Uint8Array,
   ): Promise<LocalAssetReference> {
     const extension = extensionOf(file.name);
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
     const type = typeOf(extension);
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const bytes = knownBytes ?? new Uint8Array(await file.arrayBuffer());
     assertFileFormat(file, extension, type.mime, bytes);
     const previewBytes = extension === "svg" ? sanitisedSvg(bytes) : bytes;
     const { id, path } = this.#allocate(file.name, extension);
@@ -294,8 +298,9 @@ export class AssetManager {
     if (sameFace !== undefined) return this.amendFont(sameFace.id, checked);
 
     // `import` has already validated the bytes and allocated the path;
-    // amending it is what writes the facts the file cannot answer.
-    const imported = await this.import(file);
+    // amending it is what writes the facts the file cannot answer. The bytes
+    // are the ones this method already read, so the chosen file is read once.
+    const imported = await this.import(file, undefined, bytes);
     return this.amendFont(imported.id, checked);
   }
 
