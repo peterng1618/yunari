@@ -564,12 +564,22 @@ function PanelFoot(props: {
   readonly onAction: (action: CellAction, id: string) => void;
   readonly authorAction: "unpublish" | "republish" | undefined;
   readonly authorPress: ((id: string) => void) | undefined;
+  /** The inline display choice, above the actions that opened it. */
+  readonly assign?: React.ReactNode;
 }): React.JSX.Element {
   const { item, install, submit, onAction, authorAction, authorPress } = props;
   const installState = installStateOf(item);
   const hasCommands = authorAction !== undefined || installState === "none";
   return (
     <span className="flex flex-none flex-col gap-[var(--space-8)] border-t border-edge px-[var(--space-16)] py-[var(--space-12)]">
+      {props.assign === undefined ? null : (
+        <span
+          data-yunari-store-item-assign=""
+          className="flex flex-col gap-[var(--space-8)]"
+        >
+          {props.assign}
+        </span>
+      )}
       {hasCommands ? (
         <span className="flex flex-wrap items-center gap-[var(--space-8)]">
           {authorAction === undefined ? null : (
@@ -654,6 +664,10 @@ export function ItemModal(props: {
   /** The parent the listing resolved for this item's credit, when it holds
    *  one. A resolved `StoreItem`, never an id. */
   readonly remixParent?: StoreItem;
+  /** The display choice, drawn inline where this page opened it: the assignment
+   *  then happens without the page being left, and the choice confirms beside
+   *  itself (`assign-display.tsx`). Absent where no assignment was started. */
+  readonly assign?: React.ReactNode;
   /** The author's own commands on the store row, drawn only for the state that
    *  allows each (`status-badge.tsx`). The region posts and re-reads the
    *  author's listing; this surface only reports the press. */
@@ -773,6 +787,7 @@ export function ItemModal(props: {
               onAction={onAction}
               authorAction={authorAction}
               authorPress={authorPress}
+              {...(props.assign === undefined ? {} : { assign: props.assign })}
             />
           </span>
         </DialogPrimitive.Popup>

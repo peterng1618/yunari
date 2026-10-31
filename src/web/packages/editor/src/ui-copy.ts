@@ -1247,6 +1247,10 @@ export const uiCopy = {
       default: "Default",
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",
+      /** What a landed assignment says where the choice stays on screen. It
+       *  names the display, so the confirmation is the assignment rather than
+       *  a bare "done" (`assign-display.tsx`). */
+      assigned: (where: string): string => `Assigned to ${where}`,
     },
     /** The pager: the per-page well, the two steps and the numerals' names.
      *

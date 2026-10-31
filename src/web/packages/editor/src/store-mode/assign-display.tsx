@@ -28,8 +28,7 @@ function reason(error: unknown): string {
 }
 
 /**
- * The display choice a cell's **Assign to display** opens: the select, whose
- * value is the display a theme is put on.
+ * The display choice itself: the select, its refusal and its confirmation.
  *
  * **The list is the host's answer, read when the choice opens and kept
  * nowhere.** A list this surface held would be a second source of truth about
@@ -51,25 +50,39 @@ function reason(error: unknown): string {
  * Reading `""` for the default too would be a real answer rendered as absence,
  * and the two states would collapse into one rendering.
  *
+ * **A landed assignment confirms beside the choice.** The dialog form closes on
+ * success, so it never needs the confirmation; the theme's own page keeps the
+ * choice open and shows which display the theme went to.
+ *
  * **Nothing warns about the cost here.** The user narrowed the cost warning to
  * the host's own pages on 2026-10-18, so the per-display plan's own surface
  * raises it and this one says nothing.
  */
-export function AssignDisplay(props: {
+export function AssignChoice(props: {
   readonly item: StoreItem;
   readonly client: ThemeLibraryClient;
-  readonly onClose: () => void;
+  /** What a landed assignment does next. A dialog closes; the theme's page
+   *  leaves the choice where it is and reads the confirmation instead. */
+  readonly onAssigned: () => void;
 }): React.JSX.Element {
-  const { item, client, onClose } = props;
+  const { item, client, onAssigned } = props;
 
-  /** What the host answered, or `undefined` until an answer arrives. The dialog
-   *  draws no choice before then rather than an empty one. */
+  /** What the host answered, or `undefined` until an answer arrives. The choice
+   *  draws no select before then rather than an empty one. */
   const [answered, setAnswered] = useState<DisplayRead | undefined>(undefined);
   /** The last refusal, in the host's own words: a read that failed or an
    *  assignment the host would not take. The two are one slot because they are
    *  one thing to the person reading it — what the host said — and they cannot
    *  both be on screen: without an answer there is no choice to assign from. */
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  /** What the last landed assignment said, where the choice stays open. */
+  const [confirmation, setConfirmation] = useState<string | undefined>(
+    undefined,
+  );
+  /** The display the person just chose. Kept because the answered list cannot
+   *  say where the theme went until the next read, and the choice must not fall
+   *  back to the display that held it before. */
+  const [chosen, setChosen] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let live = true;
@@ -98,32 +111,31 @@ export function AssignDisplay(props: {
   // `default` naming it is the next, because that is what a display with no
   // choice of its own is served. `""` is left for neither.
   const heldBy =
+    chosen ??
     displays.find((display) => display.theme === item.id)?.id ??
     (answered?.default === item.id ? DEFAULT_DISPLAY_KEY : "");
 
   /** Choosing a display is the assignment. A refusal leaves the choice where it
-   *  is, with the host's reason beside it, so another display can be tried;
-   *  success has nothing left to say and closes. */
+   *  is, with the host's reason beside it, so another display can be tried. */
   const choose = (display: string): void => {
-    void client.assign(display, item.id).then(onClose, (error: unknown) => {
-      setRefusal(reason(error));
-    });
+    setChosen(display);
+    setRefusal(undefined);
+    setConfirmation(undefined);
+    void client.assign(display, item.id).then(
+      () => {
+        const where =
+          options.find((option) => option.id === display)?.name ?? display;
+        setConfirmation(uiCopy.store.assign.assigned(where));
+        onAssigned();
+      },
+      (error: unknown) => {
+        setRefusal(reason(error));
+      },
+    );
   };
 
   return (
-    <Dialog
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      label={uiCopy.store.cell.actions.assign}
-      closeLabel={uiCopy.store.assign.close}
-    >
-      {/* The dialog's own name, printed: the action a person pressed, so the
-          surface says which of the four they are in. */}
-      <p className="editor-shell-dialog-lead">
-        {uiCopy.store.cell.actions.assign}
-      </p>
+    <>
       {answered === undefined ? null : (
         <ControlSelect
           label={uiCopy.store.assign.display}
@@ -144,6 +156,49 @@ export function AssignDisplay(props: {
       >
         {refusal}
       </p>
+      <p
+        className="editor-shell-dialog-status"
+        role="status"
+        data-yunari-store-assign-confirmed=""
+        hidden={confirmation === undefined}
+      >
+        {confirmation}
+      </p>
+    </>
+  );
+}
+
+/**
+ * The display choice a cell's **Assign to display** opens: the dialog around
+ * the choice the theme's own page draws inline.
+ *
+ * **The dialog closes on a landed assignment** because the assign was the whole
+ * errand; a page that was being read stays open instead and reads the
+ * confirmation, which is why `AssignChoice` reports the landing rather than
+ * closing anything itself.
+ */
+export function AssignDisplay(props: {
+  readonly item: StoreItem;
+  readonly client: ThemeLibraryClient;
+  readonly onClose: () => void;
+}): React.JSX.Element {
+  const { item, client, onClose } = props;
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      label={uiCopy.store.cell.actions.assign}
+      closeLabel={uiCopy.store.assign.close}
+    >
+      {/* The dialog's own name, printed: the action a person pressed, so the
+          surface says which of the four they are in. */}
+      <p className="editor-shell-dialog-lead">
+        {uiCopy.store.cell.actions.assign}
+      </p>
+      <AssignChoice item={item} client={client} onAssigned={onClose} />
     </Dialog>
   );
 }
