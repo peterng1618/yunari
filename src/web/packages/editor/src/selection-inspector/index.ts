@@ -8,6 +8,7 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
+  applyObjectTypeTokens,
   isLocked,
   type PlanTextObject,
   scaleOf,
@@ -738,6 +739,12 @@ export function createSelectionInspector(
     applyAuthoredText(editor.canvas, globals, {
       artboardHeight: editor.artboard().height,
     });
+    // A run edit can change the first run's type token — the preset picker
+    // does, and so does dropping run zero — and the object-level face is
+    // `object-type.ts`'s to write. The authored pass deliberately leaves
+    // `fontFamily`/`fontWeight` alone, so the face is refreshed here or not at
+    // all (`vg-766`).
+    applyObjectTypeTokens(editor.canvas, globals);
     commit();
     render();
     return true;

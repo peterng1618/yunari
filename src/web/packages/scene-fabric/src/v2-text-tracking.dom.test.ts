@@ -196,6 +196,26 @@ describe("the v2 path applies tracking", () => {
   });
 });
 
+describe("the object-level face has one owner", () => {
+  it("leaves the face to the object cache when authored text is repainted", () => {
+    const object = textbox("wordmark", [
+      { kind: "literal", text: "YUNARI", typeToken: "typeTokens.tracked" },
+    ]);
+    object.set({ fontFamily: "Old", fontWeight: 400 });
+    const canvas = canvasOf([object]);
+    const globals = globalsWith();
+
+    // The run's token resolves to Inter, but the authored pass paints only the
+    // run's size, leading and tracking. `applyObjectTypeTokens` writes the
+    // face; a second writer is how one field got two homes (`vg-766`).
+    applyAuthoredText(canvas, globals, { bindings: {} });
+    expect(object.fontFamily).toBe("Old");
+
+    applyObjectTypeTokens(canvas, globals);
+    expect(object.fontFamily).toBe("Inter");
+  });
+});
+
 describe("fixed boxes survive a changing reading", () => {
   it("holds a centre-aligned label on its box as the reading widens", () => {
     // The hard case the brief names: a capacity label whose text grows a digit

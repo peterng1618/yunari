@@ -329,25 +329,22 @@ interface ApplyAuthoredTextOptions {
 }
 
 /**
- * The object's own typography is its first run's, resolved.
+ * The object's own size, leading and tracking is its first run's, resolved.
  *
- * `fontFamily`, `fontSize` and `fontWeight` also reach Fabric per grapheme, but
- * `charSpacing` and `lineHeight` are whole-object properties Fabric measures
- * once, so a run's tracking can only arrive here. A run that authored no
- * tracking clears the object's, the way the old token field did.
+ * **Not the face.** `fontFamily` and `fontWeight` belong to `object-type.ts`'s
+ * `applyObjectTypeTokens`, which reads the same first run's type token: two
+ * writers of one object-level field is how a wrong number gets two homes
+ * (`vg-766`). They also reach Fabric per grapheme, but `charSpacing` and
+ * `lineHeight` are whole-object properties Fabric measures once, so a run's
+ * tracking can only arrive here. A run that authored no tracking clears the
+ * object's, the way the old token field did.
  */
 function runTypePaint(
   style: ResolvedStyle | undefined,
 ): Readonly<Record<string, unknown>> {
   const paint = paintFor(style ?? {}, "text");
   return {
-    ...(paint["fontFamily"] === undefined
-      ? {}
-      : { fontFamily: paint["fontFamily"] }),
     ...(paint["fontSize"] === undefined ? {} : { fontSize: paint["fontSize"] }),
-    ...(paint["fontWeight"] === undefined
-      ? {}
-      : { fontWeight: paint["fontWeight"] }),
     ...(paint["lineHeight"] === undefined
       ? {}
       : { lineHeight: paint["lineHeight"] }),
