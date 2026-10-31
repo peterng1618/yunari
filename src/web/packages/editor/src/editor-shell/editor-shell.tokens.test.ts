@@ -73,8 +73,8 @@ function declarationBlock(palette: string): string {
 }
 
 /** The `--shell-*` tokens a palette block must declare: every *source* a
- *  `--shell-*` role or its the palette alias can name. The eleven colours plus the
- *  primary button's pair.
+ *  `--shell-*` role or its the palette alias can name. The twelve colours plus
+ *  the primary button's pair.
  *
  *  `--shell-display` is deliberately absent: it is declared once on the
  *  baseline and inherited, it is not a colour, and requiring it per block
@@ -89,6 +89,7 @@ const SOURCE_TOKENS = [
   "--shell-text",
   "--shell-muted",
   "--shell-accent",
+  "--shell-attention",
   "--shell-warm",
   "--shell-danger",
   "--shell-primary-bg",
@@ -484,8 +485,8 @@ describe("shell token stylesheet", () => {
 
     // **One token is not a colour, and a `--color-*` name for it would compile
     // a broken utility** — Tailwind's namespaces are per type, so a font stack
-    // belongs in `--font-*`. Measured: the file declares thirteen `--shell-*`
-    // tokens and twelve of them are colours, which the count below pins so
+    // belongs in `--font-*`. Measured: the file declares fourteen `--shell-*`
+    // tokens and thirteen of them are colours, which the count below pins so
     // this exclusion cannot quietly grow to swallow one.
     const NOT_A_COLOUR = new Set(["--shell-display"]);
     const declared = [...css.matchAll(/^\s*(--shell-[a-z-]+)\s*:/gm)].map(
@@ -494,7 +495,7 @@ describe("shell token stylesheet", () => {
     const colours = [...new Set(declared)].filter(
       (token) => !NOT_A_COLOUR.has(token),
     );
-    expect(colours, "the exclusion set is hiding a colour").toHaveLength(12);
+    expect(colours, "the exclusion set is hiding a colour").toHaveLength(13);
 
     for (const token of colours) {
       expect(
@@ -510,14 +511,14 @@ describe("shell token stylesheet", () => {
    *  `--shell-*` layer exists. An alias is substituted where it is declared, so
    *  a role declared once at `:root` would resolve the root's palette and pin a
    *  subtree that re-declares `--shell-*` — the swatch chip — to it. Every
-   *  palette therefore declares all thirteen, and each colour role that can hold
+   *  palette therefore declares all fourteen, and each colour role that can hold
    *  a plain colour gets a utility name so a React surface writes `bg-panel-2`
    *  rather than an arbitrary value; `--bg` and `--stage` cannot, and say why
    *  below.
    *
    *  `--stage`, `--hdr` and `--edge-2` were declared ahead of their consumers
    *  on the user's instruction, reversing the earlier "nothing declared for
-   *  nothing" ruling recorded here: the palette names all thirteen roles, and the gap
+   *  nothing" ruling recorded here: the palette names all fourteen roles, and the gap
    *  was the detail pass every later plan composes from. A colour declared for
    *  nothing is still the defect this plan exists to remove — the reversal is
    *  the user's, and the three now have a named consumer path. */
@@ -534,6 +535,7 @@ describe("shell token stylesheet", () => {
       "--muted",
       "--faint",
       "--accent",
+      "--attention",
       "--warn",
       "--hot",
     ];

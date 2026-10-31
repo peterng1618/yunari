@@ -42,6 +42,7 @@ body,
   --shell-muted: #4f6659;
   --shell-backdrop: linear-gradient(145deg, #d8ebe4, #afd4d1);
   --shell-accent: #1c6b4f;
+  --shell-attention: #9a4a00;
   --shell-warm: #8a5a2b;
   --shell-danger: color-mix(in srgb, #ff7e6e 40%, var(--shell-text));
   --shell-primary-bg: var(--shell-accent);
@@ -54,6 +55,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -160,6 +162,7 @@ body,
     --shell-text: #e8ecf3;
     --shell-muted: #8a97ab;
     --shell-accent: #72e0c0;
+    --shell-attention: #ff9f45;
     --shell-warm: #f3aa64;
     --shell-danger: #ff7e6e;
     --shell-primary-bg: var(--shell-accent);
@@ -174,6 +177,7 @@ body,
     --muted: var(--shell-muted);
     --faint: #5a6675;
     --accent: var(--shell-accent);
+    --attention: var(--shell-attention);
     --warn: var(--shell-warm);
     --hot: var(--shell-danger);
     --stage: var(--shell-backdrop);
@@ -208,6 +212,7 @@ body,
   --shell-text: #14120e;
   --shell-muted: #5a5449;
   --shell-accent: #14120e;
+  --shell-attention: #9a4a00;
   --shell-warm: #8a5a2b;
   --shell-danger: #a4291f;
   --shell-primary-bg: var(--shell-accent);
@@ -221,8 +226,8 @@ body,
      an alias is substituted where it is declared, so a root-only declaration
      would pin a subtree that re-declares `--shell-*` — the swatch chip — to
      the live palette. Nothing is renamed and no `--shell-*` is removed; this
-     block's thirteen lines are repeated in each palette below for that reason.
-     All thirteen of the roles are declared though three of them have no
+     block's fourteen lines are repeated in each palette below for that reason.
+     All fourteen of the roles are declared though three of them have no
      consumer yet, on the user's instruction: a DESIGN.md-named token the code
      lacks gets declared rather than worked around, which reverses the earlier
      "nothing declared for nothing" ruling recorded here.
@@ -245,6 +250,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -279,6 +285,7 @@ body,
   --shell-text: #e8ecf3; /* --text */
   --shell-muted: #8a97ab; /* --muted */
   --shell-accent: #72e0c0; /* --accent */
+  --shell-attention: #ff9f45;
   --shell-warm: #f3aa64; /* no palette token: --warn is the product's own */
   --shell-danger: #ff7e6e; /* --hot */
   --shell-primary-bg: var(--shell-accent); /* the chip's `background` */
@@ -296,6 +303,7 @@ body,
   --muted: var(--shell-muted);
   --faint: #5a6675; /* --faint, the literal */
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -334,6 +342,7 @@ body,
   --shell-text: #2e1a0f;
   --shell-muted: #6d5138;
   --shell-accent: #8f4208;
+  --shell-attention: #0b5f66;
   /* The 4.5:1 rather than the pastel: `#ff7e6e` read at 1.98:1 on this paper.
      The hue is held and the lightness deepened; `#b81400` measures 5.34:1 on
      `--shell-surface` and 4.88:1 on the cluster's 95% fill over the canvas. */
@@ -355,6 +364,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -370,6 +380,7 @@ body,
   --shell-text: #1c2a12;
   --shell-muted: #4f6242;
   --shell-accent: #38601a;
+  --shell-attention: #8a4a00;
   /* Deepened as ember's, from `#e8c56a` at 1.40:1: 5.47:1 on the surface,
      4.99:1 on the cluster fill. */
   --shell-warm: #7a5800;
@@ -387,6 +398,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -402,6 +414,7 @@ body,
   --shell-text: #241634;
   --shell-muted: #5a4870;
   --shell-accent: #543484;
+  --shell-attention: #9a4a00;
   /* Deepened as ember's, from `#ffb2a1` at 1.39:1: 5.19:1 on the surface,
      4.74:1 on the cluster fill. */
   --shell-warm: #b82100;
@@ -419,6 +432,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -436,6 +450,7 @@ body,
   /* The one palette that never declared an accent and inherited editorial's
      ink, which on mint read as a gap rather than as a choice. */
   --shell-accent: #1c6b4f;
+  --shell-attention: #9a4a00;
   /* `--warn` had no source here either: `--shell-warm` fell through to the
      baseline's editorial brown, so it is declared at the value it already
      resolved to rather than changed to a different hue in passing. */
@@ -457,6 +472,7 @@ body,
   --muted: var(--shell-muted);
   --faint: color-mix(in srgb, var(--muted) 68%, transparent);
   --accent: var(--shell-accent);
+  --attention: var(--shell-attention);
   --warn: var(--shell-warm);
   --hot: var(--shell-danger);
   --stage: var(--shell-backdrop);
@@ -612,6 +628,7 @@ body,
   --color-shell-text: var(--shell-text);
   --color-shell-muted: var(--shell-muted);
   --color-shell-accent: var(--shell-accent);
+  --color-shell-attention: var(--shell-attention);
   --color-shell-warm: var(--shell-warm);
   --color-shell-danger: var(--shell-danger);
   --color-shell-primary-bg: var(--shell-primary-bg);
@@ -634,6 +651,7 @@ body,
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
+  --color-attention: var(--attention);
   --color-warn: var(--warn);
   --color-hot: var(--hot);
   --color-hdr: var(--hdr);

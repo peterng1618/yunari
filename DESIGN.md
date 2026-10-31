@@ -96,6 +96,7 @@ palette resolves it:
 | `--muted` | Secondary text, labels, inactive icons |
 | `--faint` | Tertiary: counts, hints, disabled glyphs |
 | `--accent` | The one thing the author should do or has done |
+| `--attention` | Work in flight: unsaved or unpublished changes, a pending operation, a reading awaiting the author |
 | `--warn` | Something needs attention; not an error |
 | `--hot` | Destructive. Delete, and only delete |
 
@@ -105,6 +106,12 @@ the primary button. Two accents in one region means neither is the accent.
 
 **`--hot` marks destructive affordances only.** It never marks "important", and
 a disabled destructive control stays `--faint` rather than dimming red.
+
+**`--attention` marks work in flight, never an action or a fault.** It appears
+only on an unsaved or unpublished indicator, an operation still running, or a
+reading that is stale and waiting for the author. It never fills a button,
+never shares an element with `--accent`, and does not stand in for `--warn`
+(something needs attention) or `--hot` (destructive).
 
 ## Typography
 
