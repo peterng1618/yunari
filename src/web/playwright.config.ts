@@ -107,6 +107,10 @@ export default defineConfig({
   // passed alone, and the wall clock was the variable rather than the assertion
   // (issue #79). The suite still fails a case that never reaches its selector.
   testTimeout: 60_000,
+  // The assertion budget is where the same load actually showed: `toHaveCount`
+  // and friends kept Playwright's 5 s default, so a popup that took longer than
+  // 5 s to draw failed a 60 s test. Raised with the same ruling (issue #79).
+  expect: { timeout: 60_000 },
   // `workers` is deliberately left to Playwright's default (half the cores).
   // Hardcoding a count would oversubscribe a small CI runner, and oversubscription
   // is what turned the long `clock.runFor` waits into 30 s timeouts under load.
