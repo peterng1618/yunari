@@ -450,7 +450,11 @@ export {
   YUNARI_NAME_PROPERTY,
 } from "./theme/object-name.js";
 export type { PaletteTokenOption } from "./theme/palette-tokens.js";
-export { paletteTokenOptions } from "./theme/palette-tokens.js";
+export {
+  isOfferedPaletteToken,
+  paletteTokenIds,
+  paletteTokenOptions,
+} from "./theme/palette-tokens.js";
 export type { PerformanceCost } from "./theme/performance-cost.js";
 export { performanceCostsOf } from "./theme/performance-cost.js";
 export { defaultTypeSize } from "./theme/type-size.js";

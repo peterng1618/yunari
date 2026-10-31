@@ -58,9 +58,9 @@ export interface EditorShellSnapshot {
    *  default, and the two are different answers. */
   readonly objectCount: number | undefined;
   /** The Tokens pane's own list, as the title bar counts it: the theme's
-   *  paints, minus the reserved `none` (`paletteTokenIds`, the same module
-   *  `PaintList` draws its rows from — one membership rule, so the number beside
-   *  the title and the rows under it cannot disagree).
+   *  paints, minus the reserved `none` (`paletteTokenIds` in renderer-core, the
+   *  same rule `PaintList` draws its rows from — one membership rule, so the
+   *  number beside the title and the rows under it cannot disagree).
    *
    *  A number rather than `number | undefined` wherever a bridge exists: the
    *  bridge is only built over an open document, and a document whose globals

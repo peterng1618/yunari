@@ -11,6 +11,7 @@ import {
   formatInstant,
   groupDescriptorsByFamily,
   instantIn,
+  isOfferedPaletteToken,
   knownTimeZones,
   paletteTokenOptions,
   SEMANTIC_KEYS,
@@ -117,7 +118,7 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
   readonly name: string;
   readonly ref: string;
 }[] {
-  return paletteTokenOptions(globals?.palette, (id) => id !== "none").map(
+  return paletteTokenOptions(globals?.palette, isOfferedPaletteToken).map(
     (option) => ({ id: option.id, name: option.name, ref: option.id }),
   );
 }

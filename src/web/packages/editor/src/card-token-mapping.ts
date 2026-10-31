@@ -1,4 +1,7 @@
-import type { FabricGlobals } from "@yunari/renderer-core";
+import {
+  type FabricGlobals,
+  isOfferedPaletteToken,
+} from "@yunari/renderer-core";
 import { paletteTokenRole } from "./new-object-defaults.js";
 
 /**
@@ -115,7 +118,7 @@ function paletteRoleMatch(
 ): string | undefined {
   const wanted = paletteTokenRole(entry);
   const candidates = Object.keys(globals?.palette ?? {}).filter(
-    (id) => id !== "none",
+    isOfferedPaletteToken,
   );
   return (
     candidates.find((id) => paletteTokenRole(id) === wanted) ?? candidates[0]

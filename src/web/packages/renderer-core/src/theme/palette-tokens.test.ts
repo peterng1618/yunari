@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { FabricPalette } from "./fabric-envelope.js";
-import { paletteTokenOptions } from "./palette-tokens.js";
+import {
+  isOfferedPaletteToken,
+  paletteTokenIds,
+  paletteTokenOptions,
+} from "./palette-tokens.js";
 
 /** A document's tokens, as a hand-authored or store-downloaded theme declares
     them. `none` is the reserved transparent token every starter carries. */
@@ -19,6 +23,23 @@ const PALETTE = {
     },
   },
 } as unknown as FabricPalette;
+
+describe("isOfferedPaletteToken", () => {
+  it("excludes the reserved none and includes an authored token", () => {
+    expect(isOfferedPaletteToken("none")).toBe(false);
+    expect(isOfferedPaletteToken("ink")).toBe(true);
+  });
+});
+
+describe("paletteTokenIds", () => {
+  it("lists the document's tokens in declaration order without none", () => {
+    expect(paletteTokenIds(PALETTE)).toEqual(["ink", "heat"]);
+  });
+
+  it("offers nothing when the document declares no palette", () => {
+    expect(paletteTokenIds(undefined)).toEqual([]);
+  });
+});
 
 describe("paletteTokenOptions", () => {
   it("names each of the document's tokens by the name its author gave it", () => {

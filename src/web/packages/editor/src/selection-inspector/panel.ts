@@ -1,5 +1,8 @@
 import type { FabricGlobals } from "@yunari/renderer-core";
-import { paletteTokenOptions } from "@yunari/renderer-core";
+import {
+  isOfferedPaletteToken,
+  paletteTokenOptions,
+} from "@yunari/renderer-core";
 import {
   Arc,
   applyObjectPalettePaints,
@@ -156,7 +159,8 @@ function paintOptions(
     ...paletteTokenOptions(
       globals?.palette,
       (id, entry) =>
-        id !== "none" && !(solidOnly && entry.value.kind !== "solid"),
+        isOfferedPaletteToken(id) &&
+        !(solidOnly && entry.value.kind !== "solid"),
     ),
   ];
 }
