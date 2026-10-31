@@ -56,6 +56,7 @@ describe("commandBlock", () => {
       "play-block": 121,
       "stop-play": 123,
       "buffer-level": 122,
+      "h264-block": 17,
     });
   });
 

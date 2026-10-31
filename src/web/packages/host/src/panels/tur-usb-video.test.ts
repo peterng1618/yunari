@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clipFps,
   encodePanelH264,
   H264_BLOCK_BYTES,
   panelH264Args,
@@ -39,16 +40,37 @@ describe("panelH264Args", () => {
     expect(filter).toContain("-464*0");
   });
 
-  it("encodes without B-frames, which the panel's decoder stalls on", () => {
+  it("encodes with the vendor's exact arguments", () => {
     const args = panelH264Args("in.mp4", "out.h264", GEOMETRY);
 
-    expect(args[args.indexOf("-x264opts") + 1]).toContain("bframes=0");
+    // L-Connect's TransferH264: no frame rate, no bitrate, no profile — the
+    // panel takes the stream's own pacing.
+    expect(args[args.indexOf("-x264opts") + 1]).toBe("bframes=0");
+    expect(args[args.indexOf("-threads") + 1]).toBe("4");
+    expect(args[args.indexOf("-preset") + 1]).toBe("ultrafast");
+    expect(args).not.toContain("-b:v");
+    expect(args).not.toContain("-maxrate");
+    expect(args).not.toContain("-r");
     expect(args[args.indexOf("-f") + 1]).toBe("h264");
     expect(args).not.toContain("-movflags");
   });
 
-  it("uses the vendor's block size", () => {
+  it("uses the vendor's block size only as a fallback", () => {
     expect(H264_BLOCK_BYTES).toBe(202_752);
+  });
+});
+
+describe("clipFps", () => {
+  it("reads the input's rate from ffmpeg's report", () => {
+    expect(
+      clipFps(
+        "Stream #0:0: Video: h264 (High), yuv420p, 1920x1080, 23.98 fps, 24 tbr",
+      ),
+    ).toBe(24);
+  });
+
+  it("reports no rate when ffmpeg names none", () => {
+    expect(clipFps("Input #0, mov,mp4,m4a")).toBe(0);
   });
 });
 

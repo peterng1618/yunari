@@ -48,7 +48,7 @@ function frameEvent(data: string, sessionId: number): Record<string, unknown> {
 }
 
 describe("startScreencast", () => {
-  it("pushes every frame in the device's encoding and acks each one", async () => {
+  it("acks a frame when it is consumed, not when it arrives", async () => {
     const { devtools, sent, push } = fakeDevtools();
 
     const cast = await startScreencast(devtools, "png");
@@ -60,13 +60,17 @@ describe("startScreencast", () => {
 
     push("Page.screencastFrame", frameEvent("one", 7));
     await Promise.resolve();
+    // An unacknowledged frame is what holds the browser's next one back.
+    expect(
+      sent.some((entry) => entry.method === "Page.screencastFrameAck"),
+    ).toBe(false);
 
-    expect(request(sent, "Page.screencastFrameAck").params).toEqual({
-      sessionId: 7,
-    });
     const frame = await cast.next(0);
     expect(frame.sequence).toBe(1);
     expect(Buffer.from(frame.bytes).toString()).toBe("one");
+    expect(request(sent, "Page.screencastFrameAck").params).toEqual({
+      sessionId: 7,
+    });
   });
 
   it("asks for JPEG 85 when the device renders that encoding itself", async () => {
@@ -101,6 +105,22 @@ describe("startScreencast", () => {
 
     push("Page.screencastFrame", frameEvent("two", 2));
     expect((await pending).sequence).toBe(2);
+  });
+
+  it("acks the frame it hands over, not the one it skipped", async () => {
+    const { devtools, sent, push } = fakeDevtools();
+    const cast = await startScreencast(devtools, "png");
+
+    push("Page.screencastFrame", frameEvent("one", 1));
+    push("Page.screencastFrame", frameEvent("two", 2));
+
+    const frame = await cast.next(0);
+    expect(frame.sequence).toBe(2);
+
+    const acks = sent.filter(
+      (entry) => entry.method === "Page.screencastFrameAck",
+    );
+    expect(acks.map((entry) => entry.params)).toEqual([{ sessionId: 2 }]);
   });
 
   it("refuses after a second with no frame", async () => {

@@ -7,7 +7,7 @@ import { inflateSync } from "node:zlib";
  * Chromium's `Page.captureScreenshot` writes 8-bit truecolour PNGs —
  * `RGB` or `RGBA`, no interlacing, no palette — and the panel pipeline needs
  * those pixels in milliseconds. Everything else is refused by name rather than
- * guessed at; `panel-image.ts` keeps ffmpeg for arbitrary stills.
+ * guessed at; theme video goes through ffmpeg, which owns files and streams.
  *
  * Node's own `zlib` does the decompression: a PNG's IDAT stream is a zlib
  * stream, and the only work left is undoing the per-row filter.

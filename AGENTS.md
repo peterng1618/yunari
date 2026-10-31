@@ -177,3 +177,6 @@ Node support is `>=22`; Vitest 5 accepts `^22.12 || ^24 || >=26`. CI pins Node
 - `docs/architecture.md` — package boundaries and data flow.
 - `docs/development.md` — local setup, tests and tooling detail.
 - `docs/operations.md` — running, security, releases and store deployment.
+- `docs/hardware/` — per-device USB protocols, opcodes, media handling, firmware
+  facts and quirks; update the device's document when hardware teaches something
+  new.

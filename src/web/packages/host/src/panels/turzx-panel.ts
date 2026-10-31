@@ -8,7 +8,7 @@ import type {
   PanelVideo,
   PanelVideoPlacement,
 } from "./panel-device.js";
-import { decodeStill, type RawFrame } from "./panel-image.js";
+import { decodePngRgba } from "./png-raster.js";
 import {
   listSerialPorts,
   openSerialPort,
@@ -87,6 +87,14 @@ interface HeldPanel {
 }
 
 const heldPanels = new Map<string, HeldPanel>();
+
+/** One decoded still, in the shape the panel's own wire takes. */
+export interface RawFrame {
+  readonly width: number;
+  readonly height: number;
+  /** Straight RGBA, 4 bytes per pixel, row-major, top-left origin. */
+  readonly rgba: Uint8Array;
+}
 
 export interface TurzxOptions {
   readonly ports?: () => Promise<readonly SerialPortInfo[]>;
@@ -664,10 +672,16 @@ export async function openTurzxPanel(
 ): Promise<PanelDevice> {
   const ports = await (options.ports ?? listSerialPorts)();
   const open = options.open ?? openSerialPort;
+  // In process, because the rasteriser wrote this PNG itself: a spawn and a
+  // 70 MB digest per frame is a subprocess the host already paid to avoid.
   const decode =
     options.decode ??
     ((bytes: Uint8Array, width: number, height: number) =>
-      decodeStill(bytes, width, height));
+      Promise.resolve({
+        width,
+        height,
+        rgba: decodePngRgba(bytes, width, height),
+      }));
   const transcode: Transcode =
     options.transcode ??
     ((bytes, placement) => transcodeForPanel(bytes, { placement }));

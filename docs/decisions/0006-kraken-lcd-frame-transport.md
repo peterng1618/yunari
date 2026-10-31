@@ -1,7 +1,7 @@
 # 0006 — Stream the Kraken Z through a two-bucket ring
 
 - **Date:** 2026-10-30
-- **Status:** accepted
+- **Status:** superseded by 0018
 - **Paths:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`,
   `src/web/packages/host/src/panels/png-raster.ts`,
   `src/web/packages/host/src/panels/panel-image.ts`,

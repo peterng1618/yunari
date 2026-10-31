@@ -80,9 +80,9 @@ export interface Screencast {
  * `Page.captureScreenshot` answers "what is on screen now" with a round trip of
  * its own: the reply lands later, on a surface the renderer had already
  * committed, and the next request cannot start until it arrives. The screencast
- * pushes every commit instead, in order, and drops one when the ack is late —
- * the back-pressure a panel wants, and the only way the host can send the frame
- * that is current rather than the frame that was current.
+ * pushes every commit instead, in order, and stops pushing while acks are
+ * outstanding — the back-pressure a panel wants, and the only way the host can
+ * send the frame that is current rather than the frame that was current.
  */
 export async function startScreencast(
   devtools: Devtools,
@@ -90,6 +90,8 @@ export async function startScreencast(
 ): Promise<Screencast> {
   let sequence = 0;
   let newest: LiveFrame | undefined;
+  /** The frame the browser sent and has not been told we are done with. */
+  let unacked: number | undefined;
   let waiting: ((frame: LiveFrame) => void) | undefined;
   let stopped = false;
 
@@ -105,16 +107,30 @@ export async function startScreencast(
     newest = frame;
 
     const sessionId = params["sessionId"];
-    if (typeof sessionId === "number") {
-      void devtools
-        .send("Page.screencastFrameAck", { sessionId })
-        .catch(() => undefined);
-    }
+    unacked = typeof sessionId === "number" ? sessionId : undefined;
 
     const resolve = waiting;
     waiting = undefined;
     resolve?.(frame);
   });
+
+  /**
+   * Tells the browser this frame is spent.
+   *
+   * **The ack is the throttle.** Chromium stops producing frames once a few
+   * are unacknowledged, which is the back-pressure a panel wants: the browser
+   * encodes one frame per frame the host actually consumes, instead of encoding
+   * and shipping ten a second that a 13-per-second wire throws away.
+   */
+  const ack = (): void => {
+    const sessionId = unacked;
+    if (sessionId === undefined) return;
+    unacked = undefined;
+
+    void devtools
+      .send("Page.screencastFrameAck", { sessionId })
+      .catch(() => undefined);
+  };
 
   await devtools.send("Page.startScreencast", {
     format,
@@ -126,6 +142,7 @@ export async function startScreencast(
     async next(after: number): Promise<LiveFrame> {
       const available = newest;
       if (available !== undefined && available.sequence > after) {
+        ack();
         return available;
       }
 
@@ -141,6 +158,7 @@ export async function startScreencast(
 
         waiting = (frame) => {
           clearTimeout(timer);
+          ack();
           resolve(frame);
         };
       });
@@ -374,6 +392,43 @@ async function startBrowser(
  * samples keep arriving over its own stream and a capture returns the newest one
  * rather than asking the renderer to compose on demand.
  */
+/**
+ * One `Page.captureScreenshot` of the artboard, clipped to the panel.
+ *
+ * **The overlay is photographed, not screencast.** A screencast frame is a
+ * surface the renderer had already committed, and hiding the media layer is a
+ * script the compositor applies afterwards: the frame that follows the switch
+ * can still carry the video, which for a 464x1920 panel is a 1.3 MB PNG the
+ * device refuses (512,000-byte cap) where the UI alone is 48 KB. A screenshot
+ * is composed after the script, so the bytes are the UI by construction.
+ */
+async function shot(
+  devtools: Devtools,
+  geometry: PanelGeometry,
+  format: "jpeg" | "png",
+): Promise<Uint8Array> {
+  const reply = await devtools.send("Page.captureScreenshot", {
+    format,
+    ...(format === "jpeg" ? { quality: 85 } : {}),
+    clip: {
+      x: 0,
+      y: 0,
+      width: geometry.width,
+      height: geometry.height,
+      scale: 1,
+    },
+    // The page is exactly the clip size, so nothing here is off-screen.
+    captureBeyondViewport: false,
+  });
+
+  const data = reply.result?.["data"];
+  if (typeof data !== "string") {
+    throw new Error("the browser answered a screenshot with no image");
+  }
+
+  return new Uint8Array(Buffer.from(data, "base64"));
+}
+
 export async function createRasterizer(
   options: RasterOptions,
 ): Promise<Rasterizer> {
@@ -386,8 +441,6 @@ export async function createRasterizer(
 
   let devtools: BrowserDevtools | undefined;
   let frames: Screencast | undefined;
-  /** The encoding the running screencast produces; the overlay needs PNG. */
-  let encoding: "jpeg" | "png" = options.stillFormat ?? "jpeg";
 
   try {
     const target = (await fetch(`${base}/json/new?about:blank`, {
@@ -415,9 +468,6 @@ export async function createRasterizer(
 
     await devtools.send("Page.navigate", { url: options.url });
     await waitForScene(devtools);
-    // The compositor is the frame source from here: a capture is a lookup of
-    // what it has already committed, not a request for a fresh surface.
-    frames = await startScreencast(devtools, encoding);
   } catch (error) {
     child.kill();
     await rm(profile, { recursive: true, force: true }).catch(() => {});
@@ -427,9 +477,10 @@ export async function createRasterizer(
   let closed = false;
   /** The identity of the last frame handed to the runner. */
   let sequence = 0;
-  /** The mode the last frame was composed in, so a switch settles once. */
+  /** True while the page is composing without its picture, for an overlay. */
   let overlay = false;
-
+  /** Temporary probe: the first overlay, returned forever when asked. */
+  let frozenOverlay: Uint8Array | undefined;
   const connected = (): Devtools => {
     if (closed || devtools === undefined) {
       throw new Error("The rasteriser is closed.");
@@ -439,30 +490,27 @@ export async function createRasterizer(
   };
 
   /**
-   * The next frame the renderer has not already given us, composed in
-   * `wantOverlay`.
+   * The next still the compositor has not already given us.
    *
-   * A mode change is spent before it is answered: a frame the compositor
-   * committed before the switch would carry the old mode, so that one is
-   * consumed and the next frame is the one the caller asked for.
+   * **A screencast starts on the first still, not at page load.** A panel that
+   * plays its own video asks for no stills at all, and a screencast of a
+   * 464x1920 page decoding video is a compositor running at video rate for
+   * pixels nobody reads — CPU the device's own feed then competes with.
    */
-  const nextFrame = async (wantOverlay: boolean): Promise<Uint8Array> => {
-    const format = wantOverlay ? "png" : (options.stillFormat ?? "jpeg");
+  const nextFrame = async (): Promise<Uint8Array> => {
+    if (closed) throw new Error("The rasteriser is closed.");
 
-    if (format !== encoding) {
-      await frames?.stop();
-      frames = await startScreencast(connected(), format);
-      encoding = format;
-      sequence = 0;
+    // A still is the theme with its picture: the overlay leaves a transparent
+    // backdrop behind, and a JPEG has no alpha to carry it.
+    if (overlay) {
+      await setOverlayMode(connected(), false);
+      overlay = false;
     }
 
-    if (frames === undefined) throw new Error("The rasteriser is closed.");
-
-    if (wantOverlay !== overlay) {
-      await setOverlayMode(connected(), wantOverlay);
-      overlay = wantOverlay;
-      sequence = (await frames.next(sequence)).sequence;
-    }
+    frames ??= await startScreencast(
+      connected(),
+      options.stillFormat ?? "jpeg",
+    );
 
     const frame = await frames.next(sequence);
     sequence = frame.sequence;
@@ -471,11 +519,30 @@ export async function createRasterizer(
 
   return {
     capture(): Promise<Uint8Array> {
-      return nextFrame(false);
+      return nextFrame();
     },
 
-    captureOverlay(): Promise<Uint8Array> {
-      return nextFrame(true);
+    async captureOverlay(): Promise<Uint8Array> {
+      if (
+        process.env["YUNARI_PANEL_FREEZE_OVERLAY"] === "1" &&
+        frozenOverlay !== undefined
+      ) {
+        return frozenOverlay;
+      }
+
+      // **The mode is entered once and kept.** A video panel asks for an
+      // overlay on every tick, and hiding then restoring the media layer per
+      // tick is page work on the same event loop that feeds the device its
+      // clip; the mode only changes back when a still is asked for.
+      if (!overlay) {
+        await setOverlayMode(connected(), true);
+        overlay = true;
+      }
+
+      const image = await shot(connected(), options.geometry, "png");
+
+      frozenOverlay ??= image;
+      return image;
     },
 
     async close(): Promise<void> {

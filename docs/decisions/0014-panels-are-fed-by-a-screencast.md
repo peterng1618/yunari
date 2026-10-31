@@ -1,7 +1,8 @@
 # 0014 — A panel is fed by a screencast, not one screenshot per frame
 
 - **Date:** 2026-10-31
-- **Status:** accepted
+- **Status:** accepted for live stills. 0021 takes the overlay out of the
+  screencast: a compositor frame can predate the script that hides the media.
 - **Paths:** `src/web/packages/host/src/panels/panel-raster.ts`
 
 ## Problem
@@ -82,3 +83,13 @@ toggles overlay mode first and then waits for a frame produced after the toggle,
 so the alpha layer reflects the mode rather than the frame before it. The
 screenshot path, its clip and its background-override dance are deleted: two
 capture mechanisms would drift.
+
+**The ack is the throttle.** An ack sent the moment a frame arrives lets
+Chromium encode and ship every compositor commit — 30 a second for a wire that
+takes eleven — and the host pays the base64, JSON and PNG costs for all of them.
+Chromium stops producing frames while a few are unacknowledged (Cypress shipped
+a fix for exactly this after Chrome 87 froze its recordings), so the ack moved
+to the moment a frame is handed to the panel. Measured on the live host: the
+Kraken's cadence rose from 9.15 to 9.86 frames a second before the handler work
+was moved off-thread (0016, 0017), and the host stopped processing frames the
+panel would never see.

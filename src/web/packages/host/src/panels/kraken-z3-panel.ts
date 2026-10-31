@@ -19,16 +19,18 @@ import { decodePngRgba } from "./png-raster.js";
  * write still succeeds on the wire. So the driver keeps two buckets and always
  * writes the one that is not displayed, which is what makes the picture move.
  *
- * **Mode `0x03` streaming packets do not paint this firmware.** CAM's own
- * web-integration stream is a 20-byte header plus a 103,424-byte palette and
- * index plane, about nine times a second, and CAM's captured packets replayed
- * by hand are accepted without error and shown nowhere. The bucket ring above
- * is the transport that works on the attached Z73: 2,316 frames in three
- * minutes with no failed command, measured at 12.9 FPS.
+ * **The live stream is 24-bit RGBA, not the 8-bit paletted mode `0x03`.** Both
+ * modes paint when fed through a bucket ring, and a mode-3 frame is a quarter
+ * of the bytes. But 256 colours are the whole colour space the panel then has,
+ * and on a theme with a gradient or a photograph that is large flat bands —
+ * visibly worse than the frame the browser composed. A mode-2 frame costs
+ * 409,600 bytes of bulk; the firmware then takes about 140 ms to put the bucket
+ * on the glass, so the cadence below is the glass's, not the wire's. The
+ * palette would buy a faster glass, not wire time.
  *
  * **The payload goes out in one bulk write.** The endpoint took all 409,600
- * bytes in 36 ms; splitting it into liquidctl's 512-byte writes costs 800 USB
- * round trips for the same bytes.
+ * bytes in 36–52 ms across runs (51.6 ms mean on 2026-10-31); splitting it into
+ * liquidctl's 512-byte writes costs 800 USB round trips for the same bytes.
  *
  * The transport is two interfaces on one device, and neither alone is enough:
  * **control is HID** (interface 1, 64-byte reports) and **data is bulk**
@@ -70,13 +72,26 @@ const HEADER_BYTES = HEADER_MAGIC.length + 8;
 const BUCKET_SLOTS = Math.ceil((HEADER_BYTES + FRAME_BYTES) / SLOT_BYTES);
 const MAX_READ_ATTEMPTS = 8;
 const READ_TIMEOUT_MS = 120;
+/** How long the firmware gets to finish storing a bucket before it is shown. */
+const UPLOAD_SETTLE_MS = 10;
 /**
- * The camera-ready cadence: the ring carried 12.9 FPS on this hardware, so the
- * runner is asked for one frame every 70 ms. A tick costs about a capture plus
- * a send and the runner overlaps those, so the achieved rate lands near 10 FPS
- * rather than the 9 CAM asks for.
+ * **The glass honours a switch only about every 140 ms on mode-2 frames.**
+ *
+ * The wire carries a 400 KB frame in ~90 ms, so the ring can be driven at
+ * ~11 frames a second — but the firmware answers every command with status 1
+ * and silently drops a switch that arrives before it has finished putting the
+ * previous bucket on the glass. Filming the glass at 30 fps while the host
+ * drove it at 70 ms showed about half the frames missing from the glass (59%
+ * shown without the settle, 50% with it), in an irregular pattern, which is the
+ * judder and the pull-back read as a frozen jump. At 130–135 ms a few per cent
+ * of frames still vanished; from 140 ms every frame landed (129 sent, 130
+ * pictures, no pull-back, no held tear).
+ *
+ * CAM lands nine a second because its paletted frame is a quarter of the bytes
+ * (0020). This driver streams 24-bit frames, so the glass, not the wire, sets
+ * the cadence.
  */
-export const KRAKEN_FRAME_INTERVAL_MS = 70;
+export const KRAKEN_FRAME_INTERVAL_MS = 140;
 
 /**
  * The header that precedes a frame: the 12-byte magic, the transfer type, and
@@ -160,10 +175,11 @@ class KrakenControl {
 class KrakenPanel implements PanelDevice {
   readonly geometry: PanelGeometry = { width: SIZE, height: SIZE };
   /**
-   * CAM asks this panel for nine frames a second; the ring itself ran at 12.9
-   * FPS on this hardware. The runner skips a tick whose capture is still in
-   * flight and overlaps capture with send, so this is a target the pipeline
-   * can fall short of, not a promise.
+   * The glass drops a switch that arrives before it has put the previous frame
+   * up, so this is the fastest cadence that shows every frame; see
+   * `KRAKEN_FRAME_INTERVAL_MS`. The runner skips a tick whose capture is still
+   * in flight and overlaps capture with send, so this is a ceiling the
+   * pipeline can fall short of, not a promise.
    */
   readonly frameIntervalMs = KRAKEN_FRAME_INTERVAL_MS;
   /** The still is decoded here, so the rasteriser can skip a lossy step. */
@@ -260,6 +276,11 @@ class KrakenPanel implements PanelDevice {
 
     this.control.write([0x36, 0x02, index]);
     this.control.readUntil(0x37, 0x02);
+    // **The switch races the write.** `36 02` answers before the glass has the
+    // bucket's last tiles; switching on its heels shows a partly old picture,
+    // which on a moving theme reads as a tear. Every command still reports
+    // success, so no status check can see it.
+    await new Promise((resolve) => setTimeout(resolve, UPLOAD_SETTLE_MS));
     this.switchBucket(index);
   }
 
