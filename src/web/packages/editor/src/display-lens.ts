@@ -163,9 +163,7 @@ export function writePreviewRatioTokens(
 
 /** Removing the key is "the defaults again", the same absence-means-default
  *  rule `palette.ts` uses. */
-export function clearPreviewRatioTokens(
-  storage: Storage | undefined,
-): boolean {
+export function clearPreviewRatioTokens(storage: Storage | undefined): boolean {
   if (storage === undefined) return false;
   try {
     storage.removeItem(PREVIEW_RATIO_STORAGE_KEY);
