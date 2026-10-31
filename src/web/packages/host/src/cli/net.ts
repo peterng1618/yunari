@@ -334,19 +334,29 @@ export function rankLanAddresses(source: LanSource): LanChoice {
   };
 }
 
-/** The address a phone on the same LAN should dial.
- *
- *  `source` is injectable so a case carries a fixture; the host reads the
- *  machine it is on. A pick made without a default route to go by is not
- *  silent: the row this exists for (`vg-171`) is invisible on the machine that
- *  makes it — the header renders a plausible dotted quad either way — so the
- *  alternatives go on the record where a wrong pick can be found without a
- *  phone. The host's logging surface is `console` (`main.ts` prints its whole
- *  banner through it) and there is no logger beside it to duplicate. */
-export async function lanAddress(
-  source?: LanSource,
-): Promise<string | undefined> {
-  const choice = rankLanAddresses(source ?? (await readLanSource()));
+/** How long a measured LAN address is trusted. `readLanSource` reaches the
+ *  platform's route table, which blocks for over a hundred milliseconds on
+ *  Windows; a reader waiting on that is a reader waiting on `netstat`. */
+const LAN_ADDRESS_TTL_MS = 30_000;
+
+/** The last measured address, and whether a refresh is already reading. */
+let lanCache:
+  | {
+      address: string | undefined;
+      measuredAt: number;
+      refreshing: boolean;
+    }
+  | undefined;
+
+/** Drops the cached measurement. The unit suite calls it between fixtures; the
+ *  host never does — a DHCP move is picked up by the next refresh. */
+export function resetLanAddressCache(): void {
+  lanCache = undefined;
+}
+
+/** Picks an address from a source, warning about alternatives as before. */
+function addressOf(source: LanSource): string | undefined {
+  const choice = rankLanAddresses(source);
 
   if (choice.alternatives.length > 0) {
     console.warn(
@@ -356,6 +366,62 @@ export async function lanAddress(
   }
 
   return choice.address;
+}
+
+/** Measures the machine once. */
+async function measureLanAddress(): Promise<string | undefined> {
+  return addressOf(await readLanSource());
+}
+
+/** The address a phone on the same LAN should dial.
+ *
+ *  `source` is injectable so a case carries a fixture; the host reads the
+ *  machine it is on. A pick made without a default route to go by is not
+ *  silent: the row this exists for (`vg-171`) is invisible on the machine that
+ *  makes it — the header renders a plausible dotted quad either way — so the
+ *  alternatives go on the record where a wrong pick can be found without a
+ *  phone. The host's logging surface is `console` (`main.ts` prints its whole
+ *  banner through it) and there is no logger beside it to duplicate.
+ *
+ *  **A request never waits for a new measurement.** The host measures once at
+ *  startup (the banner already names the address), serves that answer for the
+ *  TTL, and when it expires returns the answer it has while a fresh read runs
+ *  in the background. A LAN address that moved an hour ago can be a refresh
+ *  late; a host that blocks its event loop for `netstat` is late for
+ *  everything. */
+export async function lanAddress(
+  source?: LanSource,
+): Promise<string | undefined> {
+  if (source !== undefined) {
+    return addressOf(source);
+  }
+
+  const now = Date.now();
+  if (lanCache === undefined) {
+    lanCache = { address: undefined, measuredAt: now, refreshing: true };
+    lanCache.address = await measureLanAddress().finally(() => {
+      if (lanCache !== undefined) {
+        lanCache.refreshing = false;
+        lanCache.measuredAt = Date.now();
+      }
+    });
+    return lanCache.address;
+  }
+
+  if (!lanCache.refreshing && now - lanCache.measuredAt >= LAN_ADDRESS_TTL_MS) {
+    lanCache.refreshing = true;
+    const cache = lanCache;
+    void measureLanAddress()
+      .then((address) => {
+        cache.address = address;
+      })
+      .finally(() => {
+        cache.refreshing = false;
+        cache.measuredAt = Date.now();
+      });
+  }
+
+  return lanCache.address;
 }
 
 /** The name this machine answers to over mDNS, as a display dials it.

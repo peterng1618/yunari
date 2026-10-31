@@ -9,6 +9,7 @@ import {
   openTarget,
   rankLanAddresses,
   readLanSource,
+  resetLanAddressCache,
   stableName,
   VIRTUAL_ADAPTER_PATTERNS,
 } from "./net.js";
@@ -205,6 +206,11 @@ describe("rankLanAddresses", () => {
 });
 
 describe("lanAddress", () => {
+  // The measured path caches; a fixture in the next case must not inherit it.
+  beforeEach(() => {
+    resetLanAddressCache();
+  });
+
   it("says on the console which other addresses were in the running", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -408,11 +414,49 @@ describe("readLanSource", () => {
     expect(warn.mock.calls[0]?.[0]).toContain("Ethernet 2 10.0.0.7");
 
     networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+    resetLanAddressCache();
 
     expect(await lanAddress()).toBe("10.0.0.7");
     // The measured pick adds no second warning: the existing tie-break policy
     // is unchanged, it now just sees the route only when it was read.
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves its measurement without re-reading, and refreshes it after the TTL", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("");
+
+    resetLanAddressCache();
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      expect(await lanAddress()).toBe("192.168.2.56");
+      const reads = networkInterfaceDefault.mock.calls.length;
+
+      // Within the TTL, the answer is the one already measured.
+      expect(await lanAddress()).toBe("192.168.2.56");
+      expect(networkInterfaceDefault).toHaveBeenCalledTimes(reads);
+
+      networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+      vi.setSystemTime(Date.now() + 30_000);
+
+      // Expired: the stale answer is served while the refresh runs.
+      expect(await lanAddress()).toBe("192.168.2.56");
+      await vi.waitFor(() => {
+        expect(networkInterfaceDefault.mock.calls.length).toBeGreaterThan(
+          reads,
+        );
+      });
+      expect(await lanAddress()).toBe("10.0.0.7");
+    } finally {
+      vi.useRealTimers();
+      resetLanAddressCache();
+      warn.mockRestore();
+    }
   });
 });
 
