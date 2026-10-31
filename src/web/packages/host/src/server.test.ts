@@ -155,10 +155,15 @@ function createValidPackage(
     id,
     artboard: { width: 1920, height: 1080 },
     metadata: { name, themeLanguage: "en" },
-    ...(semanticKey === undefined
-      ? {}
-      : {
-          globals: {
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+      ...(semanticKey === undefined
+        ? {}
+        : {
             palette: {
               none: {
                 name: "None",
@@ -169,14 +174,8 @@ function createValidPackage(
                 value: { kind: "solid" as const, color: "#e8ecf3" },
               },
             },
-            typeTokens: {
-              "11-400": {
-                family: "system-ui, sans-serif",
-                weight: "400",
-              },
-            },
-          },
-        }),
+          }),
+    },
     scene: {
       version: "7.4.0",
       objects:
@@ -198,7 +197,7 @@ function createValidPackage(
                     {
                       kind: "value" as const,
                       bindingId: "readout-value",
-                      typeToken: "typeTokens.11-400" as const,
+                      typeToken: "typeTokens.body" as const,
                       style: { color: { ref: "palette.ink" as const } },
                     },
                   ],
@@ -241,6 +240,13 @@ function createPackageWithAsset(
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
     metadata: { themeLanguage: "en" },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
     assets: [
       {

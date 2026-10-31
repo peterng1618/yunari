@@ -14,6 +14,13 @@ function envelope(schemaVersion: unknown): Record<string, unknown> {
     id: "theme",
     metadata: { themeLanguage: "en" },
     artboard: { width: 400, height: 300 },
+    globals: {
+      typeTokens: {
+        heading: { family: "Inter", weight: 700 },
+        body: { family: "Inter", weight: 400 },
+        mono: { family: "Consolas, monospace", weight: 400 },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
   };
 }

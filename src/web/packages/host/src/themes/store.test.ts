@@ -39,6 +39,13 @@ function envelopeFor(id: string, name: string): FabricThemeEnvelope {
     id,
     artboard: { width: 1920, height: 1080 },
     metadata: { name, author: "Ada", themeLanguage: "en" },
+    globals: {
+      typeTokens: {
+        heading: { family: "system-ui, sans-serif", weight: "600" },
+        body: { family: "system-ui, sans-serif", weight: "400" },
+        mono: { family: "monospace", weight: "400" },
+      },
+    },
     scene: { version: "7.4.0", objects: [] },
   };
 }
@@ -427,6 +434,11 @@ describe("ThemeStore", () => {
         },
         background: { color: { ref: "palette.night" } },
         globals: {
+          typeTokens: {
+            heading: { family: "system-ui, sans-serif", weight: "600" },
+            body: { family: "system-ui, sans-serif", weight: "400" },
+            mono: { family: "monospace", weight: "400" },
+          },
           palette: {
             // The immutable fallback every palette must carry.
             none: {
@@ -496,6 +508,11 @@ describe("ThemeStore", () => {
         },
         background: { color: { ref: "palette.night" } },
         globals: {
+          typeTokens: {
+            heading: { family: "system-ui, sans-serif", weight: "600" },
+            body: { family: "system-ui, sans-serif", weight: "400" },
+            mono: { family: "monospace", weight: "400" },
+          },
           palette: {
             none: {
               name: "None",
@@ -525,6 +542,11 @@ describe("ThemeStore", () => {
           media: { assetId: "loop", bounds: "theme" },
         },
         globals: {
+          typeTokens: {
+            heading: { family: "system-ui, sans-serif", weight: "600" },
+            body: { family: "system-ui, sans-serif", weight: "400" },
+            mono: { family: "monospace", weight: "400" },
+          },
           palette: {
             none: {
               name: "None",
@@ -575,6 +597,11 @@ describe("ThemeStore", () => {
         },
         background: { color: { ref: "palette.dusk" } },
         globals: {
+          typeTokens: {
+            heading: { family: "system-ui, sans-serif", weight: "600" },
+            body: { family: "system-ui, sans-serif", weight: "400" },
+            mono: { family: "monospace", weight: "400" },
+          },
           palette: {
             none: {
               name: "None",

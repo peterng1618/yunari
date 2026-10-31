@@ -43,6 +43,8 @@ const globals = {
   },
   typeTokens: {
     body: { family: "Inter", weight: 500 },
+    heading: { family: "Inter", weight: 600 },
+    mono: { family: "Consolas, monospace", weight: 400 },
   },
 };
 

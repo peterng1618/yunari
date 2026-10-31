@@ -51,6 +51,9 @@ export type FabricEnvelopeValidationResult =
   | { readonly ok: false; readonly issues: readonly ValidationIssue[] };
 
 export interface FabricEnvelopeValidationOptions {
+  /** Required by default: a persisted theme always carries `heading`, `body`
+   *  and `mono` (DESIGN.md §2). A reader opts out only when it is validating a
+   *  deliberately partial fixture, never a document it will store. */
   readonly requireTrioRoles?: boolean;
 }
 
@@ -126,7 +129,7 @@ export function validateFabricThemeEnvelope(
   fontPresetFaces(
     input["globals"],
     input["assets"],
-    options.requireTrioRoles === true,
+    options.requireTrioRoles !== false,
     issues,
   );
   const sceneIndex = scene(input["scene"], issues);

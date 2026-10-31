@@ -13,6 +13,13 @@ const validEnvelope: FabricThemeEnvelope = {
   id: "living-room",
   artboard: { width: 1920, height: 1080 },
   metadata: { name: "Living Room", themeLanguage: "en" },
+  globals: {
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "monospace", weight: "400" },
+    },
+  },
   scene: { version: "7.4.0", objects: [] },
 };
 

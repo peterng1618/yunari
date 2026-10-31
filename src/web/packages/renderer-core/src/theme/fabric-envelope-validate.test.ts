@@ -29,6 +29,13 @@ function issuesOf(
   return result.ok ? [] : result.issues;
 }
 
+/** The trio every persisted theme carries (DESIGN.md §2). */
+const TRIO = {
+  heading: { family: "Inter", weight: 700 },
+  body: { family: "Inter", weight: 400 },
+  mono: { family: "Consolas, monospace", weight: 400 },
+} as const;
+
 function envelope(): Record<string, unknown> {
   return {
     schemaVersion: "2.0.0",
@@ -36,6 +43,11 @@ function envelope(): Record<string, unknown> {
     id: "theme",
     metadata: { themeLanguage: "en" },
     artboard: { width: 400, height: 300 },
+    globals: {
+      // A persisted theme always carries the trio (DESIGN.md §2), so the base
+      // fixture does too; a case that wants it absent deletes it.
+      typeTokens: { ...TRIO },
+    },
     bindings: { chart: [{ id: "cpu", semanticKey: "cpu.load", precision: 0 }] },
     scene: {
       version: "7.4.0",
@@ -404,6 +416,7 @@ describe("Fabric theme envelope validation", () => {
     const missing = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           accent: {
             name: "Accent",
@@ -415,6 +428,7 @@ describe("Fabric theme envelope validation", () => {
     const renamed = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "Clear",
@@ -436,6 +450,7 @@ describe("Fabric theme envelope validation", () => {
       validateFabricThemeEnvelope({
         ...envelope(),
         globals: {
+          typeTokens: { ...TRIO },
           palette: {
             none: {
               name: "None",
@@ -452,6 +467,7 @@ describe("Fabric theme envelope validation", () => {
       validateFabricThemeEnvelope({
         ...envelope(),
         globals: {
+          typeTokens: { ...TRIO },
           palette: {
             none: {
               name: "None",
@@ -479,6 +495,7 @@ describe("Fabric theme envelope validation", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "None",
@@ -513,6 +530,7 @@ describe("Fabric theme envelope validation", () => {
         {
           ...envelope(),
           globals: {
+            typeTokens: { ...TRIO },
             palette: {
               none: {
                 name: "None",
@@ -554,6 +572,7 @@ describe("Fabric theme envelope validation", () => {
         {
           ...envelope(),
           globals: {
+            typeTokens: { ...TRIO },
             palette: {
               none: {
                 name: "None",
@@ -607,6 +626,7 @@ describe("Fabric theme envelope validation", () => {
         {
           ...envelope(),
           globals: {
+            typeTokens: { ...TRIO },
             palette: {
               none: {
                 name: "None",
@@ -686,6 +706,7 @@ describe("Fabric theme envelope validation", () => {
     const base = {
       ...envelope(),
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "None",
@@ -976,11 +997,7 @@ describe("Fabric theme envelope validation", () => {
   it("rejects resolved text type without a preset reference", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
-      globals: {
-        typeTokens: {
-          body: { family: "Inter" },
-        },
-      },
+      globals: {},
       scene: {
         version: "7.4.0",
         objects: [
@@ -1007,15 +1024,13 @@ describe("Fabric theme envelope validation", () => {
       ...envelope(),
       bindings: {},
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "None",
             value: { kind: "solid", color: "transparent" },
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
-        },
-        typeTokens: {
-          body: { family: "Inter" },
         },
       },
       scene: {
@@ -1050,6 +1065,7 @@ describe("Fabric theme envelope validation", () => {
         ...envelope(),
         globals: {
           typeTokens: {
+            ...TRIO,
             metric: {
               family: "Inter",
 
@@ -1125,15 +1141,11 @@ describe("Fabric theme envelope validation", () => {
   });
 
   it("requires the three roles even when typeTokens is absent", () => {
-    const theme = envelope();
+    const theme = withoutKey(envelope(), "globals");
 
-    // Only the opt-in requires roles; an ordinary theme without a token bag is
-    // not refused for this reason.
-    expect(validateFabricThemeEnvelope(theme)).toMatchObject({ ok: true });
-
-    const refused = validateFabricThemeEnvelope(theme, {
-      requireTrioRoles: true,
-    });
+    // The trio is part of the persisted document, so its absence is refused
+    // without any opt-in.
+    const refused = validateFabricThemeEnvelope(theme);
     expect(refused.ok).toBe(false);
     if (refused.ok) throw new Error("expected the missing roles to be refused");
     for (const role of ["heading", "body", "mono"] as const) {
@@ -1144,6 +1156,11 @@ describe("Fabric theme envelope validation", () => {
         }),
       );
     }
+
+    // A deliberately partial fixture can still be read without the trio.
+    expect(
+      validateFabricThemeEnvelope(theme, { requireTrioRoles: false }),
+    ).toMatchObject({ ok: true });
   });
 
   it("validates exact declared font faces and shared trio roles", () => {
@@ -1174,16 +1191,13 @@ describe("Fabric theme envelope validation", () => {
     });
   });
 
-  it("requires all starter roles only when requested", () => {
+  it("requires all starter roles unless the reader opts out", () => {
     const theme = envelopeWithFontRoles();
     const globals = theme["globals"] as Record<string, unknown>;
     const presets = globals["typeTokens"] as Record<string, unknown>;
     delete presets["mono"];
 
-    expect(validateFabricThemeEnvelope(theme)).toMatchObject({ ok: true });
-    expect(
-      validateFabricThemeEnvelope(theme, { requireTrioRoles: true }),
-    ).toMatchObject({
+    expect(validateFabricThemeEnvelope(theme)).toMatchObject({
       ok: false,
       issues: expect.arrayContaining([
         expect.objectContaining({
@@ -1192,6 +1206,9 @@ describe("Fabric theme envelope validation", () => {
         }),
       ]),
     });
+    expect(
+      validateFabricThemeEnvelope(theme, { requireTrioRoles: false }),
+    ).toMatchObject({ ok: true });
   });
 
   it.each(["woff2", "woff", "ttf", "otf"] as const)(
@@ -1419,15 +1436,13 @@ describe("Fabric theme envelope validation", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "None",
             value: { kind: "solid", color: "transparent" },
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
-        },
-        typeTokens: {
-          body: { family: "Inter" },
         },
       },
       scene: {
@@ -1469,15 +1484,13 @@ describe("Fabric theme envelope validation", () => {
       ...envelope(),
       bindings: {},
       globals: {
+        typeTokens: { ...TRIO },
         palette: {
           none: {
             name: "None",
             value: { kind: "solid", color: "transparent" },
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
-        },
-        typeTokens: {
-          body: { family: "Inter" },
         },
       },
       scene: {
@@ -1539,7 +1552,7 @@ describe("Fabric theme envelope validation", () => {
           },
           text: { name: "Text", value: { kind: "solid", color: "#fff" } },
         },
-        typeTokens: { body: { family: "Inter" } },
+        typeTokens: { ...TRIO },
       },
       scene: {
         version: "7.4.0",

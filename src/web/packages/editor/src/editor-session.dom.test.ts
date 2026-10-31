@@ -256,6 +256,13 @@ const envelope: FabricThemeEnvelope = {
   id: "theme",
   metadata: { themeLanguage: "en" },
   artboard: { width: 100, height: 100 },
+  globals: {
+    typeTokens: {
+      heading: { family: "system-ui, sans-serif", weight: "600" },
+      body: { family: "system-ui, sans-serif", weight: "400" },
+      mono: { family: "monospace", weight: "400" },
+    },
+  },
   scene: { version: "7.4.0", objects: [] },
 };
 
@@ -2937,8 +2944,11 @@ describe("the local font import", () => {
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
-    expect(Object.values(presets)).toHaveLength(1);
-    expect(Object.values(presets)[0]).toMatchObject({
+    const faces = Object.values(presets).filter(
+      (preset) => preset.face !== undefined,
+    );
+    expect(faces).toHaveLength(1);
+    expect(faces[0]).toMatchObject({
       family: "Inter",
       weight: 700,
       face: { assetId: "Inter-Bold" },
@@ -2988,8 +2998,11 @@ describe("the local font import", () => {
     await extensions.actionFacade().savePackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     expect(
-      (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens,
-    ).toBeUndefined();
+      Object.values(
+        (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
+          {},
+      ).filter((preset) => preset.face !== undefined),
+    ).toEqual([]);
     expect(saved?.[3]).toBeUndefined();
 
     extensions.destroy();
@@ -3082,8 +3095,11 @@ describe("the local font import", () => {
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
       {};
-    expect(Object.values(presets)).toHaveLength(1);
-    expect(Object.values(presets)[0]).toMatchObject({
+    const faces = Object.values(presets).filter(
+      (preset) => preset.face !== undefined,
+    );
+    expect(faces).toHaveLength(1);
+    expect(faces[0]).toMatchObject({
       face: { assetId: face.id },
     });
     const shipped = saved?.[3] as
