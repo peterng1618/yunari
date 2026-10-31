@@ -884,23 +884,18 @@ export class EditorDocument {
       id,
       replacement,
     );
+    // Before the fan-out, so a chart repaints against the paint it now names.
     this.#consumers.charts().reassignPaletteReferences(from, to);
-    // The artboard did not change, so nothing writes it: the colour the token
-    // painted now lives in the background layer, so the shell is told the new
-    // bag directly or the stage keeps painting the deleted token.
-    this.#writeEnvelope({
-      ...this.#envelope,
-      ...(background === undefined ? {} : { background }),
-      globals: { ...this.#envelope.globals, palette },
-    });
-    // After the globals fan-out: the new bag still names the token the palette
-    // no longer has, so it has to be repainted against the palette it now names.
-    this.#globalsChanged();
-    this.#shell.setBackground(background);
-    this.#consumers.palette().render(palette);
-    // A deletion is a discrete globals commit with no gesture to settle behind
-    // it; without an entry of its own a later undo's globals restore reverts it.
-    this.#shell.editor.historyManager.saveState();
+    this.#deleteGlobalsEntry(
+      { ...this.#envelope.globals, palette },
+      {
+        // The artboard did not change, so nothing writes it: the colour the
+        // token painted now lives in the background layer, and the shell is
+        // told that bag directly or the stage keeps painting the deleted token.
+        background,
+        repaint: () => this.#consumers.palette().render(palette),
+      },
+    );
   }
 
   setTypes(typeTokens: TypeTokens): void {
@@ -924,12 +919,48 @@ export class EditorDocument {
       id,
       replacement,
     );
+    this.#deleteGlobalsEntry(
+      { ...this.#envelope.globals, typeTokens },
+      { repaint: () => this.#consumers.types().render(typeTokens) },
+    );
+  }
+
+  /**
+   * Commits a globals bag that lost one entry of a keyed library.
+   *
+   * A palette token and a type preset are the same operation over different
+   * keys: repoint what named them, write the reduced bag, fan it out, repaint
+   * the pane that owns the library, and record the delete as its own undo step.
+   * A deletion is a discrete commit with no gesture to settle behind it;
+   * without an entry of its own, a later undo's globals restore reverts it.
+   *
+   * The palette's call site does the two things that are its own: chart series
+   * are re-pointed before this call, and the background layer holds the token as
+   * a colour reference, so its rewritten background rides the same envelope and
+   * reaches the stage after the fan-out.
+   */
+  #deleteGlobalsEntry(
+    globals: FabricGlobals,
+    commit: {
+      /** Present only when the deleted entry also rewrote the background. */
+      readonly background?: Background | undefined;
+      readonly repaint: () => void;
+    },
+  ): void {
+    const { background, repaint } = commit;
+    // Present even when it rewrote nothing: the shell is told the stage's bag
+    // either way, and only a delete that names the background layer passes it.
+    const namesBackground = "background" in commit;
     this.#writeEnvelope({
       ...this.#envelope,
-      globals: { ...this.#envelope.globals, typeTokens },
+      ...(background === undefined ? {} : { background }),
+      globals,
     });
+    // After the globals fan-out: the new bag still names the entry the library
+    // no longer has, so it has to be repainted against what it now names.
     this.#globalsChanged();
-    this.#consumers.types().render(typeTokens);
+    if (namesBackground) this.#shell.setBackground(background);
+    repaint();
     this.#shell.editor.historyManager.saveState();
   }
 

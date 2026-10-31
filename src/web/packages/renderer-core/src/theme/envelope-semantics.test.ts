@@ -217,6 +217,16 @@ describe("metadata and identity", () => {
       "invalid-id",
     ]);
   });
+
+  it("refuses a name longer than the published bound, and takes its edge", () => {
+    const named = (length: number): Record<string, unknown> => ({
+      ...baseEnvelope(),
+      metadata: { themeLanguage: "en", name: "n".repeat(length) },
+    });
+
+    expect(codes(named(201))).toEqual(["out-of-range"]);
+    expect(issuesFor(named(200))).toEqual([]);
+  });
 });
 
 describe("assets (§141)", () => {

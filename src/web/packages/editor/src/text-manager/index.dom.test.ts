@@ -771,6 +771,29 @@ describe("placing a text by click or drag", () => {
     manager.destroy();
   });
 
+  it("cancels an idle arm without placing, and the next press selects", () => {
+    // Choosing another tool while the text tile is armed: the arm must not
+    // outlive that choice, or the author's next press on the canvas would place
+    // a text instead of selecting the object they just made (`vg-714`).
+    const { canvas, manager, port } = placementScene({ arm: false });
+    canvas.skipTargetFind = false;
+    canvas.selection = true;
+    canvas.defaultCursor = "default";
+
+    manager.beginPlacement(port);
+    expect(canvas.skipTargetFind).toBe(true);
+
+    manager.cancelPlacement();
+
+    expect(canvas.skipTargetFind).toBe(false);
+    expect(canvas.selection).toBe(true);
+    expect(canvas.defaultCursor).toBe("default");
+    pointer(canvas, "mouse:down", 100, 100);
+    pointer(canvas, "mouse:up", 100, 100);
+    expect(port.onPlace).not.toHaveBeenCalled();
+    manager.destroy();
+  });
+
   it("cancels on Space before the viewport's pan can claim the canvas", () => {
     // Space is the viewport's pan key and claims the same three properties.
     // The gesture has to stand down first, or the pan captures the crosshair

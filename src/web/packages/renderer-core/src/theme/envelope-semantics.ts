@@ -23,6 +23,9 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
  * `envelope-keys.ts`, which is the vocabulary the published schema is held to.
  */
 
+/** The published schema's bound on a theme's name (`schema/theme-document.schema.json`). */
+const MAX_METADATA_NAME_LENGTH = 200;
+
 export type IssueCode =
   | "not-an-object"
   | "unknown-field"
@@ -204,6 +207,20 @@ function validateMetadata(issues: Issues, value: unknown): void {
       "wrong-type",
       "/metadata/version",
       "version must be a semantic major.minor.patch string.",
+    );
+  }
+
+  // Only the upper bound is enforced. An absent, empty or non-string name is
+  // the repair path `namedEnvelope` owns: a stored document that predates the
+  // bound must keep loading, labelled by its id. A name that *is* a string and
+  // longer than the published bound is input some writer chose, so it is
+  // refused rather than truncated.
+  const name = value["name"];
+  if (typeof name === "string" && name.length > MAX_METADATA_NAME_LENGTH) {
+    issues.add(
+      "out-of-range",
+      "/metadata/name",
+      `name must be at most ${MAX_METADATA_NAME_LENGTH} characters.`,
     );
   }
 }

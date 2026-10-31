@@ -55,7 +55,6 @@ const SKIP_DIRS = new Set([
   "coverage",
   "test-results",
   "playwright-report",
-  ".agent-scratch",
   ".superpowers",
   ".codegraph",
   "build",

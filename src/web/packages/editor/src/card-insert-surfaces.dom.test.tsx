@@ -136,6 +136,7 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
           beginPlacement: (port: TextPlacementPort) => {
             armed = port;
           },
+          cancelPlacement: vi.fn(),
           setAuthoringView: vi.fn(),
           setRepaint: vi.fn(),
           setMentions: vi.fn(),
@@ -305,6 +306,39 @@ describe("an insert the Add pane cannot reach its owner for", () => {
   });
 });
 
+/* ---- choosing another tile while a text placement is armed ---- */
+
+/**
+ * `vg-714`: the Add pane's text tile arms a one-shot placement, and choosing a
+ * different tile afterwards used to leave that arm on the canvas — target
+ * finding stayed off and the next press placed a text instead of selecting the
+ * object the author had just made.
+ */
+describe("choosing another tile while a text placement is armed", () => {
+  it("cancels the arm before constructing", async () => {
+    const { canvas, errors } = wiredSession();
+    const cancelPlacement = vi.fn();
+    const panel = createNewObjectPanel(
+      document.body,
+      {
+        ...(editorOf(canvas, errors) as unknown as Record<string, unknown>),
+        textManager: { addText: vi.fn(), cancelPlacement },
+      } as never,
+      {
+        palette: BLANK.globals?.palette ?? {},
+        typeTokens: BLANK.globals?.typeTokens ?? {},
+      },
+    );
+
+    panel.root
+      .querySelector<HTMLButtonElement>('[data-yunari-panel-add="rect"]')
+      ?.click();
+    await flush();
+
+    expect(cancelPlacement).toHaveBeenCalledOnce();
+  });
+});
+
 /* ---- a construction the theme cannot express ---- */
 
 /**
@@ -360,7 +394,7 @@ function editorOf(
     canvas,
     artboard: () => ({ width: 1920, height: 1080 }),
     historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
-    textManager: { addText: vi.fn() },
+    textManager: { addText: vi.fn(), cancelPlacement: vi.fn() },
     errorManager: errors,
   } as never;
 }

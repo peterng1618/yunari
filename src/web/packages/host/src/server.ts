@@ -4191,9 +4191,20 @@ export function createHostServer(options: HostServerOptions): HostServer {
         }
 
         const available = await themeStore.list();
+        // A theme with no picture has none to request: the page draws its
+        // fallback directly when the listing says so, instead of costing a 404
+        // per theme on every clean load (`vg-655`).
+        const listed = await Promise.all(
+          available.map(async (theme) => ({
+            ...theme,
+            ...(thumbnails !== undefined && (await thumbnails.has(theme.id))
+              ? { thumbnail: true as const }
+              : {}),
+          })),
+        );
         sendJson(response, 200, {
           ...(await activeThemeMap(activeTheme, available)),
-          themes: available,
+          themes: listed,
           templates: SHIPPED_TEMPLATES,
         });
         return;

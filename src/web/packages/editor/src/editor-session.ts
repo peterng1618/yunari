@@ -1346,13 +1346,23 @@ export class EditorSession {
       // `#armText`. `insertCard` is not wrapped: the document reports that one
       // at its own owner.
       addText: () => this.#armText(),
+      // A non-text construction is another tool: the armed text placement is
+      // cancelled first, or the next canvas press would place a text instead of
+      // selecting what was just made.
       addShape: (kind) =>
-        constructing(editor, () =>
-          insertNewShape(editor, this.#document.envelope.globals, kind),
-        ),
+        constructing(editor, () => {
+          editor.textManager.cancelPlacement();
+          insertNewShape(editor, this.#document.envelope.globals, kind);
+        }),
       addChart: (family) =>
-        constructing(editor, () => this.charts.addChart(family)),
-      insertCard: (cardId) => this.#document.insertCard(cardId),
+        constructing(editor, () => {
+          editor.textManager.cancelPlacement();
+          this.charts.addChart(family);
+        }),
+      insertCard: (cardId) => {
+        editor.textManager.cancelPlacement();
+        this.#document.insertCard(cardId);
+      },
       arrange: (action) => applyArrange(editor, action),
       canArrange: (action) => canArrange(editor, action),
       undo: () => void editor.historyManager.undo(),
@@ -1452,24 +1462,27 @@ export class EditorSession {
    */
   #deleteType(id: string, replacement: string): void {
     this.#document.deleteType(id, replacement);
-    const selection = this.#options.tokenSelection;
-    const token = selection?.get();
-    if (token?.kind === "preset" && token.id === id) selection?.clear();
+    this.#clearDeletedToken("preset", id);
   }
 
   /**
    * The one paint-token delete route, handed to the palette pane and the token
    * inspector.
-   *
-   * The document re-points the references; a token selection still naming the
-   * deleted paint is cleared here, so the object column comes back rather than
-   * the right column staying suppressed over a token that no longer exists.
    */
   #deletePalette(id: string, replacement: string): void {
     this.#document.deletePalette(id, replacement);
+    this.#clearDeletedToken("paint", id);
+  }
+
+  /**
+   * A token still selected in the inspector when it is deleted is cleared, so
+   * the object column comes back rather than the right column staying
+   * suppressed over a token that no longer exists.
+   */
+  #clearDeletedToken(kind: TokenRef["kind"], id: string): void {
     const selection = this.#options.tokenSelection;
     const token = selection?.get();
-    if (token?.kind === "paint" && token.id === id) selection?.clear();
+    if (token?.kind === kind && token.id === id) selection?.clear();
   }
 
   destroy(): void {

@@ -6828,6 +6828,57 @@ describe("The templates the host serves", () => {
     // point every display at a package that does not exist.
     expect(res.status).toBe(404);
   });
+
+  it("says which themes have a picture, so a row requests only those", async () => {
+    const library = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-listed-thumbs-"),
+    );
+    try {
+      const store = createThemeStore(library);
+      await store.write("pictured", createValidPackage("pictured", "Pictured"));
+      await store.write("bare", createValidPackage("bare", "Bare"));
+      const thumbnails = createThumbnailStore(library);
+      await thumbnails.write(
+        "pictured",
+        new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+          0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63,
+          0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84,
+          0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+          0xae, 0x42, 0x60, 0x82,
+        ]),
+      );
+      const listed = createHostServer({
+        registry: new ProviderRegistry([]),
+        bundles: { player: library, editor: library, admin: ADMIN_DIR },
+        themeStore: store,
+        thumbnails,
+        activeTheme: createActiveThemeStore(library),
+      });
+      try {
+        const body = (
+          await request(listed.server, "GET", "/api/themes/active")
+        ).json() as {
+          themes: readonly { id: string; thumbnail?: true }[];
+        };
+
+        // The absence is the truth: a theme with no picture has no key at all,
+        // so the page draws its stand-in without asking for an image.
+        expect(body.themes.map(({ id, thumbnail }) => [id, thumbnail])).toEqual(
+          [
+            ["bare", undefined],
+            ["pictured", true],
+          ],
+        );
+      } finally {
+        await listed.close();
+      }
+    } finally {
+      await fs.rm(library, { recursive: true, force: true });
+    }
+  });
 });
 
 /**

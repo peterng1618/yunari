@@ -34,6 +34,9 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 export interface ThumbnailStore {
   read(id: string): Promise<Uint8Array | undefined>;
+  /** Whether a picture is stored at all, without reading its bytes: a listing
+   *  asks this so its page requests only images that exist (`vg-655`). */
+  has(id: string): Promise<boolean>;
   write(id: string, bytes: Uint8Array): Promise<void>;
   remove(id: string): Promise<void>;
 }
@@ -138,6 +141,23 @@ export function createThumbnailStore(library: string): ThumbnailStore {
         pixelRefusal(bytes) === undefined
         ? new Uint8Array(bytes)
         : undefined;
+    },
+
+    async has(id) {
+      if (!isValidThemeId(id)) {
+        return false;
+      }
+
+      // A stat rather than `read`: the listing shows a row per theme, and
+      // reading every picture to decide whether to draw one is the cost this
+      // exists to avoid. A file only the reader would refuse still costs its
+      // one 404, which is the honest answer for a corrupt picture.
+      try {
+        await fs.stat(filePath(id));
+        return true;
+      } catch {
+        return false;
+      }
     },
 
     async write(id, bytes) {

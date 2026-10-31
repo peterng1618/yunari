@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { ThemeOrigin } from "@yunari/theme-package";
 
 /**
  * Where each library theme came from, kept in the host's settings directory.
@@ -10,16 +11,12 @@ import path from "node:path";
  * `theme-answers.json`, and it lives beside them rather than beside the themes,
  * as `theme-origins.json` holding
  * `{ "<theme id>": { "catalogueId": …, "version": …, "installedAt": … } }`.
+ *
+ * The shape itself is `@yunari/theme-package`'s, because the editor reads the
+ * same record over `/api/themes` and cannot import this package.
  */
 
-export interface ThemeOrigin {
-  /** The catalogue's own id for the item, not the library id. */
-  readonly catalogueId: string;
-  /** The catalogue version this copy was installed from. */
-  readonly version: string;
-  /** An ISO instant. */
-  readonly installedAt: string;
-}
+export type { ThemeOrigin };
 
 export interface ThemeOriginsStore {
   /** Every entry, keyed by library theme id. */

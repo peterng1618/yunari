@@ -57,6 +57,7 @@ function editorStub() {
       addText: vi.fn((_options?: Record<string, unknown>): unknown =>
         textWithEditing(),
       ),
+      cancelPlacement: vi.fn(),
     },
     errorManager: { warn: vi.fn(), error: vi.fn() },
   };
@@ -225,6 +226,7 @@ describe("new object panel", () => {
           addText: vi.fn((_options?: Record<string, unknown>): unknown =>
             textWithEditing(),
           ),
+          cancelPlacement: vi.fn(),
         },
       } as never,
       undefined,

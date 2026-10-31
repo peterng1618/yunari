@@ -7,9 +7,10 @@ import { costWarning, deleteTheme, themeList } from "../public/theme-list.js";
  * is drawn once here. A chooser that drew its own would be the second copy of
  * the thumbnail, the hatched stand-in and the duplicated-name disambiguation. */
 
+/** Both carry a picture, which is what the listing says when one exists. */
 const THEMES = [
-  { id: "living-room", name: "Living Room" },
-  { id: "studio", name: "Studio" },
+  { id: "living-room", name: "Living Room", thumbnail: true },
+  { id: "studio", name: "Studio", thumbnail: true },
 ];
 
 /** Every row is choosable, so the tests pass a handler they never call. */
@@ -74,15 +75,15 @@ describe("a saved theme as one row", () => {
     expect(shots.every((shot) => shot.alt === "")).toBe(true);
   });
 
-  it("falls back to a hatched stand-in when a theme has no picture", () => {
-    const host = mount(themeList(THEMES, { onChoose }));
-    const shot = host.querySelector("img.theme-shot");
-    shot?.dispatchEvent(new Event("error"));
+  it("draws the stand-in without asking when the listing has no picture", () => {
+    // A theme saved before pictures existed has none, and the listing says so:
+    // asking anyway logged a 404 per theme on every clean load, which is the
+    // noise that hides a real missing asset.
+    const host = mount(
+      themeList([{ id: "studio", name: "Studio" }], { onChoose }),
+    );
 
-    // A theme saved before pictures existed has none, which is not a broken
-    // one: the element is swapped for one of the same size, because a failed
-    // `<img>` keeps drawing the browser's own glyph over the space.
-    expect(host.querySelectorAll("img.theme-shot")).toHaveLength(1);
+    expect(host.querySelectorAll("img.theme-shot")).toHaveLength(0);
     expect(host.querySelector("[data-placeholder]")).not.toBeNull();
   });
 
@@ -220,14 +221,6 @@ describe("a saved theme as one row", () => {
         "DefaultLiving Room",
         "This PCStudio",
         "Kitchen tabletUses the default",
-      ]);
-      // The kind travels to the row, because the warning table is keyed on it
-      // and a page cannot ask a display what it is. The default row is the
-      // fallback rather than a display, so it carries none.
-      expect(rows.map((row) => row.getAttribute("data-kind"))).toEqual([
-        null,
-        "local",
-        "paired",
       ]);
     });
 

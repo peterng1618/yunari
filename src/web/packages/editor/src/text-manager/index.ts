@@ -111,6 +111,13 @@ interface TextManager {
    */
   beginPlacement(port: TextPlacementPort): void;
   /**
+   * Cancels an armed placement, if any, as choosing another tool does. Every
+   * surface that constructs a non-text object calls this first: the gesture is
+   * one-shot on the next canvas press, so an arm that outlived the author
+   * choosing a tile would place a text instead of selecting what they made.
+   */
+  cancelPlacement(): void;
+  /**
    * Who paints an object's authoring view when the author starts editing it.
    * The session owns the run display that painting comes from, and the shell
    * that creates this manager has no session yet, so it is set rather than
@@ -946,6 +953,11 @@ export function createTextManager(
       canvas.selection = false;
       canvas.defaultCursor = "crosshair";
       canvas.setCursor("crosshair");
+    },
+    cancelPlacement() {
+      // Disarming an idle arm puts the cursor, selection and target finding
+      // back exactly as arming found them.
+      if (placement !== undefined) disarmPlacement();
     },
     setAuthoringView(paint) {
       showAuthoringView = paint;

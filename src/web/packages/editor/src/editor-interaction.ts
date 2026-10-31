@@ -39,6 +39,8 @@ export interface EditorInteraction {
     addText(options?: TextCreationOptions): IText;
     /** Arms the one-shot placement gesture the session's text route owns. */
     beginPlacement(port: TextPlacementPort): void;
+    /** Cancels an armed placement, as choosing another tool does. */
+    cancelPlacement(): void;
     /**
      * Installs who paints an object's authoring view when the author starts
      * editing it. The session owns the run display that comes from, and the
