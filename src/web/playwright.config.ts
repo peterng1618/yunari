@@ -142,6 +142,11 @@ export default defineConfig({
       url: `http://127.0.0.1:${HOST_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 60_000,
+      // Playwright discards a web server's output by default, so a host that
+      // exits before answering reports only the exit code. These two make the
+      // failure legible in the CI log instead of a second blind run.
+      stdout: "pipe",
+      stderr: "pipe",
     },
   ],
 
