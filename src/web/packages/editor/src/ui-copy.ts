@@ -1660,6 +1660,9 @@ export const uiCopy = {
     objects: (count: number): string =>
       `${count} ${count === 1 ? "object" : "objects"}`,
     selected: (count: number): string => `${count} selected`,
+    /** The Themes mode's own reading: what the chosen half and filters show. */
+    themes: (count: number): string =>
+      `${count} ${count === 1 ? "theme" : "themes"}`,
   },
   /** The title-bar counts: one per pane's own list, so a pane whose list has
    *  not loaded prints nothing rather than a `0` (the same rule `statusBar`'s
