@@ -20,27 +20,27 @@ rounded:            # --radius-*
   xl: 10px
 typography:         # --text-* with their stated line-height companions
   2xs:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 10px
     lineHeight: 1.2
   xs:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 11px
     lineHeight: 1.3
   sm:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 12px
     lineHeight: 1.4
   md:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 13px
     lineHeight: 1.3
   lg:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 15px
     lineHeight: 1.3
   xl:
-    fontFamily: "system-ui, sans-serif"
+    fontFamily: system-ui, sans-serif
     fontSize: 19px
     lineHeight: 1.2
 omitted:
@@ -115,6 +115,10 @@ Three families, each with one job.
 | UI sans (`system-ui` stack) | Everything a person reads as language | Labels, menus, headings, panel copy |
 | UI mono (`ui-monospace` stack) | Everything a machine produced or will parse | Values, coordinates, token names, chord marks, counts |
 | Theme fonts | The author's typography | Inside the artboard only; never in chrome |
+
+The UI sans stack is the `--font-ui` token in `editor-shell.css`'s `@theme
+static` block, and every `typography` entry's `fontFamily` above transcribes
+it; `--sync` fails when one drifts from the other.
 
 **Values are mono; labels are sans.** This is the largest difference from a
 form-shaped panel, and it is not decorative: a mono value is scannable by column

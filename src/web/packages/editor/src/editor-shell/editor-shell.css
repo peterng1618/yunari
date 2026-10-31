@@ -488,6 +488,10 @@ body,
    most of this block is referenced by nothing yet — the declared-and-never-
    consumed state the ratchet in `design-tokens.gated.json` exists to shrink. */
 @theme static {
+  /* The chrome's UI sans stack, the one DESIGN.md section 2 calls "UI sans".
+     A token so the normative front matter transcribes it rather than a string
+     no check can see. */
+  --font-ui: system-ui, sans-serif;
   --spacing: 0.25rem;
   --space-4: 4px;
   --space-6: 6px;
@@ -781,9 +785,7 @@ body,
   height: 100%;
   color: var(--shell-text);
   background: var(--shell-backdrop);
-  font:
-    var(--text-md) / 1.4 system-ui,
-    sans-serif;
+  font: var(--text-md) / 1.4 var(--font-ui);
 }
 /* the header rule: the header is the window's top edge. A full-width 42px strip at
    elevation 0 with a hairline along its foot, rather than the floating glass
@@ -1371,7 +1373,7 @@ body,
   /* UI sans, not the palette's display face: §2 gives headings to the UI sans
      and no clause grants chrome a serif. `--shell-display` still dresses the
      brand and a dialog's lead. */
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: var(--text-md);
   line-height: var(--text-md--line-height);
   text-transform: uppercase;

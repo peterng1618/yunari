@@ -59,8 +59,9 @@ it("fails a name only one side declares, in either direction", () => {
 
 it("treats the typography line-height companion as its own token", () => {
   const read = fixture({
-    css: "@theme static {\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n",
-    design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n",
+    css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.5;\n}\n",
+    design:
+      "typography:\n  md:\n    fontFamily: system-ui, sans-serif\n    fontSize: 13px\n    lineHeight: 1.3\n",
   });
   expect(whats(checkSync(read))).toEqual(["text-md--line-height"]);
 });
@@ -68,10 +69,26 @@ it("treats the typography line-height companion as its own token", () => {
 it("reads the front matter's typography keys as the bare suffix", () => {
   // `--text-2xs`, not `--text-text-2xs`: the key is the scale-level suffix.
   const read = fixture({
-    css: "@theme static {\n  --text-2xs: 10px;\n  --text-2xs--line-height: 1.2;\n}\n",
-    design: "typography:\n  2xs:\n    fontSize: 10px\n    lineHeight: 1.2\n",
+    css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-2xs: 10px;\n  --text-2xs--line-height: 1.2;\n}\n",
+    design:
+      "typography:\n  2xs:\n    fontFamily: system-ui, sans-serif\n    fontSize: 10px\n    lineHeight: 1.2\n",
   });
   expect(checkSync(read)).toEqual([]);
+});
+
+it("requires each typography entry to transcribe --font-ui", () => {
+  const missing = fixture({
+    css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.3;\n}\n",
+    design: "typography:\n  md:\n    fontSize: 13px\n    lineHeight: 1.3\n",
+  });
+  expect(whats(checkSync(missing))).toEqual(["text-md-fontFamily"]);
+
+  const drifted = fixture({
+    css: "@theme static {\n  --font-ui: system-ui, sans-serif;\n  --text-md: 13px;\n  --text-md--line-height: 1.3;\n}\n",
+    design:
+      "typography:\n  md:\n    fontFamily: serif\n    fontSize: 13px\n    lineHeight: 1.3\n",
+  });
+  expect(whats(checkSync(drifted))).toEqual(["text-md-fontFamily"]);
 });
 
 it("ignores a name outside the three synced groups", () => {
