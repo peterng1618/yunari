@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
-import { networkInterfaces, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -42,6 +42,7 @@ import {
   TWO_TONE_DISPLAY_BOUNDS,
   TWO_TONE_THEME_BOUNDS,
 } from "./host-theme.js";
+import { lanAddress } from "./lan-address.js";
 import { placeText, readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -4636,17 +4637,6 @@ function wakeFailure(page: Page): Promise<string> {
       (window as unknown as { __yunariWake?: { failed: string | null } })
         .__yunariWake?.failed ?? "no failure recorded",
   );
-}
-
-/** The first non-loopback IPv4 address, which is the address a phone is told to
- *  open. `undefined` on a machine that has none, and the case skips. */
-function lanAddress(): string | undefined {
-  for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries ?? []) {
-      if (entry.family === "IPv4" && !entry.internal) return entry.address;
-    }
-  }
-  return undefined;
 }
 
 const PLAYER_CONTENT_TYPES: Readonly<Record<string, string>> = {

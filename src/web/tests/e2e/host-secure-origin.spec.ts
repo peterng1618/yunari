@@ -2,10 +2,10 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { chromium, expect, test } from "@playwright/test";
 import { hostClient } from "./host-theme.js";
+import { requiredLanAddress } from "./lan-address.js";
 
 /**
  * The reading `vg-580` was filed for, taken where it matters.
@@ -66,19 +66,6 @@ function spkiHash(pem: string): string {
     format: "der",
   });
   return createHash("sha256").update(der).digest("base64");
-}
-
-/** The first non-internal IPv4 address, which is the address a display uses. */
-function lanAddress(): string {
-  for (const interfaces of Object.values(os.networkInterfaces())) {
-    for (const candidate of interfaces ?? []) {
-      if (candidate.family === "IPv4" && !candidate.internal) {
-        return candidate.address;
-      }
-    }
-  }
-
-  throw new Error("no LAN address on this machine");
 }
 
 test.describe("the host's secure origin", () => {
@@ -143,7 +130,7 @@ test.describe("the host's secure origin", () => {
     // allowlisting *it* rather than the leaf is the model of a device that has
     // done that step, and the leaf is re-issued at every start.
     const authority = await readFile(CA_FILE, "utf8");
-    const address = lanAddress();
+    const address = requiredLanAddress();
     const origin = `https://${address}:${PORT}`;
 
     // **Headed, because headless refuses the wake lock on any origin.**

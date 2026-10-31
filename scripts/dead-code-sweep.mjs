@@ -1295,7 +1295,7 @@ if (SELF_TEST) {
     [
       "a re-export of an imported name is not a read (the file only forwards it)",
       readsOutsideDeclaration(
-        'import { countable } from "./x";\nexport { countable };\n',
+        `${importFrom("countable", "./x")}export { countable };\n`,
         "countable",
       ) === 0,
     ],
