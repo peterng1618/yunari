@@ -509,6 +509,54 @@ describe("native editor shell", () => {
     shell.editor.groupingManager.exitGroup();
   });
 
+  it("does not mark the document unsaved when a group is entered", async () => {
+    // Entering a group flips the artboard's reachability flags, and the save
+    // marker compares the whole document. A capture that read those flags as
+    // authored state reported work nobody did the moment the group was entered.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 600 },
+    });
+    const authored = createNewFabricTheme();
+    const shell = await mount({
+      host,
+      artboard: authored.artboard,
+      envelope: authored,
+    });
+    const canvas = shell.editor.canvas;
+    const grouping = shell.editor.groupingManager;
+    const entered = canvas
+      .getObjects()
+      .find((object) => object instanceof Group);
+    if (entered === undefined) throw new Error("the starter draws no group");
+    const persistence = new PersistenceManager(shell.snapshot(authored), {});
+    const before = JSON.stringify(shell.snapshot(authored));
+
+    grouping.enterGroup({ object: entered });
+
+    // The layer view still says only the entered group is reachable.
+    expect(grouping.groupContext()).toEqual([entered]);
+    expect(
+      canvas
+        .getObjects()
+        .filter((object) => object !== entered)
+        .every((object) => !object.selectable && !object.evented),
+    ).toBe(true);
+
+    const inside = shell.snapshot(authored);
+    // The projected document is the one that was open: no reachability flag
+    // reached it, so the save marker does not move.
+    expect(JSON.stringify(inside)).toBe(before);
+    expect(persistence.isDirty(inside)).toBe(false);
+
+    grouping.exitGroup();
+
+    expect(grouping.groupContext()).toEqual([]);
+    expect(JSON.stringify(shell.snapshot(authored))).toBe(before);
+    expect(persistence.isDirty(shell.snapshot(authored))).toBe(false);
+  });
+
   it("records a scale gesture as one entry, so one undo restores size and scale", async () => {
     // The shell's own `object:modified` save must run after the text manager's
     // commit: registered first, it recorded the interim scaled state, and one
