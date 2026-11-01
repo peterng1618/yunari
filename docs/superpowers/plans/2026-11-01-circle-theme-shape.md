@@ -474,7 +474,7 @@ Expected: FAIL — unknown option / no clip.
 
 - `FabricSceneOptions.themeShape?: ArtboardShape`; default `"rect"`.
 - `fit()`: pass `shape: artboardTransformShape(themeShape, presentation.shape)` to `computeArtboardTransform`.
-- `applyPresentation`: compute `masked`, `radius = Math.min(board.width, board.height) * transform.scale / 2`, `cx = transform.offsetX + board.width * transform.scale / 2`, `cy = transform.offsetY + board.height * transform.scale / 2`.
+- `applyPresentation`: compute `masked`, `radius = Math.min(board.width, board.height) * transform.scale / 2`, `cx = viewportWidth / 2`, `cy = viewportHeight / 2`. The transform centres the composition's centre on the viewport centre at every angle, so an offset-relative centre is right only at rotation 0.
   - rect branch: `element.style.clipPath = masked ? `circle(${radius}px at ${cx}px ${cy}px)` : ""`; keep `host.style.background = paint`.
   - circle branch: keep the existing screen fill and clip; when masked, the disc coincides.
   - `applyBoardPlate`: when masked, `plateElement.style.clipPath = "circle(50% at 50% 50%)"`; otherwise `""`.
