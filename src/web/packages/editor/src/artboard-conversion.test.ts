@@ -16,6 +16,21 @@ describe("circleConversion", () => {
     expect(conversion.scale).toBe(1080 / Math.hypot(1920, 1080));
   });
 
+  it("keeps an authored contentFit", () => {
+    const conversion = circleConversion({
+      width: 1920,
+      height: 1080,
+      contentFit: "cover",
+    });
+
+    expect(conversion.artboard).toEqual({
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+      contentFit: "cover",
+    });
+  });
+
   it("converts a square artboard to itself", () => {
     const conversion = circleConversion({ width: 1080, height: 1080 });
 

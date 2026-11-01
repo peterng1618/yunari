@@ -4,19 +4,20 @@ import { ActiveSelection, type Canvas, type FabricObject } from "fabric/es";
 
 type HistoryCanvas = Canvas;
 
-/** The envelope half of an undo entry. The scene is the canvas's; the palette,
- *  type presets and the artboard the scene is authored on are the document's,
- *  so history asks its host for them rather than reaching into an envelope it
- *  does not own. */
+/** The envelope half of an undo entry: the palette, type presets and the
+ *  artboard the scene is authored on. One owner for the shape, so a port, a
+ *  capture and a restore cannot drift apart. */
+export interface HistoryEnvelope {
+  readonly globals: FabricGlobals | undefined;
+  readonly artboard: Artboard;
+}
+
+/** How history reads and writes that envelope. The scene is the canvas's; the
+ *  envelope is the document's, so history asks its host for it rather than
+ *  reaching into an envelope it does not own. */
 export interface HistoryEnvelopePort {
-  readonly read: () => {
-    readonly globals: FabricGlobals | undefined;
-    readonly artboard: Artboard;
-  };
-  readonly write: (state: {
-    readonly globals: FabricGlobals | undefined;
-    readonly artboard: Artboard;
-  }) => void;
+  readonly read: () => HistoryEnvelope;
+  readonly write: (state: HistoryEnvelope) => void;
 }
 
 interface HistoryEntry {
@@ -232,12 +233,7 @@ function reselect(canvas: HistoryCanvas, ids: readonly string[]): void {
 /** One entry, its scene and envelope serialised together once. */
 function captureWith(
   scene: SerialisedScene,
-  envelope:
-    | {
-        readonly globals: FabricGlobals | undefined;
-        readonly artboard: Artboard;
-      }
-    | undefined,
+  envelope: HistoryEnvelope | undefined,
 ): HistoryEntry {
   const globals = envelope?.globals;
   const artboard = envelope?.artboard;

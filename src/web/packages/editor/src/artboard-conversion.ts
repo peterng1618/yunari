@@ -23,7 +23,9 @@ export function circleConversion(artboard: Artboard): ArtboardConversion {
   if (artboard.shape === "circle") return { artboard, scale: 1 };
   const side = Math.min(artboard.width, artboard.height);
   return {
-    artboard: { width: side, height: side, shape: "circle" },
+    // Spread so every other authored field — `contentFit` today — survives the
+    // conversion rather than being silently deleted with the size.
+    artboard: { ...artboard, width: side, height: side, shape: "circle" },
     scale: side / Math.hypot(artboard.width, artboard.height),
   };
 }

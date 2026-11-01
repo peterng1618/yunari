@@ -1,22 +1,15 @@
 import type { Artboard, FabricGlobals } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
-import { EditorHistory } from "./index.js";
+import { EditorHistory, type HistoryEnvelope } from "./index.js";
 
 const canvasStub = () => ({ fire: vi.fn(), getActiveObject: () => undefined });
 
 const ARTBOARD: Artboard = { width: 1920, height: 1080 };
 
-/** The envelope half of an entry: the globals history asks the document for,
- *  and the artboard the scene was authored on. */
-interface Envelope {
-  readonly globals: FabricGlobals | undefined;
-  readonly artboard: Artboard;
-}
-
 const envelopeOf = (
   globals: FabricGlobals | undefined,
   artboard: Artboard = ARTBOARD,
-): Envelope => ({ globals, artboard });
+): HistoryEnvelope => ({ globals, artboard });
 
 const paletteOf = (colour: string): FabricGlobals => ({
   palette: {
@@ -141,7 +134,7 @@ describe("EditorHistory", () => {
 
   it("records an entry when only the globals changed", () => {
     const canvas = canvasStub();
-    let state: Envelope = envelopeOf({});
+    let state: HistoryEnvelope = envelopeOf({});
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -165,7 +158,7 @@ describe("EditorHistory", () => {
 
   it("writes the previous globals after reviving the scene", async () => {
     const order: string[] = [];
-    let state: Envelope = envelopeOf(paletteOf("red"));
+    let state: HistoryEnvelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvasStub() as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -194,7 +187,7 @@ describe("EditorHistory", () => {
 
   it("patches the first entry when the port attaches after reset", async () => {
     const canvas = canvasStub();
-    let state: Envelope = envelopeOf(undefined);
+    let state: HistoryEnvelope = envelopeOf(undefined);
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -271,7 +264,7 @@ describe("EditorHistory", () => {
 
   it("re-fingerprints the first entry when the port attaches", () => {
     const canvas = canvasStub();
-    let state: Envelope = envelopeOf(paletteOf("red"));
+    let state: HistoryEnvelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -293,7 +286,7 @@ describe("EditorHistory", () => {
 
   it("records one entry when neither the scene nor the globals changed", async () => {
     const canvas = canvasStub();
-    let state: Envelope = envelopeOf(paletteOf("red"));
+    let state: HistoryEnvelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -319,7 +312,7 @@ describe("EditorHistory", () => {
 
   it("restores the artboard captured with the scene", async () => {
     const canvas = canvasStub();
-    let state: Envelope = envelopeOf(undefined);
+    let state: HistoryEnvelope = envelopeOf(undefined);
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -346,7 +339,7 @@ describe("EditorHistory", () => {
   it("undoes a scene and artboard change as one entry", async () => {
     const canvas = canvasStub();
     let scene = { version: "7.4.0", objects: [{ id: "before" }] };
-    let state: Envelope = envelopeOf(undefined);
+    let state: HistoryEnvelope = envelopeOf(undefined);
     const revive = vi.fn(async (_canvas: unknown, _scene: unknown) => {});
     const history = new EditorHistory({
       canvas: canvas as never,

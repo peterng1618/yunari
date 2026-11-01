@@ -121,7 +121,7 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
         describedById={noteId}
         value={circle ? "circle" : "rect"}
         options={shapeOptions()}
-        onChange={(id) => onShapeChange(presetId(id, "rect"))}
+        onChange={(id) => onShapeChange(presetId<ArtboardShape>(id, "rect"))}
       />
       {circle ? null : (
         <>
