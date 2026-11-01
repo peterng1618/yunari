@@ -18,7 +18,7 @@ import type { ThemeLibraryClient } from "./theme-library-client.js";
 export interface EditorPanelHosts {
   /** Text and chart creation, and the card library. */
   readonly add: HTMLElement;
-  /** The declared files, their import and placement, in the Assets pane. */
+  /** The declared files, their import and placement, in the file section. */
   readonly assets: HTMLElement;
   /** The theme's own paints and type presets, in the Tokens pane. */
   readonly tokens: HTMLElement;
@@ -103,7 +103,7 @@ export interface EditorSessionOptions {
    *  so a session built without chrome draws plain names rather than dead
    *  links. */
   readonly onRevealLayer?: (objectId: string) => void;
-  /** The Assets pane's title count. The store is the shell chrome's, so the
+  /** The file section's title count. The store is the shell chrome's, so the
    *  session reports the manager's declaration count rather than the shell
    *  reaching for a manager it does not hold. */
   readonly onAssetCountChange?: (count: number) => void;

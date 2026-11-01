@@ -68,6 +68,10 @@ export interface EditorActionFacade {
    *  document owns the theme's fonts and the bindings the frozen object stops
    *  using, so the conversion is its own. */
   outlineText(): void;
+  /** **Replace file…**: declares a picked image or SVG and re-points the active
+   *  object at it, keeping the object's authored box and transform. The file
+   *  picker is the session's because the declaration list is. */
+  replaceSelectedAsset(): void;
   /** The canvas context menu's route to a primitive; the Add pane's own
       buttons call the same construction rather than a second copy of it. */
   addShape(kind: ShapeKind): void;

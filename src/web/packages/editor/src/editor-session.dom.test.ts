@@ -922,7 +922,7 @@ describe("EditorSession", () => {
 
     expect(onAssetCountChange).toHaveBeenLastCalledWith(0);
     const result = await extensions.applyFontTrio("minimal");
-    // The trio adopted one declaration per face, so the count the Assets pane's
+    // The trio adopted one declaration per face, so the count the file section's
     // title draws moved with the declarations — a trio applied from Tokens must
     // not leave a stale number beside the new font cards.
     expect(onAssetCountChange).toHaveBeenLastCalledWith(
@@ -1493,7 +1493,7 @@ describe("EditorSession", () => {
     expect(tokenColumn?.textContent).toBe("");
 
     extensions.destroy();
-    // The duplicate-pane defect `4ede5585` fixed for the Assets pane: a panel
+    // The duplicate-pane defect `4ede5585` fixed for the file section: a panel
     // whose `destroy()` is never called leaves its section in the host.
     expect(
       selectionHost.querySelector("[data-yunari-token-inspector]"),
@@ -2963,7 +2963,7 @@ describe("the local font import", () => {
     document.body.replaceChildren();
   });
 
-  /** A session whose Assets pane is the real one, over a real manager. */
+  /** A session whose file section is the real one, over a real manager. */
   function fontSession(
     manager: AssetManager,
     credits?: readonly ThemeCreditsEntry[],
@@ -3477,7 +3477,7 @@ describe("arming a text placement from every surface", () => {
  *
  * The pane hosts outlive a document replacement — a new session mounts into the
  * same node — so a root the old session does not unmount is still attached
- * beside the new one, and the Assets panel draws twice. The browser specs read
+ * beside the new one, and the file sectionl draws twice. The browser specs read
  * that as a strict-mode duplicate rather than as a layout accident.
  */
 describe("the session's disposal", () => {
@@ -3527,7 +3527,7 @@ describe("the session's disposal", () => {
     });
   }
 
-  it("unmounts the Assets pane, so the next session does not draw it twice", () => {
+  it("unmounts the file section, so the next session does not draw it twice", () => {
     const assets = document.createElement("div");
     document.body.append(assets);
 
@@ -3540,7 +3540,7 @@ describe("the session's disposal", () => {
     );
 
     // The user-visible consequence: File -> New reuses the host, so a stranded
-    // root is a second Assets panel on screen.
+    // root is a second file sectionl on screen.
     const second = build(assets);
     expect(
       assets.querySelectorAll("[data-yunari-asset-import]"),

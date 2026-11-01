@@ -338,7 +338,7 @@ async function start(): Promise<void> {
         layout.showLayers();
         layout.selection.bridge?.selectLayer(objectId);
       },
-      // The Assets pane's count is the session's manager's list, and the title
+      // The file section's count is the session's manager's list, and the title
       // bar is the shell's, so the reading crosses back through the store that
       // already carries the document's own facts.
       onAssetCountChange: (count: number) =>

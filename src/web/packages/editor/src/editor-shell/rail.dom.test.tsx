@@ -68,18 +68,12 @@ afterEach(() => {
   host = undefined;
 });
 
-it("has five slots with Assets between Add and Tokens", () => {
-  expect(RAIL_SLOTS).toEqual([
-    "composition",
-    "add",
-    "assets",
-    "tokens",
-    "document",
-  ]);
+it("has four slots, with Add between Composition and Tokens", () => {
+  expect(RAIL_SLOTS).toEqual(["composition", "add", "tokens", "document"]);
 });
 
-it("names the fifth slot Assets", () => {
-  expect(uiCopy.rail.slots.assets).toBe("Assets");
+it("does not carry an file section", () => {
+  expect(RAIL_SLOTS).not.toContain("assets");
 });
 
 it("offers exactly the slots DESIGN.md names", () => {

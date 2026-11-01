@@ -3,11 +3,11 @@ import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { uiCopy } from "../ui-copy.js";
 import { Glyph, RAIL_GLYPHS, SETTINGS_GLYPH } from "./icons.js";
 
-/** The rail's five slots. Named here rather than in
+/** The rail's four slots. Named here rather than in
  *  `shell-layout.tsx` because the rail is what enumerates them — two owners of
  *  "which slots there are" would drift. The settings gear is deliberately not
  *  one of them: it opens a modal, never a pane, so it is outside this set. */
-export type RailSlot = "composition" | "add" | "assets" | "tokens" | "document";
+export type RailSlot = "composition" | "add" | "tokens" | "document";
 
 /** The gear's own id, so the modal it opens can return focus to it on close.
  *  The gear is the one rail control with a surface outside the rail, so its id
@@ -20,7 +20,6 @@ export const SETTINGS_TRIGGER_ID = "editor-shell-settings-trigger";
 export const RAIL_SLOTS: readonly RailSlot[] = [
   "composition",
   "add",
-  "assets",
   "tokens",
   "document",
 ];

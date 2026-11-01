@@ -108,9 +108,9 @@ export function corners(r: {
   ];
 }
 
-/** The Assets pane, where a picture is declared and the background is set. */
+/** The file section, where a picture is declared and the background is set. */
 export async function openAssets(page: Page): Promise<void> {
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
 }
 
 /** Pins `Date.now` for the page, so the starter's live readings stop moving.
@@ -350,7 +350,7 @@ export async function chooserSize(page: Page): Promise<string> {
     .innerText();
 }
 
-/** Imports a picture through the Assets pane's own background action, which is
+/** Imports a picture through the file section's own background action, which is
  *  the one path that changes the background asset and so remounts the layer. */
 export async function importBackground(
   page: Page,

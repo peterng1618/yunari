@@ -458,7 +458,7 @@ describe("the session's font import", () => {
 
     await pick("Manrope-Bold.woff2");
 
-    // The form is the Assets pane's, minus the role select this import may never
+    // The form is the file section's, minus the role select this import may never
     // use.
     expect(dialog().querySelector("[data-yunari-font-role]")).toBeNull();
     await press("[data-yunari-font-create]");
@@ -527,7 +527,7 @@ describe("the session's font import", () => {
     await pick("Manrope-Bold.woff2");
     await press("[data-yunari-font-cancel]");
 
-    // The file is declared — that is what the Assets pane's Cancel means — but
+    // The file is declared — that is what the file section's Cancel means — but
     // no token and no credit are written.
     expect(
       assetManager.declarations.filter((asset) => asset.kind === "font"),

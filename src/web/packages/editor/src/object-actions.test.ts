@@ -52,8 +52,19 @@ describe("object action registry", () => {
       "group",
       "ungroup",
       "outline-text",
+      "replace-asset",
       "delete",
     ]);
+  });
+
+  it("offers replace only against a placed image or SVG", () => {
+    const replace = objectAction("replace-asset");
+    expect(replace.eligible(target({ asset: "image" }))).toBe(true);
+    expect(replace.eligible(target({ asset: "svg" }))).toBe(true);
+    expect(replace.eligible(target())).toBe(false);
+    expect(replace.eligible(target({ asset: "image", locked: true }))).toBe(
+      false,
+    );
   });
 
   it("marks delete, and only delete, destructive — the registry's own fact", () => {

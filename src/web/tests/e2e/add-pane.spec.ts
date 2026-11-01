@@ -15,7 +15,7 @@ import { isDesktopSurface } from "./surface.js";
  * can name.
  *
  * The third case came here from the Add pane's deleted file section: local files
- * belong to the Assets pane, so the control it measures is
+ * belong to the file section, so the control it measures is
  * opened where it now lives.
  */
 
@@ -60,13 +60,13 @@ test("the Add pane offers units and primitives, neither greyed, neither a fallba
   }
 });
 
-test(`the Assets pane's import control takes control text, not the shell's ${themeToken("--text-md")} base`, async ({
+test(`the file section's import control takes control text, not the shell's ${themeToken("--text-md")} base`, async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await page.goto(EDITOR);
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
 
   // These boxes' text was *inherited*, not stated, so they took the shell
   // root's `--text-md`. The type scale gives control text `--text-sm`, and both plain-DOM
@@ -74,10 +74,10 @@ test(`the Assets pane's import control takes control text, not the shell's ${the
   // the stylesheet's own declaration, so the
   // row moves with the type scale rather than restating it.
   //
-  // The import button is the Assets pane's now; the Add pane's file section
+  // The import button is the file section's now; the Add pane's file section
   // that used to carry it is deleted.
   const importButton = page.locator(
-    '[data-yunari-panel="assets"] [data-yunari-asset-import]',
+    '[data-yunari-panel="add"] [data-yunari-asset-import]',
   );
   await expect(importButton).toBeVisible();
   await expect(importButton).toHaveCSS(

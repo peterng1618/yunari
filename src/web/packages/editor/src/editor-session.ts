@@ -598,7 +598,7 @@ export class EditorSession {
     return importWallpaperItem(this.#videoHost(), item, trim);
   }
 
-  /** One picked `.mpkg` or video: the same one-call import the Assets pane
+  /** One picked `.mpkg` or video: the same one-call import the file section
    *  reports, through the video owner. */
   importPickedVideo(
     file: File,
@@ -625,7 +625,7 @@ export class EditorSession {
   }
 
   /**
-   * The declarations moved: the Assets pane's title count, the background
+   * The declarations moved: the file section's title count, the background
    * column's picture list and the bytes the artboard resolves all read them, so
    * one method serves every path that adds or drops one.
    */
@@ -729,7 +729,7 @@ export class EditorSession {
 
   async applyFontTrio(id: string): Promise<FabricThemeEnvelope> {
     const envelope = await this.#document.applyFontTrio(id);
-    // The trio adopted three declarations, so the Assets pane's count moves
+    // The trio adopted three declarations, so the file section's count moves
     // here as it does for an import.
     this.#declarationsChanged();
     return envelope;

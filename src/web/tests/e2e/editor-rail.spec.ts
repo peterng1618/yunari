@@ -315,10 +315,10 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
  *  Composition is opened to its full length first for the reason the case above
  *  gives — a collapsed starter does not overflow the panel. Tokens and Document
  *  overflow at rest. The archived bullet this case descends from named the
- *  asset-library surface and Document; the library is the Assets pane now, and
+ *  asset-library surface and Document; the library is the file section now, and
  *  Assets is excluded because at rest it declares the starter's one backdrop — a
  *  single card that fits, so it cannot hold an offset. Add is not walked any more
- *  either: the file section that gave it a long tail is the Assets pane's, and
+ *  either: the file section that gave it a long tail is the file section's, and
  *  what is left — shapes, text and the card library — fits the panel. The slot
  *  list is hand-written, so a starter that later made either pane overflow would
  *  not re-enter this walk by itself. Their overflow heights are deliberately not

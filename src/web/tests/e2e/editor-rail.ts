@@ -58,7 +58,7 @@ export async function openPane(page: Page, name: string): Promise<void> {
   await slot.click();
 }
 
-/** One declared file's card in the Assets pane, addressed by the file name the
+/** One declared file's card in the file section, addressed by the file name the
  *  author chose — the name the card prints.
  *
  *  A card is a choose button (`data-yunari-asset-select`) carrying `aria-pressed`
@@ -66,10 +66,9 @@ export async function openPane(page: Page, name: string): Promise<void> {
  *  `data-yunari-value` to read here; the file's name is the only handle an
  *  author has on the row, and the pressed state is what says it is chosen. */
 export function assetCard(page: Page, fileName: string): Locator {
-  return page.locator(
-    '[data-yunari-panel="assets"] [data-yunari-asset-select]',
-    { hasText: fileName },
-  );
+  return page.locator('[data-yunari-panel="add"] [data-yunari-asset-select]', {
+    hasText: fileName,
+  });
 }
 
 /** Chooses the declared file whose card prints `fileName`. */

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * The token inspector's import dialog: the same form the Assets pane draws,
+ * The token inspector's import dialog: the same form the file section draws,
  * without its role select, and the two commits it reports.
  */
 

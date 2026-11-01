@@ -293,7 +293,7 @@ describe("editor panels", () => {
       // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
       // section at all rather than a switch that writes nothing.
       "INPUT[type=checkbox][aria-hidden]", // Frosted glass, shape
-      // The Assets pane's two file pickers, `[hidden]` and driven by the Import
+      // The file section's two file pickers, `[hidden]` and driven by the Import
       // and Replace controls. The declared-asset chooser that used to sit ahead
       // of them was a `ControlSelect`; the list is a card per file now, so it
       // renders no value carrier.
@@ -519,7 +519,7 @@ function mountPanels(): { root: HTMLElement } {
   mountSelectionInspector(root);
 
   // The Add pane draws only the insert tiles now; the declared files and their
-  // import live in the Assets pane, so the audit has to read both panes.
+  // import live in the file section, so the audit has to read both panes.
   const editor = {
     canvas: {
       add: vi.fn(),

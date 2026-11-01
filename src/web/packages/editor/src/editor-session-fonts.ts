@@ -34,7 +34,7 @@ export interface FontCommitHost {
 }
 
 /**
- * The one font commit the Assets pane reports: a fresh file or a declared
+ * The one font commit the file section reports: a fresh file or a declared
  * face, with or without the preset.
  *
  * The cap is checked before anything is declared, because nothing removes a
@@ -135,7 +135,7 @@ export function pickFontFile(
 }
 
 /**
- * The dialog answers with the same two commits the Assets pane makes, minus
+ * The dialog answers with the same two commits the file section makes, minus
  * the role: this import may never rewrite a role token.
  */
 function openFontImport(

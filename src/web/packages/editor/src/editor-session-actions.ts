@@ -25,6 +25,7 @@ import {
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
 import { newInk } from "./new-object-defaults.js";
 import { constructing, insertNewShape } from "./new-object-panel.js";
+import { replaceSelectedAsset as replaceSelectionFile } from "./replace-selected-asset.js";
 import type { TypeTokens } from "./type-preset-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 import { startProject } from "./wallpaper-engine/client.js";
@@ -143,7 +144,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // The finder's Wallpaper Engine pane: the listing is the pane's own fetch
     // — it is a library, not a search — so the session owns only the writes a
     // card triggers: a video's background, a scene's local project, and a
-    // picked `.mpkg` through the same one-call import the Assets pane uses.
+    // picked `.mpkg` through the same one-call import the file section uses.
     wallpaperActions: () => wallpaperActions(host),
     // One finder row's action. The bytes come from the host, the manager
     // keeps its caps and sanitising, and the credit is written before the
@@ -249,7 +250,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
         },
       });
       if (outcome.ok === true) {
-        // A finder import makes a declaration just as the Assets pane's own
+        // A finder import makes a declaration just as the file section's own
         // file does, so the pane's title and the background column re-resolve.
         host.declarationsChanged();
       }
@@ -289,6 +290,13 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
       document.insertCard(cardId);
     },
     outlineText: () => document.outlineText(),
+    replaceSelectedAsset: () =>
+      replaceSelectionFile({
+        editor,
+        assets,
+        onChanged: host.declarationsChanged,
+        ...(options.onError === undefined ? {} : { onError: options.onError }),
+      }),
     arrange: (action) => applyArrange(editor, action),
     canArrange: (action) => canArrange(editor, action),
     undo: () => void editor.historyManager.undo(),

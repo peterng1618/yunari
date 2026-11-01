@@ -697,16 +697,16 @@ export async function buildComposition(page: Page): Promise<void> {
  * The backdrop, through the controls an author has.
  *
  * Two of them, in the order an author would: **Import a file** at the head of
- * the Assets pane's body (F0.4's control, the visible button that opens the file
+ * the file section's body (F0.4's control, the visible button that opens the file
  * chooser), then **Background media** in the artboard panel. The file is a test
  * input, not a fixture — nothing here writes a declaration, and the id the
  * package keys the asset by is minted by the editor.
  */
 export async function importBackdrop(page: Page, file: string): Promise<void> {
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
   const chooser = page.waitForEvent("filechooser");
   await page
-    .locator('[data-yunari-panel="assets"] [data-yunari-asset-import]')
+    .locator('[data-yunari-panel="add"] [data-yunari-asset-import]')
     .click();
   await (await chooser).setFiles(file);
   // The card lists the asset by the file the author chose. That is the only
@@ -716,14 +716,14 @@ export async function importBackdrop(page: Page, file: string): Promise<void> {
   // pass on one photograph and fail on the next.
   const label = path.basename(file);
   await expect(
-    page.locator('[data-yunari-panel="assets"] [data-yunari-asset-select]', {
+    page.locator('[data-yunari-panel="add"] [data-yunari-asset-select]', {
       hasText: label,
     }),
   ).toHaveCount(1);
 
   // The picture and its box are the background layer's properties, so they are
   // written where that layer is selected. Selecting it opens Composition, so
-  // this is a real swap from the Assets pane, not a no-op.
+  // this is a real swap from the file section, not a no-op.
   await selectLayer(page, "Background");
   // The id the editor minted is read from the media control's own opened list,
   // the control that commits it — the same claim F0.4's pair made, taken from

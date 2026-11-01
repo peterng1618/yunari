@@ -14,6 +14,7 @@ import {
   Copy,
   CopyPlus,
   Group,
+  ImageUp,
   Lock,
   type LucideIcon,
   PenTool,
@@ -44,6 +45,10 @@ export interface ObjectTarget {
    *  false: a target projected before this question existed has no text to
    *  convert. */
   readonly text?: boolean;
+  /** The placed image or SVG's declaration kind, when the active object carries
+   *  a `yunariAsset` reference. Absent on every other subject, so replace is
+   *  offered only against a file the document can re-point. */
+  readonly asset?: "image" | "svg";
 }
 
 export type ObjectActionId = ObjectCommandId | ConstructionActionId;
@@ -64,6 +69,7 @@ export type ObjectCommandId =
   | "group"
   | "ungroup"
   | "outline-text"
+  | "replace-asset"
   | `arrange:${ArrangeAction}`;
 
 /** A construction: it needs no subject, and the id names what it makes — the
@@ -295,6 +301,22 @@ export const OBJECT_ACTIONS: readonly ObjectAction[] = [
         );
       }
       session.outlineText();
+    },
+  },
+  {
+    id: "replace-asset",
+    label: uiCopy.actions.replaceFile,
+    icon: ImageUp,
+    // A declaration is the session's, so the picker and the re-point are too:
+    // the editor alone has no declaration list to add the file to.
+    eligible: (t) => hasUnlockedSelection(t) && t.asset !== undefined,
+    run: (_editor, session) => {
+      if (session === undefined) {
+        throw new Error(
+          "Replace file needs the editor session, which owns the declarations.",
+        );
+      }
+      session.replaceSelectedAsset();
     },
   },
   {

@@ -7,6 +7,7 @@ import {
 import {
   isLocked,
   isTextObject,
+  objectAssetReference,
   parentGroupOf,
   YunariChart,
 } from "@yunari/scene-fabric";
@@ -311,6 +312,12 @@ export function createEditorShellBridge(input: {
   const target = (): ObjectTarget => {
     const base = snapshot();
     const active = canvas.getActiveObject();
+    // Only a single image or SVG carries the reference replace re-points; a
+    // group's members are not the selection the action would swap.
+    const asset =
+      active !== undefined && !(active instanceof Group)
+        ? objectAssetReference(active)
+        : undefined;
     return {
       // The background has no Fabric subject, so the action gate sees none and
       // every object action is refused by construction.
@@ -323,6 +330,7 @@ export function createEditorShellBridge(input: {
       // A member of an ActiveSelection is not a single subject, so only a bare
       // text object asks for the conversion.
       text: active !== undefined && isTextObject(active),
+      ...(asset === undefined ? {} : { asset: asset.kind }),
     };
   };
   const canArrangeAction = (action: ArrangeAction): boolean =>
@@ -764,6 +772,12 @@ export function createEditorShellBridge(input: {
         // editor the other commands act on.
         input.session.outlineText();
         notify();
+        return;
+      }
+      if (action === "replace-asset") {
+        // The declarations are the session's, so the picker and the re-point
+        // are there too.
+        input.session.replaceSelectedAsset();
         return;
       }
       if (action.startsWith("arrange:")) {

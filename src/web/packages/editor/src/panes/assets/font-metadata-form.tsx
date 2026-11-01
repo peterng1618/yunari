@@ -127,7 +127,7 @@ export function FontMetadataForm(props: {
     role: FontTrioRole | null,
   ) => void;
   readonly onCancel: (metadata: FontMetadata) => void;
-  /** The role select is the Assets pane's: an import from the token inspector
+  /** The role select is the file section's: an import from the token inspector
    *  may never rewrite a role, so that caller draws the form without it and its
    *  commit reports `null`. */
   readonly showRole?: boolean;

@@ -1713,7 +1713,7 @@ test("gives every image it places a layer row", async ({ page }, testInfo) => {
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
 
   // **Every import is placed, so every import needs a row.** The row was the
   // half the report saw missing while the picture was on the canvas; nothing

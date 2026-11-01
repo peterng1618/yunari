@@ -156,7 +156,7 @@ describe("the save cleanup sheet", () => {
     void open();
 
     const rows = [...opened().querySelectorAll("li")];
-    // The same mark the Assets pane draws for the same file.
+    // The same mark the file section draws for the same file.
     expect(rows[1]?.querySelector("img")?.getAttribute("src")).toBe(
       "blob:studio",
     );

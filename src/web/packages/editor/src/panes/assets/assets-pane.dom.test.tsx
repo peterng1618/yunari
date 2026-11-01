@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * The Assets pane: the declared files, grouped by kind, one card each, and the
+ * The file section: the declared files, grouped by kind, one card each, and the
  * import that puts them there.
  *
  * **The list is the declarations, not the placed objects.** A font or a video is
@@ -225,7 +225,7 @@ async function selectCard(host: HTMLElement, name: string): Promise<void> {
   await act(async () => row.click());
 }
 
-describe("the Assets pane", () => {
+describe("the file section", () => {
   it("groups cards by kind and marks the chosen row's actions", async () => {
     const { host } = mount([IMAGE, OTHER_IMAGE, FONT]);
 
@@ -624,7 +624,7 @@ const isChosen = (host: HTMLElement, name: string): boolean =>
     ?.querySelector("[data-yunari-asset-select]")
     ?.getAttribute("aria-pressed") === "true";
 
-describe("the Assets pane's import", () => {
+describe("the file section's import", () => {
   it("opens the finder from its own control", async () => {
     const { host, onFindAssets } = await mountWithManager();
 

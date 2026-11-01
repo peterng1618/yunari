@@ -94,7 +94,7 @@ const fileSize = (bytes: number): string =>
 
 export const uiCopy = {
   brand: "Yunari",
-  /** The rail's five slots. A slot's word is both its tooltip and its
+  /** The rail's four slots. A slot's word is both its tooltip and its
    *  accessible name: the slot is icon-only, so it has no text of its own, and
    *  a glyph stored as a translatable string would be announced as a word and
    *  could not inherit a shell colour. One word per slot, from the one owner
@@ -106,8 +106,6 @@ export const uiCopy = {
     slots: {
       composition: "Composition",
       add: "Add",
-      /** Every declared file, its import and placement, and the finder link. */
-      assets: "Assets",
       tokens: "Design tokens",
       /** The artboard, background, metadata and reference panels — one pane,
        *  because they are the document's own settings. */
@@ -1811,7 +1809,7 @@ export const uiCopy = {
       `${count} ${count === 1 ? "unit" : "units"}`,
     tokens: (count: number): string =>
       `${count} ${count === 1 ? "token" : "tokens"}`,
-    /** The Assets pane's list, which is the asset manager's declarations. */
+    /** The file section's list, which is the asset manager's declarations. */
     files: (count: number): string =>
       `${count} ${count === 1 ? "file" : "files"}`,
   },
@@ -1890,6 +1888,7 @@ export const uiCopy = {
     copy: "Copy",
     cut: "Cut",
     outlineText: "Convert to paths",
+    replaceFile: "Replace file…",
   },
   /** Why a text object could not be frozen into vector paths. A refusal is
    *  reported whole-object: partial geometry would silently drop a word. */
@@ -2130,7 +2129,11 @@ export const uiCopy = {
     cards: "Card",
     shapes: "Shape",
     charts: "Chart",
-    /** The Assets pane's two import paths. An author imports a *file* — the
+    /** The Add pane's second section: the declared files, below the insert
+     *  tiles. A file is not a pane, so the section is headed here rather than
+     *  by a rail slot. */
+    files: "Files",
+    /** The file section's two import paths. An author imports a *file* — the
         extension is what decides whether it becomes a layer or is only
         declared — and the second control forces the file into background
         media instead of the kind's automatic placement. */
@@ -2139,7 +2142,9 @@ export const uiCopy = {
         otherwise land on the canvas, and the author wanted it as the board's
         background. */
     importAsBackground: "Import as background",
-    /** The Assets pane's cards. `kind` is the metadata line's word, a total map
+    /** Replace file… accepts only the two kinds a placed object can carry. */
+    replaceUnsupported: "Only an image or SVG can replace a placed picture.",
+    /** The file section's cards. `kind` is the metadata line's word, a total map
      *  over the manager's kinds so a fifth kind fails to compile here rather
      *  than drawing a card with no kind word. */
     assetCard: {

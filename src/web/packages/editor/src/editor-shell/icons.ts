@@ -164,9 +164,6 @@ export const PALETTE_GLYPH: LucideIcon = Palette;
 export const PIPETTE_GLYPH: LucideIcon = Pipette;
 /** The Add slot's plus, and the camera cluster's zoom-in. */
 export const PLUS_GLYPH: LucideIcon = Plus;
-/** The Assets slot: the declared files as one open collection, rather than the
- *  store's `Folder` for opening a single item. */
-export const ASSETS_GLYPH: LucideIcon = FolderOpen;
 /** The camera cluster's zoom-out. */
 export const MINUS_GLYPH: LucideIcon = Minus;
 /** The camera cluster's fit. */
@@ -293,7 +290,7 @@ export const HIDDEN_GLYPH: LucideIcon = EyeOff;
 /** The finder's footer button that opens the same preview a double-click does. */
 export const PREVIEW_GLYPH: LucideIcon = Maximize2;
 
-/** The Assets pane's two card actions that have no other surface: putting a
+/** The file section's two card actions that have no other surface: putting a
  *  file on the canvas, and swapping the bytes of the asset already chosen. The
  *  pair is a square with a plus and the refresh arrows. */
 export const PLACE_ON_CANVAS_GLYPH: LucideIcon = SquarePlus;
@@ -348,7 +345,6 @@ export const CLOSE_GLYPH: LucideIcon = X;
 export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
   composition: STACK_GLYPH,
   add: PLUS_GLYPH,
-  assets: ASSETS_GLYPH,
   tokens: PALETTE_GLYPH,
   document: PAGE_GLYPH,
 };

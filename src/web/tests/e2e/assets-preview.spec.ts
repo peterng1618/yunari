@@ -36,7 +36,7 @@ const MODAL = "[data-yunari-asset-preview-modal]";
  *  button `assetCard` names, not children of it. Matched on the `<li>`, which
  *  holds both, because a button's own text is the card's, not the row's. */
 function cardRow(page: Page, fileName: string): Locator {
-  return page.locator('[data-yunari-panel="assets"] li', {
+  return page.locator('[data-yunari-panel="add"] li', {
     hasText: fileName,
   });
 }
@@ -46,7 +46,7 @@ function cardRow(page: Page, fileName: string): Locator {
  *  closed pane is not one a person can press. */
 async function importLogo(page: Page): Promise<void> {
   await page.goto(EDITOR);
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
   await chooseAssetFile(page, "import", LOGO);
   await chooseAssetCard(page, "logo.png");
 }
@@ -114,7 +114,7 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
 
   await page.locator(".editor-shell-dialog-close").click();
   await expect(modal).toBeHidden();
-  await expect(page.locator('[data-yunari-panel="assets"]')).toBeVisible();
+  await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
 });
 
 test("disables Remove once the canvas holds the file", async ({
@@ -183,7 +183,7 @@ test("imports a picked .mpkg through the modal and declares its video", async ({
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(EDITOR);
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
 
   let packageCalls = 0;
   let normalizeCalls = 0;
@@ -225,7 +225,7 @@ test("imports a picked .mpkg through the modal and declares its video", async ({
   // The package's title is the credit's; the declaration is named through the
   // manager's own file-name derivation, which slugs the space.
   await expect(
-    page.locator('[data-yunari-panel="assets"] li', {
+    page.locator('[data-yunari-panel="add"] li', {
       hasText: "Night-street.mp4",
     }),
   ).toBeVisible();
@@ -236,7 +236,7 @@ test("keeps the modal open with the package refusal and declares nothing", async
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(EDITOR);
-  await openPane(page, "Assets");
+  await openPane(page, "Add");
 
   const sentence = "No video in this package.";
   await page.route("**/api/wallpaper-engine/mpkg", async (route) => {
@@ -259,7 +259,7 @@ test("keeps the modal open with the package refusal and declares nothing", async
   // The editor opens a starter document with its own picture; this import adds
   // nothing beside it.
   await expect(
-    page.locator('[data-yunari-panel="assets"] li', {
+    page.locator('[data-yunari-panel="add"] li', {
       hasText: "Night-street.mp4",
     }),
   ).toHaveCount(0);
