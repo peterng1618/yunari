@@ -97,6 +97,23 @@ describe("EditorDocument dirty state", () => {
     expect(document.isDirty()).toBe(true);
   });
 
+  it("reads an in-progress invalid document as unsaved instead of throwing", () => {
+    const document = documentWith();
+    // The state choosing a fixed pie total leaves for one render: the kind is
+    // written and the value is not yet. `isDirty` is read during render by
+    // `useSyncExternalStore`, so a throw here unmounts the editor before the
+    // author can type the value (`yunari#51`).
+    vi.spyOn(document, "snapshot").mockImplementation(() => {
+      throw new Error("Invalid theme: A fixed pie total needs a value.");
+    });
+
+    expect(document.isDirty()).toBe(true);
+    // The validation still holds where a document must be coherent.
+    expect(() => document.snapshot()).toThrow(
+      "A fixed pie total needs a value.",
+    );
+  });
+
   it("sees a canvas object:added once its flush has run", async () => {
     // The scene half of the key, through the event the bridge binds: the
     // document's own fields did not move, only the canvas's content.

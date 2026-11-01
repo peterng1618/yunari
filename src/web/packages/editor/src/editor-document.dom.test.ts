@@ -355,6 +355,27 @@ describe("EditorDocument asset truth", () => {
     });
     document.destroy();
   });
+
+  it("answers both reference routes through one predicate", () => {
+    // The scene half and the envelope half used to be joined at a call site,
+    // so a third reference source could be added to neither. Both now answer
+    // here, where the document can see them.
+    const document = documentWith(undefined, {
+      assetManager: managerWith([imageAsset("photo"), imageAsset("logo")]),
+      objects: [placedObject("photo")],
+      envelope: {
+        ...bareEnvelope(),
+        background: { media: { assetId: "logo", bounds: "theme" } },
+      } as FabricThemeEnvelopeInput,
+    });
+
+    // An object at any depth.
+    expect(document.isAssetReferenced("photo")).toBe(true);
+    // The envelope's own reference, which no object carries.
+    expect(document.isAssetReferenced("logo")).toBe(true);
+    expect(document.isAssetReferenced("absent")).toBe(false);
+    document.destroy();
+  });
 });
 
 describe("EditorDocument save cleanup", () => {

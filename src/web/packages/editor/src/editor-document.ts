@@ -27,9 +27,9 @@ import { assetBytes, familyCuts, trashAssets } from "./asset-finder/client.js";
 import {
   type AssetManager,
   assetFileName,
+  assetReferencedBy,
   type LocalAssetReference,
 } from "./asset-manager/index.js";
-import { unusedAssets as computeUnusedAssets } from "./asset-manager/unused.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import {
@@ -353,10 +353,18 @@ export class EditorDocument {
     ) {
       return memo.value;
     }
-    const value = this.#persistence.isDirty(
-      this.snapshot(),
-      this.#assets.assets,
-    );
+    let value: boolean;
+    try {
+      value = this.#persistence.isDirty(this.snapshot(), this.#assets.assets);
+    } catch {
+      // A committed edit can be momentarily invalid before the author can
+      // finish it — choosing a fixed pie total writes `{kind: "fixed"}` and the
+      // value arrives after the next keystroke. This read is the render-time
+      // unsaved marker, so it reports such a document as unsaved instead of
+      // throwing out of `useSyncExternalStore`; validation still refuses it at
+      // save and load, where a document must be coherent.
+      value = true;
+    }
     this.#dirty = {
       revision: this.#revision,
       assets: this.#assets.mutationCount,
@@ -686,14 +694,29 @@ export class EditorDocument {
     );
   }
 
-  /** The declarations neither the envelope nor the scene still references. The
-   *  one walk: the helper owns reachability, this owner supplies its inputs. */
+  /** Whether anything that survives a save still names this asset.
+   *
+   *  Both reference routes meet here because this is the one owner that can
+   *  see both. The canvas walk reaches objects at any depth; `holdsAsset`
+   *  answers the envelope's own references — the artboard's background media
+   *  and each type preset's face — which no Fabric object carries. A caller
+   *  that checked only one half would offer a live asset for removal, and
+   *  removing it leaves a theme that validates and renders nothing.
+   */
+  isAssetReferenced(assetId: string): boolean {
+    return (
+      this.holdsAsset(assetId) ||
+      assetReferencedBy(this.#source.shell.editor.canvas.getObjects(), assetId)
+    );
+  }
+
+  /** The declarations neither the envelope nor the scene still references.
+   *  A credit is attribution, not a reference: it never keeps an asset alive
+   *  and follows the asset it names, so it is not an input here. */
   unusedAssets(): readonly LocalAssetReference[] {
-    return computeUnusedAssets({
-      declarations: this.#assets.declarations,
-      objects: this.#source.shell.editor.canvas.getObjects(),
-      holdsAsset: (assetId) => this.holdsAsset(assetId),
-    });
+    return this.#assets.declarations.filter(
+      (asset) => !this.isAssetReferenced(asset.id),
+    );
   }
 
   /** Removes the declarations, their bytes, their preview URLs and the credits

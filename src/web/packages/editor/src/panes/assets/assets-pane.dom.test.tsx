@@ -8,10 +8,12 @@
  * declared only, so a list built from the canvas would lose them — the cases
  * here mount declarations that no object holds and still expect a card.
  *
- * **In use is the scene's reference OR the envelope's.** The envelope-side
- * references are the artboard's background media and a type preset's face, which
- * no Fabric object carries; `isReferenced` is how the pane hears them, and it is
- * optional so the pane mounts where there is no envelope to ask.
+ * **In use is the document's answer.** `isReferenced` is one predicate over
+ * both reference routes: the scene at any depth, and the envelope's own
+ * references (the artboard's background media and a type preset's face), which
+ * no Fabric object carries. These cases pass the scene half from `objects` and
+ * the envelope half from the callback, as `EditorDocument.isAssetReferenced`
+ * does in the product.
  *
  * **Import routes by kind, and the author can override it.** A picture is placed
  * on the canvas, a video becomes the artboard's background media, and a font is
@@ -19,7 +21,7 @@
  * background and refuses a font, because a face has no background form.
  */
 import { setObjectAssetReference } from "@yunari/scene-fabric";
-import { FabricImage, Group } from "fabric/es";
+import { FabricImage, type FabricObject, Group } from "fabric/es";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -34,6 +36,7 @@ import {
 import {
   ASSET_FILE_EXTENSIONS,
   AssetManager,
+  assetReferencedBy,
   type LocalAssetReference,
 } from "../../asset-manager/index.js";
 import type { EditorInteraction } from "../../editor-interaction.js";
@@ -151,10 +154,8 @@ function mount(
       <AssetsPane
         manager={manager}
         editor={editorStub()}
+        isReferenced={options.isReferenced ?? (() => false)}
         onFontCommit={async () => ({ ok: true, message: "" })}
-        {...(options.isReferenced === undefined
-          ? {}
-          : { isReferenced: options.isReferenced })}
       />,
     ),
   );
@@ -464,7 +465,12 @@ async function mountWithManager(
       <AssetsPane
         manager={manager}
         editor={editor}
-        isReferenced={isReferenced}
+        // The document's answer in the product: the envelope half comes from
+        // the callback, the scene half from the objects the canvas holds.
+        isReferenced={(assetId) =>
+          isReferenced(assetId) ||
+          assetReferencedBy(objects as readonly FabricObject[], assetId)
+        }
         onChanged={changed}
         onFindAssets={onFindAssets}
         onFontCommit={fontCommit}
@@ -998,8 +1004,8 @@ describe("the behaviours the file section carried", () => {
   });
 
   it("refuses a press made after an object re-references the asset", async () => {
-    // No event is fired: the scene moved and the render did not. The press
-    // must read the canvas itself rather than a render's object list.
+    // No event is fired: the scene moved and the render did not. The predicate
+    // is read at the press, not sampled from a render's object list.
     const image = new FabricImage(document.createElement("img"), {
       id: "image-1",
     });

@@ -1056,10 +1056,10 @@ test.describe("the per-kind inspector column", () => {
     }
   });
 
-  // yunari#51: choosing `fixed` unmounts the shell before the value can be
-  // typed, because `isDirty` validates the transiently invalid document.
-  // Fixme, not skip, so the reason and the issue stay on the case itself.
-  test.fixme("draws a remainder slice for a fixed pie total, measured on the canvas", async ({
+  // yunari#51: choosing `fixed` used to unmount the shell before the value
+  // could be typed, because `isDirty` validated the transiently invalid
+  // document during render.
+  test("draws a remainder slice for a fixed pie total, measured on the canvas", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1112,9 +1112,13 @@ test.describe("the per-kind inspector column", () => {
     expect(remainder?.value).toBeCloseTo(400 - known, 6);
 
     // ...and the slice is on the glass, in the remainder's own ink, where a
-    // moment ago there was none of it.
-    const drawn = await colourInsideObject(page, "pie", REMAINDER_INK);
-    expect(drawn).toBeGreaterThan(1000);
+    // moment ago there was none of it. Polled because the chart sweeps the new
+    // slice in, and the value arrives before the paint does.
+    await expect
+      .poll(async () => colourInsideObject(page, "pie", REMAINDER_INK), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(1000);
 
     // Unset again: the remainder goes, and so does its ink.
     await chooseIn(page, '[data-yunari-chart-setting="total"]', "sum");

@@ -6,7 +6,6 @@ import type { ImportOutcome } from "../../asset-finder/actions.js";
 import {
   type AssetManager,
   assetFileName,
-  assetReferencedBy,
   type LocalAssetReference,
   mimeOf,
 } from "../../asset-manager/index.js";
@@ -54,10 +53,12 @@ import { VideoTrimModal } from "./video-trim-modal.js";
  * scene would lose both, and a font imported once would be unreachable and
  * un-removable.
  *
- * **In use is either reference route.** `assetReferencedBy` walks the scene at
- * any depth; `isReferenced` asks the envelope, which holds the artboard's
- * background media and a type preset's face. The second is optional, so the
- * pane mounts where there is no envelope to ask.
+ * **In use is the document's answer.** `isReferenced` is one predicate over
+ * both reference routes: the scene at any depth, and the envelope's own
+ * references (the artboard's background media and a type preset's face), which
+ * no Fabric object carries. The session binds it to the document's
+ * `isAssetReferenced`; the pane does not walk the canvas itself, so a third
+ * reference source is added where that predicate is owned rather than here.
  *
  * The component owns no bytes and no document state. Files are declared,
  * replaced, hydrated and removed through the manager; placement goes through
@@ -68,8 +69,9 @@ import { VideoTrimModal } from "./video-trim-modal.js";
 interface AssetsPaneProps {
   readonly manager: AssetManager;
   readonly editor: EditorInteraction;
-  /** The envelope-side references no object carries. */
-  readonly isReferenced?: (assetId: string) => boolean;
+  /** Whether anything that survives a save still names this asset. The
+   *  document answers both halves; the pane never walks the scene itself. */
+  readonly isReferenced: (assetId: string) => boolean;
   /** Told the document moved, so a reference this pane cannot see — a deleted
    *  object, a cleared background — redraws the cards. Optional, like the
    *  others, so the pane mounts where there is no document to follow. */
@@ -198,11 +200,9 @@ export function AssetsPane({
   const declarations = manager.declarations;
   const chosen =
     declarations.find((asset) => asset.id === chosenId) ?? declarations[0];
-  // Read live at every call: a render's object list is a snapshot, and Remove
-  // is decided by what the scene and the document hold at the press.
-  const referenced = (assetId: string): boolean =>
-    assetReferencedBy(editor.canvas.getObjects(), assetId) ||
-    isReferenced?.(assetId) === true;
+  // Read live at every call: Remove is decided by what the document holds at
+  // the press, not by a snapshot a render took.
+  const referenced = (assetId: string): boolean => isReferenced(assetId);
 
   // One submission at a time: the pickers are cleared after every use, so a
   // re-fire of the same file is caught here rather than importing twice.

@@ -504,7 +504,7 @@ export class EditorSession {
     this.#assetsPanel = createAssetsPane(options.panelHosts.assets, {
       manager: this.#assets,
       editor: options.shell.editor,
-      isReferenced: (assetId) => this.#document.holdsAsset(assetId),
+      isReferenced: (assetId) => this.#document.isAssetReferenced(assetId),
       subscribeDocumentChange: (listener) =>
         this.#document.subscribeDocumentChange(listener),
       onChanged: () => this.#declarationsChanged(),
