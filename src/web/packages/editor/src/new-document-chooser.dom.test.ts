@@ -247,7 +247,7 @@ describe("the new-document chooser", () => {
       "16:9",
       "19.5:9",
       "4:3",
-      "circle",
+      "1:1",
     ]);
     expect(
       (await optionIds("orientation")).filter((value) => value !== ""),
