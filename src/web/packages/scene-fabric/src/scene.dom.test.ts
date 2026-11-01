@@ -215,6 +215,31 @@ describe("mountFabricScene's theme shape", () => {
     element.remove();
   });
 
+  it("clips a rotated rect presentation about the viewport centre", () => {
+    // A quarter turn maps the artboard's centre onto the viewport's centre, so
+    // the disc's centre is the viewport's. Reading it as the rotated offset plus
+    // the unrotated half-extents puts it outside the viewport instead — the
+    // composition disappears behind a clip that misses it entirely.
+    const element = host();
+    resizeHost(element, 400, 400);
+    const scene = mountCircleTheme(element, {
+      plan: plan({ width: 400, height: 400 }),
+      artboard: { width: 400, height: 400 },
+      presentation: { shape: "rect", rotation: 90 },
+    });
+
+    const match = /^circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)$/.exec(
+      scene.artboard.style.clipPath,
+    );
+    expect(match, "the clip is a disc").not.toBeNull();
+    expect(Number(match?.[1]), "the inscribed radius").toBeCloseTo(200, 6);
+    expect(Number(match?.[2]), "centred on the viewport").toBeCloseTo(200, 6);
+    expect(Number(match?.[3]), "centred on the viewport").toBeCloseTo(200, 6);
+
+    scene.dispose();
+    element.remove();
+  });
+
   it("keeps a rect theme's inscribed scale on a circle presentation", () => {
     const element = host();
     resizeHost(element, 200, 200);

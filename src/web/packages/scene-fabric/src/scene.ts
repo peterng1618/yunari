@@ -273,11 +273,13 @@ export function mountFabricScene(
     const width = host.clientWidth;
     const height = host.clientHeight;
     const box = displayBox(width, height, presentation.shape);
-    // A masked composition's glass is the disc inscribed in the artboard's
-    // mapped box, so both the clip and the guide read the same geometry.
+    // A masked composition's glass is the disc inscribed in the artboard. Its
+    // centre is the viewport's, because `computeArtboardTransform` maps the
+    // artboard's centre onto the viewport centre at every angle; adding the
+    // unrotated half-extents to the rotated offset is only the same at zero.
     const radius = (Math.min(board.width, board.height) * transform.scale) / 2;
-    const cx = transform.offsetX + (board.width * transform.scale) / 2;
-    const cy = transform.offsetY + (board.height * transform.scale) / 2;
+    const cx = width / 2;
+    const cy = height / 2;
     applyBoardPlate(paint, transform, board);
     if (presentation.shape === "circle") {
       // Outside the disc is outside the screen, so the host is black and the
