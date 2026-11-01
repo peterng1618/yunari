@@ -393,6 +393,13 @@ export function chromiumArguments(profile: string): readonly string[] {
     "--disable-background-timer-throttling",
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
+    // Every panel page is the same origin, and one renderer can hold them all:
+    // the default is one renderer per window, which pays the same heap and
+    // code pages once per panel.
+    "--process-per-site",
+    // No compositor or canvas-quality switches: software canvas rasterisation
+    // banded the glass gradients on the real panels, so the renderer keeps the
+    // accelerated path even though it costs private bytes.
     // A panel is a display of its own; a URL bar or scrollbar in the capture
     // would be part of the frame.
     "about:blank",
@@ -611,11 +618,20 @@ export async function setOverlayMode(
           }
           host.style.background = "transparent";
         }
+        // The media layer is hidden and the device plays its own clip: a video
+        // left decoding is frames nobody reads.
+        for (const media of document.querySelectorAll("video")) media.pause();
       } else {
         style?.remove();
         if (host !== null && host.dataset["panelOverlayBackground"] !== undefined) {
           host.style.background = host.dataset["panelOverlayBackground"];
           delete host.dataset["panelOverlayBackground"];
+        }
+        // A still capture shows the page's own picture; autoplay may refuse,
+        // which is the page's state rather than a failed capture.
+        for (const media of document.querySelectorAll("video")) {
+          const started = media.play();
+          if (started !== undefined) started.catch(() => {});
         }
       }
       return true;

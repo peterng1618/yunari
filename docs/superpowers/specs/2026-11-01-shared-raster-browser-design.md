@@ -382,6 +382,58 @@ The expected saving is roughly 615 MB at three panels: the 982.6 MB browser +
 GPU total becomes about one panel's 367.6 MB. Renderer children remain per
 panel; some utility processes may be shared, which only adds to the saving.
 
+### After (shared browser, measured 2026-11-01)
+
+Run on the merged build, three trials per panel count with a 30 s cooldown,
+same method as the clean baseline. The browser runs with `--process-per-site` on
+top of its existing switches; an overlay panel also pauses the page's video,
+which the device plays itself.
+
+| Panels | Procs | Private MB | CPU s/60 s | Cores | Browser + GPU MB |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 11 | 689.0 | 28.7 | 0.478 | 268.8 |
+| 3 | 11 | 1,150.1 | 32.6 | 0.543 | 568.2 |
+
+Medians. The 1-panel ranges were 11–13 procs, 667.9–732.1 MB, 27.0–29.6 s and
+263.8–278.6 MB; the 3-panel ranges were 11–15 procs, 1,039.6–1,426.6 MB,
+31.0–45.0 s and 511.1–625.1 MB, the widest trial being the one where a second
+renderer process stayed alive. Each panel page is one target in one shared
+browser, and the three panel pages share one renderer process.
+
+**The canvas and raster switches are not shipped.** Enabling
+`--disable-features=CanvasOopRasterization`, `--disable-gpu-rasterization`,
+`--disable-accelerated-2d-canvas` and `--enable-low-end-device-mode` measured
+10 processes, 1,028.1 MB, 26.6 s and 515.7 MB browser + GPU, but software canvas
+rasterisation banded the glass material visibly on the Lian Li and TURZX panels.
+Visual output is a hard constraint, so that configuration was reverted; the
+table above is the shipped one.
+
+Pass/fail against the criteria above:
+
+- one browser for N ≥ 2: **pass** — one browser and one GPU process, not three.
+- at least four fewer Chromium processes: **pass** — 27 Chromium processes
+  became 8; the whole tree went from 29 to 11.
+- browser + GPU ≤ 459.5 MB: **fail** — 568.2 MB, 108.7 MB over. A headless
+  window costs ~78 MB of GPU-process private bytes, so a shared browser does
+  not keep a one-panel GPU footprint at three panels.
+- total tree private down ≥ 300 MB: **pass** — 598.2 MB lower.
+- CPU ≤ 53.55 s/60 s: **pass** — 32.6 s, 18.4 s below the baseline.
+- frames accepted ≤ 1% below baseline: **pass** — three consecutive harness
+  runs accepted 20/20/20 frames per panel against 20/20/20 for the baseline;
+  one first run after the build accepted 19/20 on one panel.
+- one-panel not worse: **mixed** — private bytes 689.0 vs 689.4 MB and
+  browser + GPU 268.8 vs 367.6 MB are equal or better, but CPU rose from 23 to
+  28.7 s/60 s. The criterion is recorded as missed on CPU.
+
+The browser + GPU miss is not recoverable by moving GPU work elsewhere. Removing
+the GPU process with `--disable-gpu` cut browser + GPU to 120 MB but raised CPU
+to 211 s and total private bytes to 2.2 GB; `--disable-gpu-compositing` did the
+same at 121 s and 2.2 GB; software video decode reached 369 MB browser + GPU at
+95 s and 2.2 GB. The 459.5 MB criterion assumed the shared runtime keeps the
+one-panel GPU footprint, which the measurements disprove. The Risks table's
+split option does not address this: a second browser adds a second GPU process.
+
+
 ## Reuse-gate evidence
 
 ### Rung 1 — internal owner

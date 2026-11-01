@@ -92,3 +92,50 @@ one shared Chromium runtime. Keep one target per panel, each target a separate
 headless window, one profile per browser, and the default browser context. Add
 no dependency and no compatibility path. The rejected options either keep the
 measured cost, serialise panel rendering, or replace the proved capture stack.
+
+## Runtime flags
+
+The browser starts with `--process-per-site` on top of the switches the panel
+browser already had, and an overlay panel pauses its page video. All panel pages
+are the same origin, so one renderer serves all of them.
+
+Measured on the three-panel hardware run (medians of three 60 s samples, private
+bytes, CPU seconds per 60 s):
+
+| Change | Procs | Private MB | CPU s | Renderers | Browser + GPU MB |
+|---|---:|---:|---:|---:|---:|
+| Shared browser, no flags | 13 | 1,187.3 | 53.5 | 6 | 620.0 |
+| `--process-per-site` | 11 | 1,138.6 | 47.3 | 4 | 603.4 |
+| Overlay video pause | 11 | 1,060.2 | 35.9 | 4 | 576.8 |
+
+The shipped set measured 1,150.1 MB, 32.6 s and 568.2 MB browser + GPU across
+three trials; the ranges are in the spec.
+
+**Canvas and raster switches are rejected on visual grounds.**
+`--disable-features=CanvasOopRasterization`, `--disable-gpu-rasterization`,
+`--disable-accelerated-2d-canvas` and `--enable-low-end-device-mode` together
+measured 10 processes, 1,028.1 MB, 26.6 s and 515.7 MB browser + GPU — the
+cheapest result — but software canvas rasterisation banded the glass material
+on the Lian Li and TURZX panels, so they are not shipped. Visual output is a
+hard constraint; a cheaper frame that a person can see is a regression.
+
+An overlay panel's page video is paused while the overlay mode is on: the media
+layer is hidden and the device plays the clip, so decoding it is frames nobody
+reads. Still panels keep their video, because their capture is the page with
+its background. Glass is unaffected: a hardware panel page forces static
+sampling, which paints no live video frame.
+
+Rejected, each measured as one trial because the cost moved rather than
+disappeared: `--disable-gpu` (browser + GPU 120 MB, but 211 s CPU and 2,192 MB
+total), `--disable-gpu-compositing` (176 MB, 121 s, 2,193 MB),
+`--disable-accelerated-video-decode` (369 MB, 95 s, 2,181 MB),
+`--in-process-gpu` (828 MB browser + GPU, 1,353 MB total). Neutral:
+`--disable-gpu-memory-buffer-video-frames` (611 MB),
+`--force-gpu-mem-available-mb=128` (587 MB), `--disable-features=SkiaGraphite`
+(569 vs 552 MB), `--disable-gpu-program-cache` (518 vs 513 MB), and creating
+each target at the panel's size (522 vs 513 MB).
+
+The shipped set does not meet the spec's browser + GPU criterion (568.2 MB
+against 459.5 MB). The criterion assumed a shared browser keeps a one-panel GPU
+footprint; the measured growth is about 78 MB per extra headless window, and
+removing it moves the bytes into renderers and CPU. The spec records the miss.

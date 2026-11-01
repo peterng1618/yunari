@@ -557,7 +557,7 @@ export function screenSurface(
 ): ArtboardSurface {
   return {
     shape: presentation.shape,
-    box: displayBox(width, height, presentation.shape),
+    box: displayBox(width, height, presentation.shape, presentation.rotation),
   };
 }
 
@@ -575,13 +575,11 @@ function displayBox(
   shape: DisplayShape,
   rotation = 0,
 ): MediaBox {
-  // A disc's box is the same disc at every angle, so a turn about its centre
-  // would move nothing and only rotate the picture inside a display-bounded
-  // layer that must fill the screen as it stands.
+  // A disc's box is the same disc at every angle, but its contents are not:
+  // a display-bounded picture fills the glass as the composition turns, so a
+  // mount angle has to rotate the layer even when the box does not move.
   const turn: Pick<MediaBox, "angle" | "angleOrigin"> =
-    rotation === 0 || shape === "circle"
-      ? {}
-      : { angle: rotation, angleOrigin: "centre" };
+    rotation === 0 ? {} : { angle: rotation, angleOrigin: "centre" };
   if (shape === "rect") {
     if (rotation === 90 || rotation === 270) {
       return {

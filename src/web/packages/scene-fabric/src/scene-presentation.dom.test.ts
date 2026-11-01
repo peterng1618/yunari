@@ -81,11 +81,10 @@ describe("mountFabricScene's display presentation", () => {
     element.remove();
   });
 
-  it("leaves a display-bounded disc layer unturned at a rotated screen", () => {
-    // The disc is the screen and is the same disc at every angle; a turn would
-    // only rotate the picture inside a layer that must fill the screen as it
-    // stands. At 45 an unturned layer is the only one that reports no
-    // transform, which is what the browser spec asserts.
+  it("turns a display-bounded disc layer with the rotated screen", () => {
+    // The disc is the same disc at every angle, but its picture is not: a
+    // layer that fills the glass has to turn with the composition, or a video
+    // background stays upright under rotated canvas text.
     const { element, scene } = mountDisplayMedia({
       shape: "circle",
       rotation: 45,
@@ -93,7 +92,8 @@ describe("mountFabricScene's display presentation", () => {
     const layer = element.querySelector<HTMLElement>(
       "[data-yunari-background-media]",
     );
-    expect(layer?.style.transform).toBe("");
+    expect(layer?.style.transform).toBe("rotate(45deg)");
+    expect(layer?.style.transformOrigin).toBe("50% 50%");
 
     scene.dispose();
     element.remove();
@@ -206,6 +206,23 @@ describe("mountFabricScene's display presentation", () => {
     ).toEqual({
       shape: "circle",
       box: { left: 50, top: 0, width: 300, height: 300, radius: "circle" },
+    });
+    // A round glass is symmetric, but a display-bounded picture inside it is
+    // not: the mount angle has to turn the picture with the composition.
+    expect(
+      screenSurface({ shape: "circle", rotation: 90 }, 400, 300),
+      "the turned round screen",
+    ).toEqual({
+      shape: "circle",
+      box: {
+        left: 50,
+        top: 0,
+        width: 300,
+        height: 300,
+        radius: "circle",
+        angle: 90,
+        angleOrigin: "centre",
+      },
     });
   });
 
