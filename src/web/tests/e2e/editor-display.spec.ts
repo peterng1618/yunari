@@ -1058,19 +1058,31 @@ test.describe("the stage looks through a display", () => {
   test("settings add, remove and reset ratios", async ({ page }) => {
     await openSettings(page, uiCopy.settings.previews);
     await addRatio(page, "21:9");
-    // `21:9` enters as `7:3`, whose portrait twin is `3:7`. One row, one token.
-    expect(await ratioRows(page)).toContain("7:3");
+    // A typed ratio keeps its own spelling, and its portrait twin is derived:
+    // `21:9` stays `21:9`, with `9:21` beside it. One row, one token.
+    expect(await ratioRows(page)).toContain("21:9");
     await closeSettings(page);
     const added = await displayMenuItems(page);
-    expect(added).toContain("7:3");
-    expect(added).toContain("3:7");
+    expect(added).toContain("21:9");
+    expect(added).toContain("9:21");
 
     await openSettings(page, uiCopy.settings.previews);
-    await removeRatio(page, "7:3");
+    // `7:3` is the same rect shape as the listed `21:9`, so it would add no
+    // lens: it is refused, the reason names both tokens, and nothing is stored.
+    await addRatio(page, "7:3");
+    await expect(
+      page.locator("[data-yunari-preview-ratio-reason]"),
+      "the refusal names both tokens",
+    ).toHaveText(uiCopy.settings.previewRatioEquivalent("7:3", "21:9"));
+    expect(await ratioRows(page), "a refused ratio is not added").not.toContain(
+      "7:3",
+    );
+
+    await removeRatio(page, "21:9");
     expect(
       await ratioRows(page),
       "removing the row removes its token once",
-    ).not.toContain("7:3");
+    ).not.toContain("21:9");
     await addRatio(page, "21:9");
     await resetRatios(page);
     expect(await ratioRows(page)).toEqual([
@@ -1095,7 +1107,7 @@ test.describe("the stage looks through a display", () => {
     ]) {
       expect(reset).toContain(label);
     }
-    expect(reset).not.toContain("7:3");
+    expect(reset).not.toContain("21:9");
   });
 
   test("an empty catalogue leaves Fit as the only menu entry", async ({

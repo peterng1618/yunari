@@ -276,7 +276,7 @@ export async function addRatio(page: Page, ratio: string): Promise<void> {
 }
 
 /** Removes one stored token. The button is keyed by the token, so a row of
- *  `7:3` removes `7:3` once — its `3:7` twin is derived, not a second entry. */
+ *  `21:9` removes `21:9` once — its `9:21` twin is derived, not a second entry. */
 export async function removeRatio(page: Page, token: string): Promise<void> {
   await page.locator(`[data-yunari-preview-ratio-remove="${token}"]`).click();
 }
