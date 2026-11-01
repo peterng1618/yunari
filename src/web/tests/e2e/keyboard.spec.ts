@@ -5,10 +5,11 @@ import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { captureVisualReview, enterLayer } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import {
+  leaveSettings,
   openShell,
   PALETTES,
-  SETTINGS_DIALOG,
   SETTINGS_GEAR,
+  SETTINGS_REGION,
 } from "./shell-palette.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -16,13 +17,13 @@ import { isDesktopSurface } from "./surface.js";
  *  directory declares its own and no spec exports one (`editor.spec.ts:37`). */
 const EDITOR = "http://127.0.0.1:4174/";
 
-test("the Keyboard tab arms a row into the modal's trap, on a ring that clears contrast on every palette", async ({
+test("the Keyboard tab arms a row inside the Settings surface, on a ring that clears contrast on every palette", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await openShell(page);
-  const dialog = page.getByRole("dialog", SETTINGS_DIALOG);
+  const dialog = page.locator(SETTINGS_REGION);
   await page.locator(SETTINGS_GEAR).click();
   await expect(dialog).toBeVisible();
 
@@ -58,13 +59,14 @@ test("the Keyboard tab arms a row into the modal's trap, on a ring that clears c
       const focused = await page.evaluate(() => {
         const active = document.activeElement;
         return {
-          insideDialog: active?.closest('[role="dialog"]') !== null,
+          insideRegion:
+            active?.closest("[data-yunari-settings-region]") !== null,
           action: active?.getAttribute("data-yunari-shortcut-row") ?? null,
         };
       });
       expect(
-        focused.insideDialog,
-        "the armed row took focus inside the modal's trap",
+        focused.insideRegion,
+        "the armed row took focus inside the Settings surface",
       ).toBe(true);
       expect(focused.action).toBe("publish.surface");
     }
@@ -211,7 +213,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await openShell(page);
-  const dialog = page.getByRole("dialog", SETTINGS_DIALOG);
+  const dialog = page.locator(SETTINGS_REGION);
   await page.locator(SETTINGS_GEAR).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: uiCopy.settings.keyboard }).click();
@@ -268,8 +270,7 @@ test("the Keyboard tab's four states, and the sheet's chord mark that did not mo
   // renders the shared `.editor-shell-dialog kbd` rule with no dedicated rule
   // behind it. Read as a computed style rather than inspected: the shared rule is what
   // a change made for the modal would have moved by accident.
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await leaveSettings(page);
   await page.keyboard.press("?");
   const sheet = page.getByRole("dialog", { name: uiCopy.shortcuts.reference });
   await expect(sheet).toBeVisible();
@@ -335,7 +336,7 @@ test("a chord rebound in the Keyboard tab is the chord the ? sheet prints", asyn
 
   await openShell(page);
   await page.locator(SETTINGS_GEAR).click();
-  const dialog = page.getByRole("dialog", SETTINGS_DIALOG);
+  const dialog = page.locator(SETTINGS_REGION);
   await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: uiCopy.settings.keyboard }).click();
 
@@ -357,8 +358,7 @@ test("a chord rebound in the Keyboard tab is the chord the ? sheet prints", asyn
   );
   expect(rebound).not.toBe(fallback);
 
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await leaveSettings(page);
   await page.keyboard.press("?");
   const sheet = page.getByRole("dialog", { name: uiCopy.shortcuts.reference });
   await expect(sheet).toBeVisible();

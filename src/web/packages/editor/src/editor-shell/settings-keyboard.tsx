@@ -110,11 +110,11 @@ export function SettingsKeyboard(props: {
     (event: KeyboardEvent<HTMLDivElement>): void => {
       if (armed !== action) return;
       // The two presses the capture must not consume. Tab moves focus on — an
-      // armed row that swallowed it would be a keyboard trap — and Escape is the
-      // modal's own dismissal (`settings.tsx` passes it straight through), so
-      // neither is a chord. Both disarm and travel on; every other key is the
-      // capture's and nothing else's, because the manager listens on `window`
-      // and would otherwise run the chord being recorded.
+      // armed row that swallowed it would be a keyboard trap — and Escape
+      // cancels the row rather than becoming a chord. Both disarm and travel
+      // on; every other key is the capture's and nothing else's, because the
+      // manager listens on `window` and would otherwise run the chord being
+      // recorded.
       if (event.key === "Tab" || event.key === "Escape") {
         disarm();
         return;
@@ -168,81 +168,86 @@ export function SettingsKeyboard(props: {
           {uiCopy.settings.keyboardResetAll}
         </button>
       </div>
-      {shortcutReferenceGroups().map((group) => (
-        <section key={group.label}>
-          <h3>{group.label}</h3>
-          <dl>
-            {group.rows.map((row) => (
-              <div
-                key={row.action}
-                data-yunari-shortcut-row={row.action}
-                data-armed={armed === row.action ? "" : undefined}
-                // Focusable, so the capture has somewhere to listen that is not
-                // the whole document: the modal's guard covers the page behind
-                // it, and this covers the press being recorded. **Named**, and
-                // named by a role that can carry a name: the row takes focus
-                // when it arms, and a focused `div` with no role announces
-                // nothing — the author recording a chord would hear silence at
-                // exactly the moment the row is asking them to press one.
-                role="group"
-                aria-label={row.label}
-                tabIndex={-1}
-                ref={(element) => {
-                  if (element === null) rows.current.delete(row.action);
-                  else rows.current.set(row.action, element);
-                }}
-                onKeyDown={capture(row.action)}
-                onBlur={(event) => {
-                  // Losing focus cancels: a capture that outlived its row would
-                  // swallow the Escape meant to close the modal. Only the
-                  // *armed* row's own blur counts — arming a second row focuses
-                  // it, and that moves focus out of the first one, which is not
-                  // the capture being abandoned.
-                  if (armed !== row.action) return;
-                  if (
-                    !event.currentTarget.contains(event.relatedTarget as Node)
-                  ) {
-                    disarm();
-                  }
-                }}
-              >
-                <dt>{row.label}</dt>
-                <dd>
-                  <kbd
-                    data-yunari-shortcut-chord={row.action}
-                    aria-label={armed === row.action ? undefined : row.spoken}
-                  >
-                    {armed === row.action
-                      ? uiCopy.settings.keyboardPrompt
-                      : row.chord}
-                  </kbd>
-                  <ControlIconButton
-                    label={uiCopy.settings.keyboardRebind}
-                    data={{ "data-yunari-shortcut-arm": row.action }}
-                    shortcut={{ printed: row.chord, spoken: row.spoken }}
-                    onClick={() =>
-                      armed === row.action ? disarm() : onArmed(row.action)
-                    }
-                  >
-                    <Glyph icon={PENCIL_GLYPH} size={15} />
-                  </ControlIconButton>
-                  <button
-                    type="button"
-                    className="editor-shell-keyboard-action"
-                    data-yunari-shortcut-reset={row.action}
-                    onClick={() => {
-                      if (storage !== undefined)
-                        clearShortcutOverride(storage, row.action);
-                      onOverrides(
-                        withoutShortcutOverride(overrides, row.action),
-                      );
+      {/* **The groups flow across the page, not down one column.** Twenty rows
+          in a single list made the Settings page the long scroll the mode
+          exists to replace; each group is a card in a grid that fits the width
+          the page has. */}
+      <div className="editor-shell-keyboard-groups">
+        {shortcutReferenceGroups().map((group) => (
+          <section key={group.label}>
+            <h3>{group.label}</h3>
+            <dl>
+              {group.rows.map((row) => (
+                <div
+                  key={row.action}
+                  data-yunari-shortcut-row={row.action}
+                  data-armed={armed === row.action ? "" : undefined}
+                  // Focusable, so the capture has somewhere to listen that is not
+                  // the whole document: the modal's guard covers the page behind
+                  // it, and this covers the press being recorded. **Named**, and
+                  // named by a role that can carry a name: the row takes focus
+                  // when it arms, and a focused `div` with no role announces
+                  // nothing — the author recording a chord would hear silence at
+                  // exactly the moment the row is asking them to press one.
+                  role="group"
+                  aria-label={row.label}
+                  tabIndex={-1}
+                  ref={(element) => {
+                    if (element === null) rows.current.delete(row.action);
+                    else rows.current.set(row.action, element);
+                  }}
+                  onKeyDown={capture(row.action)}
+                  onBlur={(event) => {
+                    // Losing focus cancels: a capture that outlived its row would
+                    // swallow the Escape meant to close the modal. Only the
+                    // *armed* row's own blur counts — arming a second row focuses
+                    // it, and that moves focus out of the first one, which is not
+                    // the capture being abandoned.
+                    if (armed !== row.action) return;
+                    if (
+                      !event.currentTarget.contains(event.relatedTarget as Node)
+                    ) {
                       disarm();
-                    }}
-                  >
-                    {uiCopy.settings.keyboardReset}
-                  </button>
-                </dd>
-                {/* The refusal, **in the armed row**. It used to be one node at
+                    }
+                  }}
+                >
+                  <dt>{row.label}</dt>
+                  <dd>
+                    <kbd
+                      data-yunari-shortcut-chord={row.action}
+                      aria-label={armed === row.action ? undefined : row.spoken}
+                    >
+                      {armed === row.action
+                        ? uiCopy.settings.keyboardPrompt
+                        : row.chord}
+                    </kbd>
+                    <ControlIconButton
+                      label={uiCopy.settings.keyboardRebind}
+                      data={{ "data-yunari-shortcut-arm": row.action }}
+                      shortcut={{ printed: row.chord, spoken: row.spoken }}
+                      onClick={() =>
+                        armed === row.action ? disarm() : onArmed(row.action)
+                      }
+                    >
+                      <Glyph icon={PENCIL_GLYPH} size={15} />
+                    </ControlIconButton>
+                    <button
+                      type="button"
+                      className="editor-shell-keyboard-action"
+                      data-yunari-shortcut-reset={row.action}
+                      onClick={() => {
+                        if (storage !== undefined)
+                          clearShortcutOverride(storage, row.action);
+                        onOverrides(
+                          withoutShortcutOverride(overrides, row.action),
+                        );
+                        disarm();
+                      }}
+                    >
+                      {uiCopy.settings.keyboardReset}
+                    </button>
+                  </dd>
+                  {/* The refusal, **in the armed row**. It used to be one node at
                     the tab's foot, which on a table this long sits twenty
                     scrollable rows away from the very row the author is on: a
                     refusal they cannot see is a refusal not stated. The row is
@@ -251,20 +256,21 @@ export function SettingsKeyboard(props: {
                     carries it — a refusal exists only while a row is listening
                     — and the node is present while armed even when empty, so a
                     screen reader hears the alert when it fills. */}
-                {armed === row.action ? (
-                  <p
-                    className="editor-shell-keyboard-reason"
-                    data-yunari-shortcut-reason=""
-                    role="alert"
-                  >
-                    {reason}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </dl>
-        </section>
-      ))}
+                  {armed === row.action ? (
+                    <p
+                      className="editor-shell-keyboard-reason"
+                      data-yunari-shortcut-reason=""
+                      role="alert"
+                    >
+                      {reason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+      </div>
       {storage === undefined ? (
         <p className="editor-shell-keyboard-notice">
           {uiCopy.settings.keyboardSessionOnly}

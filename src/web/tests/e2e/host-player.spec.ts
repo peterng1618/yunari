@@ -3520,17 +3520,17 @@ test.describe("a paired display and the theme it is given", () => {
     });
   }
 
-  /** `/editor/` in the Host mode: the surface the display controls live on. */
+  /** `/editor/` in the Settings mode: the surface the display controls live on. */
   async function openHostSettings(page: Page): Promise<void> {
     await page.goto(`${admin}/editor/`);
     const modeSwitch = page.locator(".editor-shell-mode-switch");
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
-      .getByRole("button", { name: editorCopy.modes.host, exact: true })
+      .getByRole("button", { name: editorCopy.modes.settings, exact: true })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "host",
+      "settings",
     );
   }
 
@@ -4352,13 +4352,13 @@ test.describe("a paired display and the theme it is given", () => {
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
       .getByRole("button", {
-        name: editorCopy.modes.host,
+        name: editorCopy.modes.settings,
         exact: true,
       })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "host",
+      "settings",
     );
 
     const row = page.locator(`[data-yunari-host-display="${display.id}"]`);

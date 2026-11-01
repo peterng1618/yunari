@@ -11,7 +11,7 @@ import {
   cancelShortcutCapture,
   choosePalette,
   paletteNotInForce,
-  SETTINGS_MODAL_CLASS,
+  SETTINGS_REGION,
 } from "./walkthrough-settings.js";
 import {
   chooseRailPane,
@@ -72,7 +72,7 @@ import {
  * reaches remains the forbidden move, and a green here does not license it.
  *
  * **The primitives are `walkthrough-focus.ts`'s, the shell's vocabulary is
- * `walkthrough-shell.ts`'s and the settings modal's is
+ * `walkthrough-shell.ts`'s and the Settings surface's is
  * `walkthrough-settings.ts`'s** (Ruling L): the split is by responsibility
  * because the file had passed the 800-line stop, and the second split is
  * the same rule applied again when Task 4's helpers took the shell module past
@@ -583,16 +583,15 @@ test.describe("the shell, reached by keyboard alone", () => {
     //    recorded anything.
     await cancelShortcutCapture(page);
 
-    // **The first of the two invariants §13.1 states, swept.** The modal open
-    // here is not the capture's: `cancelShortcutCapture`'s own Escape *was* the
-    // cancel, dismissing the modal, and it reopened it on the Keyboard tab to
-    // prove the chord came back unchanged — so this Escape is the walk's, and
-    // the modal it dismisses is the reopened one. §13.1's sentence is that
-    // Escape affects one innermost owner: the modal goes, and everything the
-    // shell was carrying behind it is still there. The four readings are the
-    // shell's own state — the pane the walk chose, the row it selected, the
-    // document it named and the field it edited — so an Escape that reached a
-    // second owner fails here rather than passing on the modal's disappearance.
+    // **The first of the two invariants §13.1 states, swept.** Settings is a
+    // mode, not a modal: the Escape `cancelShortcutCapture` pressed was the
+    // capture's own cancel, and this Escape has no innermost owner left to
+    // dismiss. The invariant is now that it changes nothing — Settings stays,
+    // and everything the shell was carrying behind it is still there. The four
+    // readings are the shell's own state — the pane the walk chose, the row it
+    // selected, the document it named and the field it edited — so an Escape
+    // that reached a second owner fails here rather than passing because a
+    // surface disappeared.
     const covered = await surroundingState(page, id);
     // **And the sweep can tell one row from another**, which is the whole of
     // its non-vacuity: three of `surroundingState`'s four legs read the shell's
@@ -623,13 +622,16 @@ test.describe("the shell, reached by keyboard alone", () => {
     ).not.toEqual(covered);
     await page.keyboard.press("Escape");
     await expect(
-      page.locator(SETTINGS_MODAL_CLASS),
-      "the settings modal after Escape",
-    ).toBeHidden();
+      page.locator(SETTINGS_REGION),
+      "Settings after Escape, a mode with no dismissal to make",
+    ).toBeVisible();
     expect(
       await surroundingState(page, id),
-      "the shell behind the settings modal's Escape",
+      "the shell behind Settings after Escape",
     ).toEqual(covered);
+    // Back to the editor, which is where the walk's closing reads live.
+    await page.locator("#yunari-shell-modes-editor").click();
+    await expect(page.locator(SETTINGS_REGION)).toBeHidden();
 
     // **The second invariant, swept in the walk's own state.** §13.1's "each
     // region has a reachable focus target" is Task 1's census in detail —

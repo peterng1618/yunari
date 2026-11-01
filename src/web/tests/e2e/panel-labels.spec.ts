@@ -2,7 +2,7 @@ import { expect, type Locator, test } from "@playwright/test";
 import { chooseIn } from "./control-set.js";
 import { openPane } from "./editor-rail.js";
 import { selectLayer } from "./rebuild-driver.js";
-import { openAppearance } from "./shell-palette.js";
+import { leaveSettings, openAppearance } from "./shell-palette.js";
 import { compactViewportMaxPx } from "./shell-tokens.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -234,17 +234,16 @@ test.describe("the settings panels name every control", () => {
     // so this audit comes last of the panes.
     await selectLayer(page, "Background");
     await audit(BACKGROUND_CONTROLS);
-    // Last, because an open modal is modal: the controls behind it are inert
-    // and the panes' own audit above measures them as an author reaches them.
-    const dialog = await openAppearance(page);
+    // Last, because Settings is the other mode: the panes' own audit above
+    // measures them as an author reaches them, and this one changes surface.
+    await openAppearance(page);
     await audit(APPEARANCE_CONTROLS);
     // The palette entry is a *set* of six rows, and the audit now reaches all
     // six: this count is what fails if the set shrinks under the audit's feet,
     // so "the six choice rows" stays true of what was measured and not only of
     // the comment above it.
     await expect(page.locator("[data-yunari-palette-choice]")).toHaveCount(6);
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
+    await leaveSettings(page);
 
     // The gradient, the delete controls and every field really rendered: a
     // short list would mean the audit passed by not looking.

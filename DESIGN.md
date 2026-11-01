@@ -203,7 +203,7 @@ so switching halves does not change the grid's shape. Column width is fixed at
 follows the width, so no breakpoint is invented for it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
-panel.** The width is not the settings modal's 560: this surface's subject is a
+panel.** The width is not the editor dialog's 560: this surface's subject is a
 picture. The stage is flush to the box's edges, one height for every item, with
 the panel beside it rather than below. The theme is contained at its own ratio,
 letterboxed against a ground darker than the modal's surface. A stage sized to
@@ -235,14 +235,21 @@ toolbar, so the header has no Edit menu.
   per-document readout. Both are on the canvas.
 
 **The header carries the shell's mode switch, and there is no bar under it.**
-The shell has three modes — the editor, the theme store and the host — and the
+The shell has three modes — the editor, the theme store and Settings — and the
 switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
-and `Host`. A strip under the header would be a second horizontal bar, so the
+and `Settings`. A strip under the header would be a second horizontal bar, so the
 header owns the choice and its **right-hand region is per-mode**: the menus, the
 theme toolbar and the publish control belong to the editor; a mode with actions
 of its own carries them there; a mode with none shows nothing beside the switch.
 The editor's own body is hidden, not unmounted, while another mode shows — a mode
-switch never loses an unsaved document, and it asks before leaving a dirty one.
+switch never loses an unsaved document. Editor and Settings move freely; leaving
+either for Themes asks before discarding a dirty document.
+
+**Settings is a mode, not a dialog.** Its destinations run down a fixed
+navigation column grouped as This PC — the machine and its screens — and Editor —
+how the author works. The column is for choosing where to be; the page beside it
+spends the width on columns of sections rather than on one long vertical list.
+The mode's status line is the shell's strip, not a second bar inside the page.
 
 `View` stays in the header because its commands — preview/source — are changed
 *while* designing, many times a session. Settings is for once-in-a-while

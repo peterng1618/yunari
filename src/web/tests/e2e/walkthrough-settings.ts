@@ -3,7 +3,7 @@ import { PALETTES, type Palette } from "./shell-palette.js";
 import { focusedWithin, tabToMark } from "./walkthrough-focus.js";
 
 /**
- * The settings modal's keyboard vocabulary: the two of §13.1's interactions
+ * The Settings surface's keyboard vocabulary: the two of §13.1's interactions
  * that live in one popup — the shell palette and the shortcut capture — and the
  * route that reaches them.
  *
@@ -16,9 +16,9 @@ import { focusedWithin, tabToMark } from "./walkthrough-focus.js";
  * is where focus is observed.
  */
 
-/** The settings modal and the rail's gear that opens it (`rail.tsx`,
- *  `components/ui/dialog.tsx`). */
-export const SETTINGS_MODAL_CLASS = ".editor-shell-dialog";
+/** The Settings region the rail's gear selects (`rail.tsx`,
+ *  `settings-mode/region.tsx`). */
+export const SETTINGS_REGION = "[data-yunari-settings-region]";
 const SETTINGS_GEAR = "data-rail-settings";
 /** The Appearance tab's six palette cards, each marked with the palette it
  *  offers (`settings.tsx`). */
@@ -40,32 +40,29 @@ const KEYBOARD_TAB = "[data-yunari-keyboard]";
 const SHORTCUT_ARM = "data-yunari-shortcut-arm";
 const SHORTCUT_ROW = "data-yunari-shortcut-row";
 const SHORTCUT_CHORD = "data-yunari-shortcut-chord";
-/** The settings modal, opened from the rail's gear with no pointer.
+/** Settings, opened from the rail's gear with no pointer.
  *
- *  Idempotent: two of §13.1's interactions live in this one popup — the palette
- *  and the shortcut capture — so the second caller finds it already open rather
- *  than tabbing at a page its own modal has made inert. (The gear would be
- *  unreachable anyway: the modal traps focus inside itself.)
+ *  Idempotent: two of §13.1's interactions live on this surface — the palette
+ *  and the shortcut capture — so the second caller finds it already showing.
  *
- *  On the open it takes, it asserts the popup's focus the same way
- *  `openPopup` does — Review Focus 3, asked of the surface §13.1's palette
- *  is chosen in. */
+ *  On the open it takes, it asserts focus the same way `openPopup` does —
+ *  Review Focus 3, asked of the surface §13.1's palette is chosen in. */
 export async function openSettingsByKeyboard(page: Page): Promise<void> {
-  const dialog = page.locator(SETTINGS_MODAL_CLASS);
-  if (await dialog.isVisible()) return;
+  const region = page.locator(SETTINGS_REGION);
+  if (await region.isVisible()) return;
   await tabToMark(page, { attribute: SETTINGS_GEAR });
   await page.keyboard.press("Enter");
   await expect(
-    dialog,
-    "the settings modal after Enter on the gear",
+    region,
+    "the Settings region after Enter on the gear",
   ).toBeVisible();
   expect(
-    await focusedWithin(page, SETTINGS_MODAL_CLASS),
-    "the settings modal opened with focus inside it rather than left on its gear",
+    await focusedWithin(page, SETTINGS_REGION),
+    "the Settings region opened with focus inside it rather than left on its gear",
   ).toBe(true);
 }
 
-/** Brings the settings modal to the tab whose label is `label`, with no pointer.
+/** Brings Settings to the page whose label is `label`, with no pointer.
  *
  *  The tab list is Base UI's `Tabs`, a roving-focus group: Tab reaches the
  *  *selected* tab and the arrow keys move between them, **vertically** —
@@ -91,9 +88,9 @@ async function activateTab(
 ): Promise<void> {
   await tabToMark(page, { attribute: "role", value: "tab" });
   const labels: readonly string[] = await page.evaluate(() =>
-    [
-      ...document.querySelectorAll('.editor-shell-settings-tabs [role="tab"]'),
-    ].map((tab) => (tab.textContent ?? "").trim()),
+    [...document.querySelectorAll('.settings-mode-nav-list [role="tab"]')].map(
+      (tab) => (tab.textContent ?? "").trim(),
+    ),
   );
   const target = labels.indexOf(label);
   if (target < 0) {
@@ -204,19 +201,16 @@ export async function paletteNotInForce(page: Page): Promise<Palette> {
  * Arms a shortcut capture in Settings and cancels it with Escape, proving that
  * nothing was recorded.
  *
- * **The cancel is Escape, and it is one press with two effects**: `settings.tsx`
- * passes Base UI's dismissal straight through and clears `armed` with it (`an
- * earlier cut that declined the dismissal left the modal unclosable`), so the
- * capture is abandoned *because* the modal goes. Both halves are asserted —
- * the chord the row prints is unchanged after reopening, and the modal left and
- * handed focus back to the gear — because §13.1's second invariant is exactly
- * this question, and the answer is only worth reporting if it is measured.
+ * **Escape is the capture's own cancel**, not a dismissal: Settings is a mode,
+ * so the press disarms the row and leaves the surface showing. Both halves are
+ * asserted — the row stops being armed, and the chord it prints is unchanged —
+ * because §13.1's second invariant is exactly this question, and the answer is
+ * only worth reporting if it is measured.
  *
- * The reopen is what makes "cancelled" mean anything: a capture that recorded
- * the Escape as a chord would leave the modal up, or would print a different
- * chord when it came back. The chord is read *before* the arming and compared
- * after, and the helper ends with focus on that row's own arm control, which is
- * where the walk's last interaction leaves it.
+ * The chord is read *before* the arming and compared after; a capture that
+ * recorded the Escape as a chord would print a different one. The helper ends
+ * with focus on that row's own arm control, which is where the walk's last
+ * interaction leaves it.
  *
  * Answers the action whose capture was cancelled.
  */
@@ -240,16 +234,13 @@ export async function cancelShortcutCapture(page: Page): Promise<string> {
 
   await page.keyboard.press("Escape");
   await expect(
-    page.locator(SETTINGS_MODAL_CLASS),
-    "the settings modal after Escape on an armed row",
-  ).toBeHidden();
+    page.locator(`[${SHORTCUT_ROW}="${action}"]`),
+    "the row after Escape cancelled the capture",
+  ).not.toHaveAttribute("data-armed", "");
   await expect(
-    page.locator(`[${SETTINGS_GEAR}]`),
-    "the gear the dismissed modal returned focus to",
-  ).toBeFocused();
-
-  await openSettingsByKeyboard(page);
-  await activateTab(page, "Keyboard", KEYBOARD_TAB);
+    page.locator(SETTINGS_REGION),
+    "Settings left on its own Escape rather than staying a surface with no dismissal",
+  ).toBeVisible();
   await expect(
     page.locator(`[${SHORTCUT_CHORD}="${action}"]`),
     `the chord after the cancelled capture for ${action}`,

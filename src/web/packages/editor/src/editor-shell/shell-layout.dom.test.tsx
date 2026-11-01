@@ -1582,7 +1582,7 @@ it("offers the three modes and marks the active one", async () => {
   expect(
     modeSegments(root).map((segment) => segment.textContent),
     "the header does not offer the three modes, in order",
-  ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.host]);
+  ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.settings]);
   expect(chosen(root)).toEqual(["true", "false", "false"]);
   // the control-id rule: every control carries an id, the group's and each segment's.
   expect(
@@ -1592,7 +1592,7 @@ it("offers the three modes and marks the active one", async () => {
   expect(modeSegments(root).map((segment) => segment.id)).toEqual([
     "yunari-shell-modes-editor",
     "yunari-shell-modes-themes",
-    "yunari-shell-modes-host",
+    "yunari-shell-modes-settings",
   ]);
   expect(root.querySelector<HTMLElement>(".editor-shell-body")?.hidden).toBe(
     false,
@@ -2007,7 +2007,7 @@ it("stays in the editor when the save does not land", async () => {
  * host answers: the display map, the library, the Host's devices and its display
  * settings.
  */
-it("shows the Host mode's own region, and the store's only in Themes", async () => {
+it("shows the Settings mode's own region, and the store's only in Themes", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -2050,27 +2050,27 @@ it("shows the Host mode's own region, and the store's only in Themes", async () 
     "the Themes mode drew no store region",
   ).not.toBeNull();
   expect(
-    root.querySelector("[data-yunari-host-region]"),
-    "the store's region was drawn beside the Host one",
+    root.querySelector("[data-yunari-settings-region]"),
+    "the store's region was drawn beside the Settings one",
   ).toBeNull();
 
   await act(async () => modeSegments(root)[2]?.click());
   await act(async () => {});
 
   expect(
-    root.querySelector("[data-yunari-host-region]"),
-    "the Host mode drew no region",
+    root.querySelector("[data-yunari-settings-region]"),
+    "the Settings mode drew no region",
   ).not.toBeNull();
   expect(
     root.querySelector("[data-yunari-store-region]"),
-    "the store's region is still showing in the Host mode",
+    "the store's region is still showing in the Settings mode",
   ).toBeNull();
   const sections = root.querySelectorAll("[data-yunari-mode-region]");
   expect(sections, "the seam is more than one element").toHaveLength(1);
   expect(
     sections[0]?.getAttribute("data-yunari-mode-region"),
     "the section does not name the mode that is showing",
-  ).toBe("host");
+  ).toBe("settings");
 
   layout.destroy();
 });
@@ -2086,7 +2086,7 @@ it("shows the Host mode's own region, and the store's only in Themes", async () 
  * publishes the line, so the shell draws it without reading the host again, and
  * the editor's readouts come back when the mode does.
  */
-it("puts the Host mode's line in the status strip, and the editor's readouts elsewhere", async () => {
+it("puts the Settings mode's line in the status strip, and the editor's readouts elsewhere", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -2133,7 +2133,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
   ).not.toBeNull();
   expect(
     strip().querySelector("[data-yunari-host-status]"),
-    "the Host mode's line is drawn in a mode that is not Host",
+    "the Settings mode's line is drawn in a mode that is not Settings",
   ).toBeNull();
 
   await act(async () => modeSegments(root)[2]?.click());
@@ -2141,7 +2141,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
 
   expect(
     strip().querySelector("[data-yunari-status-objects]"),
-    "the editor's counts are still in the strip in the Host mode",
+    "the editor's counts are still in the strip in the Settings mode",
   ).toBeNull();
   expect(
     strip().querySelector("[data-yunari-host-display-count]")?.textContent,
@@ -2149,7 +2149,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
   ).toBe(uiCopy.hostSettings.status.displays(1));
   expect(
     strip().querySelector("[data-yunari-host-status]")?.textContent,
-    "the strip does not carry the Host mode's own line",
+    "the strip does not carry the Settings mode's own line",
   ).toBe(uiCopy.hostSettings.status.ready);
 
   layout.destroy();
@@ -2157,7 +2157,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
 
 /**
  * **The strip's line belongs to the visit that read it.** The `host` branch
- * is a different element tree from the editor's, so coming back to the Host mode
+ * is a different element tree from the editor's, so coming back to the Settings mode
  * mounts a fresh `<p role="status">` — and a live region mounted *holding* text
  * is the pattern the removed strip's own comment called the less reliably
  * announced one. A line left in the shell would be painted there before the
@@ -2169,7 +2169,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
  * is therefore the mutation record of the visit's own live region, and the
  * comment beside it says what that record distinguishes.
  */
-it("paints no line from the previous visit when the Host mode is re-entered", async () => {
+it("paints no line from the previous visit when the Settings mode is re-entered", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {

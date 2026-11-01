@@ -557,6 +557,27 @@ describe("ShortcutManager and a modal", () => {
     manager.destroy();
   });
 
+  it("refuses every binding while the editor body is inactive", () => {
+    // A non-editor mode keeps the document mounted behind `hidden` so unsaved
+    // work survives the switch. The marker is the manager's answer to "is the
+    // body a chord would edit the one on screen?" — without it, Delete in
+    // Settings edits the document nobody is looking at.
+    const manager = new ShortcutManager();
+    const remove = vi.fn();
+    manager.register("edit.delete", remove);
+    const body = document.createElement("div");
+    body.setAttribute("data-yunari-editor-inactive", "");
+    document.body.append(body);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+    expect(remove).not.toHaveBeenCalled();
+
+    body.remove();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }));
+    expect(remove).toHaveBeenCalledOnce();
+    manager.destroy();
+  });
+
   it("leaves Escape to the group-exit action when no dialog is open", () => {
     // Escape is the one binding a dialog also answers to, so a guard that
     // swallowed it unconditionally would take the author out of their group

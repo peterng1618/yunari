@@ -925,20 +925,15 @@ test("the settings gear paints a lighter ink than a closed slot", async ({
 });
 
 /**
- * The keyboard route through the gear's modal: open with the keyboard, Tab and
- * Shift+Tab, Escape, and where focus ends.
+ * The keyboard route into Settings, and its page at 200% zoom.
  *
- * The brief demands the whole sequence and a browser is the only place it can
- * be observed. jsdom performs **no** sequential focus navigation — a Tab
- * keypress moves nothing — and Base UI's `FloatingFocusManager` deliberately
- * does not handle Tab when tabbable content exists; it relies on the browser
- * walking focus onto its focus-guard spans, whose `onFocus` redirects it to the
- * first or last tabbable. So the trap is a rendered fact with nothing to press
- * in jsdom, and this presses real keys: Tab from the last control wraps to the
- * first, Shift+Tab from the first wraps back, and Escape returns focus to the
- * gear it was opened from.
+ * A mode has no dialog to trap focus in: the header's gear selects Settings,
+ * the region moves focus to the active navigation row, and the page beside the
+ * column scrolls rather than clipping. Both are browser facts — jsdom performs
+ * no sequential focus navigation and lays nothing out — so this walks them with
+ * real keys and real viewport sizes.
  */
-test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus to the gear", async ({
+test("the gear opens Settings, and every page stays reachable at 200% zoom", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -949,103 +944,72 @@ test("Tab and Shift+Tab stay inside the settings modal, and Escape returns focus
   ).toBeVisible();
 
   // Open with the keyboard, not a click: the gear is reachable and Enter
-  // activates it.
+  // selects Settings.
   const gear = page.locator(".editor-shell-rail-settings");
   await gear.focus();
   await expect(gear).toBeFocused();
   await page.keyboard.press("Enter");
 
-  const dialog = page.getByRole("dialog", { name: uiCopy.settings.title });
-  await expect(dialog).toBeVisible();
-  // The two ends of the popup's tab order: the selected tab leads, the labelled
-  // close is last. The panels sit between them and are not named here.
-  const first = dialog.getByRole("tab", { name: uiCopy.settings.appearance });
-  const last = dialog.locator(".editor-shell-dialog-close");
+  const region = page.locator("[data-yunari-settings-region]");
+  await expect(region).toBeVisible();
+  // Entering the mode hands focus to the page already chosen, so a keyboard
+  // author is in the surface they just opened rather than back on the rail.
+  await expect(
+    region.locator('[data-yunari-settings-nav-item][aria-selected="true"]'),
+  ).toBeFocused();
 
-  // Tab from the last control wraps forward to the first.
-  await last.focus();
-  await expect(last).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(first).toBeFocused();
-
-  // Shift+Tab from the first wraps back to the last.
-  await page.keyboard.press("Shift+Tab");
-  await expect(last).toBeFocused();
-
-  // Escape is one press, one effect, and it hands focus back to the gear.
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(gear).toBeFocused();
-
-  // ── the constrained proof, in this same procedure ───────────────────────
+  // ── the constrained proof ───────────────────────────────────────────────
   //
-  // DESIGN.md asks for "the full shell at 1280×720 and 1440×900 CSS pixels,
-  // then at 200% browser zoom", with every control reachable through scrolling
-  // or compact composition. The two sizes are read here; what was never taken
-  // is the modal under the zoom.
-  //
-  // **200% zoom is modelled as the CSS-pixel viewport it produces** — 640×360,
-  // which is what a browser zoom does: it halves the layout viewport in CSS
-  // pixels, and `80vh` and every other length in the modal then resolve
-  // against the halved box, exactly as they do at a real 200%. CSS `zoom` on the
-  // root, which is the cheap way to widen a capture, is *not* faithful here and
-  // measurably so: it scales a `vh`-capped fixed dialog
-  // to twice its computed height while the window stays 720 device pixels, so
-  // the modal runs off the screen at a size a real browser zoom never gives it.
-  // What this still does not reproduce is the device scale factor, so text
-  // rasterisation is not what it proves; the four claims below are all layout
-  // and focus, which it does.
+  // 200% zoom is modelled as the CSS-pixel viewport it produces — 640×360 —
+  // exactly as a browser zoom halves the layout viewport.
   await page.setViewportSize({ width: 640, height: 360 });
 
-  await gear.click();
-  await expect(dialog).toBeVisible();
-
-  // (1) All three tabs are reachable, and each one mounts its panel.
+  // (1) Every destination is reachable through its row, and selecting one
+  //     marks it active and shows its page.
   for (const name of [
-    uiCopy.settings.appearance,
-    uiCopy.settings.keyboard,
-    uiCopy.settings.about,
+    uiCopy.settings.pages.displays,
+    uiCopy.settings.pages.hardware,
+    uiCopy.settings.pages.units,
+    uiCopy.settings.pages.readings,
+    uiCopy.settings.pages.appearance,
+    uiCopy.settings.pages.keyboard,
+    uiCopy.settings.pages.assetSources,
+    uiCopy.settings.pages.about,
   ]) {
-    const tab = dialog.getByRole("tab", { name });
+    const tab = region.getByRole("tab", { name });
     await tab.scrollIntoViewIfNeeded();
     await tab.click();
     await expect(tab).toHaveAttribute("data-active", "");
   }
 
-  // (2) The panel scrolls rather than clipping. Read on the Keyboard tab, which
-  // holds the twenty-row table: this is the case the sentence is about, and
-  // it is the tab left selected for (3).
-  await dialog.getByRole("tab", { name: uiCopy.settings.keyboard }).click();
-  const scroller = await dialog.evaluate((element) => ({
-    overflowY: getComputedStyle(element).overflowY,
-    scrollHeight: element.scrollHeight,
-    clientHeight: element.clientHeight,
-  }));
+  // (2) The page scrolls rather than clipping. Read on the Keyboard page, which
+  //     holds the twenty-row table.
+  await region
+    .getByRole("tab", { name: uiCopy.settings.pages.keyboard })
+    .click();
+  const scroller = await region
+    .locator(".settings-mode-content")
+    .evaluate((element) => ({
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    }));
   expect(
     scroller.overflowY,
-    `the modal is not the scroller at 200% zoom: ${JSON.stringify(scroller)}`,
+    `the page is not the scroller at 200% zoom: ${JSON.stringify(scroller)}`,
   ).toBe("auto");
   expect(
     scroller.scrollHeight,
     `the Keyboard table is clipped rather than scrolled at 200% zoom: ${JSON.stringify(scroller)}`,
   ).toBeGreaterThan(scroller.clientHeight);
 
-  // (3) The trap still holds at this size: Tab from the last control wraps to
-  // the first tabbable, which is the selected tab.
-  const close = dialog.locator(".editor-shell-dialog-close");
-  await close.scrollIntoViewIfNeeded();
-  await close.focus();
-  await expect(close).toBeFocused();
-  await page.keyboard.press("Tab");
+  // (3) The header's mode switch is still the way back, and the editor the
+  //     author left is painted rather than blank.
+  await page.locator("#yunari-shell-modes-editor").click();
+  await expect(region).toBeHidden();
   await expect(
-    dialog.getByRole("tab", { name: uiCopy.settings.keyboard }),
-  ).toBeFocused();
-
-  // (4) And Close is reachable — scrolled to, visible and operable — rather
-  // than merely present at the end of an overflow.
-  await expect(close).toBeVisible();
-  await close.click();
-  await expect(dialog).toBeHidden();
+    page.locator("#yunari-fabric-editor canvas.upper-canvas"),
+  ).toBeVisible();
 });
 
 /**
@@ -1095,7 +1059,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "aria-pressed",
     "false",
   );
-  await expect(segment(uiCopy.modes.host)).toHaveAttribute(
+  await expect(segment(uiCopy.modes.settings)).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -1259,14 +1223,14 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "themes mode still draws the editor's menus",
   ).toHaveCount(0);
 
-  await segment(uiCopy.modes.host).click();
+  await segment(uiCopy.modes.settings).click();
   await expect(
     page.locator("[data-yunari-mode-region]"),
-    "the host mode renders no region",
-  ).toHaveAttribute("data-yunari-mode-region", "host");
+    "the settings mode renders no region",
+  ).toHaveAttribute("data-yunari-mode-region", "settings");
   await expect(
     header.locator(".editor-shell-menubar"),
-    "host mode still draws the editor's menus",
+    "settings mode still draws the editor's menus",
   ).toHaveCount(0);
 
   // And back: the editor is the document's surface, and the switch returns it

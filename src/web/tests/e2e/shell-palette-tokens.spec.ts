@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { PANE_BODY } from "./editor-rail.js";
 import {
   choosePalette,
+  leaveSettings,
   openAppearance,
   openShell,
   PALETTES,
@@ -130,12 +131,11 @@ test.describe("shell palettes", () => {
     });
     await page.keyboard.press("Escape");
 
-    // The modal, portalled the same way and asserted to be by the case above
-    // ("a portalled surface carries the palette in force").
+    // The Settings page, whose content track is the scroller.
     await openAppearance(page);
-    const sheet = await scrollbarReading(page, [".editor-shell-dialog"]);
+    const sheet = await scrollbarReading(page, [".settings-mode-content"]);
     expectScrollbarTokens(sheet, {
-      ".editor-shell-dialog": "the settings sheet",
+      ".settings-mode-content": "the settings page",
     });
 
     // The reading is the evidence, and it is attached rather than only
@@ -156,7 +156,7 @@ test.describe("shell palettes", () => {
         .join(" || "),
     });
 
-    await page.keyboard.press("Escape");
+    await leaveSettings(page);
   });
 
   /** `vg-479`: the thumb was a `:root` literal, so every palette that is not a
@@ -214,7 +214,7 @@ test.describe("shell palettes", () => {
     ).not.toBe(editorial.thumb);
   });
 
-  test("a portalled surface carries the palette in force", async ({
+  test("the Settings surface carries the palette in force", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -225,32 +225,25 @@ test.describe("shell palettes", () => {
     await openEditor(page);
     for (const palette of PALETTES) {
       await choosePalette(page, palette);
-      const dialog = await openAppearance(page);
+      const settings = await openAppearance(page);
 
-      // The modal is a sibling of `#app`, not a descendant — the reason this
-      // failed under every non-editorial palette while the chrome beside it was
-      // correct. Asserted rather than assumed, so the check keeps meaning what
-      // it says if the portal target ever changes.
-      const portalled = await dialog.evaluate(
-        (node) => document.getElementById("app")?.contains(node) === false,
-      );
-      expect(portalled, "the modal left #app, which is the whole case").toBe(
-        true,
-      );
-
-      const [dialogBackground, headerBackground] = await Promise.all([
-        dialog.evaluate((node) => getComputedStyle(node).backgroundColor),
+      const [settingsBackground, headerBackground] = await Promise.all([
+        // The mode section paints the surface; the region inside it is a layout
+        // track and stays transparent.
+        settings.evaluate((node) => {
+          const surface = node.closest(".editor-shell-mode") ?? node;
+          return getComputedStyle(surface).backgroundColor;
+        }),
         page
           .locator(".editor-shell-header")
           .evaluate((node) => getComputedStyle(node).backgroundColor),
       ]);
       expect(
-        dialogBackground,
-        `the ${palette} modal does not match its chrome`,
+        settingsBackground,
+        `the ${palette} settings surface does not match its chrome`,
       ).toBe(headerBackground);
 
-      await page.keyboard.press("Escape");
-      await expect(dialog).toBeHidden();
+      await leaveSettings(page);
     }
   });
 
@@ -338,7 +331,7 @@ test.describe("shell palettes", () => {
       "two palettes render the same accent",
     ).toEqual([]);
 
-    await page.keyboard.press("Escape");
+    await leaveSettings(page);
   });
 
   /** A utility resolves the palette of the SUBTREE it is written in.
@@ -397,7 +390,7 @@ test.describe("shell palettes", () => {
       "the live palette was not measured, so nothing was proved",
     ).not.toBe("");
 
-    await page.keyboard.press("Escape");
+    await leaveSettings(page);
   });
 
   /** The scale, as the built bundle actually resolves it.

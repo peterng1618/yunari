@@ -9,16 +9,15 @@ import type { EditorShellBridge } from "./editor-shell/bridge.js";
 import { CanvasDock } from "./editor-shell/canvas-dock.js";
 import { STACK_GLYPH } from "./editor-shell/icons.js";
 import { LayerActions } from "./editor-shell/layer-panel.js";
-import { DEFAULT_SHELL_PALETTE } from "./editor-shell/palette.js";
 import { Pane } from "./editor-shell/pane.js";
 import { Rail } from "./editor-shell/rail.js";
-import { Settings } from "./editor-shell/settings.js";
 import { chooseArtboardSize } from "./new-document-chooser.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
+import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 import { createTypeTokenPanel } from "./type-preset-manager/panel.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -310,14 +309,6 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
       "SPAN[type=][aria-hidden]", // The chooser's trailing focus guard
-      // The settings modal's focus-trap sentinels, and the only pair here that
-      // belongs to a library rather than to us: `FloatingFocusManager` renders
-      // one `span` before the popup and one after it, `tabindex="0"` on purpose
-      // — they are what catches a Tab trying to leave the popup — and
-      // `aria-hidden` so no reader announces them. Named rather than filtered
-      // silently, and asserted as a pair below.
-      "SPAN[type=][aria-hidden]", // The modal's leading focus guard
-      "SPAN[type=][aria-hidden]", // The modal's trailing focus guard
     ]);
 
     // And the `aria-hidden` exclusion is earned rather than assumed. The
@@ -327,12 +318,12 @@ describe("editor panels", () => {
     // would be a control this audit stopped looking at, so that is asserted
     // here rather than read off the source and hoped for.
     //
-    // The dialogs' focus guards are the one exception, and they are the
-    // library's: both are `tabindex="0"` and `aria-hidden="true"` by
+    // The new-theme chooser's focus guards are the one exception, and they are
+    // the library's: both are `tabindex="0"` and `aria-hidden="true"` by
     // construction, which is the trap working rather than a control that has
-    // looked away. Asserted as exactly those four — one pair per open `Dialog`,
-    // the chooser's and the modal's — so a third dialog, or a third
-    // `aria-hidden` focusable of ours, fails here.
+    // looked away. Asserted as exactly that pair — the one open `Dialog` in this
+    // mount — so a second dialog, or an `aria-hidden` focusable of ours, fails
+    // here.
     const hiddenFocusable = Array.from(
       root.querySelectorAll<HTMLElement>('[aria-hidden="true"]'),
     ).filter((element) => element.tabIndex >= 0);
@@ -342,7 +333,7 @@ describe("editor panels", () => {
           ? `guard:${element.getAttribute("data-type")}`
           : element.outerHTML.slice(0, 60),
       ),
-    ).toEqual(["guard:inside", "guard:inside", "guard:inside", "guard:inside"]);
+    ).toEqual(["guard:inside", "guard:inside"]);
   });
 
   it("names the release version, which no form control owns", () => {
@@ -634,18 +625,14 @@ let chromeRoot: Root | undefined;
 let settingsRoot: Root | undefined;
 
 /**
- * The Settings modal, open on the Keyboard tab.
+ * The Settings Keyboard page, mounted as itself.
  *
- * The modal is a `Dialog`, so it is portalled to `body` and is audited through
- * the body the caller returns. Base UI mounts only the *active* tab panel, so
- * the Keyboard tab is clicked after mount: without that click the modal renders
- * the six palette rows and the twenty action rows of the reference — every
- * arm button, every per-row Reset and Reset all — are in no tree at all, which
- * is exactly the audit gap vg-114's comment describes.
- *
- * The Appearance tab's six rows and its follow toggle are the same modal and
- * are driven by `settings.dom.test.tsx`; this mount is the Keyboard tab because
- * that is where the controls nothing else names live.
+ * The page is where the arm buttons and the twenty reference rows live, and
+ * the surface has no modal to open: mounting the page puts every row in the
+ * tree at once, which is exactly the audit gap vg-114's comment describes. The
+ * Appearance page's palette rows and follow toggle are driven by
+ * `editor-pages.dom.test.tsx`; this mount is the Keyboard page because that is
+ * where the controls nothing else names live.
  */
 function mountSettings(): void {
   const host = document.createElement("div");
@@ -654,29 +641,12 @@ function mountSettings(): void {
   settingsRoot = reactRoot;
   act(() => {
     reactRoot.render(
-      createElement(Settings, {
-        open: true,
-        onOpenChange: () => undefined,
+      createElement(KeyboardPage, {
         storage: localStorage,
-        palette: DEFAULT_SHELL_PALETTE,
-        following: true,
-        onPalette: () => undefined,
-        onFollowing: () => undefined,
         overrides: {},
         onOverrides: () => undefined,
-        // The About tab's fact is irrelevant to the accessible-name audit, and
-        // the Keyboard tab it does open carries no version; the document this
-        // mounts carries none.
-        releaseVersion: undefined,
       }),
     );
-  });
-  const keyboard = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="tab"]'),
-  ).find((tab) => tab.textContent?.trim() === uiCopy.settings.keyboard);
-  if (keyboard === undefined) throw new Error("no Keyboard tab in the modal.");
-  act(() => {
-    keyboard.click();
   });
 }
 

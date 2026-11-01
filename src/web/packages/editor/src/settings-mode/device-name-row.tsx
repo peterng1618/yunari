@@ -1,7 +1,6 @@
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import {
-  ControlRow,
   ControlWell,
   useComposingGuard,
   useControlIds,
@@ -36,11 +35,22 @@ export function DeviceNameRow(props: {
   };
 
   return (
-    <ControlRow ids={ids} label={props.device.name} labelFor={ids.control}>
+    // **The device's own name is the field's label, above the well.** A
+    // reported name is a sentence, not a 74px field heading: stacked, a long
+    // card or drive name reads once and the well keeps the full column width.
+    <div className="flex min-w-0 flex-col gap-[var(--space-4)]">
+      <label
+        id={ids.label}
+        htmlFor={ids.control}
+        className="break-words text-xs text-muted"
+      >
+        {props.device.name}
+      </label>
       <ControlWell>
         <input
           id={ids.control}
           type="text"
+          aria-labelledby={ids.label}
           data-yunari-host-name={props.device.id}
           placeholder={uiCopy.hostSettings.devices.namePlaceholder}
           value={draft}
@@ -57,6 +67,6 @@ export function DeviceNameRow(props: {
           className="h-full w-full bg-transparent text-sm text-text outline-none"
         />
       </ControlWell>
-    </ControlRow>
+    </div>
   );
 }

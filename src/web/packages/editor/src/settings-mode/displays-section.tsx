@@ -18,28 +18,6 @@ import type {
 } from "./client.js";
 import { Group } from "./section-group.js";
 
-/**
- * The displays this host holds, and the routes that change that set.
- *
- * **The list is one choice, and the choice is which display the sections below
- * speak for** — never which theme it shows. The set is too large for
- * `Segmented`, so it is a list of choice rows (DESIGN.md rule 7), each a radio
- * in one labelled group. The management commands live beside the row they act
- * on: Remove names the display it would remove, and its confirmation says what
- * goes with it.
- *
- * **Adding is the one thing here that creates a row.** A local display needs
- * the monitor it is on, so the add form is drawn only when the probe answered a
- * list; a probe that failed states its reason instead of offering a choice no
- * route would accept. The name field is a well, and the monitor is the control
- * set's select.
- *
- * The sign-in registration is the host's own entry, not one display's: one
- * entry brings every local display back, including one added later. The route
- * answers the registrar's own sentence, and this section prints it rather than
- * rewording it.
- */
-
 /** The theme a display shows: its own choice, else the default's. Spelled once
  *  because the fallback is the feature's core, and a second copy of it is one
  *  more place to get it wrong. `null` means neither — a display showing nothing,
@@ -56,7 +34,15 @@ function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function DisplaysSection(props: {
+/**
+ * The displays this host holds. **The list is one choice, and the choice is
+ * which display the detail column speaks for** — never which theme it shows.
+ * The set is too large for `Segmented`, so it is a list of choice rows
+ * (DESIGN.md rule 7), each a radio in one labelled group. The management
+ * commands live beside the row they act on: Remove names the display it would
+ * remove, and its confirmation says what goes with it.
+ */
+export function DisplaysList(props: {
   readonly displays: readonly ThemedDisplay[];
   readonly selected: string | undefined;
   readonly fallback: string | null;
@@ -64,38 +50,16 @@ export function DisplaysSection(props: {
    *  because it could not be read, not because no display exists. */
   readonly unreadable: boolean;
   readonly themeName: (id: string) => string;
-  readonly settings: Pick<
-    HostSettingsClient,
-    "listMonitors" | "registerAutostart"
-  >;
   readonly onSelect: (id: string) => void;
-  /** Adds one local display. Answers whether the host accepted it, so the form
-   *  clears only when the row it created exists. */
-  readonly onAdd: (label: string, monitor: HostMonitor) => Promise<boolean>;
   /** Removes one display. Answers whether the host accepted it, so the
    *  confirmation closes only on a removal that landed. */
   readonly onRemove: (display: ThemedDisplay) => Promise<boolean>;
 }): React.JSX.Element {
   const copy = uiCopy.hostSettings.displays;
-  const [monitors, setMonitors] = useState<readonly HostMonitor[] | undefined>(
-    undefined,
-  );
-  /** A probe that failed is not a machine with no monitors: the reason gets its
-   *  own sentence, and the add form stays out because it has no monitor to put
-   *  on a display. */
-  const [monitorError, setMonitorError] = useState<string | undefined>(
-    undefined,
-  );
-  const [monitorIndex, setMonitorIndex] = useState(0);
-  const [name, setName] = useState("");
-  const [adding, setAdding] = useState(false);
   /** The row whose confirmation is showing. */
   const [confirming, setConfirming] = useState<string | undefined>(undefined);
   /** The row a removal is in flight for, so its button cannot be pressed twice. */
   const [removing, setRemoving] = useState<string | undefined>(undefined);
-  const [autostart, setAutostart] = useState<
-    AutostartAnswer | "working" | undefined
-  >(undefined);
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -104,42 +68,6 @@ export function DisplaysSection(props: {
       mounted.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    let live = true;
-    props.settings.listMonitors().then(
-      (found) => {
-        if (!live) return;
-        setMonitors(found);
-        setMonitorError(undefined);
-      },
-      (error: unknown) => {
-        if (live) {
-          setMonitors(undefined);
-          setMonitorError(reason(error));
-        }
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [props.settings]);
-
-  const chosenMonitor = monitors?.[monitorIndex] ?? monitors?.[0];
-
-  const add = async (): Promise<void> => {
-    const label = name.trim();
-    if (adding || label === "" || chosenMonitor === undefined) return;
-    setAdding(true);
-    const added = await props.onAdd(label, chosenMonitor);
-    if (mounted.current) {
-      setAdding(false);
-      if (added) {
-        setName("");
-        setMonitorIndex(0);
-      }
-    }
-  };
 
   const remove = async (display: ThemedDisplay): Promise<void> => {
     if (removing !== undefined) return;
@@ -151,21 +79,8 @@ export function DisplaysSection(props: {
     }
   };
 
-  const registerAutostart = async (): Promise<void> => {
-    if (autostart === "working") return;
-    setAutostart("working");
-    try {
-      const answer = await props.settings.registerAutostart();
-      if (mounted.current) setAutostart(answer);
-    } catch (error: unknown) {
-      if (mounted.current) {
-        setAutostart({ ok: false, message: reason(error) });
-      }
-    }
-  };
-
   return (
-    <Group testId="displays" name={copy.heading} hint={copy.hint}>
+    <Group testId="displays" name={copy.listHeading}>
       {/* **An unreadable file is not an empty one.** The host fails closed and
           answers no displays either way, so this is the only word that tells
           the person the list is missing rather than empty — and it names the
@@ -180,12 +95,6 @@ export function DisplaysSection(props: {
         </p>
       ) : null}
 
-      {/* **The rows are a choice, and the choice is which display the sections
-          below speak for.** The set is too large for Segmented, so it is the
-          control set's choice row: each display is one radio in one labelled
-          group, and the chosen row lifts to `--stage` behind an accent border
-          (DESIGN.md rule 7). The theme it shows is a fact about the choice,
-          drawn at the row's right edge. */}
       {props.displays.length === 0 ? null : (
         <RadioGroup
           value={props.selected ?? ""}
@@ -297,11 +206,82 @@ export function DisplaysSection(props: {
           })}
         </RadioGroup>
       )}
+    </Group>
+  );
+}
 
-      <h3 className="m-0 pt-[var(--space-6)] text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {copy.addHeading}
-      </h3>
+/**
+ * Adding a local display: the one thing here that creates a row. It needs the
+ * monitor it is on, so the form is drawn only when the probe answered a list; a
+ * probe that failed states its reason instead of offering a choice no route
+ * would accept.
+ */
+export function AddDisplaySection(props: {
+  readonly settings: Pick<HostSettingsClient, "listMonitors">;
+  /** Adds one local display. Answers whether the host accepted it, so the form
+   *  clears only when the row it created exists. */
+  readonly onAdd: (label: string, monitor: HostMonitor) => Promise<boolean>;
+}): React.JSX.Element {
+  const copy = uiCopy.hostSettings.displays;
+  const [monitors, setMonitors] = useState<readonly HostMonitor[] | undefined>(
+    undefined,
+  );
+  /** A probe that failed is not a machine with no monitors: the reason gets its
+   *  own sentence, and the add form stays out because it has no monitor to put
+   *  on a display. */
+  const [monitorError, setMonitorError] = useState<string | undefined>(
+    undefined,
+  );
+  const [monitorIndex, setMonitorIndex] = useState(0);
+  const [name, setName] = useState("");
+  const [adding, setAdding] = useState(false);
 
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    props.settings.listMonitors().then(
+      (found) => {
+        if (!live) return;
+        setMonitors(found);
+        setMonitorError(undefined);
+      },
+      (error: unknown) => {
+        if (live) {
+          setMonitors(undefined);
+          setMonitorError(reason(error));
+        }
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [props.settings]);
+
+  const chosenMonitor = monitors?.[monitorIndex] ?? monitors?.[0];
+
+  const add = async (): Promise<void> => {
+    const label = name.trim();
+    if (adding || label === "" || chosenMonitor === undefined) return;
+    setAdding(true);
+    const added = await props.onAdd(label, chosenMonitor);
+    if (mounted.current) {
+      setAdding(false);
+      if (added) {
+        setName("");
+        setMonitorIndex(0);
+      }
+    }
+  };
+
+  return (
+    <Group testId="add-display" name={copy.addHeading} hint={copy.addNameHint}>
       {/* A failed probe is the host's own sentence, and no form is drawn: the
           route needs a monitor, and a monitor list nobody read is not one. */}
       {monitorError === undefined ? null : (
@@ -347,28 +327,65 @@ export function DisplaysSection(props: {
           </button>
         </>
       )}
+    </Group>
+  );
+}
 
-      <div className="flex flex-col gap-[var(--space-6)] pt-[var(--space-6)]">
-        <p className="m-0 text-xs text-muted">{copy.autostartHint}</p>
-        <button
-          type="button"
-          data-yunari-host-autostart=""
-          className={plainButtonClasses}
-          disabled={autostart === "working"}
-          onClick={() => void registerAutostart()}
+/**
+ * The host starts at sign-in so every local display comes back after a reboot.
+ * The route registers the host, not one display, which is why this sits beside
+ * the add form rather than on a display's own detail.
+ */
+export function AutostartSection(props: {
+  readonly settings: Pick<HostSettingsClient, "registerAutostart">;
+}): React.JSX.Element {
+  const copy = uiCopy.hostSettings.displays;
+  const [autostart, setAutostart] = useState<
+    AutostartAnswer | "working" | undefined
+  >(undefined);
+
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const register = async (): Promise<void> => {
+    if (autostart === "working") return;
+    setAutostart("working");
+    try {
+      const answer = await props.settings.registerAutostart();
+      if (mounted.current) setAutostart(answer);
+    } catch (error: unknown) {
+      if (mounted.current) {
+        setAutostart({ ok: false, message: reason(error) });
+      }
+    }
+  };
+
+  return (
+    <Group testId="autostart" name={copy.autostartHeading}>
+      <p className="m-0 text-xs text-muted">{copy.autostartHint}</p>
+      <button
+        type="button"
+        data-yunari-host-autostart=""
+        className={plainButtonClasses}
+        disabled={autostart === "working"}
+        onClick={() => void register()}
+      >
+        {autostart === "working" ? copy.autostartBusy : copy.autostart}
+      </button>
+      {autostart === undefined || autostart === "working" ? null : (
+        <p
+          role={autostart.ok ? "status" : "alert"}
+          data-yunari-host-autostart-result={autostart.ok ? "ok" : "failed"}
+          className={`m-0 text-xs ${autostart.ok ? "text-muted" : "text-warn"}`}
         >
-          {autostart === "working" ? copy.autostartBusy : copy.autostart}
-        </button>
-        {autostart === undefined || autostart === "working" ? null : (
-          <p
-            role={autostart.ok ? "status" : "alert"}
-            data-yunari-host-autostart-result={autostart.ok ? "ok" : "failed"}
-            className={`m-0 text-xs ${autostart.ok ? "text-muted" : "text-warn"}`}
-          >
-            {autostart.message}
-          </p>
-        )}
-      </div>
+          {autostart.message}
+        </p>
+      )}
     </Group>
   );
 }
