@@ -225,9 +225,9 @@ describe("createRasterBrowser", () => {
 
     const page = await browser.create(pageOptions());
 
-    expect(request(over.client(BROWSER_URL), "Target.createTarget").params).toEqual(
-      { url: "about:blank", newWindow: true },
-    );
+    expect(
+      request(over.client(BROWSER_URL), "Target.createTarget").params,
+    ).toEqual({ url: "about:blank", newWindow: true });
     expect(over.connect).toHaveBeenNthCalledWith(2, `${PAGE_URL}T1`);
 
     await page.close();
@@ -246,14 +246,14 @@ describe("createRasterBrowser", () => {
     );
 
     const firstPage = over.client(`${PAGE_URL}T1`);
-    expect(request(firstPage, "Emulation.setDeviceMetricsOverride").params).toEqual(
-      {
-        width: 800,
-        height: 480,
-        deviceScaleFactor: 1,
-        mobile: false,
-      },
-    );
+    expect(
+      request(firstPage, "Emulation.setDeviceMetricsOverride").params,
+    ).toEqual({
+      width: 800,
+      height: 480,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
     expect(request(firstPage, "Page.navigate").params).toEqual({
       url: "http://127.0.0.1:1/?display=strip",
     });
@@ -396,11 +396,8 @@ describe("createRasterBrowser", () => {
     over.holdPageConnect();
 
     const creating = browser.create(pageOptions());
-    await until(
-      () =>
-        over.connect.mock.calls.some(([url]) =>
-          String(url).startsWith(PAGE_URL),
-        ),
+    await until(() =>
+      over.connect.mock.calls.some(([url]) => String(url).startsWith(PAGE_URL)),
     );
 
     const stopping = browser.stop();

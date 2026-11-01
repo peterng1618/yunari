@@ -331,13 +331,15 @@ describe("createPageRasterizer", () => {
 
     await page.close();
 
-    expect(
-      sent.some((entry) => entry.method === "Page.stopScreencast"),
-    ).toBe(true);
+    expect(sent.some((entry) => entry.method === "Page.stopScreencast")).toBe(
+      true,
+    );
     expect(closeTarget).toHaveBeenCalledTimes(1);
     expect(closePage()).toBe(true);
     // The browser's own lifecycle is the caller's: this page sends no Target.*.
-    expect(sent.some((entry) => entry.method.startsWith("Target."))).toBe(false);
+    expect(sent.some((entry) => entry.method.startsWith("Target."))).toBe(
+      false,
+    );
   });
 });
 

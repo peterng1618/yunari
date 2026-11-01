@@ -6,8 +6,8 @@ import {
   connectDevtools,
   createPageRasterizer,
   type Devtools,
-  type RasterPageOptions,
   type Rasterizer,
+  type RasterPageOptions,
   startBrowser,
 } from "./panel-raster.js";
 
@@ -54,10 +54,7 @@ export interface RasterBrowserOptions {
   readonly spawn?: typeof startBrowser;
   readonly connect?: typeof connectDevtools;
   readonly openTarget?: (browser: Devtools) => Promise<TargetHandle>;
-  readonly closeTarget?: (
-    browser: Devtools,
-    targetId: string,
-  ) => Promise<void>;
+  readonly closeTarget?: (browser: Devtools, targetId: string) => Promise<void>;
 }
 
 /** The page socket behind a target id, on the host the browser announced. */
