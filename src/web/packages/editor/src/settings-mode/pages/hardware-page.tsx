@@ -51,6 +51,7 @@ export function HardwarePage(state: HostState): React.JSX.Element {
                   key={group}
                   id={`yunari-host-device-${group}`}
                   label={groupQuestion(devices, group)}
+                  shape="headed"
                   data={{ "data-yunari-host-device-group": group }}
                   value={devices.assigned[group] ?? ""}
                   options={choices}
