@@ -191,6 +191,77 @@ describe("ThemeStore", () => {
     expect(read?.assets).toEqual({});
   });
 
+  it("retries a staging rename another process is holding", async () => {
+    // Windows loses a rename onto a watched or scanned folder with EPERM; the
+    // staging folder is the save's own, so the swap waits for the handle
+    // instead of failing the save outright.
+    let busy = 2;
+    const renamed: string[] = [];
+    const store = createThemeStore(tmpDir, {
+      rename: async (from, to) => {
+        renamed.push(path.basename(from));
+        if (busy > 0 && path.basename(from).startsWith(".staging-")) {
+          busy -= 1;
+          throw Object.assign(new Error("operation not permitted"), {
+            code: "EPERM",
+          });
+        }
+        await fs.rename(from, to);
+      },
+    });
+
+    const entry = await store.write("living-room", {
+      envelope: envelopeFor("living-room", "Living Room"),
+      assets: {},
+    });
+
+    expect(entry.id).toBe("living-room");
+    expect(
+      renamed.filter((name) => name.startsWith(".staging-")),
+      "the busy rename is tried again before the save gives up",
+    ).toHaveLength(3);
+    // The retry saved the real folder, not just the promise.
+    expect((await store.read("living-room"))?.name).toBe("Living Room");
+  });
+
+  it("gives up on a rename that stays busy, after a bounded number of tries", async () => {
+    const renamed: string[] = [];
+    const store = createThemeStore(tmpDir, {
+      rename: async (from) => {
+        renamed.push(path.basename(from));
+        throw Object.assign(new Error("operation not permitted"), {
+          code: "EPERM",
+        });
+      },
+    });
+
+    await expect(
+      store.write("living-room", {
+        envelope: envelopeFor("living-room", "Living Room"),
+        assets: {},
+      }),
+    ).rejects.toMatchObject({ code: "EPERM" });
+    expect(renamed).toHaveLength(6);
+  });
+
+  it("does not retry a rename that failed for a reason a wait cannot fix", async () => {
+    const renamed: string[] = [];
+    const store = createThemeStore(tmpDir, {
+      rename: async (from) => {
+        renamed.push(path.basename(from));
+        throw Object.assign(new Error("no such file"), { code: "ENOENT" });
+      },
+    });
+
+    await expect(
+      store.write("living-room", {
+        envelope: envelopeFor("living-room", "Living Room"),
+        assets: {},
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(renamed).toHaveLength(1);
+  });
+
   it("opens a document written by the previous schema major", async () => {
     const store = createThemeStore(tmpDir);
     // A folder saved by the previous major, written by hand: the strict write

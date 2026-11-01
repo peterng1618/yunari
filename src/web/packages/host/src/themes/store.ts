@@ -250,6 +250,43 @@ export function storeRefusalMessage(error: unknown): string {
  */
 interface ThemeStoreOptions {
   readonly trash?: (folder: string) => Promise<void>;
+  /** The folder rename a save's two-step swap uses. The default is the real
+   *  one; a test substitutes it so the retry can be told apart from the
+   *  filesystem it retries. */
+  readonly rename?: (from: string, to: string) => Promise<void>;
+}
+
+/**
+ * How long a save waits for a rename another process is holding.
+ *
+ * On Windows a rename onto a directory a watcher, indexer or virus scanner has
+ * open loses with `EPERM` or `EBUSY`. The staging folder is the save's own and
+ * the window is one handle's lifetime, so the swap retries a few times rather
+ * than failing the save outright — a lost race here used to surface as an
+ * unrelated spec failure far from the install.
+ */
+const RENAME_RETRY_MS: readonly number[] = [10, 20, 40, 80, 160];
+
+function renameIsBusy(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EPERM" || code === "EBUSY" || code === "EACCES";
+}
+
+async function renameWithRetry(
+  rename: (from: string, to: string) => Promise<void>,
+  from: string,
+  to: string,
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const wait = RENAME_RETRY_MS[attempt];
+      if (!renameIsBusy(error) || wait === undefined) throw error;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 }
 
 export interface ThemeStore {
@@ -849,6 +886,11 @@ export function createThemeStore(
   options?: ThemeStoreOptions,
 ): ThemeStore {
   const trash = options?.trash ?? moveToTrash;
+  // Read through `fs` on every call rather than bound here: a test swaps the
+  // real rename after the store exists, and a captured function would leave the
+  // test renaming folders it believes it replaced.
+  const rename = (from: string, to: string): Promise<void> =>
+    (options?.rename ?? fs.rename)(from, to);
   // The ids with a save in flight, so a listing landing inside one does not
   // mistake that save's scratch folders for the debris of a dead one.
   const saving = new Set<string>();
@@ -1175,9 +1217,9 @@ export function createThemeStore(
             .then(() => true)
             .catch(() => false);
           if (hadPrevious) {
-            await fs.rename(target, retired);
+            await renameWithRetry(rename, target, retired);
           }
-          await fs.rename(staging, target);
+          await renameWithRetry(rename, staging, target);
         } catch (error) {
           await fs.rm(staging, { recursive: true, force: true });
           throw error;
