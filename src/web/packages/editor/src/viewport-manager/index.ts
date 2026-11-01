@@ -1,3 +1,7 @@
+import {
+  type ArtboardShape,
+  artboardTransformShape,
+} from "@yunari/renderer-core";
 import { type Canvas, Point } from "fabric/es";
 import {
   defaultPreviewLens,
@@ -103,7 +107,11 @@ export interface ViewportManager {
 interface ViewportManagerInput {
   readonly canvas: Canvas;
   readonly host: HTMLElement;
-  readonly artboard: () => { readonly width: number; readonly height: number };
+  readonly artboard: () => {
+    readonly width: number;
+    readonly height: number;
+    readonly shape?: ArtboardShape;
+  };
 }
 
 /**
@@ -185,7 +193,8 @@ export function createViewportManager({
    * presents through. Its origin is carried because a fit centres the artboard
    * in *this* box, and that is what makes a wide display letterbox a square
    * artboard rather than scale it to the corners. A circle lens frames a
-   * square, since its disc's bounding square is the one the diagonal must fit.
+   * square: a rect theme's diagonal must fit the disc, and a circle theme's
+   * board is that square already.
    */
   const framingBox = (viewport: Viewport): ScreenRect => {
     const active = lens === undefined ? undefined : resolveLens(lens);
@@ -213,6 +222,12 @@ export function createViewportManager({
     if (lens === undefined || viewportSize() === undefined) return undefined;
     const active = resolveLens(lens);
     if (active === undefined) return undefined;
+    // A circle theme's artboard is the disc's own canvas, so under a circle
+    // lens the artboard *is* the screen. Growing a bounding square to the
+    // diagonal would draw a window larger than the glass the board fills.
+    if (active.shape === "circle" && artboard().shape === "circle") {
+      return artboardScreenRect();
+    }
     const box = lensBox(active, artboard());
     const vpt = canvas.viewportTransform;
     return {
@@ -258,12 +273,16 @@ export function createViewportManager({
     // perfectly finite number, so a board with no frameable area slips past the
     // guard below and the camera fits to a board that cannot be framed.
     if (!isFrameable(board)) return zoom();
-    // A circle inscribes the artboard's diagonal: the corners lie on the disc,
-    // so the fit is the diagonal against the square's edge, not the board's own
-    // contain scale.
+    // A circle lens inscribes a rect theme's diagonal: its corners lie on the
+    // disc, so the fit is the diagonal against the square's edge, not the
+    // board's own contain scale. A circle theme is already the disc's canvas,
+    // so it keeps the rect rule and fills the lens instead of shrinking to its
+    // own diagonal. `artboardTransformShape` is the one owner of that
+    // distinction, shared with the renderer's layout.
     const active = lens === undefined ? undefined : resolveLens(lens);
+    const shape = artboardTransformShape(board.shape, active?.shape ?? "rect");
     const scale =
-      active?.shape === "circle"
+      shape === "circle"
         ? box.width / Math.hypot(board.width, board.height)
         : Math.min(box.width / board.width, box.height / board.height);
     if (!Number.isFinite(scale) || scale <= 0) return zoom();

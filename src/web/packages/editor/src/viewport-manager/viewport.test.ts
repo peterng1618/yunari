@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ArtboardShape } from "@yunari/renderer-core";
 import { Canvas, Point } from "fabric/es";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -60,7 +61,11 @@ afterEach(() => {
 function createCamera(options: {
   readonly width: number;
   readonly height: number;
-  readonly artboard: { readonly width: number; readonly height: number };
+  readonly artboard: {
+    readonly width: number;
+    readonly height: number;
+    readonly shape?: ArtboardShape;
+  };
 }) {
   const host = document.createElement("div");
   Object.defineProperties(host, {
@@ -675,5 +680,71 @@ describe("the display lens", () => {
       }).display(),
     ).toBeUndefined();
     resetPreviewRatios();
+  });
+});
+
+/** A circle theme is a square artboard whose disc is inscribed, so its corners
+ *  sit outside the glass. Under a circle lens the board is the screen, not a
+ *  rect that has to shrink to put its diagonal on the disc. */
+describe("a circle theme under a lens", () => {
+  it("fills a circle lens instead of shrinking to the diagonal", () => {
+    // Contain-fit of the board's own square into the 400x400 lens box. The
+    // diagonal rule would give 400 / hypot(1080, 1080) and letterbox the disc.
+    const camera = createCamera({
+      width: 400,
+      height: 400,
+      artboard: { width: 1080, height: 1080, shape: "circle" },
+    });
+    camera.showDisplay("Circle");
+    expect(camera.zoom()).toBeCloseTo(400 / 1080, 6);
+  });
+
+  it("keeps the diagonal fit for a rect theme under a circle lens", () => {
+    // A rect theme's corners are authored content, so the lens inscribes the
+    // whole rect: the board shrinks until its diagonal meets the disc.
+    const camera = createCamera({
+      width: 400,
+      height: 400,
+      artboard: { width: 1080, height: 1080 },
+    });
+    camera.showDisplay("Circle");
+    expect(camera.zoom()).toBeCloseTo(400 / Math.hypot(1080, 1080), 6);
+  });
+
+  it("draws its screen on the artboard's own rect under a circle lens", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1080, height: 1080, shape: "circle" },
+    });
+    camera.showDisplay("Circle");
+    expect(camera.displayScreenRect()).toEqual(camera.artboardScreenRect());
+  });
+
+  it("keeps the lens's rect under a rect lens", () => {
+    // The authored board shapes the fit; the lens still decides what window is
+    // drawn around it. A 16:9 lens over a square board is a 16:9 screen.
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1080, height: 1080, shape: "circle" },
+    });
+    camera.showDisplay("16:9");
+    const screen = camera.displayScreenRect();
+    if (screen === undefined) throw new Error("no display screen rect");
+    expect(screen.left).toBeCloseTo(0, 6);
+    expect(screen.top).toBeCloseTo(75, 6);
+    expect(screen.width).toBeCloseTo(800, 6);
+    expect(screen.height).toBeCloseTo(450, 6);
+  });
+
+  it("draws no screen under Fit", () => {
+    const camera = createCamera({
+      width: 800,
+      height: 600,
+      artboard: { width: 1080, height: 1080, shape: "circle" },
+    });
+    camera.showDisplay(undefined);
+    expect(camera.displayScreenRect()).toBeUndefined();
   });
 });
