@@ -5567,6 +5567,39 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("releases a running panel's page before it publishes the save", async () => {
+      // The page reloads the moment the revision is published. A runner still
+      // holding it then captures the new UI and pushes it over the old clip,
+      // before the changed clip is uploaded (TURZX, 2026-11-02).
+      const panels = managerOver([], [], [], ["strip"]);
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels,
+      });
+      let publishedWhenRefreshed: string | null | undefined;
+
+      panels.refreshVideo = async () => {
+        const answer = await request(hosting.server, "GET", "/api/published");
+        publishedWhenRefreshed = (answer.json() as { id: string | null }).id;
+      };
+
+      try {
+        const saved = await request(
+          hosting.server,
+          "PUT",
+          "/api/themes/living-room",
+          themeBody(createValidPackage("living-room")),
+        );
+
+        expect(saved.status).toBe(200);
+        // The panel is released while the previous revision is still the
+        // published one; only then may every page be told to reload.
+        expect(publishedWhenRefreshed).toBeNull();
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("answers a theme save even when a panel cannot compare its clip", async () => {
       const logged = vi.spyOn(console, "error").mockImplementation(() => {});
       const hosting = host({
