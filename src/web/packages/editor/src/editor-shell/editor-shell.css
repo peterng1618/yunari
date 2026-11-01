@@ -32,11 +32,12 @@ body,
    mapping was rejected, which is what an inline script resolving the
    palette ahead of the bundle would have been. */
 :root {
-  --shell-surface: #eff9f2bf;
+  --shell-surface: #e4f3ec;
   /* A popover's own ground: the drawing fixes it at 95%, so a cell behind it
-     does not read as part of the menu. */
-  --shell-popover: #eff9f2f2;
-  --shell-surface-strong: #f8fffbdf;
+     does not read as part of the menu. Opaque for the same reason the two
+     surface roles below are: chrome never composites against the ground. */
+  --shell-popover: #edf8f1;
+  --shell-surface-strong: #f1fbf7;
   --shell-edge: #26463833;
   --shell-text: #102119;
   --shell-muted: #4f6659;
@@ -440,9 +441,9 @@ body,
   --edge-2: color-mix(in srgb, var(--edge) 55%, transparent);
 }
 [data-shell-palette="light"] {
-  --shell-surface: #eff9f2bf;
-  --shell-popover: #eff9f2f2;
-  --shell-surface-strong: #f8fffbdf;
+  --shell-surface: #e4f3ec;
+  --shell-popover: #edf8f1;
+  --shell-surface-strong: #f1fbf7;
   --shell-edge: #26463833;
   --shell-text: #102119;
   --shell-muted: #4f6659;
@@ -725,11 +726,10 @@ body,
 
    - **chrome** — the rail, both panes, the inspector, and the header and status
      strips that declare their own surface — paints the palette's own `--panel`,
-     with no gradient and no shadow. `--panel` is opaque in five palettes
-     (Task 4 made graphite's `#12161c`); `light` declares
-     `--shell-surface: #eff9f2bf`, so its chrome is still 75% and still
-     composites against the mint ground. That is a derivation Task 4 did not
-     reach rather than a literal to invent here, and `vg-310` owns it.
+     with no gradient and no shadow. `--panel` is opaque in **every** palette;
+     `light`'s surface roles were the last translucent ones (75%, 87% and 95%)
+     and now carry the opaque tones of the composite the reader already saw, so
+     no chrome composites against its ground.
    - a **floating cluster over the canvas** — the dock and the view cluster —
      adds row 1's shadow and a 95% fill. The 95% is the derivation for a
      cluster's fill and the same one `.editor-shell-identity` declares in its

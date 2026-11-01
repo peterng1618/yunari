@@ -1,8 +1,8 @@
 import { type Page } from "@playwright/test";
 import { openPane } from "./editor-rail.js";
-import { openShell, PALETTES } from "./shell-palette.js";
+import { openShell } from "./shell-palette.js";
 
-/** Responsibility: the four readers both shell-palette specs share — the editor opened with a pane, the shell's resolved colours, a fill's alpha, and the palettes whose chrome is not yet opaque. */
+/** Responsibility: the four readers both shell-palette specs share — the editor opened with a pane, the shell's resolved colours, and a fill's alpha. */
 export async function openEditor(page: Page): Promise<void> {
   await openShell(page);
   await openPane(page, "Document");
@@ -95,23 +95,3 @@ export function backgroundAlpha(colour: string): number | null {
   }
   return null;
 }
-
-/** `light` is the one palette whose chrome is not yet opaque, and it is named
- *  rather than skipped so the exception is visible in the reading it exempts.
- *
- *  `light` declares `--shell-surface: #eff9f2bf` — 75% alpha, the residue of
- *  the glass chrome — and every other surface role it declares is alpha too, so
- *  the derivation plan 7 Task 4 wrote produces no opaque value for it. A value
- *  invented here would be a seventh palette tuned by hand, which is the move
- *  the derivation exists to replace, so the fill stays where it is and `vg-310`
- *  owns the gap.
- *
- *  The waiver names a **value, not a direction** (review round 1): the case
- *  asserts that a palette's rendered chrome alpha equals the alpha its own
- *  `--panel` declares, and this set against what that declaration says. The
- *  exemption therefore reds whichever way the fill moves — a value that lands
- *  (declared opaque) makes the row stale, and any treatment added on top of
- *  light's fill breaks the equality — instead of only in the opaque direction,
- *  which is all an `alpha >= 1` reading of "exempt" could catch. */
-export const CHROME_NOT_YET_OPAQUE: ReadonlySet<(typeof PALETTES)[number]> =
-  new Set(["light"]);
