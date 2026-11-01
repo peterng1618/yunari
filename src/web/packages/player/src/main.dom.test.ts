@@ -21,6 +21,15 @@ import {
 } from "./host-refind.js";
 import type { PageNavigation } from "./main.js";
 
+// The display-replacement case below was filed twice (`vg-532`, `vg-585`) for
+// timing out at the global 20s while green alone. The cost is the box, not the
+// case: the case ran 99ms inside a full idle suite (2026-11-02 report) and the
+// file 4.27s alone when the rows were filed, so a starved worker start is what
+// crosses 20s. Sixty seconds keeps a genuinely hung case red while surviving a
+// gate run that carries other work; every wait inside the cases keeps its own
+// budget.
+vi.setConfig({ testTimeout: 60_000 });
+
 /**
  * `vg-190`: a rejection arriving after the scene mounted calls
  * `showLoadFailure`, which replaces the whole document and discards a display
