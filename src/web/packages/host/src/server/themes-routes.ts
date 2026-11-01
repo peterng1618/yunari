@@ -16,6 +16,7 @@ import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import { isValidThemeId, type ThemeStore } from "../themes/store.js";
 import { SHIPPED_TEMPLATES } from "../themes/templates.js";
+import type { ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
 import { isPlatformError, readBody, sendJson, sendText } from "./http.js";
 import { displayFor, isLoopbackRemote, knownDisplayKey } from "./identity.js";
@@ -62,6 +63,7 @@ export interface ThemeRouteDeps {
   readonly themeSettings: ThemeSettingsStore | undefined;
   readonly themeOrigins: ThemeOriginsStore | undefined;
   readonly thumbnails: ThumbnailStore | undefined;
+  readonly themeMedia: ThemeMedia | undefined;
 }
 
 /**
@@ -82,6 +84,7 @@ export function createThemeRoutes(
     themeSettings,
     themeOrigins,
     thumbnails,
+    themeMedia,
   } = deps;
   const displays: DisplayStore | undefined = options.displays;
 
@@ -470,6 +473,93 @@ export function createThemeRoutes(
       return true;
     }
 
+    // A panel's own view of the theme video. The page it renders shows no
+    // picture or a picture scaled to its glass, so it is served a derived
+    // still or a device-sized clip instead of the theme's full-size source.
+    // A name the cache does not hold is generated here, before the page can
+    // load anything: the cache name is the invalidation check.
+    const posterMatch = url.pathname.match(/^\/api\/themes\/([^/]+)\/poster$/);
+    if (posterMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Theme media is available on this PC only.");
+        return true;
+      }
+      const rawId = decodeURIComponent(posterMatch[1] ?? "");
+      if (!isValidThemeId(rawId)) {
+        sendText(response, 400, "Invalid theme id.");
+        return true;
+      }
+      const envelope =
+        themeMedia === undefined
+          ? undefined
+          : await themeStore.readEnvelope(rawId);
+      const media =
+        themeMedia === undefined || envelope === undefined
+          ? undefined
+          : await themeMedia.still(rawId, envelope);
+      if (media === undefined) {
+        // No video background, or the frame could not be taken. The page falls
+        // back to the theme's own asset, which is the behaviour before this
+        // route existed.
+        sendText(response, 404, "No poster for that theme.");
+        return true;
+      }
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "x-content-type-options": "nosniff",
+        "cache-control": "no-store",
+      });
+      response.end(Buffer.from(media.bytes));
+      return true;
+    }
+
+    const panelVideoMatch = url.pathname.match(
+      /^\/api\/themes\/([^/]+)\/panel-video$/,
+    );
+    if (panelVideoMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Theme media is available on this PC only.");
+        return true;
+      }
+      const rawId = decodeURIComponent(panelVideoMatch[1] ?? "");
+      if (!isValidThemeId(rawId)) {
+        sendText(response, 400, "Invalid theme id.");
+        return true;
+      }
+      const size = panelPixelSize(url.searchParams);
+      if (size === undefined) {
+        sendText(response, 400, "A panel size needs whole width and height.");
+        return true;
+      }
+      const envelope =
+        themeMedia === undefined
+          ? undefined
+          : await themeStore.readEnvelope(rawId);
+      const media =
+        themeMedia === undefined || envelope === undefined
+          ? undefined
+          : await themeMedia.panelVideo(rawId, envelope, size);
+      if (media === undefined) {
+        sendText(response, 404, "No panel clip for that theme.");
+        return true;
+      }
+      response.writeHead(200, {
+        "content-type": "video/mp4",
+        "x-content-type-options": "nosniff",
+        "cache-control": "no-store",
+      });
+      response.end(Buffer.from(media.bytes));
+      return true;
+    }
+
     const thumbMatch = url.pathname.match(
       /^\/api\/themes\/([^/]+)\/thumbnail$/,
     );
@@ -577,4 +667,23 @@ export function createThemeRoutes(
 
     return false;
   };
+}
+
+/** The panel box a clip is scaled into, or nothing when the query is not two
+ *  whole pixel sizes. 4096 is the video envelope's own long edge; a device
+ *  beyond it is not a panel this build knows. */
+function panelPixelSize(
+  params: URLSearchParams,
+): { readonly width: number; readonly height: number } | undefined {
+  const width = params.get("width");
+  const height = params.get("height");
+  if (width === null || height === null) return undefined;
+  if (!/^\d{1,4}$/u.test(width) || !/^\d{1,4}$/u.test(height)) return undefined;
+  const parsed = { width: Number(width), height: Number(height) };
+  return parsed.width > 0 &&
+    parsed.height > 0 &&
+    parsed.width <= 4096 &&
+    parsed.height <= 4096
+    ? parsed
+    : undefined;
 }

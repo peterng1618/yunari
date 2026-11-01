@@ -31,6 +31,7 @@ import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import type { WeatherSettingsStore } from "../settings/weather.js";
 import type { ThemeStore } from "../themes/store.js";
+import type { ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
 import type { RootPem } from "../tls/authority.js";
 import type { WallpaperEngineSource } from "../wallpaper-engine/source.js";
@@ -83,6 +84,9 @@ export interface HostServerOptions {
   readonly themeOrigins?: ThemeOriginsStore;
   /** Theme thumbnails. Omitted when the host stores none. */
   readonly thumbnails?: ThumbnailStore;
+  /** The theme video's derived panel media: a still frame and device-sized
+   *  clips. Omitted when the host keeps no cache. */
+  readonly themeMedia?: ThemeMedia;
   /** The fetcher the install route uses. Omitted uses the global; supplied so a
    *  route test can install without a network. */
   readonly fetch?: typeof fetch;

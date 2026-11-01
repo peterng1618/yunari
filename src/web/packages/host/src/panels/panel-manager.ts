@@ -33,7 +33,9 @@ import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
 export interface PanelManagerOptions {
   readonly displays: DisplayStore;
   /** The player page a display is shown at, including its credential. */
-  readonly pageFor: (displayId: string) => string;
+  /** The page for a panel. `clip` says the device plays the theme's clip
+   *  itself, so the page stands on one poster frame instead. */
+  readonly pageFor: (displayId: string, clip: boolean) => string;
   /** The clip the display's theme plays itself, or undefined for a still theme.
    *  Read once per start: a changed assignment is a restart, not a re-read. */
   readonly videoFor?: (
@@ -290,7 +292,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     try {
       rasterizer = await rasterBrowserFor(executable).create({
-        url: options.pageFor(displayId),
+        url: options.pageFor(displayId, video !== undefined),
         geometry: device.geometry,
         // The device says which still it consumes; a panel that decodes to raw
         // pixels takes PNG rather than paying for a lossy intermediate.

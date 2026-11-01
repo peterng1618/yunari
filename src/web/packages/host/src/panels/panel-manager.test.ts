@@ -205,6 +205,38 @@ describe("createPanelManager", () => {
     expect(manager.running()).toEqual([]);
   });
 
+  it("tells the page whether its device plays the clip itself", async () => {
+    const pageFor = vi.fn(
+      (displayId: string, clip: boolean) =>
+        `http://127.0.0.1:1/?display=${displayId}&clip=${clip}`,
+    );
+
+    h.family = familyOver(async () =>
+      deviceOver({
+        video: {
+          start: async () => {},
+          presentOverlay: async () => {},
+          stop: async () => {},
+        },
+      }),
+    );
+    const withClip = managerOver({
+      pageFor,
+      videoFor: async () => SOURCE,
+    });
+    await withClip.start("strip");
+    expect(pageFor).toHaveBeenLastCalledWith("strip", true);
+    await withClip.stop("strip");
+
+    // No device video: the device shows the page, so the page must load a
+    // picture of its own rather than one poster frame.
+    h.family = familyOver(async () => deviceOver());
+    const still = managerOver({ pageFor });
+    await still.start("strip");
+    expect(pageFor).toHaveBeenLastCalledWith("strip", false);
+    await still.stop("strip");
+  });
+
   it("reads videoFor once per start, and undefined leaves stills", async () => {
     const present = vi.fn(async () => {});
     const presentOverlay = vi.fn(async () => {});

@@ -59,6 +59,12 @@ export interface FabricSceneOptions
   readonly resolveAsset?: (
     assetId: string,
   ) => BackgroundMediaSource | undefined;
+  /** What a hardware panel's page loads instead of a declared video: a still
+   *  frame or a clip scaled to the panel. Absent on a browser display. */
+  readonly backgroundSource?: {
+    readonly url: string;
+    readonly kind: "image" | "video";
+  };
   /** Reports an unresolvable declared background; distinct from the adapter's
    * per-node `onAssetError`. */
   readonly onMediaError?: (message: string) => void;
@@ -225,6 +231,9 @@ export function mountFabricScene(
       artboard: currentArtboard,
       assets: options.assets,
       resolveAsset: options.resolveAsset,
+      ...(options.backgroundSource === undefined
+        ? {}
+        : { backgroundSource: options.backgroundSource }),
       // Nothing has rendered, so no panel has a surface yet. Passing the count
       // rather than syncing after the mount keeps a panel that arrives later
       // from costing one frame callback before it exists.

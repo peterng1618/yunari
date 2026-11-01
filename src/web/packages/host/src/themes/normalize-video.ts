@@ -50,7 +50,7 @@ const HASH_REFUSAL =
   "The bundled ffmpeg does not match the hash recorded for this platform, " +
   "so the video was not re-encoded.";
 
-type Run = (
+export type Run = (
   args: readonly string[],
 ) => Promise<{ code: number; stderr: string }>;
 
@@ -135,18 +135,9 @@ export async function normalizeVideo(
         "contain preserves the source aspect.",
     };
 
-  const executable = options.ffmpegPath ?? ffmpegStatic;
-  if (executable === null)
-    return {
-      ok: false,
-      message:
-        "No ffmpeg encoder is available on this host, so the video cannot be re-encoded.",
-    };
-  // The bytes this host is about to execute come from an install-time download
-  // that npm's tarball integrity does not cover; nothing else checks them.
-  if (!verified(executable, options.verifyForTest))
-    return { ok: false, message: HASH_REFUSAL };
-  const run = options.run ?? encoderRun(executable);
+  const encoder = bundledFfmpeg(options);
+  if (!encoder.ok) return encoder;
+  const run = encoder.run;
 
   // A directory per run, under the OS temp root: two normalizations at once
   // cannot overwrite each other's files, and nothing is left behind either way.
@@ -442,6 +433,36 @@ function validAspect(
 
 function evenAtMost(value: number): number {
   return Math.max(2, Math.floor(value / 2) * 2);
+}
+
+/**
+ * The bundled encoder, gated by its recorded digest, or the sentence saying
+ * why it cannot run. Shared with the poster frame, which executes the same
+ * binary and must pass the same gate.
+ */
+export interface BundledFfmpegOptions {
+  readonly ffmpegPath?: string;
+  readonly run?: Run;
+  readonly verifyForTest?: Verify;
+}
+
+export function bundledFfmpeg(
+  options: BundledFfmpegOptions = {},
+):
+  | { readonly ok: true; readonly run: Run }
+  | { readonly ok: false; readonly message: string } {
+  const executable = options.ffmpegPath ?? ffmpegStatic;
+  if (executable === null)
+    return {
+      ok: false,
+      message:
+        "No ffmpeg encoder is available on this host, so the video cannot be re-encoded.",
+    };
+  // The bytes this host is about to execute come from an install-time download
+  // that npm's tarball integrity does not cover; nothing else checks them.
+  if (!verified(executable, options.verifyForTest))
+    return { ok: false, message: HASH_REFUSAL };
+  return { ok: true, run: options.run ?? encoderRun(executable) };
 }
 
 /** The spawn gate. Verification runs at every spawn rather than once per path:
