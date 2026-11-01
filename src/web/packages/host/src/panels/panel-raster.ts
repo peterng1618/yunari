@@ -397,14 +397,9 @@ export function chromiumArguments(profile: string): readonly string[] {
     // the default is one renderer per window, which pays the same heap and
     // code pages once per panel.
     "--process-per-site",
-    // Canvas rasterisation stays in the renderer that owns the canvas rather
-    // than a GPU-process surface per panel window.
-    "--disable-features=CanvasOopRasterization",
-    "--disable-gpu-rasterization",
-    "--disable-accelerated-2d-canvas",
-    // A dashboard host is not a workstation: the low-end budget keeps tile and
-    // surface pools small without moving compositing to the CPU.
-    "--enable-low-end-device-mode",
+    // No compositor or canvas-quality switches: software canvas rasterisation
+    // banded the glass gradients on the real panels, so the renderer keeps the
+    // accelerated path even though it costs private bytes.
     // A panel is a display of its own; a URL bar or scrollbar in the capture
     // would be part of the frame.
     "about:blank",

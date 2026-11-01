@@ -319,12 +319,6 @@ describe("chromiumArguments", () => {
       "--disable-renderer-backgrounding",
       // Every panel is the same origin, so one renderer serves them all.
       "--process-per-site",
-      // Canvas rasterisation stays in the renderer that owns the canvas rather
-      // than a GPU-process surface per panel window.
-      "--disable-features=CanvasOopRasterization",
-      "--disable-gpu-rasterization",
-      "--disable-accelerated-2d-canvas",
-      "--enable-low-end-device-mode",
       "about:blank",
     ]);
   });
