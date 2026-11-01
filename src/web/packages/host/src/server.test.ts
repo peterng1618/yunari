@@ -110,6 +110,15 @@ import {
 } from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
+// `vg-637` (issue #45) is the bound-port case below reddening once in a full
+// run and green alone and on re-run. Its cost is not the trigger: the case ran
+// 49ms inside a full idle suite (2026-11-02 report), and three repetitions
+// under twenty CPU-saturating processes did not redden it either. The file's
+// own slowest case is the 5.7s video import, which a starved worker start can
+// push past the global 20s. Sixty seconds keeps a genuinely hung case red while
+// surviving the gate's own contention; the cases keep their internal budgets.
+vi.setConfig({ testTimeout: 60_000 });
+
 /**
  * The encrypted stores below use a reversible protector, so this suite never
  * depends on DPAPI or a Linux keyring being present.
