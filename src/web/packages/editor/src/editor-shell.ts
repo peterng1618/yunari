@@ -777,6 +777,7 @@ export async function mountEditorShell({
         width: currentArtboard.width,
         height: currentArtboard.height,
         media: media?.backdrop(),
+        artboardShape: currentArtboard.shape ?? "rect",
       });
 
     // After the media, because a glass panel samples that layer for its backdrop.

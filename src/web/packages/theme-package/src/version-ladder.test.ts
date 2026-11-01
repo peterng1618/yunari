@@ -112,6 +112,26 @@ describe("classifyThemeChange", () => {
       reasons: ["canvas"],
     });
   });
+  it("is major when the artboard shape changes at the same size", () => {
+    // The visible glass changed from a square to a disc, so this cannot ship as
+    // a content patch.
+    const next = base({
+      artboard: { ...base().artboard, shape: "circle" },
+    });
+    expect(classifyThemeChange(base(), next)).toEqual({
+      level: "major",
+      reasons: ["canvas"],
+    });
+  });
+  it("is none when the artboard shape is unchanged", () => {
+    const disc = base({
+      artboard: { ...base().artboard, shape: "circle" },
+    });
+    expect(classifyThemeChange(disc, base({ ...disc }))).toEqual({
+      level: "none",
+      reasons: [],
+    });
+  });
   it("is major when a bound sensor is no longer bound", () => {
     const withSensor = base({
       bindings: {

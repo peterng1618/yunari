@@ -187,16 +187,10 @@ export function mountFabricScene(
   // is wired whether or not a media layer exists, because the paint is the whole
   // backdrop for a theme that declares none, and the canvas is no longer allowed
   // to hold it: a fill there sits above the media and hides it.
-  /** The screen's own surface: a circle theme's glass is the disc inscribed in
-   *  its artboard, so a panel samples black outside that disc rather than the
-   *  rectangular window. */
-  function screenSurface(): ArtboardSurface {
-    const shape = masked ? "circle" : presentation.shape;
-    return {
-      shape,
-      box: displayBox(host.clientWidth, host.clientHeight, shape),
-    };
-  }
+  /** The screen's own surface: the host rect for a rectangular display, the
+   *  disc for a round one. **The composition mask is separate** — a circle
+   *  theme on a rectangular display still samples the rectangle the player
+   *  paints the background colour across. */
   const glass = createGlass({
     canvas,
     backdrop: () =>
@@ -205,11 +199,16 @@ export function mountFabricScene(
         width: currentArtboard?.width ?? plan.artboard.width,
         height: currentArtboard?.height ?? plan.artboard.height,
         media: media?.backdrop(),
+        artboardShape: themeShape,
         // The media turns with the composition; the display's own surface does
         // not. Without this the paint a panel sees where the media is absent
         // would be the turned board rather than the host or the disc.
         angle: presentation.rotation ?? 0,
-        surface: screenSurface(),
+        surface: screenSurface(
+          presentation,
+          host.clientWidth,
+          host.clientHeight,
+        ),
       }),
     ...(options.onGlassError === undefined
       ? {}
@@ -376,6 +375,7 @@ export function mountFabricScene(
       contentFit: geometry.contentFit ?? "contain",
       shape: presentation.shape,
       layoutShape: artboardTransformShape(themeShape, presentation.shape),
+      themeShape,
       ...(presentation.rotation === undefined
         ? {}
         : { rotation: presentation.rotation }),
@@ -546,6 +546,21 @@ export function mountFabricScene(
     },
   };
 }
+/** The display's own surface a glass panel samples: the host rect, or the round
+ *  display's disc. **The composition mask is not part of it** — a circle theme
+ *  on a rectangular display is sampled as the rectangle the screen is, because
+ *  that is what the player paints around the disc's corners. */
+export function screenSurface(
+  presentation: DisplayPresentation,
+  width: number,
+  height: number,
+): ArtboardSurface {
+  return {
+    shape: presentation.shape,
+    box: displayBox(width, height, presentation.shape),
+  };
+}
+
 /** The display's own box in host pixels: the host rect for a rect display, the
  *  centred disc (`min(width, height)`) for a circle.
  *

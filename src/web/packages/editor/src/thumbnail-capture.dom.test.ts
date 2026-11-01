@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { BackdropMedia } from "@yunari/scene-fabric";
+import { artboardBackdrop, type BackdropMedia } from "@yunari/scene-fabric";
 import { type Canvas, Rect, StaticCanvas } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { captureCanvas } from "./thumbnail-capture.js";
@@ -191,6 +191,50 @@ describe("the capture's artboard shape", () => {
     for (const [x, y] of corners) {
       expect(pixelAt(picture, x, y)).toEqual(BLUE);
     }
+  });
+
+  it("clips a circle artboard's theme-bounded media to the disc", () => {
+    // A theme-bounded picture shows only inside the disc on a panel. The
+    // composited media covers the artboard square, so without the disc the
+    // stored PNG advertises image in four corners no panel ever shows.
+    const GREEN = [0, 255, 0, 255];
+    const media: BackdropMedia = {
+      rect: { left: 0, top: 0, width: SIZE, height: SIZE },
+      paint(context, region) {
+        context.fillStyle = "#ff0000";
+        context.fillRect(region.left, region.top, region.width, region.height);
+        return true;
+      },
+    };
+    const backdrop = artboardBackdrop({
+      background: "#00ff00",
+      width: SIZE,
+      height: SIZE,
+      media,
+      artboardShape: "circle",
+    });
+
+    const picture = captureCanvas(mounted(), backdrop, 640, undefined, {
+      width: SIZE,
+      height: SIZE,
+      shape: "circle",
+    });
+    if (picture === undefined)
+      throw new Error("the capture produced no picture");
+
+    for (const [x, y] of [
+      [0, 0],
+      [SIZE - 1, 0],
+      [0, SIZE - 1],
+      [SIZE - 1, SIZE - 1],
+    ] as const) {
+      expect(pixelAt(picture, x, y), "the surround, not the media").toEqual(
+        GREEN,
+      );
+    }
+    expect(pixelAt(picture, SIZE / 2, SIZE / 2), "the media inside").toEqual(
+      RED,
+    );
   });
 
   it("builds the disc from the artboard, not the host canvas", () => {

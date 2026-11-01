@@ -521,6 +521,33 @@ describe("computeArtboardTransform — rotation and shape", () => {
     expect(t.contentFit).toBe("contain");
   });
 
+  it("forces the rect contain rule on a circle theme, whatever fit it declares", () => {
+    // The spec's rule is a guarantee, not a default: an authored `cover` on a
+    // circle theme would scale the disc past the display's short edge.
+    const t = computeArtboardTransform({
+      artboard: { width: 100, height: 100 },
+      viewport: { width: 300, height: 200 },
+      shape: "rect",
+      layoutShape: "rect",
+      themeShape: "circle",
+      contentFit: "cover",
+    });
+
+    expect(t.scale).toBe(2); // contain: min(300/100, 200/100)
+    expect(t.contentFit).toBe("contain");
+  });
+
+  it("keeps a rect theme's declared cover", () => {
+    const t = computeArtboardTransform({
+      artboard: { width: 100, height: 100 },
+      viewport: { width: 300, height: 200 },
+      contentFit: "cover",
+    });
+
+    expect(t.scale).toBe(3);
+    expect(t.contentFit).toBe("cover");
+  });
+
   it("refuses a rect layout at a non-quarter angle on a rect display", () => {
     expect(() =>
       computeArtboardTransform({

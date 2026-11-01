@@ -102,6 +102,13 @@ export interface ComputeArtboardTransformInput {
    * to the display. Defaults to `shape`.
    */
   readonly layoutShape?: DisplayShape;
+  /**
+   * The authored artboard's shape. A circle theme's artboard is a square masked
+   * by a disc, so it always uses the rect **contain** rule whatever fit the
+   * document declares: a `cover` would scale the disc past the screen's short
+   * edge. A rect theme keeps honouring its own `contentFit`.
+   */
+  readonly themeShape?: ArtboardShape;
 }
 
 /** Computes the centred rotate-then-fit transform. Invalid geometry or angle throws. */
@@ -109,7 +116,8 @@ export function computeArtboardTransform(
   input: ComputeArtboardTransformInput,
 ): ArtboardTransform {
   const { artboard, viewport } = input;
-  const contentFit = input.contentFit ?? "contain";
+  const contentFit =
+    input.themeShape === "circle" ? "contain" : (input.contentFit ?? "contain");
   const shape = input.shape ?? "rect";
   const layoutShape = input.layoutShape ?? shape;
   const rotation = readRotation(shape, input.rotation);

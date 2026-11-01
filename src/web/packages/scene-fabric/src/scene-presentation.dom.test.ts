@@ -4,7 +4,7 @@ import type { DisplayPresentation, ScenePlan } from "@yunari/renderer-core";
 import { viewportToDocument } from "@yunari/renderer-core";
 import { Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { mountFabricScene } from "./scene.js";
+import { mountFabricScene, screenSurface } from "./scene.js";
 import { host, plan, resizeHost } from "./scene-test-fixtures.js";
 
 describe("mountFabricScene's display presentation", () => {
@@ -169,6 +169,26 @@ describe("mountFabricScene's display presentation", () => {
 
     scene.dispose();
     element.remove();
+  });
+
+  it("samples the display's own surface, not the composition mask", () => {
+    // A circle theme on a rectangular display paints its background colour in
+    // the corners, so a panel overlapping one samples that colour — not the
+    // black the theme's disc would put there. On a round display outside the
+    // glass is genuinely black and stays so.
+    expect(screenSurface({ shape: "rect" }, 400, 300), "the host rect").toEqual(
+      {
+        shape: "rect",
+        box: { left: 0, top: 0, width: 400, height: 300 },
+      },
+    );
+    expect(
+      screenSurface({ shape: "circle" }, 400, 300),
+      "the round screen",
+    ).toEqual({
+      shape: "circle",
+      box: { left: 50, top: 0, width: 300, height: 300, radius: "circle" },
+    });
   });
 
   /** Samples the glass backdrop at a viewport point, the way the player does:

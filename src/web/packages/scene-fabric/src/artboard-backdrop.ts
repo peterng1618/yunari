@@ -1,4 +1,4 @@
-import type { DisplayShape } from "@yunari/renderer-core";
+import type { ArtboardShape, DisplayShape } from "@yunari/renderer-core";
 import { fillArtboardPaint } from "./artboard-paint.js";
 import type { MediaBox } from "./background-media.js";
 import type {
@@ -30,6 +30,11 @@ export interface ArtboardBackdropOptions {
    *  absent or transparent. Absent keeps the board's own rect as the paint
    *  surface, the behaviour the earlier direct-call cases pin. */
   readonly surface?: ArtboardSurface;
+  /** The authored canvas's shape. A circle artboard's theme-bounded media is
+   *  the disc inscribed in the board, so a panel and a stored thumbnail see the
+   *  same picture: the board's colour in the four corners. Display-bounded
+   *  media keeps its own geometry and is clipped only by the display. */
+  readonly artboardShape?: ArtboardShape;
 }
 
 /**
@@ -77,6 +82,23 @@ export function artboardBackdrop(
       // The media first and the paint **underneath** it, so a frame the media
       // could not paint is left where it was: clearing to the colour
       // first would throw away the one frame the reader would otherwise keep.
+      const disc =
+        options.artboardShape === "circle" && screenRect === undefined;
+      if (disc) {
+        // **A theme-bounded picture on a circle artboard is the disc**, the same
+        // rule the media layer applies in the DOM. Clipping here rather than in
+        // each caller keeps the panel and the stored thumbnail on one decision.
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(
+          device.left + device.width / 2 - region.left,
+          device.top + device.height / 2 - region.top,
+          Math.min(device.width, device.height) / 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.clip();
+      }
       if (media !== undefined)
         media.paint(
           ctx,
@@ -86,6 +108,7 @@ export function artboardBackdrop(
             : device,
           sampling,
         );
+      if (disc) ctx.restore();
       ctx.save();
       ctx.globalCompositeOperation = "destination-over";
       if (surface === undefined) {

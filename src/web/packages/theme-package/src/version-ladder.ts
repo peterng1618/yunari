@@ -355,7 +355,9 @@ function compareSceneNode(
   return merged(changes);
 }
 
-const ARTBOARD_VOLATILE_KEYS = ["width", "height"] as const;
+// `shape` rides with the canvas: a square theme becoming a disc changes the
+// visible glass, so it cannot ship as a content patch.
+const ARTBOARD_VOLATILE_KEYS = ["width", "height", "shape"] as const;
 
 function artboardChange(
   before: unknown,
@@ -363,7 +365,10 @@ function artboardChange(
 ): ThemeChange | undefined {
   const a = isRecord(before) ? before : {};
   const b = isRecord(after) ? after : {};
-  const canvas = a["width"] !== b["width"] || a["height"] !== b["height"];
+  const canvas =
+    a["width"] !== b["width"] ||
+    a["height"] !== b["height"] ||
+    a["shape"] !== b["shape"];
   const content =
     stable(withoutKeys(a, ARTBOARD_VOLATILE_KEYS)) !==
     stable(withoutKeys(b, ARTBOARD_VOLATILE_KEYS));
