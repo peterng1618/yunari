@@ -401,8 +401,8 @@ async function start(): Promise<void> {
           () => shell.editor.groupingManager.suspendDim(),
           // A library or store card is what a panel would show, so a circle
           // theme's card is its disc, not the square the camera happened to
-          // frame.
-          extensions.envelope.artboard.shape ?? "rect",
+          // frame. The artboard carries the size the disc is built in.
+          extensions.envelope.artboard,
         )?.toDataURL("image/png"),
       // The theme's paints, for the Tokens pane's title-bar count. The
       // session owns the document, so this is pulled at each snapshot rather

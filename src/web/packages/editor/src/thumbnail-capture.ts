@@ -1,4 +1,4 @@
-import type { ArtboardShape } from "@yunari/renderer-core";
+import type { Artboard } from "@yunari/renderer-core";
 import type { BackdropMedia } from "@yunari/scene-fabric";
 import { type Canvas, Circle } from "fabric/es";
 
@@ -34,7 +34,7 @@ export function captureCanvas(
    * must be that disc: a card showing the square would advertise a picture the
    * panel never shows, whatever lens the author was using at the time.
    */
-  shape: ArtboardShape = "rect",
+  artboard?: Pick<Artboard, "width" | "height" | "shape">,
 ): HTMLCanvasElement | undefined {
   const width = canvas.width;
   const height = canvas.height;
@@ -46,31 +46,38 @@ export function captureCanvas(
 
   const scale = Math.min(1, maxEdge / Math.max(width, height));
   const previousClip = canvas.clipPath;
-  if (shape === "circle") {
-    // Absolute, so the export's own multiplier scales it with the scene rather
-    // than placing it in the author's camera.
-    canvas.clipPath = new Circle({
-      radius: Math.min(width, height) / 2,
-      left: width / 2,
-      top: height / 2,
-      originX: "center",
-      originY: "center",
-      absolutePositioned: true,
-      excludeFromExport: true,
-    });
-  }
-  // Only the shot is taken with the view state lifted: everything below is the
-  // media the canvas cannot see, which carries no view state of its own.
-  const release = suspendViewState();
+  let release: () => void = () => {};
   let scene: HTMLCanvasElement;
   try {
+    if (artboard?.shape === "circle") {
+      // `canvas.clipPath` is drawn after the viewport transform, so it lives in
+      // scene units, not canvas pixels: the disc is built from the artboard's
+      // own size, exactly as the editor's `artboardClip` does. `absolutePositioned`
+      // is inert for a canvas-level clip (it positions an *object's* clip), but
+      // the disc is stated in scene units either way.
+      canvas.clipPath = new Circle({
+        radius: Math.min(artboard.width, artboard.height) / 2,
+        left: artboard.width / 2,
+        top: artboard.height / 2,
+        originX: "center",
+        originY: "center",
+        absolutePositioned: true,
+        excludeFromExport: true,
+      });
+    }
+    // Only the shot is taken with the view state lifted: everything below is the
+    // media the canvas cannot see, which carries no view state of its own.
+    release = suspendViewState();
     scene = canvas.toCanvasElement(scale);
   } finally {
-    release();
-    // The author's canvas keeps its own clip, whatever the shot needed. A
-    // canvas that had none gets none back rather than an explicit `undefined`.
-    if (previousClip === undefined) delete canvas.clipPath;
-    else canvas.clipPath = previousClip;
+    try {
+      release();
+    } finally {
+      // The author's canvas keeps its own clip, whatever the shot needed. A
+      // canvas that had none gets none back rather than an explicit `undefined`.
+      if (previousClip === undefined) delete canvas.clipPath;
+      else canvas.clipPath = previousClip;
+    }
   }
   if (backdrop === undefined) return scene;
 
@@ -110,14 +117,14 @@ export async function captureThumbnail(
   maxEdge = MAX_EDGE,
   backdrop?: BackdropMedia,
   suspendViewState: () => () => void = () => () => {},
-  shape: ArtboardShape = "rect",
+  artboard?: Pick<Artboard, "width" | "height" | "shape">,
 ): Promise<Uint8Array | undefined> {
   const source = captureCanvas(
     canvas,
     backdrop,
     maxEdge,
     suspendViewState,
-    shape,
+    artboard,
   );
   if (source === undefined) {
     return undefined;

@@ -173,13 +173,11 @@ describe("the capture's artboard shape", () => {
     // A circle theme ships as the disc inscribed in its artboard, so a card
     // showing the square would advertise a picture the panel never shows.
     const canvas = mounted();
-    const picture = captureCanvas(
-      canvas,
-      blueBackdrop(),
-      640,
-      undefined,
-      "circle",
-    );
+    const picture = captureCanvas(canvas, blueBackdrop(), 640, undefined, {
+      width: SIZE,
+      height: SIZE,
+      shape: "circle",
+    });
     if (picture === undefined)
       throw new Error("the capture produced no picture");
 
@@ -195,6 +193,46 @@ describe("the capture's artboard shape", () => {
     }
   });
 
+  it("builds the disc from the artboard, not the host canvas", () => {
+    // The host canvas is 400x300 around a 100x100 artboard at zoom 2, so canvas
+    // pixels and artboard units coincide nowhere: a disc sized from the canvas
+    // lands off the board and the picture loses it.
+    const stage = new StaticCanvas(document.createElement("canvas"), {
+      width: 400,
+      height: 300,
+    });
+    stage.viewportTransform = [2, 0, 0, 2, 100, 50];
+    stage.add(
+      new Rect({
+        left: -1000,
+        top: -1000,
+        width: 3000,
+        height: 3000,
+        originX: "left",
+        originY: "top",
+        fill: "#ff0000",
+      }),
+    );
+    stage.renderAll();
+
+    const picture = captureCanvas(
+      stage as unknown as Canvas,
+      blueBackdrop(),
+      640,
+      undefined,
+      { width: SIZE, height: SIZE, shape: "circle" },
+    );
+    if (picture === undefined)
+      throw new Error("the capture produced no picture");
+
+    // The artboard's disc centre is scene (50,50), which the camera puts at
+    // export (200,150).
+    expect(pixelAt(picture, 200, 150)).toEqual(RED);
+    // Scene (145,75) is outside the artboard's disc but inside a disc sized
+    // from the 400x300 canvas (radius 150 at scene 200,150).
+    expect(pixelAt(picture, 390, 200)).toEqual(BLUE);
+  });
+
   it("puts the live clip back when the shot is done", () => {
     // The author's canvas must not be left wearing the thumbnail's disc.
     const sentinel = new Rect({
@@ -206,7 +244,11 @@ describe("the capture's artboard shape", () => {
       absolutePositioned: true,
     });
     const canvas = mounted(sentinel);
-    captureCanvas(canvas, blueBackdrop(), 640, undefined, "circle");
+    captureCanvas(canvas, blueBackdrop(), 640, undefined, {
+      width: SIZE,
+      height: SIZE,
+      shape: "circle",
+    });
     expect(canvas.clipPath).toBe(sentinel);
   });
 });

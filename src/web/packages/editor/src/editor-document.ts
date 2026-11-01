@@ -459,8 +459,8 @@ export class EditorDocument {
         // the dim the author is working behind (`vg-527`).
         () => this.#shell.editor.groupingManager.suspendDim(),
         // A circle theme's picture is its disc, not the square the camera
-        // happened to show.
-        this.#envelope.artboard.shape ?? "rect",
+        // happened to show. The artboard carries the size the disc is built in.
+        this.#envelope.artboard,
       );
     } catch {
       return undefined;
