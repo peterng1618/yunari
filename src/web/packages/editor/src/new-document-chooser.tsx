@@ -221,7 +221,10 @@ export function NewDocumentChooser({
           />
           {/* The free size the panel already carries, through the panel's own
               pair so the chooser and the panel bound an author's dimensions the
-              same way rather than the chooser inventing a second pair. */}
+              same way rather than the chooser inventing a second pair. A circle
+              is the exception the pair itself does not know: it is drawn on a
+              square, so an edge typed while Shape is Circle writes both, and
+              the answer is never a circle the validator refuses. */}
           <ControlPair
             label={uiCopy.panels.size}
             halves={[
@@ -232,7 +235,11 @@ export function NewDocumentChooser({
                 integer: true,
                 min: 1,
                 max: MAX_ARTBOARD_DIMENSION,
-                onCommit: (width) => adopt({ width, height: chosen.height }),
+                onCommit: (width) =>
+                  adopt({
+                    width,
+                    height: shape === "circle" ? width : chosen.height,
+                  }),
               },
               {
                 label: uiCopy.panels.heightMark,
@@ -241,7 +248,11 @@ export function NewDocumentChooser({
                 integer: true,
                 min: 1,
                 max: MAX_ARTBOARD_DIMENSION,
-                onCommit: (height) => adopt({ width: chosen.width, height }),
+                onCommit: (height) =>
+                  adopt({
+                    width: shape === "circle" ? height : chosen.width,
+                    height,
+                  }),
               },
             ]}
           />

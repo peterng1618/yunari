@@ -220,6 +220,32 @@ describe("the new-document chooser", () => {
     });
   });
 
+  it("a circle size stays square when one edge is typed", async () => {
+    const pending = open();
+
+    await chooseIn("shape", "circle");
+    await type("width", "1200");
+
+    // A disc is drawn on a square, so the edge the author did not type follows
+    // the one they did. A pair that wrote only itself would answer a circle
+    // with two sizes, which the validator refuses — the document would open and
+    // throw on its first save.
+    expect(size(), "the readout is square").toContain("1200 × 1200");
+    expect(
+      document.querySelector<HTMLInputElement>(
+        "[data-yunari-new-document-height]",
+      )?.value,
+      "the height field shows the square's edge",
+    ).toBe("1200");
+
+    create();
+    await expect(pending).resolves.toEqual({
+      size: { width: 1200, height: 1200 },
+      shape: "circle",
+      display: "16:9",
+    });
+  });
+
   it("hides Ratio and Orientation for a circle, and keeps Resolution", async () => {
     void open();
 
