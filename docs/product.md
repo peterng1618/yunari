@@ -26,7 +26,11 @@ The host also serves a settings page and a `/pair` page for displays.
 - **Authoring.** Shapes, text, images/SVG, groups, layers, undo, snapping and
   reusable card widgets on a Fabric canvas. Six chart families (gauge, line, bar,
   pie, radar and polar bar), rich text and typography presets, paints and type
-  tokens, and a frosted-glass treatment for shapes.
+  tokens, and a frosted-glass treatment for shapes. A theme's artboard is
+  rectangular or circular. A circular theme is a square artboard whose glass is
+  the disc inscribed in it: the four corners fall outside the glass and are
+  cropped on output. A rectangular theme shown on a round panel keeps its
+  artboard inscribed in the disc, corners on the ring.
 - **Theme library and store.** Themes are local first. The editor can browse a
   Cloudflare-hosted catalogue, install a package, sign in to submit a theme and
   see its own submissions.

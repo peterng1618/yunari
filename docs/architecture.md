@@ -101,6 +101,9 @@ provider or display that falls behind is dropped rather than growing memory.
   `fabricVersion`, `id`, `metadata`, `artboard`, `background`, `globals`,
   `assets`, `bindings`, `editorMetadata` and `scene`.
 - `scene` is Fabric JSON. There is no second scene representation.
+- `artboard` is `{ width, height, contentFit, shape? }`; `shape` is `rect` or
+  `circle`, and absent means `rect`. A circle artboard is square and its glass
+  is the inscribed disc; the field is additive, so the schema stays `2.0.0`.
 - Current schema is `2.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are
   keyed by the major they migrate from. Missing migration or newer major is a
   refusal, never a best-effort read.
