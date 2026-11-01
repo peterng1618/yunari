@@ -207,11 +207,11 @@ export function ShellMenuBar({
       <MenuGroup label={uiCopy.menus.file}>
         {/* A File row prints a chord where the row and its `PRODUCT_SHORTCUTS`
             id run the same call — `item`'s fourth argument — and each of the
-            three names the call it shares. `newFromTemplate`, `exportTheme`
-            and `openLibrary` carry none because the table binds nothing for
-            them, not because a File row cannot have one. `savePackage` carries
-            none either: `Ctrl+S` is the library save, and the package is the
-            explicit export that downloads. */}
+            three names the call it shares. `newFromTemplate`, `exportTheme`,
+            `openLibrary`, `openRecent` and `saveAs` carry none because the table
+            binds nothing for them, not because a File row cannot have one.
+            `savePackage` carries none either: `Ctrl+S` is the library save, and
+            the package is the explicit export that downloads. */}
         {/* `file.new` → `#document.newDocument()`. */}
         {item(
           uiCopy.file.newDocument,
@@ -236,12 +236,17 @@ export function ShellMenuBar({
         {item(uiCopy.file.savePackage, () => void session?.savePackage())}
         {item(uiCopy.file.exportTheme, () => void session?.releasePackage())}
         {item(uiCopy.file.openLibrary, () => void session?.openLibrary())}
+        {/* No chord: the table binds none, the same as Open and Save as. */}
+        {item(uiCopy.file.openRecent, () => void session?.openRecent())}
         {item(
           uiCopy.file.saveLibrary,
           () => void session?.saveLibrary(),
           false,
           "file.save",
         )}
+        {/* Beside Save, because the two are the same act on two targets — the
+            open theme and a new one — and the author chooses between them. */}
+        {item(uiCopy.file.saveAs, () => void session?.saveAs())}
       </MenuGroup>
       <MenuGroup label={uiCopy.menus.edit}>
         {/* A row names an id only when that binding reaches the same manager the

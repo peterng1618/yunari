@@ -257,6 +257,8 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     openLibraryTheme: (id, onAccepted) =>
       document.openLibraryTheme(id, onAccepted),
     saveLibrary: () => document.saveLibrary(),
+    openRecent: () => document.openRecentLibrary(),
+    saveAs: () => document.saveLibraryAs(),
     // The constructions the shell dispatches are wrapped in the one owner of
     // a construction's refusal (`new-object-panel.ts`), because the surfaces
     // that reach them — the layer footer through `bridge.run`, and the canvas

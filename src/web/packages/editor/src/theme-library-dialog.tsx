@@ -4,6 +4,7 @@ import {
   type ControlOption,
   ControlSelect,
 } from "./components/ui/control-select.js";
+import { ControlText } from "./components/ui/control-text.js";
 import { ACTION_BUTTON, Dialog } from "./components/ui/dialog.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
 import { openModal } from "./components/ui/modal-host.js";
@@ -429,6 +430,63 @@ export function ThemeConflict({
 }
 
 /**
+ * Asks for the name a **Save as** writes the open document under.
+ *
+ * A real dialog rather than the browser's `prompt`, because the name is a
+ * document fact the editor can read and show while it is being changed, and
+ * because the answer is a string the caller can cancel — an empty name is not
+ * an answer, so the action stays disabled until the field holds one.
+ */
+export function ThemeSaveAsDialog({
+  initialName,
+  settle,
+}: {
+  readonly initialName: string;
+  readonly settle: ModalSettle<string>;
+}): React.JSX.Element {
+  const [name, setName] = useState(initialName);
+  const trimmed = name.trim();
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) settle.dismiss();
+      }}
+      label={uiCopy.library.saveAs.title}
+    >
+      <p className="editor-shell-dialog-lead">{uiCopy.library.saveAs.lead}</p>
+      <div className="flex flex-col gap-[var(--space-8)]">
+        <ControlText
+          label={uiCopy.library.saveAs.name}
+          data={{ "data-yunari-save-as-name": "" }}
+          value={name}
+          onCommit={setName}
+        />
+        <div className="yunari-dialog-actions">
+          <button
+            type="button"
+            className={ACTION_BUTTON}
+            data-yunari-save-as-cancel=""
+            onClick={settle.dismiss}
+          >
+            {uiCopy.library.cancel}
+          </button>
+          <button
+            type="button"
+            className={ACTION_BUTTON}
+            data-yunari-save-as-confirm=""
+            disabled={trimmed.length === 0}
+            onClick={() => settle.close(trimmed)}
+          >
+            {uiCopy.library.saveAs.action}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
  * Asks which theme to open: the product's templates, or the author's own.
  *
  * A dismissal — Cancel, Escape, a host closing it — resolves `undefined`, which
@@ -453,4 +511,12 @@ export function promptThemeConflict(): Promise<
   ThemeConflictChoice | undefined
 > {
   return openModal((settle) => createElement(ThemeConflict, { settle }));
+}
+
+export function promptThemeSaveAs(
+  initialName: string,
+): Promise<string | undefined> {
+  return openModal((settle) =>
+    createElement(ThemeSaveAsDialog, { initialName, settle }),
+  );
 }

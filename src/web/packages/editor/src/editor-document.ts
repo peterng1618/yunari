@@ -281,6 +281,7 @@ export class EditorDocument {
         this.#dirty = undefined;
       },
       announceChange: this.announceChange,
+      adoptIdentity: (id, name) => this.adoptIdentity(id, name),
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
       // The title is the save the author pressed; the library's own is the one
@@ -537,6 +538,28 @@ export class EditorDocument {
   /** Opens a stored theme, or the reference composition as a template. */
   openLibrary(): Promise<void> {
     return this.#library.open();
+  }
+
+  /** Opens the most recently saved theme that is not this document. */
+  openRecentLibrary(): Promise<void> {
+    return this.#library.openRecent();
+  }
+
+  /** Writes this document under a new theme, leaving its own stored theme
+   *  untouched, and continues as the new one. */
+  saveLibraryAs(): Promise<void> {
+    return this.#library.saveAs();
+  }
+
+  /** Re-identifies this document as the theme a **Save as** wrote: its id is
+   *  the library folder the next save updates and its name is what the identity
+   *  chip reads. The rest of the document is the author's, unchanged. */
+  adoptIdentity(id: string, name: string): void {
+    this.#writeEnvelope({
+      ...this.#envelope,
+      id,
+      metadata: { ...(this.#envelope.metadata ?? {}), name },
+    });
   }
 
   /** Opens one theme the library already holds, by id: the store's own route,

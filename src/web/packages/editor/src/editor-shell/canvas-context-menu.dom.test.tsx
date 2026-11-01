@@ -62,6 +62,8 @@ function facadeStub(): EditorActionFacade {
     releasePackage: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
+    openRecent: vi.fn(async () => undefined),
+    saveAs: vi.fn(async () => undefined),
     addText: vi.fn(),
     addShape: vi.fn(),
     addChart: vi.fn(),

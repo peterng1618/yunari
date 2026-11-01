@@ -44,6 +44,12 @@ export interface EditorActionFacade {
    *  caller that must move a surface moves it only for an open that happens. */
   openLibraryTheme(id: string, onAccepted?: () => void): Promise<void>;
   saveLibrary(): Promise<void>;
+  /** The File menu's **Open recent**: the newest stored theme that is not the
+   *  document that is open. */
+  openRecent(): Promise<void>;
+  /** The File menu's **Save as**: writes the open document under a new theme
+   *  and continues as it, leaving the theme it came from untouched. */
+  saveAs(): Promise<void>;
   addText(): void;
   /** Freezes the selected text, as the author sees it, into vector paths. The
    *  document owns the theme's fonts and the bindings the frozen object stops

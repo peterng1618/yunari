@@ -70,6 +70,8 @@ function facade(): EditorActionFacade {
     releasePackage: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
+    openRecent: vi.fn(async () => undefined),
+    saveAs: vi.fn(async () => undefined),
     addText: vi.fn(),
     addShape: vi.fn(),
     addChart: vi.fn(),
@@ -1378,6 +1380,10 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
     [uiCopy.file.savePackage, undefined],
     [uiCopy.file.exportTheme, undefined],
     [uiCopy.file.openLibrary, undefined],
+    [uiCopy.file.openRecent, undefined],
+    // Before `saveLibrary`: the row lookup below takes the first key a row's
+    // text starts with, and "Save as" starts with "Save".
+    [uiCopy.file.saveAs, undefined],
     [uiCopy.file.saveLibrary, "file.save"],
   ]);
 
@@ -1462,6 +1468,36 @@ it("runs the import from the File row, and nothing else", async () => {
 
   layout.destroy();
 });
+
+/** The two library rows the top bar owes, each its own entry rather than a
+ *  modifier of Open or Save, which is the ruling (`#35`). */
+for (const [label, pick] of [
+  [uiCopy.file.openRecent, (session: EditorActionFacade) => session.openRecent],
+  [uiCopy.file.saveAs, (session: EditorActionFacade) => session.saveAs],
+] as const) {
+  it(`runs ${label} from its own File row`, async () => {
+    const root = document.createElement("div");
+    const layout = createShellLayout(root);
+    const session = facade();
+    layout.setBridge(bridgeStub({ session }), undefined);
+    await Promise.resolve();
+
+    await act(async () => menubarEntry(root, uiCopy.menus.file).click());
+    await Promise.resolve();
+    const row = menuItems().find((item) =>
+      (item.textContent ?? "").startsWith(label),
+    );
+    if (row === undefined) throw new Error(`No ${label} row.`);
+    await act(async () => row.click());
+
+    expect(
+      pick(session),
+      `${label} did not reach the session`,
+    ).toHaveBeenCalledTimes(1);
+
+    layout.destroy();
+  });
+}
 
 /** The three mode segments, in the order the header draws them. */
 function modeSegments(root: HTMLElement): readonly HTMLButtonElement[] {

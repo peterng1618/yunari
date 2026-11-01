@@ -910,7 +910,13 @@ export const uiCopy = {
      *  author hands on, not the save that keeps their work. */
     exportTheme: "Export theme",
     openLibrary: "Open",
+    /** The newest stored theme that is not the open document, opened by its own
+     *  `openById` road so the replacement question and the base stay there. */
+    openRecent: "Open recent",
     saveLibrary: "Save",
+    /** Writes the open document under a new theme id, leaving the theme it came
+     *  from as it is. The editor then continues as the new theme. */
+    saveAs: "Save as",
   },
   /** The chooser `New` opens before the document exists. The first control is
    *  the display a theme is for, and its entries are the display switch's own
@@ -1340,6 +1346,22 @@ export const uiCopy = {
       overwrite: "Replace it with mine",
       cancel: "Keep editing",
     },
+    /** **Save as**: names the new theme the open document is written under. The
+     *  lead says what the act leaves alone, because saving over the open theme
+     *  is the other File row and the two must not read alike. */
+    saveAs: {
+      title: "Save as a new theme",
+      lead: "Save this document under a new theme name. The theme it came from stays as it is.",
+      name: "Theme name",
+      action: "Save as",
+    },
+    /** The status line's word after a save-as, naming the theme the editor now
+     *  continues as. */
+    savedAs: (name: string): string => `Saved as ${name}`,
+    /** Open recent with no candidate: every stored theme is the open one, or
+     *  the library is empty. Said rather than left silent, because a menu row
+     *  that does nothing is indistinguishable from a broken one. */
+    noOtherTheme: "No other saved theme to open.",
   },
   /** The package the picker brings in. Its landing word says what happened — a
    *  package written into the library — because the same line used to report a

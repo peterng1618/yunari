@@ -250,6 +250,26 @@ describe("EditorDocument dirty state", () => {
     for (const flush of queued) flush();
     expect(document.isDirty()).toBe(false);
   });
+
+  it("adopts the id and name a Save as wrote, so the next save is that theme", () => {
+    // The manager writes first and adopts afterwards; this is the document half
+    // of that pair — the chip and the next save both read the envelope, never a
+    // second copy of the identity.
+    const document = documentWith({
+      envelope: createBlankFabricTheme({
+        width: 640,
+        height: 360,
+      }) as unknown as FabricThemeEnvelopeInput,
+    });
+
+    document.adoptIdentity("kitchen-copy", "Kitchen copy");
+
+    expect(document.envelope.id).toBe("kitchen-copy");
+    expect(document.snapshot().metadata?.name).toBe("Kitchen copy");
+    // Identity is authored state, so the adoption is a change until the save
+    // that wrote it marks the document saved.
+    expect(document.isDirty()).toBe(true);
+  });
 });
 
 describe("EditorDocument change notification", () => {

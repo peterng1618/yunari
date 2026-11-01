@@ -1,199 +1,33 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import type { ThemeCredits, ThemeCreditsEntry } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
+import { ThemeConflictError } from "../theme-library-client.js";
+import { uiCopy } from "../ui-copy.js";
 import {
-  AssetManager,
-  type LocalAssetReference,
-} from "../asset-manager/index.js";
-import type { CleanupAnswer } from "../editor-document.js";
-import type { ErrorManager } from "../error-manager/index.js";
-import {
-  ThemeConflictError,
-  type ThemeLibraryClient,
-} from "../theme-library-client.js";
-import { ThemeLibraryManager } from "./index.js";
+  assetsWith,
+  CREDITS,
+  declaration,
+  envelope,
+  harness,
+  listed,
+  OTHER,
+  PARENT,
+  PNG,
+  savedCalls,
+  storedInstalled,
+  UUID,
+} from "./index.fixtures.js";
 
 /** Both dialogs are React components with no node implementation, and both are
  *  answers rather than behaviour: what the author picked is the only difference
  *  between two roads through this manager. */
 const selectionMock = vi.hoisted(() => vi.fn());
 const conflictMock = vi.hoisted(() => vi.fn());
+const saveAsMock = vi.hoisted(() => vi.fn());
 vi.mock("../theme-library-dialog.js", () => ({
   promptThemeSelection: () => selectionMock(),
   promptThemeConflict: () => conflictMock(),
+  promptThemeSaveAs: () => saveAsMock(),
 }));
-
-const envelope: FabricThemeEnvelope = {
-  schemaVersion: "2.0.0",
-  fabricVersion: "7.4.0",
-  id: "living-room",
-  artboard: { width: 1920, height: 1080 },
-  scene: { version: "7.4.0", objects: [] },
-};
-
-/** An installed theme as the library stored it: it declares everything the
- *  remix has to drop, including a credit of its own — a saved remix has no
- *  host origin record, so the chooser offers it Duplicate. */
-const storedInstalled: FabricThemeEnvelope = {
-  ...envelope,
-  metadata: {
-    name: "Primary",
-    author: "Ada",
-    version: "1.2.0",
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-02-01T00:00:00.000Z",
-    themeLanguage: "en",
-    remixOf: {
-      catalogueId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f2a3b4c5d",
-      name: "Ancestor",
-      version: "1.0.0",
-    },
-  },
-};
-
-const PARENT = {
-  catalogueId: "5f0c4f30-0f8c-4e4f-9c1f-1f0f0f0f0f0f",
-  name: "Primary",
-  version: "1.2.0",
-} as const;
-
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const PNG = new Uint8Array([137, 80, 78, 71]);
-const OTHER = new Uint8Array([137, 80, 78, 72]);
-const CREDITS: ThemeCredits = {
-  format: "yunari-theme-credits",
-  version: 1,
-  entries: [
-    {
-      kind: "icon",
-      title: "Badge",
-      license: "ISC v2",
-      changes: "Imported unchanged",
-    },
-  ],
-};
-
-function declaration(id: string, sha256: string): LocalAssetReference {
-  return { id, kind: "image", path: `assets/${id}.png`, sha256 };
-}
-
-/** A manager holding these declarations, as the shell hands one over once it
- *  has revived the document's scene. */
-function assetsWith(
-  declarations: readonly LocalAssetReference[],
-  bytes: Readonly<Record<string, Uint8Array>>,
-): AssetManager {
-  const assets = new AssetManager();
-  assets.load({ assets: declarations }, bytes);
-  return assets;
-}
-
-/** What a request body carries, kept in one place so a test asserts on the save
- *  rather than on a transcription of it. */
-interface SaveCall {
-  readonly id: string;
-  readonly base: string | undefined;
-  readonly assets: Readonly<Record<string, Uint8Array>>;
-  readonly overwrite: boolean;
-}
-
-function savedCalls(save: ReturnType<typeof vi.fn>): SaveCall[] {
-  return save.mock.calls.map(([id, content, options]) => ({
-    id: id as string,
-    base: (content as { readonly base?: string }).base,
-    assets: (
-      content as { readonly assets: Readonly<Record<string, Uint8Array>> }
-    ).assets,
-    overwrite: (options as { readonly overwrite: boolean }).overwrite,
-  }));
-}
-
-function harness(options: {
-  readonly assets?: AssetManager;
-  readonly base?: string;
-  readonly picture?: () => Promise<Uint8Array | undefined>;
-  readonly client?: Partial<ThemeLibraryClient>;
-  /** The answer to the replacement question. `true` unless a case is about the
-   *  refusal, which is the one road that reads nothing. */
-  readonly confirm?: () => Promise<boolean>;
-  /** The document's cleanup question, which this manager asks before writing.
-   *  Nothing unused by default, so an existing case is not about it. */
-  readonly cleanup?: () => Promise<CleanupAnswer>;
-  readonly credits?: () => ThemeCredits | undefined;
-}) {
-  const save = vi.fn(async () => "base-after-save");
-  const open = vi.fn(async () => ({
-    envelope,
-    assets: {},
-    base: "base-from-open",
-  }));
-  const saveThumbnail = vi.fn(async () => {});
-  // Spies rather than inert stubs: the manager calls neither, and a test that
-  // means to forbid a call can read that off them rather than trusting a
-  // default that would resolve either way.
-  const assign = vi.fn(async () => undefined);
-  const listDisplays = vi.fn(async () => ({ default: null, displays: [] }));
-  const markSaved = vi.fn();
-  const announceChange = vi.fn();
-  const warn = vi.fn();
-  const onSaved = vi.fn();
-  const onError = vi.fn();
-  const onNewFromStarter = vi.fn(async () => {});
-  const onOpenTheme = vi.fn<
-    (
-      envelope: FabricThemeEnvelope,
-      assets: Readonly<Record<string, Uint8Array>>,
-      base?: string,
-      credits?: readonly ThemeCreditsEntry[],
-    ) => Promise<void>
-  >(async () => {});
-  const errors: ErrorManager = { error: vi.fn(), warn };
-  // Built before the manager so the harness can hand back the very client it
-  // wired: the defaults above are not what the manager received once an
-  // override lands, and asserting on one of them would pass for the wrong
-  // reason.
-  const client: ThemeLibraryClient = {
-    list: async () => [],
-    open,
-    save,
-    saveThumbnail,
-    assign,
-    listDisplays,
-    ...options.client,
-  };
-  const manager = new ThemeLibraryManager({
-    snapshot: () => envelope,
-    assets: options.assets ?? assetsWith([], {}),
-    ...(options.credits === undefined ? {} : { credits: options.credits }),
-    picture: options.picture ?? (async () => undefined),
-    markSaved,
-    announceChange,
-    errors,
-    confirmReplacement: options.confirm ?? (async () => true),
-    confirmCleanup: options.cleanup ?? (async () => ({ proceed: true })),
-    onSaved,
-    onNewFromStarter,
-    client,
-    onError,
-    onOpenTheme,
-    ...(options.base === undefined ? {} : { base: options.base }),
-  });
-  return {
-    manager,
-    client,
-    save,
-    saveThumbnail,
-    markSaved,
-    announceChange,
-    warn,
-    onSaved,
-    onError,
-    onNewFromStarter,
-    onOpenTheme,
-  };
-}
 
 describe("ThemeLibraryManager", () => {
   it("holds the stored base only while the document descends from one", () => {
@@ -654,5 +488,195 @@ describe("ThemeLibraryManager", () => {
     const { client } = harness({ client: { assign: custom } });
 
     expect(client.assign).toBe(custom);
+  });
+
+  describe("Save as", () => {
+    it("writes a new id, rebases, and leaves the theme it came from untouched", async () => {
+      let current: FabricThemeEnvelope = envelope;
+      saveAsMock.mockReset();
+      saveAsMock.mockResolvedValue("Living room copy");
+      // An asset the old theme's folder already holds: a save-as still has to
+      // send it, because the new id's folder is empty and the host's check for a
+      // first save is "exactly the declaration".
+      const assets = assetsWith([declaration("kept", "digest-kept")], {
+        "assets/kept.png": PNG,
+      });
+      const { manager, save, adoptIdentity, markSaved } = harness({
+        assets,
+        base: "stored-base",
+        // The document the manager re-identifies is the one its snapshot reads
+        // next, which is what makes the rebase observable rather than a claim.
+        snapshot: () => current,
+        adoptIdentity: (id, name) => {
+          current = { ...current, id, metadata: { ...current.metadata, name } };
+        },
+        client: { list: async () => [listed("living-room", "2026-01-01")] },
+      });
+
+      await manager.saveAs();
+
+      // The harness's save is a no-argument spy, so its call tuple has to be
+      // read as the manager's own argument list.
+      const calls = save.mock.calls as unknown as readonly [
+        string,
+        {
+          readonly envelope: FabricThemeEnvelope;
+          readonly assets: Readonly<Record<string, Uint8Array>>;
+          readonly base?: string;
+        },
+      ][];
+      const [id, content] = calls[0]!;
+      // The name's slug, not the open theme's id; the old theme is never a
+      // target, which is the difference between Save as and Save.
+      expect(id).toBe("living-room-copy");
+      expect(content.envelope.id).toBe("living-room-copy");
+      expect(content.envelope.metadata?.name).toBe("Living room copy");
+      // A first save: no base, so the host takes it as a new theme, and every
+      // declared byte travels even though the old folder already holds it.
+      expect(content.base).toBeUndefined();
+      expect(content.assets).toEqual({ "assets/kept.png": PNG });
+      expect(adoptIdentity).toHaveBeenCalledWith(
+        "living-room-copy",
+        "Living room copy",
+      );
+      expect(markSaved).toHaveBeenCalledWith(content.envelope, {
+        "assets/kept.png": PNG,
+      });
+      expect(manager.isStored()).toBe(true);
+      // The next Save is the new theme's.
+      await manager.save();
+      expect(calls[1]?.[0]).toBe("living-room-copy");
+      expect(
+        calls.some(([target]) => target === "living-room"),
+        "save-as wrote over the theme it came from",
+      ).toBe(false);
+    });
+
+    it("moves a taken slug aside instead of asking to replace it", async () => {
+      saveAsMock.mockReset();
+      saveAsMock.mockResolvedValue("Kitchen");
+      const { manager, save } = harness({
+        client: {
+          list: async () => [
+            listed("kitchen", "2026-01-01"),
+            listed("kitchen-2", "2026-01-02"),
+          ],
+        },
+      });
+
+      await manager.saveAs();
+
+      const calls = save.mock.calls as unknown as readonly [string][];
+      expect(calls[0]?.[0]).toBe("kitchen-3");
+    });
+
+    it("writes nothing when the name question is dismissed", async () => {
+      saveAsMock.mockReset();
+      saveAsMock.mockResolvedValue(undefined);
+      const { manager, save, adoptIdentity, markSaved, onSaved } = harness({});
+
+      await manager.saveAs();
+
+      expect(save).not.toHaveBeenCalled();
+      expect(adoptIdentity).not.toHaveBeenCalled();
+      expect(markSaved).not.toHaveBeenCalled();
+      expect(onSaved).not.toHaveBeenCalled();
+    });
+
+    it("speaks the host's refusal and changes nothing", async () => {
+      saveAsMock.mockReset();
+      saveAsMock.mockResolvedValue("Kitchen");
+      const { manager, adoptIdentity, markSaved, onError } = harness({
+        client: {
+          list: async () => [],
+          save: async () => {
+            throw new Error("no room on this PC.");
+          },
+        },
+      });
+
+      await manager.saveAs();
+
+      expect(onError).toHaveBeenCalledWith(
+        "Could not save to library: no room on this PC.",
+      );
+      // The document is still the one it was: no new identity and no saved mark.
+      expect(adoptIdentity).not.toHaveBeenCalled();
+      expect(markSaved).not.toHaveBeenCalled();
+      expect(manager.isStored()).toBe(false);
+    });
+  });
+
+  describe("Open recent", () => {
+    it("opens the newest stored theme that is not the open document", async () => {
+      const open = vi.fn(async () => ({
+        envelope,
+        assets: {},
+        base: "base-from-open",
+      }));
+      const { manager, onOpenTheme } = harness({
+        snapshot: () => ({ ...envelope, id: "current" }),
+        client: {
+          list: async () => [
+            listed("older", "2026-01-01T00:00:00.000Z"),
+            listed("current", "2026-03-01T00:00:00.000Z"),
+            listed("newest", "2026-02-01T00:00:00.000Z"),
+          ],
+          open,
+          save: async () => "base",
+        },
+      });
+
+      await manager.openRecent();
+
+      // `current` is the newest by time, but it is the document already open.
+      expect(open).toHaveBeenCalledWith("newest");
+      // The open travels through `openById`, so the base arrives with it.
+      expect(onOpenTheme).toHaveBeenCalledWith(
+        envelope,
+        {},
+        "base-from-open",
+        undefined,
+      );
+    });
+
+    it("asks before replacing a dirty document, and a refusal reads nothing", async () => {
+      const open = vi.fn(async () => ({ envelope, assets: {}, base: "base" }));
+      const { manager, onOpenTheme } = harness({
+        confirm: async () => false,
+        client: {
+          list: async () => [listed("other", "2026-01-01T00:00:00.000Z")],
+          open,
+          save: async () => "base",
+        },
+      });
+
+      await manager.openRecent();
+
+      expect(open).not.toHaveBeenCalled();
+      expect(onOpenTheme).not.toHaveBeenCalled();
+    });
+
+    it("says there is nothing to open rather than doing nothing", async () => {
+      const { manager, onError } = harness({
+        client: { list: async () => [] },
+      });
+
+      await manager.openRecent();
+
+      expect(onError).toHaveBeenCalledWith(uiCopy.library.noOtherTheme);
+    });
+
+    it("does not count the open document as recent", async () => {
+      const { manager, onError } = harness({
+        client: {
+          list: async () => [listed("living-room", "2026-01-01T00:00:00.000Z")],
+        },
+      });
+
+      await manager.openRecent();
+
+      expect(onError).toHaveBeenCalledWith(uiCopy.library.noOtherTheme);
+    });
   });
 });
