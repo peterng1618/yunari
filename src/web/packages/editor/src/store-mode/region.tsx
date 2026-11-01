@@ -408,7 +408,7 @@ function Halves(props: {
           key={tab}
           id={halvesSegmentId(tab)}
           value={tab}
-          className={`${hitTargetClasses} rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+          className={`${hitTargetClasses} min-w-0 flex-1 rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
         >
           {TAB_NAMES[tab]}
         </Toggle>

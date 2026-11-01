@@ -64,7 +64,7 @@ export function FinderSegmented<T extends string>(props: {
           {...option.data}
           key={option.id}
           value={option.id}
-          className="rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
         >
           {option.label}
         </Toggle>
