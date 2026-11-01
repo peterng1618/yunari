@@ -137,7 +137,7 @@ async function openEditor(page: Page): Promise<void> {
   await page.waitForFunction(() => "yunariEditorBridge" in window);
 }
 
-/** Drives **File ▸ Import package**, the row an author has, and answers the
+/** Drives **File ▸ Import theme**, the row an author has, and answers the
  *  chooser it opens. */
 async function importFile(
   page: Page,
@@ -146,7 +146,7 @@ async function importFile(
 ): Promise<void> {
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Import package" }).click();
+  await page.getByRole("menuitem", { name: "Import theme" }).click();
   await (await chooser).setFiles({
     name,
     mimeType: "application/octet-stream",

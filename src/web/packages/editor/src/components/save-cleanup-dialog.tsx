@@ -149,7 +149,7 @@ function SaveCleanupDialog({
  * flows with the words they used to open it.
  */
 export async function confirmSaveCleanup(input: {
-  /** The save the author pressed: `uiCopy`'s own "Save to library" or
+  /** The save the author pressed: `uiCopy`'s own "Save" or
    *  "Save package". */
   readonly title: string;
   /** The document's name, drawn under the save's title; absent when it has

@@ -159,7 +159,7 @@ export function ShellMenuBar({
   readonly store: SelectionStore;
   readonly getView: () => EditorViewControls | undefined;
   /** Opens the asset finder. Its modal is the shell's, and the row sits above
-   *  *Import package* because both add something and the finder is the one that
+   *  *Import theme* because both add something and the finder is the one that
    *  fetches (the entry drawing). */
   readonly onFindAssets: () => void;
 }): React.JSX.Element {
@@ -207,7 +207,7 @@ export function ShellMenuBar({
       <MenuGroup label={uiCopy.menus.file}>
         {/* A File row prints a chord where the row and its `PRODUCT_SHORTCUTS`
             id run the same call — `item`'s fourth argument — and each of the
-            three names the call it shares. `newFromStarter`, `releasePackage`
+            three names the call it shares. `newFromTemplate`, `exportTheme`
             and `openLibrary` carry none because the table binds nothing for
             them, not because a File row cannot have one. `savePackage` carries
             none either: `Ctrl+S` is the library save, and the package is the
@@ -219,7 +219,10 @@ export function ShellMenuBar({
           false,
           "file.new",
         )}
-        {item(uiCopy.file.newFromStarter, () => void session?.newFromStarter())}
+        {item(
+          uiCopy.file.newFromTemplate,
+          () => void session?.newFromStarter(),
+        )}
         {item(uiCopy.file.findAssets, onFindAssets, false, "file.findAssets")}
         {/* `file.open` → the package picker, and nothing of the document's. */}
         {item(
@@ -231,7 +234,7 @@ export function ShellMenuBar({
         {/* `file.save` → `#document.saveLibrary()`. The package is the explicit
             export below, so it prints no chord: Ctrl+S saves to the library. */}
         {item(uiCopy.file.savePackage, () => void session?.savePackage())}
-        {item(uiCopy.file.releasePackage, () => void session?.releasePackage())}
+        {item(uiCopy.file.exportTheme, () => void session?.releasePackage())}
         {item(uiCopy.file.openLibrary, () => void session?.openLibrary())}
         {item(
           uiCopy.file.saveLibrary,

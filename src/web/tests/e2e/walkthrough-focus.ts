@@ -35,7 +35,7 @@ import type { Page } from "@playwright/test";
  *
  * **The instrument does reach into the header, and a command path is not a
  * region.** §13.1's first and last interactions are commands about a document —
- * `File → New from starter` and `File → Open library` — and the walk performs
+ * `File → New from template` and `File → Open` — and the walk performs
  * them through the header's own `File` menu (`walkthrough-shell.ts`'s
  * `chooseFileMenuRow`); the census's own first press lands on that button. That
  * is a route *through* a band to a command, not a band that owns a focusable

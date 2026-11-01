@@ -2427,14 +2427,14 @@ test.describe("Fabric editor route", () => {
     );
     await page.goto(EDITOR);
     // Dirty by an authoring act first, for the reason the replacement capture
-    // gives. An untouched starter is *not* dirty: File → Open library would ask
+    // gives. An untouched starter is *not* dirty: File → Open would ask
     // nothing, and `answerDialogIfShown` would then find the chooser's own
     // dialog and spend its budget waiting inside it for a Discard button.
     await openPane(page, "Add");
     await insertShape(page, "Rectangle");
 
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open library" }).click();
+    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
     await answerDialogIfShown(page, "Discard");
     const chooser = page.locator('[role="dialog"]', {
       hasText: "Open a theme",
@@ -4089,10 +4089,10 @@ test.describe("Fabric editor route", () => {
       editor?.canvas.requestRenderAll();
     });
     // **The File row, not `Control+o`.** That chord now prints beside, and
-    // drives, the *Import package* row — and an import replaces nothing, so it
+    // drives, the *Import theme* row — and an import replaces nothing, so it
     // asks no question. The row that still opens a document is this one.
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open library" }).click();
+    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();

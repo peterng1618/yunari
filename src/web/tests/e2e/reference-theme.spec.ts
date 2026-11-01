@@ -551,7 +551,7 @@ test.describe("the reference composition, authored", () => {
       .poll(async () => idsOf(await sceneFacts(page)), { timeout: 15_000 })
       .not.toContain(authored);
     // **New is a blank theme of the chosen size, not the starter.** The File
-    // menu says so — "New theme" beside "New from starter" — and this assertion
+    // menu says so — "New theme" beside "New from template" — and this assertion
     // used to require the reference composition back, which is the other
     // command's job. Measured: after Create and Discard the canvas holds 0
     // objects. What matters here is that the author's object is gone and the

@@ -11,7 +11,7 @@ import {
  * The theme a boot URL asks for, or the one the author left off, or nothing to
  * open.
  *
- * `?theme=<id>` is the same call the in-editor *Open library* dialog makes,
+ * `?theme=<id>` is the same call the in-editor *Open* dialog makes,
  * reached by URL instead. A saved theme with no way back to it is a
  * write-only surface: the editor could put one in the library and nothing
  * could ever read it again.

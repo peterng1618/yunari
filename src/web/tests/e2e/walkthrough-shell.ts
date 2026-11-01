@@ -145,7 +145,7 @@ export async function selectInComposition(
  *  document. `STARTER_DOCUMENT_NAME` is the starter's own metadata name, which
  *  is what tells the created document apart from the fixture (`?theme=`). */
 const FILE_MENU_NAME = "File";
-const NEW_FROM_STARTER_ROW = "New from starter";
+const NEW_FROM_STARTER_ROW = "New from template";
 export const STARTER_DOCUMENT_NAME = "System dashboard";
 /** Bounds for the two searches — the File menu's rows and the rail's slots —
  *  which report a count rather than hang.
@@ -260,7 +260,7 @@ export async function openDocumentByKeyboard(page: Page): Promise<void> {
 
 /** The File menu's own row for the library (`uiCopy.file.openLibrary`), and the
  *  chooser's own pieces (`theme-library-dialog.tsx` / `control-select.tsx`). */
-const OPEN_LIBRARY_ROW = "Open library";
+const OPEN_LIBRARY_ROW = "Open";
 /** The chooser's theme picker, on its trigger — where the value it commits is
  *  also read (`data-yunari-value`). */
 const LIBRARY_THEME_FIELD = "data-yunari-library-theme";

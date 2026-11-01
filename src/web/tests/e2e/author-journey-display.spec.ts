@@ -217,7 +217,7 @@ test.describe("the rebuilt composition, on a display", () => {
     //
     // Reopened through the store's own **Open in editor** control over a stubbed
     // library, which is where the document route lives now that
-    // `File ▸ Import package` writes into the library instead. The editor frame
+    // `File ▸ Import theme` writes into the library instead. The editor frame
     // is still the product's own reading of the saved document rather than the
     // composition that was still in memory. A difference between this and the
     // player is a finding about the round trip; a difference between this and

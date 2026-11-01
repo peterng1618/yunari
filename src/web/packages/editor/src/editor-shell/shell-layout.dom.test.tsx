@@ -1366,17 +1366,17 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
   // reaches, which for these three is one method on the same receiver —
   // `file.save`/`saveLibrary` both end at `#document.saveLibrary()`, `file.new`
   // and `newDocument` at `#document.newDocument()`, and `file.open` and the
-  // *Import package* row at the session's own `importPackage()`, which is the
+  // *Import theme* row at the session's own `importPackage()`, which is the
   // package picker. The four rows with no id stay chordless; the
   // menu does not pair a chord by eye, which is how a menu starts teaching a
   // key that runs something else.
   const keyed = new Map<string, ProductShortcutId | undefined>([
     [uiCopy.file.newDocument, "file.new"],
-    [uiCopy.file.newFromStarter, undefined],
+    [uiCopy.file.newFromTemplate, undefined],
     [uiCopy.file.findAssets, "file.findAssets"],
     [uiCopy.file.importPackage, "file.open"],
     [uiCopy.file.savePackage, undefined],
-    [uiCopy.file.releasePackage, undefined],
+    [uiCopy.file.exportTheme, undefined],
     [uiCopy.file.openLibrary, undefined],
     [uiCopy.file.saveLibrary, "file.save"],
   ]);
@@ -1398,9 +1398,9 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
   layout.destroy();
 });
 
-/** The finder's own entry: a File row above *Import package*, because both add
+/** The finder's own entry: a File row above *Import theme*, because both add
  *  something and the finder is the one that fetches (entry drawing). */
-it("opens the finder from the File menu, above Import package", async () => {
+it("opens the finder from the File menu, above Import theme", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   await act(async () => menubarEntry(root, uiCopy.menus.file).click());
@@ -1414,7 +1414,7 @@ it("opens the finder from the File menu, above Import package", async () => {
     (row.textContent ?? "").startsWith(uiCopy.file.importPackage),
   );
   if (finderRow === undefined) throw new Error("No Find assets row.");
-  if (importRow === undefined) throw new Error("No Import package row.");
+  if (importRow === undefined) throw new Error("No Import theme row.");
   expect(rows.indexOf(finderRow)).toBeLessThan(rows.indexOf(importRow));
 
   await act(async () => finderRow.click());
@@ -1448,7 +1448,7 @@ it("runs the import from the File row, and nothing else", async () => {
   const row = menuItems().find((item) =>
     (item.textContent ?? "").startsWith(uiCopy.file.importPackage),
   );
-  if (row === undefined) throw new Error("No Import package row.");
+  if (row === undefined) throw new Error("No Import theme row.");
   await act(async () => row.click());
 
   expect(

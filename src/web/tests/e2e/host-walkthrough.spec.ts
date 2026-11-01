@@ -494,7 +494,7 @@ test.describe("the shell, reached by keyboard alone", () => {
    *
    * **The return trip is the library.** Under the walkthrough's own ruling the
    * original document is the `e2e-hosted` fixture `openWalkthrough` boots on, and
-   * `File → Open library` is the editor's only keyboard route back to a stored
+   * `File → Open` is the editor's only keyboard route back to a stored
    * theme (`openThemeFromLibrary`, and the fixture is listed there as the host
    * wrote it). The library's own listing is what makes this a route rather than a
    * hope: the chooser reads `/api/themes`, which is the host's library folder,

@@ -856,23 +856,26 @@ export const uiCopy = {
   },
   file: {
     newDocument: "New theme",
-    /** The finder's one entry in this menu. It sits above *Import package*
+    /** The finder's one entry in this menu. It sits above *Import theme*
      *  because both add something and the finder is the one that fetches. */
     findAssets: "Find assets…",
     /** The reference composition, offered as what it is: a template the
      *  product ships. `New` is the author's own blank document; this is the one
      *  they can open a copy of. */
-    newFromStarter: "New from starter",
-    /** **Import package**, which is the store mode's own action and what the
-     *  row does: the package is written into the library and the open document
-     *  is untouched.
-     *  The row used to read *Open package* and open a document, which is the
-     *  route A.7 removed — the store's `open` action is that route now. */
-    importPackage: "Import package",
+    newFromTemplate: "New from template",
+    /** **Import theme**, which is the store mode's own action and what the row
+     *  does: the theme package is written into the library and the open
+     *  document is untouched. The store's `open` action is the route that opens
+     *  a document. */
+    importPackage: "Import theme",
+    /** The document written out as a package file. It downloads rather than
+     *  recording anything, so its name says what the author gets. */
     savePackage: "Save package",
-    releasePackage: "Release package",
-    openLibrary: "Open library",
-    saveLibrary: "Save to library",
+    /** A package with a bumped version, written the same way: the release the
+     *  author hands on, not the save that keeps their work. */
+    exportTheme: "Export theme",
+    openLibrary: "Open",
+    saveLibrary: "Save",
   },
   /** The chooser `New` opens before the document exists. The first control is
    *  the display a theme is for, and its entries are the display switch's own

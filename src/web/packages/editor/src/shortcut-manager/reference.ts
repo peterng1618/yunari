@@ -40,7 +40,7 @@ interface ShortcutReferenceGroup {
  */
 export const SHORTCUT_LABELS = {
   "file.new": uiCopy.file.newDocument,
-  // The chord the File menu prints beside its *Import package* row, and the
+  // The chord the File menu prints beside its *Import theme* row, and the
   // word is the row's own: `file.open` names the chord the action is bound to,
   // and the row it is printed beside is what a person reads.
   "file.open": uiCopy.file.importPackage,

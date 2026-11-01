@@ -62,13 +62,13 @@ const themeIdOfSave = (request: Request): string =>
 /**
  * Save the starter through the host's own library route, as an author would.
  *
- * **`New from starter` first, and that is the whole fix.** `boot-theme.ts` opens
+ * **`New from template` first, and that is the whole fix.** `boot-theme.ts` opens
  * the author's most recent save when the URL names no theme — which, against the
  * host project's shared `--app-dir`, is whichever *fixture* ran last, not the
  * starter. The save that followed therefore wrote somebody else's document, and
  * the display then asked the host for the reference theme, which no run had
  * ever put there. Measured: booting the seeded store opened `bar-0…bar-4` (a
- * fixture), and after `Save to library` the library still had no reference
+ * fixture), and after `Save` the library still had no reference
  * theme.
  *
  * The id is read off the save request rather than assumed: the document mints
@@ -81,7 +81,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "New from starter" }).click();
+  await page.getByRole("menuitem", { name: "New from template" }).click();
   await expect(page.locator("#status")).toContainText(
     "New theme from the starter",
   );
@@ -91,7 +91,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("menuitem", { name: "Save" }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });
@@ -376,12 +376,12 @@ test.describe("hosted player over the real host", () => {
     // The saved theme has to carry the text class the player reads runs from.
     expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
-    // Save to library goes through PUT /api/themes/:id, not a download.
+    // Save goes through PUT /api/themes/:id, not a download.
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("menuitem", { name: "Save" }).click();
     // Assets nothing holds are offered for cleanup before either save writes;
     // the sheet is answered the way an author answers it.
-    await answerDialogIfShown(page, "Save to library", 1_000);
+    await answerDialogIfShown(page, "Save", 1_000);
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -528,7 +528,7 @@ test.describe("hosted player over the real host", () => {
       .getByRole("button", { name: "Rectangle", exact: true })
       .click();
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("menuitem", { name: "Save" }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -1353,7 +1353,7 @@ test.describe("a display fed by the real host", () => {
         /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
     );
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("menuitem", { name: "Save" }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });
@@ -1656,7 +1656,7 @@ test.describe("a display fed by the real host", () => {
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("menuitem", { name: "Save" }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });

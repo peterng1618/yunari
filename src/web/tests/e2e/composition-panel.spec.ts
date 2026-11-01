@@ -804,7 +804,7 @@ function packageBytes(
  *
  * The route below is the one an author has: the store's own **Open in editor**
  * control over a stubbed library, which is where the document route lives now
- * that `File ▸ Import package` writes into the library instead. The milliseconds
+ * that `File ▸ Import theme` writes into the library instead. The milliseconds
  * are the control's click to the status line — the same span the picker's own
  * measurement covered.
  */

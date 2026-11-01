@@ -257,7 +257,7 @@ function runsOf(
   return runs ?? [];
 }
 
-/** Saves through File ▸ Save to library and answers the host's own id. */
+/** Saves through File ▸ Save and answers the host's own id. */
 async function saveToLibrary(page: Page): Promise<string> {
   const saved = page.waitForRequest(
     (request) =>
@@ -265,7 +265,7 @@ async function saveToLibrary(page: Page): Promise<string> {
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("menuitem", { name: "Save" }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });

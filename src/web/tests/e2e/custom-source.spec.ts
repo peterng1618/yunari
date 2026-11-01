@@ -328,7 +328,7 @@ test("a source authored on the page is read on a display, and its deletion expla
 
   // 4. The document is saved to the host, then opened on a display.
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("menuitem", { name: "Save" }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });
