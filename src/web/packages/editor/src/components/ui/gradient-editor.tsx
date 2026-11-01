@@ -86,9 +86,18 @@ export function GradientEditor({
    *  because the index is the stop's identity for the selection and the marks. */
   const put = (index: number, stop: GradientStop): void => {
     if (stops[index] === undefined) return;
+    // **Bounded by the neighbouring stops, never reordered.** The document's
+    // validator requires ascending offsets, and the index is what the marks and
+    // the selection point at. A drag or a typed percent that crosses a
+    // neighbour therefore pins at that neighbour's offset.
+    const lower = stops[index - 1]?.offset ?? 0;
+    const upper = stops[index + 1]?.offset ?? 1;
+    const offset = Math.min(Math.max(stop.offset, lower), upper);
     onChange({
       angle,
-      stops: stops.map((candidate, at) => (at === index ? stop : candidate)),
+      stops: stops.map((candidate, at) =>
+        at === index ? { offset, color: stop.color } : candidate,
+      ),
     });
   };
 
