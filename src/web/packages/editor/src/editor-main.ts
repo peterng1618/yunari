@@ -86,9 +86,7 @@ async function start(): Promise<void> {
       // re-projected when it answers: the pickers pull descriptors at render
       // time, so without this the visit that follows a Host-page write would
       // still offer the list it was built with.
-      void sensors
-        .refresh()
-        .then(() => active?.extensions.catalogueChanged());
+      void sensors.refresh().then(() => active?.extensions.catalogueChanged());
     },
   });
   const host = layout.hosts.canvas;
