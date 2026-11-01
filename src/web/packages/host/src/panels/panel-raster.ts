@@ -1,7 +1,4 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import type { PanelGeometry } from "./panel-device.js";
 
 /**
@@ -30,9 +27,7 @@ const REPLY_TIMEOUT_MS = 5_000;
 /** A composited frame is 33 ms away; a second of nothing is a page that stopped. */
 const FRAME_TIMEOUT_MS = 1_000;
 
-export interface RasterOptions {
-  /** The browser executable, from `findBrowser`. */
-  readonly browser: string;
+export interface RasterPageOptions {
   /** The player page for a display, including its session. */
   readonly url: string;
   readonly geometry: PanelGeometry;
@@ -197,6 +192,8 @@ export interface Devtools {
   send(method: string, params?: Record<string, unknown>): Promise<CdpReply>;
   /** One handler per protocol event; the screencast is the only source. */
   on(method: string, listener: (params: Record<string, unknown>) => void): void;
+  /** Closes the socket and settles every request still waiting on it. */
+  close(): void;
 }
 
 interface Pending {
@@ -221,7 +218,7 @@ class BrowserDevtools implements Devtools {
 
   private constructor(private readonly socket: WebSocket) {
     socket.addEventListener("close", () => {
-      this.closed = true;
+      this.shutdown("the browser's devtools socket closed");
     });
     // One handler for the socket: a reply settles its request, anything else is
     // an event, and a request that never arrives settles by its own timer.
@@ -242,6 +239,18 @@ class BrowserDevtools implements Devtools {
     });
 
     return new BrowserDevtools(socket);
+  }
+
+  /** Stops every waiter at once: a dead browser has no reply to give. */
+  private shutdown(message: string): void {
+    if (this.closed) return;
+    this.closed = true;
+
+    for (const pending of this.pending.values()) {
+      pending.settle();
+      pending.reject(new Error(`${message} before ${pending.method}`));
+    }
+    this.pending.clear();
   }
 
   private receive(raw: string): void {
@@ -320,8 +329,14 @@ class BrowserDevtools implements Devtools {
   }
 
   close(): void {
+    this.shutdown("the browser's devtools socket closed");
     this.socket.close();
   }
+}
+
+/** Opens one devtools socket; the browser-level and page-level clients share it. */
+export async function connectDevtools(url: string): Promise<Devtools> {
+  return await BrowserDevtools.connect(url);
 }
 
 /** The devtools endpoint a freshly started browser announces on stderr. */
@@ -354,44 +369,49 @@ function waitForEndpoint(child: ChildProcess): Promise<string> {
   });
 }
 
-async function startBrowser(
-  browser: string,
+/**
+ * Every flag the shared browser starts with.
+ *
+ * The three throttling flags matter to a panel: Chromium otherwise slows timers
+ * and rendering for a target it treats as backgrounded, and a panel keeps
+ * updating while nobody is looking at it. They keep an occluded window
+ * unthrottled; they do not make a hidden tab visible — `newWindow: true` does.
+ */
+export function chromiumArguments(profile: string): readonly string[] {
+  return [
+    // `new` headless is the full browser without a window: the old mode has
+    // no layout engine for some CSS, and glass needs a real compositor.
+    "--headless=new",
+    "--remote-debugging-port=0",
+    `--user-data-dir=${profile}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--hide-scrollbars",
+    "--force-device-scale-factor=1",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    // A panel is a display of its own; a URL bar or scrollbar in the capture
+    // would be part of the frame.
+    "about:blank",
+  ];
+}
+
+export async function startBrowser(
+  executable: string,
   profile: string,
 ): Promise<{ readonly child: ChildProcess; readonly endpoint: string }> {
-  const child = spawn(
-    browser,
-    [
-      // `new` headless is the full browser without a window: the old mode has
-      // no layout engine for some CSS, and glass needs a real compositor.
-      "--headless=new",
-      "--remote-debugging-port=0",
-      `--user-data-dir=${profile}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=1",
-      // A panel is a display of its own; a URL bar or scrollbar in the capture
-      // would be part of the frame.
-      "about:blank",
-    ],
-    { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
-  );
+  const child = spawn(executable, chromiumArguments(profile), {
+    stdio: ["ignore", "ignore", "pipe"],
+    windowsHide: true,
+  });
 
   const endpoint = await waitForEndpoint(child);
   return { child, endpoint };
 }
 
-/**
- * Starts a page on `url` at exactly `geometry` and captures it.
- *
- * One browser per capture would be a second of latency per frame; one browser
- * for the rasteriser's life is the shape that is affordable. The page is
- * navigated once and screencast for the rest of its life, so a live theme's
- * samples keep arriving over its own stream and a capture returns the newest one
- * rather than asking the renderer to compose on demand.
- */
 /**
  * One `Page.captureScreenshot` of the artboard, clipped to the panel.
  *
@@ -429,52 +449,37 @@ async function shot(
   return new Uint8Array(Buffer.from(data, "base64"));
 }
 
-export async function createRasterizer(
-  options: RasterOptions,
+/**
+ * Starts a page on `url` at exactly `geometry` and captures it.
+ *
+ * The page is navigated once and screencast for the rest of its life, so a
+ * live theme's samples keep arriving over its own stream and a capture returns
+ * the newest one rather than asking the renderer to compose on demand. The
+ * target and the browser are the caller's: `closePage` closes this page's
+ * target, and this function closes only its own socket.
+ */
+export async function createPageRasterizer(
+  devtools: Devtools,
+  options: RasterPageOptions,
+  closePage: () => Promise<void>,
 ): Promise<Rasterizer> {
-  const profile = await mkdtemp(path.join(os.tmpdir(), "yunari-panel-"));
-  const { child, endpoint } = await startBrowser(options.browser, profile);
+  await devtools.send("Page.enable");
 
-  const base = endpoint
-    .replace(/^ws:\/\//, "http://")
-    .replace(/\/devtools\/browser\/.*$/, "");
+  // The page is told its size rather than resized: a panel has one geometry,
+  // and the player letterboxes the artboard into it the way it does for any
+  // display whose shape is not the artboard's.
+  await devtools.send("Emulation.setDeviceMetricsOverride", {
+    width: options.geometry.width,
+    height: options.geometry.height,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
 
-  let devtools: BrowserDevtools | undefined;
-  let frames: Screencast | undefined;
-
-  try {
-    const target = (await fetch(`${base}/json/new?about:blank`, {
-      method: "PUT",
-    }).then((response) => response.json())) as {
-      readonly webSocketDebuggerUrl?: string;
-    };
-
-    if (target.webSocketDebuggerUrl === undefined) {
-      throw new Error("the browser opened no page to render into");
-    }
-
-    devtools = await BrowserDevtools.connect(target.webSocketDebuggerUrl);
-    await devtools.send("Page.enable");
-
-    // The page is told its size rather than resized: a panel has one geometry,
-    // and the player letterboxes the artboard into it the way it does for any
-    // display whose shape is not the artboard's.
-    await devtools.send("Emulation.setDeviceMetricsOverride", {
-      width: options.geometry.width,
-      height: options.geometry.height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-
-    await devtools.send("Page.navigate", { url: options.url });
-    await waitForScene(devtools);
-  } catch (error) {
-    child.kill();
-    await rm(profile, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  }
+  await devtools.send("Page.navigate", { url: options.url });
+  await waitForScene(devtools);
 
   let closed = false;
+  let frames: Screencast | undefined;
   /** The identity of the last frame handed to the runner. */
   let sequence = 0;
   /** True while the page is composing without its picture, for an overlay. */
@@ -482,7 +487,7 @@ export async function createRasterizer(
   /** Temporary probe: the first overlay, returned forever when asked. */
   let frozenOverlay: Uint8Array | undefined;
   const connected = (): Devtools => {
-    if (closed || devtools === undefined) {
+    if (closed) {
       throw new Error("The rasteriser is closed.");
     }
 
@@ -550,9 +555,8 @@ export async function createRasterizer(
       closed = true;
 
       await frames?.stop();
-      devtools?.close();
-      child.kill();
-      await rm(profile, { recursive: true, force: true }).catch(() => {});
+      await closePage().catch(() => {});
+      devtools.close();
     },
   };
 }
