@@ -445,16 +445,13 @@ export function createThemeWrites(
           });
         }
 
-        // A save is the only moment a theme becomes authoritative, so it is
-        // also the only moment a display is told to re-read it. The revision
-        // moves and every page showing this theme reloads once — scene and
-        // background together. Editing sends nothing.
-        published.publish(rawId);
-
-        // A panel's page polls its document, so a save reaches its UI by
-        // itself; the clip on the device was uploaded when the runner started
-        // and nothing re-reads it. Every running panel compares what it would
-        // play with what it is playing, and only a changed clip restarts it.
+        // **Release running panels before publishing.** A panel's page reloads
+        // the moment the revision moves; a runner still holding it would then
+        // capture the new UI and push it over the device's old clip, before the
+        // changed clip is uploaded (TURZX, 2026-11-02). The clip comparison
+        // restarts only the panel whose clip changed, and that restart releases
+        // the old page before the new one is shown. A panel whose clip is
+        // unchanged keeps running and picks the new UI up by itself.
         const panels = options.panels;
         if (panels !== undefined) {
           for (const displayId of panels.running()) {
@@ -469,6 +466,12 @@ export function createThemeWrites(
             }
           }
         }
+
+        // A save is the only moment a theme becomes authoritative, so it is
+        // also the only moment a display is told to re-read it. The revision
+        // moves and every page showing this theme reloads once — scene and
+        // background together. Editing sends nothing.
+        published.publish(rawId);
 
         sendJson(response, 200, { ok: true, ...saved });
       } catch (error) {
