@@ -1,4 +1,8 @@
-import { ASSIGNABLE_GROUPS, type AssignableGroup } from "@yunari/renderer-core";
+import {
+  ASSIGNABLE_GROUPS,
+  type AssignableGroup,
+  STABLE_ID_PATTERN,
+} from "@yunari/renderer-core";
 import { DEVICE_ID_PATTERN } from "./devices.js";
 import { DEFAULT_DISPLAY } from "./displays.js";
 import { createJsonFile } from "./json-file.js";
@@ -36,7 +40,6 @@ export interface ThemeSettingsStore {
 }
 
 const FILE = "theme-answers.json";
-const THEME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function isGroup(value: string): value is AssignableGroup {
   return (ASSIGNABLE_GROUPS as readonly string[]).includes(value);
@@ -83,7 +86,7 @@ function isLevel(value: unknown): boolean {
   return (
     isObject(value) &&
     Object.entries(value).some(
-      ([id, answers]) => THEME_ID.test(id) && isObject(answers),
+      ([id, answers]) => STABLE_ID_PATTERN.test(id) && isObject(answers),
     )
   );
 }
@@ -91,7 +94,7 @@ function isLevel(value: unknown): boolean {
 /**
  * The file's contents in the shape this task writes.
  *
- * A display key is held to `DEVICE_ID_PATTERN` and a theme key to `THEME_ID`,
+ * A display key is held to `DEVICE_ID_PATTERN` and a theme key to `STABLE_ID_PATTERN`,
  * and a level that normalises to `{}` is dropped rather than written, so a
  * hand-edited file cannot introduce a display or a theme nothing else accepts
  * and no empty level reaches the disk.
@@ -111,7 +114,7 @@ function normalizeLevels(input: unknown): Levels {
     const level: [string, ThemeAnswers][] = [];
 
     for (const [id, rawAnswers] of Object.entries(rawLevel)) {
-      if (!THEME_ID.test(id)) continue;
+      if (!STABLE_ID_PATTERN.test(id)) continue;
 
       const answers = normalizeAnswers(rawAnswers);
       if (Object.keys(answers).length > 0) level.push([id, answers]);
@@ -157,7 +160,10 @@ export function createThemeSettingsStore(
 
   return {
     async read(display, themeId) {
-      if (!DEVICE_ID_PATTERN.test(display) || !THEME_ID.test(themeId)) {
+      if (
+        !DEVICE_ID_PATTERN.test(display) ||
+        !STABLE_ID_PATTERN.test(themeId)
+      ) {
         return {};
       }
 
@@ -169,7 +175,7 @@ export function createThemeSettingsStore(
         throw new Error(`Invalid display id "${display}".`);
       }
 
-      if (!THEME_ID.test(themeId)) {
+      if (!STABLE_ID_PATTERN.test(themeId)) {
         throw new Error(`Invalid theme id "${themeId}".`);
       }
 
@@ -187,7 +193,7 @@ export function createThemeSettingsStore(
     },
 
     async removeTheme(themeId) {
-      if (!THEME_ID.test(themeId)) return;
+      if (!STABLE_ID_PATTERN.test(themeId)) return;
 
       // A file that cannot be read is nothing to remove, and must not be
       // replaced by the emptiness the read fell back to. `Object.hasOwn`, not

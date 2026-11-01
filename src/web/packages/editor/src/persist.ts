@@ -1,4 +1,7 @@
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import {
+  type FabricThemeEnvelope,
+  STABLE_ID_PATTERN,
+} from "@yunari/renderer-core";
 import {
   readThemePackage,
   type ThemeCredits,
@@ -50,6 +53,6 @@ export function serializeThemePackage(
 }
 
 export function fileNameFor(theme: { readonly id: string }): string {
-  const base = /^[A-Za-z0-9_-]{1,64}$/.test(theme.id) ? theme.id : "theme";
+  const base = STABLE_ID_PATTERN.test(theme.id) ? theme.id : "theme";
   return `${base}.yunari-theme`;
 }

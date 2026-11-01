@@ -21,6 +21,8 @@
  * files itself, so they must not need a build step or a network fetch.
  */
 
+import { themeForDisplay } from "./theme-fallback.js";
+
 /** Reserved space with nothing in it, for a row with no picture to draw. */
 function placeholder() {
   const box = document.createElement("div");
@@ -163,9 +165,12 @@ const DEFAULT_KEY = "default";
 /**
  * The theme a display shows: its own choice, else the default's.
  *
- * Exported because both pages ask it of the display they are showing for, and
- * the fallback is the feature's core — a second and third copy of it are two
- * more places to get the fallback wrong.
+ * The rule itself is `theme-fallback.js`'s, which the host's route code imports
+ * too — the served module is the one place it is spelled. This wrapper only
+ * finds the display's own row, because the page holds the list and the server
+ * holds a store.
+ *
+ * Exported because both pages ask it of the display they are showing for.
  *
  * @param {string} display
  * @param {readonly {readonly id: string, readonly theme: string | null}[]} displays
@@ -173,10 +178,8 @@ const DEFAULT_KEY = "default";
  * @returns {string | null}
  */
 export function shownTheme(display, displays, defaultTheme) {
-  if (display === DEFAULT_KEY) return defaultTheme ?? null;
-  return (
-    displays.find((row) => row.id === display)?.theme ?? defaultTheme ?? null
-  );
+  const own = displays.find((row) => row.id === display)?.theme;
+  return themeForDisplay(own, defaultTheme) ?? null;
 }
 
 /**

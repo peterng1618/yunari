@@ -1,3 +1,5 @@
+import { STABLE_ID_PATTERN } from "@yunari/renderer-core";
+import { themeForDisplay } from "../../public/theme-fallback.js";
 import { DEFAULT_DISPLAY } from "./displays.js";
 import { createJsonFile } from "./json-file.js";
 
@@ -37,7 +39,6 @@ export interface ActiveThemeStore {
 }
 
 const FILE = "active-theme.json";
-const THEME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * The theme a display shows: its own choice, else the default's.
@@ -52,13 +53,12 @@ export async function assignedThemeFor(
   exists: (id: string) => Promise<boolean>,
 ): Promise<string | undefined> {
   const own = await store.read(display, exists);
+  const fallback =
+    own === undefined && display !== DEFAULT_DISPLAY
+      ? await store.read(DEFAULT_DISPLAY, exists)
+      : undefined;
 
-  return (
-    own ??
-    (display === DEFAULT_DISPLAY
-      ? undefined
-      : await store.read(DEFAULT_DISPLAY, exists))
-  );
+  return themeForDisplay(own, fallback);
 }
 
 /**
@@ -113,7 +113,7 @@ export function createActiveThemeStore(directory: string): ActiveThemeStore {
     async read(display, exists) {
       const id = (await stored.read())[display];
 
-      if (typeof id !== "string" || !THEME_ID.test(id)) {
+      if (typeof id !== "string" || !STABLE_ID_PATTERN.test(id)) {
         return undefined;
       }
 
@@ -126,7 +126,11 @@ export function createActiveThemeStore(directory: string): ActiveThemeStore {
       const chosen: Record<string, string> = {};
 
       for (const [display, id] of Object.entries(await stored.read())) {
-        if (typeof id === "string" && THEME_ID.test(id) && (await exists(id))) {
+        if (
+          typeof id === "string" &&
+          STABLE_ID_PATTERN.test(id) &&
+          (await exists(id))
+        ) {
           chosen[display] = id;
         }
       }
@@ -135,7 +139,7 @@ export function createActiveThemeStore(directory: string): ActiveThemeStore {
     },
 
     async write(display, id) {
-      if (!THEME_ID.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error(`Invalid theme id "${id}".`);
       }
 

@@ -12,6 +12,7 @@ import {
   type PerformanceCost,
   performanceCostsOf,
   readFabricThemeEnvelope,
+  STABLE_ID_PATTERN,
   type ThemeRemix,
   type ValidationIssue,
   validateFabricThemeEnvelope,
@@ -283,7 +284,6 @@ export interface ThemeStore {
   remove(id: string): Promise<boolean>;
 }
 
-const THEME_ID_REGEX = /^[A-Za-z0-9_-]{1,64}$/;
 const NONCE_REGEX = /^[0-9a-z]+$/;
 const THEME_FILE = "theme.json";
 const ASSETS_DIR = "assets";
@@ -408,7 +408,7 @@ function assetBounds(
 }
 
 export function isValidThemeId(id: string): boolean {
-  return THEME_ID_REGEX.test(id);
+  return STABLE_ID_PATTERN.test(id);
 }
 
 /**
