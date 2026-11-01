@@ -408,10 +408,7 @@ function PreviewsTab({
           // The field is the control set's Well, not a box of its own: the
           // well owns the surface, the edge, the radius and the focus
           // boundary, and the input fills it.
-          <ControlWell
-            density="dialog"
-            widthClassName="min-w-[6rem] flex-1"
-          >
+          <ControlWell density="dialog" widthClassName="min-w-[6rem] flex-1">
             <input
               type="text"
               aria-label={uiCopy.settings.previewRatioField}
@@ -570,7 +567,10 @@ function ConnectionsTab(): React.JSX.Element {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-[var(--space-8)]">
-              <ControlWell density="dialog" widthClassName="min-w-[6rem] flex-1">
+              <ControlWell
+                density="dialog"
+                widthClassName="min-w-[6rem] flex-1"
+              >
                 <input
                   type="password"
                   aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
