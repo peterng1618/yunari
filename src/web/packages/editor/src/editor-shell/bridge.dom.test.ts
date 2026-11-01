@@ -4,10 +4,15 @@ import {
   type FabricThemeEnvelopeInput,
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
-import { createSceneAdapter, YunariChart } from "@yunari/scene-fabric";
+import {
+  createSceneAdapter,
+  setObjectAssetReference,
+  YunariChart,
+} from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Canvas,
+  FabricImage,
   FabricObject,
   Group,
   IText,
@@ -443,6 +448,34 @@ it("refuses the conversion for a group and for a locked text", () => {
   const locked = new IText("AB");
   locked.set("locked", true);
   expect(bridgeFor(locked).bridge.can("outline-text")).toBe(false);
+});
+
+it("offers replace for a placed image and for no other subject", () => {
+  const picture = new FabricImage(document.createElement("img"), {
+    id: "picture",
+  });
+  setObjectAssetReference(picture, { assetId: "hero", kind: "image" });
+  const { bridge, session } = bridgeFor(picture);
+
+  expect(bridge.target().asset).toBe("image");
+  expect(bridge.can("replace-asset")).toBe(true);
+  bridge.run("replace-asset");
+  expect(session.replaceSelectedAsset).toHaveBeenCalledTimes(1);
+
+  // A plain image with no declaration, a group and a locked picture all fail
+  // the same question: there is no single reference the action could swap.
+  expect(
+    bridgeFor(new FabricImage(document.createElement("img"))).bridge.can(
+      "replace-asset",
+    ),
+  ).toBe(false);
+  expect(bridgeFor(new Group([picture])).bridge.can("replace-asset")).toBe(
+    false,
+  );
+  const locked = new FabricImage(document.createElement("img"));
+  setObjectAssetReference(locked, { assetId: "hero", kind: "image" });
+  locked.set("locked", true);
+  expect(bridgeFor(locked).bridge.can("replace-asset")).toBe(false);
 });
 
 it("republishes when an object is deleted, so the row goes with it", () => {
