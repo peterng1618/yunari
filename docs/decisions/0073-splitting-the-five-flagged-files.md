@@ -63,3 +63,41 @@ body and preview projection into sibling modules, and move the host-backed font
 favourites into a hook. `modal.tsx` keeps the `AssetFinder` export and composes
 the pieces with the same props, DOM, class names, data attributes and
 accessible names. No new dependency, interface or barrel is introduced.
+
+## The host server (issue #42)
+
+- **Paths:** `src/web/packages/host/src/server.ts`, `src/web/packages/host/src/server/options.ts`, `src/web/packages/host/src/server/limits.ts`, `src/web/packages/host/src/server/http.ts`, `src/web/packages/host/src/server/identity.ts`, `src/web/packages/host/src/server/panels.ts`, `src/web/packages/host/src/server/displays-routes.ts`, `src/web/packages/host/src/server/pairing-routes.ts`, `src/web/packages/host/src/server/settings-routes.ts`, `src/web/packages/host/src/server/secrets-routes.ts`, `src/web/packages/host/src/server/themes-routes.ts`, `src/web/packages/host/src/server/theme-writes.ts`, `src/web/packages/host/src/server/media-routes.ts`, `src/web/packages/host/src/server/wallpaper-routes.ts`, `src/web/packages/host/src/server/pages-routes.ts`, `src/web/packages/host/src/server/streaming.ts`, `scripts/oversize-files.ceiling.json`
+
+**Rung 1 — internal owner.** `server.ts` already owns the router, the shared
+responders and the route families; the existing `assets/routes.ts`,
+`catalogue/routes.ts`, `catalogue/submit.ts` and `serve/static-path.ts` are the
+precedent for a family module. `server.test.ts` imports only the public
+construction and helper surface, so the route bodies can move without changing
+assertions.
+
+**Rung 2 — installed dependencies.** Node's `http`, `https` and `net` already
+supply the server and the TLS/plain listener; no dependency donates a route
+registry or context. No package is added.
+
+**Rung 3 — native platform.** `node:http` routing is the native mechanism the
+file already uses; extraction is file organisation, not a runtime change.
+
+**Rung 4 — public solutions.** The repository's established pattern is one
+plain module per route family (`catalogue/routes.ts`, `assets/routes.ts`) and
+factory functions with explicit parameters rather than a framework. Express or
+similar would add a dependency and a second router for no behaviour change.
+
+**Rung 5 — integration comparison.** Keeping one file violates the 800-line
+stop. A framework or a generic DI container adds a mechanism with no consumer.
+The chosen shape is one factory per route family, composed by `server.ts` in
+the original dispatch order; shared request helpers live in `server/http.ts`
+and identity helpers in `server/identity.ts`.
+
+**Rung 6 — smallest probe.** The unchanged `server.test.ts` is the probe: it
+mounts the real server and asserts routes, statuses, headers, bodies, guards,
+order and error text.
+
+**Rung 7 — decision.** Split the route families into sibling modules under
+`server/`, keep `createHostServer` as the composition and route table, and keep
+every public export re-exported from `server.ts`. No new runtime dependency,
+interface implementation or barrel.
