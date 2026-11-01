@@ -1900,8 +1900,11 @@ export const uiCopy = {
     "16:9": "16:9",
     "19.5:9": "19.5:9",
     "4:3": "4:3",
-    circle: "Circle",
+    "1:1": "1:1",
   },
+  /** A document's outline, distinct from its ratio: a circle is drawn on a
+   *  1:1 artboard rather than being one. */
+  artboardShapes: { rect: "Rectangle", circle: "Circle" },
   /**
    * The two boxes a background picture is clipped to, spelled once. This is the
    * layer's own `bounds`; the artboard's content fit is a guarantee of the

@@ -2,7 +2,7 @@
     A new document picks one; a document with a size the presets cannot name
     keeps it, because the numeric fields are the same fields (the artboard panel). */
 
-export type ArtboardRatioId = "16:9" | "19.5:9" | "4:3" | "circle";
+export type ArtboardRatioId = "16:9" | "19.5:9" | "4:3" | "1:1";
 export type ArtboardResolutionId = "1080p" | "2k" | "4k";
 export type ArtboardOrientation = "landscape" | "portrait";
 
@@ -18,9 +18,10 @@ export const ARTBOARD_RATIOS: ReadonlyArray<{
   { id: "16:9", ratio: 16 / 9 },
   { id: "19.5:9", ratio: 19.5 / 9 },
   { id: "4:3", ratio: 4 / 3 },
-  // A round display's square. The panel shows the disc inscribed in it: the
-  // four edges touch the ring and the corners fall outside the glass.
-  { id: "circle", ratio: 1 },
+  // A square artboard. The round display's shape is the artboard's *shape*,
+  // not a ratio: a disc is drawn on the same square and the shape travels with
+  // the document, so the ratio stays one number.
+  { id: "1:1", ratio: 1 },
 ];
 
 /** A resolution names the **short** edge — 19.5:9 at 1080p is 2340 × 1080, not
@@ -68,7 +69,10 @@ interface ArtboardPresetChoice {
 /** A ratio and an orientation with no resolution attached: the shape something
     is measured in. Carries no resolution because a display says a shape and the
     resolution is the author's later choice — argued at `DisplayLens.shape`. */
-export type ArtboardShape = Pick<ArtboardPresetChoice, "ratio" | "orientation">;
+export type ArtboardPresetShape = Pick<
+  ArtboardPresetChoice,
+  "ratio" | "orientation"
+>;
 
 /** Portrait is landscape with the two edges swapped, so one number per entry
     covers both and the two orientations cannot drift apart. */

@@ -27,16 +27,16 @@ const LANDSCAPE: ReadonlyArray<
   ["4:3", "1080p", 1440, 1080],
   ["4:3", "2k", 1920, 1440],
   ["4:3", "4k", 2880, 2160],
-  ["circle", "1080p", 1080, 1080],
-  ["circle", "2k", 1440, 1440],
-  ["circle", "4k", 2160, 2160],
+  ["1:1", "1080p", 1080, 1080],
+  ["1:1", "2k", 1440, 1440],
+  ["1:1", "4k", 2160, 2160],
 ];
 
 const RATIO_IDS: ReadonlyArray<ArtboardRatioId> = [
   "16:9",
   "19.5:9",
   "4:3",
-  "circle",
+  "1:1",
 ];
 const RESOLUTION_IDS: ReadonlyArray<ArtboardResolutionId> = [
   "1080p",
@@ -127,6 +127,11 @@ describe("matching a document's size back to its preset", () => {
       resolution: "1080p",
       orientation: "portrait",
     });
+    expect(artboardPresetFor({ width: 1080, height: 1080 })).toEqual({
+      ratio: "1:1",
+      resolution: "1080p",
+      orientation: "landscape",
+    });
   });
 
   it("has no answer for a size the author typed", () => {
@@ -179,12 +184,12 @@ describe("the preset a new document should open on", () => {
 
   it("picks the closest ratio rather than the first one that fits", () => {
     // 5:4 is nearer 4:3 (1.25) than 16:9 (1.78), and a square is exactly the
-    // Circle preset — the round display's own shape.
+    // 1:1 preset.
     expect(nearestArtboardPreset({ width: 1200, height: 960 }).ratio).toBe(
       "4:3",
     );
     expect(nearestArtboardPreset({ width: 1000, height: 1000 }).ratio).toBe(
-      "circle",
+      "1:1",
     );
   });
 
@@ -193,7 +198,7 @@ describe("the preset a new document should open on", () => {
     [{ width: 2000, height: 920 }, "19.5:9", "landscape"],
     [{ width: 960, height: 1280 }, "4:3", "portrait"],
     [{ width: 1024, height: 768 }, "4:3", "landscape"],
-    [{ width: 1000, height: 1000 }, "circle", "landscape"],
+    [{ width: 1000, height: 1000 }, "1:1", "landscape"],
   ])(
     "reads %o as %s %s, landscape ratio or portrait reciprocal",
     (size, ratio, orientation) => {

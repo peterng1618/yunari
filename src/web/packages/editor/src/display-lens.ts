@@ -1,7 +1,7 @@
 import {
   ARTBOARD_ORIENTATIONS,
   type ArtboardOrientation,
-  type ArtboardShape,
+  type ArtboardPresetShape,
 } from "./artboard-presets.js";
 
 /**
@@ -272,7 +272,9 @@ export function resolveLens(id: string): DisplayLens | undefined {
 
 /** The rect lens framing `shape`, or `undefined` — a user-managed list cannot
  *  guarantee every artboard shape a preview, so this never throws. */
-export function lensMatching(shape: ArtboardShape): DisplayLens | undefined {
+export function lensMatching(
+  shape: ArtboardPresetShape,
+): DisplayLens | undefined {
   let ratio: PreviewRatio;
   try {
     ratio = parsePreviewRatio(shape.ratio);
