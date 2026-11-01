@@ -228,6 +228,32 @@ describe("setOverlayMode", () => {
    * one — both contain the same text. This executes the emitted script instead,
    * so moving the clear back inside the dataset guard turns it red.
    */
+  it("pauses the page video while the overlay hides it, then resumes it", async () => {
+    document.body.innerHTML = "";
+    const host = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    canvas.dataset["yunari"] = "artboard";
+    host.append(canvas);
+    const video = document.createElement("video");
+    const pause = vi.fn();
+    const play = vi.fn(() => Promise.resolve());
+    Object.defineProperty(video, "pause", { value: pause });
+    Object.defineProperty(video, "play", { value: play });
+    document.body.append(host, video);
+
+    const { devtools, sent } = fakeDevtools();
+
+    await setOverlayMode(devtools, true);
+    new Function(expressionOf(sent))();
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(play).not.toHaveBeenCalled();
+
+    await setOverlayMode(devtools, false);
+    const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
+    new Function(String(entries[entries.length - 1]?.params["expression"]))();
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
   it("re-asserts the transparent paint after a fit repaints the host", async () => {
     document.body.innerHTML = "";
     const host = document.createElement("div");
@@ -291,6 +317,14 @@ describe("chromiumArguments", () => {
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
       "--disable-renderer-backgrounding",
+      // Every panel is the same origin, so one renderer serves them all.
+      "--process-per-site",
+      // Canvas rasterisation stays in the renderer that owns the canvas rather
+      // than a GPU-process surface per panel window.
+      "--disable-features=CanvasOopRasterization",
+      "--disable-gpu-rasterization",
+      "--disable-accelerated-2d-canvas",
+      "--enable-low-end-device-mode",
       "about:blank",
     ]);
   });

@@ -393,6 +393,18 @@ export function chromiumArguments(profile: string): readonly string[] {
     "--disable-background-timer-throttling",
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
+    // Every panel page is the same origin, and one renderer can hold them all:
+    // the default is one renderer per window, which pays the same heap and
+    // code pages once per panel.
+    "--process-per-site",
+    // Canvas rasterisation stays in the renderer that owns the canvas rather
+    // than a GPU-process surface per panel window.
+    "--disable-features=CanvasOopRasterization",
+    "--disable-gpu-rasterization",
+    "--disable-accelerated-2d-canvas",
+    // A dashboard host is not a workstation: the low-end budget keeps tile and
+    // surface pools small without moving compositing to the CPU.
+    "--enable-low-end-device-mode",
     // A panel is a display of its own; a URL bar or scrollbar in the capture
     // would be part of the frame.
     "about:blank",
@@ -611,11 +623,20 @@ export async function setOverlayMode(
           }
           host.style.background = "transparent";
         }
+        // The media layer is hidden and the device plays its own clip: a video
+        // left decoding is frames nobody reads.
+        for (const media of document.querySelectorAll("video")) media.pause();
       } else {
         style?.remove();
         if (host !== null && host.dataset["panelOverlayBackground"] !== undefined) {
           host.style.background = host.dataset["panelOverlayBackground"];
           delete host.dataset["panelOverlayBackground"];
+        }
+        // A still capture shows the page's own picture; autoplay may refuse,
+        // which is the page's state rather than a failed capture.
+        for (const media of document.querySelectorAll("video")) {
+          const started = media.play();
+          if (started !== undefined) started.catch(() => {});
         }
       }
       return true;
