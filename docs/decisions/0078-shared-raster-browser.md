@@ -95,12 +95,9 @@ measured cost, serialise panel rendering, or replace the proved capture stack.
 
 ## Runtime flags
 
-The browser starts with `--process-per-site`, `--disable-features=CanvasOopRasterization`,
-`--disable-gpu-rasterization`, `--disable-accelerated-2d-canvas` and
-`--enable-low-end-device-mode`. All panel pages are the same origin, so one
-renderer serves all of them; the canvas and raster switches keep their work in
-that renderer instead of a GPU-side surface per window, and the low-end budget
-stops the compositor reserving a full desktop pool.
+The browser starts with `--process-per-site` on top of the switches the panel
+browser already had, and an overlay panel pauses its page video. All panel pages
+are the same origin, so one renderer serves all of them.
 
 Measured on the three-panel hardware run (medians of three 60 s samples, private
 bytes, CPU seconds per 60 s):
@@ -110,7 +107,17 @@ bytes, CPU seconds per 60 s):
 | Shared browser, no flags | 13 | 1,187.3 | 53.5 | 6 | 620.0 |
 | `--process-per-site` | 11 | 1,138.6 | 47.3 | 4 | 603.4 |
 | Overlay video pause | 11 | 1,060.2 | 35.9 | 4 | 576.8 |
-| Canvas/raster/low-end flags | 10 | 1,028.1 | 26.6 | 3 | 515.7 |
+
+The shipped set measured 1,150.1 MB, 32.6 s and 568.2 MB browser + GPU across
+three trials; the ranges are in the spec.
+
+**Canvas and raster switches are rejected on visual grounds.**
+`--disable-features=CanvasOopRasterization`, `--disable-gpu-rasterization`,
+`--disable-accelerated-2d-canvas` and `--enable-low-end-device-mode` together
+measured 10 processes, 1,028.1 MB, 26.6 s and 515.7 MB browser + GPU — the
+cheapest result — but software canvas rasterisation banded the glass material
+on the Lian Li and TURZX panels, so they are not shipped. Visual output is a
+hard constraint; a cheaper frame that a person can see is a regression.
 
 An overlay panel's page video is paused while the overlay mode is on: the media
 layer is hidden and the device plays the clip, so decoding it is frames nobody
@@ -128,7 +135,7 @@ total), `--disable-gpu-compositing` (176 MB, 121 s, 2,193 MB),
 (569 vs 552 MB), `--disable-gpu-program-cache` (518 vs 513 MB), and creating
 each target at the panel's size (522 vs 513 MB).
 
-The flag set does not meet the spec's browser + GPU criterion (515.7 MB against
-459.5 MB). The criterion assumed a shared browser keeps a one-panel GPU
+The shipped set does not meet the spec's browser + GPU criterion (568.2 MB
+against 459.5 MB). The criterion assumed a shared browser keeps a one-panel GPU
 footprint; the measured growth is about 78 MB per extra headless window, and
 removing it moves the bytes into renderers and CPU. The spec records the miss.

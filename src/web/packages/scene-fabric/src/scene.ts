@@ -557,12 +557,7 @@ export function screenSurface(
 ): ArtboardSurface {
   return {
     shape: presentation.shape,
-    box: displayBox(
-      width,
-      height,
-      presentation.shape,
-      presentation.rotation,
-    ),
+    box: displayBox(width, height, presentation.shape, presentation.rotation),
   };
 }
 
