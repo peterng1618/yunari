@@ -423,7 +423,7 @@ function createNativeEditor(input: {
     artboard: () => input.artboard(),
     viewport,
     historyManager: {
-      attachGlobals: (port) => history.attachGlobals(port),
+      attachEnvelope: (port) => history.attachEnvelope(port),
       saveState: save,
       resetHistory: () => history.reset(),
       undo: () => history.undo(),

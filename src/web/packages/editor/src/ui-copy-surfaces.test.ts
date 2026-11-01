@@ -834,7 +834,10 @@ async function mountLandedSurfaces(): Promise<{
     createSelectionInspector(host, {
       editor: {
         canvas,
-        historyManager: { attachGlobals: () => {}, saveState: () => undefined },
+        historyManager: {
+          attachEnvelope: () => {},
+          saveState: () => undefined,
+        },
         errorManager: { warn: () => undefined, error: () => undefined },
         cropManager: { active: false, target: undefined },
         artboard: () => ({ width: 1920, height: 1080 }),

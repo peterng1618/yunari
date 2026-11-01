@@ -633,7 +633,7 @@ describe("panel fields in the selection inspector", () => {
           on: vi.fn(),
           off: vi.fn(),
         },
-        historyManager: { attachGlobals: () => {}, saveState },
+        historyManager: { attachEnvelope: () => {}, saveState },
         errorManager: { warn: vi.fn(), error: vi.fn() },
         cropManager: idleCrop(),
         artboard: () => ({ width: 1920, height: 1080 }),

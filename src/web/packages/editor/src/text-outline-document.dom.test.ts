@@ -80,7 +80,7 @@ function documentWith(font = true) {
         editor: {
           canvas,
           errorManager: { warn },
-          historyManager: { attachGlobals: () => undefined, saveState },
+          historyManager: { attachEnvelope: () => undefined, saveState },
         },
       } as unknown as EditorShell,
       envelope,

@@ -452,7 +452,7 @@ async function mountWithManager(
         handlers.get(event)?.delete(handler);
       },
     },
-    historyManager: { attachGlobals: () => {}, saveState },
+    historyManager: { attachEnvelope: () => {}, saveState },
     errorManager: { error, warn: vi.fn() },
   } as unknown as EditorInteraction;
 

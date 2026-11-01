@@ -59,7 +59,7 @@ function setup(objects: readonly object[] = []) {
   const editor = {
     canvas,
     cropManager: crop,
-    historyManager: { attachGlobals: () => {}, saveState },
+    historyManager: { attachEnvelope: () => {}, saveState },
     errorManager: { warn: vi.fn(), error: vi.fn() },
     artboard: () => ({ width: 1920, height: 1080 }),
   };

@@ -231,13 +231,14 @@ describe("editor panels", () => {
           }`,
       );
     expect(skipped).toEqual([
-      // The Document pane's four, and it leads the list because it is the first
+      // The Document pane's five, and it leads the list because it is the first
       // thing in `root` that renders one. The artboard panel was imperative
       // until Task 8, so its natives were not skipped at all; every control on it
       // is `ControlSelect` now, and each is a Base UI value carrier. It held
       // three more until the background's colour, media and fit moved to the
       // inspector's own column.
       "INPUT[type=][aria-hidden]", // Theme language
+      "INPUT[type=][aria-hidden]", // Shape
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution
@@ -521,7 +522,7 @@ function mountPanels(): { root: HTMLElement } {
       getObjects: () => [],
     },
     artboard: () => ({ width: 1280, height: 720 }),
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
     textManager: { addText: vi.fn() },
     errorManager: { warn: vi.fn(), error: vi.fn() },
   } as never;
@@ -700,7 +701,7 @@ function mountSelectionInspector(root: HTMLElement): void {
     canvas.setActiveObject(selection);
     const editor = {
       canvas,
-      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+      historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
       errorManager: { warn: vi.fn(), error: vi.fn() },
       cropManager: { active: false, target: undefined },
       artboard: () => ({ width: 1920, height: 1080 }),

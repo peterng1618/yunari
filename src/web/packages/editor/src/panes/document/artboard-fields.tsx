@@ -1,4 +1,8 @@
-import { type Artboard, MAX_ARTBOARD_DIMENSION } from "@yunari/renderer-core";
+import {
+  type Artboard,
+  type ArtboardShape,
+  MAX_ARTBOARD_DIMENSION,
+} from "@yunari/renderer-core";
 import { outsideCount, type SceneBox } from "@yunari/scene-fabric";
 import { useId } from "react";
 import {
@@ -40,14 +44,18 @@ interface ArtboardFieldsProps {
   readonly artboard: Artboard;
   readonly boxes: readonly SceneBox[] | undefined;
   readonly onCommit: (next: Artboard) => void;
+  /** The outline is a document edit with a scene conversion behind it, so it
+   *  leaves as a choice rather than as an artboard the panel invented. */
+  readonly onShapeChange: (shape: ArtboardShape) => void;
 }
 
 export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
-  const { artboard, boxes, onCommit } = props;
+  const { artboard, boxes, onCommit, onShapeChange } = props;
   // The size note's id, minted here because this component renders the note and
   // hands the id to the controls it describes.
   const noteId = `yunari-artboard-note-${useId().replace(/[^\w-]/g, "")}`;
   const matching = artboardPresetFor(artboard);
+  const circle = artboard.shape === "circle";
   const commit = (patch: Partial<Artboard>): void =>
     onCommit({ ...artboard, ...patch });
 
@@ -71,6 +79,18 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
     id: string,
   ): void => {
     const nearest = nearestArtboardPreset(artboard);
+    // A disc is inscribed in a square, so the one preset left on a circle board
+    // derives at 1:1 landscape: the ratio and orientation are the model's
+    // guarantee rather than a second choice the author can contradict.
+    if (circle) {
+      const derived = artboardSize(
+        "1:1",
+        presetId(id, nearest.resolution),
+        "landscape",
+      );
+      commit({ width: derived.width, height: derived.height });
+      return;
+    }
     const chosen = {
       ratio:
         which === "ratio"
@@ -96,21 +116,33 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
       <ControlSelect
-        label={uiCopy.panels.ratio}
-        data={{ "data-yunari-artboard-ratio": "" }}
+        label={uiCopy.newDocument.shape}
+        data={{ "data-yunari-artboard-shape": "" }}
         describedById={noteId}
-        value={matching?.ratio ?? ""}
-        options={ratioOptions()}
-        onChange={(id) => commitPreset("ratio", id)}
+        value={circle ? "circle" : "rect"}
+        options={shapeOptions()}
+        onChange={(id) => onShapeChange(presetId(id, "rect"))}
       />
-      <ControlSelect
-        label={uiCopy.panels.orientation}
-        data={{ "data-yunari-artboard-orientation": "" }}
-        describedById={noteId}
-        value={matching?.orientation ?? ""}
-        options={orientationOptions()}
-        onChange={(id) => commitPreset("orientation", id)}
-      />
+      {circle ? null : (
+        <>
+          <ControlSelect
+            label={uiCopy.panels.ratio}
+            data={{ "data-yunari-artboard-ratio": "" }}
+            describedById={noteId}
+            value={matching?.ratio ?? ""}
+            options={ratioOptions()}
+            onChange={(id) => commitPreset("ratio", id)}
+          />
+          <ControlSelect
+            label={uiCopy.panels.orientation}
+            data={{ "data-yunari-artboard-orientation": "" }}
+            describedById={noteId}
+            value={matching?.orientation ?? ""}
+            options={orientationOptions()}
+            onChange={(id) => commitPreset("orientation", id)}
+          />
+        </>
+      )}
       <ControlSelect
         label={uiCopy.panels.resolution}
         data={{ "data-yunari-artboard-resolution": "" }}
@@ -121,7 +153,8 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
       />
       {/* The free size fields stay for a size no preset names, and the pair
           marks them W and H because the whole words do not fit beside two boxes
-          in a 246px pane. */}
+          in a 246px pane. On a circle board the two edges are one size, so
+          either field writes both. */}
       <ControlPair
         label={uiCopy.panels.size}
         describedById={noteId}
@@ -133,7 +166,8 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
             integer: true,
             min: 1,
             max: MAX_ARTBOARD_DIMENSION,
-            onCommit: (width) => commitSize(width, artboard.height),
+            onCommit: (width) =>
+              commitSize(width, circle ? width : artboard.height),
           },
           {
             label: uiCopy.panels.heightMark,
@@ -142,7 +176,8 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
             integer: true,
             min: 1,
             max: MAX_ARTBOARD_DIMENSION,
-            onCommit: (height) => commitSize(artboard.width, height),
+            onCommit: (height) =>
+              commitSize(circle ? height : artboard.width, height),
           },
         ]}
       />
@@ -186,6 +221,16 @@ const CUSTOM: ControlOption = {
   name: uiCopy.panels.customSize,
   disabled: true,
 };
+
+/** The one closed set the document stores, in the order the chooser offers it:
+ *  a rectangle first, because it is what a document without a shape already
+ *  is. */
+function shapeOptions(): readonly ControlOption[] {
+  return (["rect", "circle"] as const).map((id) => ({
+    id,
+    name: uiCopy.artboardShapes[id],
+  }));
+}
 
 function ratioOptions(): readonly ControlOption[] {
   return [

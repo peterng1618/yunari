@@ -131,7 +131,7 @@ function createSession(
           setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
-        historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+        historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
         errorManager: { warn: vi.fn(), error: vi.fn() },
       },
       scene: {},

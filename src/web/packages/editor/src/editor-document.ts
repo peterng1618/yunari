@@ -1,5 +1,6 @@
 import {
   type Artboard,
+  type ArtboardShape,
   type Background,
   type Binding,
   bumpSemanticVersion,
@@ -19,7 +20,8 @@ import {
   type ThemeCredits,
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
-import { IText } from "fabric/es";
+import { IText, Point } from "fabric/es";
+import { circleConversion } from "./artboard-conversion.js";
 import type { ArtboardPanel } from "./artboard-panel.js";
 import { assetBytes, familyCuts, trashAssets } from "./asset-finder/client.js";
 import {
@@ -297,12 +299,21 @@ export class EditorDocument {
         ? {}
         : { onOpenTheme: source.onOpenTheme }),
     });
-    // Undo carries the palette as well as the scene. The shell captured its
-    // opening entry before this document existed, so attaching patches that
-    // entry with the globals the document opened with.
-    this.#shell.editor.historyManager.attachGlobals({
-      read: () => this.#envelope.globals,
-      write: (globals) => this.#restoreGlobals(globals),
+    // Undo carries the palette as well as the scene, and the board the scene
+    // was authored on. The shell captured its opening entry before this
+    // document existed, so attaching patches that entry with the envelope the
+    // document opened with.
+    this.#shell.editor.historyManager.attachEnvelope({
+      read: () => ({
+        globals: this.#envelope.globals,
+        artboard: this.#envelope.artboard,
+      }),
+      // Reached from the restore itself, which holds history suspended, so the
+      // artboard write below records no entry of its own.
+      write: (state) => {
+        this.#restoreGlobals(state.globals);
+        this.setArtboard(state.artboard);
+      },
     });
   }
 
@@ -726,6 +737,60 @@ export class EditorDocument {
     // is for.
     this.#shell.setArtboard(artboard);
     this.#consumers.artboard().render(artboard, this.#envelope.metadata);
+  }
+
+  /**
+   * Sets the authored canvas's outline, converting the scene when it becomes a
+   * circle.
+   *
+   * **One entry for the whole conversion.** Every object moves and the board
+   * changes, and the author pressed one control: the suspension makes that
+   * burst one undo step instead of one per object, and the save after it is the
+   * entry. The rectangle direction records one entry too — undo covering only
+   * the circle would make the toggle asymmetric — and it keeps the square the
+   * circle left rather than restoring a previous size nobody can inverse.
+   *
+   * The same shape is a no-op: the control can report a value the document
+   * already holds, and recording that would be an entry that undoes nothing.
+   */
+  setArtboardShape(shape: ArtboardShape): void {
+    const current = this.#envelope.artboard;
+    if ((current.shape ?? "rect") === shape) return;
+    const history = this.#shell.editor.historyManager;
+    if (shape === "rect") {
+      // Omitted rather than written as "rect": absent is the document's own
+      // spelling of a rectangular board.
+      const { shape: _shape, ...artboard } = current;
+      this.setArtboard(artboard);
+    } else {
+      const conversion = circleConversion(current);
+      const canvas = this.#shell.editor.canvas;
+      const release = history.suspend();
+      try {
+        for (const object of canvas.getObjects()) {
+          const centre = object.getCenterPoint();
+          object.set({
+            scaleX: object.scaleX * conversion.scale,
+            scaleY: object.scaleY * conversion.scale,
+          });
+          object.setXY(
+            new Point(
+              conversion.artboard.width / 2 +
+                (centre.x - current.width / 2) * conversion.scale,
+              conversion.artboard.height / 2 +
+                (centre.y - current.height / 2) * conversion.scale,
+            ),
+            "center",
+            "center",
+          );
+          object.setCoords();
+        }
+        this.setArtboard(conversion.artboard);
+      } finally {
+        release();
+      }
+    }
+    history.saveState();
   }
 
   /**

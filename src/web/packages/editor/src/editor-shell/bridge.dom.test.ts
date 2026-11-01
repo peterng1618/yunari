@@ -76,7 +76,7 @@ function documentForNotifications(): EditorDocument {
         snapshot: (value: unknown) => value,
         editor: {
           errorManager: { report: () => {} },
-          historyManager: { attachGlobals: () => {} },
+          historyManager: { attachEnvelope: () => {} },
         },
       } as unknown as EditorShell,
       envelope: createNewFabricTheme() as unknown as FabricThemeEnvelopeInput,
@@ -133,7 +133,7 @@ function bridgeFor(
     groupingManager: { groupContext: () => [] as readonly unknown[] },
     // Every committed layer command records exactly one history entry, so the
     // stub carries the manager they all go through.
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
     ...extra,
   };
   const session = {
@@ -897,7 +897,7 @@ it("reveals a hidden ancestor path but hides only the requested object", () => {
   const saveState = vi.fn();
   const { bridge } = bridgeFor(
     group,
-    { historyManager: { attachGlobals: () => {}, saveState } },
+    { historyManager: { attachEnvelope: () => {}, saveState } },
     {},
     { requestRenderAll: vi.fn() },
   );
@@ -973,7 +973,7 @@ it("ignores a layer command aimed at an id the tree does not have", () => {
   const saveState = vi.fn();
   const { bridge } = bridgeFor(
     new Rect({ id: "only" }),
-    { historyManager: { attachGlobals: () => {}, saveState } },
+    { historyManager: { attachEnvelope: () => {}, saveState } },
     {},
     { setActiveObject, requestRenderAll: vi.fn() },
   );
@@ -996,7 +996,7 @@ it("reorders within one parent and reports the move", () => {
   const saveState = vi.fn();
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState },
+    historyManager: { attachEnvelope: () => {}, saveState },
   });
 
   const order = (): unknown[] =>
@@ -1029,7 +1029,7 @@ it("moves a layer across a group boundary, in and out", () => {
   const saveState = vi.fn();
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState },
+    historyManager: { attachEnvelope: () => {}, saveState },
   });
   const ids = (objects: readonly { get(key: string): unknown }[]): unknown[] =>
     objects.map((object) => object.get("id"));
@@ -1072,7 +1072,7 @@ it("refuses a cycle, before the drop rather than after it", () => {
   canvas.add(group);
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
   const ids = (objects: readonly { get(key: string): unknown }[]): unknown[] =>
     objects.map((object) => object.get("id"));
@@ -1110,7 +1110,7 @@ it("leaves a reparented object alive in the scene the adapter is drawing", async
   const adapter = createSceneAdapter({ canvas });
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
 
   expect(chart.disposed).toBe(false);
@@ -1153,7 +1153,7 @@ it("refreshes the cached boxes a reparent moves", async () => {
   for (const object of [a, b, loose, group]) object.setCoords();
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
 
   expect(bridge.moveLayer("loose", "a")).toBe(true);
@@ -1207,7 +1207,7 @@ it("leaves the canvas in the state a removal leaves, except the object itself", 
     canvas._hoveredActualTarget = chart;
     const { bridge } = bridgeFor(undefined, {
       canvas,
-      historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+      historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
     });
     return { canvas, group, chart, bridge, adapter };
   };
@@ -1334,7 +1334,7 @@ it("refreshes the caches beside a nested destination, not only those the drop na
   for (const object of scene) object.setCoords();
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
 
   expect(bridge.moveLayer("loose", "a")).toBe(true);
@@ -1363,7 +1363,7 @@ it("fills a group that has nothing in it, and refills one a drag emptied", async
   canvas.add(group, other);
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
   const ids = (objects: readonly { get(key: string): unknown }[]): unknown[] =>
     objects.map((object) => object.get("id"));
@@ -1405,7 +1405,7 @@ it("refuses an unknown id instead of moving something else", () => {
   canvas.add(alpha, beta);
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   });
 
   const before = canvas.getObjects().map((object) => object.get("id"));
@@ -1431,7 +1431,7 @@ it("reorders inside a group without lifting the child out of it", () => {
   const saveState = vi.fn();
   const { bridge } = bridgeFor(undefined, {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState },
+    historyManager: { attachEnvelope: () => {}, saveState },
   });
 
   const ids = (objects: readonly { get(key: string): unknown }[]): unknown[] =>

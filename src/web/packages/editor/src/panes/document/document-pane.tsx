@@ -1,4 +1,8 @@
-import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
+import type {
+  Artboard,
+  ArtboardShape,
+  ThemeMetadata,
+} from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { InspectorSection } from "../../components/ui/inspector-section.js";
@@ -37,6 +41,7 @@ interface DocumentPaneProps {
    *  terms. Empty for a theme that credits nothing. */
   readonly credits: readonly ThemeCreditsEntry[];
   readonly onArtboard: (next: Artboard) => void;
+  readonly onShapeChange: (shape: ArtboardShape) => void;
   readonly onMetadata: (next: ThemeMetadata) => void;
 }
 
@@ -55,6 +60,7 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
           artboard={artboard}
           boxes={boxes}
           onCommit={props.onArtboard}
+          onShapeChange={props.onShapeChange}
         />
       </InspectorSection>
       {credits.length === 0 ? null : (

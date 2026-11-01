@@ -70,6 +70,7 @@ interface Mounted {
   readonly host: HTMLElement;
   readonly change: ReturnType<typeof vi.fn>;
   readonly metadataChange: ReturnType<typeof vi.fn>;
+  readonly shapeChange: ReturnType<typeof vi.fn>;
 }
 
 async function mount(
@@ -79,14 +80,16 @@ async function mount(
   panel = undefined;
   document.body.replaceChildren();
   const metadataChange = vi.fn();
+  const shapeChange = vi.fn();
   const change = vi.fn();
   await act(async () => {
     panel = createArtboardPanel(document.body, change, {
       onMetadataChange: metadataChange,
+      onShapeChange: shapeChange,
       ...options,
     });
   });
-  return { host: document.body, change, metadataChange };
+  return { host: document.body, change, metadataChange, shapeChange };
 }
 
 /** One draw, which is what the session's `render` is. */
@@ -262,6 +265,56 @@ describe("artboard panel", () => {
       width: 1000,
       height: 720,
     });
+  });
+
+  it("reports the chosen shape without resizing the board itself", async () => {
+    // The conversion is the document's: it scales the scene and records the
+    // history entry. The panel reports the choice and nothing more, so a failed
+    // conversion cannot leave a resized board the document never wrote.
+    const { shapeChange } = await mount();
+    await draw({ width: 1920, height: 1080 });
+    expect(choiceOf("[data-yunari-artboard-shape]")).toBe("rect");
+
+    await chooseIn("[data-yunari-artboard-shape]", "circle");
+    expect(shapeChange).toHaveBeenCalledWith("circle");
+  });
+
+  it("hides ratio and orientation on a circle board and writes both edges", async () => {
+    const { change, shapeChange } = await mount();
+    await draw({ width: 1080, height: 1080, shape: "circle" });
+
+    expect(document.querySelector("[data-yunari-artboard-ratio]")).toBeNull();
+    expect(
+      document.querySelector("[data-yunari-artboard-orientation]"),
+    ).toBeNull();
+
+    // A circle is square by the model's own rule, so one typed edge is one
+    // size: a width alone would leave a board the validator refuses.
+    await commitField("[data-yunari-artboard-width]", "1200");
+    expect(change).toHaveBeenLastCalledWith({
+      width: 1200,
+      height: 1200,
+      shape: "circle",
+    });
+
+    await commitField("[data-yunari-artboard-height]", "900");
+    expect(change).toHaveBeenLastCalledWith({
+      width: 900,
+      height: 900,
+      shape: "circle",
+    });
+
+    // The remaining preset control derives at 1:1 landscape, so a resolution
+    // writes one square size rather than the nearest ratio's rectangle.
+    await chooseIn("[data-yunari-artboard-resolution]", "4k");
+    expect(change).toHaveBeenLastCalledWith({
+      width: 2160,
+      height: 2160,
+      shape: "circle",
+    });
+
+    await chooseIn("[data-yunari-artboard-shape]", "rect");
+    expect(shapeChange).toHaveBeenCalledWith("rect");
   });
 
   it("draws the theme's attribution only when it has one", async () => {

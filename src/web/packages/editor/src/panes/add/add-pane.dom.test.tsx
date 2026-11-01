@@ -33,7 +33,7 @@ function editorStub() {
       getObjects: vi.fn((): unknown[] => []),
     },
     artboard: () => ({ width: 1920, height: 1080 }),
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
     textManager: { addText: vi.fn(), cancelPlacement: vi.fn() },
     errorManager: { warn: vi.fn(), error: vi.fn() },
   };

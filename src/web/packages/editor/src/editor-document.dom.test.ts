@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type {
+  Artboard,
   FabricThemeEnvelopeInput,
   FontCut,
   FontTrioInfo,
@@ -14,7 +15,7 @@ import {
 } from "./asset-manager/index.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
-import type { HistoryGlobalsPort } from "./history-manager/index.js";
+import type { HistoryEnvelopePort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
 import { serializeThemePackage } from "./persist.js";
 import { PersistenceManager } from "./persistence-manager/index.js";
@@ -92,7 +93,7 @@ function documentWith(
         backdrop: () => undefined,
         editor: {
           errorManager: { report: () => {} },
-          historyManager: { attachGlobals: () => {} },
+          historyManager: { attachEnvelope: () => {} },
           canvas: { getObjects: () => seams.objects ?? [] },
         },
       } as unknown as EditorShell,
@@ -726,7 +727,7 @@ describe("EditorDocument globals commits", () => {
           setBackground: vi.fn(),
           editor: {
             errorManager: { report: () => {} },
-            historyManager: { attachGlobals: () => {}, saveState },
+            historyManager: { attachEnvelope: () => {}, saveState },
             canvas: { getObjects: () => [] },
           },
         } as unknown as EditorShell,
@@ -787,7 +788,7 @@ describe("EditorDocument's unsaved mark", () => {
           setBackground: vi.fn(),
           editor: {
             errorManager: { report: () => {} },
-            historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+            historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
             canvas: { getObjects: () => [] },
           },
         } as unknown as EditorShell,
@@ -837,18 +838,20 @@ describe("EditorDocument's unsaved mark", () => {
 
 describe("EditorDocument undo", () => {
   it("re-renders the types panel when an undo restores the globals", () => {
-    let port: HistoryGlobalsPort | undefined;
+    let port: HistoryEnvelopePort | undefined;
     const typesRender = vi.fn();
     const setGlobals = vi.fn();
+    const setArtboard = vi.fn();
     const document = new EditorDocument({
       source: {
         shell: {
           snapshot: (value: unknown) => value,
           setGlobals,
+          setArtboard,
           editor: {
             errorManager: { report: () => {} },
             historyManager: {
-              attachGlobals: (attached: HistoryGlobalsPort) => {
+              attachEnvelope: (attached: HistoryEnvelopePort) => {
                 port = attached;
               },
             },
@@ -861,23 +864,151 @@ describe("EditorDocument undo", () => {
         onSaved: () => {},
       },
       consumers: {
+        artboard: () => ({ render: () => {} }),
         palette: () => ({ render: () => {} }),
         types: () => ({ render: typesRender }),
         runtime: () => ({ setGlobals }),
         charts: () => ({ setGlobals }),
         newObjects: () => ({ setGlobals }),
-        selection: () => ({ setGlobals }),
+        selection: () => ({ setGlobals, setLocale: () => {} }),
       } as never,
     });
-    if (port === undefined) throw new Error("no globals port was attached");
+    if (port === undefined) throw new Error("no envelope port was attached");
 
     // A type-preset edit records an entry, so undo restores the whole bag: the
     // envelope would hold the old presets while the pane still drew the new.
     const presets = { heading: { name: "Heading", value: {} } } as never;
-    port.write({ typeTokens: presets });
+    port.write({
+      globals: { typeTokens: presets },
+      artboard: { width: 1920, height: 1080 },
+    });
 
     expect(typesRender).toHaveBeenCalledWith(presets);
+    expect(setArtboard).toHaveBeenCalledWith({ width: 1920, height: 1080 });
     document.destroy();
+  });
+});
+
+describe("EditorDocument artboard shape", () => {
+  /** A document holding one artboard and a scene the conversion may touch. The
+   *  shell and consumers are stubs because the conversion's contract is the
+   *  envelope, the objects and the one history entry. */
+  function shapeDocument(
+    artboard: Artboard,
+    objects: readonly FabricObject[] = [],
+  ) {
+    const saveState = vi.fn();
+    const release = vi.fn();
+    const suspend = vi.fn(() => release);
+    const setArtboard = vi.fn();
+    const render = vi.fn();
+    const document = new EditorDocument({
+      source: {
+        shell: {
+          snapshot: (value: unknown) => value,
+          setGlobals: vi.fn(),
+          setBackground: vi.fn(),
+          setArtboard,
+          editor: {
+            errorManager: { report: () => {} },
+            historyManager: {
+              attachEnvelope: () => {},
+              saveState,
+              suspend,
+            },
+            canvas: { getObjects: () => objects },
+          },
+        } as unknown as EditorShell,
+        envelope: {
+          ...createNewFabricTheme(),
+          artboard,
+        } as unknown as FabricThemeEnvelopeInput,
+        assetManager: new AssetManager(),
+        onNew: async () => {},
+        onNewFromStarter: async () => {},
+        onSaved: () => {},
+      },
+      consumers: {
+        artboard: () => ({ render }),
+        palette: () => ({ render: () => {} }),
+        types: () => ({ render: () => {} }),
+        runtime: () => ({ setGlobals: () => {}, setThemeLanguage: () => {} }),
+        charts: () => ({
+          setGlobals: () => {},
+          reassignPaletteReferences: () => {},
+        }),
+        newObjects: () => ({ setGlobals: () => {} }),
+        selection: () => ({ setGlobals: () => {}, setLocale: () => {} }),
+      } as never,
+    });
+    return { document, saveState, suspend, release, setArtboard, render };
+  }
+
+  it("scales and centres the top-level scene inside the inscribed disc", () => {
+    const rect = new Rect({
+      left: 100,
+      top: 100,
+      width: 200,
+      height: 100,
+      originX: "center",
+      originY: "center",
+    });
+    const { document, saveState, suspend, release, render } = shapeDocument(
+      { width: 1920, height: 1080 },
+      [rect],
+    );
+
+    document.setArtboardShape("circle");
+
+    const scale = 1080 / Math.hypot(1920, 1080);
+    expect(rect.left).toBeCloseTo(540 + (100 - 960) * scale);
+    expect(rect.top).toBeCloseTo(540 + (100 - 540) * scale);
+    expect(rect.scaleX).toBeCloseTo(scale);
+    expect(rect.scaleY).toBeCloseTo(scale);
+    expect(document.envelope.artboard).toEqual({
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+    });
+    expect(render.mock.lastCall?.[0]).toEqual({
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+    });
+    // The burst is one entry however many objects moved: the suspension wraps
+    // the whole conversion and the save happens once, after it.
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(saveState).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the shape key when a circle becomes a rectangle", () => {
+    const { document, saveState } = shapeDocument({
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+    });
+
+    document.setArtboardShape("rect");
+
+    // A rectangle is the absent shape, so the key is omitted rather than
+    // written as "rect" — the validator reads the same thing either way, but
+    // only one of them is the document's own spelling.
+    expect(document.envelope.artboard).toEqual({ width: 1080, height: 1080 });
+    expect("shape" in document.envelope.artboard).toBe(false);
+    expect(saveState).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when the document already has the shape", () => {
+    const { document, saveState, setArtboard } = shapeDocument({
+      width: 1920,
+      height: 1080,
+    });
+
+    document.setArtboardShape("rect");
+
+    expect(saveState).not.toHaveBeenCalled();
+    expect(setArtboard).not.toHaveBeenCalled();
   });
 });
 
@@ -897,7 +1028,7 @@ function presetDocument(presets: TypeTokens): {
         setGlobals: vi.fn(),
         editor: {
           errorManager: { report: () => {} },
-          historyManager: { attachGlobals: () => {}, saveState },
+          historyManager: { attachEnvelope: () => {}, saveState },
           canvas: { getObjects: () => [] },
         },
       } as unknown as EditorShell,

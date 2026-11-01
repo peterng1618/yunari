@@ -83,8 +83,9 @@ const enumeratedHooks = [
   "theme-language",
   "theme-language-sample",
   "theme-version",
-  // The artboard: the three controls that derive a size, and the free pair for
-  // a size no preset names.
+  // The artboard: the outline, the three controls that derive a size, and the
+  // free pair for a size no preset names.
+  "artboard-shape",
   "artboard-ratio",
   "artboard-orientation",
   "artboard-resolution",
@@ -214,6 +215,7 @@ it("states the note's role and describes the controls it is about with it", asyn
   for (const hook of [
     "artboard-width",
     "artboard-height",
+    "artboard-shape",
     "artboard-ratio",
     "artboard-orientation",
     "artboard-resolution",

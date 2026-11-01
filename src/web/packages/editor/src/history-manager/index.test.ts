@@ -1,8 +1,22 @@
-import type { FabricGlobals } from "@yunari/renderer-core";
+import type { Artboard, FabricGlobals } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { EditorHistory } from "./index.js";
 
 const canvasStub = () => ({ fire: vi.fn(), getActiveObject: () => undefined });
+
+const ARTBOARD: Artboard = { width: 1920, height: 1080 };
+
+/** The envelope half of an entry: the globals history asks the document for,
+ *  and the artboard the scene was authored on. */
+interface Envelope {
+  readonly globals: FabricGlobals | undefined;
+  readonly artboard: Artboard;
+}
+
+const envelopeOf = (
+  globals: FabricGlobals | undefined,
+  artboard: Artboard = ARTBOARD,
+): Envelope => ({ globals, artboard });
 
 const paletteOf = (colour: string): FabricGlobals => ({
   palette: {
@@ -127,23 +141,23 @@ describe("EditorHistory", () => {
 
   it("records an entry when only the globals changed", () => {
     const canvas = canvasStub();
-    let globals: FabricGlobals | undefined = {};
+    let state: Envelope = envelopeOf({});
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
       revive: async () => {},
     });
-    history.attachGlobals({
-      read: () => globals,
+    history.attachEnvelope({
+      read: () => state,
       write: (next) => {
-        globals = next;
+        state = next;
       },
     });
     history.reset();
 
     // A palette edit touches no Fabric object, so the scene is identical and
     // the only difference an entry can see is the envelope's half.
-    globals = paletteOf("red");
+    state = envelopeOf(paletteOf("red"));
     history.save();
 
     expect(canvas.fire).toHaveBeenCalledWith("editor:edit-committed");
@@ -151,7 +165,7 @@ describe("EditorHistory", () => {
 
   it("writes the previous globals after reviving the scene", async () => {
     const order: string[] = [];
-    let globals: FabricGlobals | undefined = paletteOf("red");
+    let state: Envelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvasStub() as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -159,20 +173,20 @@ describe("EditorHistory", () => {
         order.push("revive");
       },
     });
-    history.attachGlobals({
-      read: () => globals,
+    history.attachEnvelope({
+      read: () => state,
       write: (next) => {
         order.push("globals");
-        globals = next;
+        state = next;
       },
     });
     history.reset();
-    globals = paletteOf("blue");
+    state = envelopeOf(paletteOf("blue"));
     history.save();
 
     await history.undo();
 
-    expect(globals).toEqual(paletteOf("red"));
+    expect(state.globals).toEqual(paletteOf("red"));
     // The scene is what the globals were authored against, so it goes back
     // first: a palette written before the revive paints the old scene.
     expect(order).toEqual(["revive", "globals"]);
@@ -180,7 +194,7 @@ describe("EditorHistory", () => {
 
   it("patches the first entry when the port attaches after reset", async () => {
     const canvas = canvasStub();
-    let globals: FabricGlobals | undefined;
+    let state: Envelope = envelopeOf(undefined);
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
@@ -192,20 +206,20 @@ describe("EditorHistory", () => {
     // so entry 0 is recorded without globals. Undoing to it must restore the
     // palette that was present when the port attached, not delete it.
     const attached = paletteOf("red");
-    globals = attached;
-    history.attachGlobals({
-      read: () => globals,
+    state = envelopeOf(attached);
+    history.attachEnvelope({
+      read: () => state,
       write: (next) => {
-        globals = next;
+        state = next;
       },
     });
     expect(canvas.fire).not.toHaveBeenCalled();
 
-    globals = paletteOf("blue");
+    state = envelopeOf(paletteOf("blue"));
     history.save();
     await history.undo();
 
-    expect(globals).toEqual(attached);
+    expect(state.globals).toEqual(attached);
   });
 
   it("keeps the newest 100 entries and makes the older ones unreachable", async () => {
@@ -257,17 +271,17 @@ describe("EditorHistory", () => {
 
   it("re-fingerprints the first entry when the port attaches", () => {
     const canvas = canvasStub();
-    let globals: FabricGlobals | undefined = paletteOf("red");
+    let state: Envelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
       revive: async () => {},
     });
     history.reset();
-    history.attachGlobals({
-      read: () => globals,
+    history.attachEnvelope({
+      read: () => state,
       write: (next) => {
-        globals = next;
+        state = next;
       },
     });
 
@@ -279,27 +293,87 @@ describe("EditorHistory", () => {
 
   it("records one entry when neither the scene nor the globals changed", async () => {
     const canvas = canvasStub();
-    let globals: FabricGlobals | undefined = paletteOf("red");
+    let state: Envelope = envelopeOf(paletteOf("red"));
     const history = new EditorHistory({
       canvas: canvas as never,
       serialize: () => ({ version: "7.4.0", objects: [] }) as never,
       revive: async () => {},
     });
-    history.attachGlobals({
-      read: () => globals,
+    history.attachEnvelope({
+      read: () => state,
       write: (next) => {
-        globals = next;
+        state = next;
       },
     });
     history.reset();
-    globals = paletteOf("blue");
+    state = envelopeOf(paletteOf("blue"));
     history.save();
-    globals = paletteOf("blue");
+    state = envelopeOf(paletteOf("blue"));
     history.save();
 
     expect(canvas.fire).toHaveBeenCalledTimes(1);
 
     await history.undo();
-    expect(globals).toEqual(paletteOf("red"));
+    expect(state.globals).toEqual(paletteOf("red"));
+  });
+
+  it("restores the artboard captured with the scene", async () => {
+    const canvas = canvasStub();
+    let state: Envelope = envelopeOf(undefined);
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => ({ version: "7.4.0", objects: [] }) as never,
+      revive: async () => {},
+    });
+    history.attachEnvelope({
+      read: () => state,
+      write: (next) => {
+        state = next;
+      },
+    });
+    history.reset();
+
+    const circle: Artboard = { width: 1080, height: 1080, shape: "circle" };
+    state = envelopeOf(undefined, circle);
+    history.save();
+    await history.undo();
+
+    // A conversion changes the board the scene is authored on, so the entry's
+    // other half has to travel with it or undo leaves the disc on a 16:9 board.
+    expect(state.artboard).toEqual(ARTBOARD);
+  });
+
+  it("undoes a scene and artboard change as one entry", async () => {
+    const canvas = canvasStub();
+    let scene = { version: "7.4.0", objects: [{ id: "before" }] };
+    let state: Envelope = envelopeOf(undefined);
+    const revive = vi.fn(async (_canvas: unknown, _scene: unknown) => {});
+    const history = new EditorHistory({
+      canvas: canvas as never,
+      serialize: () => scene as never,
+      revive,
+    });
+    history.attachEnvelope({
+      read: () => state,
+      write: (next) => {
+        state = next;
+      },
+    });
+    history.reset();
+
+    scene = { version: "7.4.0", objects: [{ id: "after" }] };
+    state = envelopeOf(undefined, {
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+    });
+    history.save();
+    await history.undo();
+
+    expect(revive).toHaveBeenCalledWith(canvas, {
+      version: "7.4.0",
+      objects: [{ id: "before" }],
+    });
+    expect(state.artboard).toEqual(ARTBOARD);
   });
 });

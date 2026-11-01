@@ -1,4 +1,8 @@
-import type { Artboard, ThemeMetadata } from "@yunari/renderer-core";
+import type {
+  Artboard,
+  ArtboardShape,
+  ThemeMetadata,
+} from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { createElement } from "react";
@@ -31,6 +35,10 @@ export interface ArtboardPanel {
 
 export interface ThemeSettingsOptions {
   readonly onMetadataChange?: (metadata: ThemeMetadata) => void;
+  /** The authored canvas's outline. The conversion and its history entry are
+   *  the document's, so the panel reports the choice rather than resizing the
+   *  board it was handed. */
+  readonly onShapeChange?: (shape: ArtboardShape) => void;
 }
 
 /**
@@ -107,6 +115,7 @@ export function createArtboardPanel(
             draw();
             options.onMetadataChange?.(next);
           },
+          onShapeChange: (shape) => options.onShapeChange?.(shape),
         }),
       );
     });

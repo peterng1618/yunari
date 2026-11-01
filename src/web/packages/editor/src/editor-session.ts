@@ -349,6 +349,9 @@ export class EditorSession {
       (artboard) => this.#document.setArtboard(artboard),
       {
         onMetadataChange: (metadata) => this.#document.setMetadata(metadata),
+        // The conversion is the document's: it scales the scene, writes the
+        // board and records the one history entry.
+        onShapeChange: (shape) => this.#document.setArtboardShape(shape),
         // The panel's own comment said the scene was not its to read, so it
         // stated a rule true at every size and therefore said nothing. It is
         // given the scene now that the counting lives with it.

@@ -42,7 +42,7 @@ function documentWith(
               },
         editor: {
           errorManager: { report: () => {} },
-          historyManager: { attachGlobals: () => {} },
+          historyManager: { attachEnvelope: () => {} },
           // The cleanup a save asks first walks the canvas for referenced
           // assets, so a fixture without one cannot save at all.
           canvas: { getObjects: () => [...(sceneObjects ?? [])] },

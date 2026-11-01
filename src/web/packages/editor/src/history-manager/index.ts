@@ -1,24 +1,34 @@
-import type { FabricGlobals } from "@yunari/renderer-core";
+import type { Artboard, FabricGlobals } from "@yunari/renderer-core";
 import { type SerialisedScene, targetsOf } from "@yunari/scene-fabric";
 import { ActiveSelection, type Canvas, type FabricObject } from "fabric/es";
 
 type HistoryCanvas = Canvas;
 
-/** The envelope's half of undo state. The scene is the canvas's; the palette
- *  and type presets are the document's, so history asks its host for them
- *  rather than reaching into an envelope it does not own. */
-export interface HistoryGlobalsPort {
-  readonly read: () => FabricGlobals | undefined;
-  readonly write: (globals: FabricGlobals | undefined) => void;
+/** The envelope half of an undo entry. The scene is the canvas's; the palette,
+ *  type presets and the artboard the scene is authored on are the document's,
+ *  so history asks its host for them rather than reaching into an envelope it
+ *  does not own. */
+export interface HistoryEnvelopePort {
+  readonly read: () => {
+    readonly globals: FabricGlobals | undefined;
+    readonly artboard: Artboard;
+  };
+  readonly write: (state: {
+    readonly globals: FabricGlobals | undefined;
+    readonly artboard: Artboard;
+  }) => void;
 }
 
 interface HistoryEntry {
   readonly scene: SerialisedScene;
   readonly globals: FabricGlobals | undefined;
-  /** `scene` and `globals` serialised once, at capture. Comparing two of these
-   *  is string equality, so a save no longer re-serialises the entry it is
-   *  compared against — and an undo target older than the cap is dropped with
-   *  the string it already paid for. */
+  /** `undefined` until the port attaches after `reset()`, which re-captures the
+   *  opening entry with the document's board. Every later entry has one. */
+  readonly artboard: Artboard | undefined;
+  /** `scene` and the envelope's halves serialised once, at capture. Comparing
+   *  two of these is string equality, so a save no longer re-serialises the
+   *  entry it is compared against — and an undo target older than the cap is
+   *  dropped with the string it already paid for. */
   readonly fingerprint: string;
 }
 
@@ -41,7 +51,7 @@ export class EditorHistory {
   #index = -1;
   #suspended = 0;
   #restoring: Promise<void> = Promise.resolve();
-  #port: HistoryGlobalsPort | undefined;
+  #port: HistoryEnvelopePort | undefined;
 
   constructor(options: {
     readonly canvas: HistoryCanvas;
@@ -68,12 +78,13 @@ export class EditorHistory {
   /** Tells history where an entry's envelope half comes from. The shell resets
    *  while creating the editor, before the document exists, so this arrives
    *  after `reset()` and patches the entry it could not capture. Undoing to
-   *  entry 0 must restore the palette the author started with, not delete it. */
-  attachGlobals(port: HistoryGlobalsPort): void {
+   *  entry 0 must restore the palette the author started with, not delete it,
+   *  and the board the scene was drawn on rather than one it never had. */
+  attachEnvelope(port: HistoryEnvelopePort): void {
     this.#port = port;
     const entry = this.#entries[this.#index];
     if (entry === undefined) return;
-    // Re-captured rather than patched: the fingerprint has to cover the globals
+    // Re-captured rather than patched: the fingerprint has to cover the envelope
     // the entry could not read at reset, or the same state would compare as new.
     this.#entries[this.#index] = captureWith(entry.scene, port.read());
   }
@@ -138,8 +149,9 @@ export class EditorHistory {
     return next;
   }
 
-  /** `scene` and `globals` captured together, so one entry is one authored
-   *  state: the palette alone can change while no Fabric object moves. */
+  /** `scene` and the envelope captured together, so one entry is one authored
+   *  state: the palette alone can change while no Fabric object moves, and a
+   *  shape conversion changes the board the scene was authored on. */
   #capture(scene: SerialisedScene): HistoryEntry {
     return captureWith(scene, this.#port?.read());
   }
@@ -151,8 +163,17 @@ export class EditorHistory {
     this.#suspended += 1;
     try {
       await this.#revive(this.#canvas, entry.scene);
-      // After the revive: the scene is what the globals were authored against.
-      this.#port?.write(entry.globals);
+      // After the revive: the scene is what the envelope was authored against.
+      // The suspension above is also what keeps the write from recording: the
+      // document's write sets the artboard, and any save it made would be
+      // suppressed as part of this same restore rather than becoming a new
+      // entry per press.
+      if (this.#port !== undefined && entry.artboard !== undefined) {
+        this.#port.write({
+          globals: entry.globals,
+          artboard: entry.artboard,
+        });
+      }
       reselect(this.#canvas, selected);
       this.#index = index;
       this.#canvas.fire("editor:history-state-loaded" as never);
@@ -208,12 +229,24 @@ function reselect(canvas: HistoryCanvas, ids: readonly string[]): void {
     canvas.setActiveObject(new ActiveSelection(many, { canvas }));
 }
 
-/** One entry, its two halves serialised together once. */
+/** One entry, its scene and envelope serialised together once. */
 function captureWith(
   scene: SerialisedScene,
-  globals: FabricGlobals | undefined,
+  envelope:
+    | {
+        readonly globals: FabricGlobals | undefined;
+        readonly artboard: Artboard;
+      }
+    | undefined,
 ): HistoryEntry {
-  return { scene, globals, fingerprint: JSON.stringify({ scene, globals }) };
+  const globals = envelope?.globals;
+  const artboard = envelope?.artboard;
+  return {
+    scene,
+    globals,
+    artboard,
+    fingerprint: JSON.stringify({ scene, globals, artboard }),
+  };
 }
 
 function sameEntry(

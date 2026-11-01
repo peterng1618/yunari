@@ -409,10 +409,15 @@ it("records a token rename as its own step, so an unrelated undo keeps it", asyn
     },
   });
   history.reset();
-  history.attachGlobals({
-    read: () => ({ palette }),
-    write: (globals) => {
-      palette = globals?.palette ?? {};
+  history.attachEnvelope({
+    // The board is not what this case measures; it is the envelope's other
+    // half and the port carries it whole.
+    read: () => ({
+      globals: { palette },
+      artboard: { width: 1920, height: 1080 },
+    }),
+    write: (state) => {
+      palette = state.globals?.palette ?? {};
     },
   });
 

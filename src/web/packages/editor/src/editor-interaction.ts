@@ -4,7 +4,7 @@ import type { CropManager } from "./crop-manager/index.js";
 import type { DeletionManager } from "./deletion-manager/index.js";
 import type { ErrorManager } from "./error-manager/index.js";
 import type { GroupingManager } from "./grouping-manager/index.js";
-import type { HistoryGlobalsPort } from "./history-manager/index.js";
+import type { HistoryEnvelopePort } from "./history-manager/index.js";
 import type {
   TextCreationOptions,
   TextMentionPort,
@@ -71,9 +71,9 @@ export interface EditorInteraction {
     destroy(): void;
   };
   readonly historyManager: {
-    /** Where an entry's palette comes from and goes back to; the document owns
+    /** Where an entry's envelope comes from and goes back to; the document owns
      *  the envelope, so history is handed it rather than importing it. */
-    attachGlobals(port: HistoryGlobalsPort): void;
+    attachEnvelope(port: HistoryEnvelopePort): void;
     saveState(): void;
     resetHistory(): void;
     undo(): Promise<void>;

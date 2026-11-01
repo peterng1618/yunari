@@ -113,7 +113,7 @@ function context(): ColumnContext {
         getObjects: () => [],
         requestRenderAll: () => {},
       },
-      historyManager: { attachGlobals: () => {}, saveState: () => {} },
+      historyManager: { attachEnvelope: () => {}, saveState: () => {} },
       errorManager: { warn: () => {}, error: () => {} },
       cropManager: idleCrop(),
       artboard: () => ({ width: 1920, height: 1080 }),
