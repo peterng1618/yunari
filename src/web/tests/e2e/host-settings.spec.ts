@@ -511,6 +511,15 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
     try {
       await page.goto(`${HOST}/`);
 
+      // **The precondition names itself.** `/` resolves to the chooser only
+      // while nothing is published, nothing is chosen for this PC and the
+      // store holds more than one theme; `resetStores` covers the last two,
+      // but the published store is in memory and file-less, so a publish an
+      // earlier spec left behind would land this case on a dashboard. Without
+      // this line the failure is a locator mismatch in the row column; with
+      // it, the failure says which precondition did not hold.
+      await expect(page.locator("h1")).toHaveText("Choose a theme");
+
       const map = (await (
         await request.get(`${HOST}/api/themes/active`)
       ).json()) as { displays: { id: string }[] };
@@ -581,6 +590,12 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
 
     resetStores();
     await page.goto(`${HOST}/`);
+    // The precondition names itself: `/` is the chooser only while nothing is
+    // published, nothing is chosen for this PC and the store holds more than
+    // one theme. `resetStores` covers the last two; the in-memory published
+    // store has no reset, so a publish left by an earlier spec would land this
+    // case on a dashboard. This line says so instead of a row locator.
+    await expect(page.locator("h1")).toHaveText("Choose a theme");
     await expect(
       page.locator('#themes [data-display="this-pc"]'),
     ).toBeVisible();

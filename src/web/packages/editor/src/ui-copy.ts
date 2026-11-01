@@ -1343,12 +1343,20 @@ export const uiCopy = {
      *  parent. Disabled where there is no origin to name. */
     remix: "Remix",
     cancel: "Cancel",
+    /** **What the removal confirmation says, in one sentence.** It names the
+     *  theme and where it goes because a confirmation that says only "Delete?"
+     *  confirms the button rather than the act. The dialog says it twice — as
+     *  its accessible name and as its visible lead — so it is one entry: two
+     *  literals were one edit from a screen reader and a sighted reader being
+     *  told different things. */
+    confirmRemoval: (id: string, name: string | undefined): string =>
+      `Move this theme to the recycle bin?\n\n${name ?? id} (${id}) will be moved to the recycle bin, where you can get it back.`,
     /** The dialog a refused save raises. Two answers and a way out, because a
      *  refusal must not cost the author their document and must not be a dead
      *  end: reload takes the stored version, overwrite keeps theirs, and
      *  cancelling keeps both. */
     conflict: {
-      lead: "This theme was changed somewhere else",
+      lead: "This theme was changed somewhere else since you opened it. Your work is still here.",
       reload: "Open the saved version",
       overwrite: "Replace it with mine",
       cancel: "Keep editing",

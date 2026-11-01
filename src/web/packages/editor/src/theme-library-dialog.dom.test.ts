@@ -271,11 +271,13 @@ describe("the library chooser", () => {
     await pressButton("[data-yunari-library-delete]");
 
     // The confirm names the theme, because a destructive act the author cannot
-    // see the target of is the thing they have to be stopped from.
+    // see the target of is the thing they have to be stopped from — and it is
+    // the copy table's sentence, read as the dialog's own visible lead *and*
+    // its accessible name, so the two cannot drift apart.
     const confirm = topDialog();
-    expect(confirm.textContent).toContain("My theme");
-    // And says where it goes, which is the whole reason this is allowed.
-    expect(confirm.textContent).toMatch(/recycle bin|trash/i);
+    const sentence = uiCopy.library.confirmRemoval("mine", "My theme");
+    expect(confirm.textContent).toContain(sentence);
+    expect(confirm.getAttribute("aria-label")).toBe(sentence);
 
     await pressButton("[data-yunari-library-delete-confirm]");
     await flush();

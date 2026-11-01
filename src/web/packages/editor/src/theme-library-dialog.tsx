@@ -34,28 +34,13 @@ export type ThemeLibraryChoice =
    *  parent to credit: the copy keeps its name and carries no `remixOf`. */
   | { readonly kind: "duplicate"; readonly id: string };
 
-/**
- * What the author is asked before a theme is removed.
- *
- * Longer than the button, and read before it, so it can say the two things that
- * make the act safe to offer: **which theme**, and **that the recycle bin is
- * where it goes**. A confirmation that only says "Delete?" is a confirmation of
- * the button, not of the act.
- */
-const DELETE_LEAD = "Move this theme to the recycle bin?";
+/** The confirmation's sentence is `uiCopy.library.confirmRemoval`'s: the dialog
+ *  says it twice — as its accessible name and as its visible lead — so one
+ *  table entry keeps a screen reader and a sighted reader told the same thing. */
 
-/** The confirmation's one sentence. The dialogue says it twice — as its
- *  accessible name and as its visible lead — so it is written once here; two
- *  literals were one edit away from a screen reader and a sighted reader being
- *  told different things. */
-function confirmWords(id: string, name: string | undefined): string {
-  return `${DELETE_LEAD}\n\n${name ?? id} (${id}) will be moved to the recycle bin, where you can get it back.`;
-}
-
-/** The control's own word. Beside the dialog rather than in `ui-copy.ts`,
- *  because the copy table's owner is another surface's concern and this string
- *  exists only beside the button it names. */
-const DELETE_LABEL = "Delete";
+/** The control's own word, from the action table: the same Delete the selection
+ *  net owns, rather than a second literal that happens to match it. */
+const DELETE_LABEL = uiCopy.actions.delete;
 
 /** The control's own word, from the copy table: the surfaces walk reads every
  *  rendered word and refuses a literal it cannot find in `uiCopy`. */
@@ -320,10 +305,10 @@ export function ThemeLibraryChooser({
           onOpenChange={(next) => {
             if (!next) setConfirming(undefined);
           }}
-          label={confirmWords(confirming, confirmEntry?.name)}
+          label={uiCopy.library.confirmRemoval(confirming, confirmEntry?.name)}
         >
           <p className="editor-shell-dialog-lead">
-            {confirmWords(confirming, confirmEntry?.name)}
+            {uiCopy.library.confirmRemoval(confirming, confirmEntry?.name)}
           </p>
           <div className="yunari-dialog-actions">
             <button
@@ -373,11 +358,6 @@ function libraryOptions(
 /** What an author can do about a save the host refused. */
 export type ThemeConflictChoice = "reload" | "overwrite";
 
-/** Longer than the three answers, and read before them, so it stays beside the
- *  dialog rather than in the table with its siblings. */
-const CONFLICT_LEAD_TEXT =
-  "This theme was changed somewhere else since you opened it. Your work is still here.";
-
 /**
  * Asks what to do about a save that was refused because the stored theme moved
  * on. Two answers and a way out, because a refusal must not cost the author
@@ -396,9 +376,9 @@ export function ThemeConflict({
       onOpenChange={(next) => {
         if (!next) settle.dismiss();
       }}
-      label={CONFLICT_LEAD_TEXT}
+      label={uiCopy.library.conflict.lead}
     >
-      <p className="editor-shell-dialog-lead">{CONFLICT_LEAD_TEXT}</p>
+      <p className="editor-shell-dialog-lead">{uiCopy.library.conflict.lead}</p>
       <div className="yunari-dialog-actions">
         {(
           [

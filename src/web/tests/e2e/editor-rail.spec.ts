@@ -1378,7 +1378,11 @@ test("the themes mode draws the store's own header row, and no width drops a fac
     "something sits above the region's own header row",
   ).toBe(true);
 
-  // ── The narrow pass ───────────────────────────────────────────────────────
+  // ── Every width the plan names ─────────────────────────────────────────────
+  // 1280 is the project's own viewport; the boundary's other two sizes are
+  // 1440×900 and the repo's model of 200% zoom, a 640×360 CSS viewport. 720 is
+  // the narrow wrap this case has always measured. Every size is read the same
+  // way: all five facets drawn inside the row, and the row inside the window.
   /** The row and the five facets, as rendered boxes. */
   const measure = async (): Promise<{
     readonly row: { left: number; right: number; height: number };
@@ -1411,31 +1415,44 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   });
 
   const wide = await measure();
-  await page.setViewportSize({ width: 720, height: 720 });
-  const narrow = await measure();
-  const report = JSON.stringify({ wide, narrow });
-  console.log(`store-facets ${report}`);
-  testInfo.annotations.push({ type: "store-facets", description: report });
+  const sizes = [
+    { width: 1440, height: 900 },
+    { width: 720, height: 720 },
+    { width: 640, height: 360 },
+  ] as const;
+  for (const size of sizes) {
+    await page.setViewportSize(size);
+    const at = await measure();
+    const report = JSON.stringify({ size, wide, at });
+    console.log(`store-facets ${report}`);
+    testInfo.annotations.push({
+      type: "store-facets",
+      description: report,
+    });
 
-  expect(
-    narrow.boxes.every((box) => box.width > 0 && box.height > 0),
-    `a facet is not drawn at a narrow width (${report})`,
-  ).toBe(true);
-  expect(
-    narrow.boxes.every(
-      (box) =>
-        box.left >= narrow.row.left - 1 && box.right <= narrow.row.right + 1,
-    ),
-    `a facet falls outside the row at a narrow width (${report})`,
-  ).toBe(true);
-  expect(
-    narrow.row.height,
-    `the row did not wrap, so a control is out of reach (${report})`,
-  ).toBeGreaterThan(wide.row.height);
-  expect(
-    narrow.row.right,
-    `the row overflows the window it is drawn in (${report})`,
-  ).toBeLessThanOrEqual(720);
+    expect(
+      at.boxes.every((box) => box.width > 0 && box.height > 0),
+      `a facet is not drawn at ${size.width}×${size.height} (${report})`,
+    ).toBe(true);
+    expect(
+      at.boxes.every(
+        (box) => box.left >= at.row.left - 1 && box.right <= at.row.right + 1,
+      ),
+      `a facet falls outside the row at ${size.width}×${size.height} (${report})`,
+    ).toBe(true);
+    expect(
+      at.row.right,
+      `the row overflows the ${size.width}px window it is drawn in (${report})`,
+    ).toBeLessThanOrEqual(size.width);
+    // A window too narrow for one line takes a second rather than losing a
+    // control. 720 and 640 are both narrower than the row's own wide line.
+    if (size.width < wide.row.right) {
+      expect(
+        at.row.height,
+        `the row did not wrap at ${size.width}×${size.height}, so a control is out of reach (${report})`,
+      ).toBeGreaterThan(wide.row.height);
+    }
+  }
 });
 
 /**
@@ -1864,10 +1881,10 @@ test("the store lists a library, opens an item, and comes back to the same page"
  * narrowed, a badge really inside the facts band — and two joins no unit case
  * can see:
  *
- * 1. **The badge's word is asserted as a literal, and that is the point.** The
- *    badge and the modal's provenance line are plain spans, and the copy walk
- *    reads labels, buttons, headings and paragraphs, so **this case is the only
- *    check of that word in the repo** (`vg-685`). Asserting it from
+ * 1. **The badge's and the provenance line's words are asserted as literals,
+ *    and that is the point.** Both are plain spans, and the copy walk reads
+ *    labels, buttons, headings and paragraphs, so **this case is the only
+ *    check of those words in the repo** (`vg-685`). Asserting them from
  *    `uiCopy.store.fromStore` would make the case green through the rename it
  *    exists to catch, which is how *Installed* shipped here twice: every local
  *    cell is badged *From the store* and *Installed* is the **online** half's
@@ -2056,6 +2073,26 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
     badgeOf("boundary-plain"),
     "a theme with no origin record draws an origin badge",
   ).toHaveCount(0);
+
+  // **The item's provenance line, read as a literal for the badge's reason.**
+  // It is a plain `<span>` too, so no copy reader sees it: the copy walk reads
+  // labels, buttons, headings and paragraphs (`vg-685`). The literal names the
+  // origin clause, the catalogue item and the installed version, so a rename of
+  // any of the three fails here rather than passing through a `uiCopy` lookup.
+  await cellOf("boundary-origin")
+    .locator("[data-yunari-store-cell-surface]")
+    .click();
+  const originModal = page.locator("[data-yunari-store-item]");
+  await expect(
+    originModal,
+    "the origin theme's cell opens no item's surface",
+  ).toBeVisible();
+  await expect(
+    originModal.locator("[data-yunari-store-item-origin]"),
+    "the provenance line does not name the origin the record holds",
+  ).toHaveText("From the store · cat-office-wall · 1.2.0");
+  await page.locator("[data-yunari-store-item-close]").click();
+  await expect(originModal, "the item's surface does not close").toBeHidden();
 
   // ── The item's Style group, with a proposed tag ────────────────────────────
   // Opened from the region's own cell, which is what joins the two halves: the
