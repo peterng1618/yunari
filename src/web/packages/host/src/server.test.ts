@@ -4662,7 +4662,7 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
       `/api/displays/${LOCAL_DISPLAY_ID}`,
     );
     expect(refused.status).toBe(409);
-    expect(refused.text()).toMatch(/This PC/);
+    expect(refused.text()).toMatch(/The Host/);
   });
 
   it("never echoes a stored hash, and carries a token only where it mints one", async () => {
@@ -6121,7 +6121,7 @@ describe("A local monitor is specified rather than paired", () => {
         expect(
           rows.find((row) => row.id === "strip")?.panel?.commands,
         ).toBeInstanceOf(Array);
-        // This PC is not host-driven, so it carries no panel key at all.
+        // The Host is not host-driven, so it carries no panel key at all.
         expect(rows.find((row) => row.id === "this-pc")).not.toHaveProperty(
           "panel",
         );
@@ -7166,13 +7166,13 @@ describe("The display map", () => {
     };
 
     // An entry with no theme is `theme: null` rather than absent, so the page
-    // can tell "no theme" from "no display". This PC is always present and is
+    // can tell "no theme" from "no display". The Host is always present and is
     // never asked of the store: it has no record to take a label from.
     expect(res.status).toBe(200);
     expect(body.displays).toEqual([
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -7433,7 +7433,7 @@ describe("The pages a consumer lands on", () => {
     // take the first card the machine names. A control showing that as a
     // product name beside real model numbers misreports what is in use.
     expect(html).not.toContain("First card found (default)");
-    expect(html).toContain("Automatic (the first card this PC reports)");
+    expect(html).toContain("Automatic (the first card the Host reports)");
   });
 
   it("serves a pair page that asks for the screen shape and rotation", async () => {
@@ -8440,7 +8440,7 @@ describe("The assignment a display is served", () => {
     return token;
   }
 
-  /** This PC's own stream, and the kitchen tablet's. */
+  /** The Host's own stream, and the kitchen tablet's. */
   function streams(token: string): {
     readonly here: { frames: () => string };
     readonly there: { frames: () => string };

@@ -1501,7 +1501,7 @@ it("offers the three modes and marks the active one", async () => {
   expect(
     modeSegments(root).map((segment) => segment.textContent),
     "the header does not offer the three modes, in order",
-  ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.thisPc]);
+  ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.host]);
   expect(chosen(root)).toEqual(["true", "false", "false"]);
   // the control-id rule: every control carries an id, the group's and each segment's.
   expect(
@@ -1511,7 +1511,7 @@ it("offers the three modes and marks the active one", async () => {
   expect(modeSegments(root).map((segment) => segment.id)).toEqual([
     "yunari-shell-modes-editor",
     "yunari-shell-modes-themes",
-    "yunari-shell-modes-this-pc",
+    "yunari-shell-modes-host",
   ]);
   expect(root.querySelector<HTMLElement>(".editor-shell-body")?.hidden).toBe(
     false,
@@ -1912,7 +1912,7 @@ it("stays in the editor when the save does not land", async () => {
  * mounting in the same section — one `[data-yunari-mode-region]` element
  * whichever of the two draws, which is the seam's own rule rather than two
  * regions stacked. Both clients are the shell's own, so the stub is what the
- * host answers: the display map, the library, this PC's devices and its display
+ * host answers: the display map, the library, the Host's devices and its display
  * settings.
  */
 it("shows the Host mode's own region, and the store's only in Themes", async () => {
@@ -1924,7 +1924,7 @@ it("shows the Host mode's own region, and the store's only in Themes", async () 
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "This PC", theme: null }],
+            displays: [{ id: "this-pc", label: "Host", theme: null }],
           }),
           { status: 200 },
         );
@@ -1978,7 +1978,7 @@ it("shows the Host mode's own region, and the store's only in Themes", async () 
   expect(
     sections[0]?.getAttribute("data-yunari-mode-region"),
     "the section does not name the mode that is showing",
-  ).toBe("this-pc");
+  ).toBe("host");
 
   layout.destroy();
 });
@@ -2003,7 +2003,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "This PC", theme: null }],
+            displays: [{ id: "this-pc", label: "Host", theme: null }],
           }),
           { status: 200 },
         );
@@ -2064,7 +2064,7 @@ it("puts the Host mode's line in the status strip, and the editor's readouts els
 });
 
 /**
- * **The strip's line belongs to the visit that read it.** The `this-pc` branch
+ * **The strip's line belongs to the visit that read it.** The `host` branch
  * is a different element tree from the editor's, so coming back to the Host mode
  * mounts a fresh `<p role="status">` — and a live region mounted *holding* text
  * is the pattern the removed strip's own comment called the less reliably
@@ -2086,7 +2086,7 @@ it("paints no line from the previous visit when the Host mode is re-entered", as
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "This PC", theme: null }],
+            displays: [{ id: "this-pc", label: "Host", theme: null }],
           }),
           { status: 200 },
         );

@@ -213,7 +213,7 @@ interface ActiveDisplay {
  * client anyone paired, so it has no record whose label could be taken. The
  * word matches the heading the host's own pages already use (`public/settings.html`).
  */
-const LOCAL_DISPLAY_LABEL = "This PC";
+const LOCAL_DISPLAY_LABEL = "Host";
 
 /** A search term longer than this is a paste, not a place. */
 const MAX_PLACE_QUERY_LENGTH = 200;
@@ -228,7 +228,7 @@ function issueKey(issue: SourceIssue): string {
   return `${issue.sourceId}\u0000${issue.reason}`;
 }
 
-/** This PC's device settings, as the store hands them to a tick. */
+/** The Host's device settings, as the store hands them to a tick. */
 type StoredDeviceSettings = Awaited<ReturnType<DeviceSettingsStore["read"]>>;
 
 export interface BundleRoots {
@@ -1085,7 +1085,7 @@ function firstRunPage(): string {
     <main>
       <h1>No dashboard yet</h1>
       <p>
-        This PC has no saved theme, so there is nothing to display. Open the
+        The Host has no saved theme, so there is nothing to display. Open the
         editor to start from the ${SHIPPED_TEMPLATES[0]?.name ?? "template"},
         or build one of your own, then save it to this PC's library.
       </p>
@@ -1551,7 +1551,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * The map `/api/themes/active` reads and writes: every display with the theme
    * it holds, and the default a display with no entry of its own falls to.
    *
-   * This PC is always present and always first, because it is the display the
+   * The Host is always present and always first, because it is the display the
    * person reading the page is looking at. A stored record with that id is not
    * possible — the store refuses to mint it — so it is added rather than found.
    */
@@ -2299,11 +2299,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
       }
 
       if (id !== undefined && request.method === "DELETE") {
-        // This PC is the display the host *is*, not a client anyone paired: it
+        // The Host is the display the host *is*, not a client anyone paired: it
         // has no credential to remove, and it is the one display that cannot be
         // re-paired if it goes.
         if (id === LOCAL_DISPLAY_ID) {
-          sendText(response, 409, "This PC is not a paired client.");
+          sendText(response, 409, "The Host is not a paired client.");
           return;
         }
 
@@ -5269,7 +5269,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
       return;
     }
 
-    // This PC's settings, read once for every display in the tick: which GPU
+    // The Host's settings, read once for every display in the tick: which GPU
     // answers is this machine's question, not a screen's.
     const stored =
       devices === undefined ? EMPTY_DEVICE_SETTINGS : await devices.read();

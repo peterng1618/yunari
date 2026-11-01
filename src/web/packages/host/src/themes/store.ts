@@ -234,7 +234,7 @@ export function storeRefusalMessage(error: unknown): string {
   if (typeof (error as NodeJS.ErrnoException | undefined)?.code === "string") {
     console.error("Yunari: saving a theme to the library failed.", error);
     return (
-      "This PC could not save the theme to its library. " +
+      "The Host could not save the theme to its library. " +
       "Try again, or restart Yunari."
     );
   }

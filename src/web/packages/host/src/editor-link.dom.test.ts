@@ -73,7 +73,7 @@ interface Display {
 
 const THIS_PC: Display = {
   id: "this-pc",
-  label: "This PC",
+  label: "Host",
   kind: "local",
   theme: null,
 };
@@ -130,7 +130,7 @@ afterEach(() => {
 
 for (const page of ["settings.html", "library.html"]) {
   describe(`${page}'s link into the editor`, () => {
-    it("carries the theme this PC is showing", async () => {
+    it("carries the theme the Host is showing", async () => {
       await open(page, "living-room");
 
       // The point of the whole change: an author who picks a theme and then

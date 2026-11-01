@@ -2711,7 +2711,7 @@ describe("ThemeStore remove", () => {
   it("removes nothing itself when the trash refuses, and says so", async () => {
     const refusing = createThemeStore(tmpDir, {
       trash: async () => {
-        throw new Error("This PC has no trash command (gio, trash-put)");
+        throw new Error("The Host has no trash command (gio, trash-put)");
       },
     });
     await refusing.write("living-room", save("living-room", "Living Room"));

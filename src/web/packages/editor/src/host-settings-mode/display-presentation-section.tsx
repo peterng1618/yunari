@@ -31,7 +31,7 @@ function snapQuarterTurn(rotation: number): number {
  * store them.
  *
  * **The words speak for the chosen display**, so the controls edit only the
- * record the rows above selected. This PC is the machine rather than a record —
+ * record the rows above selected. The Host is the machine rather than a record —
  * the host adds its row rather than finding it — so it says why instead of
  * drawing controls that could not write. The host lists no `default` row: it is
  * a theme key, so there is nothing here to present.

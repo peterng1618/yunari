@@ -367,7 +367,7 @@ describe("the library chooser", () => {
   it("says why a removal failed, and keeps the theme listed", async () => {
     const pending = open([listedTheme("mine", "My theme")], {
       remove: async () => {
-        throw new Error("This PC has no trash command (gio, trash-put)");
+        throw new Error("The Host has no trash command (gio, trash-put)");
       },
     } as unknown as ThemeLibraryClient);
 

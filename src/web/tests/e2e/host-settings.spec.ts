@@ -524,7 +524,7 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
       await expect(rows.first()).toHaveAttribute("aria-pressed", "true");
       await expect(rows.first()).toContainText("Nothing chosen");
       await expect(rows.nth(1)).toHaveAttribute("data-display", "this-pc");
-      await expect(rows.nth(1)).toContainText("This PC");
+      await expect(rows.nth(1)).toContainText("Host");
       await expect(rows.nth(1)).toContainText("Uses the default");
 
       // One display's theme is not another's: choosing for the tablet leaves the
@@ -638,7 +638,7 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
         `.theme-row:has([data-theme="${HOST_VIDEO_THEME_ID}"]) .theme-cost-note`,
       );
 
-      // This PC is a host monitor, and the note is on the row before anything
+      // The Host is a host monitor, and the note is on the row before anything
       // is pressed: it describes the pair a press would commit.
       await page.locator('#themes [data-display="this-pc"]').click();
       await expect(note).toBeVisible();

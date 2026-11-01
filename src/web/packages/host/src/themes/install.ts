@@ -65,11 +65,11 @@ export type InstallResult =
  *  needs telling which one. */
 export const INSTALL_REFUSALS = {
   updateKept:
-    "This PC could not record where that theme came from; your copy is unchanged.",
+    "The Host could not record where that theme came from; your copy is unchanged.",
   rolledBack:
-    "This PC could not record where that theme came from, so it was not kept.",
+    "The Host could not record where that theme came from, so it was not kept.",
   rolledBackFailed:
-    "This PC could not record where that theme came from, and could not remove it; delete it from Your themes before installing again.",
+    "The Host could not record where that theme came from, and could not remove it; delete it from Your themes before installing again.",
 } as const;
 
 /**

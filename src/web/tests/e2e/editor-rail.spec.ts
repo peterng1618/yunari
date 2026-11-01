@@ -1095,7 +1095,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "aria-pressed",
     "false",
   );
-  await expect(segment(uiCopy.modes.thisPc)).toHaveAttribute(
+  await expect(segment(uiCopy.modes.host)).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -1259,11 +1259,11 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "themes mode still draws the editor's menus",
   ).toHaveCount(0);
 
-  await segment(uiCopy.modes.thisPc).click();
+  await segment(uiCopy.modes.host).click();
   await expect(
     page.locator("[data-yunari-mode-region]"),
     "the host mode renders no region",
-  ).toHaveAttribute("data-yunari-mode-region", "this-pc");
+  ).toHaveAttribute("data-yunari-mode-region", "host");
   await expect(
     header.locator(".editor-shell-menubar"),
     "host mode still draws the editor's menus",

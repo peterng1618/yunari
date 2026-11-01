@@ -237,7 +237,7 @@ async function editorReady(page: Page): Promise<void> {
 
 /** The Host mode's Sources section, over the host this file started. */
 async function openSources(page: Page): Promise<void> {
-  await page.locator("#yunari-shell-modes-this-pc").click();
+  await page.locator("#yunari-shell-modes-host").click();
   await expect(
     page.locator('[data-yunari-host-section="sources"]'),
   ).toBeVisible();

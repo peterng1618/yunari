@@ -396,12 +396,10 @@ export const uiCopy = {
    * The shell's three modes, as the header's switch names them.
    * Each names the *surface* rather than the mechanism behind it.
    *
-   * **The user chose `Editor · Themes · Host` on 2026-10-19** (SDD ruling R100),
-   * over the draft names — *theme store*, *theme editor*, *host
-   * settings* — and over the surfaces' `This PC`, which named the machine
-   * rather than a peer of `Themes`. The key `thisPc` and the mode id `"this-pc"`
-   * are unchanged: an id is never shown to anyone, so renaming one buys a
-   * reader nothing and costs every call site.
+   * **The machine and the mode that manages it are one name: `Host`.** The
+   * mode value, the query value and this key are `host`; the persisted display
+   * id stays `this-pc`, because it is stored in per-display assignments rather
+   * than shown to anyone.
    */
   modes: {
     /** The switch's own name. The three labels inside are the options, so a
@@ -410,7 +408,7 @@ export const uiCopy = {
     label: "Shell modes",
     editor: "Editor",
     themes: "Themes",
-    thisPc: "Host",
+    host: "Host",
     /** Asked before the editor is left with unsaved work. It is the question
      *  the editor's own replacement prompt is given, so it offers the same
      *  three answers — Save, Discard, Cancel — and the author can save rather
@@ -418,7 +416,7 @@ export const uiCopy = {
     unsaved: "Save changes before leaving the editor?",
   },
   /**
-   * The Host mode's own surface: this PC.
+   * The Host mode's own surface: the machine and its display.
    *
    * **The words are `packages/host/public/settings.html`'s** — its hints, its
    * device labels, its status line — taken rather than rewritten, because they
@@ -439,7 +437,7 @@ export const uiCopy = {
       /** A display holding no theme of its own is served the default. The row
        *  names the theme it shows and says where that answer came from, because
        *  a name alone would read as a choice this display made. */
-      follows: "Follows this PC",
+      follows: "Follows Host",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
       /** The file the host keeps its displays and their credentials in could not
@@ -461,18 +459,18 @@ export const uiCopy = {
       /** What the section says about the two rules they write under. */
       rotationSnapHint:
         "A round display turns by any whole degree; a rectangular one turns in quarter turns. Changing the shape snaps the angle to the new rule.",
-      /** This PC has no record to present, and the unpaired default is served
+      /** The Host has no record to present, and the unpaired default is served
        *  rather than owned: the section says why instead of drawing a control
        *  that cannot write. */
       presentationAbsent:
-        "This PC's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
+        "The Host's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
     },
     panels: {
       heading: "USB panels",
-      hint: "A panel is a small screen plugged into this PC. Adding one makes it a display, and this PC draws for it.",
+      hint: "A panel is a small screen plugged into the Host. Adding one makes it a display, and the Host draws for it.",
       /** Nothing attached: the ordinary case on a machine without a panel. */
-      none: "No USB panel is attached to this PC.",
+      none: "No USB panel is attached to the Host.",
       /** Every attached panel is already a display. */
       allAdded: "Every attached panel is already a display.",
       /** A held device's row names the display driving it, where the owner can
@@ -574,19 +572,19 @@ export const uiCopy = {
       },
     },
     devices: {
-      heading: "Devices on this PC",
-      hint: "Which hardware this PC reports. These apply to every theme, unless a theme asks for something different.",
+      heading: "Devices on the Host",
+      hint: "Which hardware the Host reports. These apply to every theme, unless a theme asks for something different.",
       groups: {
         gpu: "Graphics card",
         "system-disk": "System disk",
         "data-disk": "Data disk",
       } as const satisfies Record<AssignableGroup, string>,
       /** What a slot does when nothing has been chosen, in the words a consumer
-       *  would use. The empty answer is a rule about this PC and not a device:
+       *  would use. The empty answer is a rule about the Host and not a device:
        *  naming it after discovery order puts a machine's bookkeeping in the
        *  same list as the model numbers a person bought. */
       automatic: {
-        gpu: "Automatic (the first card this PC reports)",
+        gpu: "Automatic (the first card the Host reports)",
         "system-disk": "Automatic (every drive, combined)",
         "data-disk": "Automatic (every drive, combined)",
       } as const satisfies Record<AssignableGroup, string>,
@@ -598,7 +596,7 @@ export const uiCopy = {
       // holds, so a lookup by any slot compiles and answers `undefined` for the
       // card slot — which is what its count-based label is for.
       asked: {
-        "system-disk": "Which drive does this PC run from?",
+        "system-disk": "Which drive does the Host run from?",
         "data-disk": "Which second drive should dashboards show?",
       } as Partial<Record<AssignableGroup, string>>,
       /** What a slot with no question of its own is labelled. */
@@ -616,9 +614,9 @@ export const uiCopy = {
     },
     display: {
       heading: "Display",
-      hint: "How this PC's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
+      hint: "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
       timeZone: "Clock time zone",
-      ownZone: "This PC's own zone",
+      ownZone: "Host's own zone",
       measurement: "Temperature units",
       /** The systems by the unit they read in, which is the choice rather than
        *  its name: `metric` and `imperial` say nothing about a thermometer. The
@@ -663,7 +661,7 @@ export const uiCopy = {
     },
     weather: {
       heading: "Weather",
-      hint: "Where this PC's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
+      hint: "Where the Host's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
       provider: "Backend",
       /** What each backend costs: the three are names a person knows from the
        *  key they bought, not descriptions of an API. */
@@ -683,7 +681,7 @@ export const uiCopy = {
       noResults: "No place matched that search.",
       searchFailed: (reason: string): string => `Could not search: ${reason}`,
     },
-    /** The custom HTTP sources this PC reads. The page names the source and
+    /** The custom HTTP sources the Host reads. The page names the source and
      *  never its secret: a source carries a credential id, and no credential
      *  value ever reaches the browser (`credentials-client.ts`). */
     sources: {
@@ -765,7 +763,7 @@ export const uiCopy = {
       /** The offer after a delete: the route answered that no source references
        *  this credential any more. The id is an id, never the value. */
       credentialAsk: (id: string): string =>
-        `No other source uses the key ${id}. Remove it from this PC?`,
+        `No other source uses the key ${id}. Remove it from the Host?`,
       removeCredential: "Remove the key",
       keepCredential: "Keep the key",
       credentialRemoved: "The key was removed.",
@@ -799,8 +797,8 @@ export const uiCopy = {
      *  has not answered are drawn, so answering one is what makes it leave. */
     questions: {
       heading: (theme: string): string => `${theme} needs`,
-      hint: "This theme reads hardware that has no answer yet. Pick a device, or leave it following this PC's settings.",
-      inherit: "Use this PC's settings",
+      hint: "This theme reads hardware that has no answer yet. Pick a device, or leave it following the Host's settings.",
+      inherit: "Use the Host's settings",
     },
     /** The region's own status line, which is the host page's: its two halves
      *  are the display count and the last write's answer. */
@@ -1073,7 +1071,7 @@ export const uiCopy = {
     install: {
       noCatalogueVersion: "This item has no catalogue version to install.",
       unreachable:
-        "This PC could not be reached to install that item. Check Yunari is running, then try again.",
+        "The Host could not be reached to install that item. Check Yunari is running, then try again.",
       refused: (status: number): string =>
         `The host refused the install (${status}).`,
       notRefreshed:
@@ -1168,7 +1166,7 @@ export const uiCopy = {
      *  telling someone with forty themes to go and build one is a lie the
      *  surface avoids by having both. */
     empty: {
-      library: "No themes are saved on this PC yet.",
+      library: "No themes are saved on the Host yet.",
       libraryHint: "Build one in the editor, or import a package.",
       /** **The catalogue's own empty state, and not the library's** (R124):
        *  before the store has anything published this is the normal state, so
@@ -1345,7 +1343,7 @@ export const uiCopy = {
       image: "Search photos…",
       video: "Search videos…",
       colour: "Search colors…",
-      local: "Search this PC…",
+      local: "Search the Host…",
     } satisfies Record<ListingCategory, string>,
     searching: (sources: number): string =>
       `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
@@ -1560,7 +1558,7 @@ export const uiCopy = {
      *  the one status line at the modal's bottom. */
     wallpaperEngine: {
       reason: {
-        "not-installed": "Wallpaper Engine is not installed on this PC.",
+        "not-installed": "Wallpaper Engine is not installed on the Host.",
         "unsupported-platform": "Wallpaper Engine is read only on Windows.",
         "no-library": "Wallpaper Engine holds no wallpaper library yet.",
       } satisfies Record<
@@ -1739,7 +1737,7 @@ export const uiCopy = {
      *  last clause is not hedging — Android 11 and earlier and a device on Private DNS cannot
      *  resolve the name, and then the address is what it types. */
     reserveAddress:
-      "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
+      "The address breaks if the Host's IP changes; the name above survives it, where your device can resolve it.",
     warning:
       "Phone access is HTTPS. Plain HTTP is the fallback on your own network — trusted networks only, never the internet.",
     fallback: (address: string, port: number): string =>

@@ -333,7 +333,7 @@ it("opens a facet as a group of checkbox rows, and counts what is chosen", async
  * does not own would be the second surface in one section.
  */
 it("renders no region for a mode that is not Themes", async () => {
-  const container = await mount(<StoreModeRegion mode="this-pc" />);
+  const container = await mount(<StoreModeRegion mode="host" />);
   expect(container.textContent, "the store drew itself in the host mode").toBe(
     "",
   );
@@ -1180,7 +1180,7 @@ function twoDisplays(): ActiveThemeHost {
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1239,7 +1239,7 @@ it("offers the default beside the displays rather than as one of them", async ()
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1346,7 +1346,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1371,7 +1371,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
     displays: [
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -1411,7 +1411,7 @@ it("reports where the theme already is as the choice's own value", async () => {
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: "porch-strip",
           shape: "rect",
@@ -1453,7 +1453,7 @@ it("tells a theme no display holds apart from the theme that is the default", as
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1478,7 +1478,7 @@ it("tells a theme no display holds apart from the theme that is the default", as
     displays: [
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",

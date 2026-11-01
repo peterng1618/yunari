@@ -3531,11 +3531,11 @@ test.describe("a paired display and the theme it is given", () => {
     const modeSwitch = page.locator(".editor-shell-mode-switch");
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
-      .getByRole("button", { name: editorCopy.modes.thisPc, exact: true })
+      .getByRole("button", { name: editorCopy.modes.host, exact: true })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "this-pc",
+      "host",
     );
   }
 
@@ -3890,7 +3890,7 @@ test.describe("a paired display and the theme it is given", () => {
     const display = await pairDisplay(request, "E2E refind");
 
     try {
-      // This PC's own theme, because the address the display loads at is
+      // The Host's own theme, because the address the display loads at is
       // loopback and the host resolves a loopback request as `this-pc`.
       await assign(request, "this-pc", HOST_CHART_THEME_ID);
       // The pairing the display would already hold from a LAN load: its
@@ -4357,13 +4357,13 @@ test.describe("a paired display and the theme it is given", () => {
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
       .getByRole("button", {
-        name: editorCopy.modes.thisPc,
+        name: editorCopy.modes.host,
         exact: true,
       })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "this-pc",
+      "host",
     );
 
     const row = page.locator(`[data-yunari-host-display="${display.id}"]`);

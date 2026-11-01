@@ -19,7 +19,7 @@ export function parseShellEntry(search: string): ShellEntry {
   const parameters = new URLSearchParams(search);
   const named = parameters.get("mode");
   const mode: ShellMode =
-    named === "themes" || named === "this-pc" ? named : "editor";
+    named === "themes" || named === "host" ? named : "editor";
   return {
     mode,
     publish: mode === "editor" && parameters.get("publish") === "1",

@@ -149,7 +149,7 @@ describe("trashPlan", () => {
     // The write fails because its parent is a file — `EEXIST` on this box,
     // `ENOENT` where the parent is absent instead. What matters is that the
     // rewrapped error carries no code, so the route loop cannot read it as a
-    // missing command and answer "This PC has no trash command": that is a
+    // missing command and answer "The Host has no trash command": that is a
     // different, wrong sentence.
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-list-"));
     const blocker = path.join(directory, "blocker");

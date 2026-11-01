@@ -391,13 +391,13 @@ function sourcesClient(fixture: Fixture): {
 }
 
 /** Two displays, one of them holding no theme of its own, and the two themes the
- *  library calls them. This PC leads, as the route always answers it first. */
+ *  library calls them. Host leads, as the route always answers it first. */
 const TWO_DISPLAYS: Fixture = {
   fallback: "kitchen-strip",
   displays: [
     {
       id: "this-pc",
-      label: "This PC",
+      label: "Host",
       kind: "local",
       theme: null,
       shape: "rect",
@@ -451,7 +451,7 @@ async function mountHost(
   const published: (HostStatusLine | undefined)[] = [];
   const container = await mount(
     <HostSettingsRegion
-      mode="this-pc"
+      mode="host"
       client={library(fixture)}
       settings={settings.client}
       sources={sources.client}
@@ -674,8 +674,8 @@ it("names each display, and the default for the ones with none", async () => {
     container.querySelectorAll<HTMLElement>("[data-yunari-host-display]"),
   );
   expect(
-    rows.map((row) => row.textContent?.startsWith("This PC") ?? false),
-    "the route's own order is not kept, This PC first",
+    rows.map((row) => row.textContent?.startsWith("Host") ?? false),
+    "the route's own order is not kept, Host first",
   ).toEqual([true, false]);
 
   const own = displayRow(container, "hallway");
@@ -895,14 +895,14 @@ it("names the display file when the host could not read it", async () => {
   ).toBeNull();
 });
 
-/** This PC is the machine, not a paired screen: it has no record to present, so
+/** Host is the machine, not a paired screen: it has no record to present, so
  *  the section says why rather than drawing a disabled control. */
-it("draws no presentation controls for this-pc", async () => {
+it("draws no presentation controls for the Host", async () => {
   const { container } = await mountHost({
     displays: [
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -926,7 +926,7 @@ it("draws no presentation controls for this-pc", async () => {
  * The plan's first case, and the one that carries the per-display model: **a
  * theme that binds only `cpu.load` offers no GPU row for that display**.
  *
- * Three facts in one run, because they are one decision. This PC holds no theme
+ * Three facts in one run, because they are one decision. Host holds no theme
  * of its own, so the region asks about the default's — the fallback reaches the
  * route, which is what makes the questions the answers of a display's use of a
  * theme. That theme raises nothing, so no section is drawn at all. And the
@@ -2043,7 +2043,7 @@ const ONE_PANEL: Fixture = {
   displays: [
     {
       id: "this-pc",
-      label: "This PC",
+      label: "Host",
       kind: "local",
       theme: null,
       shape: "rect",

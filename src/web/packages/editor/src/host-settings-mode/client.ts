@@ -42,7 +42,7 @@ export interface AvailableDevice {
   readonly name: string;
 }
 
-/** This PC's devices and what has been chosen about them. */
+/** The Host's devices and what has been chosen about them. */
 export interface DeviceSettings {
   readonly available: {
     readonly gpus: readonly AvailableDevice[];

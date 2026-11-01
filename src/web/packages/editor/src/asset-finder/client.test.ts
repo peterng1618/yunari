@@ -189,14 +189,14 @@ describe("trashAssets", () => {
 
   it("carries the host's refusal sentence, which a save must print", async () => {
     const { fetcher } = stub(
-      () => new Response("This PC has no trash command.", { status: 500 }),
+      () => new Response("The Host has no trash command.", { status: 500 }),
     );
 
     expect(
       await trashAssets([{ name: "old.woff2", bytes: new Uint8Array() }], {
         fetch: fetcher,
       }),
-    ).toEqual({ ok: false, message: "This PC has no trash command." });
+    ).toEqual({ ok: false, message: "The Host has no trash command." });
   });
 
   it("answers a transport failure rather than throwing", async () => {

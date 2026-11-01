@@ -80,7 +80,7 @@ const THEME_MAP = {
   themes: [{ id: "living-room", name: "Living Room" }],
   templates: [],
   default: "living-room",
-  displays: [{ id: "this-pc", label: "This PC", kind: "local", theme: null }],
+  displays: [{ id: "this-pc", label: "Host", kind: "local", theme: null }],
 };
 
 /** Every URL the page asked for, in order, so a case can read which display's
@@ -156,7 +156,7 @@ describe("the two disk fieldsets ask different questions", () => {
     await render(MANY);
     const prompt = promptByGroup();
 
-    expect(prompt["system-disk"]).toBe("Which drive does this PC run from?");
+    expect(prompt["system-disk"]).toBe("Which drive does the Host run from?");
     expect(prompt["data-disk"]).toBe(
       "Which second drive should dashboards show?",
     );
@@ -168,7 +168,7 @@ describe("the two disk fieldsets ask different questions", () => {
 
     // The count once decided both labels, so a one-drive PC asked twice and
     // the legend was the only thing telling the two dropdowns apart.
-    expect(prompt["system-disk"]).toBe("Which drive does this PC run from?");
+    expect(prompt["system-disk"]).toBe("Which drive does the Host run from?");
     expect(prompt["data-disk"]).toBe(
       "Which second drive should dashboards show?",
     );
@@ -176,7 +176,7 @@ describe("the two disk fieldsets ask different questions", () => {
 });
 
 describe("the graphics card keeps both of its branches", () => {
-  it("answers the question when this PC reports one card", async () => {
+  it("answers the question when the Host reports one card", async () => {
     await render({ gpus: [CARD], disks: [BOOT, ARCHIVE] });
 
     expect(promptByGroup()["gpu"]).toBe(
@@ -184,7 +184,7 @@ describe("the graphics card keeps both of its branches", () => {
     );
   });
 
-  it("asks it when this PC reports several", async () => {
+  it("asks it when the Host reports several", async () => {
     await render(MANY);
 
     expect(promptByGroup()["gpu"]).toBe("Which device should dashboards use?");

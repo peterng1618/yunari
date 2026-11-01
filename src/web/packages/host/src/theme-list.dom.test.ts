@@ -191,7 +191,7 @@ describe("a saved theme as one row", () => {
 
   describe("the display column above the rows", () => {
     const DISPLAYS = [
-      { id: "this-pc", label: "This PC", kind: "local", theme: "studio" },
+      { id: "this-pc", label: "Host", kind: "local", theme: "studio" },
       {
         id: "kitchen-tablet",
         label: "Kitchen tablet",
@@ -219,7 +219,7 @@ describe("a saved theme as one row", () => {
       ]);
       expect(rows.map((row) => row.textContent)).toEqual([
         "DefaultLiving Room",
-        "This PCStudio",
+        "HostStudio",
         "Kitchen tabletUses the default",
       ]);
     });
@@ -508,7 +508,7 @@ describe("removing a saved theme from a host page", () => {
     // What `host/src/themes/trash.ts` sends on a machine with no trash
     // command — the only way an author learns their Linux box has no `gio`.
     const refusal =
-      "This PC has no trash command (gio, trash-put), so the theme was left " +
+      "The Host has no trash command (gio, trash-put), so the theme was left " +
       "alone rather than deleted permanently.";
     globalThis.fetch = (async () => ({
       ok: false,
@@ -587,7 +587,7 @@ describe("what a theme costs the display it is given to", () => {
     { id: "studio", name: "Studio", costs: [] },
   ];
   const DISPLAYS = [
-    { id: "this-pc", label: "This PC", kind: "local", theme: null },
+    { id: "this-pc", label: "Host", kind: "local", theme: null },
     {
       id: "kitchen-tablet",
       label: "Kitchen tablet",

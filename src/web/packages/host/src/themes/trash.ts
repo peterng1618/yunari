@@ -311,7 +311,7 @@ export async function runTrashRoutes(
   }
 
   throw new TrashRefusal(
-    `This PC has no trash command (${routes
+    `The Host has no trash command (${routes
       .map((route) => route.command)
       .join(", ")}), so the ${
       kind === "file" ? "file was" : "theme was"

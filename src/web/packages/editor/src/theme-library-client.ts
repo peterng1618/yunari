@@ -188,7 +188,7 @@ export interface ThemeLibraryClient {
    *  display holding no choice of its own falls to. */
   assign(display: string, id: string): Promise<void>;
   /** Every display this host holds with the theme it shows, and the theme a
-   *  display holding none falls to. This PC is always present and always first.
+   *  display holding none falls to. The Host is always present and always first.
    *
    *  `default` is a *theme*, not a key: {@link DEFAULT_DISPLAY_KEY} is what
    *  `assign` takes. It is its own field and never a row, because a theme id is

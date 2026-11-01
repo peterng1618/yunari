@@ -84,7 +84,7 @@ const UNIT_BY_KEY: ReadonlyMap<string, string | undefined> = new Map(
 );
 
 export const NO_SESSION_MESSAGE = "No media session is playing.";
-const NO_AUDIO_ENDPOINT_MESSAGE = "This PC reports no output volume.";
+const NO_AUDIO_ENDPOINT_MESSAGE = "The Host reports no output volume.";
 const WAITING_MESSAGE = "Waiting for the media helper.";
 export const WAITING_ARTWORK_MESSAGE = "Waiting for this track's artwork.";
 export const ARTWORK_TOO_LARGE_MESSAGE =

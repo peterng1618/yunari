@@ -191,7 +191,7 @@ export function HostSettingsRegion(props: {
   readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element | null {
-  return props.mode === "this-pc" ? (
+  return props.mode === "host" ? (
     <HostSettings
       client={props.client}
       settings={props.settings}
@@ -249,7 +249,7 @@ function HostSettings(props: {
       }
     | undefined
   >(undefined);
-  /** The display the questions below speak for. The route always answers This PC
+  /** The display the questions below speak for. The route always answers the Host
    *  first, so the region opens on it rather than on nothing. */
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   /** The USB panels attached right now, or `undefined` until the read answers.
@@ -831,7 +831,7 @@ function HostSettings(props: {
                   label={uiCopy.hostSettings.display.timeZone}
                   data={{ "data-yunari-host-time-zone": "" }}
                   value={preferences.settings.timeZone ?? ""}
-                  // This PC's own zone is the default and the most common
+                  // The Host's own zone is the default and the most common
                   // answer, so it comes first and is the empty value the route
                   // reads as the absence of a choice.
                   options={[
@@ -930,7 +930,7 @@ function HostSettings(props: {
                   data={{ "data-yunari-host-answer": group }}
                   value={questions.answers[group] ?? ""}
                   options={[
-                    // This PC's own choice is the default, so most themes need
+                    // The Host's own choice is the default, so most themes need
                     // no answer at all.
                     { id: "", name: uiCopy.hostSettings.questions.inherit },
                     ...devicesFor(devices, group).map((device) => ({
