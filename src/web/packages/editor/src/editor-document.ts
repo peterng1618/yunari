@@ -491,7 +491,9 @@ export class EditorDocument {
       return await captureThumbnail(
         this.#shell.editor.canvas,
         undefined,
-        this.#shell.backdrop(),
+        // A saved picture is of the theme, not of this screen: a display-bounded
+        // background is captured as it would sit on the artboard.
+        this.#shell.backdrop("theme"),
         // A package saved from inside an entered group ships the document, not
         // the dim the author is working behind (`vg-527`).
         () => this.#shell.editor.groupingManager.suspendDim(),

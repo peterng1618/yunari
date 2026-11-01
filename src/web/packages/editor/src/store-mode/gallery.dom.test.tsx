@@ -187,6 +187,31 @@ function pictureBox(container: HTMLElement): HTMLElement {
 }
 
 /**
+ * The card contains the theme's picture rather than cropping it. A theme whose
+ * ratio is not the band's must show whole: a card is the advertisement of a
+ * theme, and one that crops it advertises a composition nobody drew.
+ */
+it("contains the theme's picture in the card's band", async () => {
+  const container = await mount(
+    <Gallery
+      items={[item()]}
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  const img = must(
+    pictureBox(container).querySelector("img"),
+    "the cell's picture",
+  );
+  expect(
+    img.className,
+    "the picture is cropped into the band instead of contained by it",
+  ).toContain("object-contain");
+});
+
+/**
  * The cell's picture box, filled from the theme's own artboard.
  *
  * A theme the host has stored no picture for is answered by a `404` at the

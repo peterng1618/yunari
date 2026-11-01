@@ -56,6 +56,10 @@ export interface MediaBounds {
   readonly display?: MediaBox;
 }
 
+/** Which placement a `backdrop()` answer describes: the one the layer is
+ *  showing on this display, or the one the theme alone defines. */
+export type BackdropFit = "authored" | "theme";
+
 export interface PlacementInput {
   readonly box: { readonly width: number; readonly height: number };
   readonly source:
@@ -160,8 +164,13 @@ export interface BackgroundMediaHandle {
   resume(): void;
   /** Pixel access for the glass sampler, or undefined with nothing to sample.
    *  The media is a DOM sibling below the canvas, so a glass panel cannot read
-   *  it out of the canvas it is painting. */
-  backdrop(): BackdropMedia | undefined;
+   *  it out of the canvas it is painting.
+   *
+   *  `fit` is which placement the answer describes: `"authored"` is what the
+   *  layer is actually showing on this display, and `"theme"` is the same
+   *  picture placed on the artboard alone. A thumbnail is a picture of the
+   *  theme, not of the screen it was open on, so it asks for `"theme"`. */
+  backdrop(fit?: BackdropFit): BackdropMedia | undefined;
   destroy(): void;
 }
 
@@ -429,7 +438,7 @@ export function mountBackgroundMedia(
       }
       syncFrames();
     },
-    backdrop(): BackdropMedia | undefined {
+    backdrop(fit: BackdropFit = "authored"): BackdropMedia | undefined {
       const mounted = element;
       if (mounted === undefined) return undefined;
       // The rect the layer covers, in artboard units. A display-bounded layer
@@ -439,8 +448,13 @@ export function mountBackgroundMedia(
         bounds === undefined ? 0 : bounds.artboard.width / artboardSize.width;
       // Falls back with `place`: a display-bounded layer with no display box is
       // drawn on the artboard, so the sampled rect has to be that box too.
+      // **A "theme" answer ignores the authored bounds**: a thumbnail is a
+      // picture of the theme, so every media layer is asked how it would look
+      // placed on the artboard alone, whatever this display shows.
       const display =
-        background?.media?.bounds === "display" ? bounds?.display : undefined;
+        fit === "authored" && background?.media?.bounds === "display"
+          ? bounds?.display
+          : undefined;
       const rect =
         bounds !== undefined &&
         display !== undefined &&
