@@ -125,7 +125,7 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "a native checkbox: an on/off answer, with no draft to compose or commit",
   ],
   [
-    "host-settings-mode/device-name-row.tsx",
+    "settings-mode/device-name-row.tsx",
     "a copy: its own Enter and blur commit, with no Escape; only the composing guard is shared",
   ],
   [
@@ -150,19 +150,23 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     'a hidden `type="file"` input, driven by its own toolbar button',
   ],
   [
-    "editor-shell/settings.tsx",
+    "settings-mode/pages/asset-sources-page.tsx",
     "the credential field commits through its own Save button and is cleared there, never on blur or Enter",
   ],
   [
-    "host-settings-mode/source-form.tsx",
+    "settings-mode/pages/appearance-page.tsx",
+    "the preview-ratio field commits through the page's own Add button, never on blur or Enter",
+  ],
+  [
+    "settings-mode/source-form.tsx",
     "the source form's fields are committed by the form's own Save button, never on blur or Enter",
   ],
   [
-    "host-settings-mode/displays-section.tsx",
+    "settings-mode/displays-section.tsx",
     "the display name is committed by the add form's own Add button, never on blur or Enter",
   ],
   [
-    "host-settings-mode/panel-controls-section.tsx",
+    "settings-mode/panel-controls-section.tsx",
     "the brightness field is committed by its own Apply button, never on blur or Enter; Escape belongs to the dialog",
   ],
   [

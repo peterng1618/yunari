@@ -158,6 +158,12 @@ export const VIDEO_GLYPH: LucideIcon = Play;
 
 /** The page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
+/** Settings mode's four This PC pages: the screens, the sensors that feed
+ *  them, the units readings print in, and the external readings themselves. */
+export const DISPLAYS_GLYPH: LucideIcon = Monitor;
+export const HARDWARE_GLYPH: LucideIcon = Cpu;
+export const UNITS_GLYPH: LucideIcon = Gauge;
+export const READINGS_GLYPH: LucideIcon = Activity;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
 export const PALETTE_GLYPH: LucideIcon = Palette;
 /** The picker's eyedropper: a sample taken off the screen, not a paint pick. */

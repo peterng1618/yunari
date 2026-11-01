@@ -127,6 +127,44 @@ export const uiCopy = {
     connections: "Connections",
     about: "About",
     close: "Close",
+    /** The grouped navigation column. `thisPc` is the machine and its screens;
+     *  `editor` is how the author works on this machine. The group headings
+     *  are the only place those words appear, so a page cannot be filed twice. */
+    groups: {
+      thisPc: "This PC",
+      editor: "Editor",
+    },
+    /** One word per page, and the same word the page's own heading prints. The
+     *  nav and the header read this map, so a page cannot appear with one name
+     *  and open under another. */
+    pages: {
+      displays: "Displays",
+      hardware: "Hardware",
+      units: "Units & time",
+      readings: "Readings",
+      appearance: "Appearance",
+      keyboard: "Keyboard",
+      assetSources: "Asset sources",
+      about: "About",
+    } as const,
+    /** A page's one-sentence promise, under its heading. The host pages reuse
+     *  the hints their sections already owned; the two editor pages that had a
+     *  modal rather than a page gain the sentence that says what they hold. */
+    pageHints: {
+      displays: "Each display shows its own theme. Assign one from the theme's row in Themes.",
+      hardware:
+        "Which hardware the Host reports. These apply to every theme, unless a theme asks for something different.",
+      units:
+        "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
+      readings:
+        "Where this PC's weather and custom readings come from, and how often they are read.",
+      appearance:
+        "The editor's own palette and the preview ratios its display menu offers.",
+      keyboard: "Every product action, and the chord that runs it.",
+      assetSources:
+        "Keys stay on this machine. Stored values are never shown again, only the last four characters.",
+      about: "Yunari, a dashboard theme editor.",
+    } as const,
     /** The Connections tab: the one place a provider key is entered, because
      *  every remote source reads from here rather than growing its own field. */
     connectionsHeading: "Asset sources",
@@ -412,7 +450,9 @@ export const uiCopy = {
     label: "Shell modes",
     editor: "Editor",
     themes: "Themes",
-    host: "Host",
+    /** The third surface: this PC's settings and the editor's own preferences,
+     *  one page each. It was called Host while it held host settings only. */
+    settings: "Settings",
     /** Asked before the editor is left with unsaved work. It is the question
      *  the editor's own replacement prompt is given, so it offers the same
      *  three answers — Save, Discard, Cancel — and the author can save rather
@@ -434,6 +474,11 @@ export const uiCopy = {
   hostSettings: {
     displays: {
       heading: "Displays",
+      /** The list column's own eyebrow. The page heading already says
+       *  "Displays", so the list names what it holds rather than repeating it. */
+      listHeading: "All displays",
+      /** The startup row's eyebrow, under the add form rather than beside it. */
+      autostartHeading: "Startup",
       hint: "Each display shows its own theme. Assign one from the theme's row in Themes.",
       /** The name of the control that picks which display the questions below
        *  speak for. It is a choice and not an assignment. */
@@ -653,6 +698,11 @@ export const uiCopy = {
     },
     display: {
       heading: "Display",
+      /** The two section headings on the Units & time page. The page's own name
+       *  is neither: one group is the clock and temperature system, the other
+       *  is the family grid. */
+      clockHeading: "Clock & temperature",
+      unitsHeading: "Units",
       hint: "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
       timeZone: "Clock time zone",
       ownZone: "Host's own zone",

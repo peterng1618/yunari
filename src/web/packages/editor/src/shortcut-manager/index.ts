@@ -151,7 +151,7 @@ export function defersToTextEntry(action: ProductShortcutId): boolean {
   );
 }
 
-/** True while a modal dialog is on screen.
+/** True while a modal dialog is on screen, or while the editor is not.
  *
  * A modal makes the page behind it inert to the pointer and to focus, and it
  * does not touch a `window`-level listener — which is what this manager is. So
@@ -162,6 +162,11 @@ export function defersToTextEntry(action: ProductShortcutId): boolean {
  * Both shapes, because the editor has both: the three native modals
  * (`new-document-chooser.ts`, `persistence-manager`, `theme-library-dialog`)
  * and the library `Dialog` on Base UI.
+ *
+ * **The editor's own surface can be hidden too.** A shell mode that is not the
+ * editor keeps its body mounted behind `hidden` so an open document survives
+ * the switch; the marker `data-yunari-editor-inactive` is what tells this
+ * manager that the body a chord would edit is not the one on screen.
  *
  * **`[role='dialog']` alone, with no `aria-modal` clause.** `@base-ui/react`
  * 1.8.0's dialog sets `role: 'dialog'` on the popup and hides the content's
@@ -174,7 +179,11 @@ export function defersToTextEntry(action: ProductShortcutId): boolean {
  * draws no non-modal `role="dialog"`.
  */
 function isModalOpen(): boolean {
-  return document.querySelector("dialog[open], [role='dialog']") !== null;
+  return (
+    document.querySelector(
+      "dialog[open], [role='dialog'], [data-yunari-editor-inactive]",
+    ) !== null
+  );
 }
 
 /** The sole window-level dispatcher for Yunari product actions above the canvas's own key handling. */

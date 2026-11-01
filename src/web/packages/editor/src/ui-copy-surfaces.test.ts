@@ -39,7 +39,7 @@
  */
 import type { FacetRecord } from "@yunari/renderer-core";
 import { Canvas, type FabricObject, Rect, Textbox } from "fabric/es";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { expect, it } from "vitest";
 import { ColourPicker } from "./components/ui/colour-picker.js";
@@ -56,7 +56,9 @@ import {
   shellPalettes,
 } from "./editor-shell/palette.js";
 import { PublishControl } from "./editor-shell/publish-control.js";
-import { Settings } from "./editor-shell/settings.js";
+import { AppearancePage } from "./settings-mode/pages/appearance-page.js";
+import { AboutPage } from "./settings-mode/pages/about-page.js";
+import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 import { createShellLayout } from "./editor-shell/shell-layout.js";
 import type { PublishSurfaceStore } from "./editor-shell/shell-stores.js";
 import { ShortcutReference } from "./editor-shell/shortcut-reference.js";
@@ -95,7 +97,12 @@ it("leaves the React surfaces with no copy of their own", async () => {
   const owned = new Set(copy());
   expect(
     spokenIn(root).filter(
-      (text) => !owned.has(text) && !isStoredName(text) && !isLensId(text),
+      (text) =>
+        !owned.has(text) &&
+        !isStoredName(text) &&
+        !isLensId(text) &&
+        !isShortcutWord(text) &&
+        !isPreviewRemoveLabel(text),
     ),
   ).toEqual([]);
   for (const surface of LANDED_SURFACES) {
@@ -139,9 +146,12 @@ it("reads the opened menus, the Settings tabs and the canvas context menu", asyn
     ).toEqual([]);
   }
 
-  const { keyboard, about } = uiCopy.settings;
-  for (const tab of [keyboard, about]) {
-    const panel = openSettingsTab(tab);
+  for (const page of ["keyboard", "about"] as const) {
+    const tab = uiCopy.settings.pages[page];
+    const panel = document.querySelector<HTMLElement>(
+      `[data-yunari-settings-page="${page}"]`,
+    );
+    if (panel === null) throw new Error(`no ${tab} page rendered`);
     const said = saidIn(panel);
     expect(said, tab).not.toEqual([]);
     expect(
@@ -150,7 +160,8 @@ it("reads the opened menus, the Settings tabs and the canvas context menu", asyn
           !owned.has(text) &&
           !isShortcutWord(text) &&
           !isStoredName(text) &&
-          !isLensId(text),
+          !isLensId(text) &&
+          !isPreviewRemoveLabel(text),
       ),
       tab,
     ).toEqual([]);
@@ -584,24 +595,6 @@ function menubarEntry(root: HTMLElement, label: string): HTMLButtonElement {
   return entry;
 }
 
-/** The Settings modal's tab named `label`, clicked the way a reader opens it,
- *  returning the panel the tab points at — not the first `tabpanel`, which is
- *  the Appearance tab's while Base UI still holds it. */
-function openSettingsTab(label: string): HTMLElement {
-  const tab = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="tab"]'),
-  ).find((element) => element.textContent?.trim() === label);
-  if (tab === undefined) throw new Error(`No "${label}" tab in the modal.`);
-  act(() => {
-    tab.click();
-  });
-  const controlled = tab.getAttribute("aria-controls");
-  const panel =
-    controlled === null ? null : document.getElementById(controlled);
-  if (panel === null) throw new Error(`the ${label} tab points at no panel`);
-  return panel;
-}
-
 /** React schedules outside `act` and floating-ui's measurement never settles
  *  inside one, so a popup is flushed with macrotasks instead. */
 async function flushTasks(): Promise<void> {
@@ -618,7 +611,7 @@ const LANDED_SURFACES = [
   ".editor-shell-rail",
   "[data-yunari-canvas-toolbar]",
   ".editor-shell-panel",
-  ".editor-shell-settings",
+  '[data-yunari-settings-page="appearance"]',
   "[data-yunari-section]",
   '[data-testid="colour-picker"]',
 ] as const;
@@ -635,6 +628,20 @@ function isStoredName(text: string): boolean {
  *  ratio added in Settings must need no copy change. */
 function isLensId(text: string): boolean {
   return activePreviewLenses().some((lens) => lens.id === text);
+}
+
+/** A preview row's Remove control is the copy word followed by the lens ids
+ *  that token derives — `Remove preview ratio 16:9 9:16` — so the sentence is
+ *  owned by its prefix and the author's ids, not by a literal in the page. */
+function isPreviewRemoveLabel(text: string): boolean {
+  const prefix = `${uiCopy.settings.previewRatioRemove} `;
+  return (
+    text.startsWith(prefix) &&
+    text
+      .slice(prefix.length)
+      .split(" ")
+      .every((token) => isLensId(token))
+  );
 }
 
 /** A shortcut's action word is the reference table's. `SHORTCUT_LABELS` reuses
@@ -772,23 +779,31 @@ async function mountLandedSurfaces(): Promise<{
   const layout = createShellLayout(shellRoot);
   layout.setBridge(selectionBridge(), undefined);
 
+  /** The three editor-owned Settings pages, mounted together so the walk reads
+   *  the surface the author reaches rather than a closed surface's chrome. The
+   *  host pages are `region.dom.test.tsx`'s and are not part of this copy net. */
   const settingsHost = document.createElement("div");
   document.body.append(settingsHost);
   const settingsRoot = createRoot(settingsHost);
   await act(async () => {
     settingsRoot.render(
-      createElement(Settings, {
-        open: true,
-        onOpenChange: () => undefined,
-        storage: undefined,
-        palette: DEFAULT_SHELL_PALETTE,
-        following: true,
-        onPalette: () => undefined,
-        onFollowing: () => undefined,
-        overrides: {},
-        onOverrides: () => undefined,
-        releaseVersion: undefined,
-      }),
+      createElement(
+        Fragment,
+        null,
+        createElement(AppearancePage, {
+          storage: undefined,
+          palette: DEFAULT_SHELL_PALETTE,
+          following: true,
+          onPalette: () => undefined,
+          onFollowing: () => undefined,
+        }),
+        createElement(KeyboardPage, {
+          storage: undefined,
+          overrides: {},
+          onOverrides: () => undefined,
+        }),
+        createElement(AboutPage, { releaseVersion: undefined }),
+      ),
     );
   });
 

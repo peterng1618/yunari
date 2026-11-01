@@ -235,9 +235,10 @@ async function editorReady(page: Page): Promise<void> {
   await page.waitForFunction(() => "yunariEditorBridge" in window);
 }
 
-/** The Host mode's Sources section, over the host this file started. */
+/** The Readings page's Sources section, over the host this file started. */
 async function openSources(page: Page): Promise<void> {
-  await page.locator("#yunari-shell-modes-host").click();
+  await page.locator("#yunari-shell-modes-settings").click();
+  await page.locator('[data-yunari-settings-nav-item="readings"]').click();
   await expect(
     page.locator('[data-yunari-host-section="sources"]'),
   ).toBeVisible();

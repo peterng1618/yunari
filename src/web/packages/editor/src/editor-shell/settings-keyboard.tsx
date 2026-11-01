@@ -110,11 +110,11 @@ export function SettingsKeyboard(props: {
     (event: KeyboardEvent<HTMLDivElement>): void => {
       if (armed !== action) return;
       // The two presses the capture must not consume. Tab moves focus on — an
-      // armed row that swallowed it would be a keyboard trap — and Escape is the
-      // modal's own dismissal (`settings.tsx` passes it straight through), so
-      // neither is a chord. Both disarm and travel on; every other key is the
-      // capture's and nothing else's, because the manager listens on `window`
-      // and would otherwise run the chord being recorded.
+      // armed row that swallowed it would be a keyboard trap — and Escape
+      // cancels the row rather than becoming a chord. Both disarm and travel
+      // on; every other key is the capture's and nothing else's, because the
+      // manager listens on `window` and would otherwise run the chord being
+      // recorded.
       if (event.key === "Tab" || event.key === "Escape") {
         disarm();
         return;

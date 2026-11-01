@@ -22,7 +22,7 @@
  * follows is read by its own gate, not by this file.
  */
 import type { AssignableGroup, DisplayShape } from "@yunari/renderer-core";
-import { act, type ReactElement } from "react";
+import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { fixtureEntry } from "../store-mode/item-fixture.js";
@@ -44,7 +44,15 @@ import {
   type WeatherRead,
   type WeatherSettings,
 } from "./client.js";
-import { HostSettingsRegion, type HostStatusLine } from "./region.js";
+import {
+  SETTINGS_GROUPS,
+  SETTINGS_PAGES,
+  type SettingsPage,
+} from "./nav.js";
+import {
+  SettingsRegion,
+  type SettingsStatusLine,
+} from "./region.js";
 import {
   type RemovalAnswer,
   type Source,
@@ -507,22 +515,35 @@ async function mountHost(
     readonly answers?: string;
     readonly weather?: string;
   },
+  /** The page the region opens on. A page that is not Displays is the one its
+   *  panels are visible on, so a test that touches a control there passes it. */
+  page: SettingsPage = "displays",
 ): Promise<{
   readonly container: HTMLDivElement;
   readonly wrote: Written;
   readonly sources: SourceWrites;
-  readonly published: (HostStatusLine | undefined)[];
+  readonly published: (SettingsStatusLine | undefined)[];
 }> {
   const settings = hostSettings(fixture, refuse);
   const sources = sourcesClient(fixture);
-  const published: (HostStatusLine | undefined)[] = [];
+  const published: (SettingsStatusLine | undefined)[] = [];
   const container = await mount(
-    <HostSettingsRegion
-      mode="host"
+    <SettingsRegion
+      mode="settings"
+      page={page}
+      onPageChange={() => {}}
       client={library(fixture)}
       settings={settings.client}
       sources={sources.client}
       onStatus={(line) => published.push(line)}
+      storage={undefined}
+      palette="graphite"
+      following={true}
+      onPalette={() => {}}
+      onFollowing={() => {}}
+      overrides={{}}
+      onOverrides={() => {}}
+      releaseVersion={undefined}
     />,
   );
   return {
@@ -533,13 +554,54 @@ async function mountHost(
   };
 }
 
+/** The region with its page state held the way the shell holds it, so a test
+ *  can move between destinations through the navigation column. */
+async function mountSettings(fixture: Fixture): Promise<HTMLDivElement> {
+  const settings = hostSettings(fixture, undefined);
+  const sources = sourcesClient(fixture);
+
+  function Harness(): React.JSX.Element {
+    const [page, setPage] = useState<SettingsPage>("displays");
+    return (
+      <SettingsRegion
+        mode="settings"
+        page={page}
+        onPageChange={setPage}
+        client={library(fixture)}
+        settings={settings.client}
+        sources={sources.client}
+        storage={undefined}
+        palette="graphite"
+        following={true}
+        onPalette={() => {}}
+        onFollowing={() => {}}
+        overrides={{}}
+        onOverrides={() => {}}
+        releaseVersion={undefined}
+      />
+    );
+  }
+
+  return mount(<Harness />);
+}
+
+/** One navigation destination, by the page it opens. */
+function navItem(container: HTMLElement, page: SettingsPage): HTMLElement {
+  return must(
+    container.querySelector<HTMLElement>(
+      `[data-yunari-settings-nav-item="${page}"]`,
+    ),
+    `the ${page} navigation item`,
+  );
+}
+
 /** The line the shell's strip is showing: the last one published, or a defect
  *  this file names rather than a `null` a later assertion reports as a value.
  *  A run's own reads happen while the region is mounted, so the last entry
  *  during a case is a line — a withdrawal here means the region left. */
 function statusLine(
-  published: readonly (HostStatusLine | undefined)[],
-): HostStatusLine {
+  published: readonly (SettingsStatusLine | undefined)[],
+): SettingsStatusLine {
   const last = published.at(-1);
   if (last === undefined) {
     throw new Error("the region published no status line, or withdrew it");
@@ -719,10 +781,68 @@ async function enter(field: HTMLInputElement): Promise<void> {
  *  `[data-yunari-mode-region]` section for every non-editor mode and mounts
  *  both regions in it, so a region that drew itself in a mode it does not own
  *  would be the second surface in one section. */
-it("renders no region for a mode that is not Host", async () => {
-  const container = await mount(<HostSettingsRegion mode="themes" />);
-  expect(container.querySelector("[data-yunari-host-region]")).toBeNull();
+it("renders no region for a mode that is not Settings", async () => {
+  const container = await mount(
+    <SettingsRegion
+      mode="themes"
+      page="displays"
+      onPageChange={() => {}}
+      storage={undefined}
+      palette="graphite"
+      following={true}
+      onPalette={() => {}}
+      onFollowing={() => {}}
+      overrides={{}}
+      onOverrides={() => {}}
+      releaseVersion={undefined}
+    />,
+  );
+  expect(container.querySelector("[data-yunari-settings-region]")).toBeNull();
   expect(container.textContent).toBe("");
+});
+
+/**
+ * **The column reads in the order the page list declares**, under the two
+ * headings it declares. The navigation and the panels share one list, so an
+ * ordering test here also pins the panel order: a destination cannot move in
+ * one place and not the other.
+ */
+it("draws the navigation in the declared order, under its two groups", async () => {
+  const { container } = await mountHost(TWO_DISPLAYS);
+
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-yunari-settings-nav-item]",
+      ),
+    ).map((item) => item.dataset.yunariSettingsNavItem),
+    "the column does not read in the page list's order",
+  ).toEqual(SETTINGS_PAGES.map((page) => page.id));
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(".settings-mode-nav-group"),
+    ).map((group) => group.textContent),
+    "the column does not draw the two group headings",
+  ).toEqual(SETTINGS_GROUPS.map((group) => group.label));
+});
+
+/**
+ * **A page stays mounted when another is chosen**, which is what keeps a draft
+ * typed on it. A page that unmounted on the way out would silently discard the
+ * half-typed word; the visited set mounts each page once and hides the rest.
+ */
+it("keeps a page mounted across a switch, so its draft survives", async () => {
+  const container = await mountSettings({ ...TWO_DISPLAYS, devices: DEVICES });
+  await act(async () => navItem(container, "hardware").click());
+  await type(nameField(container, "gpu-0"), "Card");
+
+  await act(async () => navItem(container, "units").click());
+  await act(async () => navItem(container, "hardware").click());
+
+  expect(
+    nameField(container, "gpu-0").value,
+    "the draft did not survive the page switch",
+  ).toBe("Card");
 });
 
 /**
@@ -1293,10 +1413,14 @@ it("offers each slot's devices with the automatic choice first", async () => {
  * region holds, and both fields travel.
  */
 it("writes both device fields together, because the route replaces the object", async () => {
-  const { container, wrote, published } = await mountHost({
-    ...TWO_DISPLAYS,
-    devices: DEVICES,
-  });
+  const { container, wrote, published } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      devices: DEVICES,
+    },
+    undefined,
+    "hardware",
+  );
 
   await type(nameField(container, "gpu-0"), "Graphics card");
   await leave(nameField(container, "gpu-0"));
@@ -1323,10 +1447,14 @@ it("writes both device fields together, because the route replaces the object", 
  * absorbs commits on.
  */
 it("commits a device name on the way out, not on every keystroke", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    devices: DEVICES,
-  });
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      devices: DEVICES,
+    },
+    undefined,
+    "hardware",
+  );
   await type(nameField(container, "gpu-0"), "Card");
   expect(
     wrote.devices,
@@ -1349,10 +1477,14 @@ it("commits a device name on the way out, not on every keystroke", async () => {
 });
 
 it("does not commit a device name on the Enter of a composition", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    devices: DEVICES,
-  });
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      devices: DEVICES,
+    },
+    undefined,
+    "hardware",
+  );
   const field = nameField(container, "gpu-0");
   await type(field, "Card");
 
@@ -1387,13 +1519,17 @@ it("does not commit a device name on the Enter of a composition", async () => {
 /** The display form sends both fields for the same reason the device form does,
  *  and the units sentence says which screens the change has not reached yet. */
 it("writes both display fields together", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    preferences: {
-      settings: { measurement: "imperial" },
-      zones: ["UTC", "Europe/Paris"],
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      preferences: {
+        settings: { measurement: "imperial" },
+        zones: ["UTC", "Europe/Paris"],
+      },
     },
-  });
+    undefined,
+    "units",
+  );
 
   const zone = must(
     container.querySelector<HTMLElement>("[data-yunari-host-time-zone]"),
@@ -1422,13 +1558,17 @@ it("writes both display fields together", async () => {
  * are kept rather than cleared.
  */
 it("renders a row per unit preference and writes only the changed field", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    preferences: {
-      settings: { measurement: "imperial", units: { data: "decimal" } },
-      zones: [],
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      preferences: {
+        settings: { measurement: "imperial", units: { data: "decimal" } },
+        zones: [],
+      },
     },
-  });
+    undefined,
+    "units",
+  );
 
   expect(
     unitRows(container),
@@ -1481,6 +1621,7 @@ it("shows the store's refusal when a unit preference cannot be stored", async ()
   const { container, published } = await mountHost(
     { ...TWO_DISPLAYS, preferences: { settings: {}, zones: [] } },
     { display: refusal },
+    "units",
   );
 
   await offered(
@@ -1519,17 +1660,21 @@ const WEATHER: WeatherSettings = {
  * fields from geocoding rather than being typed in by hand.
  */
 it("saves the weather form in seconds and fills a searched place", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    weather: WEATHER,
-    places: [
-      {
-        label: "Paris, Ile-de-France, FR",
-        latitude: 48.86,
-        longitude: 2.35,
-      },
-    ],
-  });
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      weather: WEATHER,
+      places: [
+        {
+          label: "Paris, Ile-de-France, FR",
+          latitude: 48.86,
+          longitude: 2.35,
+        },
+      ],
+    },
+    undefined,
+    "readings",
+  );
 
   const interval = weatherField(container, "[data-yunari-weather-interval]");
   expect(
@@ -1647,10 +1792,14 @@ it.each([
  * editor follows.
  */
 it("does not save an emptied poll interval as zero or NaN", async () => {
-  const { container, wrote } = await mountHost({
-    ...TWO_DISPLAYS,
-    weather: WEATHER,
-  });
+  const { container, wrote } = await mountHost(
+    {
+      ...TWO_DISPLAYS,
+      weather: WEATHER,
+    },
+    undefined,
+    "readings",
+  );
 
   const interval = weatherField(container, "[data-yunari-weather-interval]");
   await type(interval, "");
@@ -1673,6 +1822,7 @@ it("reports the host's own reason when a write is refused", async () => {
   const { container, published } = await mountHost(
     { ...TWO_DISPLAYS, devices: DEVICES },
     { devices: refusal },
+    "hardware",
   );
 
   await type(nameField(container, "gpu-0"), "Card");
@@ -1748,13 +1898,17 @@ it("answers a zone write in its own words, not the device save's", async () => {
   const copy = uiCopy.hostSettings.status as { savedDevices: string };
   copy.savedDevices = sharpened;
   try {
-    const { container, published } = await mountHost({
-      ...TWO_DISPLAYS,
-      preferences: {
-        settings: { measurement: "imperial" },
-        zones: ["Europe/Paris"],
+    const { container, published } = await mountHost(
+      {
+        ...TWO_DISPLAYS,
+        preferences: {
+          settings: { measurement: "imperial" },
+          zones: ["Europe/Paris"],
+        },
       },
-    });
+      undefined,
+      "units",
+    );
 
     await offered(
       must(

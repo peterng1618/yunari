@@ -12,9 +12,10 @@ import {
   setActivePreviewRatios,
 } from "../display-lens.js";
 import {
-  HostSettingsRegion,
-  type HostStatusLine,
-} from "../host-settings-mode/region.js";
+  SettingsRegion,
+  type SettingsStatusLine,
+} from "../settings-mode/region.js";
+import type { SettingsPage } from "../settings-mode/nav.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import { confirmDocumentReplacement } from "../persistence-manager/index.js";
 import {
@@ -48,7 +49,6 @@ import { PublishIndicator } from "./publish-indicator.js";
 import { Rail, type RailSlot } from "./rail.js";
 import { SaveState } from "./save-state.js";
 import type { EditorViewControls } from "./session-facade.js";
-import { Settings, type SettingsTab } from "./settings.js";
 import { parseShellEntry } from "./shell-entry.js";
 import { ShellMenuBar } from "./shell-menu-bar.js";
 import {
@@ -75,7 +75,7 @@ import { StatusReadout } from "./status-readout.js";
  * reads it, and the store mode is a surface in this same React tree rather than
  * an iframe over another page.
  */
-export type ShellMode = "editor" | "themes" | "host";
+export type ShellMode = "editor" | "themes" | "settings";
 
 /**
  * What the shell's React root is given: the surface showing, and the request for
@@ -98,7 +98,7 @@ export interface ShellLayoutProps {
 const MODE_NAMES: Record<ShellMode, string> = {
   editor: uiCopy.modes.editor,
   themes: uiCopy.modes.themes,
-  host: uiCopy.modes.host,
+  settings: uiCopy.modes.settings,
 };
 
 /** The order the header draws them in, which is a separate decision from what
@@ -106,7 +106,7 @@ const MODE_NAMES: Record<ShellMode, string> = {
 const MODE_ORDER = [
   "editor",
   "themes",
-  "host",
+  "settings",
 ] as const satisfies readonly ShellMode[];
 
 /** The switch's id, and the stem of each segment's. The control-id rule wants every
@@ -324,15 +324,12 @@ export function createShellLayout(
     );
     const [slot, setSlot] = useState<RailSlot>("composition");
     const [collapsed, setCollapsed] = useState(false);
-    /** The settings modal, opened by the rail's gear. Local state, like the
-     *  palette above: it is a shell surface, not document state, and it is
-     *  never serialized. */
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    /** The tab a surface asked Settings to open on, cleared when it closes so
-     *  the next open is the author's own last choice. */
-    const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(
-      undefined,
-    );
+    /** The Settings page the surface shows. Local state, like the palette
+     *  above: it is shell chrome, not document state, and it is never
+     *  serialized. The gear keeps the last page; a surface that asks for one
+     *  (the finder's needs-key path) sets it before switching. */
+    const [settingsPage, setSettingsPage] =
+      useState<SettingsPage>("displays");
     /** The author's bindings, held here because the effective table lives
      *  outside React. Initialized from storage — the same read
      *  `createShellLayout` made for the live table — and moved from there by
@@ -346,7 +343,7 @@ export function createShellLayout(
      *  region withdraws the line when it unmounts, so this state is one visit's
      *  and never outlives it — otherwise the next visit's strip would mount
      *  holding the last visit's sentence. */
-    const [hostStatus, setHostStatus] = useState<HostStatusLine | undefined>(
+    const [hostStatus, setHostStatus] = useState<SettingsStatusLine | undefined>(
       undefined,
     );
     /** The Themes mode's own reading, published by its region for the same
@@ -526,6 +523,10 @@ export function createShellLayout(
           className="editor-shell-body"
           data-collapsed={collapsed}
           hidden={mode !== "editor"}
+          // The document stays mounted here while another mode shows. The
+          // marker is the shortcut manager's signal that the body a product
+          // chord would edit is not the one on screen.
+          data-yunari-editor-inactive={mode === "editor" ? undefined : ""}
         >
           {/* The rail is the left edge's own column, ahead of the pane's, so
               the canvas gets the pane's width back and the slots read as one
@@ -534,10 +535,7 @@ export function createShellLayout(
             slot={slot}
             collapsed={collapsed}
             onChoose={choosePane}
-            onOpenSettings={() => {
-              setSettingsTab(undefined);
-              setSettingsOpen(true);
-            }}
+            onOpenSettings={() => onModeChange("settings")}
           />
           <aside className="editor-shell-panel editor-glass" hidden={collapsed}>
             {/* Every pane wears the same chrome — a title bar, a body and a
@@ -709,25 +707,9 @@ export function createShellLayout(
               }}
               onOpenConnections={() => {
                 finder.set(false);
-                setSettingsTab("connections");
-                setSettingsOpen(true);
+                setSettingsPage("asset-sources");
+                onModeChange("settings");
               }}
-            />
-            <Settings
-              open={settingsOpen}
-              onOpenChange={(next) => {
-                setSettingsOpen(next);
-                if (!next) setSettingsTab(undefined);
-              }}
-              initialTab={settingsTab}
-              storage={storage}
-              palette={palette}
-              following={following}
-              onPalette={setPalette}
-              onFollowing={setFollowing}
-              overrides={overrides}
-              onOverrides={applyOverrides}
-              releaseVersion={releaseVersion}
             />
           </main>
           <aside className="editor-shell-inspector editor-glass">
@@ -775,7 +757,20 @@ export function createShellLayout(
                 own, so the section holds one surface whatever mode is showing.
                 It takes no route from the shell — it writes the Host's own
                 settings, and assigning a theme is the store's. */}
-            <HostSettingsRegion mode={mode} onStatus={setHostStatus} />
+            <SettingsRegion
+              mode={mode}
+              page={settingsPage}
+              onPageChange={setSettingsPage}
+              onStatus={setHostStatus}
+              storage={storage}
+              palette={palette}
+              following={following}
+              onPalette={setPalette}
+              onFollowing={setFollowing}
+              overrides={overrides}
+              onOverrides={applyOverrides}
+              releaseVersion={releaseVersion}
+            />
           </section>
         )}
         {/* The strip: readouts only, the counts on the left and the save
@@ -784,7 +779,7 @@ export function createShellLayout(
             count, the host's two strings. A mode that has not published its
             reading draws nothing rather than another mode's numbers. */}
         <footer id="status" className="editor-shell-status">
-          {mode === "host" ? (
+          {mode === "settings" ? (
             <>
               <span data-yunari-host-display-count="">
                 {hostStatus?.displays ?? null}
@@ -825,9 +820,12 @@ export function createShellLayout(
    * The shell opens on the editor — the document is what an author came for —
    * and the mode is never persisted: it is chrome, not authored state.
    *
-   * **The guard fires on the way out of the editor and nowhere else.** Leaving
-   * the editor is the only transition that can cost an unsaved document, so
-   * moving between the other two modes asks nothing.
+   * **The guard fires on the way to Themes, and nowhere else.** The editor and
+   * Settings share the editing workspace: Settings is chrome over the document,
+   * the body stays mounted behind `hidden`, and nothing can be lost by moving
+   * between them. Themes is the surface that puts the document away, so it is
+   * the transition the prompt protects — from either of the other two modes.
+   * That keeps the gear usable mid-edit, as the modal it replaces was.
    *
    * It is the editor's **existing** replacement prompt with the switch's own
    * question, not a second guard: the prompt's copy is the only thing that makes
@@ -868,8 +866,12 @@ export function createShellLayout(
         setMode(chosen);
         options.onModeChange?.(chosen);
       };
-      const session = mode === "editor" ? store.bridge?.session : undefined;
-      if (session === undefined || session.isDirty() !== true) {
+      const session = store.bridge?.session;
+      if (
+        next !== "themes" ||
+        session === undefined ||
+        session.isDirty() !== true
+      ) {
         switchTo(next);
         return;
       }
