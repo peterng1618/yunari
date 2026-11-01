@@ -92,7 +92,16 @@ export interface ComputeArtboardTransformInput {
   readonly contentFit?: ContentFit;
   /** Whole degrees clockwise; a rect display accepts quarter turns only. */
   readonly rotation?: number;
+  /** The display's shape: the glass and the angle it can hold. */
   readonly shape?: DisplayShape;
+  /**
+   * The theme's layout rule on that display, when it differs from the glass.
+   *
+   * A circle theme is a square artboard masked by a disc, so it lays out by the
+   * rect rules whatever the display's shape; the mounting angle still belongs
+   * to the display. Defaults to `shape`.
+   */
+  readonly layoutShape?: DisplayShape;
 }
 
 /** Computes the centred rotate-then-fit transform. Invalid geometry or angle throws. */
@@ -102,6 +111,7 @@ export function computeArtboardTransform(
   const { artboard, viewport } = input;
   const contentFit = input.contentFit ?? "contain";
   const shape = input.shape ?? "rect";
+  const layoutShape = input.layoutShape ?? shape;
   const rotation = readRotation(shape, input.rotation);
 
   assertFinite(artboard.width, "artboard.width");
@@ -145,7 +155,7 @@ export function computeArtboardTransform(
     Math.abs(artboard.width * sin) + Math.abs(artboard.height * cos);
 
   const scale =
-    shape === "circle"
+    layoutShape === "circle"
       ? Math.min(viewportWidth, viewportHeight) /
         Math.hypot(artboard.width, artboard.height)
       : contentFit === "contain"
@@ -175,7 +185,7 @@ export function computeArtboardTransform(
     offsetY,
   ];
 
-  if (shape === "circle") {
+  if (layoutShape === "circle") {
     return {
       scale,
       offsetX,

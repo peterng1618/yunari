@@ -374,7 +374,8 @@ export function mountFabricScene(
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
       contentFit: geometry.contentFit ?? "contain",
-      shape: artboardTransformShape(themeShape, presentation.shape),
+      shape: presentation.shape,
+      layoutShape: artboardTransformShape(themeShape, presentation.shape),
       ...(presentation.rotation === undefined
         ? {}
         : { rotation: presentation.rotation }),

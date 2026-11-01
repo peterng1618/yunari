@@ -240,6 +240,28 @@ describe("mountFabricScene's theme shape", () => {
     element.remove();
   });
 
+  it("keeps a circle theme's non-quarter mounting angle on a round display", () => {
+    // A round display stores any whole degree, so a circle theme must not have
+    // its mounting angle validated against the rect quarter-turn rule. The
+    // layout is still the circle theme's rect rule, so the rotated bounding box
+    // drives the scale.
+    const element = host();
+    resizeHost(element, 200, 200);
+    const scene = mountCircleTheme(element, {
+      presentation: { shape: "circle", rotation: 20 },
+    });
+    const radians = (20 * Math.PI) / 180;
+
+    expect(scene.transform().rotation).toBe(20);
+    expect(scene.transform().scale).toBeCloseTo(
+      200 / (100 * (Math.cos(radians) + Math.sin(radians))),
+      9,
+    );
+
+    scene.dispose();
+    element.remove();
+  });
+
   it("keeps a rect theme's inscribed scale on a circle presentation", () => {
     const element = host();
     resizeHost(element, 200, 200);

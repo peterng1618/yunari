@@ -500,6 +500,39 @@ describe("computeArtboardTransform — rotation and shape", () => {
     ).toThrow(RangeError);
   });
 
+  it("lays a circle-theme layout out by the rect rule at a non-quarter angle", () => {
+    // The mounting angle belongs to the round display, so it is accepted; the
+    // layout belongs to the circle theme, whose square artboard takes the rect
+    // contain rule with the rotated bounding box driving the scale.
+    const radians = (20 * Math.PI) / 180;
+    const t = computeArtboardTransform({
+      artboard: { width: 100, height: 100 },
+      viewport: { width: 200, height: 200 },
+      shape: "circle",
+      layoutShape: "rect",
+      rotation: 20,
+    });
+
+    expect(t.rotation).toBe(20);
+    expect(t.scale).toBeCloseTo(
+      200 / (100 * (Math.cos(radians) + Math.sin(radians))),
+      9,
+    );
+    expect(t.contentFit).toBe("contain");
+  });
+
+  it("refuses a rect layout at a non-quarter angle on a rect display", () => {
+    expect(() =>
+      computeArtboardTransform({
+        artboard: { width: 100, height: 100 },
+        viewport: { width: 200, height: 200 },
+        shape: "rect",
+        layoutShape: "rect",
+        rotation: 45,
+      }),
+    ).toThrow(RangeError);
+  });
+
   it("round-trips a rotated point", () => {
     const t = computeArtboardTransform({
       artboard: { width: 1600, height: 900 },
