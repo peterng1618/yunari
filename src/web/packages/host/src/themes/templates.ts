@@ -16,19 +16,19 @@
  * is the defect this list exists to close.
  *
  * **`ponytail:` what actually makes this safe today, measured 2026-09-29, and
- * what would end it.** The id is *inert* across the boundary: the chooser row
- * carries it as `data-template` and links to `/editor/`, the editor's template
- * branch calls `onNewFromStarter()` without reading `choice.id`, and no URL,
- * route or dispatch resolves it. So a rename here cannot break the editor — it
- * can only leave a label the two surfaces spell differently, which is a copy
- * defect and not a broken link. That is the whole margin, and it is what the
- * second entry spends: a catalogue is a list precisely because it is meant to
- * grow, and the first thing a second template needs is for the id to *mean*
- * something — a chooser that can only ever open the one starter has no way to
- * say which. Close it then, and the owner is not a new package: this id is
- * product content, `renderer-core` already carries product content both sides
- * depend on (`MEASUREMENT_SYSTEMS`), and moving one line there adds no edge.
- * Until a second entry exists, closing it buys a package for a label.
+ * what would end it.** The id crosses the boundary in the chooser's link
+ * (`/editor/?template=<id>`) but the editor does not resolve it: the boot asks
+ * whether a template was requested, not which one, and starts the bundled
+ * starter. So a rename here cannot break the editor — it can only leave a label
+ * the two surfaces spell differently, which is a copy defect and not a broken
+ * link. That is the whole margin, and it is what the second entry spends: a
+ * catalogue is a list precisely because it is meant to grow, and the first thing
+ * a second template needs is for the id to *mean* something — a boot that can
+ * only ever open the one starter has no way to say which. Close it then, and the
+ * owner is not a new package: this id is product content, `renderer-core`
+ * already carries product content both sides depend on (`MEASUREMENT_SYSTEMS`),
+ * and moving one line there adds no edge. Until a second entry exists, closing
+ * it buys a package for a label.
  */
 interface TemplateEntry {
   readonly id: string;

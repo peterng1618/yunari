@@ -298,7 +298,11 @@ describe("a template the product ships, beside the saved themes", () => {
     // the only honest action is to open it. An anchor is focusable and follows
     // the link, so the row needs no key handler of its own.
     expect(row?.tagName).toBe("A");
-    expect(row?.getAttribute("href")).toBe("/editor/");
+    // The template's own id travels: a bare `/editor/` resumed the author's
+    // last save, so the starter row opened a document that was not the starter.
+    expect(row?.getAttribute("href")).toBe(
+      "/editor/?template=yunari-starter-template",
+    );
     // A screen reader reads the link's purpose from its name, not from where
     // the pointer is, so the row has to say where it goes.
     expect(row?.textContent).toContain("Opens in the editor");

@@ -320,7 +320,10 @@ export function themeList(
     const row = document.createElement("a");
     row.className = "theme-option";
     row.dataset.template = template.id;
-    row.href = "/editor/";
+    // The id travels: a template row asks for that template, where a bare
+    // `/editor/` resumed the author's last save and opened a different
+    // document under the starter's name.
+    row.href = `/editor/?template=${encodeURIComponent(template.id)}`;
     row.append(placeholder(), rowText(template.name, "Opens in the editor"));
     fragment.append(row);
   }

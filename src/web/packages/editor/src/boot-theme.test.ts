@@ -259,6 +259,23 @@ describe("the editor on a URL that names a theme", () => {
   });
 });
 
+describe("the editor on a URL that names a template", () => {
+  it("starts the fresh template and never resumes a save", async () => {
+    // The host's chooser links a template row here. It used to link bare
+    // `/editor/`, which resumes the author's last save — so pressing Starter
+    // opened a stored theme with the starter's name on the row.
+    const client = clientOpening(content);
+
+    await expect(
+      bootTheme("?template=yunari-starter-template", client),
+    ).resolves.toEqual({ kind: "none" });
+    expect(client.open).not.toHaveBeenCalled();
+    // Not even asked: a template request is answered without consulting the
+    // library, so no later edit to the resume rule can make it resume.
+    expect(client.list).not.toHaveBeenCalled();
+  });
+});
+
 describe("the editor on a URL that names nothing", () => {
   it("opens what the author saved last, not the template", async () => {
     // The shape the row measured: rename, add a rectangle, save, close the
