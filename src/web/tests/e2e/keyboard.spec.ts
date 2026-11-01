@@ -323,6 +323,14 @@ test("a chord rebound in the Keyboard tab is the chord the ? sheet prints", asyn
   // stopped reaching the sheet left `toHaveCount(20)` green. Two jsdom files
   // redden on that break (`settings-keyboard.dom.test.tsx`,
   // `shortcut-reference.dom.test.tsx`); nothing in a browser did.
+  //
+  // **The sheet half is what reddens when it breaks, proved 2026-11-01.** The
+  // sheet's own `<kbd>` was planted (`shortcut-reference.tsx` printing a fixed
+  // word) with the projection untouched: the chip assertion ahead of it stayed
+  // green and this case failed on the sheet's read at the line below, 1.0m.
+  // A plant on the shared projection reddens the chip first and proves only
+  // that the case can fail — the two surfaces read one table, so the sheet's
+  // render is the seam that separates them.
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await openShell(page);
