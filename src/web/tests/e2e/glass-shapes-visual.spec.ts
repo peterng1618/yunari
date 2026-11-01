@@ -6,6 +6,7 @@ import {
   frost,
   solidOf,
 } from "../../packages/editor/src/new-fabric-theme-globals.js";
+import { decode, luma as sharedLuma } from "./frame-diff.js";
 import { GLASS_BAR } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { withRoleTokens } from "./theme-fixture.js";
@@ -331,26 +332,15 @@ interface Frame {
 
 /** `canvas` is already a devDependency here and every e2e fixture uses it. */
 async function measure(shot: Buffer, probes: Probes): Promise<Frame> {
-  const { createCanvas, loadImage } = await import("canvas");
-  const image = await loadImage(shot);
-  const surface = createCanvas(image.width, image.height);
-  const context = surface.getContext("2d");
-  context.drawImage(image, 0, 0);
-  // One readback for the whole frame.
-  const data = context.getImageData(0, 0, image.width, image.height).data;
+  const frame = await decode(shot);
   const luma = (x: number, y: number): number | undefined => {
     const xi = Math.round(x);
     const yi = Math.round(y);
     // Bounds-checked. An out-of-range probe returned NaN and every statistic
     // built on it was silently void.
-    if (xi < 0 || yi < 0 || xi >= image.width || yi >= image.height)
+    if (xi < 0 || yi < 0 || xi >= frame.width || yi >= frame.height)
       return undefined;
-    const i = (yi * image.width + xi) * 4;
-    return (
-      0.2126 * (data[i] ?? 0) +
-      0.7152 * (data[i + 1] ?? 0) +
-      0.0722 * (data[i + 2] ?? 0)
-    );
+    return sharedLuma(frame, xi, yi);
   };
   const detail = (cx: number, cy: number): number => {
     let step = 0;

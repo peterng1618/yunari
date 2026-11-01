@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { luma as sharedLuma } from "./frame-diff.js";
 import {
   GLASS_MEDIA_SOURCE,
   GLASS_STRIPE_SOURCE_WIDTH,
@@ -136,7 +137,13 @@ export async function readGlass(
   target: GlassTarget = { id: "glass", band: BANDS.panel },
 ): Promise<Reading> {
   await waitForMedia(page);
-  return page.evaluate(
+  // `page.evaluate` cannot import a module into the page, so the shared
+  // instrument is installed by its own source rather than re-spelled here.
+  // A hand-written luma in this file is the third copy issue #117 removed.
+  await page.addScriptTag({
+    content: `window.__yunariFrameLuma = ${sharedLuma.toString()};`,
+  });
+  return (await page.evaluate(
     (input) => {
       const {
         bands,
@@ -160,12 +167,19 @@ export async function readGlass(
       if (context === null) throw new Error("no 2D context");
       const width = element.width;
       const data = context.getImageData(0, 0, width, element.height).data;
-      const luma = (x: number, y: number): number => {
-        const i = (y * width + x) * 4;
-        return (
-          0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!
-        );
-      };
+      const lumaAt = (
+        window as unknown as {
+          __yunariFrameLuma?: (
+            frame: { readonly width: number; readonly data: ArrayLike<number> },
+            x: number,
+            y: number,
+          ) => number;
+        }
+      ).__yunariFrameLuma;
+      if (lumaAt === undefined)
+        throw new Error("the shared frame luma was not installed");
+      const frame = { width, height: element.height, data };
+      const luma = (x: number, y: number): number => lumaAt(frame, x, y);
 
       const layer = document.querySelector<HTMLElement>(
         "[data-yunari-background-media]",
@@ -352,7 +366,7 @@ export async function readGlass(
       marker: MARKER_LEVEL,
       bleed: BLEED_LEVEL,
     },
-  ) as Promise<Reading>;
+  )) as Reading;
 }
 
 /** The blur, and the backdrop's position. */

@@ -3,7 +3,13 @@ import { rmSync } from "node:fs";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
-import { HOST_PORT, HOST_THEMES_DIR } from "./host-theme.js";
+import { decode, luma, THRESHOLD } from "./frame-diff.js";
+import {
+  HOST_PORT,
+  HOST_THEMES_DIR,
+  HOST_VIDEO_THEME_ID,
+  videoEnvelope,
+} from "./host-theme.js";
 import { lanAddress } from "./lan-address.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -187,29 +193,27 @@ async function recordWebm(page: Page): Promise<Uint8Array> {
   return new Uint8Array(Buffer.from(base64, "base64"));
 }
 
+/** The theme writer's own document type, so a fixture cannot hand the route an
+ *  envelope the archive writer would refuse. */
+type ThemeDocument = Parameters<typeof writeThemePackage>[0]["envelope"];
+
 /** Publishes the theme through the host's own admin write route, so the bytes
  *  the display later fetches went in and out of the real store. The library is
  *  a folder, so the route takes the document and its declared bytes
  *  as JSON — the archive is only ever what an author exports. */
-async function publish(
+async function putTheme(
   page: Page,
-  id: string,
-  webm: Uint8Array,
+  document: ThemeDocument,
+  assets: Readonly<Record<string, Uint8Array>>,
 ): Promise<void> {
-  const theme = {
-    envelope: envelope(id),
-    assets: {
-      "assets/loop.webm": webm,
-      "assets/badge.svg": new TextEncoder().encode(badge),
-    },
-  };
+  const theme = { envelope: document, assets };
   // Validated by the archive writer too, so a fixture that cannot be exported
   // cannot be saved, and the failure names the real problem.
   const written = writeThemePackage(theme);
   if (!written.ok)
     throw new Error(`the fixture is invalid: ${written.message}`);
 
-  const response = await page.request.put(`${HOST}/api/themes/${id}`, {
+  const response = await page.request.put(`${HOST}/api/themes/${document.id}`, {
     data: {
       // A fixture is seeded, not authored: a previous run left a newer base,
       // and the seed replaces it rather than failing the conflict rule.
@@ -227,6 +231,14 @@ async function publish(
     response.status(),
     `the host accepted the fixture theme: ${await response.text().catch(() => "")}`,
   ).toBe(200);
+}
+
+/** The changing-media fixture's own document, with its two declared assets. */
+function publish(page: Page, id: string, webm: Uint8Array): Promise<void> {
+  return putTheme(page, envelope(id), {
+    "assets/loop.webm": webm,
+    "assets/badge.svg": new TextEncoder().encode(badge),
+  });
 }
 
 /**
@@ -728,6 +740,113 @@ test.describe("the video frame callback on the real player", () => {
       idle.renders,
       `the player still repaints with no video frames delivered (${idle.renders} against ${armed.renders} armed)`,
     ).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * The host fixture's own video theme: an opaque `palette.bar` board with a
+ * `bounds: "theme"` video over it and no scene. `artboard-backdrop.ts` owns the
+ * layering — the board's paint underneath, the media over it — and the DOM
+ * plate follows the same order. This is the browser proof that the paint does
+ * not cover the picture: if it did, every sample would be the same board colour.
+ */
+test.describe("a video background on an opaque board", () => {
+  test("the display shows a different decoded frame, not the board's paint", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      !isDesktopSurface(testInfo),
+      "a decoded video frame and its pixels are a desktop read",
+    );
+    await putTheme(page, videoEnvelope, {
+      "assets/loop.webm": await recordPerFrameWebm(page),
+    });
+
+    await page.setViewportSize({ width: 1280, height: 960 });
+    await page.goto(`${HOST}/?theme=${HOST_VIDEO_THEME_ID}`);
+    await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible();
+    await expect(page.locator("[data-yunari-load-failure]")).toHaveCount(0);
+
+    const video = page.locator("[data-yunari-background-media] video").first();
+    // Readiness is a decoded frame, not an element that exists: a mount that
+    // never reaches HAVE_CURRENT_DATA has no pixels for the display to show.
+    await expect
+      .poll(
+        () =>
+          video.evaluate((element) => {
+            const media = element as HTMLVideoElement;
+            return media.readyState * 1000 + media.videoWidth;
+          }),
+        { timeout: 20_000 },
+      )
+      .toBeGreaterThan(2000);
+
+    const layering = await page.evaluate(() => {
+      const plate = document.querySelector<HTMLElement>(
+        "[data-yunari-artboard-plate]",
+      );
+      const media = document.querySelector<HTMLElement>(
+        "[data-yunari-background-media]",
+      );
+      const canvas = document.querySelector<HTMLCanvasElement>(
+        "#artboard canvas.lower-canvas",
+      );
+      if (plate === null || media === null || canvas === null)
+        throw new Error(
+          "the board, its media and the canvas are not all mounted",
+        );
+      const follows = (first: Element, second: Element): boolean =>
+        (first.compareDocumentPosition(second) &
+          Node.DOCUMENT_POSITION_FOLLOWING) !==
+        0;
+      return {
+        paint: getComputedStyle(plate).backgroundColor,
+        plateBeforeMedia: follows(plate, media),
+        mediaBeforeCanvas: follows(media, canvas),
+      };
+    });
+    expect(
+      layering.paint,
+      "the opaque board paint is the backdrop under the video",
+    ).toBe("rgb(16, 19, 24)");
+    expect(layering.plateBeforeMedia, "the paint sits under the media").toBe(
+      true,
+    );
+    expect(layering.mediaBeforeCanvas, "and the media under the canvas").toBe(
+      true,
+    );
+
+    const artboard = page.locator("#artboard");
+    const first = await artboard.screenshot();
+    // A presented frame is the readiness signal; a timer is not. Two callbacks
+    // because the clip repaints every animation frame and a screenshot can land
+    // on either side of the frame this waits for.
+    await page.evaluate(async () => {
+      const element = document.querySelector<HTMLVideoElement>(
+        "[data-yunari-background-media] video",
+      );
+      if (element === null)
+        throw new Error("the background video is not mounted");
+      for (let index = 0; index < 2; index += 1)
+        await new Promise<void>((resolve) =>
+          element.requestVideoFrameCallback(() => resolve()),
+        );
+    });
+    const second = await artboard.screenshot();
+
+    const before = await decode(first);
+    const after = await decode(second);
+    expect(after.width).toBe(before.width);
+    expect(after.height).toBe(before.height);
+    let changed = 0;
+    for (let y = 0; y < before.height; y += 1)
+      for (let x = 0; x < before.width; x += 1)
+        if (Math.abs(luma(before, x, y) - luma(after, x, y)) > THRESHOLD)
+          changed += 1;
+    expect(
+      changed,
+      "the display shows a different decoded video frame than the board paint",
+    ).toBeGreaterThan(0);
   });
 });
 

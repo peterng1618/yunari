@@ -992,11 +992,13 @@ const glassTwoToneEnvelope = {
   },
 };
 
-/** A video background, declared and never decoded: the bytes beside it are a
- *  placeholder, because the cost the host reads is the asset's declaration and
- *  the library writer only checks that a declared asset is present. An empty
- *  scene, so the theme carries no glass and answers `video-background`. */
-const videoEnvelope = {
+/** A video background, declared and never decoded by the seed: the bytes beside
+ *  it are a placeholder, because the cost the host reads is the asset's
+ *  declaration and the library writer only checks that a declared asset is
+ *  present. `host-media` mounts this envelope with a recorded clip and proves a
+ *  pixel on the display changes across two decoded frames. An empty scene, so
+ *  the theme carries no glass and answers `video-background`. */
+export const videoEnvelope = {
   schemaVersion: "2.0.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_VIDEO_THEME_ID,

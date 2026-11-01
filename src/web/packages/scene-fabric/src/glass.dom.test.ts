@@ -1064,8 +1064,7 @@ describe("glass composition", () => {
   });
 
   it("refuses a sample larger than the bound and still samples a smaller one", () => {
-    const big = stage({ size: 3000 });
-    big.canvas.backgroundColor = "#000000";
+    const big = stage({ size: 3000, backdrop: () => ({ paint: () => true }) });
     const wide = new Rect({
       left: 0,
       top: 0,
@@ -1086,8 +1085,10 @@ describe("glass composition", () => {
     expect(big.glass.liveSurfaces()).toBe(0);
     expect(big.draws).toHaveLength(0);
 
-    const small = stage({ size: 3000 });
-    small.canvas.backgroundColor = "#000000";
+    const small = stage({
+      size: 3000,
+      backdrop: () => ({ paint: () => true }),
+    });
     small.canvas.add(panel({ left: 100, top: 100 }));
     small.canvas.renderAll();
     expect(small.errors).toEqual([]);
