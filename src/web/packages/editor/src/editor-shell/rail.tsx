@@ -6,13 +6,13 @@ import { Glyph, RAIL_GLYPHS, SETTINGS_GLYPH } from "./icons.js";
 /** The rail's four slots. Named here rather than in
  *  `shell-layout.tsx` because the rail is what enumerates them — two owners of
  *  "which slots there are" would drift. The settings gear is deliberately not
- *  one of them: it opens a modal, never a pane, so it is outside this set. */
+ *  one of them: it switches the shell to the Settings mode rather than
+ *  choosing a pane, so it is outside this set. */
 export type RailSlot = "composition" | "add" | "tokens" | "document";
 
-/** The gear's own id, so the modal it opens can return focus to it on close.
- *  The gear is the one rail control with a surface outside the rail, so its id
- *  is the handle the two halves share rather than a ref threaded through the
- *  shell. */
+/** The gear's own id: the shell may return focus to it when a surface it
+ *  opened withdraws, and tests address the one gear by this handle rather than
+ *  by position. */
 export const SETTINGS_TRIGGER_ID = "editor-shell-settings-trigger";
 
 /** The slots, in rail order. This is the one place that says how many there
@@ -79,8 +79,8 @@ function RailSlotButton({
  *
  *  It draws its own button for the reason the slots do — the control set's icon
  *  button is a 26px action and this is the rail's 36px rhythm — and it carries
- *  no `aria-pressed`, because it chooses nothing: pressing it opens a modal and
- *  nothing else. The name and the tooltip are one string, the rail's slot rule.
+ *  no `aria-pressed`, because it chooses nothing: pressing it switches the
+ *  shell to Settings and nothing else. The name and the tooltip are one string, the rail's slot rule.
  */
 function SettingsGear({
   label,
@@ -114,13 +114,13 @@ function SettingsGear({
  *  the slot already open is a collapse, and the shell is what turns the
  *  gesture into a close (its `choosePane`), because the rail cannot tell a
  *  swap from a close. The gear is not a slot and opens no pane; it is the one
- *  thing on the rail whose surface is a modal. */
+ *  thing on the rail whose surface is the Settings mode. */
 export function Rail(props: {
   readonly slot: RailSlot;
   readonly collapsed: boolean;
   readonly onChoose: (slot: RailSlot) => void;
-  /** Opens the settings modal. Required rather than optional: the gear is on
-   *  every rail, and a rail with a dead gear is the defect this exists to fix. */
+  /** Opens Settings. Required rather than optional: the gear is on every rail,
+   *  and a rail with a dead gear is the defect this exists to fix. */
   readonly onOpenSettings: () => void;
   readonly disabled?: boolean;
 }): React.JSX.Element {

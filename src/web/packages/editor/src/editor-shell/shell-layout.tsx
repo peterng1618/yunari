@@ -676,9 +676,6 @@ export function createShellLayout(
               open={sheetOpen}
               onOpenChange={(next) => sheet.set(next)}
             />
-            {/* The settings modal. The gear's route is the rail's
-                `onOpenSettings`; the modal returns focus to the gear itself.
-                `storage` is the browser-local store the palette already uses. */}
             {/* The one place the finder is mounted. Its chord and its two menu
                 entries all move this one store, the same way `?` moves the
                 sheet's. */}
