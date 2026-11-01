@@ -166,6 +166,22 @@ export const uiCopy = {
         than leaving to be discovered. */
     followSystemSessionOnly:
       "This browser is not keeping editor settings, so the choice lasts until the editor is reloaded.",
+    /** The editor theme: the palette in force, plus any applied overrides, as a
+     *  package. Its own section rather than a second palette picker — choosing
+     *  a palette replaces an applied theme, so the two cannot both be "in
+     *  force". */
+    editorThemeHeading: "Editor theme",
+    editorThemeHint:
+      "Save the shell palette in force, with any applied overrides, as a package. Choosing a palette above clears an imported theme.",
+    editorThemeName: "Theme name",
+    editorThemeSave: "Save draft",
+    editorThemeExport: "Export",
+    editorThemeImport: "Import theme package",
+    editorThemeDraftSaved: (name: string): string => `Draft saved: ${name}.`,
+    editorThemeExported: (name: string): string => `Exported ${name}.`,
+    editorThemeApplied: (name: string): string => `Applied ${name}.`,
+    editorThemeNameRequired: "A theme needs a name before it can be saved.",
+    editorThemeUnreadableFile: "That file could not be read.",
     /** The Previews tab. One row per stored token, showing the lens ids that
      *  token derives, and the add row's field and action. */
     previewRatiosHeading: "Preview ratios",

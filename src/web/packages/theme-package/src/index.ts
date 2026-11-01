@@ -26,6 +26,35 @@ export * from "./video-envelope";
 const MANIFEST = "manifest.json";
 const THEME = "theme.json";
 const WIDGET = "widget.json";
+/** The manifest's kind, once a package is more than a theme: the dashboard
+ *  theme and the editor theme share the container and one `theme.json` slot, so
+ *  the kind is what keeps each reader from opening the other's document. */
+const THEME_KIND = "theme";
+/** An editor theme is a token set, not a scene: `theme.json` carries these
+ *  values and nothing Fabric-shaped. Declared here because this module owns the
+ *  package boundary; the shell's stylesheet is the vocabulary's normative home
+ *  and `editor-theme.test.ts` in the editor package holds the two together. */
+export const EDITOR_THEME_KIND = "editor-theme";
+export const EDITOR_THEME_SCHEMA_VERSION = "1.0.0";
+export const EDITOR_THEME_TOKENS = [
+  "--bg",
+  "--stage",
+  "--panel",
+  "--panel-2",
+  "--yunari-control-bg",
+  "--hdr",
+  "--edge",
+  "--edge-2",
+  "--text",
+  "--muted",
+  "--faint",
+  "--accent",
+  "--attention",
+  "--warn",
+  "--hot",
+] as const;
+export type EditorThemeToken = (typeof EDITOR_THEME_TOKENS)[number];
+export type EditorThemeTokens = Readonly<Record<EditorThemeToken, string>>;
 /** The format's own name, in one place: a manifest is the only member that
  *  states which kind a package is. */
 const WIDGET_FORMAT = "yunari-widget-package";
@@ -127,6 +156,7 @@ export function writeThemePackage(input: {
         [MANIFEST]: strToU8(
           JSON.stringify({
             format: "yunari-theme-package",
+            kind: THEME_KIND,
             // Still 1: the thumbnail is an additive member the manifest names
             // when it is used, so a package without one opens unchanged and one
             // with one is refused cleanly by a reader that has no slot for it.
@@ -236,6 +266,10 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
     const declaredCredits = parsedManifest["credits"];
     if (
       parsedManifest["format"] !== "yunari-theme-package" ||
+      // Absent on packages written before the kind existed; such a package is
+      // the dashboard theme the only reader of the time could open.
+      (parsedManifest["kind"] !== undefined &&
+        parsedManifest["kind"] !== THEME_KIND) ||
       parsedManifest["version"] !== 1 ||
       parsedManifest["theme"] !== THEME ||
       (declaredThumbnail !== undefined && declaredThumbnail !== THUMBNAIL) ||
@@ -416,6 +450,241 @@ export function readWidgetPackage(bytes: Uint8Array): WidgetPackageResult {
       return fail("Package assets must exactly match the widget declaration.");
     const { artboard: _artboard, ...document } = validation.envelope;
     return { ok: true, document, assets };
+  }
+}
+
+/** The named functions whose arguments are colour values, plus the gradients a
+ *  `--bg`/`--stage` may carry. A theme value is one of these or a hex literal:
+ *  the values `editor-shell.css` declares are exactly that shape, and a name
+ *  such as `red` is refused rather than resolved, because the package names one
+ *  palette role and must not acquire a second colour grammar. */
+const COLOUR_FUNCTIONS = new Set([
+  "rgb",
+  "rgba",
+  "hsl",
+  "hsla",
+  "hwb",
+  "lab",
+  "lch",
+  "oklab",
+  "oklch",
+  "color",
+  "color-mix",
+  "light-dark",
+  "linear-gradient",
+  "radial-gradient",
+  "conic-gradient",
+  "repeating-linear-gradient",
+  "repeating-radial-gradient",
+  "repeating-conic-gradient",
+]);
+
+/** A hex length CSS defines: 3, 4, 6 and 8 digits. */
+const HEX_LENGTHS = new Set([3, 4, 6, 8]);
+const MAX_TOKEN_VALUE = 512;
+
+/** A balanced function call whose name is known and whose body carries no
+ *  declaration or block terminator, so a value cannot escape its custom
+ *  property. */
+function isColourFunction(value: string): boolean {
+  const match = /^([a-z-]+)\(([\s\S]*)\)$/i.exec(value);
+  if (match === null) return false;
+  const name = match[1]?.toLowerCase() ?? "";
+  if (!COLOUR_FUNCTIONS.has(name)) return false;
+  const body = match[2] ?? "";
+  if (/[;{}]/.test(body)) return false;
+  let depth = 0;
+  for (const character of body) {
+    if (character === "(") depth += 1;
+    else if (character === ")") depth -= 1;
+    if (depth < 0) return false;
+  }
+  return depth === 0;
+}
+
+function isTokenValue(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (trimmed === "" || trimmed.length > MAX_TOKEN_VALUE) return false;
+  const hex = /^#([0-9a-f]+)$/i.exec(trimmed);
+  if (hex !== null) return HEX_LENGTHS.has((hex[1] ?? "").length);
+  return isColourFunction(trimmed);
+}
+
+type TokenValidation =
+  | { readonly ok: true; readonly tokens: EditorThemeTokens }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * The one rule both halves of an editor theme pass: every vocabulary token is
+ * present, no other name is, and every value is a colour the stylesheet's own
+ * grammar admits. A refusal names the token, because the author has to find it.
+ */
+function validateEditorThemeTokens(value: unknown): TokenValidation {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return fail("An editor theme needs a token map.");
+  const map = value as Readonly<Record<string, unknown>>;
+  const vocabulary = new Set<string>(EDITOR_THEME_TOKENS);
+  const unknown = Object.keys(map)
+    .filter((token) => !vocabulary.has(token))
+    .sort();
+  if (unknown.length > 0)
+    return fail(
+      `Editor theme token ${unknown[0]} is not part of the editor-shell vocabulary.`,
+    );
+  for (const token of EDITOR_THEME_TOKENS) {
+    const tokenValue = map[token];
+    if (tokenValue === undefined)
+      return fail(`An editor theme is missing the required token ${token}.`);
+    if (!isTokenValue(tokenValue))
+      return fail(
+        `Editor theme token ${token} has an invalid value ${JSON.stringify(tokenValue)}.`,
+      );
+  }
+  return {
+    ok: true,
+    tokens: Object.fromEntries(
+      EDITOR_THEME_TOKENS.map((token) => [token, map[token] as string]),
+    ) as Record<EditorThemeToken, string>,
+  };
+}
+
+export type EditorThemeDocument = {
+  readonly schemaVersion: string;
+  readonly name: string;
+  readonly tokens: EditorThemeTokens;
+};
+
+export type EditorThemePackageResult =
+  | { readonly ok: true; readonly document: EditorThemeDocument }
+  | { readonly ok: false; readonly message: string };
+
+function validateEditorThemeDocument(value: unknown):
+  | { readonly ok: true; readonly document: EditorThemeDocument }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    } {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return fail("An editor theme document must be an object.");
+  const document = value as Readonly<Record<string, unknown>>;
+  if ("scene" in document || "artboard" in document)
+    return fail("An editor theme carries no artboard or scene.");
+  if (document["schemaVersion"] !== EDITOR_THEME_SCHEMA_VERSION)
+    return fail(
+      `Schema version ${String(document["schemaVersion"])} is not supported by this build (expected ${EDITOR_THEME_SCHEMA_VERSION}).`,
+    );
+  if (typeof document["name"] !== "string" || document["name"].trim() === "")
+    return fail("An editor theme needs a name.");
+  const tokens = validateEditorThemeTokens(document["tokens"]);
+  if (!tokens.ok) return tokens;
+  return {
+    ok: true,
+    document: {
+      schemaVersion: EDITOR_THEME_SCHEMA_VERSION,
+      name: document["name"].trim(),
+      tokens: tokens.tokens,
+    },
+  };
+}
+
+/**
+ * Writes an editor theme into the same container the dashboard theme and the
+ * widget use: the manifest names the kind, and `theme.json` carries the token
+ * map with no scene or artboard. The writer is strict, so it cannot author a
+ * package its own reader refuses.
+ */
+export function writeEditorThemePackage(input: {
+  readonly name: string;
+  readonly tokens: Readonly<Record<string, string>>;
+}):
+  | { readonly ok: true; readonly bytes: Uint8Array }
+  | { readonly ok: false; readonly message: string } {
+  const validated = validateEditorThemeDocument({
+    schemaVersion: EDITOR_THEME_SCHEMA_VERSION,
+    name: input.name,
+    tokens: input.tokens,
+  });
+  if (!validated.ok) return validated;
+  return {
+    ok: true,
+    bytes: zipSync(
+      {
+        [MANIFEST]: strToU8(
+          JSON.stringify({
+            format: "yunari-theme-package",
+            version: 1,
+            kind: EDITOR_THEME_KIND,
+            theme: THEME,
+          }),
+        ),
+        [THEME]: strToU8(JSON.stringify(validated.document)),
+      },
+      { level: 6 },
+    ),
+  };
+}
+
+/**
+ * Reads an editor theme. The archive gate is the theme package's own, and the
+ * kind check is what refuses a dashboard theme or a widget by name rather than
+ * handing its document to the token validator.
+ */
+export function readEditorThemePackage(
+  bytes: Uint8Array,
+): EditorThemePackageResult {
+  const archive = readPackageArchive(
+    bytes,
+    (name) => name === MANIFEST || name === THEME || name === WIDGET,
+    "That file is not a readable editor theme package.",
+  );
+  if (!archive.ok) return fail(archive.message);
+  {
+    const files = archive.files;
+    const manifest = files[MANIFEST];
+    const theme = files[THEME];
+    if (manifest === undefined)
+      return fail("An editor theme package needs manifest.json.");
+    let parsedManifest: Record<string, unknown>;
+    let parsedTheme: unknown;
+    try {
+      parsedManifest = JSON.parse(strFromU8(manifest)) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return fail("That file is not a readable editor theme package.");
+    }
+    if (parsedManifest["format"] !== "yunari-theme-package") {
+      return fail(
+        parsedManifest["format"] === WIDGET_FORMAT
+          ? "That package is a widget, not an editor theme."
+          : "That package is not an editor theme.",
+      );
+    }
+    if (
+      parsedManifest["version"] !== 1 ||
+      parsedManifest["theme"] !== THEME ||
+      parsedManifest["kind"] !== EDITOR_THEME_KIND
+    )
+      return fail(
+        parsedManifest["kind"] === THEME_KIND
+          ? "That package is a dashboard theme, not an editor theme."
+          : "Unsupported package manifest.",
+      );
+    if (theme === undefined)
+      return fail("An editor theme package needs theme.json.");
+    // `widget.json` is allowed through the archive gate so a widget package is
+    // refused by the kind in its manifest, not as an unsafe archive; a package
+    // that says it is an editor theme may carry nothing else.
+    if (Object.keys(files).some((name) => name !== MANIFEST && name !== THEME))
+      return fail("An editor theme carries no assets.");
+    try {
+      parsedTheme = JSON.parse(strFromU8(theme));
+    } catch {
+      return fail("That file is not a readable editor theme package.");
+    }
+    return validateEditorThemeDocument(parsedTheme);
   }
 }
 

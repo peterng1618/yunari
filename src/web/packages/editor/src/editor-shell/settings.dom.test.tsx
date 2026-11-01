@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUPPORTED_SCHEMA_VERSION } from "@yunari/renderer-core";
+import { EDITOR_THEME_TOKENS } from "@yunari/theme-package";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,6 +28,7 @@ import {
 } from "../shortcut-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
 import { createEditorShellBridge } from "./bridge.js";
+import { applyEditorThemeTokens, clearEditorTheme } from "./editor-theme.js";
 import {
   DEFAULT_SHELL_PALETTE,
   prefersDarkAppearance,
@@ -743,6 +745,45 @@ describe("Settings", () => {
     expect(document.documentElement.getAttribute("data-shell-palette")).toBe(
       resolveShellPalette(undefined, prefersDarkAppearance()),
     );
+  });
+
+  it("captures the palette in force as an editor theme draft", async () => {
+    const host = mount();
+    await press(gear(host));
+    expect(
+      document.querySelector("[data-yunari-editor-theme-heading]")?.textContent,
+    ).toBe(uiCopy.settings.editorThemeHeading);
+
+    // jsdom resolves no custom properties, so the palette is supplied the way
+    // an applied theme supplies it — the inline layer the capture reads first.
+    const tokens = Object.fromEntries(
+      EDITOR_THEME_TOKENS.map((token) => [token, "rgb(17, 34, 51)"]),
+    ) as Record<(typeof EDITOR_THEME_TOKENS)[number], string>;
+    applyEditorThemeTokens(tokens);
+
+    const name = document.querySelector<HTMLInputElement>(
+      "[data-yunari-editor-theme-name]",
+    );
+    if (name === null) throw new Error("no editor theme name field");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(name, "Warm Paper");
+    await act(async () => {
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const save = document.querySelector<HTMLElement>(
+      "[data-yunari-editor-theme-save]",
+    );
+    if (save === null) throw new Error("no editor theme save button");
+    await press(save);
+
+    expect(
+      document.querySelector("[data-yunari-editor-theme-message]")?.textContent,
+    ).toBe("Draft saved: Warm Paper.");
+    clearEditorTheme();
   });
 });
 

@@ -32,6 +32,8 @@ import {
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
 import type { ProductShortcutId } from "../shortcut-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
+import { clearEditorTheme } from "./editor-theme.js";
+import { EditorThemeSettings } from "./editor-theme-settings.js";
 import {
   CONNECTIONS_GLYPH,
   FIT_GLYPH,
@@ -174,6 +176,9 @@ function AppearanceTab({
    *  applied to React state alone leaves a portalled popup painting the old one,
    *  which is the defect this ordering prevents. */
   const choose = (next: ShellPalette): void => {
+    // A palette choice is the whole look: an applied theme's inline properties
+    // would otherwise outrank the palette block the click selects.
+    clearEditorTheme();
     if (storage !== undefined) writeShellChoice(storage, next);
     applyShellPalette(next);
     onPalette(next);
@@ -186,6 +191,7 @@ function AppearanceTab({
    *  Turning it off pins what is already resolved: the author keeps the palette
    *  they were looking at rather than the shell jumping to the default. */
   const follow = (next: boolean): void => {
+    clearEditorTheme();
     onFollowing(next);
     if (next) {
       if (storage !== undefined) clearShellChoice(storage);
@@ -255,6 +261,7 @@ function AppearanceTab({
           onChange={follow}
         />
       </div>
+      <EditorThemeSettings palette={palette} />
     </>
   );
 }
