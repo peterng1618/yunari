@@ -39,18 +39,30 @@ interface SharedFace {
 }
 
 /** Concurrent mounts load overlapping trio faces; identical bytes must not be
- * registered twice. Grouped by font set because tests inject their own. */
-const registries = new WeakMap<FontSet, Map<string, SharedFace>>();
+ *  registered twice. The registry is per font set because tests inject their
+ *  own. `rangeless` is the family|weight|style owner, which must hold across
+ *  load calls: a second call that imported the same triple shares the live
+ *  face instead of registering a duplicate that would shadow it. */
+interface FontSetRegistry {
+  readonly faces: Map<string, SharedFace>;
+  readonly rangeless: Map<string, SharedFace>;
+}
 
-function registryFor(fonts: FontSet): Map<string, SharedFace> {
+const registries = new WeakMap<FontSet, FontSetRegistry>();
+
+function registryFor(fonts: FontSet): FontSetRegistry {
   let registry = registries.get(fonts);
 
   if (registry === undefined) {
-    registry = new Map<string, SharedFace>();
+    registry = { faces: new Map(), rangeless: new Map() };
     registries.set(fonts, registry);
   }
 
   return registry;
+}
+
+function rangelessKey(asset: DeclaredFont): string {
+  return [asset.family, String(asset.weight), asset.style].join("|");
 }
 
 function registrationKey(asset: DeclaredFont): string {
@@ -82,7 +94,6 @@ export async function loadFontAssets(
   const rangeless = declared.filter(
     (asset) => unicodeRangeForSubset(asset.subset) === undefined,
   );
-  const seenRangeless = new Set<string>();
   for (const face of [...ranged, ...rangeless]) {
     const bytes = options.bytes[face.path];
     if (
@@ -97,7 +108,7 @@ export async function loadFontAssets(
       continue;
     }
     const key = registrationKey(face);
-    const existing = registry.get(key);
+    const existing = registry.faces.get(key);
 
     if (existing !== undefined) {
       existing.refs += 1;
@@ -106,14 +117,19 @@ export async function loadFontAssets(
     }
 
     const unicodeRange = unicodeRangeForSubset(face.subset);
-    const rangelessKey =
-      unicodeRange === undefined
-        ? [face.family, String(face.weight), face.style].join("|")
-        : undefined;
-    // A second rangeless face for the same family, weight and style would only
-    // shadow the first, so it is skipped rather than registered.
-    if (rangelessKey !== undefined && seenRangeless.has(rangelessKey)) {
-      continue;
+    const familyKey =
+      unicodeRange === undefined ? rangelessKey(face) : undefined;
+    // One rangeless face per family, weight and style, across every load call.
+    // A duplicate would only shadow the live one, and skipping it outright
+    // would lose it when the first mount releases, so a second caller shares
+    // the live face and its reference count.
+    if (familyKey !== undefined) {
+      const shared = registry.rangeless.get(familyKey);
+      if (shared !== undefined && shared.refs > 0) {
+        shared.refs += 1;
+        held.push(shared);
+        continue;
+      }
     }
 
     const descriptors: FontFaceDescriptors = {
@@ -139,16 +155,28 @@ export async function loadFontAssets(
       registered: undefined,
       refs: 1,
     };
-    registry.set(key, shared);
+    registry.faces.set(key, shared);
+    if (familyKey !== undefined) registry.rangeless.set(familyKey, shared);
     held.push(shared);
 
     try {
       shared.registered = await shared.face;
-      if (rangelessKey !== undefined) seenRangeless.add(rangelessKey);
+      // FontFaceSet matches manually added faces in insertion order, and a
+      // rangeless face added by an earlier call covers every codepoint. The
+      // ranged face just added must not sit behind it, so the rangeless one is
+      // moved to the end of the set — the only reorder the API allows.
+      if (unicodeRange !== undefined) {
+        const rangeless = registry.rangeless.get(rangelessKey(face));
+        if (rangeless?.registered !== undefined) {
+          fonts.delete(rangeless.registered);
+          fonts.add(rangeless.registered);
+        }
+      }
     } catch (error) {
       // A failed registration must not be cached, or a later mount would await
       // a rejected promise it never started.
-      registry.delete(key);
+      registry.faces.delete(key);
+      if (familyKey !== undefined) registry.rangeless.delete(familyKey);
       held.pop();
       options.onError(
         `Could not load packaged font "${face.id}": ${error instanceof Error ? error.message : String(error)}`,
@@ -172,8 +200,11 @@ export async function loadFontAssets(
           })
           .catch(() => undefined);
       }
-      for (const [key, entry] of registry) {
-        if (entry === shared) registry.delete(key);
+      for (const [key, entry] of registry.faces) {
+        if (entry === shared) registry.faces.delete(key);
+      }
+      for (const [key, entry] of registry.rangeless) {
+        if (entry === shared) registry.rangeless.delete(key);
       }
     }
     held.length = 0;

@@ -258,4 +258,73 @@ describe("packaged font assets", () => {
     expect(fonts.add).toHaveBeenCalledWith(firstFace);
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it("shares one rangeless face across load calls, until the last release", async () => {
+    // The per-call filter used to let a later import register a second
+    // rangeless face for the same family, weight and style, which shadowed the
+    // first; a plain skip would instead lose the face when the earlier mount
+    // released. Sharing keeps one face and both mounts' claims.
+    const first = rangelessAsset("inter-local");
+    const second = rangelessAsset("inter-other");
+    const face = { load: vi.fn().mockResolvedValue(undefined) };
+    const fonts = { add: vi.fn(), delete: vi.fn() };
+    const createFontFace = vi.fn(() => face);
+    const load = (chosen: FontAssetReference) =>
+      loadFontAssets({
+        assets: [chosen],
+        bytes: { [chosen.path]: new Uint8Array([1]) },
+        fonts,
+        createFontFace,
+        onError: vi.fn(),
+      });
+
+    const releaseFirst = await load(first);
+    const releaseSecond = await load(second);
+
+    expect(createFontFace).toHaveBeenCalledTimes(1);
+    expect(fonts.add).toHaveBeenCalledTimes(1);
+    releaseFirst();
+    expect(fonts.delete).not.toHaveBeenCalled();
+    releaseSecond();
+    expect(fonts.delete).toHaveBeenCalledWith(face);
+  });
+
+  it("keeps a later ranged face ahead of a rangeless face an earlier load registered", async () => {
+    // FontFaceSet has no reorder, so the only way to put a newly added ranged
+    // face in front of a live rangeless one is to add the rangeless face again.
+    const rangeless = rangelessAsset("inter-local");
+    const latin = subsetAsset("latin");
+    const rangelessFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const latinFace = { load: vi.fn().mockResolvedValue(undefined) };
+    const live: unknown[] = [];
+    const fonts = {
+      add: (face: unknown): void => {
+        live.push(face);
+      },
+      delete: (face: unknown): boolean => {
+        const at = live.indexOf(face);
+        if (at < 0) return false;
+        live.splice(at, 1);
+        return true;
+      },
+    };
+    const createFontFace = vi
+      .fn()
+      .mockReturnValueOnce(rangelessFace)
+      .mockReturnValueOnce(latinFace);
+    const load = (chosen: FontAssetReference) =>
+      loadFontAssets({
+        assets: [chosen],
+        bytes: { [chosen.path]: new Uint8Array([1]) },
+        fonts,
+        createFontFace,
+        onError: vi.fn(),
+      });
+
+    const releaseLocal = await load(rangeless);
+    await load(latin);
+
+    expect(live).toEqual([latinFace, rangelessFace]);
+    releaseLocal();
+  });
 });
