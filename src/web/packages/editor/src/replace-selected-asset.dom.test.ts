@@ -15,7 +15,7 @@ function pick(captured: HTMLInputElement, file: File): void {
   captured.dispatchEvent(new Event("change"));
 }
 
-function staged(): {
+function staged(kind: "image" | "video" = "image"): {
   readonly manager: AssetManager;
   readonly editor: EditorInteraction;
   readonly object: FabricImage;
@@ -43,8 +43,8 @@ function staged(): {
   const manager = {
     import: vi.fn(async () => ({
       id: "new-picture",
-      kind: "image" as const,
-      path: "assets/new.png",
+      kind,
+      path: "assets/new",
       sha256: "",
     })),
     remove,
@@ -104,6 +104,36 @@ describe("replace file on the selection", () => {
       expect(run.saveState).toHaveBeenCalledTimes(1);
       expect(run.onChanged).toHaveBeenCalledTimes(1);
       expect(run.onError).not.toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it("refuses a video, drops its declaration and leaves the object alone", async () => {
+    let picker: HTMLInputElement | undefined;
+    const click = vi
+      .spyOn(HTMLInputElement.prototype, "click")
+      .mockImplementation(function (this: HTMLInputElement) {
+        picker = this;
+      });
+    try {
+      const run = staged("video");
+      const file = new File(["clip"], "clip.mp4", { type: "video/mp4" });
+      pick(picker as HTMLInputElement, file);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(objectAssetReference(run.object)).toEqual({
+        assetId: "old-picture",
+        kind: "image",
+      });
+      expect(
+        run.manager.remove as unknown as ReturnType<typeof vi.fn>,
+      ).toHaveBeenCalledWith("new-picture");
+      expect(run.onError).toHaveBeenCalledWith(
+        "Only an image or SVG can replace a placed picture.",
+      );
+      expect(run.saveState).not.toHaveBeenCalled();
     } finally {
       click.mockRestore();
     }

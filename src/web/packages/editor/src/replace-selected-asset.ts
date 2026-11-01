@@ -57,6 +57,7 @@ async function swap(
   file: File,
 ): Promise<void> {
   let declared: LocalAssetReference | undefined;
+  let applied = false;
   try {
     declared = await host.assets.import(file);
     if (declared.kind !== "image" && declared.kind !== "svg") {
@@ -78,14 +79,16 @@ async function swap(
       assetId: declared.id,
       kind: declared.kind,
     });
+    applied = true;
     object.setCoords();
     host.editor.canvas.requestRenderAll();
     host.editor.historyManager.saveState();
     host.onChanged?.();
   } catch (error) {
     // A declared file whose pixels or kind cannot replace the object is
-    // dropped again; the object and its reference are untouched.
-    if (declared !== undefined) host.assets.remove(declared.id);
+    // dropped again. Once the object points at it, removing the declaration
+    // would leave the scene naming an asset the document does not hold.
+    if (declared !== undefined && !applied) host.assets.remove(declared.id);
     host.onError?.(error instanceof Error ? error.message : String(error));
   }
 }

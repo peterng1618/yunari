@@ -625,7 +625,7 @@ export class EditorSession {
   }
 
   /**
-   * The declarations moved: the file section's title count, the background
+   * The declarations moved: the file section's heading count, the background
    * column's picture list and the bytes the artboard resolves all read them, so
    * one method serves every path that adds or drops one.
    */

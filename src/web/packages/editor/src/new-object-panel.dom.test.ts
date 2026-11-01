@@ -467,9 +467,10 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
-  it("draws no file section in the Add pane", () => {
-    // Local files belong to the file section: the Add pane is
-    // insertion-only, so neither an import control nor a finder link lives here.
+  it("draws no file controls in the Add pane's insert tree", () => {
+    // The pane's insert tree is insertion-only. The declared files are a second
+    // host the shell mounts below this one, so no import, finder or card
+    // control belongs to this module's own tree.
     const { root } = createNewObjectPanel(
       document.body,
       editorStub() as never,

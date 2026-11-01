@@ -72,7 +72,7 @@ it("has four slots, with Add between Composition and Tokens", () => {
   expect(RAIL_SLOTS).toEqual(["composition", "add", "tokens", "document"]);
 });
 
-it("does not carry an file section", () => {
+it("does not carry an Assets slot", () => {
   expect(RAIL_SLOTS).not.toContain("assets");
 });
 
