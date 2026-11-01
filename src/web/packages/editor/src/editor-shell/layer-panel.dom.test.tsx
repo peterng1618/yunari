@@ -1118,7 +1118,7 @@ it("reaches arrange from the keyboard through Shift+Arrow", async () => {
     editor: {
       canvas,
       groupingManager: { groupContext: () => [] },
-      historyManager: { attachGlobals: () => {}, saveState: () => undefined },
+      historyManager: { attachEnvelope: () => {}, saveState: () => undefined },
     },
     session: { subscribeDocumentChange: () => () => undefined } as never,
     capture: () => undefined,

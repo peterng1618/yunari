@@ -782,7 +782,7 @@ describe("EditorSession", () => {
           setMentions: vi.fn(),
         },
         cropManager: idleCrop(),
-        historyManager: { attachGlobals: () => {} },
+        historyManager: { attachEnvelope: () => {} },
       },
       scene: {},
       snapshot: vi.fn((input) => ({ ...envelope, ...input })),

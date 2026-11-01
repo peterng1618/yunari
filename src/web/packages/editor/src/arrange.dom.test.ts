@@ -300,7 +300,7 @@ function transformedGroupEditor() {
   );
   const editor = {
     canvas,
-    historyManager: { attachGlobals: () => {}, saveState: vi.fn() },
+    historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
   } as unknown as EditorInteraction;
   return { editor, first, middle, last };
 }

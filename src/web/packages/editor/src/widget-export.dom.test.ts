@@ -144,7 +144,7 @@ function shell(canvas: Canvas): EditorShell {
     editor: {
       canvas,
       errorManager: { warn: () => {} },
-      historyManager: { attachGlobals: () => {} },
+      historyManager: { attachEnvelope: () => {} },
     },
   } as unknown as EditorShell;
 }
