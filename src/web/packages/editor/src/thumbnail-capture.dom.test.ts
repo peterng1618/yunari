@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { BackdropMedia } from "@yunari/scene-fabric";
-import type { Canvas } from "fabric/es";
+import { type Canvas, Rect, StaticCanvas } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { captureCanvas } from "./thumbnail-capture.js";
 
@@ -120,5 +120,93 @@ describe("the capture's view state", () => {
       "tainted canvases",
     );
     expect(order).toEqual(["lift", "shot", "restore"]);
+  });
+});
+
+describe("the capture's artboard shape", () => {
+  const SIZE = 100;
+  const RED = [255, 0, 0, 255];
+  const BLUE = [0, 0, 255, 255];
+
+  /** A blue backdrop over the whole exported picture. */
+  function blueBackdrop(): BackdropMedia {
+    return {
+      rect: { left: 0, top: 0, width: SIZE, height: SIZE },
+      paint(context, region) {
+        context.fillStyle = "#0000ff";
+        context.fillRect(region.left, region.top, region.width, region.height);
+        return true;
+      },
+    };
+  }
+
+  /** A board covered in red, behind whatever clip the live canvas carries. */
+  function mounted(clipPath?: Rect): Canvas {
+    const stage = new StaticCanvas(document.createElement("canvas"), {
+      width: SIZE,
+      height: SIZE,
+    });
+    stage.clipPath = clipPath;
+    stage.add(
+      new Rect({
+        left: 0,
+        top: 0,
+        width: SIZE,
+        height: SIZE,
+        originX: "left",
+        originY: "top",
+        fill: "#ff0000",
+      }),
+    );
+    stage.renderAll();
+    return stage as unknown as Canvas;
+  }
+
+  function pixelAt(canvas: HTMLCanvasElement, x: number, y: number): number[] {
+    const context = canvas.getContext("2d");
+    if (context === null)
+      throw new Error("the captured canvas has no 2D context");
+    return [...context.getImageData(x, y, 1, 1).data];
+  }
+
+  it("keeps a circle theme's picture inside its disc", () => {
+    // A circle theme ships as the disc inscribed in its artboard, so a card
+    // showing the square would advertise a picture the panel never shows.
+    const canvas = mounted();
+    const picture = captureCanvas(
+      canvas,
+      blueBackdrop(),
+      640,
+      undefined,
+      "circle",
+    );
+    if (picture === undefined)
+      throw new Error("the capture produced no picture");
+
+    expect(pixelAt(picture, SIZE / 2, SIZE / 2)).toEqual(RED);
+    const corners: ReadonlyArray<readonly [number, number]> = [
+      [0, 0],
+      [SIZE - 1, 0],
+      [0, SIZE - 1],
+      [SIZE - 1, SIZE - 1],
+    ];
+    for (const [x, y] of corners) {
+      expect(pixelAt(picture, x, y)).toEqual(BLUE);
+    }
+  });
+
+  it("puts the live clip back when the shot is done", () => {
+    // The author's canvas must not be left wearing the thumbnail's disc.
+    const sentinel = new Rect({
+      width: SIZE,
+      height: SIZE,
+      left: 0,
+      top: 0,
+      fill: "#ffffff",
+      absolutePositioned: true,
+    });
+    const canvas = mounted(sentinel);
+    captureCanvas(canvas, blueBackdrop(), 640, undefined, "circle");
+    expect(canvas.clipPath).toBe(sentinel);
   });
 });

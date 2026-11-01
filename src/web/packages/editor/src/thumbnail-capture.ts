@@ -1,5 +1,6 @@
+import type { ArtboardShape } from "@yunari/renderer-core";
 import type { BackdropMedia } from "@yunari/scene-fabric";
-import type { Canvas } from "fabric/es";
+import { type Canvas, Circle } from "fabric/es";
 
 /**
  * A PNG of the artboard, for the theme library to show.
@@ -28,6 +29,12 @@ export function captureCanvas(
    * default no-op is what a canvas with no view state to lift needs.
    */
   suspendViewState: () => () => void = () => () => {},
+  /**
+   * A circle theme ships as the disc inscribed in its artboard, so its picture
+   * must be that disc: a card showing the square would advertise a picture the
+   * panel never shows, whatever lens the author was using at the time.
+   */
+  shape: ArtboardShape = "rect",
 ): HTMLCanvasElement | undefined {
   const width = canvas.width;
   const height = canvas.height;
@@ -38,6 +45,20 @@ export function captureCanvas(
   }
 
   const scale = Math.min(1, maxEdge / Math.max(width, height));
+  const previousClip = canvas.clipPath;
+  if (shape === "circle") {
+    // Absolute, so the export's own multiplier scales it with the scene rather
+    // than placing it in the author's camera.
+    canvas.clipPath = new Circle({
+      radius: Math.min(width, height) / 2,
+      left: width / 2,
+      top: height / 2,
+      originX: "center",
+      originY: "center",
+      absolutePositioned: true,
+      excludeFromExport: true,
+    });
+  }
   // Only the shot is taken with the view state lifted: everything below is the
   // media the canvas cannot see, which carries no view state of its own.
   const release = suspendViewState();
@@ -46,6 +67,8 @@ export function captureCanvas(
     scene = canvas.toCanvasElement(scale);
   } finally {
     release();
+    // The author's canvas keeps its own clip, whatever the shot needed.
+    canvas.clipPath = previousClip;
   }
   if (backdrop === undefined) return scene;
 
@@ -85,8 +108,15 @@ export async function captureThumbnail(
   maxEdge = MAX_EDGE,
   backdrop?: BackdropMedia,
   suspendViewState: () => () => void = () => () => {},
+  shape: ArtboardShape = "rect",
 ): Promise<Uint8Array | undefined> {
-  const source = captureCanvas(canvas, backdrop, maxEdge, suspendViewState);
+  const source = captureCanvas(
+    canvas,
+    backdrop,
+    maxEdge,
+    suspendViewState,
+    shape,
+  );
   if (source === undefined) {
     return undefined;
   }

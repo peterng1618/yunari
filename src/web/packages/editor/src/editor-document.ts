@@ -458,6 +458,9 @@ export class EditorDocument {
         // A package saved from inside an entered group ships the document, not
         // the dim the author is working behind (`vg-527`).
         () => this.#shell.editor.groupingManager.suspendDim(),
+        // A circle theme's picture is its disc, not the square the camera
+        // happened to show.
+        this.#envelope.artboard.shape ?? "rect",
       );
     } catch {
       return undefined;
