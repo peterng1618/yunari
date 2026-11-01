@@ -3007,11 +3007,13 @@ body,
   border: 1px solid var(--yunari-subdued);
   box-sizing: border-box;
 }
-/* The theme's real extent under a lens whose aspect differs from the board's.
-   Dashed and faint because it is a reading rather than a boundary, and it never
-   takes a pointer event: the author's pan and selection reach the canvas
-   through it. It sits above the artwork and below the clusters. */
-[data-yunari-theme-guide] {
+/* The theme's real extent under a lens whose aspect differs from the board's,
+   and the disc a circle theme ships as while the rect preview keeps its
+   corners. Dashed and faint because they are readings rather than boundaries,
+   and they never take a pointer event: the author's pan and selection reach the
+   canvas through them. They sit above the artwork and below the clusters. */
+[data-yunari-theme-guide],
+[data-yunari-theme-disc] {
   position: absolute;
   z-index: 2;
   border: 1px dashed var(--yunari-subdued);

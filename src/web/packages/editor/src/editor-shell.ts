@@ -34,6 +34,7 @@ import {
   ActiveSelection,
   type ActiveSelectionOptions,
   Canvas,
+  Circle,
   classRegistry,
   type FabricObject,
   Point,
@@ -212,8 +213,23 @@ function artboardPlate(artboard: Artboard, background: unknown): Rect {
  *
  * `excludeFromExport` keeps it out of the persisted document, on the same
  * reasoning as the plate: the boundary belongs to the envelope's artboard, so
- * a scene document must not carry a second copy of it. */
-function artboardClip(artboard: Artboard): Rect {
+ * a scene document must not carry a second copy of it.
+ *
+ * `crop` is the disc a circle theme ships as under a circle lens. The square
+ * artboard's corners stay in the document — they are authored, and a rect
+ * preview has to show them — but the glass never draws them. */
+function artboardClip(artboard: Artboard, crop: boolean): Rect | Circle {
+  if (crop) {
+    return new Circle({
+      radius: Math.min(artboard.width, artboard.height) / 2,
+      left: artboard.width / 2,
+      top: artboard.height / 2,
+      originX: "center",
+      originY: "center",
+      absolutePositioned: true,
+      excludeFromExport: true,
+    });
+  }
   return new Rect({
     width: artboard.width,
     height: artboard.height,
@@ -226,12 +242,19 @@ function artboardClip(artboard: Artboard): Rect {
   });
 }
 
+/** The memo key for {@link artboardClip}. The crop flag is part of it: a lens
+ *  change that starts or stops cropping must not reuse the other clip. */
+function artboardClipKey(artboard: Artboard, crop: boolean): string {
+  return `${artboard.width}x${artboard.height}:${crop ? "circle" : "rect"}`;
+}
+
 function applyArtboardPaint(
   editor: EditorInteraction,
   artboard: Artboard,
   documentBackground: Background | undefined,
   globals: Globals | undefined,
   memo: PaintMemo,
+  crop: boolean,
 ): unknown {
   const issues: Parameters<typeof resolveStyleValue>[3] = [];
   const resolve = (value: Parameters<typeof resolveStyleValue>[0]): unknown => {
@@ -266,11 +289,14 @@ function applyArtboardPaint(
   // Same shape as the plate's guard: rebuilt when the board is resized, and
   // whenever it is missing, which is what `loadFromJSON` — and so every undo —
   // leaves behind. `reviveScene` restores it too, so this is the belt to that
-  // braces rather than the only copy of the rule.
-  const clipKey = `${artboard.width}x${artboard.height}`;
-  if (clipKey !== memo.clip || !(editor.canvas.clipPath instanceof Rect)) {
+  // braces rather than the only copy of the rule. The class is checked as well
+  // as the key, because a circle lens changes the boundary without changing the
+  // board's size.
+  const clipKey = artboardClipKey(artboard, crop);
+  const Clip = crop ? Circle : Rect;
+  if (clipKey !== memo.clip || !(editor.canvas.clipPath instanceof Clip)) {
     memo.clip = clipKey;
-    editor.canvas.clipPath = artboardClip(artboard);
+    editor.canvas.clipPath = artboardClip(artboard, crop);
   }
   // A revived envelope from before the camera carried the artboard paint here;
   // left set it would cover the pasteboard again.
@@ -520,6 +546,17 @@ export async function mountEditorShell({
     // under the media and re-resolving it there would be a second owner
     // of the paint. Every paint pass goes through here so it cannot go stale.
     let artboardPaint: unknown;
+    /** Whether the canvas crops to the artboard's disc: a circle theme under a
+     *  circle lens. Every other pairing keeps the rect clip, because the corners
+     *  are authored and a rect preview has to show them. */
+    const cropToDisc = (): boolean => {
+      const id = editor.viewport.display();
+      return (
+        currentArtboard.shape === "circle" &&
+        id !== undefined &&
+        resolveLens(id)?.shape === "circle"
+      );
+    };
     /** The display's screen, painted from the board's own paint. Declared before
      *  the paint pass so the letterbox and the plate cannot drift apart, and
      *  created below once the container is in place. */
@@ -531,6 +568,7 @@ export async function mountEditorShell({
         currentBackground,
         globals,
         paintMemo,
+        cropToDisc(),
       );
       if (screen !== undefined) {
         screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";
@@ -616,13 +654,19 @@ export async function mountEditorShell({
     // artboard rather than to a guessed host size.
     const placeMedia = (): void => {
       const artboard = editor.viewport.artboardScreenRect();
+      // A circle theme's theme-bounded media ships as the disc, whatever the
+      // preview lens is: the corners it would otherwise paint are never glass.
+      const board =
+        currentArtboard.shape === "circle"
+          ? { ...artboard, radius: "circle" as const }
+          : artboard;
       const display = editor.viewport.displayScreenRect();
       if (display === undefined) {
-        media?.setBounds({ artboard });
+        media?.setBounds({ artboard: board });
         return;
       }
       media?.setBounds({
-        artboard,
+        artboard: board,
         display:
           editor.viewport.displayShape() === "circle"
             ? { ...display, radius: "circle" }
@@ -640,6 +684,12 @@ export async function mountEditorShell({
     guide.dataset["yunariThemeGuide"] = "";
     guide.hidden = true;
     container.append(guide);
+    // The disc the shipped glass masks a circle theme to. It is the outline the
+    // rect preview needs, because the authoring clip keeps the corners visible.
+    const disc = document.createElement("div");
+    disc.dataset["yunariThemeDisc"] = "";
+    disc.hidden = true;
+    container.append(disc);
     // Also a DOM sibling rather than a Fabric object, and for the same reason
     // as the media layer above: a Fabric frame would be a scene object, so it
     // would change what `canvas.getObjects()` means and what `serialiseScene`
@@ -668,6 +718,7 @@ export async function mountEditorShell({
       // Geometry is written before the visibility check, so a hidden guide is
       // never left holding a stale frame for the next reveal.
       const board = editor.viewport.artboardScreenRect();
+      const side = Math.min(board.width, board.height);
       guide.style.left = `${board.left}px`;
       guide.style.top = `${board.top}px`;
       guide.style.width = `${board.width}px`;
@@ -687,7 +738,25 @@ export async function mountEditorShell({
         box !== undefined &&
         Math.abs(box.width - currentArtboard.width) <= ONE_ARTBOARD_UNIT &&
         Math.abs(box.height - currentArtboard.height) <= ONE_ARTBOARD_UNIT;
-      guide.hidden = lens === undefined || coincident;
+      const crop = cropToDisc();
+      // The disc is the boundary the shipped glass masks, so it is noise once
+      // the canvas already clips there — and absent on a rect theme entirely.
+      disc.style.left = `${board.left + (board.width - side) / 2}px`;
+      disc.style.top = `${board.top + (board.height - side) / 2}px`;
+      disc.style.width = `${side}px`;
+      disc.style.height = `${side}px`;
+      disc.style.borderRadius = "50%";
+      disc.hidden = currentArtboard.shape !== "circle" || crop;
+      guide.hidden = lens === undefined || coincident || crop;
+
+      // A lens change is a clip change, and the camera does not repaint the
+      // artboard; re-apply it here or the mount's rect outlives the lens.
+      const clipKey = artboardClipKey(currentArtboard, crop);
+      if (paintMemo.clip !== clipKey) {
+        paintMemo.clip = clipKey;
+        editor.canvas.clipPath = artboardClip(currentArtboard, crop);
+        editor.canvas.requestRenderAll();
+      }
     };
     editor.viewport.onChange(placeScreen);
     placeScreen();
@@ -745,6 +814,10 @@ export async function mountEditorShell({
         // player's letterbox, which the editor no longer draws.
         editor.viewport.zoomToFit();
         paintArtboard();
+        // The guide, the disc and the clip are all drawn from the board's
+        // shape and size, and a conversion changes both without moving the
+        // camera enough to be relied on.
+        placeScreen();
         // The media is a layer over the board rather than part of the scene, so
         // it takes the new size and the new camera box directly; nothing about
         // it changed except where it sits.

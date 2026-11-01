@@ -12,6 +12,7 @@ import {
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
 import {
+  Circle,
   FabricImage,
   type FabricObject,
   FabricText,
@@ -1081,6 +1082,126 @@ describe("the background layer", () => {
     ).toBe(before);
     themeDocument.destroy();
     shell.destroy();
+  });
+});
+
+describe("the circle theme preview", () => {
+  /** A circle theme's artboard is square and its disc is inscribed, so the
+   *  corners are authored but never shipped. */
+  const CIRCLE = { width: 1080, height: 1080, shape: "circle" } as const;
+
+  function stageHost(): HTMLElement {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    return host;
+  }
+
+  it("clips a circle theme to its disc under a circle lens", async () => {
+    const host = stageHost();
+    const shell = await mount({ host, artboard: CIRCLE });
+    shell.viewport.showDisplay("Circle");
+
+    const clip = shell.editor.canvas.clipPath;
+    expect(clip).toBeInstanceOf(Circle);
+    const disc = clip as Circle;
+    expect(disc.radius).toBe(540);
+    expect(disc.left).toBe(540);
+    expect(disc.top).toBe(540);
+    expect(disc.absolutePositioned).toBe(true);
+    expect(disc.excludeFromExport).toBe(true);
+
+    // Both frames would coincide with the clip, so neither is drawn.
+    expect(
+      host.querySelector<HTMLElement>("[data-yunari-theme-guide]")?.hidden,
+    ).toBe(true);
+    expect(
+      host.querySelector<HTMLElement>("[data-yunari-theme-disc]")?.hidden,
+    ).toBe(true);
+    shell.destroy();
+  });
+
+  it("keeps the rect clip and outlines the disc under a rect lens", async () => {
+    const host = stageHost();
+    const shell = await mount({ host, artboard: CIRCLE });
+
+    // The mount starts on the catalogue's landscape lens, which is a rect.
+    expect(shell.editor.canvas.clipPath).toBeInstanceOf(Rect);
+
+    const disc = host.querySelector<HTMLElement>("[data-yunari-theme-disc]");
+    expect(disc?.hidden).toBe(false);
+    const board = shell.viewport.artboardScreenRect();
+    const side = Math.min(board.width, board.height);
+    expect([
+      disc?.style.left,
+      disc?.style.top,
+      disc?.style.width,
+      disc?.style.height,
+      disc?.style.borderRadius,
+    ]).toEqual([
+      `${board.left + (board.width - side) / 2}px`,
+      `${board.top + (board.height - side) / 2}px`,
+      `${side}px`,
+      `${side}px`,
+      "50%",
+    ]);
+    shell.destroy();
+  });
+
+  it("shows the disc guide under Fit", async () => {
+    const host = stageHost();
+    const shell = await mount({ host, artboard: CIRCLE });
+    shell.viewport.showDisplay(undefined);
+
+    expect(
+      host.querySelector<HTMLElement>("[data-yunari-theme-disc]")?.hidden,
+    ).toBe(false);
+    expect(shell.editor.canvas.clipPath).toBeInstanceOf(Rect);
+    shell.destroy();
+  });
+
+  it("keeps a rect theme's rect clip under a circle lens", async () => {
+    const host = stageHost();
+    const shell = await mount({
+      host,
+      artboard: { width: 1080, height: 1080 },
+    });
+    shell.viewport.showDisplay("Circle");
+
+    const clip = shell.editor.canvas.clipPath;
+    expect(clip).toBeInstanceOf(Rect);
+    expect((clip as Rect).width).toBe(1080);
+    expect(
+      host.querySelector<HTMLElement>("[data-yunari-theme-disc]")?.hidden,
+    ).toBe(true);
+    shell.destroy();
+  });
+
+  it("rounds theme-bounded media with the artboard, not display-bounded media", async () => {
+    const assets = [
+      { id: "hero", kind: "image" as const, path: "assets/hero.png" },
+    ];
+    for (const [bounds, expected] of [
+      ["theme", "50%"],
+      ["display", ""],
+    ] as const) {
+      const host = stageHost();
+      const shell = await mount({
+        host,
+        artboard: CIRCLE,
+        envelope: envelopeWith({ media: { assetId: "hero", bounds } }, assets),
+        resolveAsset: () => ({ url: "blob:hero" }),
+      });
+      const layer = host.querySelector<HTMLElement>(
+        "[data-yunari-background-media]",
+      );
+      expect(layer?.style.borderRadius, `${bounds}-bounded media`).toBe(
+        expected,
+      );
+      shell.destroy();
+    }
   });
 });
 
