@@ -551,6 +551,35 @@ describe("background media on a turned display", () => {
     display.handle.destroy();
     turned.handle.destroy();
   });
+
+  it("answers a theme-fitted placement for a display-bounded layer", () => {
+    // A stored picture is of the theme, not of the screen the author happened
+    // to have open: asked for "theme", even a display-bounded layer reports the
+    // artboard's own rect, so a capture cannot change with the preview display.
+    const display = mountLayer(
+      {
+        artboard: box(0, 0, 100, 50, { angle: 90 }),
+        display: { ...box(10, 10, 50, 50), radius: "circle" },
+      },
+      "display",
+    );
+
+    expect(display.handle.backdrop("theme")).toMatchObject({
+      rect: { left: 0, top: 0, width: ARTBOARD.width, height: ARTBOARD.height },
+      angle: 90,
+    });
+    expect(display.handle.backdrop("theme")?.screenRect).toBeUndefined();
+    // The authored answer still describes this display, which is what the glass
+    // over the live editor samples.
+    expect(display.handle.backdrop()?.screenRect).toMatchObject({
+      left: 10,
+      top: 10,
+      width: 50,
+      height: 50,
+    });
+
+    display.handle.destroy();
+  });
 });
 
 describe("background media as a glass backdrop", () => {

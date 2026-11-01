@@ -17,6 +17,7 @@ import {
   applyObjectTypeTokens,
   artboardBackdrop,
   artboardPaintKey,
+  type BackdropFit,
   type BackdropMedia,
   type BackgroundMediaHandle,
   type BackgroundMediaSource,
@@ -114,8 +115,14 @@ export interface EditorShell {
    * The artboard's background media, for the capture path. The layer is a DOM
    * sibling the canvas cannot see, so the only thing that can put it in a
    * picture is something holding the handle.
+   *
+   * `fit` answers the question the caller is asking: `"authored"` is the layer
+   * this display is showing, and `"theme"` is the same picture placed on the
+   * artboard alone. A stored picture is of the theme, so every capture asks for
+   * `"theme"` — a thumbnail must not depend on which display happened to be
+   * previewed when it was taken.
    */
-  backdrop(): BackdropMedia | undefined;
+  backdrop(fit?: BackdropFit): BackdropMedia | undefined;
   destroy(): void;
 }
 
@@ -771,12 +778,14 @@ export async function mountEditorShell({
     editor.viewport.onChange(placeScreen);
     placeScreen();
 
-    const backdrop = (): BackdropMedia | undefined =>
+    const backdrop = (
+      fit: BackdropFit = "authored",
+    ): BackdropMedia | undefined =>
       artboardBackdrop({
         background: artboardPaint,
         width: currentArtboard.width,
         height: currentArtboard.height,
-        media: media?.backdrop(),
+        media: media?.backdrop(fit),
         artboardShape: currentArtboard.shape ?? "rect",
       });
 
