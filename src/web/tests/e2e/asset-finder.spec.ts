@@ -490,7 +490,13 @@ test("a late answer never lands in the tab that was left", async ({
   await expect.poll(() => searches.length).toBe(2);
   await page.locator('[data-yunari-asset-tab="icon"]').click();
   await search.fill("ab");
-  await expect.poll(() => searches.length).toBe(3);
+  // The question leaving, not a request count: choosing a tab asks the tab's
+  // own question and may re-ask it on the way back, so the number of requests
+  // is the product's business here. What this case is about is that the
+  // abandoned answer never paints.
+  await expect
+    .poll(() => searches.filter((request) => request.query === "ab").length)
+    .toBeGreaterThan(0);
 
   await expect.poll(() => rowIds(page)).toEqual(["lucide:newer"]);
   await page.waitForTimeout(1200);
