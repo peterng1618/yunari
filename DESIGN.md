@@ -471,7 +471,7 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Slider + well** | A 3px track, an accent fill, a 10px thumb, and a 40px well | A bounded number |
 | **Swatch well** | A well containing an 11px radius-4 swatch, then the token name, then a chevron | A paint reference |
 | **Toggle** | A 26×14 pill, accent when on | A boolean that applies immediately |
-| **Segmented** | A `--panel-2` well holding 2–4 labels, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
+| **Segmented** | A `--panel-2` well holding 2–4 labels, each taking an equal share of the well, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
 | **Icon button** | A 26–30px square at `--radius-md`, glyph only | An action whose glyph is unambiguous |
 | **Labelled button** | A label in `--text-sm` on the `--yunari-control-bg` fill, 1px `--edge`, `--radius-md`, `6px 12px` padding | You can answer the surface that raised it; it is chrome around an answer, not a control in a panel |
 | **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of the rail's slots; at most one pane is open |
@@ -481,6 +481,11 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |
 | **2-D colour area** | A 128px-tall `--radius-sm` surface with a 1px `--edge` and the saturation × brightness plane as its fill | A pointer picks both channels; focus paints the boundary role |
 | **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
+
+**`Segmented` members divide the well equally.** Every chip takes `flex: 1`
+with `min-width: 0`, so a longer label wraps or truncates inside its share
+rather than widening the chip. The control set's colour, spacing, radius, type,
+elevation and hairline are unchanged.
 
 **`Segmented` has a bare form, and the header's mode switch is it.** The switch
 is the well this table describes — `--panel-2` inside a 1px `--edge` at

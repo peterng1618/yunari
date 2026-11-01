@@ -670,6 +670,34 @@ it("a refused segmented choice cannot be changed by pointer or arrow keys", asyn
   expect(applied).toHaveBeenCalledWith("center");
 });
 
+it("gives every segmented chip an equal share of the group", async () => {
+  await mount(
+    <ControlSegmented
+      label="Align"
+      value="left"
+      options={ALIGN}
+      onChange={() => {}}
+    />,
+  );
+  const group = labelled("Align");
+  expect(
+    group.classList.contains("flex"),
+    "the group is not the flex container",
+  ).toBe(true);
+  const chips = Array.from(group.querySelectorAll<HTMLElement>("button"));
+  expect(chips).toHaveLength(ALIGN.length);
+  for (const chip of chips) {
+    expect(
+      chip.classList.contains("flex-1"),
+      `${chip.textContent} does not take an equal share`,
+    ).toBe(true);
+    expect(
+      chip.classList.contains("min-w-0"),
+      `${chip.textContent} can widen past its share`,
+    ).toBe(true);
+  }
+});
+
 it("a refused slider cannot be moved by arrow keys or by pointer", async () => {
   const refused = vi.fn();
   await mount(
