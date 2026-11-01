@@ -1,8 +1,8 @@
 import {
+  type Artboard,
   type FabricThemeEnvelope,
   SUPPORTED_SCHEMA_VERSION,
 } from "@yunari/renderer-core";
-import type { ArtboardSize } from "./artboard-presets.js";
 import {
   clockCard,
   cpuCard,
@@ -251,7 +251,7 @@ const BLANK_PALETTE_IDS = [
  * starter's palette reaches a blank theme and there is no copy left to forget.
  */
 export function createBlankFabricTheme(
-  artboard: ArtboardSize,
+  artboard: Artboard,
 ): FabricThemeEnvelope {
   const starter = createNewFabricTheme();
   const palette = Object.fromEntries(
@@ -272,6 +272,9 @@ export function createBlankFabricTheme(
     artboard: {
       width: artboard.width,
       height: artboard.height,
+      // Absence means rect, so a rectangular artboard omits the key rather
+      // than writing the default it was read as.
+      ...(artboard.shape === "circle" ? { shape: "circle" as const } : {}),
     },
     // A blank theme has no backdrop, so the background layer paints its board
     // instead, and the page it paints is a choice the palette has to earn.

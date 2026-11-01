@@ -285,7 +285,10 @@ async function start(): Promise<void> {
       sensors,
       onBindingsChange: replaceSource,
       onNew: async (answer: NewDocumentAnswer) => {
-        const fresh = createBlankFabricTheme(answer.size);
+        const fresh = createBlankFabricTheme({
+          ...answer.size,
+          ...(answer.shape === "circle" ? { shape: "circle" as const } : {}),
+        });
         await mount({
           input: envelopeInputFor(fresh),
           envelope: fresh,

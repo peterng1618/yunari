@@ -151,6 +151,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 1080 },
+      shape: "rect",
       display: "16:9",
     });
   });
@@ -168,6 +169,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1080, height: 2340 },
+      shape: "rect",
       display: "9:19.5",
     });
   });
@@ -184,7 +186,70 @@ describe("the new-document chooser", () => {
     // seen through the lens of that shape.
     await expect(pending).resolves.toEqual({
       size: { width: 1440, height: 1080 },
+      shape: "rect",
       display: "4:3",
+    });
+  });
+
+  it("reads the shape the document it would replace is at", () => {
+    // Shape is document data, not a preview: a round theme opens on Circle and
+    // a square rectangular one on Rectangle.
+    void open({ width: 1080, height: 1080, shape: "circle" });
+    expect(read("shape")).toBe("circle");
+    expect(read("display"), "a circle artboard opens on the disc").toBe(
+      "Circle",
+    );
+
+    document.body.replaceChildren();
+    void open({ width: 1080, height: 1080 });
+    expect(read("shape")).toBe("rect");
+    expect(read("display")).toBe("1:1");
+  });
+
+  it("creates a circle theme as a square at the current resolution", async () => {
+    const pending = open();
+
+    await chooseIn("shape", "circle");
+    expect(size()).toContain("1080 × 1080");
+
+    create();
+    await expect(pending).resolves.toEqual({
+      size: { width: 1080, height: 1080 },
+      shape: "circle",
+      display: "16:9",
+    });
+  });
+
+  it("hides Ratio and Orientation for a circle, and keeps Resolution", async () => {
+    void open();
+
+    await chooseIn("shape", "circle");
+
+    // A disc is square whichever way up it is asked, so the two controls that
+    // would say otherwise are not offered at all.
+    expect(control("ratio")).toBeNull();
+    expect(control("orientation")).toBeNull();
+    expect(control("resolution")).not.toBeNull();
+  });
+
+  it("shows both selects again, keeping the square size, for a rectangle", async () => {
+    const pending = open();
+
+    await chooseIn("shape", "circle");
+    await chooseIn("shape", "rect");
+
+    expect(control("ratio")).not.toBeNull();
+    expect(control("orientation")).not.toBeNull();
+    expect(
+      size(),
+      "the circle's square size survives the switch back",
+    ).toContain("1080 × 1080");
+
+    create();
+    await expect(pending).resolves.toEqual({
+      size: { width: 1080, height: 1080 },
+      shape: "rect",
+      display: "16:9",
     });
   });
 
@@ -203,7 +268,11 @@ describe("the new-document chooser", () => {
       await chooseIn("display", lens);
       create();
 
-      await expect(pending).resolves.toEqual({ size: expected, display: lens });
+      await expect(pending).resolves.toEqual({
+        size: expected,
+        shape: "rect",
+        display: lens,
+      });
     },
   );
 
@@ -268,6 +337,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 2160, height: 4680 },
+      shape: "rect",
       display: "16:9",
     });
   });
@@ -289,6 +359,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 4000, height: 4000 },
+      shape: "rect",
       display: "16:9",
     });
   });
@@ -307,6 +378,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 2000 },
+      shape: "rect",
       display: "16:9",
     });
   });
@@ -347,6 +419,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 3000, height: 3000 },
+      shape: "rect",
       display: "16:9",
     });
   });
@@ -385,6 +458,7 @@ describe("the new-document chooser", () => {
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1440, height: 1080 },
+      shape: "rect",
       display: undefined,
     });
   });
@@ -434,6 +508,7 @@ describe("the new-document chooser", () => {
 function open(current?: {
   width: number;
   height: number;
+  shape?: "rect" | "circle";
 }): Promise<NewDocumentAnswer | undefined> {
   let pending: Promise<NewDocumentAnswer | undefined> | undefined;
   act(() => {
@@ -570,6 +645,13 @@ function leadingPerGroup(): string[] {
       group
         .querySelector<HTMLElement>('[role="option"]')
         ?.getAttribute("data-yunari-option") ?? "",
+  );
+}
+
+/** The control itself, or nothing when the chooser does not render it. */
+function control(marker: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    `[data-yunari-new-document-${marker}]`,
   );
 }
 

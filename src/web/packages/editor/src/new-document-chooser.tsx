@@ -1,4 +1,8 @@
-import { MAX_ARTBOARD_DIMENSION } from "@yunari/renderer-core";
+import {
+  type Artboard,
+  type ArtboardShape,
+  MAX_ARTBOARD_DIMENSION,
+} from "@yunari/renderer-core";
 import { createElement, useId, useState } from "react";
 import {
   ARTBOARD_ORIENTATIONS,
@@ -62,7 +66,7 @@ export function NewDocumentChooser({
   current,
   settle,
 }: {
-  readonly current?: ArtboardSize | undefined;
+  readonly current?: Artboard | undefined;
   readonly settle: ModalSettle<NewDocumentAnswer>;
 }): React.JSX.Element {
   /** The preset this dialog opens on, and the size that follows from it. */
@@ -78,11 +82,14 @@ export function NewDocumentChooser({
    *  rather than one, because the display is a choice the technical controls do
    *  not write back: picking a ratio leaves the author's own display alone. */
   const [chosen, adopt] = useState<ArtboardSize>(opening);
+  /** The authored canvas's outline, read from the document it would replace.
+   *  Absent there means rect, the same reading the envelope uses. */
+  const [shape, setShape] = useState<ArtboardShape>(current?.shape ?? "rect");
   /** The preview, or `undefined` for Fit. `string` rather than a union of ids
    *  because the catalogue is the author's: an id is whatever the stored list
    *  derived, and only the camera resolves it. */
   const [display, setDisplay] = useState<string | undefined>(
-    () => lensMatching(nearest)?.id,
+    () => lensMatching(nearest, current?.shape)?.id,
   );
 
   /** The three ids the size is at, or `undefined` for the author's own — the
@@ -93,6 +100,18 @@ export function NewDocumentChooser({
    *  answer, which is what makes the two questions independent. */
   const pickDisplay = (id: string): void => {
     setDisplay(id === CUSTOM ? undefined : id);
+  };
+
+  /** A circle is drawn on a square, so switching to one narrows the current
+   *  size to its shorter edge. Switching back keeps that square: it is the
+   *  author's last answer, not a size they abandoned. */
+  const pickShape = (id: string): void => {
+    const next = id as ArtboardShape;
+    setShape(next);
+    if (next === "circle") {
+      const side = Math.min(chosen.width, chosen.height);
+      adopt({ width: side, height: side });
+    }
   };
 
   /** The one writer of the size, read by the three selects, the two free fields
@@ -107,6 +126,15 @@ export function NewDocumentChooser({
     // dropdown cannot say what the size is. `artboardPresetFor` returns nothing
     // there and the change is declined — the control snaps back to its reading
     // because its value is derived from `chosen`, which did not move.
+    //
+    // A circle has one technical choice: it is square by definition, so the
+    // resolution is all the author can say and the ratio and orientation it
+    // implies are fixed rather than read off a preset they may not be on.
+    if (shape === "circle") {
+      if (which !== "resolution") return;
+      adopt(artboardSize("1:1", id as ArtboardResolutionId, "landscape"));
+      return;
+    }
     if (preset === undefined) return;
     const next =
       which === "ratio"
@@ -129,7 +157,7 @@ export function NewDocumentChooser({
     adopt(artboardSize(next.ratio, next.resolution, next.orientation));
   };
 
-  const answer = (): NewDocumentAnswer => ({ size: chosen, display });
+  const answer = (): NewDocumentAnswer => ({ size: chosen, shape, display });
 
   return (
     <Dialog
@@ -158,19 +186,32 @@ export function NewDocumentChooser({
           className="flex flex-col gap-[var(--space-8)]"
         >
           <ControlSelect
-            label={uiCopy.panels.ratio}
-            data={{ "data-yunari-new-document-ratio": "" }}
-            value={preset?.ratio ?? CUSTOM}
-            options={ratioOptions()}
-            onChange={(id) => derive("ratio", id)}
+            label={uiCopy.newDocument.shape}
+            data={{ "data-yunari-new-document-shape": "" }}
+            value={shape}
+            options={shapeOptions()}
+            onChange={pickShape}
           />
-          <ControlSelect
-            label={uiCopy.panels.orientation}
-            data={{ "data-yunari-new-document-orientation": "" }}
-            value={preset?.orientation ?? CUSTOM}
-            options={orientationOptions()}
-            onChange={(id) => derive("orientation", id)}
-          />
+          {/* A circle is square whichever way up it is asked, so the two
+              controls that would say otherwise have nothing to answer. */}
+          {shape === "rect" && (
+            <>
+              <ControlSelect
+                label={uiCopy.panels.ratio}
+                data={{ "data-yunari-new-document-ratio": "" }}
+                value={preset?.ratio ?? CUSTOM}
+                options={ratioOptions()}
+                onChange={(id) => derive("ratio", id)}
+              />
+              <ControlSelect
+                label={uiCopy.panels.orientation}
+                data={{ "data-yunari-new-document-orientation": "" }}
+                value={preset?.orientation ?? CUSTOM}
+                options={orientationOptions()}
+                onChange={(id) => derive("orientation", id)}
+              />
+            </>
+          )}
           <ControlSelect
             label={uiCopy.panels.resolution}
             data={{ "data-yunari-new-document-resolution": "" }}
@@ -264,6 +305,13 @@ function displayOptions(opening: ArtboardSize): readonly ControlOption[] {
   return options;
 }
 
+function shapeOptions(): readonly ControlOption[] {
+  return (["rect", "circle"] as const).map((id) => ({
+    id,
+    name: uiCopy.artboardShapes[id],
+  }));
+}
+
 function ratioOptions(): readonly ControlOption[] {
   return [
     ...ARTBOARD_RATIOS.map((entry) => ({
@@ -310,6 +358,10 @@ function resolutionOptions(): readonly ControlOption[] {
  */
 export interface NewDocumentAnswer {
   readonly size: ArtboardSize;
+  /** The authored canvas's outline. A circle is a square whose disc is
+   *  inscribed; absent would mean rect, so the chooser names it rather than
+   *  letting the caller infer one from the size. */
+  readonly shape: ArtboardShape;
   /** The lens's id from the active catalogue, or `undefined` for Fit — see
    *  `chooseArtboardSize`. An id rather than a `DisplayLens`: the catalogue is
    *  the author's, so the answer names a stored choice and the camera resolves
@@ -337,7 +389,7 @@ export interface NewDocumentAnswer {
  * both would have the session guess which the author meant.
  */
 export function chooseArtboardSize(
-  current?: ArtboardSize,
+  current?: Artboard,
 ): Promise<NewDocumentAnswer | undefined> {
   return openModal((settle) =>
     createElement(NewDocumentChooser, { current, settle }),

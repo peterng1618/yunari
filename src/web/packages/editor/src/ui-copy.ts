@@ -886,6 +886,9 @@ export const uiCopy = {
     /** The first question. Named as what it decides — where this theme will be
      *  seen — rather than by the aspect it derives. */
     display: "Display",
+    /** The authored canvas's outline, distinct from the ratio: a circle is
+     *  drawn on a square artboard rather than being one. */
+    shape: "Shape",
     create: "Create",
     cancel: "Cancel",
   },

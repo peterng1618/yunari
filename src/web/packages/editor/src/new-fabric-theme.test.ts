@@ -1109,6 +1109,25 @@ describe("the blank Fabric document", () => {
     });
   });
 
+  it("carries a circle artboard's shape into the document", () => {
+    const blank = createBlankFabricTheme({
+      width: 1080,
+      height: 1080,
+      shape: "circle",
+    });
+
+    expect(blank.artboard.shape).toBe("circle");
+    // A circle is drawn on a square, and the shape travels with the document
+    // rather than with a display.
+    expect(blank.artboard.width).toBe(blank.artboard.height);
+  });
+
+  it("omits the shape key for a rect artboard, because absence means rect", () => {
+    const blank = createBlankFabricTheme({ width: 1080, height: 1080 });
+
+    expect(blank.artboard).not.toHaveProperty("shape");
+  });
+
   it("is empty: no scene objects, no assets, no bindings", () => {
     const blank = createBlankFabricTheme({ width: 1920, height: 1080 });
 

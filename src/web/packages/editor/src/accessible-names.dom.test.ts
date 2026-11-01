@@ -293,11 +293,12 @@ describe("editor panels", () => {
       "INPUT[type=file]", // Import
       "INPUT[type=file]", // Replace
       // The new-theme chooser, mounted as the session opens it: a `Dialog`, and
-      // four `ControlSelect`s between its two focus guards — the display, and
-      // the ratio, orientation and resolution behind Custom — each a Base UI
-      // value carrier.
+      // five `ControlSelect`s between its two focus guards — the display, the
+      // shape, and the ratio, orientation and resolution behind Custom — each a
+      // Base UI value carrier.
       "SPAN[type=][aria-hidden]", // The chooser's leading focus guard
       "INPUT[type=][aria-hidden]", // Display
+      "INPUT[type=][aria-hidden]", // Shape
       "INPUT[type=][aria-hidden]", // Ratio
       "INPUT[type=][aria-hidden]", // Orientation
       "INPUT[type=][aria-hidden]", // Resolution

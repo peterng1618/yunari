@@ -1,3 +1,4 @@
+import type { ArtboardShape } from "@yunari/renderer-core";
 import {
   ARTBOARD_ORIENTATIONS,
   type ArtboardOrientation,
@@ -270,11 +271,18 @@ export function resolveLens(id: string): DisplayLens | undefined {
   return active.find((lens) => lens.id === id);
 }
 
-/** The rect lens framing `shape`, or `undefined` — a user-managed list cannot
+/** The rect lens framing `shape`, or the first landscape circle lens when the
+ *  artboard itself is round — or `undefined`. A user-managed list cannot
  *  guarantee every artboard shape a preview, so this never throws. */
 export function lensMatching(
   shape: ArtboardPresetShape,
+  themeShape?: ArtboardShape,
 ): DisplayLens | undefined {
+  if (themeShape === "circle") {
+    return active.find(
+      (lens) => lens.shape === "circle" && lens.orientation === "landscape",
+    );
+  }
   let ratio: PreviewRatio;
   try {
     ratio = parsePreviewRatio(shape.ratio);
