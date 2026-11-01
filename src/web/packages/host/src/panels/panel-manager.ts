@@ -7,7 +7,12 @@ import type {
   PanelVideoSource,
 } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
-import { createRasterizer } from "./panel-raster.js";
+import type { Rasterizer } from "./panel-raster.js";
+import {
+  createRasterBrowser,
+  type RasterBrowser,
+  type RasterBrowserOptions,
+} from "./panel-raster-browser.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
 
 /**
@@ -37,6 +42,18 @@ export interface PanelManagerOptions {
   readonly onError?: (displayId: string, message: string) => void;
   /** The browser to rasterise with; the launcher's own discovery by default. */
   readonly browser?: string | undefined;
+  /**
+   * The shared runtime every panel's page is rendered in. Absent constructs
+   * the real Chromium-owning browser; tests inject a fake so no process starts.
+   */
+  readonly rasterBrowserFactory?: (
+    options: RasterBrowserOptions,
+  ) => RasterBrowser;
+  /**
+   * A failure of the shared browser itself, reported once. A failed panel
+   * start keeps the display's own `onError` path.
+   */
+  readonly onBrowserError?: (message: string) => void;
   /** How long shutdown waits for one display before abandoning it. */
   readonly shutdownGraceMs?: number;
   /**
@@ -142,6 +159,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
    */
   const chains = new Map<string, Promise<unknown>>();
   let stopping = false;
+  /** The one runtime every running panel's page lives in. */
+  let rasterBrowser: RasterBrowser | undefined;
 
   const trim = (displayId: string, settled: Promise<unknown>): void => {
     if (chains.get(displayId) === settled) chains.delete(displayId);
@@ -161,6 +180,28 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       () => trim(displayId, next),
     );
     return next;
+  };
+
+  /**
+   * The runtime every panel shares, replaced once it has closed.
+   *
+   * A crashed child marks its browser closed. Keeping that instance would make
+   * every later panel fail on the same dead socket; the next start builds a
+   * fresh one, and the idle stop removes the old profile.
+   */
+  const rasterBrowserFor = (executable: string): RasterBrowser => {
+    if (rasterBrowser !== undefined && !rasterBrowser.closed) {
+      return rasterBrowser;
+    }
+
+    const create = options.rasterBrowserFactory ?? createRasterBrowser;
+    rasterBrowser = create({
+      executable,
+      ...(options.onBrowserError === undefined
+        ? {}
+        : { onError: options.onBrowserError }),
+    });
+    return rasterBrowser;
   };
 
   const startNow = async (displayId: string): Promise<void> => {
@@ -219,8 +260,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const browser = options.browser ?? findBrowser();
-    if (browser === undefined) {
+    const executable = options.browser ?? findBrowser();
+    if (executable === undefined) {
       throw new Error(
         "No Chromium-family browser was found, and a panel needs one to render.",
       );
@@ -245,11 +286,10 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     entry.video = video;
 
-    let rasterizer: Awaited<ReturnType<typeof createRasterizer>>;
+    let rasterizer: Rasterizer;
 
     try {
-      rasterizer = await createRasterizer({
-        browser,
+      rasterizer = await rasterBrowserFor(executable).create({
         url: options.pageFor(displayId),
         geometry: device.geometry,
         // The device says which still it consumes; a panel that decodes to raw
@@ -603,6 +643,12 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
 
       entries.clear();
+
+      // Every runner released its page above: the runtime has nothing left to
+      // serve, and an idle stop should not be what finally ends it.
+      const shared = rasterBrowser;
+      rasterBrowser = undefined;
+      await shared?.stop();
     },
   };
 }

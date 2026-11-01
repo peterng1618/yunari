@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
 import type {
   PanelDevice,
@@ -11,11 +11,13 @@ import {
   type PanelManagerOptions,
   PanelNotRunningError,
 } from "./panel-manager.js";
+import type { Rasterizer } from "./panel-raster.js";
+import type { RasterBrowser } from "./panel-raster-browser.js";
 
 /**
  * The manager's concurrency is the thing under test, so the hardware and the
  * browser are replaced at their seams: the family table is one fake, the
- * rasteriser is one fake, and every device is a log of what happened to it.
+ * raster browser is one fake, and every device is a log of what happened to it.
  */
 const h = vi.hoisted(() => ({
   family: undefined as unknown,
@@ -24,15 +26,39 @@ const h = vi.hoisted(() => ({
     captureOverlay: async () => new Uint8Array([2]),
     close: async () => {},
   }),
+  browsers: [] as unknown[],
+  events: [] as string[],
 }));
 
 vi.mock("./panel-families.js", () => ({ familyFor: () => h.family }));
-vi.mock("./panel-raster.js", () => ({
-  createRasterizer: async () => h.rasterizer(),
-}));
 vi.mock("../serve/display-launcher.js", () => ({
   findBrowser: () => "C:/fake/chrome.exe",
 }));
+
+type FakeBrowser = Omit<RasterBrowser, "closed"> & { closed: boolean };
+
+function fakeBrowser(events: string[]): FakeBrowser {
+  const browser: FakeBrowser = {
+    closed: false,
+    create: vi.fn(async () => h.rasterizer() as Rasterizer),
+    stop: vi.fn(async () => {
+      browser.closed = true;
+      events.push("browser:stop");
+    }),
+  };
+
+  return browser;
+}
+
+beforeEach(() => {
+  h.browsers = [];
+  h.events = [];
+  h.rasterizer = () => ({
+    capture: async () => new Uint8Array([1]),
+    captureOverlay: async () => new Uint8Array([2]),
+    close: async () => {},
+  });
+});
 
 const VENDOR_ID = 0x1cbe;
 const PRODUCT_ID = 0xa092;
@@ -47,10 +73,21 @@ const RECORD: DisplayRecord = {
   panel: { vendorId: VENDOR_ID, productId: PRODUCT_ID, model: "fake" },
 };
 
-const store = {
-  list: async () => [RECORD],
-  find: async (id: string) => (id === RECORD.id ? RECORD : undefined),
-} as unknown as DisplayStore;
+const TOWER: DisplayRecord = {
+  ...RECORD,
+  id: "tower",
+  label: "Tower",
+};
+
+const store = storeOver([RECORD]);
+
+function storeOver(records: readonly DisplayRecord[]): DisplayStore {
+  return {
+    list: async () => records,
+    find: async (id: string) =>
+      records.find((record) => record.id === id),
+  } as unknown as DisplayStore;
+}
 
 interface DeviceOptions {
   readonly name?: string;
@@ -103,6 +140,11 @@ function managerOver(
   return createPanelManager({
     displays: store,
     pageFor: (displayId) => `http://127.0.0.1:1/?display=${displayId}`,
+    rasterBrowserFactory: () => {
+      const browser = fakeBrowser(h.events);
+      h.browsers.push(browser);
+      return browser;
+    },
     ...overrides,
   });
 }
@@ -766,5 +808,51 @@ describe("createPanelManager", () => {
     } finally {
       await manager.stopAll();
     }
+  });
+
+  it("shares one browser across two panels", async () => {
+    h.family = familyOver(async () => deviceOver());
+    const manager = managerOver({ displays: storeOver([RECORD, TOWER]) });
+
+    await Promise.all([manager.start("strip"), manager.start("tower")]);
+
+    expect(h.browsers).toHaveLength(1);
+    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledTimes(2);
+
+    await manager.stopAll();
+  });
+
+  it("stops the browser after the runners on shutdown", async () => {
+    h.family = familyOver(async () =>
+      deviceOver({ name: "d1", events: h.events }),
+    );
+    const manager = managerOver();
+
+    await manager.start("strip");
+    await manager.stopAll();
+
+    // The device was released before the shared runtime: a runner still
+    // writing to a closed browser would fail its own close.
+    expect(h.events.at(-1)).toBe("browser:stop");
+    expect(h.events.indexOf("close:d1")).toBeGreaterThanOrEqual(0);
+    expect(h.events.indexOf("close:d1")).toBeLessThan(
+      h.events.indexOf("browser:stop"),
+    );
+  });
+
+  it("replaces a closed browser on the next panel start", async () => {
+    h.family = familyOver(async () => deviceOver());
+    const manager = managerOver();
+
+    await manager.start("strip");
+    await manager.stop("strip");
+    (h.browsers[0] as FakeBrowser).closed = true;
+
+    await manager.start("strip");
+
+    expect(h.browsers).toHaveLength(2);
+    expect((h.browsers[1] as FakeBrowser).create).toHaveBeenCalledTimes(1);
+
+    await manager.stopAll();
   });
 });

@@ -578,6 +578,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     onError: (displayId, message) => {
       console.error(`Panel ${displayId}: ${message}`);
     },
+    onBrowserError: (message) => {
+      console.error(`Raster browser: ${message}`);
+    },
   });
   await panels.reconcile();
 
