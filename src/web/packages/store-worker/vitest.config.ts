@@ -37,6 +37,11 @@ export default defineConfig(async () => {
     ],
     test: {
       setupFiles: ["./tests/apply-migrations.ts"],
+      // Workerd's startup and the archive-bound case's oversized upload are
+      // seconds of work before the assertion runs; under the full gate's load
+      // the 5s default cut that case off at 5.8s. Twenty seconds is a failure
+      // ceiling, not a target: every case keeps its own waits.
+      testTimeout: 20_000,
     },
   };
 });
