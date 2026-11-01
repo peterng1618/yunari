@@ -879,6 +879,8 @@ body,
    by the destructive mark — the mode switch renders no registry action — so
    both are in `editor-shell.control-rules.test.ts`'s allowlist. */
 .editor-shell-mode-switch button {
+  flex: 1;
+  min-width: 0;
   border: 0;
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-8);
