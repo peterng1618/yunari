@@ -4,10 +4,11 @@ import { uiCopy } from "./ui-copy.js";
  * What a surface says, for the copy net's cases.
  *
  * Responsibility: the shared readers only — `spokenIn` for a mounted tree's
- * labels, accessible names, buttons, headings and definition terms, `saidIn`
- * and `paragraphsOf` for the paragraphs `spokenIn` does not read, `spokenText`
- * for one element's own words with its decoration stripped, and `copy` for
- * every string the table can produce. The rules are asserted by the three files
+ * labels, accessible names, buttons, headings and definition terms (and any
+ * node explicitly marked `data-yunari-copy`), `saidIn` and `paragraphsOf` for
+ * the paragraphs `spokenIn` does not read, `spokenText` for one element's own
+ * words with its decoration stripped, and `copy` for every string the table can
+ * produce. The rules are asserted by the three files
  * that read through them: `ui-copy.test.ts` (the table's own),
  * `ui-copy-panels.test.ts` (the imperative panels and the picker they mount)
  * and `ui-copy-surfaces.test.ts` (the landed React surfaces).
@@ -127,6 +128,13 @@ export function spokenIn(element: Element): string[] {
   const out: string[] = [];
   for (const label of element.querySelectorAll("label"))
     out.push(label.textContent?.trim() ?? "");
+  // A word-bearing node outside the element vocabulary — a popover's warning is
+  // a bare `<span>` — declares itself copy with `data-yunari-copy`. Its
+  // opposite is `data-yunari-value`, which marks a node printing a chosen
+  // value; between them a bare node says which of the two it carries instead
+  // of the reader guessing from its tag.
+  for (const marked of element.querySelectorAll("[data-yunari-copy]"))
+    out.push(spokenText(marked).trim());
   for (const named of element.querySelectorAll("[aria-label]")) {
     // A control named by its own `data-testid` (the picker's tracks) is a
     // driver's hook, not a word of copy.
@@ -178,7 +186,17 @@ export function spokenIn(element: Element): string[] {
     )
       continue;
     if (button.querySelector("[data-yunari-value]") !== null) continue;
-    if (button.hasAttribute("aria-controls")) continue;
+    // A popover or select trigger carries `aria-controls` and prints the value
+    // it holds; a section disclosure carries it and prints a title and a
+    // reading (its count). Tabs print a word. The markers inside the control
+    // say which of these it is, rather than the attribute alone deciding for
+    // all of them.
+    if (
+      button.hasAttribute("aria-controls") &&
+      (button.querySelector("[data-yunari-value]") !== null ||
+        button.querySelector("[data-yunari-section-count]") !== null)
+    )
+      continue;
     // A facet option's row prints a value beside the count of themes behind it:
     // the value is the record's own reading for most facets — an author's name,
     // a sensor's `label`, a ratio, a size — and the count is the library's, so

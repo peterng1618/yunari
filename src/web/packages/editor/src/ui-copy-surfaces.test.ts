@@ -10,11 +10,10 @@
  * menus, the theme toolbar and the canvas context menu are read in turn; and the
  * `?` sheet, the publish popover and the library and new-document dialogs are
  * each mounted (`vg-418` — the header once said these four were not mounted, and
- * a header owns nothing). **The popover is the one read only in part**, and the
- * limit is stated rather than implied: its own warning is a bare `<span>`, which
- * no reader in this vocabulary reads, and its trigger carries the
- * `aria-controls` the button rule skips, so neither word is owned by anything.
- * That gap is the row's, not this walk's.
+ * a header owns nothing). **The popover is read whole**: its warning is a bare
+ * `<span>` marked `data-yunari-copy`, and its trigger carries `aria-controls`
+ * without a `data-yunari-value`, so the button rule reads the word it prints
+ * instead of skipping it as a chosen value.
  *
  * **What it deliberately does not read, and why.** Three owners of words are
  * carved out by name, because the words are theirs and not this table's:

@@ -210,7 +210,11 @@ export function PublishControl({
             >
               {label}
             </button>
-            <span id={WARNING_ID} className="editor-shell-publish-warning">
+            <span
+              id={WARNING_ID}
+              className="editor-shell-publish-warning"
+              data-yunari-copy=""
+            >
               {uiCopy.publish.warning}
             </span>
             {reason === undefined ? null : (
