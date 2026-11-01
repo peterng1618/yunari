@@ -619,8 +619,13 @@ export async function setOverlayMode(
           host.style.background = "transparent";
         }
         // The media layer is hidden and the device plays its own clip: a video
-        // left decoding is frames nobody reads.
-        for (const media of document.querySelectorAll("video")) media.pause();
+        // left decoding is frames nobody reads. The scene's first-frame probe
+        // is the exception — it is mid-seek for the still a static glass card
+        // stands on, and a paused probe never delivers that frame.
+        for (const media of document.querySelectorAll(
+          "video:not([data-yunari-frame-probe])",
+        ))
+          media.pause();
       } else {
         style?.remove();
         if (host !== null && host.dataset["panelOverlayBackground"] !== undefined) {
@@ -629,7 +634,9 @@ export async function setOverlayMode(
         }
         // A still capture shows the page's own picture; autoplay may refuse,
         // which is the page's state rather than a failed capture.
-        for (const media of document.querySelectorAll("video")) {
+        for (const media of document.querySelectorAll(
+          "video:not([data-yunari-frame-probe])",
+        )) {
           const started = media.play();
           if (started !== undefined) started.catch(() => {});
         }

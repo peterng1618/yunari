@@ -239,7 +239,16 @@ describe("setOverlayMode", () => {
     const play = vi.fn(() => Promise.resolve());
     Object.defineProperty(video, "pause", { value: pause });
     Object.defineProperty(video, "play", { value: play });
-    document.body.append(host, video);
+    // The scene's first-frame probe. Pausing it stops the callback it is
+    // waiting on, so a static glass card loses the still it stands on and the
+    // overlay comes back as a bare grey tint (seen on the TURZX panel).
+    const probe = document.createElement("video");
+    probe.dataset["yunariFrameProbe"] = "";
+    const probePause = vi.fn();
+    const probePlay = vi.fn(() => Promise.resolve());
+    Object.defineProperty(probe, "pause", { value: probePause });
+    Object.defineProperty(probe, "play", { value: probePlay });
+    document.body.append(host, video, probe);
 
     const { devtools, sent } = fakeDevtools();
 
@@ -247,11 +256,16 @@ describe("setOverlayMode", () => {
     new Function(expressionOf(sent))();
     expect(pause).toHaveBeenCalledTimes(1);
     expect(play).not.toHaveBeenCalled();
+    expect(
+      probePause,
+      "the frame probe is not the panel's video",
+    ).not.toHaveBeenCalled();
 
     await setOverlayMode(devtools, false);
     const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
     new Function(String(entries[entries.length - 1]?.params["expression"]))();
     expect(play).toHaveBeenCalledTimes(1);
+    expect(probePlay).not.toHaveBeenCalled();
   });
 
   it("re-asserts the transparent paint after a fit repaints the host", async () => {
