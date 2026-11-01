@@ -252,9 +252,10 @@ test("a row's mark draws its kind's glyph, and the Add pane draws the same", asy
   for (const [id, glyph] of families) {
     expect(await markGlyph(id), id).toContain(glyph);
   }
-  expect(new Set(await Promise.all([...families].map(
-    ([id]) => markGlyph(id),
-  ))).size, "each family wears its own glyph").toBe(3);
+  expect(
+    new Set(await Promise.all([...families].map(([id]) => markGlyph(id)))).size,
+    "each family wears its own glyph",
+  ).toBe(3);
 
   // The Add pane's chart tiles draw the same family glyphs — one vocabulary,
   // two surfaces. Radar is not in this document, so it also proves the tile
