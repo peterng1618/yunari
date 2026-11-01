@@ -8,9 +8,11 @@ import {
 import {
   type ArtboardRect,
   captureVisualReview,
+  chooseAssetFile,
   clientOfScene,
   enterLayer,
   readSceneObject,
+  sceneImageIds,
 } from "./editor-canvas.js";
 import {
   openEveryGroup,
@@ -1701,4 +1703,46 @@ test("a copy inserted beside the starter names its unit without costing the star
   expect(clocks).toHaveLength(2);
   expect(new Set(clocks).size).toBe(2);
   expect(clocks).toContain("group-time-card");
+});
+
+test("gives every image it places a layer row", async ({ page }, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto(EDITOR);
+  await expect(
+    page.locator("#yunari-fabric-editor canvas.upper-canvas"),
+  ).toBeVisible();
+  await openPane(page, "Assets");
+
+  // **Every import is placed, so every import needs a row.** The row was the
+  // half the report saw missing while the picture was on the canvas; nothing
+  // in the browser suite asserted that a placement projects a row at all.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABmJLR0QA/wD/AP+gvaeTAAAAIklEQVQ4jWNk2HHzPwMVARM1DRs1cNTAUQNHDRw1cCgZCAC1HQK4IWYK+QAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  for (let index = 0; index < 5; index += 1) {
+    await chooseAssetFile(page, "import", {
+      name: `photo-${index}.png`,
+      mimeType: "image/png",
+      buffer: png,
+    });
+  }
+
+  await expect
+    .poll(async () => (await sceneImageIds(page)).length, {
+      message: "five imports placed five image objects",
+    })
+    .toBe(5);
+
+  await openPane(page, "Composition");
+  // The scene is the source of truth for which rows must exist; asking the
+  // panel for exactly those ids is what the report says it lacked.
+  for (const id of await sceneImageIds(page)) {
+    await expect(
+      page.locator(`[data-yunari-layer="${id}"]`),
+      `no layer row for placed image ${id}`,
+    ).toBeVisible();
+  }
 });

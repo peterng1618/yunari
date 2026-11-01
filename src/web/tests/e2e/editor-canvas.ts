@@ -418,6 +418,38 @@ export type LocalFile = {
   buffer: Buffer;
 };
 
+/** The ids of every image object in the live scene, groups descended.
+ *
+ * A placed picture is what a layer row is for, and a root-only walk would miss
+ * one inside a group. The id is the row's `data-yunari-layer` value, so a case
+ * can ask the panel for exactly the objects the scene holds. */
+export async function sceneImageIds(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    type SceneObject = {
+      readonly id?: string;
+      readonly type?: string;
+      readonly getObjects?: () => readonly SceneObject[];
+    };
+    const objects = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: { canvas: { getObjects(): readonly SceneObject[] } };
+        };
+      }
+    ).yunariEditorBridge.editor.canvas.getObjects();
+    const found: string[] = [];
+    const visit = (candidates: readonly SceneObject[]): void => {
+      for (const object of candidates) {
+        if (object.type === "image" && object.id !== undefined)
+          found.push(object.id);
+        visit(object.getObjects?.() ?? []);
+      }
+    };
+    visit(objects);
+    return found;
+  });
+}
+
 /**
  * Chooses a local file the way an author does: press the button, then answer
  * the file chooser it opened.
