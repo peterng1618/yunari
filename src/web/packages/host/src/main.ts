@@ -61,6 +61,7 @@ import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
+import { createThemeMedia } from "./themes/theme-media.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
 import { openTrayAction } from "./tray/actions.js";
@@ -434,6 +435,13 @@ export async function run(argv: readonly string[]): Promise<number> {
     // writes it after the save that replaced the folder, which is why the
     // library always has a picture for what was just saved.
     thumbnails: createThumbnailStore(themesDir),
+    // The derived pictures a panel's page loads instead of the theme video.
+    // Disposable, named by their inputs, and regenerated when the name is
+    // missing — a theme save only clears the entries it invalidated.
+    themeMedia: createThemeMedia({
+      directory: path.join(path.dirname(settingsDir), "cache", "theme-media"),
+      readAsset: (id, assetPath) => themeStore.readAsset(id, assetPath),
+    }),
     themeSettings: createThemeSettingsStore(settingsDir),
     // Beside the answers and from the same directory: where a copy came from is
     // this machine's own record about a theme, like what a consumer answered
@@ -535,7 +543,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // down with it.
   panels = createPanelManager({
     displays,
-    pageFor: (displayId) => panelPageUrl(bound, displayId),
+    pageFor: (displayId, clip) => panelPageUrl(bound, displayId, clip),
     // A panel's encoded clip is disposable host data, kept beside the other
     // caches so a restart reuses the transcode instead of paying for it again.
     videoCacheDir: path.join(path.dirname(settingsDir), "cache", "panel-video"),

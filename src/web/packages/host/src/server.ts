@@ -184,6 +184,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const wallpaperEngine = options.wallpaperEngine;
   const activeTheme = options.activeTheme;
   const thumbnails = options.thumbnails;
+  const themeMedia = options.themeMedia;
   const fetcher = options.fetch;
   const themeSettings = options.themeSettings;
   const themeOrigins = options.themeOrigins;
@@ -378,12 +379,14 @@ export function createHostServer(options: HostServerOptions): HostServer {
     themeSettings,
     themeOrigins,
     thumbnails,
+    themeMedia,
   });
   const themeWrites = createThemeWrites({
     options,
     themeStore,
     themeOrigins,
     thumbnails,
+    themeMedia,
     fetcher,
     largeBody,
     published,

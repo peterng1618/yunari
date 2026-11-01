@@ -15,3 +15,41 @@ export function panelGlassSampling(search: string): GlassSampling | undefined {
     ? "static"
     : undefined;
 }
+
+/** What a panel's page loads in place of the theme's video background. */
+export interface PanelBackgroundSource {
+  readonly url: string;
+  readonly kind: "image" | "video";
+}
+
+/** The largest panel a clip is scaled for, matching the video envelope. */
+const MAX_PANEL_EDGE = 4096;
+
+/**
+ * The host's derived media for this panel, or nothing for a browser display.
+ *
+ * `clip=1` means the device decodes the theme clip itself, so the page never
+ * shows the picture: one poster frame is all its glass can sample. Without it
+ * the device shows the page, so the page asks for the clip scaled to its own
+ * pixels. Either way the theme's full-size source is never fetched.
+ */
+export function panelBackgroundSource(
+  search: string,
+  themeId: string,
+  viewport: { readonly width: number; readonly height: number },
+): PanelBackgroundSource | undefined {
+  const parameters = new URLSearchParams(search);
+  if (parameters.get("panel") !== "1") return undefined;
+
+  const path = `/api/themes/${encodeURIComponent(themeId)}`;
+  if (parameters.get("clip") === "1") {
+    return { url: `${path}/poster`, kind: "image" };
+  }
+
+  const edge = (value: number): number =>
+    Math.min(MAX_PANEL_EDGE, Math.max(1, Math.floor(value) || 1));
+  return {
+    url: `${path}/panel-video?width=${edge(viewport.width)}&height=${edge(viewport.height)}`,
+    kind: "video",
+  };
+}

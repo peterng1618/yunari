@@ -19,6 +19,7 @@ import {
   ThemeTooLargeError,
   ThemeValidationError,
 } from "../themes/store.js";
+import { backgroundVideoOf, type ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
 import { TrashRefusal } from "../themes/trash.js";
 import {
@@ -53,6 +54,7 @@ export interface ThemeWriteDeps {
   readonly themeStore: ThemeStore;
   readonly themeOrigins: ThemeOriginsStore | undefined;
   readonly thumbnails: ThumbnailStore | undefined;
+  readonly themeMedia: ThemeMedia | undefined;
   readonly fetcher: typeof fetch | undefined;
   readonly largeBody: {
     run<T>(work: () => Promise<T>): Promise<T>;
@@ -79,6 +81,7 @@ export function createThemeWrites(
     themeStore,
     themeOrigins,
     thumbnails,
+    themeMedia,
     fetcher,
     largeBody,
     published,
@@ -414,10 +417,33 @@ export function createThemeWrites(
       }
 
       try {
+        // The document as it stood before this save: the only way to tell
+        // whether the background video or its declared frame moved.
+        const previous = await themeStore.readEnvelope(rawId);
         const saved = await themeStore.write(rawId, decoded.content, {
           ...(decoded.base === undefined ? {} : { base: decoded.base }),
           overwrite: decoded.overwrite,
         });
+
+        // A cached still or panel clip is named by the video asset and frame it
+        // was made from. The name changes with either, but the bytes can change
+        // under the same path, so a save that carried the video (or changed the
+        // frame) drops the theme's entries; the next panel request regenerates
+        // them before it can load anything. No extraction happens here.
+        const before = backgroundVideoOf(previous);
+        const after = backgroundVideoOf(decoded.content.envelope);
+        const videoChanged =
+          before?.asset.path !== after?.asset.path ||
+          before?.frame !== after?.frame ||
+          (after !== undefined &&
+            decoded.content.assets[after.asset.path] !== undefined);
+        if (themeMedia !== undefined && videoChanged) {
+          await themeMedia.forget(rawId).catch((error) => {
+            // A cache that could not be cleared is stale, not fatal: the theme
+            // itself was saved and the panel still draws.
+            console.error(error);
+          });
+        }
 
         // A save is the only moment a theme becomes authoritative, so it is
         // also the only moment a display is told to re-read it. The revision
@@ -533,6 +559,12 @@ export function createThemeWrites(
         } catch (error) {
           console.error(error);
         }
+
+        // Derived pictures of a theme nobody can open again. A refusal is
+        // logged and the removal stands: the folder is already in the trash.
+        await themeMedia?.forget(rawId).catch((error) => {
+          console.error(error);
+        });
 
         // A removed theme's per-display answers are answers about a document
         // nobody can open again. Like the origin, their failure cannot undo

@@ -26,6 +26,13 @@ export interface BackgroundMediaOptions {
    *  following frames by omitting it. Nothing subscribes unless a video is the
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
+  /** What a panel's page loads instead of the declared video: the host's still
+   *  of the declared frame, or a clip scaled to the panel. Applies only to a
+   *  video background; a failed load falls back to the theme's own asset. */
+  readonly backgroundSource?: {
+    readonly url: string;
+    readonly kind: "image" | "video";
+  };
   /** Glass surfaces that already need frames when the layer mounts. The scene
    *  passes its own count, which is zero until a render allocates one; a direct
    *  mount defaults to following, because its `onFrame` subscriber asked. */
@@ -207,6 +214,9 @@ export function mountBackgroundMedia(
   /** The video refused to load or play; the still takes the element's place as
    *  soon as it exists. */
   let failed = false;
+  /** The page's derived source was refused; the theme's own asset is the
+   *  fallback from then on. */
+  let overrideFailed = false;
   // Both gates are the layer's own: a panel appears or leaves, and the page is
   // shown or hidden. The frame chain is re-armed only when both allow it.
   let glassSurfaces = options.glassSurfaces ?? 1;
@@ -323,11 +333,23 @@ export function mountBackgroundMedia(
       return;
     }
 
-    const child =
-      asset.kind === "video"
-        ? document.createElement("video")
-        : document.createElement("img");
-    child.src = source.url;
+    // A panel's page is served its own picture: the host's still for an
+    // overlay panel, or a clip scaled to a still panel. Only a video
+    // background is replaced; an image is already the picture.
+    const override =
+      asset.kind === "video" &&
+      options.backgroundSource !== undefined &&
+      !overrideFailed
+        ? options.backgroundSource
+        : undefined;
+    const child = (
+      override === undefined
+        ? asset.kind === "video"
+        : override.kind === "video"
+    )
+      ? document.createElement("video")
+      : document.createElement("img");
+    child.src = override?.url ?? source.url;
     // `max-width:none` is load-bearing: Tailwind's preflight (the editor's
     // stylesheet) applies `img, video { max-width: 100%; height: auto }`, which
     // capped the placed rect's width at the layer's while the inline height
@@ -346,6 +368,22 @@ export function mountBackgroundMedia(
     element = child;
     mountedAssetId = asset.id;
     layer.append(child);
+
+    if (override !== undefined) {
+      child.addEventListener(
+        "error",
+        () => {
+          // A source the host could not produce is today's page: the theme's
+          // own asset, rather than a blank panel.
+          overrideFailed = true;
+          stop();
+          layer.replaceChildren();
+          element = undefined;
+          mount(media);
+        },
+        { once: true },
+      );
+    }
 
     // A video with no declared still stands on its first frame: a static panel
     // that has no picture paints nothing, and a glass card over a video would

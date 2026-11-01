@@ -100,6 +100,7 @@ import {
   type ThemeContent,
   ThemeTooLargeError,
 } from "./themes/store.js";
+import type { ThemeMedia } from "./themes/theme-media.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { TrashRefusal } from "./themes/trash.js";
 import { encodeThemeContent } from "./themes/wire.js";
@@ -696,6 +697,11 @@ describe("Host theme routes", () => {
   let tmpDir: string;
   let hosted: ReturnType<typeof createHostServer>;
   let validEmptyAssetTheme: ThemeContent;
+  let themeMedia: {
+    still: ReturnType<typeof vi.fn>;
+    panelVideo: ReturnType<typeof vi.fn>;
+    forget: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(
@@ -703,6 +709,23 @@ describe("Host theme routes", () => {
     );
     validEmptyAssetTheme = createValidPackage("living-room", "Living Room");
     const store = createThemeStore(tmpDir);
+    themeMedia = {
+      still: vi.fn(async () => ({
+        name: "living-room~clip~f0.png",
+        bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x00]),
+      })),
+      panelVideo: vi.fn(
+        async (
+          _id: string,
+          _envelope: unknown,
+          size: { width: number; height: number },
+        ) => ({
+          name: `living-room~clip~${size.width}x${size.height}.mp4`,
+          bytes: Uint8Array.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]),
+        }),
+      ),
+      forget: vi.fn(async () => undefined),
+    };
     hosted = createHostServer({
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
@@ -710,6 +733,8 @@ describe("Host theme routes", () => {
       // The picture's owner, so an import's thumbnail half is reachable here
       // rather than only in the store's own suite.
       thumbnails: createThumbnailStore(tmpDir),
+      // The panel media owner, faked so these cases do not pay an encode.
+      themeMedia: themeMedia as unknown as ThemeMedia,
     });
   });
 
@@ -779,6 +804,60 @@ describe("Host theme routes", () => {
     const { base, ...content } = openRes.json() as { base: string };
     expect(base).toMatch(/^[0-9a-f]{64}$/);
     expect(content).toEqual(encodeThemeContent(validEmptyAssetTheme));
+  });
+
+  it("serves a panel's derived background and drops it when a save changes the video", async () => {
+    const base = createValidPackage("living-room", "Living Room");
+    const videoTheme: ThemeContent = {
+      envelope: {
+        ...base.envelope,
+        background: {
+          media: { assetId: "clip", bounds: "theme", fallbackFrame: 3 },
+        },
+        assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+      },
+      assets: { "assets/clip.mp4": Uint8Array.from([1, 2, 3]) },
+    };
+
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(videoTheme),
+    );
+    expect(saved.status).toBe(200);
+    // The save carried the video, so the theme's cached pictures are dropped;
+    // the panel's next request regenerates the one its name describes.
+    expect(themeMedia.forget).toHaveBeenCalledWith("living-room");
+
+    const poster = await request(
+      hosted.server,
+      "GET",
+      "/api/themes/living-room/poster",
+    );
+    expect(poster.status).toBe(200);
+    expect(poster.headers["content-type"]).toBe("image/png");
+    expect(poster.body).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00]));
+
+    const clip = await request(
+      hosted.server,
+      "GET",
+      "/api/themes/living-room/panel-video?width=464&height=1920",
+    );
+    expect(clip.status).toBe(200);
+    expect(clip.headers["content-type"]).toBe("video/mp4");
+    expect(themeMedia.panelVideo).toHaveBeenCalledWith(
+      "living-room",
+      expect.objectContaining({ id: "living-room" }),
+      { width: 464, height: 1920 },
+    );
+
+    const refused = await request(
+      hosted.server,
+      "GET",
+      "/api/themes/living-room/panel-video?width=0&height=320",
+    );
+    expect(refused.status).toBe(400);
   });
 
   it("answers a stored theme that does not validate with 422, and an absent one with 404", async () => {

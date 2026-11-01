@@ -39,7 +39,7 @@ import {
 } from "./host-refind.js";
 import { envelopePlan } from "./hosted-plan.js";
 import { showLoadFailure } from "./load-failure.js";
-import { panelGlassSampling } from "./panel-sampling.js";
+import { panelBackgroundSource, panelGlassSampling } from "./panel-sampling.js";
 import { followPublished, reResolveUrl } from "./publish-follower.js";
 import { loadDisplayCatalogue } from "./sensor-catalogue.js";
 import { registerServiceWorker } from "./service-worker.js";
@@ -270,6 +270,13 @@ async function startHostedTheme(
   const resolveAsset = createAssetResolver(theme.assets, {
     baseUrl: `/api/themes/${encodeURIComponent(theme.id)}/`,
   });
+  // A hardware panel is served its own derived background — a still when its
+  // device plays the clip, a panel-sized clip when it shows this page — so the
+  // browser never fetches the theme's full-size video.
+  const background = panelBackgroundSource(window.location.search, theme.id, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
   const handle = mountFabricScene({
     host,
     plan: envelopePlan(theme),
@@ -280,6 +287,14 @@ async function startHostedTheme(
     // The colour is in the plan, resolved; this is the authored bag the scene
     // mounts and places as its own DOM layer.
     ...(theme.background === undefined ? {} : { background: theme.background }),
+    ...(background === undefined
+      ? {}
+      : {
+          backgroundSource: {
+            url: session.withToken(background.url),
+            kind: background.kind,
+          },
+        }),
     assets: theme.assets ?? [],
     resolveAsset: (assetId) => {
       const url = resolveAsset(assetId);

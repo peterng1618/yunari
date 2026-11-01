@@ -14,6 +14,16 @@ describe("the panel page URL", () => {
     expect(url.searchParams.get("panel")).toBe("1");
   });
 
+  it("says when the device plays the clip itself", () => {
+    const url = new URL(panelPageUrl(5227, "turzx-1", true));
+    expect(url.searchParams.get("clip")).toBe("1");
+  });
+
+  it("leaves the flag off a still panel", () => {
+    const url = new URL(panelPageUrl(5227, "kraken-1", false));
+    expect(url.searchParams.get("clip")).toBeNull();
+  });
+
   it("escapes an id that is not a bare word", () => {
     const url = new URL(panelPageUrl(5227, "panel one/2"));
     expect(url.searchParams.get("display")).toBe("panel one/2");
