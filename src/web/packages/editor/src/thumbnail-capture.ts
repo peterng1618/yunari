@@ -67,8 +67,10 @@ export function captureCanvas(
     scene = canvas.toCanvasElement(scale);
   } finally {
     release();
-    // The author's canvas keeps its own clip, whatever the shot needed.
-    canvas.clipPath = previousClip;
+    // The author's canvas keeps its own clip, whatever the shot needed. A
+    // canvas that had none gets none back rather than an explicit `undefined`.
+    if (previousClip === undefined) delete canvas.clipPath;
+    else canvas.clipPath = previousClip;
   }
   if (backdrop === undefined) return scene;
 

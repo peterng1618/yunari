@@ -146,7 +146,7 @@ describe("the capture's artboard shape", () => {
       width: SIZE,
       height: SIZE,
     });
-    stage.clipPath = clipPath;
+    if (clipPath !== undefined) stage.clipPath = clipPath;
     stage.add(
       new Rect({
         left: 0,

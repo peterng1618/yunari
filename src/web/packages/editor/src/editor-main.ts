@@ -399,6 +399,10 @@ async function start(): Promise<void> {
           // The bridge's own picture is a read of the document too: the
           // entered-group dim is lifted for it (`vg-527`).
           () => shell.editor.groupingManager.suspendDim(),
+          // A library or store card is what a panel would show, so a circle
+          // theme's card is its disc, not the square the camera happened to
+          // frame.
+          extensions.envelope.artboard.shape ?? "rect",
         )?.toDataURL("image/png"),
       // The theme's paints, for the Tokens pane's title-bar count. The
       // session owns the document, so this is pulled at each snapshot rather
