@@ -609,8 +609,76 @@ git commit -m "docs: a circle theme's glass is the disc inscribed in its artboar
 
 ---
 
+### Task 12: Preview ratio catalogue
+
+**Files:**
+- Modify: `src/web/packages/editor/src/editor-shell/settings.tsx`
+- Modify: `src/web/packages/editor/src/display-lens.ts`
+- Modify: `src/web/packages/editor/src/ui-copy.ts`
+- Test: `src/web/packages/editor/src/display-lens.test.ts`
+- Test: `src/web/packages/editor/src/editor-shell/settings.dom.test.tsx`
+
+**Interfaces:**
+- Consumes: `parsePreviewRatio`, `previewLenses`, `activePreviewRatioTokens`, `setActivePreviewRatios`.
+- Produces: `parsePreviewRatio` preserves the entered spelling (no GCD rename); `previewRatioKey(ratio)` (the long-over-short aspect, orientation-insensitive); the Previews tab has no Shape control and accepts `Circle` typed into the one field.
+
+- [ ] **Step 1: Write the failing tests**
+
+`display-lens.test.ts`:
+- `parsePreviewRatio("21:9").id === "21:9"` and `parsePreviewRatio("7:3").id === "7:3"` (no renaming);
+- `parsePreviewRatio("32:18").id === "32:18"`;
+- `parsePreviewRatio("circle").id === "Circle"`;
+- `previewRatioKey` equal for `21:9` and `7:3`, and for `16:9` and `9:16`;
+- `normalisePreviewRatioTokens(["21:9", "7:3"])` keeps only `["21:9"]` (first wins);
+- `setActivePreviewRatios(["16:9", "32:18"])` makes `activePreviewRatioTokens()` hold one token.
+
+`settings.dom.test.tsx`:
+- the Previews tab renders no `[data-yunari-preview-ratio-shape]` control;
+- typing `Circle` and pressing Add adds the `Circle` token;
+- adding `7:3` when `21:9` is present shows a refusal naming both (`7:3` and `21:9`) and does not add it;
+- adding `9:16` when `16:9` is present is refused naming `16:9`;
+- adding a ratio re-sorts the list widest-first, with `Circle` last.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd src/web && npx vitest run packages/editor/src/display-lens.test.ts packages/editor/src/editor-shell/settings.dom.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement the catalogue rules**
+
+`display-lens.ts`:
+- `parsePreviewRatio` keeps `${rawWidth}:${rawHeight}` as `id` for every non-circle token; delete the GCD normalisation and its helper if unused.
+- Add `export function previewRatioKey(ratio: PreviewRatio): number` returning `Math.max(width, height) / Math.min(width, height)`; `Circle` returns `1`.
+- `normalisePreviewRatioTokens` drops a token whose key equals an earlier accepted token's key.
+- `setActivePreviewRatios` already normalises; no second rule.
+
+`settings.tsx`:
+- Delete the `shape` state, the `ControlSegmented` block, and the circle-specific refusal; always render the text field.
+- `add`: parse the draft (which may be `Circle`), then refuse when any existing token's `previewRatioKey` equals the new one, with `setReason(uiCopy.settings.previewRatioEquivalent(existingToken, ratio.id))`.
+- On success, `commit(sortPreviewTokens([...tokens, ratio.id]))`.
+- Add `sortPreviewTokens(tokens)` locally (or in `display-lens.ts`): rect tokens by aspect descending, then `Circle` tokens, ties by token text.
+- `removeRatio`/`reset` unchanged.
+
+`ui-copy.ts`: remove `previewRatioShape`, `previewRatioRect`, `previewRatioCircle` (dead), remove `previewRatioDuplicate` if it becomes unused, and add:
+`previewRatioEquivalent: (entered, existing) => \`${entered} is the same shape as ${existing}, which is already in the list.\``
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd src/web && npx vitest run packages/editor/src/display-lens.test.ts packages/editor/src/editor-shell/settings.dom.test.tsx packages/editor/src/accessible-names.dom.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/web/packages/editor/src
+git commit -m "feat(editor): preview ratios keep their names, refuse equivalents and sort on add"
+```
+
+---
+
 ## Self-Review Notes
 
 - Every spec section maps to a task: data model → 2; creation → 3, 4; conversion/undo → 5; editor preview → 6, 7; output → 8, 9; thumbnails → 10; docs/gate → 11; decision note → 1.
 - The Review Focus tests are placed: unequal circle edges → Task 2; converted transformed objects → Task 5; undo → Task 5; rect theme on a round display → Task 8; circle thumbnail under a rect lens → Task 10.
 - Naming is consistent: `ArtboardShape`, `artboardTransformShape`, `circleConversion`, `themeShape`, `setArtboardShape`, `HistoryEnvelopePort`, `[data-yunari-theme-disc]`.
+- Task 12 is a user-requested addition outside the spec: the preview-ratio catalogue loses its Shape control, keeps entered ratio names, refuses an equivalent shape with a reason, and sorts on add.
