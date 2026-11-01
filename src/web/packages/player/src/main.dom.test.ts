@@ -702,6 +702,74 @@ describe("the background the display mounts with", () => {
 });
 
 /**
+ * A circle theme's artboard shape, driven through the real `main.ts`.
+ *
+ * The shape belongs to the document, not to the display: the host serves a
+ * circle theme to a rectangular phone, so the player is what has to hand it on.
+ * It arrives on the presentation route as nothing, which is the rectangular
+ * default — the disc can only come from the loaded envelope.
+ */
+describe("a circle theme on the display", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it("clips the artboard plate to the inscribed disc", async () => {
+    skeleton();
+    history.replaceState({}, "", "/?theme=living-room");
+    vi.stubGlobal("EventSource", SilentEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(0);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
+      () => undefined,
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) {
+          return json({
+            ...(mountedEnvelope() as Record<string, unknown>),
+            artboard: { width: 100, height: 100, shape: "circle" },
+          });
+        }
+        // The presentation route answers nothing, which is the rect default.
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector("[data-yunari-artboard-plate]"),
+        "the scene mounted",
+      ).not.toBeNull(),
+    );
+
+    expect(
+      document.querySelector<HTMLElement>("[data-yunari-artboard-plate]")?.style
+        .clipPath,
+      "the board's plate is the disc inscribed in the square artboard",
+    ).toMatch(/^circle\(/);
+  });
+});
+
+/**
  * The units a display paints with, driven through the real `main.ts`.
  *
  * The host answers the preference on `/api/display`, and the reading arrives on

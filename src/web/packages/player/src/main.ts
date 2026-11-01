@@ -274,6 +274,9 @@ async function startHostedTheme(
     host,
     plan: envelopePlan(theme),
     artboard: theme.artboard,
+    // The authored canvas's shape is the document's, not the display's: a
+    // circle theme reaches a rectangular phone too.
+    themeShape: theme.artboard.shape ?? "rect",
     // The colour is in the plan, resolved; this is the authored bag the scene
     // mounts and places as its own DOM layer.
     ...(theme.background === undefined ? {} : { background: theme.background }),
