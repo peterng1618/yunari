@@ -889,6 +889,47 @@ describe("Host theme routes", () => {
     }
   });
 
+  it("accepts a video at the import bound and refuses one byte above it", async () => {
+    // The importer accepts a normalized video up to MAX_ASSET_BYTES. Base64 on
+    // the save wire is four characters per three bytes, and the route's cap
+    // must carry that plus the document; the old 96 MiB body held only ~72 MiB.
+    const encoded = 4 * Math.ceil(MAX_ASSET_BYTES / 3);
+    expect(encoded).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
+
+    const base = createValidPackage("living-room", "Living Room");
+    const envelope: FabricThemeEnvelope = {
+      ...base.envelope,
+      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+    };
+    // Zero bytes encode as "A"; building the string avoids an 80 MiB buffer.
+    const body = (padding: string, overwrite = false): string =>
+      JSON.stringify({
+        envelope,
+        assets: { "assets/clip.mp4": `${"A".repeat(encoded - 4)}${padding}` },
+        ...(overwrite ? { overwrite: true } : {}),
+      });
+
+    // 80 MiB is two bytes past a three-byte group: its final quantum is "AAA=".
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      body("AAA="),
+    );
+    expect(saved.status).toBe(200);
+
+    // One more byte completes the group, so the wire length is unchanged and
+    // the writer's own per-asset bound must answer, not the transport's.
+    const refused = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      body("AAAA", true),
+    );
+    expect(refused.status).toBe(413);
+    expect(refused.text()).toContain("80 MB");
+  }, 60_000);
+
   it("refuses a save built from a document the stored theme has moved past", async () => {
     // Two tabs open the same theme; the first one saves an edit.
     const opened = await request(
@@ -2072,7 +2113,7 @@ describe("Host theme routes", () => {
     it("refuses a normalized output above the store's per-asset bound", async () => {
       // The route had no output check at all, so a conforming video the writer
       // would refuse above 80 MiB crossed here and failed only at save. The
-      // size is also below the 96 MB whole-theme ceiling, which is the gap.
+      // route now applies the writer's own per-asset bound.
       expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
       const base = new Uint8Array(
         await fs.readFile(
@@ -3030,6 +3071,79 @@ describe("Host theme routes", () => {
     // Nothing has polled yet, so nothing is unmapped; the field exists so a
     // display can tell "no data yet" from "this sensor has no provider".
     expect(body.unmapped).toEqual([]);
+  });
+
+  it("reports the sensor keys this PC measures, and not one it cannot answer", async () => {
+    const at = Date.parse("2026-11-01T00:00:00Z");
+    const probe: SensorProvider = {
+      id: "probe",
+      label: "probe",
+      describe: () =>
+        Promise.resolve([
+          {
+            sensorId: "probe:cpu.load",
+            semanticKey: "cpu.load",
+            label: "CPU load",
+            tier: "baseline" as const,
+          },
+          {
+            sensorId: "probe:custom.fan",
+            semanticKey: "custom.fan",
+            label: "Fan speed",
+            tier: "baseline" as const,
+          },
+        ]),
+      sample: (keys, nowMs) =>
+        Promise.resolve(
+          keys.map((semanticKey) => ({
+            semanticKey,
+            sample:
+              semanticKey === "cpu.load"
+                ? {
+                    sensorId: "probe:cpu.load",
+                    timestamp: new Date(nowMs).toISOString(),
+                    status: "ok" as const,
+                    value: 12,
+                  }
+                : {
+                    sensorId: "probe:custom.fan",
+                    timestamp: new Date(nowMs).toISOString(),
+                    status: "missing" as const,
+                    message: "the source is not ok",
+                  },
+          })),
+        ),
+      health: () => ({ available: true }),
+    };
+    const measuring = createHostServer({
+      registry: new ProviderRegistry([probe]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      now: () => at,
+    });
+
+    try {
+      const res = await request(
+        measuring.server,
+        "GET",
+        "/api/sensors?measured=1",
+      );
+      const body = res.json() as {
+        sensors: readonly { semanticKey: string }[];
+        measured: readonly string[];
+      };
+
+      expect(res.status).toBe(200);
+      // The catalogue still lists both keys: the picker needs the name even
+      // when this PC cannot read it.
+      expect(body.sensors.map((sensor) => sensor.semanticKey)).toEqual([
+        "cpu.load",
+        "custom.fan",
+      ]);
+      // A source that is not `ok` is a gap, not a reading, so it is not measured.
+      expect(body.measured).toEqual(["cpu.load"]);
+    } finally {
+      await measuring.close();
+    }
   });
 
   describe("LAN displays authenticate with their own credential (§145)", () => {
@@ -4548,7 +4662,7 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
       `/api/displays/${LOCAL_DISPLAY_ID}`,
     );
     expect(refused.status).toBe(409);
-    expect(refused.text()).toMatch(/This PC/);
+    expect(refused.text()).toMatch(/The Host/);
   });
 
   it("never echoes a stored hash, and carries a token only where it mints one", async () => {
@@ -6039,7 +6153,7 @@ describe("A local monitor is specified rather than paired", () => {
         expect(
           rows.find((row) => row.id === "strip")?.panel?.commands,
         ).toBeInstanceOf(Array);
-        // This PC is not host-driven, so it carries no panel key at all.
+        // The Host is not host-driven, so it carries no panel key at all.
         expect(rows.find((row) => row.id === "this-pc")).not.toHaveProperty(
           "panel",
         );
@@ -7084,13 +7198,13 @@ describe("The display map", () => {
     };
 
     // An entry with no theme is `theme: null` rather than absent, so the page
-    // can tell "no theme" from "no display". This PC is always present and is
+    // can tell "no theme" from "no display". The Host is always present and is
     // never asked of the store: it has no record to take a label from.
     expect(res.status).toBe(200);
     expect(body.displays).toEqual([
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -7351,7 +7465,7 @@ describe("The pages a consumer lands on", () => {
     // take the first card the machine names. A control showing that as a
     // product name beside real model numbers misreports what is in use.
     expect(html).not.toContain("First card found (default)");
-    expect(html).toContain("Automatic (the first card this PC reports)");
+    expect(html).toContain("Automatic (the first card the Host reports)");
   });
 
   it("serves a pair page that asks for the screen shape and rotation", async () => {
@@ -8358,7 +8472,7 @@ describe("The assignment a display is served", () => {
     return token;
   }
 
-  /** This PC's own stream, and the kitchen tablet's. */
+  /** The Host's own stream, and the kitchen tablet's. */
   function streams(token: string): {
     readonly here: { frames: () => string };
     readonly there: { frames: () => string };
@@ -11590,7 +11704,7 @@ describe("Host Wallpaper Engine routes", () => {
           "POST",
           "/api/wallpaper-engine/mpkg",
           mobilePackageBytes([
-            ["pad.bin", new Uint8Array(MAX_THEME_UPLOAD_BYTES)],
+            ["pad.bin", new Uint8Array(MAX_ASSET_BYTES + 1)],
             ["wallpaper.mp4", video],
           ]),
         );
@@ -11607,9 +11721,8 @@ describe("Host Wallpaper Engine routes", () => {
     });
 
     it("refuses a normalized output above the store's per-asset bound", async () => {
-      // The old check used the 96 MB whole-theme ceiling, so a video between
-      // 80 and 96 MB imported and then could not be saved. The bound is now
-      // the writer's own `MAX_ASSET_BYTES`, which is lower.
+      // The import bound is the writer's own `MAX_ASSET_BYTES`, so a video it
+      // yields can always be saved within the whole-theme wire ceiling.
       expect(MAX_ASSET_BYTES).toBeLessThan(MAX_THEME_UPLOAD_BYTES);
       const size = MAX_ASSET_BYTES + 1;
       expect(size).toBeLessThan(MAX_THEME_UPLOAD_BYTES);

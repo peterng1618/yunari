@@ -10,11 +10,11 @@ import { createSensorCatalogue } from "./sensor-catalogue.js";
  * editor, not an error the author has to answer for.
  */
 
-function responding(sensors: unknown): typeof fetch {
+function responding(sensors: unknown, measured?: unknown): typeof fetch {
   return vi.fn(async () => ({
     ok: true,
     status: 200,
-    json: async () => ({ sensors }),
+    json: async () => ({ sensors, measured }),
   })) as unknown as typeof fetch;
 }
 
@@ -76,6 +76,27 @@ describe("the sensor catalogue", () => {
       catalogue.descriptors().find((descriptor) => descriptor.key === key);
     expect(found("custom.fan")?.unitKind).toBe("rotation");
     expect(found("custom.odd")?.unitKind).toBeUndefined();
+  });
+
+  it("remembers the keys the host answers, and nothing before it says", async () => {
+    const catalogue = createSensorCatalogue(
+      responding([CUSTOM], ["custom.fan"]),
+    );
+    expect(catalogue.measured()).toBeUndefined();
+
+    await catalogue.refresh();
+
+    expect(catalogue.measured()).toEqual(new Set(["custom.fan"]));
+  });
+
+  it("has no measured set when the host names none", async () => {
+    const catalogue = createSensorCatalogue(responding([CUSTOM]));
+
+    await catalogue.refresh();
+
+    // An older host answers descriptors only: every key stays offered rather
+    // than every key being marked unavailable.
+    expect(catalogue.measured()).toBeUndefined();
   });
 
   it("keeps the built-in table when the request rejects", async () => {

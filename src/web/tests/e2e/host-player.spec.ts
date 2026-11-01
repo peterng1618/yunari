@@ -17,7 +17,7 @@ import { uiCopy as editorCopy } from "../../packages/editor/src/ui-copy.js";
 import { uiCopy } from "../../packages/player/src/ui-copy.js";
 import { canvasProp, sceneBounds, sceneProperty } from "./canvas-probe.js";
 import { openPaused } from "./clock.js";
-import { captureVisualReview } from "./editor-canvas.js";
+import { answerDialogIfShown, captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import {
   BADGE_INK,
@@ -62,13 +62,13 @@ const themeIdOfSave = (request: Request): string =>
 /**
  * Save the starter through the host's own library route, as an author would.
  *
- * **`New from starter` first, and that is the whole fix.** `boot-theme.ts` opens
+ * **`New from template` first, and that is the whole fix.** `boot-theme.ts` opens
  * the author's most recent save when the URL names no theme — which, against the
  * host project's shared `--app-dir`, is whichever *fixture* ran last, not the
  * starter. The save that followed therefore wrote somebody else's document, and
  * the display then asked the host for the reference theme, which no run had
  * ever put there. Measured: booting the seeded store opened `bar-0…bar-4` (a
- * fixture), and after `Save to library` the library still had no reference
+ * fixture), and after `Save` the library still had no reference
  * theme.
  *
  * The id is read off the save request rather than assumed: the document mints
@@ -81,7 +81,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "New from starter" }).click();
+  await page.getByRole("menuitem", { name: "New from template" }).click();
   await expect(page.locator("#status")).toContainText(
     "New theme from the starter",
   );
@@ -90,8 +90,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
       request.method() === "PUT" &&
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });
@@ -376,9 +375,11 @@ test.describe("hosted player over the real host", () => {
     // The saved theme has to carry the text class the player reads runs from.
     expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
-    // Save to library goes through PUT /api/themes/:id, not a download.
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    // Save goes through PUT /api/themes/:id, not a download.
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    // Assets nothing holds are offered for cleanup before either save writes;
+    // the sheet is answered the way an author answers it.
+    await answerDialogIfShown(page, "Save", 1_000);
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -524,8 +525,7 @@ test.describe("hosted player over the real host", () => {
       .locator('[data-yunari-add-group="shape"]')
       .getByRole("button", { name: "Rectangle", exact: true })
       .click();
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -960,6 +960,18 @@ test.describe("the clock the host reports", () => {
     );
 
     await page.goto(`${HOST}/?theme=${HOST_THEME_ID}&data=live`);
+    // The absence of the connection banner is true of the page before the
+    // player boots, so the artboard is what says the runtime is up.
+    await expect(page.locator("#artboard canvas.lower-canvas")).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.waitForFunction(
+      () => (window as unknown as { yunari?: unknown }).yunari !== undefined,
+      undefined,
+      {
+        timeout: 15_000,
+      },
+    );
     await expect(page.locator("#yunari-connection")).toHaveCount(0, {
       timeout: 15_000,
     });
@@ -1337,8 +1349,7 @@ test.describe("a display fed by the real host", () => {
         request.method() === "PUT" &&
         /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
     );
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });
@@ -1640,8 +1651,7 @@ test.describe("a display fed by the real host", () => {
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });
@@ -3080,7 +3090,7 @@ test.describe("a paired display and the theme it is given", () => {
     rmSync(appDir, { recursive: true, force: true });
     mkdirSync(appDir, { recursive: true });
     // The same library the shared host serves, copied rather than rebuilt: the
-    // themes are `global-setup.ts`'s fixture and this host only has to serve it.
+    // themes are `seed-host.ts`'s fixture and this host only has to serve it.
     cpSync(HOST_THEMES_DIR, join(appDir, "themes"), { recursive: true });
 
     host = spawn(
@@ -3516,11 +3526,11 @@ test.describe("a paired display and the theme it is given", () => {
     const modeSwitch = page.locator(".editor-shell-mode-switch");
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
-      .getByRole("button", { name: editorCopy.modes.thisPc, exact: true })
+      .getByRole("button", { name: editorCopy.modes.host, exact: true })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "this-pc",
+      "host",
     );
   }
 
@@ -3875,7 +3885,7 @@ test.describe("a paired display and the theme it is given", () => {
     const display = await pairDisplay(request, "E2E refind");
 
     try {
-      // This PC's own theme, because the address the display loads at is
+      // The Host's own theme, because the address the display loads at is
       // loopback and the host resolves a loopback request as `this-pc`.
       await assign(request, "this-pc", HOST_CHART_THEME_ID);
       // The pairing the display would already hold from a LAN load: its
@@ -4342,13 +4352,13 @@ test.describe("a paired display and the theme it is given", () => {
     await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
     await modeSwitch
       .getByRole("button", {
-        name: editorCopy.modes.thisPc,
+        name: editorCopy.modes.host,
         exact: true,
       })
       .click();
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
-      "this-pc",
+      "host",
     );
 
     const row = page.locator(`[data-yunari-host-display="${display.id}"]`);
@@ -4519,7 +4529,7 @@ async function recordCapabilities(
  * These cases are about the chrome the display draws, not about an authored
  * document, so none of them needs the editor: `seedHostTheme` has already put
  * this theme in the host's library by the time a worker starts
- * (`tests/e2e/global-setup.ts`).
+ * (`tests/e2e/seed-host.ts`).
  */
 async function openSeededDisplay(page: Page): Promise<void> {
   await page.goto(`${HOST}/?theme=${HOST_CHART_THEME_ID}`);

@@ -4,9 +4,8 @@
  * The chrome vocabulary's two invariants: one weight rule, one family.
  *
  * **The weight case reads the rendered DOM, not the source.** `stroke-width`
- * is an attribute lucide writes on the `<svg>` it renders, and the eight card
- * unit diagrams write it on theirs, so a scan of the source cannot see a
- * component prop and this reads what the browser would.
+ * is an attribute lucide writes on the `<svg>` it renders, so a scan of the
+ * source cannot see a component prop and this reads what the browser would.
  * It is **bounded by what it mounts**: the fleet below draws the vocabulary, the
  * rail, the camera cluster, a pane title, the row's affordances, every kind mark
  * and the whole Add pane. The surfaces it does *not* mount — settings, the
@@ -43,6 +42,7 @@ import type { ViewportManager } from "../viewport-manager/index.js";
 import { DisplaySwitch } from "./display-switch.js";
 import {
   BACKGROUND_GLYPH,
+  CARD_UNIT_GLYPHS,
   CHART_BAR_GLYPH,
   CHART_GAUGE_GLYPH,
   CHART_LINE_GLYPH,
@@ -81,18 +81,15 @@ import { Rail } from "./rail.js";
  * The sources allowed to draw a glyph without going through `icons.ts`, each
  * with the reason. `icons.ts` is the vocabulary itself and the one chrome
  * reader of `lucide-react`; the theme icons are authored scene geometry rather
- * than chrome; the registry is its own authority on action icons; and the card
- * diagrams are the unit-tile escape — "a card unit in the Add pane is not
- * arbitrary … so a unit tile may carry a diagram of what it builds". The Add
- * pane is *not* here: its shape, chart and text tiles are the vocabulary's own
- * glyphs, so a tile that went back to drawing its own path would arrive in this
- * list and fail the case below.
+ * than chrome; the registry is its own authority on action icons. The Add pane
+ * is *not* here: its card-unit, shape, chart and text tiles are all the
+ * vocabulary's own glyphs, so a tile that went back to drawing its own path
+ * would arrive in this list and fail the case below.
  */
 const EXEMPT_SOURCES: readonly string[] = [
   "editor-shell/icons.ts", // the vocabulary: one family, one weight, and the one place both are decided
   "new-fabric-theme-icons.ts", // authored scene icons — lucide geometry turned into Fabric paths, not chrome
   "object-actions.ts", // the icon set: the registry owns which action wears which icon
-  "panes/add/card-diagrams.tsx", // the icon set: "a unit tile may carry a diagram of what it builds"
 ];
 
 /** Where the editor's own sources live, from this file's directory. */
@@ -350,6 +347,15 @@ it("draws a group with the generic glyph rather than a diagram of it", () => {
   expect(KIND_GLYPHS.group).toBe(STACK_GLYPH);
 });
 
+it("gives every card unit its own glyph, so a mark identifies one unit", () => {
+  // The type closes the set at `CardDiagram`, so the count is also the library's
+  // eight; the distinctness is the rule a second keyed map cannot enforce — two
+  // units wearing one glyph would identify neither.
+  const glyphs = Object.values(CARD_UNIT_GLYPHS);
+  expect(glyphs).toHaveLength(8);
+  expect(new Set(glyphs).size).toBe(8);
+});
+
 it("draws every object the Add pane offers, so an insertable kind cannot arrive unmarked", () => {
   // The list is the owner's (`insertGroups()`), never a fixture written here: an
   // object added there arrives in this case the day it is added. Three of the
@@ -375,14 +381,11 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
   for (const tile of tiles) {
     const svg = tile.querySelector("svg");
     expect(svg).not.toBeNull();
-    // **Rendered, not read off the source.** Every tile but a card unit's now
-    // wears a vocabulary glyph, and a lucide glyph is the only mark that writes
-    // this class — the pane's own hand-authored `<svg>`s wrote none, which is
-    // how a tile drawn by hand again is caught here rather than in a reading.
-    if (tile.getAttribute("data-yunari-panel-card") === null) {
-      // `?? ""` so a glyph rendered with no class fails as a mismatch against
-      // the pattern rather than as vitest's "expected a string, got object".
-      expect(svg?.getAttribute("class") ?? "").toMatch(/^lucide/);
-    }
+    // **Rendered, not read off the source.** Every tile wears a vocabulary
+    // glyph, and a lucide glyph is the only mark that writes this class — a
+    // tile drawn by hand again is caught here rather than in a reading.
+    // `?? ""` so a glyph rendered with no class fails as a mismatch against the
+    // pattern rather than as vitest's "expected a string, got object".
+    expect(svg?.getAttribute("class") ?? "").toMatch(/^lucide/);
   }
 });

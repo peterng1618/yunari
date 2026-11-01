@@ -175,6 +175,34 @@ describe("SMTC_SCRIPT", () => {
     );
   });
 
+  it("derives one session id per window from the AUMID and its own track", () => {
+    expect(SMTC_SCRIPT).toContain(
+      "function Get-SessionId($a,$t,$r,$b){$a+':'+([string]$t+[string]$r+[string]$b).GetHashCode()}",
+    );
+    // Two sessions of one app differ only in their media properties, so the
+    // emitted id must be derived from them, not the shared AUMID.
+    expect(SMTC_SCRIPT).toContain(
+      "sessionId = Get-SessionId $session.SourceAppUserModelId $properties.Title $properties.Artist $properties.AlbumTitle",
+    );
+    expect(SMTC_SCRIPT).not.toContain(
+      "sessionId = $session.SourceAppUserModelId",
+    );
+
+    // Artwork and miss lines name the session that asked for the read.
+    const artwork = smtcScript({ artwork: true });
+    expect(artwork).toContain(
+      "function Get-ArtworkResult($session, $sessionId)",
+    );
+    expect(artwork).toContain("sessionId = $sessionId");
+    expect(artwork).toContain("Get-ArtworkResult $session $sessionId");
+
+    // The ids include their track, so the caches are cleared at a bound
+    // instead of growing for the life of the helper.
+    expect(artwork).toContain("Get-SessionId $session.SourceAppUserModelId");
+    expect(artwork).toContain("$lastArtwork.Count-gt64");
+    expect(artwork).toContain("$artworkAttempts.Clear()");
+  });
+
   it("derives the artwork byte cap from the supervisor's framing", () => {
     // The largest line the script can emit must survive the supervisor's cap.
     expect(

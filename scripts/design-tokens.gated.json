@@ -45,7 +45,6 @@
     "src/web/packages/editor/src/panes/composition/row-affordances.tsx",
     "src/web/packages/editor/src/panes/composition/kind-mark.tsx",
     "src/web/packages/editor/src/panes/add/add-pane.tsx",
-    "src/web/packages/editor/src/panes/add/card-diagrams.tsx",
     "src/web/packages/editor/src/panes/tokens/tokens-pane.tsx",
     "src/web/packages/editor/src/panes/tokens/paint-list.tsx",
     "src/web/packages/editor/src/panes/tokens/token-list.tsx",

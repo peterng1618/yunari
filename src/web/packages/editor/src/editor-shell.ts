@@ -28,6 +28,7 @@ import {
   reviveScene,
   reviveThemeEnvelope,
   type SceneAdapter,
+  sceneObjects,
   serialiseScene,
   serialiseThemeEnvelope,
 } from "@yunari/scene-fabric";
@@ -41,7 +42,6 @@ import {
   Point,
   Rect,
 } from "fabric/es";
-import { sceneObjects } from "./asset-manager/index.js";
 import { createClipboardManager } from "./clipboard-manager/index.js";
 import { applyEditorControls } from "./controls-manager/index.js";
 import { createCropManager } from "./crop-manager/index.js";

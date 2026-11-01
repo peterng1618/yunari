@@ -6,8 +6,8 @@
  * **What this half reads.** The shell is mounted whole with a bridge and a
  * selection, so the chrome it prints only then is in the tree at all; Settings is
  * read on its Appearance, Keyboard and About tabs; the colour picker is mounted
- * open; the selection column is mounted on a text object and a shape; the three
- * menubar menus and the canvas context menu are opened and read in turn; and the
+ * open; the selection column is mounted on a text object and a shape; the two
+ * menus, the theme toolbar and the canvas context menu are read in turn; and the
  * `?` sheet, the publish popover and the library and new-document dialogs are
  * each mounted (`vg-418` — the header once said these four were not mounted, and
  * a header owns nothing). **The popover is the one read only in part**, and the
@@ -125,11 +125,7 @@ it("reads the opened menus, the Settings tabs and the canvas context menu", asyn
   const { root, destroy } = await mountLandedSurfaces();
   const owned = new Set(copy());
 
-  for (const menu of [
-    uiCopy.menus.file,
-    uiCopy.menus.edit,
-    uiCopy.menus.view,
-  ]) {
+  for (const menu of [uiCopy.menus.file, uiCopy.menus.view]) {
     menubarEntry(root, menu).click();
     await Promise.resolve();
     const popup = root.querySelector<HTMLElement>(
@@ -713,8 +709,9 @@ function selectionBridge(): EditorShellBridge {
       newFromStarter: noop,
       importPackage: noop,
       openLibraryTheme: noop,
-      savePackage: noop,
-      releasePackage: noop,
+      downloadPackage: noop,
+      exportTheme: noop,
+      activate: noop,
       openLibrary: noop,
       saveLibrary: noop,
       addText: noop,

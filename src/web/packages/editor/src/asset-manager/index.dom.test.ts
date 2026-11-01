@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setObjectAssetReference } from "@yunari/scene-fabric";
 import { Canvas, FabricImage, Group, Rect, type StaticCanvas } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
@@ -7,6 +10,21 @@ import { fontTrio } from "../font-catalog.js";
 import { AssetManager, assetFileName, assetReferencedBy } from "./index.js";
 
 const PNG = new Uint8Array([137, 80, 78, 71]);
+/** Bare signatures for the cases that only need a format match; `FONT_FIXTURE`
+ *  is the real container the parsing case reads. */
+const WOFF2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32]);
+const TTF = new Uint8Array([0x00, 0x01, 0x00, 0x00]);
+/** A real Inter WOFF2, so a test parses a container rather than a signature
+ *  this file made up. Provenance and licence are in `THIRD-PARTY-NOTICES.md`. */
+const FONT_FIXTURE = new Uint8Array(
+  readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "fixtures",
+      "inter-400-latin.woff2",
+    ),
+  ),
+);
 
 function file(bytes: Uint8Array | string, name: string, type: string): File {
   const source =
@@ -143,7 +161,7 @@ describe("AssetManager", () => {
     const manager = new AssetManager();
 
     const asset = await manager.import(
-      file(new Uint8Array([0, 1, 2]), "metric.woff2", "font/woff2"),
+      file(WOFF2, "metric.woff2", "font/woff2"),
     );
 
     expect(asset).toMatchObject({
@@ -151,9 +169,7 @@ describe("AssetManager", () => {
       kind: "font",
       path: "assets/metric.woff2",
     });
-    expect(manager.assets["assets/metric.woff2"]).toEqual(
-      new Uint8Array([0, 1, 2]),
-    );
+    expect(manager.assets["assets/metric.woff2"]).toEqual(WOFF2);
   });
 
   it("refuses an extension the theme cannot declare", async () => {
@@ -221,7 +237,7 @@ describe("AssetManager", () => {
     const manager = new AssetManager();
 
     const asset = await manager.importFont(
-      file(new Uint8Array([0, 1, 2]), "Inter-Bold.ttf", "font/ttf"),
+      file(TTF, "Inter-Bold.ttf", "font/ttf"),
       { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
       async () => undefined,
     );
@@ -244,9 +260,67 @@ describe("AssetManager", () => {
     expect("subset" in (JSON.parse(JSON.stringify(asset)) as object)).toBe(
       false,
     );
-    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(
-      new Uint8Array([0, 1, 2]),
+    expect(manager.assets["assets/Inter-Bold.ttf"]).toEqual(TTF);
+  });
+
+  it("reads the chosen font file's bytes once", async () => {
+    // The parser needs the bytes before `import` can validate the signature.
+    // Reading the file again for `import` handed the same file to the browser
+    // twice; the bytes read for the parser are the ones that are declared.
+    const manager = new AssetManager();
+    const chosen = file(TTF, "Inter-Bold.ttf", "font/ttf");
+    const read = vi.spyOn(chosen, "arrayBuffer");
+
+    await manager.importFont(
+      chosen,
+      { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+      async () => undefined,
     );
+
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a font whose media type is empty or wrong when its signature matches", async () => {
+    // A Windows shell reports no type for a `.woff2`, and some report one the
+    // table never uses; the leading bytes, not `File.type`, make it a font.
+    const manager = new AssetManager();
+
+    const empty = await manager.importFont(
+      file(TTF, "Inter-Bold.ttf", ""),
+      { family: "Inter", weight: 700, style: "normal", licence: "unknown" },
+      async () => undefined,
+    );
+    const wrong = await manager.importFont(
+      file(WOFF2, "Inter-Regular.woff2", "application/octet-stream"),
+      { family: "Inter", weight: 400, style: "normal", licence: "unknown" },
+      async () => undefined,
+    );
+
+    expect(empty).toMatchObject({
+      kind: "font",
+      path: "assets/Inter-Bold.ttf",
+    });
+    expect(wrong).toMatchObject({
+      kind: "font",
+      path: "assets/Inter-Regular.woff2",
+    });
+  });
+
+  it("refuses a font whose bytes do not match its extension", async () => {
+    // A real mismatch still fails even when the browser names the media type
+    // the extension claims: a PNG renamed `.woff2` is not a font.
+    const manager = new AssetManager();
+
+    await expect(
+      manager.importFont(
+        file(PNG, "logo.woff2", "font/woff2"),
+        { family: "Logo", weight: 400, style: "normal", licence: "unknown" },
+        async () => undefined,
+      ),
+    ).rejects.toThrow("bytes do not match its extension");
+
+    expect(manager.declarations).toEqual([]);
+    expect(manager.assets).toEqual({});
   });
 
   it("refuses a file whose bytes do not parse as a font", async () => {
@@ -483,10 +557,7 @@ describe("AssetManager", () => {
     await manager.adoptFont(other, new Uint8Array([9]));
     const before = manager.declarations.length;
 
-    await manager.replace(
-      "other",
-      file(new Uint8Array([7, 7]), "other.woff2", "font/woff2"),
-    );
+    await manager.replace("other", file(WOFF2, "other.woff2", "font/woff2"));
 
     expect(manager.declarations).toHaveLength(before);
     // The catalogue owns family, weight, licence and source; the file owns the
@@ -495,11 +566,159 @@ describe("AssetManager", () => {
       family: "Other",
       license: face.license,
     });
-    expect(manager.assets["assets/other.woff2"]).toEqual(
-      new Uint8Array([7, 7]),
+    expect(manager.assets["assets/other.woff2"]).toEqual(WOFF2);
+  });
+});
+
+describe("font fixture", () => {
+  it("parses a real WOFF2 container and its table directory", () => {
+    const view = new DataView(
+      FONT_FIXTURE.buffer,
+      FONT_FIXTURE.byteOffset,
+      FONT_FIXTURE.byteLength,
+    );
+
+    expect(String.fromCharCode(...FONT_FIXTURE.subarray(0, 4))).toBe("wOF2");
+    // Flavor 0x00010000 is the sfnt version a TrueType-outline font has, and
+    // the length field counts the bytes this test just read.
+    expect(view.getUint32(4)).toBe(0x00010000);
+    expect(view.getUint32(8)).toBe(FONT_FIXTURE.byteLength);
+    expect(view.getUint16(12)).toBeGreaterThan(0);
+
+    expect(woff2TableTags(FONT_FIXTURE)).toEqual(
+      expect.arrayContaining([
+        "cmap",
+        "head",
+        "hhea",
+        "hmtx",
+        "maxp",
+        "name",
+        "glyf",
+        "loca",
+      ]),
     );
   });
 });
+
+/** WOFF2's known tags, indexed by the low six bits of a directory entry's
+ *  flags. Index 63 (`0x3f`) is followed by the four-byte tag instead. */
+const WOFF2_TABLE_TAGS = [
+  "cmap",
+  "head",
+  "hhea",
+  "hmtx",
+  "maxp",
+  "name",
+  "OS/2",
+  "post",
+  "cvt ",
+  "fpgm",
+  "glyf",
+  "loca",
+  "prep",
+  "CFF ",
+  "VORG",
+  "EBDT",
+  "EBLC",
+  "gasp",
+  "hdmx",
+  "kern",
+  "LTSH",
+  "PCLT",
+  "VDMX",
+  "vhea",
+  "vmtx",
+  "BASE",
+  "GDEF",
+  "GPOS",
+  "GSUB",
+  "EBSC",
+  "JSTF",
+  "MATH",
+  "CBDT",
+  "CBLC",
+  "COLR",
+  "CPAL",
+  "SVG ",
+  "sbix",
+  "acnt",
+  "avar",
+  "bdat",
+  "bloc",
+  "bsln",
+  "cvar",
+  "fdsc",
+  "feat",
+  "fmtx",
+  "fvar",
+  "gvar",
+  "hsty",
+  "just",
+  "lcar",
+  "mort",
+  "morx",
+  "opbd",
+  "prop",
+  "trak",
+  "Zapf",
+  "Silf",
+  "Glat",
+  "Gloc",
+  "Feat",
+  "Sill",
+] as const;
+
+/** Reads a WOFF2 UIntBase128, the directory's variable-length number. */
+function readBase128(
+  bytes: Uint8Array,
+  start: number,
+): { readonly value: number; readonly next: number } {
+  let offset = start;
+  let value = 0;
+  for (let count = 0; count < 5; count += 1) {
+    const byte = bytes[offset];
+    if (byte === undefined) throw new Error("Truncated WOFF2 table directory.");
+    offset += 1;
+    value = value * 128 + (byte & 0x7f);
+    if ((byte & 0x80) === 0) return { value, next: offset };
+  }
+  throw new Error("A WOFF2 UIntBase128 is at most five bytes.");
+}
+
+/** Walks the table directory that follows the 48-byte WOFF2 header. */
+function woff2TableTags(bytes: Uint8Array): string[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = view.getUint16(12);
+  const tags: string[] = [];
+  let offset = 48;
+  for (let index = 0; index < count; index += 1) {
+    const flags = bytes[offset];
+    if (flags === undefined)
+      throw new Error("Truncated WOFF2 table directory.");
+    offset += 1;
+    const tagIndex = flags & 0x3f;
+    let tag: string;
+    if (tagIndex === 0x3f) {
+      tag = String.fromCharCode(...bytes.subarray(offset, offset + 4));
+      offset += 4;
+    } else {
+      const known = WOFF2_TABLE_TAGS[tagIndex];
+      if (known === undefined)
+        throw new Error(`Unknown WOFF2 table tag index ${tagIndex}.`);
+      tag = known;
+    }
+    offset = readBase128(bytes, offset).next;
+    const transformVersion = (flags >> 6) & 0x3;
+    // `glyf` and `loca` are transformed by default; every other table is not.
+    const transformed =
+      tag === "glyf" || tag === "loca"
+        ? transformVersion === 0
+        : transformVersion !== 0;
+    if (transformed) offset = readBase128(bytes, offset).next;
+    tags.push(tag);
+  }
+  return tags;
+}
 
 /** jsdom reports zero natural size, so declare it the way a decode would. */
 function oversizedImage(width: number, height: number): HTMLImageElement {

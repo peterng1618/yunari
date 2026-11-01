@@ -439,6 +439,9 @@ function within(
 async function publish(page: Page): Promise<void> {
   const response = await page.request.put(`${HOST}/api/themes/${THEME_ID}`, {
     data: {
+      // A fixture is seeded, not authored: a previous run left a newer base,
+      // and the seed replaces it rather than failing the conflict rule.
+      overwrite: true,
       envelope: ENVELOPE,
       assets: {
         [BADGE_ASSET]: Buffer.from(QUADRANTS_SVG, "utf8").toString("base64"),

@@ -54,7 +54,7 @@ export function openRequest(
       };
     case "settings":
       return {
-        target: `${context.localPlain}/editor?mode=this-pc`,
+        target: `${context.localPlain}/editor?mode=host`,
         label: "Host Settings",
         options: {},
       };

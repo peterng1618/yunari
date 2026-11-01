@@ -28,10 +28,15 @@ const EMPTY_MINE = {
   readonly hint: string | undefined;
 };
 
-/** What the online half lists, whichever source it chose. */
+/** What the online half lists, whichever source it chose. `failed` and `retry`
+ *  belong to that same choice: a read that failed is stated and can be asked
+ *  again, and a retry reads whichever source is selected rather than the one
+ *  it was chosen with. */
 export interface OnlineListingShape {
   readonly items: readonly StoreItem[] | undefined;
   readonly refused: readonly CatalogueRefusal[];
+  readonly failed: boolean;
+  readonly retry: () => void;
 }
 
 export interface MineListing extends OnlineListingShape {
@@ -73,7 +78,9 @@ export interface MineListingOptions {
  * catalogue's, because the two are different answers to "what themes are there".
  *
  * A failed Mine read leaves the listing unset, never `[]`, for the region's own
- * reason: an empty array would claim the author has submitted nothing.
+ * reason: an empty array would claim the author has submitted nothing. It
+ * records the failure instead, so the region can state it and offer the read
+ * again.
  */
 export function useMineListing(
   local: readonly StoreItem[] | undefined,
@@ -90,6 +97,8 @@ export function useMineListing(
       }
     | undefined
   >(undefined);
+  const [mineFailed, setMineFailed] = useState(false);
+  const [mineAttempt, setMineAttempt] = useState(0);
   // One source for the life of the region, as the catalogue half's is.
   const [source] = useState(() => mineThemeSource());
 
@@ -123,20 +132,22 @@ export function useMineListing(
   useEffect(() => {
     if (!on) return;
     let live = true;
+    setMineFailed(false);
     setListing(undefined);
     source.list().then(
       (items) => {
         if (live) setListing({ items, refused: source.refused() });
       },
       () => {
-        // A failed read is not a fact about the author's rows, so nothing is
-        // drawn for it and the listing stays unset.
+        // A failed read is not a fact about the author's rows, so the listing
+        // stays unset; `mineFailed` is the fact the region states.
+        if (live) setMineFailed(true);
       },
     );
     return () => {
       live = false;
     };
-  }, [on, source]);
+  }, [on, source, mineAttempt]);
 
   /** Turning Mine on moves the region to the half it lists through; turning it
    *  off leaves the half where the person put it. The previous listing is
@@ -204,6 +215,10 @@ export function useMineListing(
         : withInstalledVersions(listing.items, local)
       : catalogue.items,
     refused: on ? (listing?.refused ?? []) : catalogue.refused,
+    failed: on ? mineFailed : catalogue.failed,
+    retry: on
+      ? () => setMineAttempt((current) => current + 1)
+      : catalogue.retry,
     empty: on ? EMPTY_MINE : EMPTY_CATALOGUE,
   };
 }

@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { STABLE_ID_PATTERN } from "@yunari/renderer-core";
 import type { ThemeOrigin } from "@yunari/theme-package";
 
 /**
@@ -27,7 +28,6 @@ export interface ThemeOriginsStore {
 }
 
 const FILE = "theme-origins.json";
-const THEME_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,7 +56,7 @@ function asOrigin(value: unknown): ThemeOrigin | undefined {
 }
 
 /**
- * The file's contents, with every key held to `THEME_ID` and every entry validated.
+ * The file's contents, with every key held to `STABLE_ID_PATTERN` and every entry validated.
  *
  * Built through `Object.fromEntries` rather than by assignment: `__proto__` is a
  * legal theme id, and `origins[id] = entry` would reach the map's prototype and
@@ -68,7 +68,7 @@ function normalizeOrigins(input: unknown): Record<string, ThemeOrigin> {
   const pairs: [string, ThemeOrigin][] = [];
 
   for (const [id, raw] of Object.entries(input)) {
-    if (!THEME_ID.test(id)) continue;
+    if (!STABLE_ID_PATTERN.test(id)) continue;
 
     const entry = asOrigin(raw);
     if (entry) pairs.push([id, entry]);
@@ -125,7 +125,7 @@ export function createThemeOriginsStore(directory: string): ThemeOriginsStore {
 
     async write(themeId, origin) {
       await writeExclusively(async () => {
-        if (!THEME_ID.test(themeId)) {
+        if (!STABLE_ID_PATTERN.test(themeId)) {
           throw new Error(`Invalid theme id "${themeId}".`);
         }
 
@@ -139,7 +139,7 @@ export function createThemeOriginsStore(directory: string): ThemeOriginsStore {
 
     async removeTheme(themeId) {
       await writeExclusively(async () => {
-        if (!THEME_ID.test(themeId)) return;
+        if (!STABLE_ID_PATTERN.test(themeId)) return;
 
         const all = await readOrigins(file);
         // Nothing to remove is no write: a file that could not be read reads as

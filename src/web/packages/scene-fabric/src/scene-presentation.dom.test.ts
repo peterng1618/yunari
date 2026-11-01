@@ -81,6 +81,24 @@ describe("mountFabricScene's display presentation", () => {
     element.remove();
   });
 
+  it("leaves a display-bounded disc layer unturned at a rotated screen", () => {
+    // The disc is the screen and is the same disc at every angle; a turn would
+    // only rotate the picture inside a layer that must fill the screen as it
+    // stands. At 45 an unturned layer is the only one that reports no
+    // transform, which is what the browser spec asserts.
+    const { element, scene } = mountDisplayMedia({
+      shape: "circle",
+      rotation: 45,
+    });
+    const layer = element.querySelector<HTMLElement>(
+      "[data-yunari-background-media]",
+    );
+    expect(layer?.style.transform).toBe("");
+
+    scene.dispose();
+    element.remove();
+  });
+
   it("fills the disc with a display-bounded layer and restores the host", () => {
     const { element, scene } = mountDisplayMedia({ shape: "circle" });
     const layer = element.querySelector<HTMLElement>(

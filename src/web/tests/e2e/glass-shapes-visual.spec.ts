@@ -8,6 +8,7 @@ import {
 } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import { GLASS_BAR } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /** `solidOf` is a `Record<string, string>`, so a key read is `string | undefined`
  *  even though the map is a literal. The panel token is required here. */
@@ -197,7 +198,7 @@ function packageFor(
     ),
   );
   const written = writeThemePackage({
-    envelope: envelope(fill, withGlass),
+    envelope: withRoleTokens(envelope(fill, withGlass)),
     assets: { "assets/backdrop.jpg": photograph },
   });
   if (!written.ok) throw new Error(written.message);

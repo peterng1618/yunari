@@ -219,9 +219,16 @@ already looks, and only the stage changes between the two surfaces.
 
 **Document-level and editor-level actions only.** A command that has a rightful
 home elsewhere is not repeated here — Insert lives in the Add pane, so the
-header has no Insert menu.
+header has no Insert menu, and Edit lives in the Composition pane's footer
+toolbar, so the header has no Edit menu.
 
-- Left: brand mark, then the **mode switch**, then `File`, `Edit`, `View`.
+- Left: brand mark, then the **mode switch**, then the `File` and `View`
+  menus, then the **theme toolbar**.
+- The toolbar is the open theme document's own actions, as **icon buttons**
+  from the editor's one glyph set: Import theme, Open, Save, Save as, Activate,
+  Export theme. It is a toolbar, not rows nested in a menu, and it carries no
+  selection command: copy, cut, duplicate, delete, group and arrange act on
+  individual elements and stay on the surfaces that own a selection.
 - Right: the publish chord, then the **primary button**. `Publish` is the only
   filled, accent-coloured button in the editor.
 - **The header never shows the document's identity** and never shows a
@@ -231,16 +238,20 @@ header has no Insert menu.
 The shell has three modes — the editor, the theme store and the host — and the
 switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
 and `Host`. A strip under the header would be a second horizontal bar, so the
-header owns the choice and its **right-hand region is per-mode**: `File`/`Edit`/
-`View` and the publish control belong to the editor; a mode with actions of its
-own carries them there; a mode with none shows nothing beside the switch. The
-editor's own body is hidden, not unmounted, while another mode shows — a mode
+header owns the choice and its **right-hand region is per-mode**: the menus, the
+theme toolbar and the publish control belong to the editor; a mode with actions
+of its own carries them there; a mode with none shows nothing beside the switch.
+The editor's own body is hidden, not unmounted, while another mode shows — a mode
 switch never loses an unsaved document, and it asks before leaving a dirty one.
 
-`View` stays in the header because its commands — preview/source, run display —
-are changed *while* designing, many times a session. Settings is for
-once-in-a-while choices. A frequently changed control one level deeper is a tax
-paid on every use.
+`View` stays in the header because its commands — preview/source — are changed
+*while* designing, many times a session. Settings is for once-in-a-while
+choices. A frequently changed control one level deeper is a tax paid on every
+use.
+
+`File` stays a menu because its rows are functions with no other home: New,
+New from template, Find assets, Open recent and Export selection as widget. The
+document actions the toolbar carries are not repeated there.
 
 ### The rail
 
@@ -471,15 +482,21 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Slider + well** | A 3px track, an accent fill, a 10px thumb, and a 40px well | A bounded number |
 | **Swatch well** | A well containing an 11px radius-4 swatch, then the token name, then a chevron | A paint reference |
 | **Toggle** | A 26×14 pill, accent when on | A boolean that applies immediately |
-| **Segmented** | A `--panel-2` well holding 2–4 labels, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
+| **Segmented** | A `--panel-2` well holding 2–4 labels, each taking an equal share of the well, the active one lifted to `--stage` | A small exclusive choice where both options must be readable |
 | **Icon button** | A 26–30px square at `--radius-md`, glyph only | An action whose glyph is unambiguous |
 | **Labelled button** | A label in `--text-sm` on the `--yunari-control-bg` fill, 1px `--edge`, `--radius-md`, `6px 12px` padding | You can answer the surface that raised it; it is chrome around an answer, not a control in a panel |
 | **Rail slot** | A 36px square at `--radius-lg`, glyph only | One of the rail's slots; at most one pane is open |
-| **Choice row** | A `--radius-md` row at `--panel-2` carrying a swatch and a name; the chosen row is lifted to `--stage` with the accent border | One member of a closed set where each member has its own colour |
+| **Choice row** | A `--radius-md` row at `--panel-2` carrying a name and, where the member has one, a swatch before it and a detail after it at the right edge; the chosen row is lifted to `--stage` with the accent border | One member of a closed set; a set of colours leads with the swatch |
+| **Palette card** | A `--radius-lg` card at `--panel-2` carrying the palette's swatch above its name in a three-column grid; the chosen one takes the accent border and the accent halo rather than the lift | One member of the shell-palette set, where the swatch is the picture and the name is the caption |
 | **Preset chip** | A 24px rounded square at `--radius-sm` carrying only a swatch; the chosen one takes the accent border and the accent halo, its name staying the programmatic label | One member of a swatch library, where the swatch is what the author recognises |
 | **Checkbox choice row** | The choice row, with a 14px box and a count in place of the swatch; the chosen row is lifted to `--stage` with a `--text` check | One member of a set you may choose **several** of |
 | **2-D colour area** | A 128px-tall `--radius-sm` surface with a 1px `--edge` and the saturation × brightness plane as its fill | A pointer picks both channels; focus paints the boundary role |
 | **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
+
+**`Segmented` members divide the well equally.** Every chip takes `flex: 1`
+with `min-width: 0`, so a longer label wraps or truncates inside its share
+rather than widening the chip. The control set's colour, spacing, radius, type,
+elevation and hairline are unchanged.
 
 **`Segmented` has a bare form, and the header's mode switch is it.** The switch
 is the well this table describes — `--panel-2` inside a 1px `--edge` at
@@ -695,7 +712,8 @@ Rules:
 - **A group gets a generic glyph.** A card on the canvas is an arbitrary group of
   elements, so its row cannot depict it. It gets the stack glyph and its name. A
   *card unit* in the Add pane is not arbitrary — the card library is a fixed set
-  of eight — so a unit tile may carry a diagram of what it builds.
+  of eight — so its tile wears the unit's own glyph, one per unit, and no two
+  units share one.
 - **Destructive actions use `--hot`, never `--accent`.**
 
 ## Do's and Don'ts

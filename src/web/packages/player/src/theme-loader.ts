@@ -5,6 +5,7 @@ import {
   isMeasurementSystem,
   normalizeUnitPreferences,
   readFabricThemeEnvelope,
+  STABLE_ID_PATTERN,
   type UnitPreferences,
 } from "@yunari/renderer-core";
 
@@ -82,7 +83,7 @@ export async function loadHostedTheme(
   id: string,
   fetcher: typeof fetch,
 ): Promise<FabricThemeEnvelope> {
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+  if (!STABLE_ID_PATTERN.test(id)) {
     throw new ThemeLoadError("invalid-id", "Invalid theme id.");
   }
 

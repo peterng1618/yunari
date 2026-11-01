@@ -490,7 +490,13 @@ test("a late answer never lands in the tab that was left", async ({
   await expect.poll(() => searches.length).toBe(2);
   await page.locator('[data-yunari-asset-tab="icon"]').click();
   await search.fill("ab");
-  await expect.poll(() => searches.length).toBe(3);
+  // The question leaving, not a request count: choosing a tab asks the tab's
+  // own question and may re-ask it on the way back, so the number of requests
+  // is the product's business here. What this case is about is that the
+  // abandoned answer never paints.
+  await expect
+    .poll(() => searches.filter((request) => request.query === "ab").length)
+    .toBeGreaterThan(0);
 
   await expect.poll(() => rowIds(page)).toEqual(["lucide:newer"]);
   await page.waitForTimeout(1200);
@@ -815,11 +821,7 @@ test("draws a font card's specimen rows in the result's own faces", async ({
     `[data-yunari-finder-card="${interTrio.id}"] [data-yunari-asset-preview="font"] > span`,
   );
   await expect(trioRows).toHaveCount(3);
-  await expect(trioRows).toHaveText([
-    interTrio.name,
-    interTrio.name,
-    interTrio.name,
-  ]);
+  await expect(trioRows).toHaveText(["Inter", "Poppins", "Fira Code"]);
   // Heading, body and mono are drawn at descending sizes, which is what makes
   // the thumbnail read as the hierarchy the trio itself makes.
   const sizes = await trioRows.evaluateAll((rows) =>
@@ -874,9 +876,11 @@ test("importing a trio offers every weight its role families publish", async ({
 
   const dialog = await openFinder(page);
   await page.locator('[data-yunari-asset-tab="font"]').click();
-  await page.locator("[data-yunari-font-search]").fill("inter");
-  await page.locator(`[data-yunari-font-tile="${interTrio.id}"]`).click();
-  await page.locator("[data-yunari-font-trio-apply]").click();
+  await page.locator("[data-yunari-asset-search]").fill("inter");
+  // Selecting the trio's card is what fills the footer with its actions; the
+  // card itself is the row the grid draws.
+  await page.locator(`[data-yunari-finder-card="${interTrio.id}"]`).click();
+  await page.getByRole("button", { name: "Apply trio" }).click();
 
   // The apply is asynchronous; the heading row's specimen changing family is
   // the token write landing, and the modal has to be out of the way first.
@@ -1060,7 +1064,7 @@ test("the Colours tab adds a palette to the presets", async ({
 
   // The action says what landed, in the bar the count already lives in.
   await expect(page.locator("[data-yunari-asset-message]")).toHaveText(
-    "Added 2 colours",
+    "Added 2 colors",
   );
 
   const stored = await page.evaluate(() =>
@@ -1160,12 +1164,14 @@ test("the finder is centred and the chosen tab is drawn as chosen", async ({
   expect(
     Math.abs(box.y + box.height / 2 - viewport.height / 2),
   ).toBeLessThanOrEqual(2);
-  // The 1px border is inside the box because every surface is border-box.
+  // The 1px border is inside the box because every surface is border-box. The
+  // window is the stylesheet's `--finder-width`/`--finder-height` (1416 x 880),
+  // clamped to the viewport with a 24px margin.
   expect(
-    Math.abs(box.width - Math.min(1180, viewport.width - 48)),
+    Math.abs(box.width - Math.min(1416, viewport.width - 48)),
   ).toBeLessThanOrEqual(1);
   expect(
-    Math.abs(box.height - Math.min(800, viewport.height - 48)),
+    Math.abs(box.height - Math.min(880, viewport.height - 48)),
   ).toBeLessThanOrEqual(1);
 
   const chosen = page.locator('[data-yunari-asset-tab="icon"]');

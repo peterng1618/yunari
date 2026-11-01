@@ -9,11 +9,21 @@ import {
   openTarget,
   rankLanAddresses,
   readLanSource,
+  resetLanAddressCache,
   stableName,
   VIRTUAL_ADAPTER_PATTERNS,
 } from "./net.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+
+const { networkInterfaceDefault, networkGatewayDefault } = vi.hoisted(() => ({
+  networkInterfaceDefault: vi.fn(),
+  networkGatewayDefault: vi.fn(),
+}));
+
+vi.mock("systeminformation", () => ({
+  default: { networkInterfaceDefault, networkGatewayDefault },
+}));
 
 const spawnMock = vi.mocked(spawn);
 
@@ -35,6 +45,18 @@ function ipv4(address: string, internal = false): NetworkInterfaceInfo {
     mac: "00:00:00:00:00:00",
     internal,
     cidr: `${address}/24`,
+  };
+}
+
+function ipv6(scopeid: number): NetworkInterfaceInfo {
+  return {
+    address: `fe80::${scopeid}`,
+    netmask: "ffff:ffff:ffff:ffff::",
+    family: "IPv6",
+    mac: "00:00:00:00:00:00",
+    internal: false,
+    cidr: `fe80::${scopeid}/64`,
+    scopeid,
   };
 }
 
@@ -184,6 +206,11 @@ describe("rankLanAddresses", () => {
 });
 
 describe("lanAddress", () => {
+  // The measured path caches; a fixture in the next case must not inherit it.
+  beforeEach(() => {
+    resetLanAddressCache();
+  });
+
   it("says on the console which other addresses were in the running", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -278,6 +305,11 @@ describe("localNames", () => {
 });
 
 describe("readLanSource", () => {
+  beforeEach(() => {
+    networkInterfaceDefault.mockReset();
+    networkGatewayDefault.mockReset();
+  });
+
   it("answers rather than rejects when the adapter list cannot be read", async () => {
     vi.spyOn(os, "networkInterfaces").mockImplementation(() => {
       throw new Error("no adapters for you");
@@ -291,6 +323,140 @@ describe("readLanSource", () => {
       interfaces: {},
       defaultRouteInterface: undefined,
     });
+  });
+
+  it("keeps a default interface the platform route block measured", async () => {
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+    // Not the fallback (the first external adapter, `Ethernet`), so only the
+    // platform route block can have named it.
+    networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+
+    const source = await readLanSource();
+
+    expect(source.defaultRouteInterface).toBe("Ethernet 2");
+    // The measured branch needs no corroboration.
+    expect(networkGatewayDefault).not.toHaveBeenCalled();
+  });
+
+  it("keeps a fallback-equal name when its adapter carries the default gateway", async () => {
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+    });
+    // On one adapter the route and the fallback name the same interface, so the
+    // gateway is what shows the route was read.
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("192.168.2.1");
+
+    const source = await readLanSource();
+
+    expect(source.defaultRouteInterface).toBe("Ethernet");
+  });
+
+  it("drops the name systeminformation invents when its route query fails", async () => {
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+    // `Ethernet` is exactly its own fallback (first external adapter), and a
+    // failed query reports no gateway: the name is a guess, not a reading.
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("");
+
+    const source = await readLanSource();
+
+    expect(source.defaultRouteInterface).toBeUndefined();
+  });
+
+  it("recognises the scopeid fallback, not only the first-adapter one", async () => {
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56"), ipv6(12)],
+      "Ethernet 2": [ipv4("10.0.0.7"), ipv6(4)],
+    });
+    // Its fallback is the lowest IPv6 scopeid, which here is `Ethernet 2`.
+    networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+    networkGatewayDefault.mockResolvedValue("");
+
+    const source = await readLanSource();
+
+    expect(source.defaultRouteInterface).toBeUndefined();
+  });
+
+  it("drops a fallback name whose adapter does not carry the reported gateway", async () => {
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+    // The route table answers, but its gateway sits on `Ethernet 2`. A guessed
+    // `Ethernet` must not borrow that reading.
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("10.0.0.1");
+
+    const source = await readLanSource();
+
+    expect(source.defaultRouteInterface).toBeUndefined();
+  });
+
+  it("warns on a guessed route and stays quiet on a measured one", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("");
+
+    expect(await lanAddress()).toBe("192.168.2.56");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("Ethernet 2 10.0.0.7");
+
+    networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+    resetLanAddressCache();
+
+    expect(await lanAddress()).toBe("10.0.0.7");
+    // The measured pick adds no second warning: the existing tie-break policy
+    // is unchanged, it now just sees the route only when it was read.
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves its measurement without re-reading, and refreshes it after the TTL", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(os, "networkInterfaces").mockReturnValue({
+      Ethernet: [ipv4("192.168.2.56")],
+      "Ethernet 2": [ipv4("10.0.0.7")],
+    });
+    networkInterfaceDefault.mockResolvedValue("Ethernet");
+    networkGatewayDefault.mockResolvedValue("");
+
+    resetLanAddressCache();
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      expect(await lanAddress()).toBe("192.168.2.56");
+      const reads = networkInterfaceDefault.mock.calls.length;
+
+      // Within the TTL, the answer is the one already measured.
+      expect(await lanAddress()).toBe("192.168.2.56");
+      expect(networkInterfaceDefault).toHaveBeenCalledTimes(reads);
+
+      networkInterfaceDefault.mockResolvedValue("Ethernet 2");
+      vi.setSystemTime(Date.now() + 30_000);
+
+      // Expired: the stale answer is served while the refresh runs.
+      expect(await lanAddress()).toBe("192.168.2.56");
+      await vi.waitFor(() => {
+        expect(networkInterfaceDefault.mock.calls.length).toBeGreaterThan(
+          reads,
+        );
+      });
+      expect(await lanAddress()).toBe("10.0.0.7");
+    } finally {
+      vi.useRealTimers();
+      resetLanAddressCache();
+      warn.mockRestore();
+    }
   });
 });
 

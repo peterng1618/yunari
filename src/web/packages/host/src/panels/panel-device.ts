@@ -13,6 +13,15 @@ export interface PanelGeometry {
 }
 
 /**
+ * What the host is doing with one panel's device.
+ *
+ * `connecting` is an attempt in flight — a start, or a manual reconnect whose
+ * device has not answered yet. A record with no entry at all is `disconnected`:
+ * the retry loop has nothing open for it.
+ */
+export type PanelConnectionStatus = "connected" | "connecting" | "disconnected";
+
+/**
  * What identifies a physical panel, for a record and for re-finding it after a
  * reboot. A bus address moves; the serial does not.
  */
@@ -28,6 +37,15 @@ export interface PanelHint {
   readonly model?: string;
   /** The firmware version the device answers, when it answers one. */
   readonly firmware?: string;
+  /**
+   * The host's state for this device, when discovery tried to reach it.
+   *
+   * A port another process holds is `disconnected`: the device is present and
+   * this host cannot drive it. Absent means discovery states no connection.
+   */
+  readonly status?: PanelConnectionStatus;
+  /** Why a present device cannot be driven, in the host's own words. */
+  readonly reason?: string;
 }
 
 /** A command a panel's control channel accepts. */

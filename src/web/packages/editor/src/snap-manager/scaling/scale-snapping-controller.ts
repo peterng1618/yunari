@@ -260,12 +260,12 @@ function isScaleAction({ action }: { action: Transform["action"] }): boolean {
 }
 
 /**
- * Whether this resize may snap at all. A group child's bounds are read in the
- * canvas plane but the plan is applied in the child's own plane, so the two
- * disagree once the group is rotated or scaled — guarded, not merely documented.
+ * Whether this resize may snap at all. A group child is supported: the
+ * projection and the applied anchor are both converted between the canvas plane
+ * and the child's own plane, so a rotated or scaled group does not make them
+ * disagree.
  */
 function isSupportedScaleTarget({ target }: { target: FabricObject }): boolean {
-  if (target.group !== undefined || target.parent !== undefined) return false;
   if (target instanceof ActiveSelection)
     return isSupportedActiveSelection({ selection: target });
 

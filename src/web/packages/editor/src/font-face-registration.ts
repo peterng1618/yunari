@@ -1,10 +1,7 @@
 import type { FontAssetReference } from "@yunari/renderer-core";
-import { loadFontAssets } from "@yunari/scene-fabric";
+import { loadFontAssets, sceneObjects } from "@yunari/scene-fabric";
 import type { FabricObject } from "fabric/es";
-import {
-  type LocalAssetReference,
-  sceneObjects,
-} from "./asset-manager/index.js";
+import type { LocalAssetReference } from "./asset-manager/index.js";
 
 /** The part of the canvas a remeasure needs, so a test can hand a stub. */
 export interface FontFaceCanvas {

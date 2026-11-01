@@ -2,6 +2,7 @@ import {
   type Binding,
   type FabricPalette,
   isObjectName,
+  paletteTokenIds,
 } from "@yunari/renderer-core";
 import {
   isLocked,
@@ -20,8 +21,9 @@ import {
   type ObjectActionId,
   type ObjectTarget,
 } from "../object-actions.js";
-import { paletteTokenIds } from "../palette-manager/token-list.js";
+import { refreshObjectCoords } from "../object-plane.js";
 import { typeTokenOf } from "../selection-inspector/appearance.js";
+import { uiCopy } from "../ui-copy.js";
 import {
   BACKGROUND_LAYER_ID,
   backgroundRow,
@@ -56,9 +58,9 @@ export interface EditorShellSnapshot {
    *  default, and the two are different answers. */
   readonly objectCount: number | undefined;
   /** The Tokens pane's own list, as the title bar counts it: the theme's
-   *  paints, minus the reserved `none` (`paletteTokenIds`, the same module
-   *  `PaintList` draws its rows from — one membership rule, so the number beside
-   *  the title and the rows under it cannot disagree).
+   *  paints, minus the reserved `none` (`paletteTokenIds` in renderer-core, the
+   *  same rule `PaintList` draws its rows from — one membership rule, so the
+   *  number beside the title and the rows under it cannot disagree).
    *
    *  A number rather than `number | undefined` wherever a bridge exists: the
    *  bridge is only built over an open document, and a document whose globals
@@ -531,8 +533,16 @@ export function createEditorShellBridge(input: {
     // Anything else is refused rather than written: clearing on a too-long
     // name would make an author's typing vanish. The caller re-reads the
     // projection afterwards, so a refused rename reverts the row to the name
-    // the object actually carries.
-    else return;
+    // the object actually carries. The refusal is reported, because the
+    // inspector's name field refuses through the same message — one guard, one
+    // answer, whichever surface the author typed in.
+    else {
+      input.editor.errorManager.warn(
+        "controls",
+        uiCopy.inspectorFields.invalidName,
+      );
+      return;
+    }
     // The name is authored document state on the object, so this is a
     // committed edit like any other: one history entry (§67).
     canvas.requestRenderAll();
@@ -659,23 +669,6 @@ export function createEditorShellBridge(input: {
     }
     return true;
   };
-  /**
-   * Recomputes `object`'s cached box, and everything nested under it, deepest
-   * first.
-   *
-   * A cached box is not a transform: Fabric's layout rebases a destination's
-   * children when the membership changes (`FitContentLayout.shouldPerformLayout`
-   * always answers true), but neither `Group.setCoords` nor the layout pass
-   * cascades while `subTargetCheck` is false, so the rows' `left`/`top` move
-   * under a cached box nothing recomputed — and `sceneBoxesOf` reads those
-   * caches, so the artboard reported a box the document does not have.
-   * `grouping-manager` refreshes its members for the same reason.
-   */
-  const refreshCoords = (object: FabricObject): void => {
-    if (object instanceof Group)
-      for (const child of object.getObjects()) refreshCoords(child);
-    object.setCoords();
-  };
   const moveLayer = (id: string, anchorId: string): boolean => {
     const move = layerMove(id, anchorId);
     if (move === undefined) return false;
@@ -714,7 +707,7 @@ export function createEditorShellBridge(input: {
       // `peer` stale, and neither collection named here is where `peer` lives.
       // `ponytail:` O(objects) per drop; narrow it to the ancestors if a
       // document ever makes that measurable.
-      for (const object of canvas.getObjects()) refreshCoords(object);
+      for (const object of canvas.getObjects()) refreshObjectCoords(object);
     }
     canvas.requestRenderAll();
     input.editor.historyManager.saveState();

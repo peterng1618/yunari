@@ -70,7 +70,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "New from starter" }).click();
+  await page.getByRole("menuitem", { name: "New from template" }).click();
   await expect(page.locator("#status")).toContainText(
     "New theme from the starter",
   );
@@ -79,8 +79,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
       request.method() === "PUT" &&
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });

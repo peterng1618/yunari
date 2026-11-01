@@ -13,7 +13,8 @@ import {
 import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
-import { Dialog } from "../components/ui/dialog.js";
+import { ControlWell } from "../components/ui/control-well.js";
+import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
   clearPreviewRatioTokens,
@@ -286,11 +287,15 @@ function PreviewsTab({
   /** Why the last Add did nothing, as the refusal rule words it. `undefined` is "no refusal"
    *  and renders nothing — never an empty line standing in for one. */
   const [reason, setReason] = useState<string | undefined>(undefined);
+  /** Whether the last write will survive a reload. `undefined` until one has
+   *  been attempted; a store that exists but refuses the write reads the same
+   *  as a browser that has none, which is what the note below says. */
+  const [persisted, setPersisted] = useState<boolean | undefined>(undefined);
 
   /** Storage first, then the live list, as the Appearance tab writes its
    *  choice: a write that failed still leaves the session's list changed. */
   const commit = (next: readonly string[]): void => {
-    writePreviewRatioTokens(storage, next);
+    setPersisted(writePreviewRatioTokens(storage, next));
     setActivePreviewRatios(next);
   };
 
@@ -336,7 +341,7 @@ function PreviewsTab({
   const reset = (): void => {
     // Removing the key is what returns the list to the defaults; the live list
     // is set explicitly because the module never re-reads storage.
-    clearPreviewRatioTokens(storage);
+    setPersisted(clearPreviewRatioTokens(storage));
     setReason(undefined);
     setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
   };
@@ -384,23 +389,32 @@ function PreviewsTab({
           })}
         </div>
       )}
-      <div className="flex items-center gap-[var(--space-8)]">
-        <input
-          type="text"
-          aria-label={uiCopy.settings.previewRatioField}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setReason(undefined);
-          }}
-          data-yunari-preview-ratio-input=""
-          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
-        />
+      {/* The row wraps rather than squeezing the well to nothing: the settings
+          panel is narrow beside the tab column, and the actions are labelled
+          buttons of a fixed size, so on a wrapped line the field keeps a
+          usable width instead of losing its content box. */}
+      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+        {/* The field is the control set's Well, not a box of its own: the
+            well owns the surface, the edge, the radius and the focus
+            boundary, and the input fills it. */}
+        <ControlWell density="dialog" widthClassName="min-w-[6rem] flex-1">
+          <input
+            type="text"
+            aria-label={uiCopy.settings.previewRatioField}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setReason(undefined);
+            }}
+            data-yunari-preview-ratio-input=""
+            className="h-full w-full min-w-0 bg-transparent font-mono text-sm text-text outline-none"
+          />
+        </ControlWell>
         <button
           type="button"
           onClick={add}
           data-yunari-preview-ratio-add=""
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+          className={ACTION_BUTTON}
         >
           {uiCopy.settings.previewRatioAdd}
         </button>
@@ -409,7 +423,7 @@ function PreviewsTab({
           disabled={atDefaults}
           onClick={reset}
           data-yunari-preview-ratio-reset=""
-          className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+          className={ACTION_BUTTON}
         >
           {uiCopy.settings.previewRatioReset}
         </button>
@@ -421,7 +435,7 @@ function PreviewsTab({
           {reason}
         </p>
       )}
-      {storage === undefined ? (
+      {storage === undefined || persisted === false ? (
         <p className="text-sm text-muted">
           {uiCopy.settings.previewRatiosSessionOnly}
         </p>
@@ -540,27 +554,32 @@ function ConnectionsTab(): React.JSX.Element {
                   : uiCopy.settings.connectionsNotSet}
               </span>
             </div>
-            <div className="flex items-center gap-[var(--space-8)]">
-              <input
-                type="password"
-                aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
-                placeholder={uiCopy.settings.connectionsPlaceholder}
-                value={drafts[row.id] ?? ""}
-                onChange={(event) =>
-                  setDrafts((current) => ({
-                    ...current,
-                    [row.id]: event.target.value,
-                  }))
-                }
-                data-yunari-credential-input={row.id}
-                className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
-              />
+            <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+              <ControlWell
+                density="dialog"
+                widthClassName="min-w-[6rem] flex-1"
+              >
+                <input
+                  type="password"
+                  aria-label={`${row.label} ${uiCopy.settings.connectionsPlaceholder}`}
+                  placeholder={uiCopy.settings.connectionsPlaceholder}
+                  value={drafts[row.id] ?? ""}
+                  onChange={(event) =>
+                    setDrafts((current) => ({
+                      ...current,
+                      [row.id]: event.target.value,
+                    }))
+                  }
+                  data-yunari-credential-input={row.id}
+                  className="h-full w-full min-w-0 bg-transparent font-mono text-sm text-text outline-none"
+                />
+              </ControlWell>
               <button
                 type="button"
                 disabled={busy === row.id || (drafts[row.id] ?? "") === ""}
                 onClick={() => save(row.id)}
                 data-yunari-credential-save={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsSave}
               </button>
@@ -569,7 +588,7 @@ function ConnectionsTab(): React.JSX.Element {
                 disabled={!row.set || busy === row.id}
                 onClick={() => void run(row.id, () => clearCredential(row.id))}
                 data-yunari-credential-clear={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsClear}
               </button>
@@ -578,7 +597,7 @@ function ConnectionsTab(): React.JSX.Element {
                 disabled={!row.set || !row.verify || busy === row.id}
                 onClick={() => void run(row.id, () => verifyCredential(row.id))}
                 data-yunari-credential-verify={row.id}
-                className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-4)] text-sm"
+                className={ACTION_BUTTON}
               >
                 {uiCopy.settings.connectionsVerify}
               </button>

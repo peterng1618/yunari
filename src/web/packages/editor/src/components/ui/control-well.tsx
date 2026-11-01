@@ -342,6 +342,33 @@ export function ControlReason(props: {
 }
 
 /**
+ * Whether a keystroke belongs to an IME's composition rather than to the field
+ * (vg-686).
+ *
+ * The `composing` ref and `event.nativeEvent.isComposing` are needed together:
+ * the ref catches a composition that began without a keydown, and the native
+ * flag catches a browser that reports the end late. Owned here beside
+ * `useDraftCommit` so a control that keeps its own keyboard decision still
+ * takes this half from the same place rather than spelling it again.
+ */
+export function useComposingGuard(): {
+  readonly onCompositionStart: () => void;
+  readonly onCompositionEnd: () => void;
+  readonly isComposing: (event: React.KeyboardEvent) => boolean;
+} {
+  const composing = useRef(false);
+  return {
+    onCompositionStart: () => {
+      composing.current = true;
+    },
+    onCompositionEnd: () => {
+      composing.current = false;
+    },
+    isComposing: (event) => composing.current || event.nativeEvent.isComposing,
+  };
+}
+
+/**
  * The design's draft/commit keyboard decision, in one place for both the text
  * and the number field (vg-203).
  *
@@ -369,11 +396,11 @@ export function useDraftCommit(options: {
   readonly onCompositionEnd: () => void;
   readonly onKeyDown: (event: React.KeyboardEvent) => void;
 } {
-  const composing = useRef(false);
+  const composing = useComposingGuard();
 
   const onKeyDown = (event: React.KeyboardEvent): void => {
     if (event.key === "Enter" && options.multiline !== true) {
-      if (composing.current || event.nativeEvent.isComposing) return;
+      if (composing.isComposing(event)) return;
       event.preventDefault();
       options.commit();
       return;
@@ -389,12 +416,8 @@ export function useDraftCommit(options: {
   };
 
   return {
-    onCompositionStart: () => {
-      composing.current = true;
-    },
-    onCompositionEnd: () => {
-      composing.current = false;
-    },
+    onCompositionStart: composing.onCompositionStart,
+    onCompositionEnd: composing.onCompositionEnd,
     onKeyDown,
   };
 }

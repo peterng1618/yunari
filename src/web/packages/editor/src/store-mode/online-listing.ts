@@ -12,13 +12,17 @@ import { onlineThemeSource } from "./online-source.js";
  * this is a fact: `region.tsx` is at its line stop, and the half's reading is
  * the piece that can move without touching what the surface draws.
  *
- * **A failed read leaves the listing unset, never `[]`.** The rejection arm is
- * deliberately empty — `undefined` is what the body reads as "nothing to say",
- * where an empty array would claim the store has nothing.
+ * **A failed read leaves the listing unset, never `[]`.** `undefined` is what
+ * the body reads as "not arrived", where an empty array would claim the store
+ * has nothing. `failed` is the separate fact that it will not arrive unless
+ * `retry` reads again: the surface states that rather than drawing an empty
+ * catalogue over it, and `retry` is the same read this hook opened with.
  */
 export function useOnlineListing(local: readonly StoreItem[] | undefined): {
   readonly items: readonly StoreItem[] | undefined;
   readonly refused: readonly CatalogueRefusal[];
+  readonly failed: boolean;
+  readonly retry: () => void;
 } {
   // One source for the life of the region, as the local half's is: a source
   // rebuilt per render would reach the origin again on every keystroke.
@@ -30,22 +34,30 @@ export function useOnlineListing(local: readonly StoreItem[] | undefined): {
       }
     | undefined
   >(undefined);
+  const [failed, setFailed] = useState(false);
+  // A retry is a new read of the same source: the counter is what re-runs the
+  // effect, and the listing is cleared first so no frame shows the failed
+  // read's leftover rows.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
+    setFailed(false);
+    setListing(undefined);
     source.list().then(
       (items) => {
         if (live) setListing({ items, refused: source.refused() });
       },
       () => {
-        // A failed read is not a fact about the catalogue, so nothing is drawn
-        // for it and the listing stays unset.
+        // A failed read is not a fact about the catalogue, so the listing stays
+        // unset; `failed` is the fact that the surface states.
+        if (live) setFailed(true);
       },
     );
     return () => {
       live = false;
     };
-  }, [source]);
+  }, [source, attempt]);
 
   // The join reads the library on every render rather than being baked into the
   // state: the two reads settle in either order, and a joined copy held in state
@@ -56,5 +68,7 @@ export function useOnlineListing(local: readonly StoreItem[] | undefined): {
         ? undefined
         : withInstalledVersions(listing.items, local),
     refused: listing?.refused ?? [],
+    failed,
+    retry: () => setAttempt((current) => current + 1),
   };
 }

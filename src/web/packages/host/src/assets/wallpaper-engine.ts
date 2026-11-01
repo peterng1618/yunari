@@ -1,7 +1,7 @@
 import type { AssetSource } from "./source.js";
 
 /**
- * This PC's Wallpaper Engine library, as a finder source.
+ * The Host's Wallpaper Engine library, as a finder source.
  *
  * The listing, the previews, the payload bytes and the scene flow are the
  * host's (`wallpaper-engine/source.ts`) and are served at their own routes; this

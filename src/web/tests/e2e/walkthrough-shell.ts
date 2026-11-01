@@ -1,7 +1,9 @@
 import { expect, type Page } from "@playwright/test";
+import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { HOST_PORT, HOST_THEME_ID } from "./host-theme.js";
 import {
   focusedWithin,
+  pressButtonNamed,
   REGION_SELECTOR,
   TAB_BOUND,
   tabToMark,
@@ -145,7 +147,7 @@ export async function selectInComposition(
  *  document. `STARTER_DOCUMENT_NAME` is the starter's own metadata name, which
  *  is what tells the created document apart from the fixture (`?theme=`). */
 const FILE_MENU_NAME = "File";
-const NEW_FROM_STARTER_ROW = "New from starter";
+const NEW_FROM_STARTER_ROW = "New from template";
 export const STARTER_DOCUMENT_NAME = "System dashboard";
 /** Bounds for the two searches — the File menu's rows and the rail's slots —
  *  which report a count rather than hang.
@@ -244,8 +246,7 @@ async function chooseFileMenuRow(page: Page, row: string): Promise<void> {
  *
  * **"Create or open" is discharged by creating**, on the row that creates a
  * document **with content**: `New theme` is blank, and a blank document is a
- * different walkthrough — the Composition pane it lands on has nothing to
- * select, and selection is §13.1's next interaction.
+ * different walkthrough whose pane has nothing to select (§13.1's next step).
  *
  * It ends on the document naming itself, which is what makes it safe to call
  * before the next step: the create remounts the shell, and the identity chip can
@@ -258,9 +259,8 @@ export async function openDocumentByKeyboard(page: Page): Promise<void> {
   ).toHaveText(STARTER_DOCUMENT_NAME);
 }
 
-/** The File menu's own row for the library (`uiCopy.file.openLibrary`), and the
- *  chooser's own pieces (`theme-library-dialog.tsx` / `control-select.tsx`). */
-const OPEN_LIBRARY_ROW = "Open library";
+/** The header toolbar's Open button, which opens the chooser. */
+const OPEN_LIBRARY_BUTTON = uiCopy.file.openLibrary;
 /** The chooser's theme picker, on its trigger — where the value it commits is
  *  also read (`data-yunari-value`). */
 const LIBRARY_THEME_FIELD = "data-yunari-library-theme";
@@ -278,10 +278,10 @@ const LIBRARY_BOUND = 40;
  *
  * **This is §13.1's return trip.** Under the walkthrough's own ruling the
  * "original document" is the host fixture the walk booted on (`?theme=`), and
- * the editor has no route back to it that is not the library: `File`'s
- * `uiCopy.file.openLibrary` row opens the chooser, the chooser lists the host's
- * own themes beside the product's template, and `Open` replaces the document —
- * all of it reached with Tab, the arrows and Enter.
+ * the editor has no route back to it that is not the library: the header
+ * toolbar's `uiCopy.file.openLibrary` button opens the chooser, the chooser
+ * lists the host's own themes beside the product's template, and `Open`
+ * replaces the document — all of it reached with Tab, the arrows and Enter.
  *
  * The picker is a plan-1 `ControlSelect` (Base UI's select), so the keyboard
  * model is the primitive's own: `ArrowDown` on the trigger opens the list and
@@ -301,7 +301,7 @@ export async function openThemeFromLibrary(
   page: Page,
   id: string,
 ): Promise<void> {
-  await chooseFileMenuRow(page, OPEN_LIBRARY_ROW);
+  await pressButtonNamed(page, OPEN_LIBRARY_BUTTON);
   await expect(
     page.locator(`[${LIBRARY_THEME_FIELD}]`),
     "the library chooser's theme field",
@@ -334,10 +334,10 @@ export async function openThemeFromLibrary(
 }
 
 /** The open document as the product serializes it for persistence and publish
- *  (`session.publishableDocument()`, which is the same envelope `savePackage`
- *  writes). The strongest available reading of "the document", and the one the
- *  round trip compares: a projection or a row count would answer a narrower
- *  question than "the same document came back".
+ *  (`session.publishableDocument()`, which is the same envelope the Export
+ *  theme package writes). The strongest available reading of "the document",
+ *  and the one the round trip compares: a projection or a row count would
+ *  answer a narrower question than "the same document came back".
  *
  *  Throws rather than answering `undefined` for a document that has no stored
  *  theme — a `New theme` or a starter has no envelope to compare, and an
@@ -557,7 +557,10 @@ export async function editCommits(page: Page): Promise<number> {
  *
  *  The four are the field's own surroundings and nothing else: the Composition
  *  pane the selection was made through, the selection itself, the document the
- *  shell names, and the field the draft lived in. */
+ *  shell names, and the name control the draft lived in — the heading before
+ *  the edit, the rename field while it is open. The field itself exists only
+ *  while editing (`selection-inspector/inspector.tsx`), so reading the input
+ *  alone would make the baseline leg false and the comparison vacuous. */
 export async function surroundingState(
   page: Page,
   id: string,
@@ -578,7 +581,10 @@ export async function surroundingState(
     // said nothing where a reader can see it. The other three legs read state
     // the same way, and `null` is what a hidden one contributes.
     document: (await chip.isVisible()) ? await chip.textContent() : null,
-    field: await page.locator(FIELD_SELECTOR).isVisible(),
+    field:
+      (await page
+        .locator(`${REGION_SELECTOR.inspector} ${HEADING_HOOK}`)
+        .isVisible()) || (await page.locator(FIELD_SELECTOR).isVisible()),
   };
 }
 

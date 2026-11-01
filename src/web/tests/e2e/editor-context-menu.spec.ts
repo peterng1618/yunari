@@ -1,4 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { SHORTCUT_LABELS } from "../../packages/editor/src/shortcut-manager/reference.js";
+import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
@@ -104,12 +106,15 @@ const TOP_BAND = 0.15;
  * Both are measured, not chosen: three clicks at different x put the popup's
  * left edge 1.4–1.8px right of the click and its top a constant 5.64px above it
  * (2026-10-12, `chromium`, 1280×1000), which is the popup's own edge rather than
- * a position the pointer did not choose. The bounds admit that rounding; the
- * failures they are here to catch are hundreds of pixels wide — a popup at the
- * window's corner reads left ≈ 0, and one anchored to the canvas or to a trigger
- * does not move between two clicks at all.
+ * a position the pointer did not choose. The horizontal bound is the vertical
+ * one (8px), not the 2px it carried: at 2px the measured 1.8px left 0.2px of
+ * headroom, so a second device pixel ratio or a font metric could redden a
+ * placement that had not moved. The failures these catch are hundreds of pixels
+ * wide — a popup at the window's corner reads left ≈ 0, and one anchored to the
+ * canvas or to a trigger does not move between two clicks at all — so 8px keeps
+ * both red while admitting the placement's own rounding.
  */
-const ANCHOR_X_PX = 2;
+const ANCHOR_X_PX = 8;
 const ANCHOR_Y_PX = 8;
 
 /**
@@ -302,15 +307,16 @@ async function menuChords(popup: Locator): Promise<Record<string, string>> {
 
 /**
  * Item 14 of the GUI defect list: the canvas context menu drew no chords, while
- * the Edit menu drew one on each of the four rows they share — so the surface a
+ * the menu bar drew one on each of the four rows they shared — so the surface a
  * reader meets first, with no menu bar to look at, named no key at all.
  *
- * Compared against the Edit menu *as the same build renders it*, rather than
+ * Compared against the `?` sheet *as the same build renders it*, rather than
  * against a chord spelled here: the claim is that the two surfaces read one
- * binding, and a literal would pass on a menu that restated the chord and could
- * not follow a rebind.
+ * binding table, and a literal would pass on a menu that restated the chord and
+ * could not follow a rebind. The Edit menu is gone, so the sheet — the lasting
+ * owner of the chords — is the comparison.
  */
-test("an object's own menu prints the chords the Edit menu prints", async ({
+test("an object's own menu prints the chords the shortcut sheet prints", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -329,14 +335,28 @@ test("an object's own menu prints the chords the Edit menu prints", async ({
   await page.keyboard.press("Escape");
   await expect(objectWindow).toBeHidden();
 
-  // The Edit menu, through the product's own trigger.
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
-  const editMenu = await menuChords(
-    page.locator('[role="menu"]:visible').first(),
-  );
+  // The sheet, through the product's own `?` chord.
+  await page.keyboard.press("?");
+  const sheet = page.getByRole("dialog", {
+    name: uiCopy.shortcuts.reference,
+  });
+  await expect(sheet).toBeVisible();
+  const sheetChords: Record<string, string> = {};
+  for (const action of [
+    "edit.copy",
+    "edit.cut",
+    "edit.duplicate",
+    "edit.delete",
+  ] as const) {
+    const chip = sheet.locator(`[data-yunari-reference-row="${action}"] kbd`);
+    sheetChords[SHORTCUT_LABELS[action]] = (await chip.textContent()) ?? "";
+  }
   await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 
-  const shared = Object.keys(objectMenu).filter((label) => label in editMenu);
+  const shared = Object.keys(objectMenu).filter(
+    (label) => label in sheetChords,
+  );
   // The four rows the two surfaces share and the chord the defect was filed on.
   // Named rather than counted: an eligible set that carried no bound row would
   // make the loop below vacuous.
@@ -344,15 +364,15 @@ test("an object's own menu prints the chords the Edit menu prints", async ({
     expect(shared, `the object menu has a ${label} row`).toContain(label);
     expect(
       objectMenu[label],
-      `the object menu's ${label} prints the Edit menu's chord`,
-    ).toBe(editMenu[label]);
+      `the object menu's ${label} prints the shortcut sheet's chord`,
+    ).toBe(sheetChords[label]);
     expect(objectMenu[label], `${label} prints a chord`).not.toBe("");
   }
 
   // And the whole intersection agrees, so a fifth shared row is covered too.
   for (const label of shared) {
-    expect(objectMenu[label], `${label} across both menus`).toBe(
-      editMenu[label],
+    expect(objectMenu[label], `${label} across both surfaces`).toBe(
+      sheetChords[label],
     );
   }
 });

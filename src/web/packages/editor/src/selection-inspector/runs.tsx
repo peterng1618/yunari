@@ -11,6 +11,7 @@ import {
   formatInstant,
   groupDescriptorsByFamily,
   instantIn,
+  isOfferedPaletteToken,
   knownTimeZones,
   paletteTokenOptions,
   SEMANTIC_KEYS,
@@ -27,6 +28,7 @@ import {
   ControlRow,
   ControlWell,
   useControlIds,
+  useDraftCommit,
 } from "../components/ui/control-well.js";
 import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
 import {
@@ -87,6 +89,12 @@ interface RunsProjection {
    * refreshed catalogue visible on the next render.
    */
   readonly descriptors?: readonly SemanticKeyDescriptor[];
+  /**
+   * The keys this PC answers now. Absent until the host has said: the picker
+   * then offers every catalogue key as it always has rather than marking a
+   * table it cannot verify.
+   */
+  readonly measured?: ReadonlySet<string>;
 }
 
 /** A run's description for a list: what it is, and what it says. */
@@ -116,7 +124,7 @@ function paletteOptions(globals: FabricGlobals | undefined): readonly {
   readonly name: string;
   readonly ref: string;
 }[] {
-  return paletteTokenOptions(globals?.palette, (id) => id !== "none").map(
+  return paletteTokenOptions(globals?.palette, isOfferedPaletteToken).map(
     (option) => ({ id: option.id, name: option.name, ref: option.id }),
   );
 }
@@ -339,10 +347,16 @@ export function projectRuns(
   ].flatMap(([group, descriptors]) =>
     descriptors.map((descriptor) => {
       known.add(descriptor.key);
+      // A key the host did not answer with an `ok` reading stays listed but is
+      // not a choice here. It is unavailable, never a zero reading: the host
+      // said what it measures, not what the sensor would have said.
+      const disabled =
+        context.measured !== undefined && !context.measured.has(descriptor.key);
       return {
         id: descriptor.key,
         name: descriptor.label,
         group,
+        ...(disabled ? { disabled: true } : {}),
       };
     }),
   );
@@ -490,6 +504,7 @@ function RunFormatField(props: {
     setDraft(null);
     if (next !== format) props.onCommit(next);
   };
+  const keys = useDraftCommit({ draft, setDraft, commit });
 
   return (
     <>
@@ -508,16 +523,7 @@ function RunFormatField(props: {
             className="h-full w-full bg-transparent text-sm text-text outline-none"
             value={shown}
             onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              }
-              if (event.key === "Escape" && draft !== null) {
-                event.preventDefault();
-                setDraft(null);
-              }
-            }}
+            {...keys}
             onBlur={commit}
           />
         </ControlWell>

@@ -63,7 +63,7 @@ function SaveCleanupDialog({
         </p>
       )}
       <div className="mb-[var(--space-6)] flex items-baseline gap-[var(--space-8)]">
-        <span className="text-2xs font-semibold tracking-[0.11em] text-faint uppercase">
+        <span className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
           {uiCopy.saveCleanup.heading}
         </span>
         <span className="font-mono text-[10px] text-faint">
@@ -149,8 +149,8 @@ function SaveCleanupDialog({
  * flows with the words they used to open it.
  */
 export async function confirmSaveCleanup(input: {
-  /** The save the author pressed: `uiCopy`'s own "Save to library" or
-   *  "Save package". */
+  /** The save the author pressed: `uiCopy`'s own "Save" or
+   *  "Export theme". */
   readonly title: string;
   /** The document's name, drawn under the save's title; absent when it has
    *  none. */

@@ -55,7 +55,7 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
       data-yunari-type-presets=""
       className="flex flex-col gap-[var(--space-8)]"
     >
-      <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
+      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
         {uiCopy.panels.typeTokens}
       </h2>
       <ul className="flex flex-col gap-[var(--space-4)]">

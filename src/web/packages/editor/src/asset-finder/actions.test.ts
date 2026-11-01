@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { AssetPage, AssetResult } from "@yunari/renderer-core";
+import { MAX_CREDITS_ENTRIES } from "@yunari/theme-package";
 import { describe, expect, it, vi } from "vitest";
 import { AssetManager } from "../asset-manager/index.js";
 import type { EditorDocument } from "../editor-document.js";
@@ -30,7 +31,7 @@ const page: AssetPage = {
   failure: undefined,
 };
 
-function documentStub(canAddCredit = true): {
+function documentStub(creditsFull = false): {
   document: EditorDocument;
   addCredit: ReturnType<typeof vi.fn>;
 } {
@@ -38,7 +39,15 @@ function documentStub(canAddCredit = true): {
   return {
     document: {
       addCredit,
-      canAddCredit: () => canAddCredit,
+      credits: () =>
+        creditsFull
+          ? Array.from({ length: MAX_CREDITS_ENTRIES }, () => ({
+              kind: "image",
+              title: "legacy",
+              license: "unknown",
+              changes: "Imported unchanged",
+            }))
+          : [],
     } as unknown as EditorDocument,
     addCredit,
   };
@@ -77,8 +86,44 @@ describe("importFinderResult", () => {
       license: "ISC",
       changes: "Imported unchanged",
       source: { url: "https://lucide.dev/icons/house" },
+      assetId: manager.declarations[0]?.id,
     });
     expect(place).toHaveBeenCalledWith(manager.declarations[0]?.id ?? "");
+  });
+
+  it("links a finder image's credit to the declaration that carries it", async () => {
+    const manager = new AssetManager();
+    const { document, addCredit } = documentStub();
+    const image = {
+      ...lucide,
+      name: "studio",
+      kind: "image" as const,
+      subtitle: "Jane Doe",
+    };
+
+    const outcome = await importFinderResult({
+      page,
+      result: image,
+      bytes: svg,
+      filename: "studio.svg",
+      manager,
+      document,
+      place: vi.fn(),
+    });
+
+    if (!outcome.ok) throw new Error(outcome.message);
+    const declared = manager.declarations[0];
+    // The author survives only in the package credit; the id is what lets the
+    // preview join the declaration to it.
+    expect(addCredit).toHaveBeenCalledWith({
+      kind: "image",
+      title: "studio",
+      author: { name: "Jane Doe" },
+      license: "ISC",
+      changes: "Imported unchanged",
+      source: { url: "https://lucide.dev/icons/house" },
+      assetId: declared?.id,
+    });
   });
 
   it("refuses a file the manager cannot read and adds no entry", async () => {
@@ -103,7 +148,7 @@ describe("importFinderResult", () => {
 
   it("refuses the import that would pass the credits cap, before it declares bytes", async () => {
     const manager = new AssetManager();
-    const { document, addCredit } = documentStub(false);
+    const { document, addCredit } = documentStub(true);
     const place = vi.fn();
     const declare = vi.spyOn(manager, "import");
 
@@ -143,6 +188,7 @@ describe("importFinderResult", () => {
       changes: "Imported unchanged",
       source: { url: "https://lucide.dev/icons/house" },
     });
+    expect(creditOf(lucide, "asset-1")).toMatchObject({ assetId: "asset-1" });
   });
 });
 

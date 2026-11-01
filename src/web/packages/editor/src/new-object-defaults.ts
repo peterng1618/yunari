@@ -8,6 +8,7 @@ import {
   defaultPolarBarSettings,
   defaultRadarSettings,
   type FabricGlobals,
+  isOfferedPaletteToken,
   type TypeToken,
 } from "@yunari/renderer-core";
 import {
@@ -727,8 +728,8 @@ function surfacePalette(
 ):
   | readonly [string, NonNullable<FabricGlobals["palette"]>[string]]
   | undefined {
-  const entries = Object.entries(globals?.palette ?? {}).filter(
-    ([id]) => id !== "none",
+  const entries = Object.entries(globals?.palette ?? {}).filter(([id]) =>
+    isOfferedPaletteToken(id),
   );
   return (
     candidates
@@ -740,8 +741,8 @@ function surfacePalette(
 function firstPalette(
   globals: FabricGlobals | undefined,
 ): readonly [string, NonNullable<FabricGlobals["palette"]>[string]] {
-  const entries = Object.entries(globals?.palette ?? {}).filter(
-    ([id]) => id !== "none",
+  const entries = Object.entries(globals?.palette ?? {}).filter(([id]) =>
+    isOfferedPaletteToken(id),
   );
 
   const selected =

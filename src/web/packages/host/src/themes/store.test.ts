@@ -13,7 +13,9 @@ import {
   createThemeStore,
   isValidThemeId,
   MAX_ASSET_BYTES,
+  MAX_THEME_WIRE_BYTES,
   MAX_TRASH_UPLOAD_BYTES,
+  storeRefusalMessage,
   ThemeAssetLimitError,
   ThemeConflictError,
   type ThemeContent,
@@ -143,6 +145,18 @@ describe("the trash request bound", () => {
     expect(MAX_TRASH_UPLOAD_BYTES).toBeGreaterThan(
       4 * Math.ceil(MAX_ASSET_BYTES / 3),
     );
+  });
+});
+
+describe("the save request bound", () => {
+  it("fits one asset at its own cap and the whole theme the store persists", () => {
+    // The save route reads this as its body limit. The old 96 MiB cap held only
+    // ~72 MiB of decoded asset, so an 80 MiB video the importer accepts was
+    // refused at save before the writer ever saw it.
+    expect(MAX_THEME_WIRE_BYTES).toBeGreaterThan(
+      4 * Math.ceil(MAX_ASSET_BYTES / 3),
+    );
+    expect(MAX_THEME_WIRE_BYTES).toBeGreaterThan(MAX_TRASH_UPLOAD_BYTES);
   });
 });
 
@@ -656,6 +670,10 @@ describe("ThemeStore", () => {
 
     expect(byId.get("night-sky")?.ground).toBe("#101014");
     expect(byId.get("film")?.ground).toBeUndefined();
+    // The same document's colour mode comes from the one owner of the
+    // media-behind-the-board rule, so a listing cannot carry no ground while
+    // the facet calls the board dark.
+    expect(byId.get("film")?.facets.colourMode).toBe("unclassified");
     // A board with no paint at all is the same absence as one with media.
     expect(byId.get("plain")?.ground).toBeUndefined();
   });
@@ -2267,6 +2285,33 @@ describe("ThemeStore concurrent saves", () => {
   });
 });
 
+describe("storeRefusalMessage", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("answers a filesystem failure with the step, not the platform's path", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = Object.assign(
+      new Error(
+        "EPERM: operation not permitted, mkdir 'C:\\Users\\a\\.yunari\\themes\\x'",
+      ),
+      { code: "EPERM" },
+    );
+
+    const message = storeRefusalMessage(failure);
+
+    expect(message).not.toContain("C:\\");
+    expect(message).toContain("library");
+    // The raw text is not thrown away; it goes where a maintainer can read it.
+    expect(logged).toHaveBeenCalledWith(expect.any(String), failure);
+  });
+
+  it("keeps the store's own sentences, which say what to change", () => {
+    const refusal = new ThemeConflictError("living-room");
+
+    expect(storeRefusalMessage(refusal)).toBe(refusal.message);
+  });
+});
+
 describe("isValidThemeId", () => {
   it("accepts alphanumeric, hyphens, and underscores up to 64 chars", () => {
     expect(isValidThemeId("living-room")).toBe(true);
@@ -2666,7 +2711,7 @@ describe("ThemeStore remove", () => {
   it("removes nothing itself when the trash refuses, and says so", async () => {
     const refusing = createThemeStore(tmpDir, {
       trash: async () => {
-        throw new Error("This PC has no trash command (gio, trash-put)");
+        throw new Error("The Host has no trash command (gio, trash-put)");
       },
     });
     await refusing.write("living-room", save("living-room", "Living Room"));

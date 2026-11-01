@@ -6,8 +6,8 @@ import {
   type WidgetProvenance,
   YUNARI_NAME_PROPERTY,
 } from "@yunari/renderer-core";
-import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
-import { type FabricObject, Group, util } from "fabric/es";
+import { visitSceneObjects, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
+import { type FabricObject, util } from "fabric/es";
 import {
   resolveCardToken,
   type TokenSubstitution,
@@ -58,7 +58,7 @@ import { uiCopy } from "./ui-copy.js";
  */
 
 /**
- * The name of the diagram a card unit's tile draws.
+ * The name of the mark a card unit's tile draws.
  *
  * A closed union, so the **library** owns the name and a ninth card cannot be
  * added without one; the pane owns the rendering, because it is a React surface
@@ -81,7 +81,7 @@ export interface CardUnit {
   readonly id: string;
   /** What the chooser's button says, and what a copy is named in the tree. */
   readonly label: string;
-  /** Which diagram the Add pane's tile draws for this unit. */
+  /** Which mark the Add pane's tile draws for this unit. */
   readonly diagram: CardDiagram;
   /** The card as the starter authored it — one group over its parts. */
   readonly build: () => ObjectJson;
@@ -605,14 +605,10 @@ function sceneIds(canvas: {
   getObjects(): readonly FabricObject[];
 }): Set<string> {
   const ids = new Set<string>();
-  const visit = (objects: readonly FabricObject[]): void => {
-    for (const object of objects) {
-      const id = object.get("id");
-      if (typeof id === "string") ids.add(id);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(canvas.getObjects());
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const id = object.get("id");
+    if (typeof id === "string") ids.add(id);
+  });
   return ids;
 }
 

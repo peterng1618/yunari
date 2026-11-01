@@ -137,4 +137,10 @@ export interface SensorProvider {
 export interface SampleContext {
   readonly assignment?: DeviceAssignment;
   readonly language?: string;
+  /**
+   * The caller is reading the catalogue and needs a source's first reading now
+   * rather than on its next interval. Providers without a fetch lifecycle
+   * ignore it; a custom source awaits the fetch its own demand started.
+   */
+  readonly awaitFirstReading?: boolean;
 }

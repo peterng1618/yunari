@@ -44,18 +44,18 @@
   </head>
   <body>
     <main>
-      <h1>This PC</h1>
+      <h1>Host</h1>
       <p class="lead">
-        Which hardware this PC reports, and how its readings are shown.
+        Which hardware the Host reports, and how its readings are shown.
       </p>
       <p class="elsewhere">
         Building a theme, or changing one?
         <a id="editor-link" href="/editor/">Open the editor</a>.
       </p>
       <section aria-labelledby="devices-heading">
-        <h2 id="devices-heading">Devices on this PC</h2>
+        <h2 id="devices-heading">Devices on the Host</h2>
         <p class="hint">
-          Which hardware this PC reports. These apply to every theme, unless a
+          Which hardware the Host reports. These apply to every theme, unless a
           theme asks for something different.
         </p>
         <div id="groups"></div>
@@ -63,7 +63,7 @@
       <section aria-labelledby="display-heading">
         <h2 id="display-heading">Display</h2>
         <p class="hint">
-          How this PC's readings are shown. A theme decides how a clock reads;
+          How the Host's readings are shown. A theme decides how a clock reads;
           this decides which zone it reads and which units temperatures use.
         </p>
         <label for="timezone">Clock time zone</label>
@@ -97,11 +97,11 @@
       };
 
       /** What each group does when nothing has been chosen, in the words a
-       * consumer would use for it. The empty answer is a rule about this PC,
+       * consumer would use for it. The empty answer is a rule about the Host,
        * not a device: naming it after discovery order puts a machine's
        * bookkeeping in the same list as the model numbers a person bought. */
       const AUTOMATIC_CHOICE = {
-        gpu: "Automatic (the first card this PC reports)",
+        gpu: "Automatic (the first card the Host reports)",
         "system-disk": "Automatic (every drive, combined)",
         "data-disk": "Automatic (every drive, combined)",
       };
@@ -112,7 +112,7 @@
        * ask the one question, so the legend was the only thing telling them
        * apart, and a legend scrolls out of view. */
       const DEVICE_QUESTION = {
-        "system-disk": "Which drive does this PC run from?",
+        "system-disk": "Which drive does the Host run from?",
         "data-disk": "Which second drive should dashboards show?",
       };
 
@@ -148,7 +148,7 @@
         questionsSection.hidden = false;
         questionsHint.textContent =
           "This theme reads hardware that has no answer yet. Pick a device, or " +
-          "leave it following this PC's settings. These answers are for the " +
+          "leave it following the Host's settings. These answers are for the " +
           "default display — every screen with no choice of its own.";
 
         for (const group of unanswered) {
@@ -163,7 +163,7 @@
           // The global choice is the default, so most consumers can skip this.
           const inherit = document.createElement("option");
           inherit.value = "";
-          inherit.textContent = "Use this PC's settings";
+          inherit.textContent = "Use the Host's settings";
           select.append(inherit);
 
           for (const device of optionsFor(group)) {
@@ -437,13 +437,13 @@
           const response = await fetch("/api/display");
           if (!response.ok) throw new Error(await response.text());
           const body = await response.json();
-          // This PC's own zone is the default and the most common answer, so it
+          // The Host's own zone is the default and the most common answer, so it
           // comes first and needs no name of its own.
           const zones = ["", ...(body.zones ?? [])];
           for (const zoneName of zones) {
             const option = document.createElement("option");
             option.value = zoneName;
-            option.textContent = zoneName === "" ? "This PC's own zone" : zoneName;
+            option.textContent = zoneName === "" ? "Host's own zone" : zoneName;
             zone.append(option);
           }
           chosen.timeZone = body.settings?.timeZone ?? "";

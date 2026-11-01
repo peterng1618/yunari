@@ -135,20 +135,28 @@ function tagsOf(envelope: FabricThemeEnvelope): string[] {
 }
 
 /**
- * Media behind the board is a ground this cannot read whatever the paint says,
- * and a reference is resolved the document's own way (`resolveStyleValue`) rather
- * than by a second resolver. A reference nothing declares resolves to
- * `undefined`, which is the same absence as no ground at all.
+ * The background layer's paint, with media behind the board counted as no paint
+ * at all: a picture is what a viewer sees there, so the token is neither the
+ * ground's colour nor a lightness it can be classified by. One rule, because
+ * the store's listing and the colour-mode facet both need this answer, and a
+ * second copy would let the ground and the mode drift.
+ *
+ * A reference is resolved the document's own way (`resolveStyleValue`); one
+ * nothing declares resolves to `undefined`, the same absence as no paint.
  */
-function groundOf(envelope: FabricThemeEnvelope): Ground | undefined {
+export function backgroundPaintOf(envelope: FabricThemeEnvelope): unknown {
   if (envelope.background?.media !== undefined) return undefined;
-
-  const resolved = resolveStyleValue(
+  return resolveStyleValue(
     envelope.background?.color,
     envelope.globals ?? {},
     "background",
     [],
   );
+}
+
+/** {@link backgroundPaintOf}, read as a ground this module can measure. */
+function groundOf(envelope: FabricThemeEnvelope): Ground | undefined {
+  const resolved = backgroundPaintOf(envelope);
   if (typeof resolved === "string") return { kind: "solid", color: resolved };
   if (typeof resolved !== "object" || resolved === null) return undefined;
 

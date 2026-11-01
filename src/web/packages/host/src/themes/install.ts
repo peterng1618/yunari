@@ -4,6 +4,7 @@ import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import { downloadPackage } from "./download.js";
 import { importThemePackage, type ThemeImportResult } from "./import.js";
 import {
+  storeRefusalMessage,
   type ThemeStore,
   ThemeTooLargeError,
   ThemeValidationError,
@@ -64,11 +65,11 @@ export type InstallResult =
  *  needs telling which one. */
 export const INSTALL_REFUSALS = {
   updateKept:
-    "This PC could not record where that theme came from; your copy is unchanged.",
+    "The Host could not record where that theme came from; your copy is unchanged.",
   rolledBack:
-    "This PC could not record where that theme came from, so it was not kept.",
+    "The Host could not record where that theme came from, so it was not kept.",
   rolledBackFailed:
-    "This PC could not record where that theme came from, and could not remove it; delete it from Your themes before installing again.",
+    "The Host could not record where that theme came from, and could not remove it; delete it from Your themes before installing again.",
 } as const;
 
 /**
@@ -284,10 +285,7 @@ async function replaceCatalogueCopy(
       { overwrite: true },
     );
   } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return { ok: false, message: storeRefusalMessage(error) };
   }
 
   const { thumbnail } = parsed;

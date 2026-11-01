@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   expect,
@@ -59,6 +60,7 @@ import {
 } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
+import { ROLE_TOKENS, withRoleTokens } from "./theme-fixture.js";
 
 /** The theme the library stub lists, so the record below is the host's own
  *  derivation rather than a descriptor written by hand: `describeSemanticKey`
@@ -97,7 +99,7 @@ const EDITOR = "http://127.0.0.1:4174/";
 
 /**
  * The one real face the suite keeps on disk, cached by the host fixture before
- * any worker starts (`global-setup.ts` → `seedHostTheme` → `fontBytes`). The
+ * any worker starts (`seed-host.ts` → `seedHostTheme` → `fontBytes`). The
  * token inspector's import refuses bytes the browser cannot parse, so a
  * synthetic buffer is not a stand-in here.
  */
@@ -262,85 +264,70 @@ async function guidePixelsAtSceneX(
 }
 
 /**
- * The rightmost column of a named object's box that carries light ink, in
- * canvas pixels. `-1` when the object or the canvas cannot be read.
+ * The rightmost column of a named object's rendered ink, in object pixels.
+ * `-1` when the object is missing or its render cannot be read.
  *
- * Samples `lower-canvas`, where Fabric paints objects; `upper-canvas` carries
- * only the selection overlay. Waits two animation frames first, for the reason
- * `guidePixelsAtSceneX` gives: a render scheduled by `requestRenderAll` has not
- * reached the canvas when the `fill` resolves, so reading immediately samples a
- * canvas from before the edit.
+ * Renders the object itself through Fabric rather than sampling the editor's
+ * shared `lower-canvas`. The object carries the authored state the edit wrote,
+ * and its own render is synchronous; the shared buffer can still hold the frame
+ * from before the commit when the blur resolves. Measured against the object
+ * rather than the canvas, a sibling at the same height cannot become the
+ * rightmost bright column either.
  *
  * Brightness rather than alpha, because text over an opaque panel is covered
  * everywhere and only the glyphs are light.
  */
 async function inkReachOf(page: Page, id: string): Promise<number> {
-  return page.evaluate(
-    async ([objectId, artboard]) => {
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
-      });
-      const bridge = (
-        window as unknown as {
-          yunariEditorBridge: {
-            editor: {
-              viewport: {
-                artboardScreenRect(): {
-                  left: number;
-                  top: number;
-                  width: number;
-                  height: number;
-                };
-              };
-              canvas: {
-                getObjects(): Array<{
-                  id?: string;
-                  getBoundingRect(): ArtboardRect;
-                }>;
-              };
+  return page.evaluate(async (objectId: string) => {
+    const bridge = (
+      window as unknown as {
+        yunariEditorBridge: {
+          editor: {
+            canvas: {
+              getObjects(): Array<{
+                id?: string;
+                toCanvasElement(multiplier?: number): HTMLCanvasElement;
+              }>;
             };
           };
-        }
-      ).yunariEditorBridge;
-      const object = bridge.editor.canvas
-        .getObjects()
-        .find((candidate) => candidate.id === objectId);
-      if (object === undefined) return -1;
-      const view = bridge.editor.viewport.artboardScreenRect();
-      const element = document.querySelector<HTMLCanvasElement>(
-        "#yunari-fabric-editor canvas.lower-canvas",
-      );
-      const context = element?.getContext("2d");
-      if (element === null || context === null || context === undefined)
-        return -1;
+        };
+      }
+    ).yunariEditorBridge;
+    const object = bridge.editor.canvas
+      .getObjects()
+      .find((candidate) => candidate.id === objectId);
+    if (object === undefined) return -1;
+    // The commit lands on the change event; two frames let a render the commit
+    // scheduled reach the object before it is measured.
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    const element = object.toCanvasElement(1);
+    const context = element.getContext("2d");
+    if (context === null) return -1;
+    const pixels = context.getImageData(
+      0,
+      0,
+      element.width,
+      element.height,
+    ).data;
 
-      const rect = object.getBoundingRect();
-      const ratio = element.width / element.getBoundingClientRect().width;
-      const scale = view.width / artboard;
-      const left = Math.round((view.left + rect.left * scale) * ratio);
-      const top = Math.round((view.top + rect.top * scale) * ratio);
-      const width = Math.max(1, Math.round(rect.width * scale * ratio));
-      const height = Math.max(1, Math.round(rect.height * scale * ratio));
-      const pixels = context.getImageData(left, top, width, height).data;
-
-      let rightmost = -1;
-      for (let column = 0; column < width; column += 1) {
-        for (let row = 0; row < height; row += 1) {
-          const at = (row * width + column) * 4;
-          const luminance =
-            0.2126 * (pixels[at] ?? 0) +
-            0.7152 * (pixels[at + 1] ?? 0) +
-            0.0722 * (pixels[at + 2] ?? 0);
-          if (luminance > 140) {
-            rightmost = column;
-            break;
-          }
+    let rightmost = -1;
+    for (let column = 0; column < element.width; column += 1) {
+      for (let row = 0; row < element.height; row += 1) {
+        const at = (row * element.width + column) * 4;
+        const luminance =
+          0.2126 * (pixels[at] ?? 0) +
+          0.7152 * (pixels[at + 1] ?? 0) +
+          0.0722 * (pixels[at + 2] ?? 0);
+        if (luminance > 140) {
+          rightmost = column;
+          break;
         }
       }
-      return rightmost;
-    },
-    [id, STARTER_WIDTH] as [string, number],
-  );
+    }
+    return rightmost;
+  }, id);
 }
 
 /**
@@ -1025,10 +1012,10 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
-    // "Add colour" is the palette panel's control, and the palette is the
+    // "Add color" is the palette panel's control, and the palette is the
     // Tokens pane's.
     await openPane(page, "Design tokens");
-    await page.getByRole("button", { name: "Add colour" }).click();
+    await page.getByRole("button", { name: "Add color" }).click();
     // The pane carries one trigger and no field of its own; the exact-value
     // field is the picker's, portalled from the popover.
     await page.locator("[data-yunari-palette-picker]").click();
@@ -1183,7 +1170,7 @@ test.describe("Fabric editor route", () => {
     ).toBeVisible();
     await captureVisualReview(page, testInfo, "editor-chart-creation");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const chart = sceneObjects(saved.parsed.envelope)
@@ -1292,7 +1279,7 @@ test.describe("Fabric editor route", () => {
     await expect(fill).toBeVisible();
 
     await typeInto(page, border, "3");
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const panel = sceneObjects(saved.parsed.envelope).find(
@@ -1599,7 +1586,7 @@ test.describe("Fabric editor route", () => {
 
     // Save, reopen, and the treatment is still authored state rather than a
     // cache the round trip dropped.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     const reopened = (await saveEnvelope(page)) as {
@@ -1993,12 +1980,12 @@ test.describe("Fabric editor route", () => {
     // The board's paint is the background layer's now, so it is written where
     // the layer is selected rather than in the Document pane.
     await selectLayer(page, "Background");
-    await chooseIn(page, "[data-yunari-background]", "palette.bars");
+    await chooseIn(page, "[data-yunari-background]", "palette.panel");
     // The committed reference, read off the control's own hook: the paint
     // chooser is plan 1's select now — a button, whose `.value` is always "".
     await expect(
       page.locator("[data-yunari-background] [data-yunari-value]"),
-    ).toHaveAttribute("data-yunari-value", "palette.bars");
+    ).toHaveAttribute("data-yunari-value", "palette.panel");
     // Back to the Document pane for the capture this action is registered for;
     // selecting the background survives the pane swap.
     await openPane(page, "Document");
@@ -2081,6 +2068,7 @@ test.describe("Fabric editor route", () => {
             },
           },
         },
+        typeTokens: ROLE_TOKENS,
       },
       scene: { version: "7.4.0", objects: [] },
     });
@@ -2128,31 +2116,31 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     // The artboard must reference the token before it is deleted, or the
     // reassignment has nothing to reassign and the test passes for the wrong
-    // reason. The board's one paint is `background`, so it is pointed at `bars`
+    // reason. The board's one paint is `background`, so it is pointed at `panel`
     // here where the background layer is selected — the pane that owns it.
     await selectLayer(page, "Background");
-    await chooseIn(page, "[data-yunari-background]", "palette.bars");
+    await chooseIn(page, "[data-yunari-background]", "palette.panel");
     // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
     // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Design tokens");
-    await page.locator('[data-yunari-palette-token-row="bars"]').click();
+    await page.locator('[data-yunari-palette-token-row="panel"]').click();
     await page.locator("[data-yunari-palette-delete]").click();
-    await chooseIn(page, "[data-yunari-palette-replacement]", "panel");
+    await chooseIn(page, "[data-yunari-palette-replacement]", "dim");
     await captureVisualReview(page, testInfo, "editor-palette-reassignment");
     await page.locator("[data-yunari-palette-delete]").click();
     // The row is the token's own well in the list, so a deletion takes the
-    // whole row with it — the same fact `option[value="bars"]` stated about
+    // whole row with it — the same fact `option[value="panel"]` stated about
     // the native chooser it used to be.
     await expect(
-      page.locator('[data-yunari-palette-token-row="bars"]'),
+      page.locator('[data-yunari-palette-token-row="panel"]'),
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
       background?: { color?: { ref: string } };
       globals: { palette: Record<string, unknown> };
     };
-    expect(envelope.background?.color).toEqual({ ref: "palette.panel" });
-    expect(envelope.globals.palette.bars).toBeUndefined();
+    expect(envelope.background?.color).toEqual({ ref: "palette.dim" });
+    expect(envelope.globals.palette.panel).toBeUndefined();
   });
 
   test("reassigns chart paint before deleting its palette token", async ({
@@ -2166,7 +2154,7 @@ test.describe("Fabric editor route", () => {
     await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="chartTrack"]').click();
     await page.locator("[data-yunari-palette-delete]").click();
-    await chooseIn(page, "[data-yunari-palette-replacement]", "bars");
+    await chooseIn(page, "[data-yunari-palette-replacement]", "cpu");
     await page.locator("[data-yunari-palette-delete]").click();
 
     const envelope = (await saveEnvelope(page)) as {
@@ -2185,7 +2173,7 @@ test.describe("Fabric editor route", () => {
           | { track?: unknown }
           | undefined
       )?.track,
-    ).toEqual({ ref: "palette.bars" });
+    ).toEqual({ ref: "palette.cpu" });
   });
 
   test("edits a global type token through the property surface", async ({
@@ -2220,7 +2208,11 @@ test.describe("Fabric editor route", () => {
     // Create because the fixture's file name would declare it `inter`.
     const chooser = page.waitForEvent("filechooser");
     await chooseIn(page, family, IMPORT_LOCAL_FONT_ID);
-    await (await chooser).setFiles(FONT_FIXTURE);
+    await (await chooser).setFiles({
+      name: "inter-400.woff2",
+      mimeType: "font/woff2",
+      buffer: readFileSync(FONT_FIXTURE),
+    });
     const fontFamily = page.locator("[data-yunari-font-family]");
     await fontFamily.fill("Inter");
     await fontFamily.press("Tab");
@@ -2238,7 +2230,7 @@ test.describe("Fabric editor route", () => {
     const weight = page.locator("[data-yunari-token-weight]");
     expect(await choiceOf(weight)).toBe("600 (not in package)");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
     await openPane(page, "Design tokens");
@@ -2435,14 +2427,13 @@ test.describe("Fabric editor route", () => {
     );
     await page.goto(EDITOR);
     // Dirty by an authoring act first, for the reason the replacement capture
-    // gives. An untouched starter is *not* dirty: File → Open library would ask
+    // gives. An untouched starter is *not* dirty: the toolbar's Open would ask
     // nothing, and `answerDialogIfShown` would then find the chooser's own
     // dialog and spend its budget waiting inside it for a Discard button.
     await openPane(page, "Add");
     await insertShape(page, "Rectangle");
 
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open library" }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
     await answerDialogIfShown(page, "Discard");
     const chooser = page.locator('[role="dialog"]', {
       hasText: "Open a theme",
@@ -2495,7 +2486,7 @@ test.describe("Fabric editor route", () => {
     await page.locator("[data-yunari-artboard-width]").press("Tab");
     await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background-bounds]", "display");
-    await chooseIn(page, "[data-yunari-background]", "palette.bars");
+    await chooseIn(page, "[data-yunari-background]", "palette.panel");
     await page.locator("[data-yunari-background-flip-x]").click();
 
     const envelope = (await saveEnvelope(page)) as {
@@ -2516,7 +2507,7 @@ test.describe("Fabric editor route", () => {
     expect(envelope.background?.media?.flipX).toBe(true);
     expect(envelope.artboard.contentFit ?? "contain").toBe("contain");
     expect(envelope.artboard.width).toBe(1000);
-    expect(envelope.background?.color).toEqual({ ref: "palette.bars" });
+    expect(envelope.background?.color).toEqual({ ref: "palette.panel" });
     expect(leftFor(envelope, "wordmark")).toBe(118);
   });
 
@@ -2985,7 +2976,7 @@ test.describe("Fabric editor route", () => {
       "Brand mark",
     );
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const envelope = saved.parsed.envelope as {
@@ -3057,21 +3048,17 @@ test.describe("Fabric editor route", () => {
       },
     });
 
-    const download = page.waitForEvent("download");
-    await page.keyboard.press("Control+s");
-    const stream = await (await download).createReadStream();
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    const saved = Buffer.concat(chunks);
-    const parsed = readThemePackage(saved);
-    expect(parsed.ok).toBe(true);
-    if (!parsed.ok) return;
-    expect(parsed.envelope.id).toBe("source");
-    expect(sceneObjects(parsed.envelope)).toEqual(
+    // Ctrl+S is the library save now; a package leaves through File > Save
+    // package, which is the path this case round-trips through.
+    const saved = await exportPackage(page);
+    expect(saved.parsed.ok).toBe(true);
+    if (!saved.parsed.ok) return;
+    expect(saved.parsed.envelope.id).toBe("source");
+    expect(sceneObjects(saved.parsed.envelope)).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "panel" })]),
     );
 
-    await openThemeFromStore(page, storedThemeOfPackage(saved));
+    await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
   });
 
   test("imports and round-trips packaged images", async ({
@@ -3271,7 +3258,7 @@ test.describe("Fabric editor route", () => {
     // to is the card the import declared.
     await assetCard(page, "logo.png").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-assets");
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     // One declaration, holding the replacement's bytes — the same extension the
@@ -3349,7 +3336,7 @@ test.describe("Fabric editor route", () => {
       .scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-background-media");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     expect(saved.parsed.envelope.background?.media).toEqual({
@@ -3918,11 +3905,7 @@ test.describe("Fabric editor route", () => {
             value: { kind: "solid" as const, color: INK_PAINT },
           },
         },
-        typeTokens: {
-          heading: { family: "system-ui, sans-serif", weight: "600" },
-          body: { family: "system-ui, sans-serif", weight: "400" },
-          mono: { family: "ui-monospace, monospace", weight: "400" },
-        },
+        typeTokens: ROLE_TOKENS,
       },
       bindings: {},
       scene: {
@@ -4105,10 +4088,9 @@ test.describe("Fabric editor route", () => {
       editor?.canvas.requestRenderAll();
     });
     // **The File row, not `Control+o`.** That chord now prints beside, and
-    // drives, the *Import package* row — and an import replaces nothing, so it
+    // drives, the *Import theme* row — and an import replaces nothing, so it
     // asks no question. The row that still opens a document is this one.
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open library" }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
@@ -4548,17 +4530,13 @@ test.describe("Fabric editor route", () => {
     );
     const textId = id!;
 
-    // A non-unit scale, through the product's own corner drag. `vg-233`'s
-    // comparison only exists there: at `scaleX` 1 the two candidate writes are
-    // the same number, and the run measured their difference as `scaleX` times
-    // the drag.
+    // The corner drag is folded into the authored box at the commit: the
+    // object returns to unit scale and the box carries the drawn width. That
+    // smaller box is what the side handle below resizes, and `vg-233` is about
+    // the box surviving that second gesture.
     await scaleByCornerHandle(page, textId, 0.5);
     const scaled = await textBoxState(page, textId);
-    expect(
-      scaled.scaleX,
-      "the corner drag left the text below a unit scale",
-    ).toBeGreaterThan(0.2);
-    expect(scaled.scaleX).toBeLessThan(0.9);
+    expect(scaled.scaleX, "the commit leaves no scale on the object").toBe(1);
     expect(
       scaled.boxWidth,
       "the starter's text carries the authored box both halves write",
@@ -4646,7 +4624,7 @@ test.describe("Fabric editor route", () => {
       afterSubUnit.boxWidth,
     );
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) throw new Error(saved.parsed.message);
     const persisted = sceneObjects(saved.parsed.envelope).find(
@@ -5549,35 +5527,31 @@ test.describe("Fabric editor route", () => {
 });
 
 async function saveEnvelope(page: Page): Promise<unknown> {
-  const { parsed } = await savePackage(page);
+  const { parsed } = await exportPackage(page);
   expect(parsed.ok).toBe(true);
   if (!parsed.ok) throw new Error(parsed.message);
   return parsed.envelope;
 }
 
-async function savePackage(page: Page): Promise<{
+async function exportPackage(page: Page): Promise<{
   readonly parsed: ReturnType<typeof readThemePackage>;
   readonly bytes: Buffer;
 }> {
   const download = page.waitForEvent("download");
-  // The File menu owns Save; the header's own button is gone, so the row is the
-  // one route an author takes.
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  // **Not `exact`, and the row is why.** A row that prints a chord carries the
-  // chord's `aria-label` inside it (`shell-menu-bar.tsx`), and a descendant's
-  // `aria-label` joins the ancestor's name-from-content — measured: the three
-  // chorded File rows compute a name their own label does not equal, so
-  // `exact: true` matched none of them. Which rows print a chord is the markup's
-  // business, so demanding the label *be* the whole name makes the locator fail
-  // whenever the product adds one.
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  // **Export theme is the package download's own action.** The toolbar's
+  // Activate instructs the player; it does not write a file.
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
+  // A package with unused assets asks before it writes; the download only
+  // starts after that sheet is answered.
+  await answerDialogIfShown(page, "Export theme", 1_000);
   // **Contained, not exact.** The status line also carries whatever diagnostic
   // is on screen, and a diagnostic is retired by the next *committed* edit — so
   // a save immediately after a refusal reads as both. The claim here is that
-  // the save happened, which is what the contained text states; demanding the
+  // the export happened, which is what the contained text states; demanding the
   // line be empty of everything else would be demanding the shell forget a
   // message the author has not yet had an edit to replace it.
-  await expect(page.locator("#status")).toContainText("Theme package saved");
+  await expect(page.locator("#status")).toContainText("Released");
   const stream = await (await download).createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -5610,6 +5584,7 @@ function groupDimEnvelope(): Parameters<
           value: { kind: "solid", color: ACCENT_PAINT },
         },
       },
+      typeTokens: ROLE_TOKENS,
     },
     scene: {
       version: "7.4.0",
@@ -5665,7 +5640,10 @@ async function setThemePackage(
   envelope: Parameters<typeof writeThemePackage>[0]["envelope"],
   status?: string | RegExp,
 ): Promise<void> {
-  const result = writeThemePackage({ envelope, assets: {} });
+  const result = writeThemePackage({
+    envelope: withRoleTokens(envelope),
+    assets: {},
+  });
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.message);
   await openThemeFromStore(page, storedThemeOfPackage(result.bytes), status);

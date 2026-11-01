@@ -1,5 +1,12 @@
 // Ported: fork 9efdd78a src/editor/snapping-manager/scaling/scale-snapping-runtime.ts
 /* eslint-disable no-use-before-define -- the public runtime sits above its internal checks. */
+
+import {
+  type DuplicateRuntimeStep,
+  type PlannedRuntimeStep,
+  type PlanToken,
+  SnappingSessionProtocol,
+} from "../protocol/session.js";
 import {
   type FinalScaleGeometry,
   FREE_SCALE_HOLD_STATE,
@@ -17,26 +24,16 @@ import {
 } from "./scale-snapping-resolver.js";
 
 /** A single-use scale plan id. */
-type ScalePlanToken = Readonly<{
-  sessionId: number;
-  step: number;
-}>;
+type ScalePlanToken = PlanToken;
 
 /** A fresh pointer step the object manager may apply exactly once. */
-type PlannedScaleRuntimeStep = Readonly<{
-  kind: "planned";
-  token: ScalePlanToken;
-  plan: ScaleSnapPlan;
-}>;
+type PlannedScaleRuntimeStep = PlannedRuntimeStep<ScaleSnapPlan>;
 
 /** A repeat of an already computed native pointer step. */
-type DuplicateScaleRuntimeStep = Readonly<{
-  kind: "duplicate";
-  phase: "pending" | "verified";
-  token: ScalePlanToken;
-  plan: ScaleSnapPlan;
-  verification: ScaleSnapVerification | null;
-}>;
+type DuplicateScaleRuntimeStep = DuplicateRuntimeStep<
+  ScaleSnapPlan,
+  ScaleSnapVerification
+>;
 
 /** A fresh or repeated scale-runtime result. */
 type ScaleRuntimeStep = PlannedScaleRuntimeStep | DuplicateScaleRuntimeStep;
@@ -46,25 +43,6 @@ type ScaleRuntimeCleanup = Readonly<{
   didCleanup: boolean;
   hiddenGuides: readonly VerifiedScaleGuide[];
 }>;
-
-/** State of one native pointer marker. */
-type ScaleRuntimeStepRecord = {
-  intent: ScaleRawIntent;
-  token: ScalePlanToken;
-  plan: ScaleSnapPlan;
-  verification: ScaleSnapVerification | null;
-};
-
-/** Mutable state of one active resize gesture. */
-type ActiveScaleRuntimeSession = {
-  id: number;
-  baseline: ScaleGestureBaseline;
-  holdState: ScaleHoldState;
-  visibleGuides: readonly VerifiedScaleGuide[];
-  markerRecords: WeakMap<object, ScaleRuntimeStepRecord>;
-  pendingStep: ScaleRuntimeStepRecord | null;
-  nextStep: number;
-};
 
 /** Next local scale-session id. */
 let nextScaleRuntimeSessionId = 1;
@@ -80,28 +58,51 @@ const EMPTY_SCALE_RUNTIME_CLEANUP: ScaleRuntimeCleanup = Object.freeze({
  * verification. The runtime never mutates Fabric objects.
  */
 export class ScaleSnappingRuntime {
-  private _session: ActiveScaleRuntimeSession | null = null;
-
-  private readonly _issuedTokens = new WeakSet<ScalePlanToken>();
-
-  private readonly _consumedTokens = new WeakSet<ScalePlanToken>();
+  private readonly _protocol = new SnappingSessionProtocol<
+    ScaleGestureBaseline,
+    ScaleHoldState,
+    ScaleRawIntent,
+    ScaleSnapPlan,
+    ScaleSnapVerification,
+    FinalScaleGeometry,
+    ScaleStepProjectionInput
+  >({
+    label: "Scale",
+    freeHoldState: FREE_SCALE_HOLD_STATE,
+    nextSessionId: () => {
+      const id = nextScaleRuntimeSessionId;
+      nextScaleRuntimeSessionId += 1;
+      return id;
+    },
+    snapshotIntent: (intent) => createScaleRawIntentSnapshot(intent),
+    assertSameIntent: ({ record, intent }) => {
+      assertSameScaleProjectionMode({
+        first: record.intent.projectionMode,
+        second: intent.projectionMode,
+      });
+      assertSameScaleValues({
+        first: record.intent.values,
+        second: intent.values,
+      });
+      assertSameScaleModifiers({
+        first: record.intent.modifiers,
+        second: intent.modifiers,
+      });
+    },
+    resolvePlan: ({ baseline, intent, holdState, stepProjection }) =>
+      resolveScaleSnapPlan({
+        baseline,
+        intent,
+        holdState,
+        ...(stepProjection ? { stepProjection } : {}),
+      }),
+    verifyPlan: ({ plan, finalGeometry }) =>
+      verifyScaleSnapPlan({ plan, finalGeometry }),
+  });
 
   /** Starts a new resize session with an immutable baseline. */
   startSession({ baseline }: { baseline: ScaleGestureBaseline }): void {
-    if (this._session) {
-      throw new Error("Scale snapping runtime already has an active session");
-    }
-
-    this._session = {
-      id: nextScaleRuntimeSessionId,
-      baseline,
-      holdState: FREE_SCALE_HOLD_STATE,
-      visibleGuides: Object.freeze([]),
-      markerRecords: new WeakMap<object, ScaleRuntimeStepRecord>(),
-      pendingStep: null,
-      nextStep: 1,
-    };
-    nextScaleRuntimeSessionId += 1;
+    this._protocol.startSession({ baseline });
   }
 
   /** Returns the cached result instead of re-reading a mutated target. */
@@ -110,9 +111,7 @@ export class ScaleSnappingRuntime {
   }: {
     marker: object;
   }): DuplicateScaleRuntimeStep | null {
-    const session = this._getActiveSession();
-
-    return this._getDuplicateStep({ session, marker });
+    return this._protocol.getDuplicateStep({ marker });
   }
 
   //** Issues at most one plan per native pointer marker. */
@@ -125,48 +124,11 @@ export class ScaleSnappingRuntime {
     intent: ScaleRawIntent;
     stepProjection?: ScaleStepProjectionInput;
   }): ScaleRuntimeStep {
-    const session = this._getActiveSession();
-    const duplicateRecord = session.markerRecords.get(marker);
-    if (duplicateRecord) {
-      assertSameScaleProjectionMode({
-        first: duplicateRecord.intent.projectionMode,
-        second: intent.projectionMode,
-      });
-      assertSameScaleValues({
-        first: duplicateRecord.intent.values,
-        second: intent.values,
-      });
-      assertSameScaleModifiers({
-        first: duplicateRecord.intent.modifiers,
-        second: intent.modifiers,
-      });
-
-      return createDuplicateScaleRuntimeStep({ record: duplicateRecord });
-    }
-
-    if (session.pendingStep) {
-      throw new Error(
-        "Previous scale plan token must be verified before the next pointer marker",
-      );
-    }
-
-    const plan = resolveScaleSnapPlan({
-      baseline: session.baseline,
+    return this._protocol.resolveStep({
+      marker,
       intent,
-      holdState: session.holdState,
       ...(stepProjection ? { stepProjection } : {}),
     });
-    const token = this._createPlanToken({ session });
-    const stepRecord = {
-      intent: createScaleRawIntentSnapshot(intent),
-      token,
-      plan,
-      verification: null,
-    };
-    session.markerRecords.set(marker, stepRecord);
-    session.pendingStep = stepRecord;
-
-    return Object.freeze({ kind: "planned", token, plan });
   }
 
   /** Refines the pending plan against exact domain geometry before it is applied. */
@@ -177,21 +139,10 @@ export class ScaleSnappingRuntime {
     token: ScalePlanToken;
     refinement: ScaleSnapPlanRefinement;
   }): ScaleSnapPlan {
-    const session = this._getActiveSession();
-    this._assertUsableToken({ session, token });
-
-    const { pendingStep } = session;
-    if (!pendingStep) {
-      throw new Error("Scale snapping runtime has no pointer step to refine");
-    }
-
-    const refinedPlan = refineScaleSnapPlan({
-      plan: pendingStep.plan,
-      refinement,
+    return this._protocol.refineStep({
+      token,
+      refine: (plan) => refineScaleSnapPlan({ plan, refinement }),
     });
-    pendingStep.plan = refinedPlan;
-
-    return refinedPlan;
   }
 
   /** Verifies the applied plan and only then updates the transient hold state. */
@@ -202,102 +153,18 @@ export class ScaleSnappingRuntime {
     token: ScalePlanToken;
     finalGeometry: FinalScaleGeometry;
   }): ScaleSnapVerification {
-    const session = this._getActiveSession();
-    this._assertUsableToken({ session, token });
-
-    const { pendingStep } = session;
-    if (!pendingStep) {
-      throw new Error("Scale snapping runtime has no pointer step to verify");
-    }
-
-    const verification = verifyScaleSnapPlan({
-      plan: pendingStep.plan,
-      finalGeometry,
-    });
-    this._consumedTokens.add(token);
-    pendingStep.verification = verification;
-    session.pendingStep = null;
-    session.holdState = verification.holdState;
-    session.visibleGuides = verification.guides;
-
-    return verification;
+    return this._protocol.verifyStep({ token, finalGeometry });
   }
 
   /** Ends the session exactly once and returns the guides it still shows. */
   finishSession(): ScaleRuntimeCleanup {
-    const session = this._session;
-    if (!session) return EMPTY_SCALE_RUNTIME_CLEANUP;
+    const { didCleanup, verification } = this._protocol.finishSession();
+    if (!didCleanup) return EMPTY_SCALE_RUNTIME_CLEANUP;
 
-    const pendingToken = session.pendingStep?.token;
-    if (pendingToken) this._consumedTokens.add(pendingToken);
-
-    const cleanup = Object.freeze({
+    return Object.freeze({
       didCleanup: true,
-      hiddenGuides: Object.freeze([...session.visibleGuides]),
+      hiddenGuides: Object.freeze([...(verification?.guides ?? [])]),
     });
-    this._session = null;
-
-    return cleanup;
-  }
-
-  /** Returns the active session or fails loudly on a lifecycle violation. */
-  private _getActiveSession(): ActiveScaleRuntimeSession {
-    if (!this._session) {
-      throw new Error("Scale snapping runtime has no active session");
-    }
-
-    return this._session;
-  }
-
-  /** Returns the cached result for a repeated native pointer marker. */
-  private _getDuplicateStep({
-    session,
-    marker,
-  }: {
-    session: ActiveScaleRuntimeSession;
-    marker: object;
-  }): DuplicateScaleRuntimeStep | null {
-    const record = session.markerRecords.get(marker);
-    if (!record) return null;
-
-    return createDuplicateScaleRuntimeStep({ record });
-  }
-
-  //** Creates a single-use token for the current pointer step. */
-  private _createPlanToken({
-    session,
-  }: {
-    session: ActiveScaleRuntimeSession;
-  }): ScalePlanToken {
-    const token = Object.freeze({
-      sessionId: session.id,
-      step: session.nextStep,
-    });
-    session.nextStep += 1;
-    this._issuedTokens.add(token);
-
-    return token;
-  }
-
-  /** Rejects foreign, stale or already-spent tokens. */
-  private _assertUsableToken({
-    session,
-    token,
-  }: {
-    session: ActiveScaleRuntimeSession;
-    token: ScalePlanToken;
-  }): void {
-    if (!this._issuedTokens.has(token)) {
-      throw new Error("Foreign scale plan token");
-    }
-    if (this._consumedTokens.has(token)) {
-      throw new Error("Scale plan token has already been used");
-    }
-    if (!session.pendingStep || session.pendingStep.token !== token) {
-      throw new Error(
-        "Scale plan token does not belong to the current pointer step",
-      );
-    }
   }
 }
 
@@ -310,21 +177,6 @@ function createScaleRawIntentSnapshot(intent: ScaleRawIntent): ScaleRawIntent {
       ctrlKey: intent.modifiers.ctrlKey,
       shiftKey: intent.modifiers.shiftKey,
     }),
-  });
-}
-
-/** Returns the immutable duplicate step from the stored record. */
-function createDuplicateScaleRuntimeStep({
-  record,
-}: {
-  record: ScaleRuntimeStepRecord;
-}): DuplicateScaleRuntimeStep {
-  return Object.freeze({
-    kind: "duplicate",
-    phase: record.verification ? "verified" : "pending",
-    token: record.token,
-    plan: record.plan,
-    verification: record.verification,
   });
 }
 

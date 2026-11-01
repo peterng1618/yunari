@@ -213,6 +213,8 @@ export interface ColumnContext {
   readonly sampleSource: (() => SampleSource) | undefined;
   /** The readings a run may name; absent keeps the built-in vocabulary. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+  /** The keys the host answers now; absent means no host has said. */
+  readonly measured?: () => ReadonlySet<string> | undefined;
   /**
    * The chart owner's own fields, for a chart selection. Absent when no owner
    * is mounted: a column built without one still answers every other kind, and
@@ -285,10 +287,15 @@ const GEOMETRY_LABELS: Readonly<Record<GeometryKey, string>> = {
   angle: uiCopy.inspectorFields.rotation,
 };
 
-/** The fewest whole units a dimension can be: zero would make the object
+/** The fewest whole units a **scaled** size can be: zero would make the object
     vanish from the canvas and from its own selection box. The write funnel
-    applies it — the pre-plan `numberField` landed an out-of-range value on the
-    bound it crossed rather than refusing it, and that is the rule kept. */
+    applies it to a shape's or chart's own size — the pre-plan `numberField`
+    landed an out-of-range value on the bound it crossed rather than refusing
+    it, and that is the rule kept. A text's authored box is not this floor: it
+    is measured in box units, owns its own minimum in
+    `writeAuthoredBoxDimension`, and the funnel hands it the drawn value divided
+    by the scale so there is one floor rather than two.
+ */
 export const MIN_DIMENSION = 1;
 
 /**
@@ -407,6 +414,9 @@ function contentBody(
   // control, and counting one would make the section's own count lie.
   const id = target.get("id");
   const nodeId = typeof id === "string" && id.length > 0 ? id : "";
+  // `undefined` is the host not having answered, so it travels as an absent
+  // property rather than as an empty set that would mark every key unavailable.
+  const measured = context.measured?.();
   const runs = projectRuns(
     target as unknown as {
       get(name: string): unknown;
@@ -427,6 +437,7 @@ function contentBody(
       ...(context.descriptors === undefined
         ? {}
         : { descriptors: context.descriptors() }),
+      ...(measured === undefined ? {} : { measured }),
     },
   );
   if (runs !== undefined) extras.push({ kind: "runs", nodeId, runs });

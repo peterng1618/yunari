@@ -442,6 +442,97 @@ describe("MediaProvider selection and samples", () => {
     });
   });
 
+  it("keeps two sessions from one application as separate readings", async () => {
+    const device = harness();
+    await device.sample(["media.title"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:playing",
+        app: "Chrome",
+        title: "Playing tab",
+        state: "playing",
+        current: false,
+      }),
+    );
+    // The paused window polls last. Under one AUMID key it replaced the
+    // playing window and became the only reading.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:paused",
+        app: "Chrome",
+        title: "Paused tab",
+        state: "paused",
+        current: true,
+      }),
+    );
+
+    const entries = await device.sample([
+      "media.title",
+      "media.app",
+      "media.state",
+    ]);
+    expect(entries.get("media.title")).toMatchObject({
+      status: "ok",
+      textValue: "Playing tab",
+    });
+    expect(entries.get("media.app")).toMatchObject({ textValue: "Chrome" });
+    expect(entries.get("media.state")).toMatchObject({ textValue: "playing" });
+
+    // Both windows are retained: once the playing one pauses, the system's
+    // current window supplies the reading.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:playing",
+        app: "Chrome",
+        title: "Playing tab",
+        state: "paused",
+        current: false,
+      }),
+    );
+    expect(
+      (await device.sample(["media.title"])).get("media.title"),
+    ).toMatchObject({ textValue: "Paused tab" });
+  });
+
+  it("reports a lone session exactly as before", async () => {
+    const device = harness();
+    await device.sample(["media.title", "media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Spotify.exe",
+        app: "Spotify",
+        title: "Only track",
+        state: "playing",
+      }),
+    );
+    device.emit(child, artworkLine());
+
+    const entries = await device.sample([
+      "media.title",
+      "media.app",
+      "media.state",
+      "media.artwork",
+    ]);
+    expect(entries.get("media.title")).toMatchObject({
+      status: "ok",
+      textValue: "Only track",
+    });
+    expect(entries.get("media.app")).toMatchObject({ textValue: "Spotify" });
+    expect(entries.get("media.state")).toMatchObject({ textValue: "playing" });
+    expect(entries.get("media.artwork")).toMatchObject({
+      status: "ok",
+      textValue: `/api/media/artwork/${ARTWORK_SHA}.png`,
+    });
+  });
+
   it("falls back to the current session when nothing is playing", async () => {
     const device = harness();
     await device.sample(["media.title"]);
@@ -753,6 +844,71 @@ describe("MediaProvider artwork", () => {
       (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
     ).toBe(`/api/media/artwork/${ARTWORK_SHA}.png`);
     expect(device.children).toHaveLength(1);
+  });
+
+  it("keeps each window of one application's artwork with that window", async () => {
+    const device = harness();
+    await device.sample(["media.artwork"]);
+
+    const child = device.children[0] as FakeChild;
+    const otherBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9, 9]);
+    const otherSha = createHash("sha256").update(otherBytes).digest("hex");
+
+    // Two windows of Chrome: one plays, one is paused and polls last.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:playing",
+        app: "Chrome",
+        title: "Playing tab",
+        state: "playing",
+        current: false,
+      }),
+    );
+    device.emit(child, artworkLine({ sessionId: "Chrome:playing" }));
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:paused",
+        app: "Chrome",
+        title: "Paused tab",
+        state: "paused",
+        current: true,
+      }),
+    );
+    device.emit(
+      child,
+      artworkLine({
+        sessionId: "Chrome:paused",
+        sha256: otherSha,
+        base64: Buffer.from(otherBytes).toString("base64"),
+      }),
+    );
+
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork")?.textValue,
+    ).toBe(`/api/media/artwork/${ARTWORK_SHA}.png`);
+
+    // Both pictures were held, so pausing the playing window selects the
+    // other window's own picture without a helper restart.
+    device.emit(
+      child,
+      sessionLine({
+        sessionId: "Chrome:playing",
+        app: "Chrome",
+        title: "Playing tab",
+        state: "paused",
+        current: false,
+      }),
+    );
+    expect(
+      (await device.sample(["media.artwork"])).get("media.artwork"),
+    ).toMatchObject({
+      status: "ok",
+      textValue: `/api/media/artwork/${otherSha}.png`,
+    });
+    expect(device.children).toHaveLength(1);
+    expect(device.killed).toHaveLength(0);
   });
 
   it("keeps another session's artwork for a later selection change", async () => {

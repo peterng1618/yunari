@@ -1,7 +1,8 @@
 import { objectName } from "@yunari/renderer-core";
-import { type FabricObject, Group, type StaticCanvas } from "fabric/es";
+import { type FabricObject, type StaticCanvas } from "fabric/es";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
 import { type FabricPaintRefs, YUNARI_PAINT_PROPERTY } from "./object-paint.js";
+import { visitSceneObjects } from "./scene-objects.js";
 
 /** One object that names a palette token, and where. */
 export interface PaletteReference {
@@ -31,14 +32,10 @@ export function objectPaletteReferences(
   ref: `palette.${string}`,
 ): readonly PaletteReference[] {
   const found: PaletteReference[] = [];
-  const visit = (candidates: readonly FabricObject[]): void => {
-    for (const object of candidates) {
-      const use = referenceOn(object, ref);
-      if (use !== undefined) found.push(use);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(objects);
+  visitSceneObjects(objects, (object) => {
+    const use = referenceOn(object, ref);
+    if (use !== undefined) found.push(use);
+  });
   return found;
 }
 
@@ -49,42 +46,34 @@ export function reassignObjectPaletteReferences(
   to: `palette.${string}`,
 ): number {
   let changes = 0;
-  const visit = (objects: readonly Paintable[]): void => {
-    for (const object of objects) {
-      const paints = object.get(YUNARI_PAINT_PROPERTY);
-      if (isPaintRefs(paints)) {
-        const next = Object.fromEntries(
-          Object.entries(paints).map(([property, ref]) => {
-            if (ref === from) {
-              changes += 1;
-              return [property, to];
-            }
-            return [property, ref];
-          }),
-        );
-        object.set(YUNARI_PAINT_PROPERTY, next);
-      }
-      const text = object.get(YUNARI_TEXT_PROPERTY);
-      if (isText(text)) {
-        const runs = text.runs.map((run) => {
-          const color = run.style?.color;
-          if (color?.ref !== from) return run;
-          changes += 1;
-          return { ...run, style: { ...run.style, color: { ref: to } } };
-        });
-        object.set(YUNARI_TEXT_PROPERTY, { ...text, runs });
-      }
-      if (object instanceof Group) visit(object.getObjects());
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const paints = object.get(YUNARI_PAINT_PROPERTY);
+    if (isPaintRefs(paints)) {
+      const next = Object.fromEntries(
+        Object.entries(paints).map(([property, ref]) => {
+          if (ref === from) {
+            changes += 1;
+            return [property, to];
+          }
+          return [property, ref];
+        }),
+      );
+      object.set(YUNARI_PAINT_PROPERTY, next);
     }
-  };
-  visit(canvas.getObjects());
+    const text = object.get(YUNARI_TEXT_PROPERTY);
+    if (isText(text)) {
+      const runs = text.runs.map((run) => {
+        const color = run.style?.color;
+        if (color?.ref !== from) return run;
+        changes += 1;
+        return { ...run, style: { ...run.style, color: { ref: to } } };
+      });
+      object.set(YUNARI_TEXT_PROPERTY, { ...text, runs });
+    }
+  });
   return changes;
 }
 
-type Paintable = {
-  get(name: string): unknown;
-  set(name: string, value: unknown): unknown;
-};
 type TextRun = { style?: { color?: { ref?: string } }; [key: string]: unknown };
 type AuthoredText = { runs: readonly TextRun[]; [key: string]: unknown };
 

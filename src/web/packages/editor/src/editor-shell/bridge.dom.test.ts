@@ -19,6 +19,7 @@ import { EditorDocument } from "../editor-document.js";
 import type { EditorShell } from "../editor-shell.js";
 import { createNewFabricTheme } from "../new-fabric-theme.js";
 import { objectAction } from "../object-actions.js";
+import { uiCopy } from "../ui-copy.js";
 import {
   createEditorShellBridge,
   documentNameOf,
@@ -42,10 +43,14 @@ function facadeStub(): EditorActionFacade {
     newFromStarter: vi.fn(async () => undefined),
     importPackage: vi.fn(),
     openLibraryTheme: vi.fn(async () => undefined),
-    savePackage: vi.fn(async () => undefined),
-    releasePackage: vi.fn(async () => undefined),
+    downloadPackage: vi.fn(async () => undefined),
+    exportTheme: vi.fn(async () => undefined),
+    exportWidget: vi.fn(),
+    activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
+    openRecent: vi.fn(async () => undefined),
+    saveAs: vi.fn(async () => undefined),
     addText: vi.fn(),
     addShape: vi.fn(),
     addChart: vi.fn(),
@@ -131,6 +136,9 @@ function bridgeFor(
     // Real editors always carry the grouping manager; the empty context is the
     // default so a test that enters a group overrides only this one member.
     groupingManager: { groupContext: () => [] as readonly unknown[] },
+    // A refusal is reported through the editor's own error surface, so the
+    // stub carries the manager the two name surfaces share.
+    errorManager: { warn: vi.fn(), report: vi.fn() },
     // Every committed layer command records exactly one history entry, so the
     // stub carries the manager they all go through.
     historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
@@ -551,6 +559,12 @@ it("refuses a rename past the published bound rather than clearing the name", ()
   bridge.renameLayer("header", "x".repeat(MAX_OBJECT_NAME_LENGTH + 1));
   expect(rect.get("name")).toBe("Header rule");
   expect(editor.historyManager.saveState).not.toHaveBeenCalled();
+  // The inspector's name field refuses through this same message; a refusal
+  // typed into the layer row must not be the silent one.
+  expect(editor.errorManager.warn).toHaveBeenCalledWith(
+    "controls",
+    uiCopy.inspectorFields.invalidName,
+  );
 });
 
 it("saves one history entry per rename", () => {

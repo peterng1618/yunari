@@ -15,6 +15,7 @@ import {
   click,
   mountRunEditor,
   optionsOf,
+  press,
   pressedLabel,
   segment,
   sourceLabel,
@@ -143,6 +144,45 @@ describe("binding a text run to a sensor", () => {
 
     await blur(input);
     expect(box.stored()[0]?.format).toBe("[It is ]dddd");
+    return box.dispose();
+  });
+
+  it("does not commit the format on the Enter of a composition", async () => {
+    const box = mountRunEditor({ runs: literalClock });
+    await choose(
+      box.host,
+      'data-yunari-run-source="0"',
+      sourceLabel("time.now"),
+    );
+
+    const input = box.pick<HTMLInputElement>('[data-yunari-run-format="0"]');
+    await typeInto(input, "dddd");
+    await act(async () => {
+      input.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true }),
+      );
+    });
+    await press(input, "Enter");
+    expect(
+      box.stored()[0]?.format,
+      "a half-typed IME word was committed",
+    ).toBeUndefined();
+
+    await act(async () => {
+      input.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true }),
+      );
+    });
+    await press(input, "Enter", { isComposing: true });
+    expect(
+      box.stored()[0]?.format,
+      "an Enter still carrying the composition committed",
+    ).toBeUndefined();
+
+    await press(input, "Enter");
+    expect(box.stored()[0]?.format, "the finished word did not commit").toBe(
+      "dddd",
+    );
     return box.dispose();
   });
 
@@ -1073,6 +1113,34 @@ describe("which readings a run may name", () => {
     const at = cpu.findIndex((source) => source.id === "custom.fan");
     expect(at).toBeGreaterThan(0);
     expect(cpu[at]?.index).toBe((cpu[at - 1]?.index ?? -2) + 1);
+    return box.dispose();
+  });
+
+  it("marks a key the host does not measure, and leaves a measured one offered", () => {
+    // The catalogue lists every key the vocabulary can name. What this PC
+    // answers is a separate fact, so an unmeasured key stays recognisable in
+    // the list but is not a choice; a measured one is offered as before.
+    const box = mountRunEditor({
+      runs: literalClock,
+      measured: new Set(["ram.used"]),
+    });
+    const sources = box.sources();
+
+    expect(sources.find((source) => source.id === "cpu.load")?.disabled).toBe(
+      true,
+    );
+    expect(
+      sources.find((source) => source.id === "ram.used")?.disabled,
+    ).toBeUndefined();
+    return box.dispose();
+  });
+
+  it("marks nothing when the host has not said what it measures", () => {
+    const box = mountRunEditor({ runs: literalClock });
+
+    expect(box.sources().some((source) => source.disabled === true)).toBe(
+      false,
+    );
     return box.dispose();
   });
 

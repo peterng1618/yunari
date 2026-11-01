@@ -58,10 +58,10 @@ test("opens the store from the URL", async ({ page }, testInfo) => {
 
 test("opens Host Settings from the URL", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(`${EDITOR}?mode=this-pc`);
+  await page.goto(`${EDITOR}?mode=host`);
   await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
     "data-yunari-mode-region",
-    "this-pc",
+    "host",
   );
 });
 

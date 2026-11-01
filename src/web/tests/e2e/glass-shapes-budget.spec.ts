@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { GLASS_BAR, glassStripesPng } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * The editor preview `playwright.config.ts` starts, as `glass.spec.ts` does.
@@ -171,7 +172,7 @@ function envelope(kinds: readonly Kind[]) {
 
 function packageFor(kinds: readonly Kind[]): Uint8Array {
   const written = writeThemePackage({
-    envelope: envelope(kinds),
+    envelope: withRoleTokens(envelope(kinds)),
     assets: { "assets/stripes.png": glassStripesPng() },
   });
   if (!written.ok) throw new Error(written.message);

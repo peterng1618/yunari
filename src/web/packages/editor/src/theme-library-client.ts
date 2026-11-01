@@ -1,9 +1,10 @@
-import type {
-  DisplayShape,
-  FabricThemeEnvelope,
-  FacetRecord,
-  ThemeRemix,
-  ValidationIssue,
+import {
+  type DisplayShape,
+  type FabricThemeEnvelope,
+  type FacetRecord,
+  STABLE_ID_PATTERN,
+  type ThemeRemix,
+  type ValidationIssue,
 } from "@yunari/renderer-core";
 import {
   readThemeCredits,
@@ -188,7 +189,7 @@ export interface ThemeLibraryClient {
    *  display holding no choice of its own falls to. */
   assign(display: string, id: string): Promise<void>;
   /** Every display this host holds with the theme it shows, and the theme a
-   *  display holding none falls to. This PC is always present and always first.
+   *  display holding none falls to. The Host is always present and always first.
    *
    *  `default` is a *theme*, not a key: {@link DEFAULT_DISPLAY_KEY} is what
    *  `assign` takes. It is its own field and never a row, because a theme id is
@@ -203,10 +204,6 @@ export interface ThemeLibraryClient {
     readonly unreadable?: boolean;
   }>;
 }
-
-/** The shape of a library id. The host owns the same shape for a package's own
- *  id (`isValidThemeId`); this one is for the ids a client sends. */
-const THEME_ID_REGEX = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Chunked because `String.fromCharCode` is applied to an argument list. */
 function toBase64(bytes: Uint8Array): string {
@@ -355,7 +352,7 @@ export function createThemeLibraryClient(options?: {
     },
 
     async open(id: string): Promise<ThemeLibraryContent> {
-      if (!THEME_ID_REGEX.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error("Invalid theme id.");
       }
       const response = await fetcher(
@@ -393,7 +390,7 @@ export function createThemeLibraryClient(options?: {
       content: ThemeLibraryContent,
       options?: { readonly overwrite?: boolean },
     ): Promise<string> {
-      if (!THEME_ID_REGEX.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error("Invalid theme id.");
       }
       const response = await fetcher(
@@ -438,7 +435,7 @@ export function createThemeLibraryClient(options?: {
     },
 
     async saveThumbnail(id: string, png: Uint8Array): Promise<void> {
-      if (!THEME_ID_REGEX.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error("Invalid theme id.");
       }
       const response = await fetcher(
@@ -455,7 +452,7 @@ export function createThemeLibraryClient(options?: {
     },
 
     async remove(id: string): Promise<void> {
-      if (!THEME_ID_REGEX.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error("Invalid theme id.");
       }
       const response = await fetcher(
@@ -477,7 +474,7 @@ export function createThemeLibraryClient(options?: {
     },
 
     async assign(display: string, id: string): Promise<void> {
-      if (!THEME_ID_REGEX.test(id)) {
+      if (!STABLE_ID_PATTERN.test(id)) {
         throw new Error("Invalid theme id.");
       }
       const response = await fetcher(`${baseUrl}/api/themes/active`, {

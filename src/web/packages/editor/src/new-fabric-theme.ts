@@ -41,7 +41,7 @@ export const STARTER_ENVELOPE_ID = "yunari-demo-dashboard";
 
 /**
  * The reference composition, kept whole so it can be reached as what it now is
- * — a template, offered by `New from starter` and listed in the library as one.
+ * — a template, offered by `New from template` and listed in the library as one.
  * It is not what `New` means; see `createBlankFabricTheme`.
  */
 export function createNewFabricTheme(): FabricThemeEnvelope {

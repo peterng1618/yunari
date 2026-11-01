@@ -8,6 +8,7 @@ import {
 } from "fabric/es";
 import { findById } from "../editor-shell/layer-tree.js";
 import { newObjectName } from "../new-object-defaults.js";
+import { refreshObjectCoords } from "../object-plane.js";
 
 export interface GroupingManager {
   group(): Group | undefined;
@@ -97,8 +98,13 @@ export function createGroupingManager(
   const flagsSet = new Set<Group>();
   /** The reachability this manager took away, with the values it replaced, so
    * leaving restores an author's own locks instead of assuming the defaults.
-   * `selectable`/`evented` are not in Fabric's `stateProperties`, so this never
-   * reaches a save — unlike `opacity`, which is (§67). */
+   *
+   * `selectable`/`evented` are persisted properties, named in
+   * `SCENE_PERSISTED_PROPERTIES` because an authored lock and a non-selectable
+   * background are document state. Fabric's `stateProperties` list does not
+   * enter into it: serialisation asks for these keys by name. The entry's values
+   * stay view state because every capture suspends this map first
+   * (`suspendReachability`) — not because Fabric omits them. */
   const reachabilityTaken = new Map<
     FabricObject,
     { selectable: boolean; evented: boolean }
@@ -229,8 +235,10 @@ export function createGroupingManager(
    * The layer panel already dims every row outside the entered group, so the
    * artboard that still selects them is describing a fiction the author has to
    * learn to disbelieve. `selectable`/`evented` is `object-lock-manager`'s own
-   * idiom for "not reachable", and neither key is in Fabric's `stateProperties`,
-   * so it stays view state (§67) where `opacity` would not.
+   * idiom for "not reachable". Both keys are persisted, because an authored lock
+   * and a non-selectable background are document state, so this write is view
+   * state only while a capture suspends it (`suspendReachability`). Fabric's
+   * `stateProperties` list does not enter into it:
    *
    * The dim rides this same walk because it has the same lifetime and the same
    * subject: what the entry puts out of reach. Only the subtree predicate
@@ -406,7 +414,11 @@ export function createGroupingManager(
       // context must already be right when the panel renders.
       setContext([entry]);
       applyReachability(entry);
+      // A live selection is discarded by the call below; Fabric re-enters its
+      // members into their groups without refreshing their cached boxes.
+      const released = canvas.getActiveObjects();
       canvas.setActiveObject(selected);
+      for (const object of released) refreshObjectCoords(object);
       canvas.requestRenderAll();
       return selected;
     },
@@ -421,7 +433,12 @@ export function createGroupingManager(
       leave();
       // An entry can only have been destroyed by an operation that also clears
       // the context (`ungroup`), so `target` is still on the canvas here.
+      // Selecting the group discards a selection inside it; Fabric re-enters
+      // the members without refreshing the box they cached in the selection's
+      // plane, so refresh them before anything measures the scene.
+      const released = canvas.getActiveObjects();
       canvas.setActiveObject(target);
+      for (const object of released) refreshObjectCoords(object);
       canvas.requestRenderAll();
       return before;
     },

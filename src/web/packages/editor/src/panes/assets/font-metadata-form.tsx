@@ -182,7 +182,7 @@ export function FontMetadataForm(props: {
       className="flex flex-col gap-[var(--space-8)] border-t border-edge-2 bg-panel-2 p-[var(--space-8)]"
     >
       <div className="flex flex-col gap-[var(--space-4)]">
-        <h4 className="text-2xs font-semibold uppercase tracking-[0.11em] text-faint">
+        <h4 className="text-2xs font-semibold uppercase tracking-[0.11em] text-muted">
           {uiCopy.panels.fontDetails}
         </h4>
         <span className="truncate text-xs text-muted">{filename}</span>
@@ -270,7 +270,10 @@ export function FontMetadataForm(props: {
             setRefusal(reason);
             if (reason === undefined) onCommit(candidate, role);
           }}
-          className="rounded-[var(--radius-md)] bg-accent px-[var(--space-8)] py-[var(--space-4)] text-xs font-semibold text-[var(--bg)] disabled:opacity-50"
+          // A labelled button, not a filled accent one: Publish is the one
+          // accent-filled action in the editor, and a second here would make
+          // neither read as the primary.
+          className="rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-12)] py-[var(--space-6)] text-sm text-text disabled:text-faint"
         >
           {uiCopy.panels.assetCard.createTypeToken}
         </button>
@@ -285,7 +288,7 @@ export function FontMetadataForm(props: {
               refusalOf(family, weight) === undefined ? current() : initial,
             )
           }
-          className="rounded-[var(--radius-md)] border border-edge px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted"
+          className="rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-12)] py-[var(--space-6)] text-sm text-muted disabled:text-faint"
         >
           {uiCopy.panels.cancel}
         </button>

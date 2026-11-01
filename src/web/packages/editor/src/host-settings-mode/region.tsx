@@ -1,5 +1,3 @@
-import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
 import {
   type AssignableGroup,
   DEFAULT_UNIT_PREFERENCES,
@@ -24,6 +22,7 @@ import {
   createHostSettingsClient,
   type DeviceSettings,
   type DisplayPreferences,
+  type HostMonitor,
   type HostSettingsClient,
   type PanelHint,
   type ThemeAnswers,
@@ -33,6 +32,7 @@ import {
   type DisplayPresentation,
   DisplayPresentationSection,
 } from "./display-presentation-section.js";
+import { DisplaysSection, shownTheme } from "./displays-section.js";
 import { PanelControlsSection } from "./panel-controls-section.js";
 import { hardwareOf, PanelsSection } from "./panels-section.js";
 import { Group } from "./section-group.js";
@@ -57,17 +57,6 @@ import { WeatherSection } from "./weather-section.js";
  * The page itself is not deleted: it is served from the host's own bundle and is
  * the only surface a phone, or a browser with no editor open, can reach.
  */
-
-/** The theme a display shows: its own choice, else the default's. Spelled once
- *  because the fallback is the feature's core, and a second copy of it is one
- *  more place to get it wrong. `null` means neither — a display showing nothing,
- *  which is not the same as showing a theme named "nothing". */
-function shownTheme(
-  display: ThemedDisplay | undefined,
-  fallback: string | null,
-): string | null {
-  return display?.theme ?? fallback;
-}
 
 /**
  * The slots a theme raises that nothing has answered yet, in the order the
@@ -191,7 +180,7 @@ export function HostSettingsRegion(props: {
   readonly sources?: SourcesClient | undefined;
   readonly onStatus?: ((line: HostStatusLine | undefined) => void) | undefined;
 }): React.JSX.Element | null {
-  return props.mode === "this-pc" ? (
+  return props.mode === "host" ? (
     <HostSettings
       client={props.client}
       settings={props.settings}
@@ -249,7 +238,7 @@ function HostSettings(props: {
       }
     | undefined
   >(undefined);
-  /** The display the questions below speak for. The route always answers This PC
+  /** The display the questions below speak for. The route always answers the Host
    *  first, so the region opens on it rather than on nothing. */
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   /** The USB panels attached right now, or `undefined` until the read answers.
@@ -623,6 +612,94 @@ function HostSettings(props: {
     });
   };
 
+  /** Adds one local display on the chosen monitor, then re-reads the map so the
+   *  new row is the one selected.
+   *
+   * **A re-read that fails does not undo the add.** The route answered the id it
+   * minted, and the row it created holds no theme and the default presentation,
+   * so the map is completed locally rather than reporting a successful write as
+   * a failure. The same rule keeps a removal that landed off the failure of the
+   * list read after it.
+   */
+  const addDisplay = async (
+    label: string,
+    monitor: HostMonitor,
+  ): Promise<boolean> => {
+    setStatus(uiCopy.hostSettings.status.saving);
+    try {
+      const id = await settings.createLocalDisplay({ label, monitor });
+      try {
+        const refreshed = await client.listDisplays();
+        if (mounted.current) setMap(refreshed);
+      } catch {
+        if (mounted.current) {
+          setMap((current) =>
+            current === undefined
+              ? current
+              : {
+                  ...current,
+                  displays: [
+                    ...current.displays,
+                    {
+                      id,
+                      label,
+                      kind: "local",
+                      theme: null,
+                      shape: "rect",
+                      rotation: 0,
+                    },
+                  ],
+                },
+          );
+        }
+      }
+      if (mounted.current) {
+        setChosen(id);
+        setStatus(uiCopy.hostSettings.displays.added(label));
+      }
+      return true;
+    } catch (error: unknown) {
+      if (mounted.current) {
+        setStatus(uiCopy.hostSettings.status.failed(reason(error)));
+      }
+      return false;
+    }
+  };
+
+  const removeDisplay = async (display: ThemedDisplay): Promise<boolean> => {
+    setStatus(uiCopy.hostSettings.status.saving);
+    try {
+      await settings.removeDisplay(display.id);
+      try {
+        const refreshed = await client.listDisplays();
+        if (mounted.current) setMap(refreshed);
+      } catch {
+        if (mounted.current) {
+          setMap((current) =>
+            current === undefined
+              ? current
+              : {
+                  ...current,
+                  displays: current.displays.filter(
+                    (row) => row.id !== display.id,
+                  ),
+                },
+          );
+        }
+      }
+      if (mounted.current) {
+        setChosen((current) => (current === display.id ? undefined : current));
+        setStatus(uiCopy.hostSettings.displays.removed(display.label));
+      }
+      return true;
+    } catch (error: unknown) {
+      if (mounted.current) {
+        setStatus(uiCopy.hostSettings.status.failed(reason(error)));
+      }
+      return false;
+    }
+  };
+
   return (
     // **No status strip of its own.** The bar is the shell's, drawn once as a
     // sibling of every mode's region, and this mode's line reaches it through
@@ -630,81 +707,17 @@ function HostSettings(props: {
     <div data-yunari-host-region="" className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-[var(--space-24)] overflow-y-auto p-[var(--space-24)]">
         <div className="flex max-w-[var(--host-settings-measure)] flex-col gap-[var(--space-24)]">
-          <Group
-            testId="displays"
-            name={uiCopy.hostSettings.displays.heading}
-            hint={uiCopy.hostSettings.displays.hint}
-          >
-            {/* **An unreadable file is not an empty one.** The host fails closed
-                and answers no displays either way, so this is the only word
-                that tells the person the list is missing rather than empty —
-                and it names the file every write will refuse to touch. */}
-            {map?.unreadable === true ? (
-              <p
-                role="alert"
-                data-yunari-host-displays-unreadable=""
-                className="m-0 text-xs text-warn"
-              >
-                {uiCopy.hostSettings.displays.unreadable}
-              </p>
-            ) : null}
-            {/* **The rows are a choice, and the choice is which display the
-                questions below speak for** — never which theme it shows. The control set's
-                Segmented is the control for one of a small set, composed in its
-                bare form as the header's mode switch and the store's halves
-                are, and each row is dressed as the card rather than
-                as a segment. */}
-            {displays.length === 0 ? null : (
-              <ToggleGroup
-                value={[selected ?? ""]}
-                aria-label={uiCopy.hostSettings.displays.label}
-                onValueChange={(next) => {
-                  const picked = next[0];
-                  if (picked !== undefined) setChosen(picked);
-                }}
-                className="flex flex-col gap-[var(--space-6)]"
-              >
-                {displays.map((display) => {
-                  const own = display.theme;
-                  const shown = shownTheme(display, fallback);
-                  return (
-                    <Toggle
-                      key={display.id}
-                      value={display.id}
-                      data-yunari-host-display={display.id}
-                      data-shape={display.shape}
-                      data-rotation={display.rotation}
-                      className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)] text-left data-[pressed]:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-                    >
-                      <span className="min-w-0 flex-1 text-xs text-text">
-                        {display.label}
-                      </span>
-                      <span
-                        data-yunari-host-display-theme=""
-                        className={`flex-none text-xs ${own === null ? "text-faint" : "text-muted"}`}
-                      >
-                        {shown === null
-                          ? uiCopy.hostSettings.displays.nothing
-                          : nameOfTheme(shown)}
-                      </span>
-                      {/* A display with no theme of its own is served the
-                          default, so the row names the theme it shows *and*
-                          says where that answer came from: a name alone would
-                          read as a choice this display made. */}
-                      {own === null && shown !== null ? (
-                        <span
-                          data-yunari-host-display-follows=""
-                          className="flex-none text-2xs text-faint"
-                        >
-                          {uiCopy.hostSettings.displays.follows}
-                        </span>
-                      ) : null}
-                    </Toggle>
-                  );
-                })}
-              </ToggleGroup>
-            )}
-          </Group>
+          <DisplaysSection
+            displays={displays}
+            selected={selected}
+            fallback={fallback}
+            unreadable={map?.unreadable === true}
+            themeName={nameOfTheme}
+            settings={settings}
+            onSelect={setChosen}
+            onAdd={addDisplay}
+            onRemove={removeDisplay}
+          />
 
           <DisplayPresentationSection
             display={selectedRow}
@@ -829,7 +842,7 @@ function HostSettings(props: {
                   label={uiCopy.hostSettings.display.timeZone}
                   data={{ "data-yunari-host-time-zone": "" }}
                   value={preferences.settings.timeZone ?? ""}
-                  // This PC's own zone is the default and the most common
+                  // The Host's own zone is the default and the most common
                   // answer, so it comes first and is the empty value the route
                   // reads as the absence of a choice.
                   options={[
@@ -928,7 +941,7 @@ function HostSettings(props: {
                   data={{ "data-yunari-host-answer": group }}
                   value={questions.answers[group] ?? ""}
                   options={[
-                    // This PC's own choice is the default, so most themes need
+                    // The Host's own choice is the default, so most themes need
                     // no answer at all.
                     { id: "", name: uiCopy.hostSettings.questions.inherit },
                     ...devicesFor(devices, group).map((device) => ({

@@ -54,7 +54,9 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * specs they cannot run under the preview projects, and they cannot share their
  * port — `publish-header` owns 4227, `publish-loop` owns 4229,
  * `editor-invalid-theme` owns 4231, `editor-overlarge-theme` owns 4237,
- * `host-secure-origin` owns 4233 and `media-artwork` owns 4222. The display
+ * `editor-host-refusal` owns 4247, `host-move-stream` owns 4249,
+ * `host-secure-origin` owns 4233 and
+ * `media-artwork` owns 4222. The display
  * runner's preview owns 4223 (`playwright.display.config.ts`), so
  * `custom-source` owns 4225 and `game-artwork` owns 4239; `game-metadata` owns
  * 4245.
@@ -65,7 +67,7 @@ const EDGE_PROBE_SPEC = /live-chart-edge\.spec\.ts/;
  * context and `localhost` is one whatever the host does. It owns 4235.
  */
 const OWN_HOST_SPEC =
-  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|host-secure-origin|host-pwa|media-artwork|game-artwork|game-metadata|custom-source)\.spec\.ts/;
+  /(publish-(header|loop)|editor-(invalid|overlarge)-theme|editor-host-refusal|host-secure-origin|host-pwa|host-move-stream|media-artwork|game-artwork|game-metadata|custom-source)\.spec\.ts/;
 
 /**
  * The rebuild drives its own preview on its own port, under
@@ -98,15 +100,20 @@ export default defineConfig({
   // import of `vitest`'s `test` is a hard error for the whole suite, not one
   // skipped file.
   testMatch: "**/*.spec.ts",
-  // Seeds the host fixture once; the config itself runs in every worker.
-  globalSetup: "./tests/e2e/global-setup.ts",
   retries: 0,
   fullyParallel: true,
   // 60 s, not Playwright's 30 s default: a run at the default worker count on a
   // loaded machine reported locator timeouts as failures where the same case
   // passed alone, and the wall clock was the variable rather than the assertion
   // (issue #79). The suite still fails a case that never reaches its selector.
-  testTimeout: 60_000,
+  //
+  // The key is `timeout`, not the CLI's `testTimeout`: a config object with
+  // `testTimeout` is accepted silently and every test keeps the 30 s default.
+  timeout: 60_000,
+  // The assertion budget is where the same load actually showed: `toHaveCount`
+  // and friends kept Playwright's 5 s default, so a popup that took longer than
+  // 5 s to draw failed a 60 s test. Raised with the same ruling (issue #79).
+  expect: { timeout: 60_000 },
   // `workers` is deliberately left to Playwright's default (half the cores).
   // Hardcoding a count would oversubscribe a small CI runner, and oversubscription
   // is what turned the long `clock.runFor` waits into 30 s timeouts under load.
@@ -138,7 +145,12 @@ export default defineConfig({
     {
       // The real Node host, not a preview server: hosted theme loading, package
       // asset serving and the SSE stream are otherwise never browser-tested.
-      command: `node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
+      //
+      // The seed is the command's first half, not a `globalSetup`: Playwright
+      // starts `webServer` plugins before global setup, so a global seed wiped
+      // the folder this host had already taken — its lock and every setting it
+      // wrote. In one shell the wipe lands before this host exists.
+      command: `npx tsx tests/e2e/seed-host.ts && node packages/host/bin/yunari.js --no-browser --port ${HOST_PORT} --app-dir ${HOST_APP_DIR}`,
       // http, which the host still serves beside https on the same port.
       // The pairing link these specs drive is the one the host prints, and
       // what that link should carry belongs to the per-display-themes work;

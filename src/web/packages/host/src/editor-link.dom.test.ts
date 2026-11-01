@@ -35,11 +35,12 @@ function bodyOf(page: string): string {
 /** The page's one module, with its import handed the real `theme-list.js`.
  *
  *  `/settings/theme-list.js` is a URL only a host serves, so the script cannot
- *  import it itself — but the pages now call the module's own resolution rule
+ *  import it itself — but `library.html` calls the module's own resolution rule
  *  (`shownTheme`) to build the link, so a stand-in would be testing the
  *  stand-in. The module is passed in as `__themeList` and the import line
  *  becomes a destructuring of it, which is also how a name added to a page's
- *  import cannot arrive undefined. */
+ *  import cannot arrive undefined. `settings.html` imports nothing, so the
+ *  rewrite matches nothing there and the parameter is simply unused. */
 function scriptOf(page: string): string {
   const html = readFileSync(join(PUBLIC, page), "utf8");
   return (
@@ -73,7 +74,7 @@ interface Display {
 
 const THIS_PC: Display = {
   id: "this-pc",
-  label: "This PC",
+  label: "Host",
   kind: "local",
   theme: null,
 };
@@ -130,7 +131,7 @@ afterEach(() => {
 
 for (const page of ["settings.html", "library.html"]) {
   describe(`${page}'s link into the editor`, () => {
-    it("carries the theme this PC is showing", async () => {
+    it("carries the theme the Host is showing", async () => {
       await open(page, "living-room");
 
       // The point of the whole change: an author who picks a theme and then

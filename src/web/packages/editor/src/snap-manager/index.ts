@@ -1,6 +1,7 @@
 import type { Canvas, FabricObject } from "fabric/es";
 import { ActiveSelection } from "fabric/es";
 import type { ErrorManager } from "../error-manager/index.js";
+import { moveObjectByCanvasDelta } from "../object-plane.js";
 import { getObjectExactBounds, type ObjectBounds } from "./bounds.js";
 import {
   collectExcludedObjects,
@@ -279,13 +280,17 @@ export function createSnapManager(options: SnapManagerOptions): SnapManager {
       activeObject: active,
     });
 
+    const startPosition = active.getXY();
     runtime.startSession({
       baseline: createMovementGestureBaseline({
         bounds: startBounds,
-        // Fabric's own left/top; the raw intent's position uses the same keys.
+        // The canvas plane, matching `bounds`: a group member's own `left`/`top`
+        // are group-local, so using them here would make the plan's delta a
+        // different vector from the world bounds' and the raw intent would be
+        // refused as "not a translation of the gesture baseline".
         position: {
-          left: active.get("left") ?? startBounds.left,
-          top: active.get("top") ?? startBounds.top,
+          left: startPosition.x,
+          top: startPosition.y,
         },
         environment: createMovementSnapEnvironment({
           sources,
@@ -324,6 +329,7 @@ export function createSnapManager(options: SnapManagerOptions): SnapManager {
     // gesture-start geometry translated by the drag's current offset.
     const offsetLeft = rawBounds.left - startBounds.left;
     const offsetTop = rawBounds.top - startBounds.top;
+    const currentPosition = moved.getXY();
 
     const step = runtime.resolveMovementPlan({
       marker,
@@ -337,9 +343,10 @@ export function createSnapManager(options: SnapManagerOptions): SnapManager {
           bottom: startBounds.bottom + offsetTop,
           centerY: startBounds.centerY + offsetTop,
         },
+        // Canvas coordinates, like `bounds`; `left`/`top` are group-local.
         position: {
-          left: moved.get("left") ?? startBounds.left,
-          top: moved.get("top") ?? startBounds.top,
+          left: currentPosition.x,
+          top: currentPosition.y,
         },
         axes: {
           x: moved.lockMovementX !== true,
@@ -351,18 +358,20 @@ export function createSnapManager(options: SnapManagerOptions): SnapManager {
     if (step.kind !== "planned") return;
 
     const { plan } = step;
-    const currentLeft = moved.get("left");
-    const currentTop = moved.get("top");
-    const deltaX = plan.nextPosition.left - currentLeft;
-    const deltaY = plan.nextPosition.top - currentTop;
+    const deltaX = plan.nextPosition.left - currentPosition.x;
+    const deltaY = plan.nextPosition.top - currentPosition.y;
 
     // A zero-delta plan is still a plan: the object already sits at
     // nextPosition, so the current bounds are the final geometry and the
     // pending token must be verified — leaving it pending would wedge every
     // later step of the gesture.
     if (deltaX !== 0 || deltaY !== 0) {
-      moved.set({ left: plan.nextPosition.left, top: plan.nextPosition.top });
-      moved.setCoords();
+      // The plan is in canvas coordinates; `left`/`top` are the parent's
+      // plane, so a group member's delta is converted rather than written.
+      moveObjectByCanvasDelta({
+        object: moved,
+        delta: { x: deltaX, y: deltaY },
+      });
     }
     const finalBounds =
       deltaX === 0 && deltaY === 0

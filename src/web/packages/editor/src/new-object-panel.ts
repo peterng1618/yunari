@@ -73,7 +73,7 @@ export type InsertableObject =
       readonly kind: "card";
       readonly label: string;
       readonly card: string;
-      /** Which diagram the Add pane's tile draws, read from the unit. */
+      /** Which mark the Add pane's tile draws, read from the unit. */
       readonly diagram: CardDiagram;
     };
 

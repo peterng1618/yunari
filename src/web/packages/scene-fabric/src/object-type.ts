@@ -1,6 +1,7 @@
 import { type Globals, objectName } from "@yunari/renderer-core";
-import { type FabricObject, Group, type StaticCanvas } from "fabric/es";
+import { type FabricObject, type StaticCanvas } from "fabric/es";
 import { YUNARI_TEXT_PROPERTY } from "./fabric-text.js";
+import { visitSceneObjects } from "./scene-objects.js";
 
 /**
  * Reapply the first authored run's type token face to its Fabric text-object.
@@ -53,24 +54,20 @@ export function objectTypeTokenReferences(
   ref: `typeTokens.${string}`,
 ): readonly TypeTokenReference[] {
   const found: TypeTokenReference[] = [];
-  const visit = (candidates: readonly FabricObject[]): void => {
-    for (const object of candidates) {
-      const runs: number[] = [];
-      const text = object.get(YUNARI_TEXT_PROPERTY);
-      if (isAuthoredText(text)) {
-        text.runs.forEach((run, index) => {
-          if (run.typeToken === ref) runs.push(index);
-        });
-      }
-      if (runs.length > 0) {
-        const objectId = object.get("id");
-        const id = typeof objectId === "string" ? objectId : "";
-        found.push({ objectId: id, name: objectName(object) ?? id, runs });
-      }
-      if (object instanceof Group) visit(object.getObjects());
+  visitSceneObjects(objects, (object) => {
+    const runs: number[] = [];
+    const text = object.get(YUNARI_TEXT_PROPERTY);
+    if (isAuthoredText(text)) {
+      text.runs.forEach((run, index) => {
+        if (run.typeToken === ref) runs.push(index);
+      });
     }
-  };
-  visit(objects);
+    if (runs.length > 0) {
+      const objectId = object.get("id");
+      const id = typeof objectId === "string" ? objectId : "";
+      found.push({ objectId: id, name: objectName(object) ?? id, runs });
+    }
+  });
   return found;
 }
 
@@ -81,29 +78,25 @@ export function reassignObjectTypeTokenReferences(
   to: `typeTokens.${string}`,
 ): number {
   let changes = 0;
-  const visit = (objects: readonly ReassignableObject[]): void => {
-    for (const object of objects) {
-      const text = object.get(YUNARI_TEXT_PROPERTY);
-      if (isAuthoredText(text)) {
-        const runs = text.runs.map((run) => {
-          if (run.typeToken !== from) return run;
-          changes += 1;
-          return { ...run, typeToken: to };
-        });
-        object.set(YUNARI_TEXT_PROPERTY, { ...text, runs });
-      }
-      if (object instanceof Group) visit(object.getObjects());
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const text = object.get(YUNARI_TEXT_PROPERTY);
+    if (isAuthoredText(text)) {
+      const runs = text.runs.map((run) => {
+        if (run.typeToken !== from) return run;
+        changes += 1;
+        return { ...run, typeToken: to };
+      });
+      object.set(YUNARI_TEXT_PROPERTY, { ...text, runs });
     }
-  };
-  visit(canvas.getObjects());
+  });
   return changes;
 }
 
 function applyTypes(
-  objects: readonly PaintableObject[],
+  objects: readonly FabricObject[],
   globals: Globals | undefined,
 ): void {
-  for (const object of objects) {
+  visitSceneObjects(objects, (object) => {
     const run = firstRun(object.get(YUNARI_TEXT_PROPERTY));
     const ref = run?.["typeToken"];
     const value =
@@ -116,22 +109,12 @@ function applyTypes(
         ...(value.weight === undefined ? {} : { fontWeight: value.weight }),
       });
     }
-    if (object instanceof Group) applyTypes(object.getObjects(), globals);
-  }
+  });
 }
 
 type Preset = {
   family: string;
   weight?: string | number;
-};
-
-type PaintableObject = {
-  get(name: string): unknown;
-  set(value: Record<string, unknown>): unknown;
-};
-type ReassignableObject = {
-  get(name: string): unknown;
-  set(name: string, value: unknown): unknown;
 };
 
 type AuthoredRun = {

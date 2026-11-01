@@ -32,11 +32,12 @@ body,
    mapping was rejected, which is what an inline script resolving the
    palette ahead of the bundle would have been. */
 :root {
-  --shell-surface: #eff9f2bf;
+  --shell-surface: #e4f3ec;
   /* A popover's own ground: the drawing fixes it at 95%, so a cell behind it
-     does not read as part of the menu. */
-  --shell-popover: #eff9f2f2;
-  --shell-surface-strong: #f8fffbdf;
+     does not read as part of the menu. Opaque for the same reason the two
+     surface roles below are: chrome never composites against the ground. */
+  --shell-popover: #edf8f1;
+  --shell-surface-strong: #f1fbf7;
   --shell-edge: #26463833;
   --shell-text: #102119;
   --shell-muted: #4f6659;
@@ -440,9 +441,9 @@ body,
   --edge-2: color-mix(in srgb, var(--edge) 55%, transparent);
 }
 [data-shell-palette="light"] {
-  --shell-surface: #eff9f2bf;
-  --shell-popover: #eff9f2f2;
-  --shell-surface-strong: #f8fffbdf;
+  --shell-surface: #e4f3ec;
+  --shell-popover: #edf8f1;
+  --shell-surface-strong: #f1fbf7;
   --shell-edge: #26463833;
   --shell-text: #102119;
   --shell-muted: #4f6659;
@@ -725,11 +726,10 @@ body,
 
    - **chrome** — the rail, both panes, the inspector, and the header and status
      strips that declare their own surface — paints the palette's own `--panel`,
-     with no gradient and no shadow. `--panel` is opaque in five palettes
-     (Task 4 made graphite's `#12161c`); `light` declares
-     `--shell-surface: #eff9f2bf`, so its chrome is still 75% and still
-     composites against the mint ground. That is a derivation Task 4 did not
-     reach rather than a literal to invent here, and `vg-310` owns it.
+     with no gradient and no shadow. `--panel` is opaque in **every** palette;
+     `light`'s surface roles were the last translucent ones (75%, 87% and 95%)
+     and now carry the opaque tones of the composite the reader already saw, so
+     no chrome composites against its ground.
    - a **floating cluster over the canvas** — the dock and the view cluster —
      adds row 1's shadow and a 95% fill. The 95% is the derivation for a
      cluster's fill and the same one `.editor-shell-identity` declares in its
@@ -879,6 +879,8 @@ body,
    by the destructive mark — the mode switch renders no registry action — so
    both are in `editor-shell.control-rules.test.ts`'s allowlist. */
 .editor-shell-mode-switch button {
+  flex: 1;
+  min-width: 0;
   border: 0;
   border-radius: var(--radius-sm);
   padding: var(--space-4) var(--space-8);
@@ -998,6 +1000,15 @@ body,
 .editor-shell-menubar {
   display: flex;
   gap: 4px;
+}
+/* The theme toolbar: the open document's actions as the design's 26px icon
+   buttons. It is a sibling of the menus rather than rows inside them, so a
+   press is one gesture and the glyph-only hover rule is `ControlIconButton`'s
+   own. The 4px gap is the menubar's, because the two regions read as one row. */
+.editor-shell-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
 }
 .editor-shell-menubar button {
   color: var(--shell-text);
@@ -1161,6 +1172,17 @@ body,
 }
 .editor-shell-palette-swatch-accent {
   background: var(--shell-accent);
+}
+/* The publish chord, printed before the header's primary button. The header
+   rule puts the chord first, and its `margin-left: auto` is what keeps the pair
+   together at the right edge now that something sits ahead of the button. */
+.editor-shell-publish-chord {
+  margin-left: auto;
+  margin-right: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--shell-muted);
+  opacity: 0.7;
 }
 .editor-shell-primary {
   margin-left: auto;
@@ -1414,18 +1436,22 @@ body,
 .editor-shell-dock button:hover {
   border-color: var(--muted);
 }
+/* A section heading is an eyebrow: the design's type scale reserves uppercase
+   for eyebrows alone, at `--text-2xs`, 600, `.11em`, muted. A pane's own name
+   overrides this rule below, because a name is a title rather than a label. */
 .editor-shell-panel h2,
 .editor-shell-inspector h2 {
   margin: 0 0 12px;
-  color: var(--shell-text);
+  color: var(--muted);
   /* UI sans, not the palette's display face: §2 gives headings to the UI sans
      and no clause grants chrome a serif. `--shell-display` still dresses the
      brand and a dialog's lead. */
   font-family: var(--font-ui);
-  font-size: var(--text-md);
-  line-height: var(--text-md--line-height);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.11em;
 }
 [data-shell-palette="editorial"] .editor-shell-panel h2,
 [data-shell-palette="editorial"] .editor-shell-inspector h2 {
@@ -1681,7 +1707,6 @@ body,
 .editor-shell,
 .editor-shell button,
 .editor-shell input,
-.editor-shell select,
 .editor-shell [role="menuitem"] {
   transition:
     background-color 140ms ease,
@@ -1711,7 +1736,6 @@ body,
     :is(
       button,
       input,
-      select,
       [tabindex]:not(:where([role="tabpanel"]))
     ):focus-visible {
     outline: 2px solid var(--shell-accent);
@@ -2239,10 +2263,8 @@ body,
   font-variant-numeric: tabular-nums;
 }
 .yunari-field input,
-.yunari-field select,
 .yunari-field textarea,
-.yunari-field-row input,
-.yunari-field-row select {
+.yunari-field-row input {
   width: auto;
   display: inline-block;
   margin: 0;
@@ -2401,10 +2423,10 @@ body,
    toolbar. The section is the pane itself, so `data-yunari-panel` names it.
 
    The pane's own name overrides the panel-wide `h2` rule above it. That rule is
-   for a *section* heading inside a pane — uppercase, display serif, a hairline
-   under it — and a pane's name is neither: the design reserves uppercase for
-   section eyebrows and gives a panel title `--text-md` in the UI sans. The
-   selector is long because it has to out-rank
+   for a *section* heading inside a pane — an eyebrow, and the editorial palette
+   adds a hairline under it — and a pane's name is neither: the design reserves
+   uppercase for section eyebrows and gives a panel title `--text-md` in the UI
+   sans. The selector is long because it has to out-rank
    `[data-shell-palette="editorial"] .editor-shell-panel h2`. */
 .editor-shell-pane .editor-shell-pane-title .editor-shell-pane-name {
   margin: 0;
@@ -3105,14 +3127,16 @@ body,
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
   /* **The compact header keeps the mode switch and the publish control.** The
-     brand and the menubar are the two regions that stand down: together with
-     the switch and the publish control they measure more than the glass, while
-     the switch alone plus publish fit. The menubar's actions stay on their
-     shortcuts, and the header is not where a phone-width author edits a
-     document's menus. The row does not wrap: the publish control is the
-     editor's one filled accent button and belongs at the right edge. */
+     brand, the menubar and the theme toolbar are the three regions that stand
+     down: together with the switch and the publish control they measure more
+     than the glass, while the switch alone plus publish fit. The menubar's and
+     toolbar's actions stay on their shortcuts, and the header is not where a
+     phone-width author edits a document's menus. The row does not wrap: the
+     publish control is the editor's one filled accent button and belongs at
+     the right edge. */
   .editor-shell-header strong,
-  .editor-shell-menubar {
+  .editor-shell-menubar,
+  .editor-shell-toolbar {
     display: none;
   }
   .editor-shell-header {

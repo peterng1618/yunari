@@ -222,6 +222,12 @@ describe("EditorDocument credits", () => {
       assetA,
       { ...assetB, license: "ISC v2" },
     ]);
+    // The preview's one join: the id the import wrote answers its own credit.
+    expect(document.creditForAsset("asset-b")).toEqual({
+      ...assetB,
+      license: "ISC v2",
+    });
+    expect(document.creditForAsset("asset-missing")).toBeUndefined();
   });
 
   it("refuses the entry past the package's own cap, but not a repeat", () => {
@@ -391,7 +397,7 @@ describe("EditorDocument save cleanup", () => {
 
     expect(cleanupMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: uiCopy.file.savePackage,
+        title: uiCopy.file.exportTheme,
         documentName: "System dashboard",
         files: [
           expect.objectContaining({

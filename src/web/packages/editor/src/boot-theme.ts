@@ -11,7 +11,7 @@ import {
  * The theme a boot URL asks for, or the one the author left off, or nothing to
  * open.
  *
- * `?theme=<id>` is the same call the in-editor *Open library* dialog makes,
+ * `?theme=<id>` is the same call the in-editor *Open* dialog makes,
  * reached by URL instead. A saved theme with no way back to it is a
  * write-only surface: the editor could put one in the library and nothing
  * could ever read it again.
@@ -28,6 +28,16 @@ import {
  * because closing the tab and coming back to the theme they were working on is
  * the ordinary round trip and the template is not it. `New theme` and `New from
  * starter` are what a blank document means, and they stay where they were.
+ *
+ * **`?template=<id>` is an explicit request for the fresh template, and it wins
+ * over both.** The host's chooser links a template row here, and that row used
+ * to link bare `/editor/` — which resumed the author's last save, so "Starter"
+ * opened somebody else's document. A row that names a template asks for that
+ * template, never for whatever ran last. The bundled starter is the only
+ * template the editor implements today, so the id is not resolved; the host's
+ * catalogue (`themes/templates.ts`) carries the same id and both surfaces only
+ * ever offer the one, which is why an unrecognised id still starts fresh
+ * instead of opening a saved theme.
  *
  * **The store this assumes is single-author, and that is what makes the
  * fallback safe.** `~/.yunari/themes/` under `os.homedir()` (`cli/args.ts`),
@@ -57,7 +67,12 @@ export async function bootTheme(
   search: string,
   client: ThemeLibraryClient,
 ): Promise<BootThemeOutcome> {
-  const id = new URLSearchParams(search).get("theme");
+  const params = new URLSearchParams(search);
+  const template = params.get("template");
+  if (template !== null && template !== "") {
+    return { kind: "none" };
+  }
+  const id = params.get("theme");
   if (id !== null && id !== "") {
     return openTheme(client, id);
   }

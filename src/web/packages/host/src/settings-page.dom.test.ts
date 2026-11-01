@@ -3,7 +3,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import * as themeListModule from "../public/theme-list.js";
 
 /**
  * The prompts `/settings` puts above its device dropdowns.
@@ -29,23 +28,17 @@ const BODY_HTML = PAGE.slice(
   PAGE.indexOf("</body>"),
 ).replace(/<script[\s\S]*?<\/script>/, "");
 
-/** The page's one module, with its import handed the real `theme-list.js`:
- *  `/settings/theme-list.js` is a URL only a host serves, and the page calls
- *  the module's own resolution rule as well as drawing its rows through it. */
-const SCRIPT = (
-  PAGE.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1] ?? ""
-).replace(
-  /^\s*import\s*\{([^}]*)\}[^\n]*$/m,
-  (_statement, names: string) => `const {${names}} = __themeList;`,
-);
+/** The page's one module, evaluated as it is written: this page imports no
+ *  `/settings/theme-list.js`, so there is no import to hand a stand-in to. */
+const SCRIPT =
+  PAGE.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1] ?? "";
 
 type Body = () => Promise<void>;
 const AsyncFunction = Object.getPrototypeOf(
   async (): Promise<void> => undefined,
 ).constructor as new (
-  parameter: string,
   source: string,
-) => (themeList: unknown) => Body;
+) => () => Body;
 
 interface Device {
   readonly id: string;
@@ -80,7 +73,7 @@ const THEME_MAP = {
   themes: [{ id: "living-room", name: "Living Room" }],
   templates: [],
   default: "living-room",
-  displays: [{ id: "this-pc", label: "This PC", kind: "local", theme: null }],
+  displays: [{ id: "this-pc", label: "Host", kind: "local", theme: null }],
 };
 
 /** Every URL the page asked for, in order, so a case can read which display's
@@ -118,7 +111,7 @@ async function render(hardware: Hardware): Promise<void> {
   document.body.innerHTML = BODY_HTML;
   requested = [];
   stubFetch(hardware);
-  await new AsyncFunction("__themeList", SCRIPT)(themeListModule);
+  await new AsyncFunction(SCRIPT)();
 }
 
 afterEach(() => {
@@ -156,7 +149,7 @@ describe("the two disk fieldsets ask different questions", () => {
     await render(MANY);
     const prompt = promptByGroup();
 
-    expect(prompt["system-disk"]).toBe("Which drive does this PC run from?");
+    expect(prompt["system-disk"]).toBe("Which drive does the Host run from?");
     expect(prompt["data-disk"]).toBe(
       "Which second drive should dashboards show?",
     );
@@ -168,7 +161,7 @@ describe("the two disk fieldsets ask different questions", () => {
 
     // The count once decided both labels, so a one-drive PC asked twice and
     // the legend was the only thing telling the two dropdowns apart.
-    expect(prompt["system-disk"]).toBe("Which drive does this PC run from?");
+    expect(prompt["system-disk"]).toBe("Which drive does the Host run from?");
     expect(prompt["data-disk"]).toBe(
       "Which second drive should dashboards show?",
     );
@@ -176,7 +169,7 @@ describe("the two disk fieldsets ask different questions", () => {
 });
 
 describe("the graphics card keeps both of its branches", () => {
-  it("answers the question when this PC reports one card", async () => {
+  it("answers the question when the Host reports one card", async () => {
     await render({ gpus: [CARD], disks: [BOOT, ARCHIVE] });
 
     expect(promptByGroup()["gpu"]).toBe(
@@ -184,7 +177,7 @@ describe("the graphics card keeps both of its branches", () => {
     );
   });
 
-  it("asks it when this PC reports several", async () => {
+  it("asks it when the Host reports several", async () => {
     await render(MANY);
 
     expect(promptByGroup()["gpu"]).toBe("Which device should dashboards use?");

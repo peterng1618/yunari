@@ -1,6 +1,7 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
 import type {
+  PanelConnectionStatus,
   PanelControlCommand,
   PanelDevice,
   PanelVideoSource,
@@ -56,13 +57,10 @@ export interface PanelManagerOptions {
 export class PanelNotRunningError extends Error {}
 
 /**
- * What the manager is doing with one display.
- *
- * `connecting` is an attempt in flight — a start, or a manual reconnect whose
- * device has not answered yet. A record with no entry at all is `disconnected`:
- * the retry loop has nothing open for it.
+ * What the manager is doing with one display, in the vocabulary its port and
+ * the settings surface share.
  */
-export type PanelConnectionStatus = "connected" | "connecting" | "disconnected";
+export type { PanelConnectionStatus };
 
 export interface PanelManager {
   /** Starts a panel's runner, or does nothing when one is already running. */

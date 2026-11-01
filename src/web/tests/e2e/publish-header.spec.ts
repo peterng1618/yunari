@@ -227,11 +227,13 @@ test.describe("the header's publish surface", () => {
     const windowWidth = await page.evaluate(() => window.innerWidth);
 
     // **The compact header is a layout, not a clipped row.** Below the
-    // breakpoint the brand and the menubar stand down, so the mode switch and
-    // the publish control are the two regions the header keeps — and the
-    // control the author presses is inside the window rather than past it.
+    // breakpoint the brand, the menubar and the theme toolbar stand down, so
+    // the mode switch and the publish control are the two regions the header
+    // keeps — and the control the author presses is inside the window rather
+    // than past it.
     await expect(page.locator(".editor-shell-header strong")).toBeHidden();
     await expect(page.locator(".editor-shell-menubar")).toBeHidden();
+    await expect(page.locator("[data-yunari-theme-toolbar]")).toBeHidden();
     await expect(page.locator(".editor-shell-mode-switch")).toBeVisible();
     await expect(publish).toBeVisible();
     const publishBox = await publish.boundingBox();

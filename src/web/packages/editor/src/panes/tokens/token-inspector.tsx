@@ -239,7 +239,7 @@ function TokenFields(props: {
       data-yunari-token-fields=""
       className="flex flex-col gap-[var(--space-8)]"
     >
-      <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
+      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
         {uiCopy.panels.typeToken}
       </h2>
       {/* Computed, never stored: a role reads `[Heading] Segoe UI 600`, an

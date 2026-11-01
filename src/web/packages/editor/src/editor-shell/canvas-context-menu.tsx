@@ -97,7 +97,7 @@ function entryItem(entry: MenuEntry): React.JSX.Element {
       onClick={entry.run}
     >
       {entry.label}
-      {/* The Edit menu's own reading of a chord, from the same route: the
+      {/* The menu bar's own reading of a chord, from the same route: the
           label functions, on the id the registry binds. Right alignment is
           `.editor-shell-menu-key`'s, which the popup's flex row already gives
           a context-menu item. */}

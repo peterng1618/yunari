@@ -8,7 +8,7 @@ import type {
   TextContent,
 } from "@yunari/renderer-core";
 import { emptySampleSource } from "@yunari/renderer-core";
-import { Canvas, IText, Rect, Textbox } from "fabric/es";
+import { Canvas, Group, IText, Rect, Textbox } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyAuthoredText,
@@ -512,6 +512,17 @@ describe("what one text pass costs", () => {
 
     expect(object.text).toBe("CPU 55");
     expect(render).toHaveBeenCalled();
+    await canvas.dispose();
+  });
+
+  it("repaints a bound object nested inside a group", async () => {
+    const { canvas, object, bindings, source } = readout();
+    canvas.remove(object);
+    canvas.add(new Group([object]));
+
+    refreshBoundText(canvas, bindings, source(62), undefined);
+
+    expect(object.text).toBe("CPU 62");
     await canvas.dispose();
   });
 });

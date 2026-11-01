@@ -325,6 +325,8 @@ it("reads a panel's hardware record, dropping what it cannot print", async () =>
           },
           model: "chs_5inch",
           firmware: "1.90",
+          status: "disconnected",
+          reason: "Another program holds the port.",
           commands: ["brightness", "startVideo", "status"],
         },
         {
@@ -362,6 +364,8 @@ it("reads a panel's hardware record, dropping what it cannot print", async () =>
     },
     model: "chs_5inch",
     firmware: "1.90",
+    status: "disconnected",
+    reason: "Another program holds the port.",
     commands: ["brightness", "status"],
   });
   expect(panels[1]?.support).toBeUndefined();
@@ -402,4 +406,106 @@ it("answers a panel command refusal with the host's plain-text words", async () 
       kind: "status",
     }),
   ).rejects.toThrow("Panel display strip is not running.");
+});
+
+/**
+ * The display-management routes the add form and its neighbours call. Each is
+ * read here because the region is handed a fake: a URL or a field renamed on
+ * one side would otherwise agree with the other and disagree with the host.
+ */
+it("lists the monitors a local display can be put on", async () => {
+  const { fetch, calls } = host(() =>
+    json({
+      monitors: [
+        {
+          deviceName: "\\\\.\\DISPLAY1",
+          serial: "4790810010513",
+          main: true,
+          positionX: 0,
+          positionY: 0,
+          currentResX: 1920,
+          currentResY: 1080,
+        },
+        // No geometry: a screen the host could not place is not a choice.
+        { deviceName: "\\\\.\\DISPLAY2", main: false },
+      ],
+    }),
+  );
+
+  const monitors = await createHostSettingsClient({ fetch }).listMonitors();
+
+  expect(calls).toEqual(["GET /api/displays/monitors"]);
+  expect(monitors).toEqual([
+    {
+      deviceName: "\\\\.\\DISPLAY1",
+      serial: "4790810010513",
+      main: true,
+      positionX: 0,
+      positionY: 0,
+      currentResX: 1920,
+      currentResY: 1080,
+    },
+  ]);
+});
+
+it("adds a local display with the monitor hint, not the probe entry", async () => {
+  let body: unknown;
+  const { fetch, calls } = host((_url, init) => {
+    body = JSON.parse(String(init?.body));
+    return json(
+      {
+        display: {
+          id: "desk",
+          label: "Desk",
+          kind: "local",
+          shape: "rect",
+          rotation: 0,
+        },
+      },
+      201,
+    );
+  });
+
+  const id = await createHostSettingsClient({ fetch }).createLocalDisplay({
+    label: "Desk",
+    monitor: {
+      deviceName: "\\\\.\\DISPLAY1",
+      serial: "4790810010513",
+      main: true,
+      positionX: 0,
+      positionY: 0,
+      currentResX: 1920,
+      currentResY: 1080,
+    },
+  });
+
+  expect(calls).toEqual(["POST /api/displays"]);
+  // What finds the screen again: the name and serial. The geometry is read
+  // from the OS at launch and is not part of the record.
+  expect(body).toEqual({
+    label: "Desk",
+    monitor: {
+      deviceName: "\\\\.\\DISPLAY1",
+      serial: "4790810010513",
+    },
+  });
+  expect(id).toBe("desk");
+});
+
+it("removes one display and answers nothing", async () => {
+  const { fetch, calls } = host(() => json({ ok: true }));
+
+  await createHostSettingsClient({ fetch }).removeDisplay("hallway");
+
+  expect(calls).toEqual(["DELETE /api/displays/hallway"]);
+});
+
+it("registers the host at sign-in and answers the registrar's message", async () => {
+  const message = "Registered. Windows starts Yunari at sign-in.";
+  const { fetch, calls } = host(() => json({ ok: true, message }));
+
+  expect(await createHostSettingsClient({ fetch }).registerAutostart()).toEqual(
+    { ok: true, message },
+  );
+  expect(calls).toEqual(["POST /api/displays/autostart"]);
 });

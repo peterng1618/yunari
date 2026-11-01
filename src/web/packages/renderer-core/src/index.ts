@@ -416,7 +416,7 @@ export type {
   FacetRecord,
   Orientation,
 } from "./theme/facet-record.js";
-export { facetRecordOf } from "./theme/facet-record.js";
+export { backgroundPaintOf, facetRecordOf } from "./theme/facet-record.js";
 export type { GlassSampling, GlassTreatment } from "./theme/glass.js";
 // The reader, the property name, the guard and the bound are the external
 // contract. The guard is external because a control that decides the membership
@@ -453,7 +453,11 @@ export {
   YUNARI_NAME_PROPERTY,
 } from "./theme/object-name.js";
 export type { PaletteTokenOption } from "./theme/palette-tokens.js";
-export { paletteTokenOptions } from "./theme/palette-tokens.js";
+export {
+  isOfferedPaletteToken,
+  paletteTokenIds,
+  paletteTokenOptions,
+} from "./theme/palette-tokens.js";
 export type { PerformanceCost } from "./theme/performance-cost.js";
 export { performanceCostsOf } from "./theme/performance-cost.js";
 export { defaultTypeSize } from "./theme/type-size.js";

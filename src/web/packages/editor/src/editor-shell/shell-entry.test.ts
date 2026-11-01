@@ -14,7 +14,8 @@ describe("parseShellEntry", () => {
   it.each([
     ["", { mode: "editor", publish: false }],
     ["?mode=themes", { mode: "themes", publish: false }],
-    ["?mode=this-pc", { mode: "this-pc", publish: false }],
+    ["?mode=host", { mode: "host", publish: false }],
+    ["?mode=this-pc", { mode: "editor", publish: false }],
     ["?mode=bogus", { mode: "editor", publish: false }],
     ["?publish=1", { mode: "editor", publish: true }],
     ["?mode=themes&publish=1", { mode: "themes", publish: false }],

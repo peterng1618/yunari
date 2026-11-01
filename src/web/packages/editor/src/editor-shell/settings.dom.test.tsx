@@ -7,6 +7,8 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CredentialRow } from "../asset-finder/credentials-client.js";
+import { wellClasses } from "../components/ui/control-well.js";
+import { ACTION_BUTTON } from "../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
@@ -830,6 +832,53 @@ describe("Connections", () => {
     expect(verify("has-check")?.disabled).toBe(false);
   });
 
+  /**
+   * **The modal draws the control set's shapes, not its own.** A field is the
+   * Well — the one owner of the surface, the edge, the radius and the focus
+   * boundary — and an action is the shared labelled button the dialogs already
+   * draw. Both are compared against the owners' exported strings rather than
+   * against restated literals, so a restyle moves the modal with its owner.
+   */
+  it("draws its fields as wells and its actions as labelled buttons", async () => {
+    credentials.listCredentials.mockResolvedValue([
+      rowOf({ id: "demo", label: "Demo source" }),
+    ]);
+    const host = mount();
+    await press(gear(host));
+    await openConnections();
+
+    const credentialInput = document.querySelector<HTMLInputElement>(
+      '[data-yunari-credential-input="demo"]',
+    );
+    expect(
+      credentialInput?.parentElement?.className,
+      "the credential field is not in a Well",
+    ).toContain(wellClasses("dialog"));
+    for (const action of ["save", "clear", "verify"] as const) {
+      expect(
+        document.querySelector(`[data-yunari-credential-${action}="demo"]`)
+          ?.className,
+        `the ${action} action is not the shared labelled button`,
+      ).toContain(ACTION_BUTTON);
+    }
+
+    await openPreviews();
+    const ratioInput = document.querySelector<HTMLInputElement>(
+      "[data-yunari-preview-ratio-input]",
+    );
+    expect(
+      ratioInput?.parentElement?.className,
+      "the preview-ratio field is not in a Well",
+    ).toContain(wellClasses("dialog"));
+    for (const action of ["add", "reset"] as const) {
+      expect(
+        document.querySelector(`[data-yunari-preview-ratio-${action}]`)
+          ?.className,
+        `the ${action} action is not the shared labelled button`,
+      ).toContain(ACTION_BUTTON);
+    }
+  });
+
   it("points a row at where its key is created, and adds nothing for a row without help", async () => {
     credentials.listCredentials.mockResolvedValue([
       rowOf({
@@ -1172,6 +1221,33 @@ describe("Previews", () => {
     await pressReset(tab);
     expect(rows(tab)).toHaveLength(5);
     expect(localStorage.length).toBe(0);
+  });
+
+  it("says the list is session-only once a store that exists refuses the write", async () => {
+    // A store that exists but throws (a full quota, a browser policy) is the
+    // same outcome as no store: the list lives for the session, and the tab
+    // must not go on reading as though the write had persisted.
+    const refusing = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => undefined,
+    } as unknown as Storage;
+    const host = mountWith(refusing);
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    expect(
+      tab.textContent,
+      "nothing has been attempted yet, so nothing is claimed",
+    ).not.toContain(uiCopy.settings.previewRatiosSessionOnly);
+
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+
+    expect(rows(tab)).toHaveLength(6);
+    expect(tab.textContent).toContain(uiCopy.settings.previewRatiosSessionOnly);
   });
 
   it("adds the word Circle typed into the one field", async () => {

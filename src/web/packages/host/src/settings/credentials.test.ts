@@ -392,19 +392,37 @@ describe("credentials", () => {
     expect(await store.read()).toEqual({ legacy: stored });
   });
 
-  // 520 encrypted file operations on a temp directory: alone this runs in
-  // 7.5 s, and a full gate saturated the box past the 20 s default.
+  // The cap's inputs are seeded through the same encrypted store the writes
+  // use, so the case still reads and rewrites real files. 260 live entries and
+  // 260 retirements at ~4 encrypted operations apiece spent 120 s under a
+  // saturated gate box (issue #128's shape); seeding 250 tombstones and
+  // clearing ten kept entries proves the same eviction with a tenth of it.
   it("caps the retired set at the newest 256 ids", async () => {
-    for (let index = 0; index < 260; index += 1) {
-      await store.write(`id${index}`, "value", savedAt);
-    }
-    for (let index = 0; index < 260; index += 1) {
+    const retired = Array.from({ length: 250 }, (_, index) => `id${index}`);
+    await secrets.write(
+      "credentials-retired",
+      Buffer.from(`${JSON.stringify(retired)}\n`, "utf8"),
+    );
+    const live = Object.fromEntries(
+      Array.from({ length: 10 }, (_, offset) => {
+        const id = `id${250 + offset}`;
+        return [id, { value: "value", savedAt: savedAt.toISOString() }];
+      }),
+    );
+    await secrets.write(
+      "credentials",
+      Buffer.from(`${JSON.stringify(live, null, 2)}\n`, "utf8"),
+    );
+
+    for (let index = 250; index < 260; index += 1) {
       await store.clear(`id${index}`);
     }
 
     const raw = await secrets.read("credentials-retired");
     const ids = JSON.parse((raw as Buffer).toString("utf8")) as string[];
 
+    // 250 seeded tombstones plus 10 real retirements is 260: the cap keeps the
+    // newest 256, so the four oldest seeded ids are the ones evicted.
     expect(ids).toHaveLength(256);
     expect(ids[0]).toBe("id4");
     expect(ids.at(-1)).toBe("id259");

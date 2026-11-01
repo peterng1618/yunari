@@ -56,6 +56,7 @@ function inputFor(
 ): AssetPreviewInput {
   return {
     asset,
+    credit: undefined,
     previewUrl: asset.kind === "video" ? "blob:clip" : "blob:studio",
     inUse: false,
     sizeBytes: 840 * 1024,
@@ -215,6 +216,28 @@ it("reads a Wallpaper Engine video's licence and source, never None recorded", a
 
   expect(modal.textContent).toContain("unknown");
   expect(modal.textContent).toContain(workshopUrl);
+  expect(modal.textContent).not.toContain(uiCopy.assets.preview.noneRecorded);
+});
+
+it("reads the package credit's licence and author, never None recorded", async () => {
+  // A finder image's declaration has no author, and its licence may be absent
+  // too; the credit is the only member that knows who made it.
+  const modal = await open(
+    { id: "studio", kind: "image", path: "assets/studio.png" },
+    {
+      credit: {
+        kind: "image",
+        title: "studio",
+        author: { name: "Jane Doe" },
+        license: "CC BY 4.0",
+        changes: "Imported unchanged",
+        assetId: "studio",
+      },
+    },
+  );
+
+  expect(modal.textContent).toContain("CC BY 4.0");
+  expect(modal.textContent).toContain("Jane Doe");
   expect(modal.textContent).not.toContain(uiCopy.assets.preview.noneRecorded);
 });
 

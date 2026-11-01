@@ -47,6 +47,14 @@ export default defineConfig({
     // §124's floor applies to the player; the editor is desktop-only, and this
     // matches it so both are built by one toolchain rather than two.
     target: "es2022",
+    // The editor's support floor, stated rather than inferred. Without a CSS
+    // target lightningcss picks the prefix set itself and is free to emit only
+    // the prefixed alias of a property, which a target browser that supports
+    // the standard form then ignores — a stylesheet that builds green and
+    // paints wrong. Chrome/Edge 111 and Safari 16.4 are the floor the product
+    // supports; `scripts/check-css-prefixes.mjs` reads the built stylesheet and
+    // fails the build when a declared property did not survive in that form.
+    cssTarget: ["chrome111", "edge111", "safari16.4"],
     sourcemap: true,
   },
   server: {

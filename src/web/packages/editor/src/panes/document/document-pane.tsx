@@ -49,7 +49,7 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
   const { artboard, metadata, boxes, credits } = props;
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
-      <h2 className="text-xs font-semibold tracking-[0.11em] text-muted uppercase">
+      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
         {uiCopy.panels.themeSettings}
       </h2>
       <InspectorSection id="theme" title={uiCopy.panels.themeMetadata}>

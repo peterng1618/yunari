@@ -385,23 +385,25 @@ export const uiCopy = {
     label: "Readings",
   },
   menus: {
-    /** The menubar's own name, so a screen reader reaching the three menus is
+    /** The menubar's own name, so a screen reader reaching the two menus is
      *  told what the group is before it reads each one. */
     label: "Editor menus",
     file: "File",
-    edit: "Edit",
     view: "View",
+  },
+  /** The header toolbar's own name. The buttons inside name themselves; this
+   *  says what the row is — the open theme document's actions. */
+  toolbar: {
+    label: "Theme document actions",
   },
   /**
    * The shell's three modes, as the header's switch names them.
    * Each names the *surface* rather than the mechanism behind it.
    *
-   * **The user chose `Editor · Themes · Host` on 2026-10-19** (SDD ruling R100),
-   * over the draft names — *theme store*, *theme editor*, *host
-   * settings* — and over the surfaces' `This PC`, which named the machine
-   * rather than a peer of `Themes`. The key `thisPc` and the mode id `"this-pc"`
-   * are unchanged: an id is never shown to anyone, so renaming one buys a
-   * reader nothing and costs every call site.
+   * **The machine and the mode that manages it are one name: `Host`.** The
+   * mode value, the query value and this key are `host`; the persisted display
+   * id stays `this-pc`, because it is stored in per-display assignments rather
+   * than shown to anyone.
    */
   modes: {
     /** The switch's own name. The three labels inside are the options, so a
@@ -410,7 +412,7 @@ export const uiCopy = {
     label: "Shell modes",
     editor: "Editor",
     themes: "Themes",
-    thisPc: "Host",
+    host: "Host",
     /** Asked before the editor is left with unsaved work. It is the question
      *  the editor's own replacement prompt is given, so it offers the same
      *  three answers — Save, Discard, Cancel — and the author can save rather
@@ -418,7 +420,7 @@ export const uiCopy = {
     unsaved: "Save changes before leaving the editor?",
   },
   /**
-   * The Host mode's own surface: this PC.
+   * The Host mode's own surface: the machine and its display.
    *
    * **The words are `packages/host/public/settings.html`'s** — its hints, its
    * device labels, its status line — taken rather than rewritten, because they
@@ -439,7 +441,7 @@ export const uiCopy = {
       /** A display holding no theme of its own is served the default. The row
        *  names the theme it shows and says where that answer came from, because
        *  a name alone would read as a choice this display made. */
-      follows: "Follows this PC",
+      follows: "Follows Host",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
       /** The file the host keeps its displays and their credentials in could not
@@ -461,18 +463,53 @@ export const uiCopy = {
       /** What the section says about the two rules they write under. */
       rotationSnapHint:
         "A round display turns by any whole degree; a rectangular one turns in quarter turns. Changing the shape snaps the angle to the new rule.",
-      /** This PC has no record to present, and the unpaired default is served
+      /** The Host has no record to present, and the unpaired default is served
        *  rather than owned: the section says why instead of drawing a control
        *  that cannot write. */
       presentationAbsent:
-        "This PC's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
+        "The Host's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
+      /** The local display the owner adds by choosing a monitor the Host
+       *  reports. The route needs both a name and a monitor, so the form offers
+       *  both and says nothing when no monitor was found. */
+      addHeading: "Add a local display",
+      addName: "Name",
+      addNameHint: "What this display is called. You can rename it later.",
+      addMonitor: "Monitor",
+      /** One screen, as the probe describes it: the device name it reports, its
+       *  own resolution, and whether it is the main display. */
+      monitorOption: (
+        name: string,
+        width: number,
+        height: number,
+        main: boolean,
+      ): string => `${name} - ${width}x${height}${main ? " (main)" : ""}`,
+      noMonitors:
+        "The Host reported no monitor, so a local display cannot be added here.",
+      add: "Add display",
+      adding: "Adding…",
+      added: (name: string): string => `Added ${name}.`,
+      /** Removing one display. The question names it and says what goes with it:
+       *  a removal is also the revocation of a paired display's credential. */
+      remove: "Remove",
+      removeDisplay: (name: string): string => `Remove ${name}`,
+      removeAsk: (name: string): string =>
+        `Remove ${name}? It loses its theme assignment and, if it was paired, its credential.`,
+      confirmRemove: "Remove display",
+      keep: "Keep",
+      removed: (name: string): string => `Removed ${name}.`,
+      /** The host starts at sign-in so every local display comes back after a
+       *  reboot. The route registers the host, not one display. */
+      autostart: "Start at sign-in",
+      autostartHint:
+        "Yunari starts hidden at sign-in, so every local display comes back after a reboot.",
+      autostartBusy: "Registering…",
     },
     panels: {
       heading: "USB panels",
-      hint: "A panel is a small screen plugged into this PC. Adding one makes it a display, and this PC draws for it.",
+      hint: "A panel is a small screen plugged into the Host. Adding one makes it a display, and the Host draws for it.",
       /** Nothing attached: the ordinary case on a machine without a panel. */
-      none: "No USB panel is attached to this PC.",
+      none: "No USB panel is attached to the Host.",
       /** Every attached panel is already a display. */
       allAdded: "Every attached panel is already a display.",
       /** A held device's row names the display driving it, where the owner can
@@ -574,19 +611,19 @@ export const uiCopy = {
       },
     },
     devices: {
-      heading: "Devices on this PC",
-      hint: "Which hardware this PC reports. These apply to every theme, unless a theme asks for something different.",
+      heading: "Devices on the Host",
+      hint: "Which hardware the Host reports. These apply to every theme, unless a theme asks for something different.",
       groups: {
         gpu: "Graphics card",
         "system-disk": "System disk",
         "data-disk": "Data disk",
       } as const satisfies Record<AssignableGroup, string>,
       /** What a slot does when nothing has been chosen, in the words a consumer
-       *  would use. The empty answer is a rule about this PC and not a device:
+       *  would use. The empty answer is a rule about the Host and not a device:
        *  naming it after discovery order puts a machine's bookkeeping in the
        *  same list as the model numbers a person bought. */
       automatic: {
-        gpu: "Automatic (the first card this PC reports)",
+        gpu: "Automatic (the first card the Host reports)",
         "system-disk": "Automatic (every drive, combined)",
         "data-disk": "Automatic (every drive, combined)",
       } as const satisfies Record<AssignableGroup, string>,
@@ -598,7 +635,7 @@ export const uiCopy = {
       // holds, so a lookup by any slot compiles and answers `undefined` for the
       // card slot — which is what its count-based label is for.
       asked: {
-        "system-disk": "Which drive does this PC run from?",
+        "system-disk": "Which drive does the Host run from?",
         "data-disk": "Which second drive should dashboards show?",
       } as Partial<Record<AssignableGroup, string>>,
       /** What a slot with no question of its own is labelled. */
@@ -616,9 +653,9 @@ export const uiCopy = {
     },
     display: {
       heading: "Display",
-      hint: "How this PC's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
+      hint: "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
       timeZone: "Clock time zone",
-      ownZone: "This PC's own zone",
+      ownZone: "Host's own zone",
       measurement: "Temperature units",
       /** The systems by the unit they read in, which is the choice rather than
        *  its name: `metric` and `imperial` say nothing about a thermometer. The
@@ -663,7 +700,7 @@ export const uiCopy = {
     },
     weather: {
       heading: "Weather",
-      hint: "Where this PC's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
+      hint: "Where the Host's weather comes from. A manual place needs no permission; Windows location fills the gap when none is set.",
       provider: "Backend",
       /** What each backend costs: the three are names a person knows from the
        *  key they bought, not descriptions of an API. */
@@ -683,7 +720,7 @@ export const uiCopy = {
       noResults: "No place matched that search.",
       searchFailed: (reason: string): string => `Could not search: ${reason}`,
     },
-    /** The custom HTTP sources this PC reads. The page names the source and
+    /** The custom HTTP sources the Host reads. The page names the source and
      *  never its secret: a source carries a credential id, and no credential
      *  value ever reaches the browser (`credentials-client.ts`). */
     sources: {
@@ -765,7 +802,7 @@ export const uiCopy = {
       /** The offer after a delete: the route answered that no source references
        *  this credential any more. The id is an id, never the value. */
       credentialAsk: (id: string): string =>
-        `No other source uses the key ${id}. Remove it from this PC?`,
+        `No other source uses the key ${id}. Remove it from the Host?`,
       removeCredential: "Remove the key",
       keepCredential: "Keep the key",
       credentialRemoved: "The key was removed.",
@@ -799,8 +836,8 @@ export const uiCopy = {
      *  has not answered are drawn, so answering one is what makes it leave. */
     questions: {
       heading: (theme: string): string => `${theme} needs`,
-      hint: "This theme reads hardware that has no answer yet. Pick a device, or leave it following this PC's settings.",
-      inherit: "Use this PC's settings",
+      hint: "This theme reads hardware that has no answer yet. Pick a device, or leave it following the Host's settings.",
+      inherit: "Use the Host's settings",
     },
     /** The region's own status line, which is the host page's: its two halves
      *  are the display count and the last write's answer. */
@@ -858,23 +895,38 @@ export const uiCopy = {
   },
   file: {
     newDocument: "New theme",
-    /** The finder's one entry in this menu. It sits above *Import package*
-     *  because both add something and the finder is the one that fetches. */
+    /** The finder's one entry in this menu. It sits above *Open recent*
+     *  because both are editor-level rather than one theme's. */
     findAssets: "Find assets…",
     /** The reference composition, offered as what it is: a template the
      *  product ships. `New` is the author's own blank document; this is the one
      *  they can open a copy of. */
-    newFromStarter: "New from starter",
-    /** **Import package**, which is the store mode's own action and what the
-     *  row does: the package is written into the library and the open document
-     *  is untouched.
-     *  The row used to read *Open package* and open a document, which is the
-     *  route A.7 removed — the store's `open` action is that route now. */
-    importPackage: "Import package",
-    savePackage: "Save package",
-    releasePackage: "Release package",
-    openLibrary: "Open library",
-    saveLibrary: "Save to library",
+    newFromTemplate: "New from template",
+    /** **Import theme**, a toolbar button. It is the store mode's own action
+     *  and what the press does: the theme package is written into the library
+     *  and the open document is untouched. The store's `open` action is the
+     *  route that opens a document. */
+    importPackage: "Import theme",
+    /** **Activate**: puts the stored theme on the display that holds no theme
+     *  of its own, so the player switches to it. A document that is not stored
+     *  is saved first — the display cannot show a theme the host does not
+     *  hold. */
+    activate: "Activate",
+    /** A package with a bumped version, written the same way: the release the
+     *  author hands on, not the save that keeps their work. It is also where
+     *  the plain package download lives now — there is no separate row. */
+    exportTheme: "Export theme",
+    openLibrary: "Open",
+    /** The newest stored theme that is not the open document, opened by its own
+     *  `openById` road so the replacement question and the base stay there. */
+    openRecent: "Open recent",
+    saveLibrary: "Save",
+    /** Writes the open document under a new theme id, leaving the theme it came
+     *  from as it is. The editor then continues as the new theme. */
+    saveAs: "Save as",
+    /** Exports the current selection as a `yunari-widget-package`: the objects,
+     *  their bindings, the globals they use and the files they reference. */
+    exportWidget: "Export selection as widget",
   },
   /** The chooser `New` opens before the document exists. The first control is
    *  the display a theme is for, and its entries are the display switch's own
@@ -1075,6 +1127,8 @@ export const uiCopy = {
      *  (`install-item.ts`). */
     install: {
       noCatalogueVersion: "This item has no catalogue version to install.",
+      unreachable:
+        "The Host could not be reached to install that item. Check Yunari is running, then try again.",
       refused: (status: number): string =>
         `The host refused the install (${status}).`,
       notRefreshed:
@@ -1169,7 +1223,7 @@ export const uiCopy = {
      *  telling someone with forty themes to go and build one is a lie the
      *  surface avoids by having both. */
     empty: {
-      library: "No themes are saved on this PC yet.",
+      library: "No themes are saved on the Host yet.",
       libraryHint: "Build one in the editor, or import a package.",
       /** **The catalogue's own empty state, and not the library's** (R124):
        *  before the store has anything published this is the normal state, so
@@ -1179,6 +1233,17 @@ export const uiCopy = {
       catalogueHint: "Themes published to the store will appear here.",
       filter: "No themes match these filters.",
     },
+    /** **A read that failed is not one of the empties.** The library and the
+     *  catalogue each have an empty sentence for a successful read that held
+     *  nothing; neither may be drawn when nobody answered, because saying a
+     *  half is empty to someone whose host refused the request is a fabricated
+     *  fact. This is the sentence that says the read failed instead. */
+    unreadable: {
+      local: "Your themes could not be read.",
+      online: "The store could not be read.",
+    },
+    /** The failure's one way forward: read the same listing again. */
+    retry: "Try again",
     /** The sort well, whose keys are per half because the two share none: the
      *  catalogue knows when an item was published and how often it was taken,
      *  and the host's library knows only what the author wrote. */
@@ -1284,16 +1349,48 @@ export const uiCopy = {
      *  parent. Disabled where there is no origin to name. */
     remix: "Remix",
     cancel: "Cancel",
+    /** **What the removal confirmation says, in one sentence.** It names the
+     *  theme and where it goes because a confirmation that says only "Delete?"
+     *  confirms the button rather than the act. The dialog says it twice — as
+     *  its accessible name and as its visible lead — so it is one entry: two
+     *  literals were one edit from a screen reader and a sighted reader being
+     *  told different things. */
+    confirmRemoval: (id: string, name: string | undefined): string =>
+      `Move this theme to the recycle bin?\n\n${name ?? id} (${id}) will be moved to the recycle bin, where you can get it back.`,
     /** The dialog a refused save raises. Two answers and a way out, because a
      *  refusal must not cost the author their document and must not be a dead
      *  end: reload takes the stored version, overwrite keeps theirs, and
      *  cancelling keeps both. */
     conflict: {
-      lead: "This theme was changed somewhere else",
+      lead: "This theme was changed somewhere else since you opened it. Your work is still here.",
       reload: "Open the saved version",
       overwrite: "Replace it with mine",
       cancel: "Keep editing",
     },
+    /** **Save as**: names the new theme the open document is written under. The
+     *  lead says what the act leaves alone, because saving over the open theme
+     *  is the other File row and the two must not read alike. */
+    saveAs: {
+      title: "Save as a new theme",
+      lead: "Save this document under a new theme name. The theme it came from stays as it is.",
+      name: "Theme name",
+      action: "Save as",
+    },
+    /** The status line's word after a save-as, naming the theme the editor now
+     *  continues as. */
+    savedAs: (name: string): string => `Saved as ${name}`,
+    /** A landed Activate. It says what the host now holds rather than "the
+     *  player switched", because the write is to the default assignment: a
+     *  display with a theme of its own keeps showing it. */
+    activated:
+      "Activated: displays with no theme of their own now show this one.",
+    /** A refused Activate, carrying the host's own sentence — "No such theme."
+     *  or "No such display." — unwrapped. */
+    activateFailed: (reason: string): string => `Could not activate: ${reason}`,
+    /** Open recent with no candidate: every stored theme is the open one, or
+     *  the library is empty. Said rather than left silent, because a menu row
+     *  that does nothing is indistinguishable from a broken one. */
+    noOtherTheme: "No other saved theme to open.",
   },
   /** The package the picker brings in. Its landing word says what happened — a
    *  package written into the library — because the same line used to report a
@@ -1335,7 +1432,7 @@ export const uiCopy = {
       image: "Search photos…",
       video: "Search videos…",
       colour: "Search colors…",
-      local: "Search this PC…",
+      local: "Search the Host…",
     } satisfies Record<ListingCategory, string>,
     searching: (sources: number): string =>
       `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
@@ -1433,6 +1530,9 @@ export const uiCopy = {
     fontPreview: {
       trioTitle: "Trio preview",
       familyTitle: "Font family",
+      /** The star is the on/off channel; each state names the press it makes. */
+      favorite: "Add to favorites",
+      unfavorite: "Remove from favorites",
       sampleLabel: "Sample text",
       sampleDefault: "Runtime at a glance",
       sampleReset: "Reset",
@@ -1547,7 +1647,7 @@ export const uiCopy = {
      *  the one status line at the modal's bottom. */
     wallpaperEngine: {
       reason: {
-        "not-installed": "Wallpaper Engine is not installed on this PC.",
+        "not-installed": "Wallpaper Engine is not installed on the Host.",
         "unsupported-platform": "Wallpaper Engine is read only on Windows.",
         "no-library": "Wallpaper Engine holds no wallpaper library yet.",
       } satisfies Record<
@@ -1630,7 +1730,7 @@ export const uiCopy = {
   /** The cleanup offered before either save: the files nothing holds, which
    *  the author may send to the platform's trash in the same press. The save's
    *  own title is the one it was pressed with (`file.saveLibrary` /
-   *  `file.savePackage`), so it is not repeated here. */
+   *  `file.exportTheme`), so it is not repeated here. */
   saveCleanup: {
     heading: "Unused files",
     count: (count: number, size: string): string =>
@@ -1726,7 +1826,7 @@ export const uiCopy = {
      *  last clause is not hedging — Android 11 and earlier and a device on Private DNS cannot
      *  resolve the name, and then the address is what it types. */
     reserveAddress:
-      "The address breaks if this PC's IP changes; the name above survives it, where your device can resolve it.",
+      "The address breaks if the Host's IP changes; the name above survives it, where your device can resolve it.",
     warning:
       "Phone access is HTTPS. Plain HTTP is the fallback on your own network — trusted networks only, never the internet.",
     fallback: (address: string, port: number): string =>
@@ -1787,6 +1887,17 @@ export const uiCopy = {
     missingGlyph:
       "A character in this text has no glyph in the face it is set in, so it cannot be converted to paths.",
     locked: "Unlock the object before converting it to paths.",
+  },
+  /** Why the selection could not be exported as a widget package. Each refusal
+   *  refuses the whole file and names what stopped it, so the author can fix
+   *  the selection rather than guess which member was left out. */
+  widgetExport: {
+    nothingSelected: "Select something to export as a widget.",
+    locked: (name: string): string =>
+      `Unlock "${name}" before exporting the selection as a widget.`,
+    missingAsset: (path: string): string =>
+      `The selection uses "${path}", but its bytes are missing.`,
+    unreadableScene: "The selection could not be read from the scene.",
   },
   /** One label per arrange action; keys mirror `ArrangeAction`. */
   arrangeLabels: {

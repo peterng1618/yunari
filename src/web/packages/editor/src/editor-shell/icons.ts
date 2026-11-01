@@ -11,6 +11,9 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  CircuitBoard,
+  Clock,
+  Cpu,
   Download,
   Ellipse,
   Eye,
@@ -20,6 +23,8 @@ import {
   FolderInput,
   FolderOpen,
   Gauge,
+  Gpu,
+  HardDrive,
   Hexagon,
   Image as ImageIcon,
   Info,
@@ -33,8 +38,10 @@ import {
   LogOut,
   type LucideIcon,
   Maximize2,
+  MemoryStick,
   Minus,
   Monitor,
+  Network,
   OctagonAlert,
   Palette,
   Pencil,
@@ -43,6 +50,8 @@ import {
   Plus,
   Radar,
   RefreshCw,
+  Save,
+  SaveAll,
   Scan,
   Search,
   Settings,
@@ -52,6 +61,7 @@ import {
   SquarePlus,
   Star,
   Trash2,
+  TrendingUp,
   TriangleAlert,
   TriangleRight,
   Type,
@@ -63,6 +73,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
+import type { CardDiagram } from "../card-library.js";
 import type { ShapeKind } from "../new-object-defaults.js";
 import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";
@@ -240,6 +251,31 @@ export const SHAPE_GLYPHS: Readonly<Record<ShapeKind, LucideIcon>> = {
   wedge: TriangleRight,
 };
 
+/**
+ * One glyph per card unit, keyed by the library's own `CardDiagram`, so a ninth
+ * card fails to compile here until it wears a mark.
+ *
+ * **The Add pane's card tiles draw these, the same vocabulary every other tile
+ * in that pane draws**, so a unit tile is not a second icon family.
+ *
+ * **No two units share a glyph**, because a mark two units share identifies
+ * neither. Lucide has no `vram`, so that unit takes the nearest drawing of the
+ * video adapter's memory: `CircuitBoard`, its board and components. `ram` is
+ * `MemoryStick`, the physical module, so the pair stay distinct; `storage` is
+ * `HardDrive`, the drive rather than the memory; and `network` is `Network`, the
+ * nodes and links the reading describes.
+ */
+export const CARD_UNIT_GLYPHS: Readonly<Record<CardDiagram, LucideIcon>> = {
+  time: Clock,
+  cpu: Cpu,
+  gpu: Gpu,
+  ram: MemoryStick,
+  vram: CircuitBoard,
+  trends: TrendingUp,
+  storage: HardDrive,
+  network: Network,
+};
+
 /** The settings column's other tabs. */
 export const KEYBOARD_GLYPH: LucideIcon = Keyboard;
 export const CONNECTIONS_GLYPH: LucideIcon = Link;
@@ -275,6 +311,23 @@ export const OPEN_ITEM_GLYPH: LucideIcon = Folder;
 export const ASSIGN_ITEM_GLYPH: LucideIcon = Monitor;
 export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
 export const DELETE_ITEM_GLYPH: LucideIcon = Trash2;
+
+/**
+ * The header toolbar's theme-document actions, one glyph each.
+ *
+ * **These are chrome marks, not the object actions'**, so the toolbar names
+ * them here rather than reaching for `lucide-react` itself. Import and Open
+ * are two different doors — a package file in, a stored theme in — so they do
+ * not wear one folder; Save and Save as are one disc and a stack of discs;
+ * Activate wears the monitor because it puts the theme on a display; Export
+ * wears the download arrow the store's export action already owns.
+ */
+export const IMPORT_THEME_GLYPH: LucideIcon = FolderInput;
+export const OPEN_THEME_GLYPH: LucideIcon = FolderOpen;
+export const SAVE_THEME_GLYPH: LucideIcon = Save;
+export const SAVE_THEME_AS_GLYPH: LucideIcon = SaveAll;
+export const ACTIVATE_THEME_GLYPH: LucideIcon = Monitor;
+export const EXPORT_THEME_GLYPH: LucideIcon = Download;
 
 /** The online cell's *Install* control, which the copy marks with an upload
  *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`

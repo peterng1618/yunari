@@ -1,11 +1,9 @@
-import type { FontAssetReference } from "@yunari/renderer-core";
-import type { VideoTrimRange } from "@yunari/theme-package";
+import type { ThemeCreditsEntry, VideoTrimRange } from "@yunari/theme-package";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { ImportOutcome } from "../../asset-finder/actions.js";
 import {
-  ASSET_FILE_EXTENSIONS,
   type AssetManager,
   assetFileName,
   assetReferencedBy,
@@ -25,6 +23,17 @@ import {
 import type { FontTrioRole } from "../../type-preset-apply.js";
 import { uiCopy } from "../../ui-copy.js";
 import { AssetCard } from "./asset-card.js";
+import {
+  ASSET_FILE_ACCEPT,
+  GROUP_OF,
+  importMessage,
+  isPackageFile,
+  isVideoFile,
+  metadataOfFont,
+  REPLACE_FILE_ACCEPT,
+  rowsOf,
+  SECTIONS,
+} from "./asset-rows.js";
 import {
   type FontMetadata,
   FontMetadataForm,
@@ -70,6 +79,10 @@ interface AssetsPaneProps {
   readonly onChanged?: () => void;
   /** Opens the finder. Optional so the pane draws without a shell. */
   readonly onFindAssets?: () => void;
+  /** The package's credit for a declared asset, where the caller can reach one.
+   *  The preview reads it so Attribution shows the author the declaration does
+   *  not carry; optional so a pane mounted without a document still draws. */
+  readonly creditFor?: (assetId: string) => ThemeCreditsEntry | undefined;
   /** Writes the asset as the artboard's background media — envelope state the
    *  pane cannot reach itself. */
   readonly onBackground?: (asset: LocalAssetReference) => void;
@@ -110,131 +123,6 @@ type FontDraft =
   | { readonly file: File; readonly metadata: FontMetadata }
   | { readonly assetId: string; readonly metadata: FontMetadata };
 
-/** The metadata a declared face carries, read back into the form. */
-function metadataOfFont(asset: FontAssetReference): FontMetadata {
-  const weight = Number(asset.weight);
-  return {
-    family: asset.family,
-    // A declaration always carries a usable weight; a hand-edited package that
-    // does not falls back to the parser's default rather than printing NaN.
-    weight: Number.isFinite(weight) && weight > 0 ? weight : 400,
-    style: asset.style,
-    licence: asset.license?.name ?? "unknown",
-    ...(asset.sourceUrl === undefined ? {} : { sourceUrl: asset.sourceUrl }),
-  };
-}
-
-type LocalAssetKind = LocalAssetReference["kind"];
-
-/** Which section a declared kind is drawn in. A total map, so a kind the
- *  manager grows fails to compile here rather than drawing nowhere. An SVG is
- *  an image file, so it sits with Images rather than inventing a section. */
-const GROUP_OF: Readonly<Record<LocalAssetKind, SectionId>> = {
-  font: "fonts",
-  image: "images",
-  svg: "images",
-  video: "videos",
-};
-
-type SectionId = "fonts" | "images" | "videos";
-
-const SECTIONS: readonly { readonly id: SectionId; readonly label: string }[] =
-  [
-    { id: "fonts", label: uiCopy.assets.category.font },
-    { id: "images", label: uiCopy.assets.category.image },
-    { id: "videos", label: uiCopy.assets.category.video },
-  ];
-
-const ASSET_FILE_ACCEPT = `${ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",")},.mpkg`;
-/** A replacement is a declared asset's own byte swap, so a container the import
- *  path intercepts (`.mpkg`) has no place here. */
-const REPLACE_FILE_ACCEPT = ASSET_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(
-  ",",
-);
-
-/** The package is intercepted before the manager sees it: a `.mpkg` is a
- *  container the host reads, never a declared asset. */
-function isPackageFile(file: File): boolean {
-  return file.name.toLowerCase().endsWith(".mpkg");
-}
-
-function isVideoFile(file: File): boolean {
-  return mimeOf(file.name)?.startsWith("video/") === true;
-}
-
-/** One card, and every declaration it stands for. A font family is one card:
- *  its weights are a choice a preset makes, not files the author picked, so
- *  importing six weights must not draw six cards. */
-interface AssetRow {
-  readonly key: string;
-  /** The face the card's actions act on: weight 400 where the family has it. */
-  readonly asset: LocalAssetReference;
-  readonly ids: readonly string[];
-  readonly label?: string;
-  readonly detail?: string;
-}
-
-function isFace(asset: LocalAssetReference): asset is LocalAssetReference & {
-  readonly family: string;
-  readonly weight: string | number;
-  readonly style: string;
-  readonly format: string;
-} {
-  return "family" in asset && typeof asset.family === "string";
-}
-
-/** `font · woff2 · 400 normal · 700 normal`: what a family card holds. */
-function faceDetail(faces: readonly LocalAssetReference[]): string {
-  const parts = faces.flatMap((face) =>
-    isFace(face) ? [`${face.weight} ${face.style}`] : [],
-  );
-  const format = faces
-    .map((face) => (isFace(face) ? face.format : ""))
-    .find((value) => value !== "");
-  return [
-    uiCopy.panels.assetCard.kind.font,
-    ...(format === undefined ? [] : [format]),
-    ...parts,
-  ].join(" · ");
-}
-
-function rowsOf(assets: readonly LocalAssetReference[]): readonly AssetRow[] {
-  const families = new Map<string, LocalAssetReference[]>();
-  for (const asset of assets) {
-    if (!isFace(asset)) continue;
-    const faces = families.get(asset.family);
-    if (faces === undefined) families.set(asset.family, [asset]);
-    else faces.push(asset);
-  }
-  const seen = new Set<string>();
-  const rows: AssetRow[] = [];
-  for (const asset of assets) {
-    if (!isFace(asset)) {
-      rows.push({ key: asset.id, asset, ids: [asset.id] });
-      continue;
-    }
-    // A family's card sits where its first face was declared.
-    if (seen.has(asset.family)) continue;
-    seen.add(asset.family);
-    const faces = families.get(asset.family) ?? [asset];
-    const lead =
-      faces.find(
-        (face) =>
-          isFace(face) &&
-          Number(face.weight) === 400 &&
-          face.style === "normal",
-      ) ?? faces[0]!;
-    rows.push({
-      key: `font:${asset.family}`,
-      asset: lead,
-      ids: faces.map((face) => face.id),
-      label: asset.family,
-      detail: faceDetail(faces),
-    });
-  }
-  return rows;
-}
-
 export function AssetsPane({
   manager,
   editor,
@@ -242,6 +130,7 @@ export function AssetsPane({
   subscribeDocumentChange,
   onChanged,
   onFindAssets,
+  creditFor,
   onBackground,
   onFontCommit,
   onImportVideo,
@@ -606,6 +495,7 @@ export function AssetsPane({
     setChosenId(asset.id);
     void openAssetPreview({
       asset,
+      credit: creditFor?.(asset.id),
       previewUrl:
         asset.kind === "video" ? videoUrl : manager.previewUrl(asset.id),
       inUse: referenced(asset.id),
@@ -764,7 +654,7 @@ export function AssetsPane({
         if (assets.length === 0) return null;
         return (
           <section key={section.id} className="mb-[var(--space-8)]">
-            <h3 className="mb-[var(--space-6)] text-[10px] uppercase tracking-[0.11em] text-faint">
+            <h3 className="mb-[var(--space-6)] text-[10px] uppercase tracking-[0.11em] text-muted">
               {section.label}
             </h3>
             <ul className="flex flex-col gap-[var(--space-4)]">
@@ -894,25 +784,4 @@ export function createAssetsPane(
       node.remove();
     },
   };
-}
-
-/**
- * What the pane says an import did, decided by the kind.
- *
- * The switch has no `default`, so a fifth kind in the manager's `TYPES` fails to
- * compile here rather than falling through to the placed message: the kind union
- * is what decides, and the code should have to say so.
- */
-function importMessage(asset: LocalAssetReference): string {
-  switch (asset.kind) {
-    case "image":
-    case "svg":
-      return uiCopy.panels.assetPlaced;
-    case "video":
-      // A video is the modal's now, which names its own outcome; the arm stays
-      // so the switch remains total over the manager's kinds.
-      return uiCopy.panels.assetDeclaredOnly;
-    case "font":
-      return uiCopy.panels.assetDeclaredFont;
-  }
 }

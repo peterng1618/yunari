@@ -79,6 +79,7 @@ import {
 } from "./type-preset-manager/index.js";
 import { tokenIdOfFace } from "./type-token-manager/name.js";
 import { uiCopy } from "./ui-copy.js";
+import { extractSelectionWidget } from "./widget-export.js";
 
 /** Whether a save may go on. `message` is a host refusal the author must
  *  read; a cancel carries none. */
@@ -283,6 +284,7 @@ export class EditorDocument {
         this.#dirty = undefined;
       },
       announceChange: this.announceChange,
+      adoptIdentity: (id, name) => this.adoptIdentity(id, name),
       errors: source.shell.editor.errorManager,
       confirmReplacement: () => this.confirmReplacement(),
       // The title is the save the author pressed; the library's own is the one
@@ -368,6 +370,12 @@ export class EditorDocument {
     return [...this.#credits];
   }
 
+  /** The credit an asset already carries, where one was recorded. The match is
+   *  the id the import wrote; a legacy credit has none and answers nothing. */
+  creditForAsset(assetId: string): ThemeCreditsEntry | undefined {
+    return this.#credits.find((entry) => entry.assetId === assetId);
+  }
+
   /** Whether one more credit can be held: the package writer refuses a list
    *  past its cap, so the refusal happens before the bytes are declared rather
    *  than at the next save. A prune can free a slot, but only by removing the
@@ -435,6 +443,35 @@ export class EditorDocument {
       options.onSaved("Theme package saved");
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Downloads the current selection as a `yunari-widget-package`.
+   *
+   * The extraction owns what a widget is — the selected subtree, the bindings
+   * keyed by it, the globals and assets it names — and this document supplies
+   * the live scene and the package writer. A refusal is reported whole-file:
+   * a widget with a member left out would open as a different unit than the
+   * author selected.
+   */
+  exportWidget(): void {
+    const result = extractSelectionWidget({
+      canvas: this.#shell.editor.canvas,
+      envelope: this.snapshot(),
+      declarations: this.#assets.declarations,
+      assets: this.#assets.assets,
+    });
+    if (!result.ok) {
+      this.#source.onError?.(result.message);
+      return;
+    }
+    try {
+      this.#persistence.exportWidget(result.document, result.assets);
+    } catch (error) {
+      this.#source.onError?.(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -547,6 +584,28 @@ export class EditorDocument {
     return this.#library.open();
   }
 
+  /** Opens the most recently saved theme that is not this document. */
+  openRecentLibrary(): Promise<void> {
+    return this.#library.openRecent();
+  }
+
+  /** Writes this document under a new theme, leaving its own stored theme
+   *  untouched, and continues as the new one. */
+  saveLibraryAs(): Promise<void> {
+    return this.#library.saveAs();
+  }
+
+  /** Re-identifies this document as the theme a **Save as** wrote: its id is
+   *  the library folder the next save updates and its name is what the identity
+   *  chip reads. The rest of the document is the author's, unchanged. */
+  adoptIdentity(id: string, name: string): void {
+    this.#writeEnvelope({
+      ...this.#envelope,
+      id,
+      metadata: { ...(this.#envelope.metadata ?? {}), name },
+    });
+  }
+
   /** Opens one theme the library already holds, by id: the store's own route,
    *  which has read the theme's name off the listing it drew. The replacement
    *  question and the base's bookkeeping are the library's, because this
@@ -560,6 +619,31 @@ export class EditorDocument {
    *  save — the package's half is {@link save}. */
   saveLibrary(): Promise<void> {
     return this.#library.save();
+  }
+
+  /**
+   * Makes the open theme the one the player switches to.
+   *
+   * **A theme must be stored to be activated, so the document saves first.**
+   * The press means "show what I am looking at", and a save it did not make
+   * would put the last stored version on the display while the screen shows
+   * the author's edits. A save that did not land stops the activation: the
+   * save path owns its own refusal message, and no assignment is attempted
+   * against a folder the host does not hold.
+   *
+   * The assignment itself is the manager's — the host's default display key,
+   * so a display with a theme of its own keeps showing that theme.
+   */
+  async activateTheme(): Promise<void> {
+    if (!this.#library.isStored() || this.isDirty()) {
+      await this.#library.save();
+      // Read after the save rather than trusting its return: the cleanup sheet
+      // can cancel without an error, and a conflicted save can be dismissed
+      // with the document still dirty. Either way the host does not hold what
+      // this document says, and the player must not be told it does.
+      if (!this.#library.isStored() || this.isDirty()) return;
+    }
+    await this.#library.activate(this.#envelope.id);
   }
 
   /** Whether this document descends from one the library holds, which is what
@@ -642,7 +726,7 @@ export class EditorDocument {
    * serializer's own sentence, so nothing is removed and nothing is written.
    */
   async confirmAssetCleanup(
-    title: string = uiCopy.file.savePackage,
+    title: string = uiCopy.file.exportTheme,
   ): Promise<CleanupAnswer> {
     const unused = this.unusedAssets();
     if (unused.length === 0) return { proceed: true };

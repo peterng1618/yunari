@@ -109,4 +109,5 @@ export type {
   SceneArtboard,
 } from "./scene.js";
 export { mountFabricScene } from "./scene.js";
+export { sceneObjects, visitSceneObjects } from "./scene-objects.js";
 export { Arc, Wedge } from "./sector-object.js";

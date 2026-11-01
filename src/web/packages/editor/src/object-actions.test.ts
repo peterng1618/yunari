@@ -86,12 +86,18 @@ describe("object action registry", () => {
     expect(outline.eligible(target({ text: true, locked: true }))).toBe(false);
   });
 
-  it("refuses arrange for a locked multi-selection, as canArrange does", () => {
-    const align = objectAction("arrange:align-left");
-    expect(align.eligible(target({ memberCount: 2 }))).toBe(true);
-    expect(align.eligible(target({ memberCount: 2, locked: true }))).toBe(
-      false,
-    );
+  it("leaves the arrange refusal to canArrange, not to the target projection", () => {
+    // `actionEnabled` asks the gate for arrange ids, and `canArrange` reads the
+    // live selection's members. The projection's `locked` is the selection's own
+    // flag rather than "any member locked", so a count/lock rule here answered a
+    // second question rather than the same one (issue #94, `vg-411`).
+    const subject = target({ kind: "group", memberCount: 1, locked: true });
+    for (const action of arrangeActions())
+      expect(action.eligible(subject)).toBe(true);
+    // No subject is still refused, because there is nothing to arrange.
+    expect(
+      objectAction("arrange:align-left").eligible(target({ kind: "none" })),
+    ).toBe(false);
   });
 
   it("filters to exactly the actions a gate can run, so a surface cannot re-decide", () => {

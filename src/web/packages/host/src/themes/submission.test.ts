@@ -516,7 +516,7 @@ describe("submissionFiles", () => {
     });
 
     expect(result.ok ? "" : result.message).toBe(
-      `This PC's library could not read theme "${THEME_ID}".`,
+      `The Host's library could not read theme "${THEME_ID}".`,
     );
   });
 

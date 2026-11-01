@@ -9,14 +9,10 @@ import {
 } from "@yunari/renderer-core";
 import {
   objectAssetReference,
+  sceneObjects,
   setObjectAssetReference,
 } from "@yunari/scene-fabric";
-import {
-  FabricImage,
-  type FabricObject,
-  Group,
-  type StaticCanvas,
-} from "fabric/es";
+import { FabricImage, type FabricObject, type StaticCanvas } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { boundedImageElement } from "../image-manager/index.js";
@@ -45,6 +41,20 @@ const KIND_OF = {
 
 type AssetExtension = keyof typeof KIND_OF;
 type AssetKind = (typeof KIND_OF)[AssetExtension];
+type FontExtension = (typeof FONT_ASSET_FORMATS)[number];
+
+/** Each font format's leading bytes. A Windows browser can report no media type
+ *  at all for these extensions, so the signature is what makes a file the
+ *  format its extension claims; bytes that match nothing are still refused. */
+const FONT_SIGNATURES: Record<FontExtension, readonly (readonly number[])[]> = {
+  woff2: [[0x77, 0x4f, 0x46, 0x32]], // wOF2
+  woff: [[0x77, 0x4f, 0x46, 0x46]], // wOFF
+  ttf: [
+    [0x00, 0x01, 0x00, 0x00], // \0\1\0\0
+    [0x74, 0x72, 0x75, 0x65], // true
+  ],
+  otf: [[0x4f, 0x54, 0x54, 0x4f]], // OTTO
+};
 
 /**
  * What this editor knows about one extension: its kind, which is the editor's
@@ -176,15 +186,17 @@ export class AssetManager {
   async import(
     file: File,
     metadata?: AssetImportMetadata,
+    /** Bytes the caller already read from `file`. `importFont` validates them
+     *  with the browser's parser first, and reading a chosen file twice is a
+     *  second copy of bytes the path already had. */
+    knownBytes?: Uint8Array,
   ): Promise<LocalAssetReference> {
     const extension = extensionOf(file.name);
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
     const type = typeOf(extension);
-    if (file.type !== type.mime)
-      throw new Error("File MIME type does not match its extension.");
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const bytes = knownBytes ?? new Uint8Array(await file.arrayBuffer());
+    assertFileFormat(file, extension, type.mime, bytes);
     const previewBytes = extension === "svg" ? sanitisedSvg(bytes) : bytes;
     const { id, path } = this.#allocate(file.name, extension);
     const reference: LocalAssetReference = {
@@ -281,9 +293,10 @@ export class AssetManager {
     );
     if (sameFace !== undefined) return this.amendFont(sameFace.id, checked);
 
-    // `import` has already validated the MIME type and allocated the path;
-    // amending it is what writes the facts the file cannot answer.
-    const imported = await this.import(file);
+    // `import` has already validated the bytes and allocated the path;
+    // amending it is what writes the facts the file cannot answer. The bytes
+    // are the ones this method already read, so the chosen file is read once.
+    const imported = await this.import(file, undefined, bytes);
     return this.amendFont(imported.id, checked);
   }
 
@@ -352,14 +365,13 @@ export class AssetManager {
     if (extension === undefined)
       throw new Error("Unsupported asset file type.");
     const type = typeOf(extension);
-    if (file.type !== type.mime)
-      throw new Error("File MIME type does not match its extension.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    assertFileFormat(file, extension, type.mime, bytes);
     // A different extension would leave the declared path claiming bytes of a
     // format the package's readers do not expect at that name.
     if (extensionOf(existing.path) !== extension)
       throw new Error("A replacement must keep the asset's file extension.");
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
     const next = await this.replaceBytes(assetId, bytes);
     if (type.kind === "image" || type.kind === "svg") {
       const previewBytes = extension === "svg" ? sanitisedSvg(bytes) : bytes;
@@ -561,8 +573,28 @@ function loadWithFontFace(family: string, bytes: Uint8Array): Promise<unknown> {
   return new FontFace(family, bytes as unknown as BufferSource).load();
 }
 
-function isFontFormat(extension: AssetExtension): boolean {
+function isFontFormat(extension: AssetExtension): extension is FontExtension {
   return (FONT_ASSET_FORMATS as readonly string[]).includes(extension);
+}
+
+/** Refuses a file whose contents or declared media type disagree with its
+ *  extension. A font is checked by its signature because a Windows browser can
+ *  report no media type for it; every other kind keeps the media-type check. */
+function assertFileFormat(
+  file: File,
+  extension: AssetExtension,
+  mime: string,
+  bytes: Uint8Array,
+): void {
+  if (!isFontFormat(extension)) {
+    if (file.type !== mime)
+      throw new Error("File MIME type does not match its extension.");
+    return;
+  }
+  const matches = FONT_SIGNATURES[extension].some((signature) =>
+    signature.every((byte, index) => bytes[index] === byte),
+  );
+  if (!matches) throw new Error("The file's bytes do not match its extension.");
 }
 
 /** The form's values, trimmed and refused where unusable — never coerced. An
@@ -648,30 +680,6 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(hash)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-/**
- * Every object the scene holds, at any depth, roots first.
- *
- * The one walk a "does the scene still hold this" question reads. Depth is the
- * whole point: `canvas.getObjects()` is the root only, so an image the author
- * had grouped reported itself unused and its declaration was removed out from
- * under a live object, and a binding keyed by an object inside a card read as
- * dangling and was stripped on the first save. Both are the same mistake, so
- * both callers spend this walk rather than spelling it again.
- */
-export function sceneObjects(
-  objects: readonly FabricObject[],
-): readonly FabricObject[] {
-  const found: FabricObject[] = [];
-  const visit = (list: readonly FabricObject[]): void => {
-    for (const object of list) {
-      found.push(object);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(objects);
-  return found;
 }
 
 /**

@@ -20,6 +20,7 @@ import type {
 } from "./theme-library-client.js";
 import {
   promptThemeConflict,
+  promptThemeSaveAs,
   promptThemeSelection,
 } from "./theme-library-dialog.js";
 import { uiCopy } from "./ui-copy.js";
@@ -270,11 +271,13 @@ describe("the library chooser", () => {
     await pressButton("[data-yunari-library-delete]");
 
     // The confirm names the theme, because a destructive act the author cannot
-    // see the target of is the thing they have to be stopped from.
+    // see the target of is the thing they have to be stopped from — and it is
+    // the copy table's sentence, read as the dialog's own visible lead *and*
+    // its accessible name, so the two cannot drift apart.
     const confirm = topDialog();
-    expect(confirm.textContent).toContain("My theme");
-    // And says where it goes, which is the whole reason this is allowed.
-    expect(confirm.textContent).toMatch(/recycle bin|trash/i);
+    const sentence = uiCopy.library.confirmRemoval("mine", "My theme");
+    expect(confirm.textContent).toContain(sentence);
+    expect(confirm.getAttribute("aria-label")).toBe(sentence);
 
     await pressButton("[data-yunari-library-delete-confirm]");
     await flush();
@@ -367,7 +370,7 @@ describe("the library chooser", () => {
   it("says why a removal failed, and keeps the theme listed", async () => {
     const pending = open([listedTheme("mine", "My theme")], {
       remove: async () => {
-        throw new Error("This PC has no trash command (gio, trash-put)");
+        throw new Error("The Host has no trash command (gio, trash-put)");
       },
     } as unknown as ThemeLibraryClient);
 
@@ -613,6 +616,81 @@ function duplicateButton(): HTMLButtonElement {
   if (button === null) throw new Error("no duplicate control");
   return button;
 }
+
+/** A field edit as React sees one: the value goes through the prototype's
+ *  setter, and blur is what commits a plan-1 field. */
+async function editField(selector: string, value: string): Promise<void> {
+  const input = document.querySelector<HTMLInputElement>(selector);
+  if (input === null) throw new Error(`no field matches ${selector}`);
+  await act(async () => {
+    input.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input) as HTMLInputElement,
+      "value",
+    )?.set;
+    if (setter === undefined) input.value = value;
+    else setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.blur();
+  });
+}
+
+describe("the Save as question", () => {
+  function openSaveAs(
+    initialName = "Living room",
+  ): Promise<string | undefined> {
+    let pending: Promise<string | undefined> | undefined;
+    act(() => {
+      pending = promptThemeSaveAs(initialName);
+    });
+    if (pending === undefined)
+      throw new Error("promptThemeSaveAs returned nothing");
+    return pending;
+  }
+
+  it("opens on the document's own name, so the author edits rather than retypes", () => {
+    void openSaveAs("Living room");
+
+    expect(
+      document.querySelector<HTMLInputElement>("[data-yunari-save-as-name]")
+        ?.value,
+    ).toBe("Living room");
+    expect(
+      document.querySelector('[role="dialog"]')?.getAttribute("aria-label"),
+    ).toBe(uiCopy.library.saveAs.title);
+  });
+
+  it("answers the trimmed name the field committed", async () => {
+    const pending = openSaveAs();
+    await editField("[data-yunari-save-as-name]", "  Kitchen  ");
+
+    await pressButton("[data-yunari-save-as-confirm]");
+
+    expect(await pending).toBe("Kitchen");
+    // The surface is gone with its answer.
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("answers a dismissal with nothing, and writes nothing", async () => {
+    const pending = openSaveAs();
+
+    await pressButton("[data-yunari-save-as-cancel]");
+
+    expect(await pending).toBeUndefined();
+  });
+
+  it("keeps Save disabled while the field holds no name", async () => {
+    void openSaveAs();
+    await editField("[data-yunari-save-as-name]", "   ");
+
+    expect(
+      document.querySelector<HTMLButtonElement>("[data-yunari-save-as-confirm]")
+        ?.disabled,
+    ).toBe(true);
+  });
+});
 
 /** The chooser's own status region. Absent is a failure rather than a `null`:
  *  the finding it is here for is a region that is *only* mounted once it has

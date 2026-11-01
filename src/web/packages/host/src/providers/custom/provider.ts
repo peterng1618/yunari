@@ -8,6 +8,7 @@ import type {
 } from "../../settings/sources.js";
 import type {
   ProviderHealth,
+  SampleContext,
   SensorDescriptor,
   SensorProvider,
 } from "../provider.js";
@@ -70,6 +71,8 @@ interface SourceRuntime {
   /** Already redacted; may reach `health()` and a sample message. */
   failure: string | undefined;
   inFlight: boolean;
+  /** The fetch a first demand started, so a catalogue read can wait for it. */
+  pending: Promise<void> | undefined;
   abort: AbortController | undefined;
 }
 
@@ -288,6 +291,7 @@ export class CustomSourceProvider implements SensorProvider {
         reading: undefined,
         failure: undefined,
         inFlight: false,
+        pending: undefined,
         abort: undefined,
       });
     }
@@ -302,6 +306,7 @@ export class CustomSourceProvider implements SensorProvider {
   async sample(
     semanticKeys: readonly string[],
     nowMs: number,
+    context?: SampleContext,
   ): Promise<readonly SampleEntry[]> {
     const wanted = new Set(semanticKeys);
     const entries: SampleEntry[] = [];
@@ -313,6 +318,15 @@ export class CustomSourceProvider implements SensorProvider {
       if (matched.length === 0) continue;
 
       this.#demand(runtime, nowMs);
+      // The catalogue read is the one caller that has to see the source's
+      // first answer rather than the next tick's: without this, a source just
+      // written reports every key unmeasured until its interval elapses.
+      if (
+        context?.awaitFirstReading === true &&
+        runtime.reading === undefined
+      ) {
+        await runtime.pending;
+      }
       for (const descriptor of matched) {
         entries.push(this.#entryOf(runtime, descriptor, nowMs));
       }
@@ -459,7 +473,7 @@ export class CustomSourceProvider implements SensorProvider {
     );
     // A host whose displays are idle still exits on its own.
     (runtime.timer as { unref?: () => void }).unref?.();
-    void this.#fetch(runtime);
+    runtime.pending = this.#fetch(runtime);
   }
 
   #tick(runtime: SourceRuntime): void {
@@ -518,6 +532,7 @@ export class CustomSourceProvider implements SensorProvider {
       }
     } finally {
       runtime.inFlight = false;
+      runtime.pending = undefined;
       runtime.abort = undefined;
     }
   }

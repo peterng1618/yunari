@@ -8,7 +8,7 @@ import {
   type FabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createThemeOriginsStore,
   type ThemeOriginsStore,
@@ -382,6 +382,45 @@ describe("installCatalogueItem", () => {
     expect(stored?.envelope.id).toBe("aurora-copy");
   });
 
+  it("answers a failed update with the step, not the filesystem's path", async () => {
+    await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
+      expectFree: true,
+    });
+    await origins.write("aurora-copy", {
+      catalogueId: "aurora",
+      version: "1.0.0",
+      installedAt: new Date(0).toISOString(),
+    });
+    const failing: ThemeStore = {
+      ...store,
+      write: async () => {
+        throw Object.assign(
+          new Error(
+            "EPERM: operation not permitted, mkdir 'C:\\Users\\a\\.yunari\\themes\\aurora-copy'",
+          ),
+          { code: "EPERM" },
+        );
+      },
+    };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const result = await installCatalogueItem(REQUEST, {
+        store: failing,
+        origins,
+        fetch: serving(packageOf("living-room", "Living Room 2")),
+      });
+
+      expect(result.ok ? "" : result.stage).toBe("package");
+      // The person is shown the step; the platform's path stays in the log.
+      expect(result.ok ? "" : result.message).not.toContain("C:\\");
+      expect(result.ok ? "" : result.message).toContain("library");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("bumps the origin's version", async () => {
     await installCatalogueItem(
       { ...REQUEST, version: "1.2.0" },
@@ -478,6 +517,61 @@ describe("installCatalogueItem", () => {
     ]);
     expect((await store.read("aurora-copy"))?.envelope.id).toBe("aurora-copy");
     expect(Object.keys(await origins.read())).toEqual(["aurora-copy"]);
+  });
+
+  it("lands two items that resolve the same library id on distinct ids", async () => {
+    // Different catalogue items, same package id — the shape in which the
+    // import candidates are identical and neither item's queue entry covers the
+    // other. Both downloads finish together so both writes reach the free-id
+    // claim in the same instant, which is the race this pins.
+    let arrived = 0;
+    let releaseBoth!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    const fetcher: typeof fetch = async (input) => {
+      arrived += 1;
+      if (arrived === 2) releaseBoth();
+      await bothArrived;
+      return new Response(
+        new Uint8Array(packageOf("living-room", "Living Room")),
+      );
+    };
+
+    const [first, second] = await Promise.all([
+      installCatalogueItem(
+        {
+          ...REQUEST,
+          catalogueId: "aurora",
+          packageUrl: cataloguePackageUrl("aurora", "1.2.0"),
+        },
+        { store, origins, fetch: fetcher },
+      ),
+      installCatalogueItem(
+        {
+          ...REQUEST,
+          catalogueId: "borealis",
+          packageUrl: cataloguePackageUrl("borealis", "1.2.0"),
+        },
+        { store, origins, fetch: fetcher },
+      ),
+    ]);
+
+    // One wins the contested id; the other, refused by the store's free-id
+    // claim, asks for the next candidate instead of surfacing a filesystem
+    // refusal.
+    const ids = [first, second].map((result) =>
+      result.ok ? result.id : result.message,
+    );
+    expect(ids.sort()).toEqual(["living-room", "living-room-2"]);
+    expect((await store.list()).map((entry) => entry.id).sort()).toEqual([
+      "living-room",
+      "living-room-2",
+    ]);
+    expect(Object.keys(await origins.read()).sort()).toEqual([
+      "living-room",
+      "living-room-2",
+    ]);
   });
 
   it("serialises two installs of one item", async () => {

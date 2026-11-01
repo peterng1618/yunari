@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { createSceneAdapter, YunariChart } from "@yunari/scene-fabric";
-import { ActiveSelection, Canvas, Group, Rect } from "fabric/es";
+import {
+  ActiveSelection,
+  Canvas,
+  type FabricObject,
+  Group,
+  Rect,
+} from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import { createGroupingManager, GROUP_CONTEXT_EVENT } from "./index.js";
 
@@ -139,6 +145,126 @@ describe("GroupingManager", () => {
 
     expect(grouping.ungroup()).toBeUndefined();
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("GroupingManager inside a transformed group", () => {
+  /** A pair in a group whose matrix has a linear part, which is what makes
+   * canvas coordinates and group-local coordinates differ by more than a
+   * translation. */
+  const transformed = () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const first = new Rect({ id: "a", width: 20, height: 20 });
+    const second = new Rect({
+      id: "b",
+      left: 60,
+      top: 40,
+      width: 20,
+      height: 20,
+    });
+    const group = new Group([first, second], {
+      left: 200,
+      top: 120,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      angle: 30,
+    });
+    group.set("id", "group");
+    canvas.add(group);
+    return { canvas, group, first, second };
+  };
+  const worldBoxes = (objects: readonly FabricObject[]) =>
+    objects.map((object) => object.getBoundingRect());
+  const authoring = (objects: readonly FabricObject[]) =>
+    objects.map((object) => ({
+      left: object.left,
+      top: object.top,
+      angle: object.angle,
+      scaleX: object.scaleX,
+      scaleY: object.scaleY,
+    }));
+  /** Fabric's bake lands an inverse matrix, so the authored state returns to
+   * the same position within floating-point error rather than bit-identically. */
+  const expectSameAuthoring = (
+    before: ReturnType<typeof authoring>,
+    after: ReturnType<typeof authoring>,
+  ): void => {
+    for (const [index, fields] of after.entries())
+      for (const key of ["left", "top", "angle", "scaleX", "scaleY"] as const)
+        expect(fields[key], `member ${index} ${key}`).toBeCloseTo(
+          before[index]![key],
+          6,
+        );
+  };
+
+  it("leaves the members and the group box unmoved when a selection is left", () => {
+    const { canvas, group, first, second } = transformed();
+    const grouping = createGroupingManager({
+      canvas,
+      save: vi.fn(),
+      suspend: () => () => undefined,
+    });
+    // The authored state, before any selection exists.
+    const boxesBefore = worldBoxes([group, first, second]);
+    const authoredBefore = authoring([first, second]);
+
+    grouping.enterGroup({ object: group });
+    // A marquee inside the entered group: Fabric puts the members in an
+    // ActiveSelection and takes them out of the group's plane.
+    canvas.setActiveObject(new ActiveSelection([first, second], { canvas }));
+    grouping.exitGroup();
+
+    // `getBoundingRect` is what align/distribute read, so a stale box here is
+    // the displaced scene a correct delta is then applied to.
+    const boxesAfter = worldBoxes([group, first, second]);
+    boxesAfter.forEach((box, index) => {
+      expect(box.left, `box ${index} left`).toBeCloseTo(
+        boxesBefore[index]!.left,
+        6,
+      );
+      expect(box.top, `box ${index} top`).toBeCloseTo(
+        boxesBefore[index]!.top,
+        6,
+      );
+      expect(box.width, `box ${index} width`).toBeCloseTo(
+        boxesBefore[index]!.width,
+        6,
+      );
+      expect(box.height, `box ${index} height`).toBeCloseTo(
+        boxesBefore[index]!.height,
+        6,
+      );
+    });
+    expectSameAuthoring(authoredBefore, authoring([first, second]));
+  });
+
+  it("leaves the members unmoved when the group is entered over a live selection", () => {
+    const { canvas, group, first, second } = transformed();
+    const grouping = createGroupingManager({
+      canvas,
+      save: vi.fn(),
+      suspend: () => () => undefined,
+    });
+    const boxesBefore = worldBoxes([group, first, second]);
+    const authoredBefore = authoring([first, second]);
+
+    // The selection exists before the entry: the entry's own `setActiveObject`
+    // is what discards it and re-enters the members.
+    canvas.setActiveObject(new ActiveSelection([first, second], { canvas }));
+    grouping.enterGroup({ object: group });
+
+    const boxesAfter = worldBoxes([group, first, second]);
+    boxesAfter.forEach((box, index) => {
+      expect(box.left, `box ${index} left`).toBeCloseTo(
+        boxesBefore[index]!.left,
+        6,
+      );
+      expect(box.top, `box ${index} top`).toBeCloseTo(
+        boxesBefore[index]!.top,
+        6,
+      );
+    });
+    expectSameAuthoring(authoredBefore, authoring([first, second]));
   });
 });
 

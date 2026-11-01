@@ -3,19 +3,26 @@ import type {
   ThemeMetadata,
   ThemeRemix,
 } from "@yunari/renderer-core";
-import type { ThemeCredits, ThemeCreditsEntry } from "@yunari/theme-package";
+import {
+  type ThemeCredits,
+  type ThemeCreditsEntry,
+  themeIdFromName,
+} from "@yunari/theme-package";
 import type { AssetManager } from "../asset-manager/index.js";
 import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import {
   createThemeLibraryClient,
+  DEFAULT_DISPLAY_KEY,
   ThemeConflictError,
   type ThemeLibraryClient,
 } from "../theme-library-client.js";
 import {
   promptThemeConflict,
+  promptThemeSaveAs,
   promptThemeSelection,
 } from "../theme-library-dialog.js";
+import { uiCopy } from "../ui-copy.js";
 
 /**
  * The stored document a session descends from, and what that document declared.
@@ -135,6 +142,10 @@ interface ThemeLibraryManagerOptions {
   ) => void;
   /** Told the document may have moved, which the unsaved marker reads. */
   readonly announceChange: () => void;
+  /** Re-identifies the open document as the theme a **Save as** just wrote —
+   *  its id and its new name — so the next Save updates that theme and the
+   *  identity chip shows the name the author gave it. */
+  readonly adoptIdentity: (id: string, name: string) => void;
   readonly errors: ErrorManager;
   /** Asks before the open document is replaced; `false` stops the open. */
   readonly confirmReplacement: () => Promise<boolean>;
@@ -163,6 +174,28 @@ interface ThemeLibraryManagerOptions {
     base?: string,
     credits?: readonly ThemeCreditsEntry[],
   ) => Promise<void>;
+}
+
+/** The base a name with no id-shaped characters falls back to. The host's import
+ *  path makes the same choice, so a theme saved here and an imported package
+ *  with the same nameless title land under the same kind of id. */
+const NAMELESS_THEME_ID = "theme";
+
+/**
+ * A name as a free library id: `themeIdFromName`'s host rule, suffixed the way
+ * an import suffixes a taken id. A save-as never overwrites — the old theme is
+ * the author's other work — so a taken slug has to move aside rather than raise
+ * the replace question.
+ */
+function freeThemeId(name: string, taken: ReadonlySet<string>): string {
+  const base = themeIdFromName(name) || NAMELESS_THEME_ID;
+  let candidate = base;
+  let suffix = 2;
+  while (taken.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
 }
 
 /**
@@ -228,6 +261,33 @@ export class ThemeLibraryManager {
     }
   }
 
+  /**
+   * Puts one stored theme on the display that holds no theme of its own — the
+   * host's default assignment, which is what the player falls back to.
+   *
+   * **The write is the client's own `assign`**, the route the store's Assign
+   * control already uses; this manager only names the theme and reports the
+   * answer. A refusal is the host's own sentence — "No such theme." — and is
+   * printed rather than replaced with a sentence about activation, because the
+   * host is the one that knows which half of the request failed.
+   *
+   * A theme with no stored document is not activatable: the caller saves
+   * first, and a save that did not land never reaches here.
+   */
+  async activate(id: string): Promise<void> {
+    const options = this.#options;
+    try {
+      await this.#client().assign(DEFAULT_DISPLAY_KEY, id);
+      options.onSaved(uiCopy.library.activated);
+    } catch (error) {
+      options.onError?.(
+        uiCopy.library.activateFailed(
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+  }
+
   /** Opens a stored theme, or the reference composition as a template. */
   async open(): Promise<void> {
     const options = this.#options;
@@ -288,6 +348,99 @@ export class ThemeLibraryManager {
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /**
+   * Writes the open document under a **new** theme, named by the author, and
+   * continues as that theme.
+   *
+   * **The theme it came from is never touched.** No base travels and the target
+   * id is a fresh slug, so the write is a first save rather than a gated
+   * replacement; a slug the library already holds moves to `-2`, `-3` and so on
+   * instead of raising the replace question, because the old theme is other work
+   * the author is keeping. The cleanup question is not asked either: this is not
+   * a replacement, and files it trashed would be gone from the document the
+   * author still has.
+   *
+   * Once the host has taken the write, `adoptIdentity` re-points the document at
+   * the new id and name, and the base moves with it, so the next **Save**
+   * updates this theme and the identity chip reads its name.
+   */
+  async saveAs(): Promise<void> {
+    const options = this.#options;
+    const current = options.snapshot();
+    const name = await promptThemeSaveAs(current.metadata?.name ?? current.id);
+    if (name === undefined) return;
+    const client = this.#client();
+    try {
+      // Read before the write so a taken slug is avoided rather than raced: the
+      // host answers a first save onto a stored id with a conflict, and treating
+      // that as "replace it?" would be the one question this row must not ask.
+      const taken = new Set((await client.list()).map((entry) => entry.id));
+      const id = freeThemeId(name, taken);
+      const renamed: FabricThemeEnvelope = {
+        ...current,
+        id,
+        metadata: { ...(current.metadata ?? {}), name },
+      };
+      await this.#commit(
+        client,
+        id,
+        renamed,
+        false,
+        // A first save: the new id has no stored document, so there is no base
+        // to claim and every declared byte has to travel.
+        undefined,
+        () => options.adoptIdentity(id, name),
+      );
+      options.onSaved(uiCopy.library.savedAs(name));
+    } catch (error) {
+      options.onError?.(
+        `Could not save to library: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Opens the most recently saved theme that is not the one this document
+   * already is.
+   *
+   * **The read is the listing's**, so a template is never a candidate: it is not
+   * stored, has no modified time and is not in the library the listing draws.
+   * **The open is `openById`'s**, so the dirty-document question and the base
+   * bookkeeping stay in their owner rather than being re-spelled here.
+   */
+  async openRecent(): Promise<void> {
+    const options = this.#options;
+    const current = options.snapshot().id;
+    let entries: readonly {
+      readonly id: string;
+      readonly updatedAt?: string;
+    }[];
+    try {
+      entries = await this.#client().list();
+    } catch (error) {
+      options.onError?.(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    // The document's id is the library folder it was opened from; a base is a
+    // content hash and the listing carries none, so the id is the comparable
+    // fact. Newest is the listing's own modified time, with the id as a stable
+    // tie-break for two themes written in the same tick.
+    const newest = entries
+      .filter((entry) => entry.id !== current)
+      .sort(
+        (a, b) =>
+          (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") ||
+          a.id.localeCompare(b.id),
+      )[0];
+    if (newest === undefined) {
+      options.onError?.(uiCopy.library.noOtherTheme);
+      return;
+    }
+    await this.openById(newest.id);
   }
 
   /** Reads one stored theme and hands it to whoever builds the session that
@@ -364,14 +517,36 @@ export class ThemeLibraryManager {
     current: FabricThemeEnvelope,
     overwrite: boolean,
   ): Promise<void> {
+    await this.#commit(client, current.id, current, overwrite, this.#base);
+  }
+
+  /**
+   * One write to one id, then the things that follow a landed save: the base
+   * moves onto what the host answered, the picture is refreshed, and the
+   * document is told it is saved.
+   *
+   * `base` is passed rather than read, because a **Save as** targets an id the
+   * library has never held: it must claim no base and carry every declared byte.
+   * `adopt` runs between the host's answer and the saved marker, which is what
+   * makes that save-as leave a clean document rather than a dirty one — the
+   * document has become the theme that was written, so the marker is taken
+   * against the same id and name.
+   */
+  async #commit(
+    client: ThemeLibraryClient,
+    id: string,
+    envelope: FabricThemeEnvelope,
+    overwrite: boolean,
+    base: LibraryBase | undefined,
+    adopt?: () => void,
+  ): Promise<void> {
     const options = this.#options;
-    const base = this.#base;
     const credits = options.credits?.();
     this.#base = libraryBase(
       await client.save(
-        current.id,
+        id,
         {
-          envelope: current,
+          envelope,
           assets: this.#payload(base, overwrite),
           ...(credits === undefined ? {} : { credits }),
           ...(base === undefined ? {} : { base: base.id }),
@@ -381,10 +556,12 @@ export class ThemeLibraryManager {
       options.assets.declarations,
     );
 
+    adopt?.();
+
     const png = await options.picture();
     if (png !== undefined && client.saveThumbnail !== undefined) {
       try {
-        await client.saveThumbnail(current.id, png);
+        await client.saveThumbnail(id, png);
       } catch (error) {
         options.errors.warn(
           "theme-library",
@@ -393,7 +570,7 @@ export class ThemeLibraryManager {
       }
     }
 
-    options.markSaved(current, options.assets.assets);
+    options.markSaved(envelope, options.assets.assets);
     // The document did not move, but whether it is saved just changed, and the
     // marker reads that question rather than watching the scene.
     options.announceChange();

@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import {
   activeShortcuts,
   subscribeShortcuts,
@@ -15,7 +16,17 @@ import {
 } from "../shortcut-manager/display.js";
 import type { ProductShortcutId } from "../shortcut-manager/index.js";
 import { uiCopy } from "../ui-copy.js";
-import { CHECK_GLYPH, Glyph } from "./icons.js";
+import {
+  ACTIVATE_THEME_GLYPH,
+  CHECK_GLYPH,
+  EXPORT_THEME_GLYPH,
+  Glyph,
+  IMPORT_THEME_GLYPH,
+  type LucideIcon,
+  OPEN_THEME_GLYPH,
+  SAVE_THEME_AS_GLYPH,
+  SAVE_THEME_GLYPH,
+} from "./icons.js";
 import type {
   EditorActionFacade,
   EditorViewControls,
@@ -109,47 +120,96 @@ function ViewSetting<T extends string | number>({
   );
 }
 
-/** The Edit menu's rows, in order — the one owner of what that menu draws.
- *  `uiCopy.actions` carries fourteen keys and only these six are Edit rows, so
- *  unlike File and View the list cannot be an `Object.values` of the table.
- *  `ShellMenuBar` maps over this to render them and `ui-copy.test.ts`'s
- *  sentence-case case reads the same const, so a row added to the menu enters
- *  the net instead of escaping it silently. */
-export const EDIT_MENU_ROWS: readonly {
+/** One header toolbar action: the open theme document's own commands.
+ *
+ *  `shortcut` is the `PRODUCT_SHORTCUTS` id whose handler reaches the same
+ *  owner the press does — Import theme and Save. The rest carry none because
+ *  the table binds none for them, not because a toolbar button cannot have
+ *  one. */
+export interface ThemeToolbarAction {
   readonly label: string;
-  readonly shortcut: ProductShortcutId;
-  /** Acts on the selected object, so a layer selection disables it. Undo and
-   *  redo are the document's, not an object's, and stay enabled. */
-  readonly objectScoped?: boolean;
+  readonly icon: LucideIcon;
+  readonly shortcut?: ProductShortcutId;
   readonly run: (session: EditorActionFacade | undefined) => void;
-}[] = [
-  { label: uiCopy.actions.undo, shortcut: "edit.undo", run: (s) => s?.undo() },
-  { label: uiCopy.actions.redo, shortcut: "edit.redo", run: (s) => s?.redo() },
+}
+
+/**
+ * The toolbar's rows, in order — the one owner of what it draws.
+ *
+ * **Document actions only.** The Edit and Insert menus are gone because their
+ * commands live where they act: a selection's copy, cut, duplicate, delete,
+ * group and arrange are the Composition pane's footer toolbar, and everything
+ * insertable is the Add pane. An Insert menu never existed in this header
+ * (`DESIGN.md`). Edit existed and duplicated that footer, so it went the way of
+ * the Arrange menu before it. Undo and redo remain on their chords and in the
+ * `?` sheet.
+ *
+ * **File and View stay menus** because their remaining rows are functions with
+ * no other home: New, New from template, Find assets, Open recent, and the
+ * readings source.
+ */
+export const THEME_TOOLBAR_ACTIONS: readonly ThemeToolbarAction[] = [
   {
-    label: uiCopy.actions.copy,
-    shortcut: "edit.copy",
-    objectScoped: true,
-    run: (s) => s?.copy(),
+    label: uiCopy.file.importPackage,
+    icon: IMPORT_THEME_GLYPH,
+    shortcut: "file.open",
+    run: (session) => session?.importPackage(),
   },
   {
-    label: uiCopy.actions.cut,
-    shortcut: "edit.cut",
-    objectScoped: true,
-    run: (s) => s?.cut(),
+    label: uiCopy.file.openLibrary,
+    icon: OPEN_THEME_GLYPH,
+    run: (session) => void session?.openLibrary(),
   },
   {
-    label: uiCopy.actions.duplicate,
-    shortcut: "edit.duplicate",
-    objectScoped: true,
-    run: (s) => s?.duplicate(),
+    label: uiCopy.file.saveLibrary,
+    icon: SAVE_THEME_GLYPH,
+    shortcut: "file.save",
+    run: (session) => void session?.saveLibrary(),
   },
   {
-    label: uiCopy.actions.delete,
-    shortcut: "edit.delete",
-    objectScoped: true,
-    run: (s) => s?.deleteActive(),
+    label: uiCopy.file.saveAs,
+    icon: SAVE_THEME_AS_GLYPH,
+    run: (session) => void session?.saveAs(),
+  },
+  {
+    label: uiCopy.file.activate,
+    icon: ACTIVATE_THEME_GLYPH,
+    run: (session) => void session?.activate(),
+  },
+  {
+    label: uiCopy.file.exportTheme,
+    icon: EXPORT_THEME_GLYPH,
+    run: (session) => void session?.exportTheme(),
   },
 ];
+
+/** One toolbar button. `ControlIconButton` is the design's icon button and the
+ *  one owner of the label/tooltip pairing; this only hands it the action and
+ *  the live chord. */
+function ToolbarAction({
+  action,
+  session,
+}: {
+  readonly action: ThemeToolbarAction;
+  readonly session: EditorActionFacade | undefined;
+}): React.JSX.Element {
+  const chord =
+    action.shortcut === undefined
+      ? undefined
+      : {
+          printed: shortcutLabel(action.shortcut),
+          spoken: shortcutSpokenLabel(action.shortcut),
+        };
+  return (
+    <ControlIconButton
+      label={action.label}
+      {...(chord === undefined ? {} : { shortcut: chord })}
+      onClick={() => action.run(session)}
+    >
+      <Glyph icon={action.icon} size={15} />
+    </ControlIconButton>
+  );
+}
 
 export function ShellMenuBar({
   store,
@@ -158,21 +218,14 @@ export function ShellMenuBar({
 }: {
   readonly store: SelectionStore;
   readonly getView: () => EditorViewControls | undefined;
-  /** Opens the asset finder. Its modal is the shell's, and the row sits above
-   *  *Import package* because both add something and the finder is the one that
-   *  fetches (the entry drawing). */
+  /** Opens the asset finder. Its modal is the shell's, and the row sits in the
+   *  File menu because the finder is not one theme document's action. */
   readonly onFindAssets: () => void;
 }): React.JSX.Element {
   const selection = useSelection(store);
   // Subscribed, so a rebind redraws every chord these rows print rather than
   // leaving a mark that runs a different action.
   useSyncExternalStore(subscribeShortcuts, activeShortcuts, activeShortcuts);
-  const kind = selection.activeKind;
-  // A background selection is a layer, not an object: the object-scoped Edit
-  // commands would reach managers with nothing of the kind to act on and
-  // silently no-op. Undo and redo act on the document, so they stay enabled.
-  const noSelection = kind === "none";
-  const noObject = noSelection || kind === "background";
   const session = store.bridge?.session;
   const [source, setSource] = useState<"preview" | "live">("preview");
 
@@ -203,70 +256,61 @@ export function ShellMenuBar({
   );
 
   return (
-    <nav className="editor-shell-menubar" aria-label={uiCopy.menus.label}>
-      <MenuGroup label={uiCopy.menus.file}>
-        {/* A File row prints a chord where the row and its `PRODUCT_SHORTCUTS`
-            id run the same call — `item`'s fourth argument — and each of the
-            three names the call it shares. `newFromStarter`, `releasePackage`
-            and `openLibrary` carry none because the table binds nothing for
-            them, not because a File row cannot have one. `savePackage` carries
-            none either: `Ctrl+S` is the library save, and the package is the
-            explicit export that downloads. */}
-        {/* `file.new` → `#document.newDocument()`. */}
-        {item(
-          uiCopy.file.newDocument,
-          () => void session?.newDocument(),
-          false,
-          "file.new",
-        )}
-        {item(uiCopy.file.newFromStarter, () => void session?.newFromStarter())}
-        {item(uiCopy.file.findAssets, onFindAssets, false, "file.findAssets")}
-        {/* `file.open` → the package picker, and nothing of the document's. */}
-        {item(
-          uiCopy.file.importPackage,
-          () => session?.importPackage(),
-          false,
-          "file.open",
-        )}
-        {/* `file.save` → `#document.saveLibrary()`. The package is the explicit
-            export below, so it prints no chord: Ctrl+S saves to the library. */}
-        {item(uiCopy.file.savePackage, () => void session?.savePackage())}
-        {item(uiCopy.file.releasePackage, () => void session?.releasePackage())}
-        {item(uiCopy.file.openLibrary, () => void session?.openLibrary())}
-        {item(
-          uiCopy.file.saveLibrary,
-          () => void session?.saveLibrary(),
-          false,
-          "file.save",
-        )}
-      </MenuGroup>
-      <MenuGroup label={uiCopy.menus.edit}>
-        {/* A row names an id only when that binding reaches the same manager the
-            row calls through the session — `edit.undo` and its row both end at
-            `historyManager.undo()`, and so on for the six. */}
-        {EDIT_MENU_ROWS.map((row) =>
-          item(
-            row.label,
-            () => row.run(session),
-            row.objectScoped === true ? noObject : noSelection,
-            row.shortcut,
-          ),
-        )}
-      </MenuGroup>
-      <MenuGroup label={uiCopy.menus.view}>
-        <ViewSetting
-          label={uiCopy.view.dataSource}
-          value={source}
-          options={[
-            ["preview", uiCopy.view.preview],
-            ["live", uiCopy.view.live],
-          ]}
-          onChange={(next) => {
-            getView()?.setSourceMode(next);
-            setSource(next);
-          }}
-        />
-      </MenuGroup>
-    </nav>
+    <>
+      <nav className="editor-shell-menubar" aria-label={uiCopy.menus.label}>
+        <MenuGroup label={uiCopy.menus.file}>
+          {/* A File row prints a chord where the row and its
+              `PRODUCT_SHORTCUTS` id run the same call — `item`'s fourth
+              argument. `newFromTemplate` and `openRecent` carry none because
+              the table binds nothing for them, not because a File row cannot
+              have one. */}
+          {/* `file.new` → `#document.newDocument()`. */}
+          {item(
+            uiCopy.file.newDocument,
+            () => void session?.newDocument(),
+            false,
+            "file.new",
+          )}
+          {item(
+            uiCopy.file.newFromTemplate,
+            () => void session?.newFromStarter(),
+          )}
+          {item(uiCopy.file.findAssets, onFindAssets, false, "file.findAssets")}
+          {/* The newest stored theme that is not this one. A menu row rather
+              than a toolbar button: the toolbar's **Open** already opens the
+              chooser, and this is the shortcut past it. */}
+          {item(uiCopy.file.openRecent, () => void session?.openRecent())}
+          {/* The selected unit as a package. It is done to what is on the
+              canvas, so it belongs beside the rows that read the open document
+              rather than on the toolbar, which carries theme-document actions
+              and no selection command. */}
+          {item(uiCopy.file.exportWidget, () => session?.exportWidget())}
+        </MenuGroup>
+        <MenuGroup label={uiCopy.menus.view}>
+          <ViewSetting
+            label={uiCopy.view.dataSource}
+            value={source}
+            options={[
+              ["preview", uiCopy.view.preview],
+              ["live", uiCopy.view.live],
+            ]}
+            onChange={(next) => {
+              getView()?.setSourceMode(next);
+              setSource(next);
+            }}
+          />
+        </MenuGroup>
+      </nav>
+      <div
+        className="editor-shell-toolbar"
+        role="toolbar"
+        aria-label={uiCopy.toolbar.label}
+        data-yunari-theme-toolbar=""
+      >
+        {THEME_TOOLBAR_ACTIONS.map((action) => (
+          <ToolbarAction key={action.label} action={action} session={session} />
+        ))}
+      </div>
+    </>
   );
 }

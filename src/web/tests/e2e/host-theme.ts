@@ -273,6 +273,12 @@ const envelopeFor = (
         yunariText: {
           runs: [
             {
+              // Every run says which it is. A run with no `kind` is not one the
+              // text model can read, and the live pass rewrites its `text` to
+              // the missing-reading mark — which made this fixture's document
+              // differ from itself the moment it opened, so every walk over it
+              // met the replacement question.
+              kind: "literal",
               text: "Hosted theme from the real host",
               typeToken: "typeTokens.body",
               style: {

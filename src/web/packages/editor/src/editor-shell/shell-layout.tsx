@@ -75,7 +75,7 @@ import { StatusReadout } from "./status-readout.js";
  * reads it, and the store mode is a surface in this same React tree rather than
  * an iframe over another page.
  */
-export type ShellMode = "editor" | "themes" | "this-pc";
+export type ShellMode = "editor" | "themes" | "host";
 
 /**
  * What the shell's React root is given: the surface showing, and the request for
@@ -98,7 +98,7 @@ export interface ShellLayoutProps {
 const MODE_NAMES: Record<ShellMode, string> = {
   editor: uiCopy.modes.editor,
   themes: uiCopy.modes.themes,
-  "this-pc": uiCopy.modes.thisPc,
+  host: uiCopy.modes.host,
 };
 
 /** The order the header draws them in, which is a separate decision from what
@@ -106,7 +106,7 @@ const MODE_NAMES: Record<ShellMode, string> = {
 const MODE_ORDER = [
   "editor",
   "themes",
-  "this-pc",
+  "host",
 ] as const satisfies readonly ShellMode[];
 
 /** The switch's id, and the stem of each segment's. The control-id rule wants every
@@ -488,10 +488,10 @@ export function createShellLayout(
       <div className="editor-shell">
         {/* A full-width strip, not a floating card: the header is the window's
             top edge, and the header rule gives it document- and editor-level actions only.
-            The brand and the three menus sit left; the publish control is the
-            editor's one filled accent button, on the right. No tagline and no
-            document readout — a per-document fact belongs on the canvas,
-            and the readout only grew with the LAN. The shell palette is not
+            The brand, the two menus and the theme toolbar sit left; the publish
+            control is the editor's one filled accent button, on the right. No
+            tagline and no document readout — a per-document fact belongs on the
+            canvas, and the readout only grew with the LAN. The shell palette is not
             here either: the shell layout makes it a set-once choice and it lives in
             Settings, at the accepted cost of no at-a-glance readout. */}
         <header className="editor-shell-header">
@@ -773,7 +773,7 @@ export function createShellLayout(
             {/* The Host mode's region, beside the store's rather than chosen
                 between here: each is handed the mode and draws itself in its
                 own, so the section holds one surface whatever mode is showing.
-                It takes no route from the shell — it writes this PC's own
+                It takes no route from the shell — it writes the Host's own
                 settings, and assigning a theme is the store's. */}
             <HostSettingsRegion mode={mode} onStatus={setHostStatus} />
           </section>
@@ -784,7 +784,7 @@ export function createShellLayout(
             count, the host's two strings. A mode that has not published its
             reading draws nothing rather than another mode's numbers. */}
         <footer id="status" className="editor-shell-status">
-          {mode === "this-pc" ? (
+          {mode === "host" ? (
             <>
               <span data-yunari-host-display-count="">
                 {hostStatus?.displays ?? null}

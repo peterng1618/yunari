@@ -1,8 +1,13 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import type { ThemeCredits } from "@yunari/theme-package";
+import type { ThemeCredits, WidgetDocument } from "@yunari/theme-package";
 import { createElement } from "react";
 import { openModal } from "../components/ui/modal-host.js";
-import { fileNameFor, serializeThemePackage } from "../persist.js";
+import {
+  fileNameFor,
+  serializeThemePackage,
+  serializeWidgetPackage,
+  widgetFileNameFor,
+} from "../persist.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   ReplaceDocumentPrompt,
@@ -78,6 +83,17 @@ export class PersistenceManager {
     this.#savedDocument = documentKey(theme, assets);
   }
 
+  /** Downloads a selection's widget package. It is not a save: the document's
+   *  own baseline is untouched, because the theme did not change. */
+  exportWidget(
+    document: WidgetDocument,
+    assets: Readonly<Record<string, Uint8Array>> = {},
+  ): void {
+    const result = serializeWidgetPackage(document, assets);
+    if (!result.ok) throw new Error(result.message);
+    this.#downloader(widgetFileNameFor(document), result.bytes);
+  }
+
   destroy(): void {}
 }
 
@@ -107,6 +123,14 @@ export async function confirmDocumentReplacement(
 /**
  * Authored state only: a thumbnail is a rendering of one machine, so a
  * different one is not a change to the document.
+ *
+ * The scene half is compared as the serialiser produced it, not as the canvas
+ * holds it. `@yunari/scene-fabric`'s `serialiseScene` is the one owner of what is derived
+ * — a live preview's `text`, its per-character `styles`, an image's decoded
+ * `src` — so a repaint between two reads cannot make an untouched document
+ * differ from itself, and a future derived key is excluded by changing that
+ * module rather than this one. Every caller here reaches the key through
+ * `snapshot()`, which is that serialisation.
  *
  * The asset half of the key is each path's *declared* `sha256`, not its bytes.
  * The bytes made the key a one-boxed-number-per-byte array and its stringified
@@ -138,59 +162,7 @@ export function documentKey(
     ...new Set([...declared.keys(), ...Object.keys(assets)]),
   ].sort();
   return JSON.stringify([
-    authoredOnly(theme),
+    theme,
     paths.map((path) => [path, declared.get(path) ?? null]),
   ]);
-}
-
-/**
- * The document as its author left it, with what the renderer paints taken out.
- *
- * A bound text object carries its authored content in `yunariText.runs` — a
- * value run naming a binding, a literal run saying what it says, each with its
- * own `style`. The renderer resolves those into the Fabric `text` and `styles`
- * properties, and those resolutions are what change while the author watches:
- * the clock ticks, a gauge fills, a trend extends. They are renderings of the
- * document, not the document.
- *
- * Leaving them in the key makes the guard untestable in the only way that
- * matters. Measured: one live pass rewrites `.styles` on 18 of the Starter's 52
- * objects — exactly its binding count — with nothing touched, and every later
- * prompt to replace a document asks about work nobody did.
- *
- * This is the narrow half of vg-041: the two properties the live pass actually
- * writes, on the objects whose runs are the authored truth. An object without
- * runs owns its `text` and `styles`, so they are kept there and a real edit is
- * never hidden.
- */
-function authoredOnly(theme: FabricThemeEnvelope): FabricThemeEnvelope {
-  const objects = (theme.scene as { readonly objects?: readonly unknown[] })
-    .objects;
-  if (!Array.isArray(objects)) return theme;
-
-  // Into groups: the starter's cards are groups, and every reading they carry
-  // lives one level down. A walk that stopped at the canvas would keep those
-  // resolutions in the key and the Starter would read as edited the moment it
-  // opened — which is the defect this function exists to prevent, reintroduced
-  // by the one change that moved the readings a level deeper.
-  const strip = (list: readonly unknown[]): unknown[] =>
-    list.map((object) => {
-      const entry = object as {
-        readonly yunariText?: unknown;
-        readonly text?: unknown;
-        readonly styles?: unknown;
-        readonly objects?: readonly unknown[];
-      };
-      const children = Array.isArray(entry.objects)
-        ? { objects: strip(entry.objects) }
-        : {};
-      if (entry.yunariText === undefined) return { ...entry, ...children };
-      const { text: _text, styles: _styles, ...rest } = entry;
-      return { ...rest, ...children };
-    });
-
-  return {
-    ...theme,
-    scene: { ...theme.scene, objects: strip(objects) },
-  };
 }

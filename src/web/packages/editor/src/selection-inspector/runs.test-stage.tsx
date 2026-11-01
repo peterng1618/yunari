@@ -108,6 +108,8 @@ export function mountRunEditor(options: {
   readonly artboardHeight?: number;
   /** The catalogue the picker offers; absent keeps the built-in table. */
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
+  /** The keys the host answers; absent leaves every catalogue key offered. */
+  readonly measured?: ReadonlySet<string>;
   /** The token list's action ports; absent leaves its action rows off. */
   readonly openFontFinder?: () => void;
   readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
@@ -169,6 +171,7 @@ export function mountRunEditor(options: {
       ...(options.descriptors === undefined
         ? {}
         : { descriptors: options.descriptors() }),
+      ...(options.measured === undefined ? {} : { measured: options.measured }),
     });
     if (view === undefined) {
       throw new Error("the object carries no authored text to edit");
@@ -284,10 +287,19 @@ export async function pointerDown(target: Element): Promise<void> {
   });
 }
 
-export async function press(target: Element, key: string): Promise<void> {
+export async function press(
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {},
+): Promise<void> {
   await act(async () => {
     target.dispatchEvent(
-      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      }),
     );
   });
 }

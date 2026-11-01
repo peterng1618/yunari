@@ -907,12 +907,12 @@ test("what the rebuild authored survives the save", async ({
     paint: ["CPU blue"],
   });
 
-  // The File menu's own Save row, and the package it writes.
+  // The toolbar's own export, and the package it writes.
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
   const file = await (await download).path();
-  expect(file, "Save package should write a package").not.toBeNull();
+  expect(file, "Export theme should write a package").not.toBeNull();
 
   const envelope = JSON.parse(
     execFileSync("unzip", ["-p", file!, "theme.json"], {

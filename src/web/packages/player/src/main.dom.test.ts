@@ -53,6 +53,20 @@ import type { PageNavigation } from "./main.js";
 
 const THEME_ID = "late-rejection";
 
+/**
+ * Every mount in this file shares one jsdom window, and `vi.resetModules()`
+ * gives the next case a fresh module without stopping the last one: its 1 s
+ * poll, its 30 fps frame loop and its media stay live. The player already owns
+ * the teardown, on `pagehide`; dispatch the page's own event so a case is not
+ * timing against the loops of every mount above it.
+ *
+ * A case that mounts nothing dispatches into no listener. A case that fired
+ * `pagehide` itself has already been torn down, and the listener is `once`.
+ */
+afterEach(() => {
+  window.dispatchEvent(new Event("pagehide"));
+});
+
 /** The document `index.html` ships, in its own order: the top band, the artboard
  *  host, then the bottom band. All three, so "the body was replaced" is a claim
  *  about the shipped document rather than about the elements built here. */

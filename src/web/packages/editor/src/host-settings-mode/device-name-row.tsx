@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   ControlRow,
   ControlWell,
+  useComposingGuard,
   useControlIds,
 } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
@@ -23,6 +24,7 @@ export function DeviceNameRow(props: {
 }): React.JSX.Element {
   const ids = useControlIds(`yunari-host-name-${props.device.id}`);
   const [draft, setDraft] = useState(props.value);
+  const composing = useComposingGuard();
 
   // The stored name is what the field shows: the host trims it and caps it at
   // 48 characters, so a save that came back different has to reach the field
@@ -44,8 +46,11 @@ export function DeviceNameRow(props: {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
+          onCompositionStart={composing.onCompositionStart}
+          onCompositionEnd={composing.onCompositionEnd}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
+            if (composing.isComposing(event)) return;
             event.preventDefault();
             commit();
           }}

@@ -82,7 +82,7 @@ export function ControlSegmented<T extends string>(
             key={option.id}
             value={option.id}
             aria-disabled={refusedState}
-            className={`${hitTargetClasses} rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+            className={`${hitTargetClasses} min-w-0 flex-1 rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
           >
             {option.name}
           </Toggle>

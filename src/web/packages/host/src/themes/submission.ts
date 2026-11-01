@@ -71,13 +71,13 @@ export async function submissionFiles(
     // told what happened to the theme, not where the library lives.
     return {
       ok: false,
-      message: `This PC's library could not read theme "${themeId}".`,
+      message: `The Host's library could not read theme "${themeId}".`,
     };
   }
   if (theme === undefined) {
     return {
       ok: false,
-      message: `This PC's library holds no theme with id "${themeId}".`,
+      message: `The Host's library holds no theme with id "${themeId}".`,
     };
   }
 

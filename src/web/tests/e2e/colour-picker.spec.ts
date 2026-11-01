@@ -50,9 +50,9 @@ async function openPicker(page: Page): Promise<void> {
 
 async function saveEnvelope(page: Page): Promise<unknown> {
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
-  await expect(page.locator("#status")).toContainText("Theme package saved");
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
+  await expect(page.locator("#status")).toContainText("Released");
   const stream = await (await download).createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));

@@ -237,7 +237,7 @@ async function editorReady(page: Page): Promise<void> {
 
 /** The Host mode's Sources section, over the host this file started. */
 async function openSources(page: Page): Promise<void> {
-  await page.locator("#yunari-shell-modes-this-pc").click();
+  await page.locator("#yunari-shell-modes-host").click();
   await expect(
     page.locator('[data-yunari-host-section="sources"]'),
   ).toBeVisible();
@@ -327,8 +327,7 @@ test("a source authored on the page is read on a display, and its deletion expla
   ).toHaveAttribute("data-yunari-value", SOURCE_KEY);
 
   // 4. The document is saved to the host, then opened on a display.
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });

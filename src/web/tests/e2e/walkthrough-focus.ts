@@ -35,9 +35,10 @@ import type { Page } from "@playwright/test";
  *
  * **The instrument does reach into the header, and a command path is not a
  * region.** §13.1's first and last interactions are commands about a document —
- * `File → New from starter` and `File → Open library` — and the walk performs
- * them through the header's own `File` menu (`walkthrough-shell.ts`'s
- * `chooseFileMenuRow`); the census's own first press lands on that button. That
+ * `File → New from template` and the header toolbar's `Open` — and the walk
+ * performs them through the shell's own controls (`walkthrough-shell.ts`'s
+ * `chooseFileMenuRow` and `pressButtonNamed`); the census's own first press
+ * lands on that menu button. That
  * is a route *through* a band to a command, not a band that owns a focusable
  * surface a walk wanders, which is what "each region has a reachable focus
  * target" is read against and what a region earns its place by. The status
@@ -317,6 +318,23 @@ export async function tabUntil(
       seenRegions.length === 0 ? "none" : seenRegions.join(", ")
     }`,
   );
+}
+
+/** Presses the native button whose accessible name is `name`, with no pointer.
+ *
+ *  The button's own keyboard route: Tab reaches it in the shell's order and
+ *  Enter activates it. Native buttons are the target, so this is the same
+ *  route for a header toolbar button and for any other labelled button whose
+ *  region the caller does not need to name. */
+export async function pressButtonNamed(
+  page: Page,
+  name: string,
+): Promise<void> {
+  await tabUntil(
+    page,
+    (focus) => focus.tag === "button" && focus.name === name,
+  );
+  await page.keyboard.press("Enter");
 }
 
 /** What a control carries so the walk can reach it by what it *is* rather than

@@ -22,6 +22,7 @@ import { selectLayer } from "./rebuild-driver.js";
 import { rulePx } from "./shell-tokens.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * The composition panel's browser contract, against the real editor.
@@ -190,6 +191,175 @@ test("every row carries a role and a mark, and the role adds no height", async (
   );
   expect(new Set(heights).size, "every row is the same height").toBe(1);
   expect(heights[0], "the row's height, unchanged by the role").toBe(26);
+});
+
+/**
+ * Which glyph each row draws, read off the rendered icon rather than inferred
+ * from the mark's attribute.
+ *
+ * The jsdom cases pin the same mapping, but they apply no stylesheet and see no
+ * rendered surface. This case is the browser half: the row's mark is the only
+ * place an author can tell a gauge from a radar without reading the role column,
+ * and the Add pane draws the same vocabulary, so a change that swapped or
+ * copied a glyph reddens here even though the class list still looks right.
+ *
+ * The lucide class names are read from the `svg` lucide renders. They are
+ * literals because nothing on the page carries the icon's name otherwise — and a
+ * literal that goes stale fails here rather than passing over a changed mark.
+ */
+test("a row's mark draws its kind's glyph, and the Add pane draws the same", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  /** The row's own mark, not a nested row's. */
+  const markGlyph = async (id: string): Promise<string | null> =>
+    page
+      .locator(`[data-yunari-layer="${id}"]`)
+      .locator(".yunari-layer-mark [data-yunari-layer-mark]")
+      .first()
+      .locator("svg")
+      .getAttribute("class");
+
+  const rowMark = (id: string) =>
+    page
+      .locator(`[data-yunari-layer="${id}"]`)
+      .locator(".yunari-layer-mark [data-yunari-layer-mark]")
+      .first();
+
+  // A group says "this holds others" with the chrome's stack glyph, and a text
+  // row with the vocabulary's T — never the object's own words or bytes.
+  await expect(rowMark("group-cpu-card")).toHaveAttribute(
+    "data-yunari-layer-mark",
+    "group",
+  );
+  expect(await markGlyph("group-cpu-card")).toContain("lucide-layers-2");
+  await expect(rowMark("cpu-card-title")).toHaveAttribute(
+    "data-yunari-layer-mark",
+    "text",
+  );
+  expect(await markGlyph("cpu-card-title")).toContain("lucide-type");
+
+  // A chart's mark answers the family, not just the kind: three families in
+  // this document wear three glyphs, and none of them is the generic chart mark.
+  const families = new Map([
+    ["cpu-card-sparkline", "lucide-chart-line"],
+    ["ram-gauge", "lucide-gauge"],
+    ["storage-bar", "lucide-chart-column"],
+  ]);
+  for (const [id, glyph] of families) {
+    expect(await markGlyph(id), id).toContain(glyph);
+  }
+  expect(
+    new Set(await Promise.all([...families].map(([id]) => markGlyph(id)))).size,
+    "each family wears its own glyph",
+  ).toBe(3);
+
+  // The Add pane's chart tiles draw the same family glyphs — one vocabulary,
+  // two surfaces. Radar is not in this document, so it also proves the tile
+  // reads its family rather than repeating the row it was opened beside.
+  await openPane(page, "Add");
+  const tileGlyph = (label: string) =>
+    page
+      .locator(`[data-yunari-add-group="chart"] button[aria-label="${label}"]`)
+      .locator("svg");
+  expect(await tileGlyph("Gauge").getAttribute("class")).toContain(
+    "lucide-gauge",
+  );
+  expect(await tileGlyph("Radar").getAttribute("class")).toContain(
+    "lucide-radar",
+  );
+});
+
+/**
+ * DESIGN.md's 24×24 dense-target rule against the row's own 20px rhythm.
+ *
+ * The twisty's paint box is the row's 20px square; the extra area is
+ * `hitTargetClasses`' centred `::before`, so the rendered box is what this case
+ * reads — not the class, which a later rule could override while the name still
+ * sat in `className`. The corners are hit-tested because a pseudo-element larger
+ * than its button is only a target where the pointer actually lands, and the
+ * row is 26px tall with 4px between two controls, so a target may widen into the
+ * gap but never into a neighbouring row or control.
+ */
+test("the row's twisty paints at 20px and takes a 24×24 target", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  const measured = await page
+    .locator(".yunari-layer-row > button:first-child")
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          // Only a row the pointer can actually reach is measurable: the tree
+          // scrolls, and the pane's header floats over the rows that have gone
+          // under it, so a scrolled-out or covered twisty answers another
+          // element at its own centre.
+          const box = button.getBoundingClientRect();
+          if (box.top < 0 || box.bottom > window.innerHeight) return false;
+          // The centre may land on the twisty's own glyph, so the whole
+          // subtree counts as reachable; anything else means another element
+          // covers the row.
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return hit !== null && button.contains(hit);
+        })
+        .map((button) => {
+          const box = button.getBoundingClientRect();
+          const target = getComputedStyle(button, "::before");
+          const rowBox = button
+            .closest(".yunari-layer-row")
+            ?.getBoundingClientRect();
+          const half = 12;
+          const cx = box.left + box.width / 2;
+          const cy = box.top + box.height / 2;
+          return {
+            paint: [Math.round(box.width), Math.round(box.height)],
+            target: [
+              Number.parseFloat(target.width),
+              Number.parseFloat(target.height),
+            ],
+            insideRow:
+              rowBox !== undefined &&
+              cy - half >= rowBox.top &&
+              cy + half <= rowBox.bottom,
+            // A pixel inside each edge of the 24px box: the horizontal ones sit
+            // outside the button's own 20px border box, so only the `::before`
+            // can receive them.
+            hits: [
+              { x: cx - half + 1, y: cy },
+              { x: cx + half - 1, y: cy },
+              { x: cx, y: cy - half + 1 },
+              { x: cx, y: cy + half - 1 },
+            ].every(({ x, y }) => document.elementFromPoint(x, y) === button),
+          };
+        }),
+    );
+
+  expect(
+    measured.length,
+    "no twisty in the viewport to measure",
+  ).toBeGreaterThan(0);
+  for (const row of measured) {
+    expect(
+      row.paint,
+      "the twisty's paint box left the row's 20px rhythm",
+    ).toEqual([20, 20]);
+    expect(row.target, "the twisty's target is not 24×24").toEqual([24, 24]);
+    expect(row.insideRow, "the target reaches into the neighbouring row").toBe(
+      true,
+    );
+    expect(row.hits, "a corner of the target does not receive the press").toBe(
+      true,
+    );
+  }
 });
 
 /**
@@ -670,7 +840,7 @@ function packageBytes(
   > = {},
 ): Buffer {
   const result = writeThemePackage({
-    envelope: {
+    envelope: withRoleTokens({
       schemaVersion: "2.0.0",
       fabricVersion: "7.4.0",
       id,
@@ -694,7 +864,7 @@ function packageBytes(
       },
       bindings,
       scene: { version: "7.4.0", objects },
-    },
+    }),
     assets: {},
   });
   if (!result.ok) throw new Error(result.message);
@@ -714,7 +884,7 @@ function packageBytes(
  *
  * The route below is the one an author has: the store's own **Open in editor**
  * control over a stubbed library, which is where the document route lives now
- * that `File ▸ Import package` writes into the library instead. The milliseconds
+ * that `File ▸ Import theme` writes into the library instead. The milliseconds
  * are the control's click to the status line — the same span the picker's own
  * measurement covered.
  */

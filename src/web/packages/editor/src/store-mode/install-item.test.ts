@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { uiCopy } from "../ui-copy.js";
 import { installItem } from "./install-item.js";
 import { fixtureItem } from "./item-fixture.js";
@@ -116,4 +116,26 @@ it("states the refusal when the host sends no sentence", async () => {
     ok: false,
     message: "The host refused the install (502).",
   });
+});
+
+/** A request that never reached the host is answered with the app's own
+ *  sentence; the browser's `Failed to fetch` names no step a person can act on. */
+it("answers an unreachable host with the app's own sentence", async () => {
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  try {
+    const outcome = await installItem(ITEM, {
+      fetch: (async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      message: uiCopy.store.install.unreachable,
+    });
+    expect(logged).toHaveBeenCalled();
+  } finally {
+    logged.mockRestore();
+  }
 });

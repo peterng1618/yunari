@@ -2,9 +2,15 @@ import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import {
   readThemePackage,
   type ThemeCredits,
+  themeIdFromName,
   themeVideoRefusals,
 } from "@yunari/theme-package";
-import { isValidThemeId, ThemeIdTakenError, type ThemeStore } from "./store.js";
+import {
+  isValidThemeId,
+  storeRefusalMessage,
+  ThemeIdTakenError,
+  type ThemeStore,
+} from "./store.js";
 import type { ThumbnailStore } from "./thumbnails.js";
 
 /**
@@ -19,9 +25,6 @@ import type { ThumbnailStore } from "./thumbnails.js";
  * replace is data loss with no undo.
  */
 
-/** How much of a name an id carries: the id shape's own 64, less the room a
- *  `-NN` suffix needs. */
-const MAX_SLUG = 56;
 /** How many suffixed candidates a name is worth before the library is judged to
  *  hold them all. Chosen, not measured: a library with a hundred themes of one
  *  name is a library somebody should look at. */
@@ -48,7 +51,9 @@ export interface ThemeImportOptions {
  *
  * Every refusal is its owner's — the reader's for a package it will not read,
  * the store's for a write it would not take — because the reason is what the
- * author has to act on, and a sentence composed here would hide it.
+ * author has to act on, and a sentence composed here would hide it. The one
+ * translation is `storeRefusalMessage`: an `fs` failure's own text names a
+ * path inside the profile, so it is logged and answered with the step.
  */
 export async function importThemePackage(
   bytes: Uint8Array,
@@ -101,7 +106,7 @@ export async function importThemePackage(
 export function importIdCandidates(
   envelope: FabricThemeEnvelope,
 ): readonly string[] {
-  const base = slugOf(envelope.metadata?.name ?? "") || NAMELESS_BASE;
+  const base = themeIdFromName(envelope.metadata?.name ?? "") || NAMELESS_BASE;
   const suffixed = Array.from(
     { length: MAX_SUFFIX - 1 },
     (_unused, index) => `${base}-${index + 2}`,
@@ -116,25 +121,6 @@ export function importIdCandidates(
       ...suffixed,
     ]),
   ];
-}
-
-/**
- * A name as a library id: lowercased, runs of anything else collapsed to one
- * hyphen, and trimmed — the shape `isValidThemeId` accepts, or "" when the name
- * has no such characters at all.
- *
- * A slug of the name is never the *first* candidate — the package's own id is —
- * because two packages named alike would collide under one slug and the author
- * would never learn that the second landed on the first. It is what a taken or
- * unusable id falls to, where a suffix makes the collision visible.
- */
-function slugOf(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, MAX_SLUG)
-    .replace(/-+$/, "");
 }
 
 /**
@@ -166,10 +152,7 @@ async function writeUnderFreeId(
       // else is the store's own answer to this document, and belongs to the
       // author rather than to the next candidate.
       if (!(error instanceof ThemeIdTakenError)) {
-        return {
-          ok: false,
-          message: error instanceof Error ? error.message : String(error),
-        };
+        return { ok: false, message: storeRefusalMessage(error) };
       }
     }
   }

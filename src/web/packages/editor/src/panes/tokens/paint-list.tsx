@@ -1,4 +1,8 @@
-import type { FabricPalette, PalettePaint } from "@yunari/renderer-core";
+import {
+  type FabricPalette,
+  type PalettePaint,
+  paletteTokenIds,
+} from "@yunari/renderer-core";
 import { plainButtonClasses } from "../../components/ui/control-well.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
 import {
@@ -6,7 +10,6 @@ import {
   useTokenSelection,
 } from "../../editor-shell/shell-stores.js";
 import { newTokenPaint } from "../../new-fabric-theme-globals.js";
-import { paletteTokenIds } from "../../palette-manager/token-list.js";
 import { uiCopy } from "../../ui-copy.js";
 import { type TokenUsage, usageFigure } from "./token-use.js";
 
@@ -19,8 +22,8 @@ import { type TokenUsage, usageFigure } from "./token-use.js";
  * shape is unchanged from the pane's field-set days, when paint rows were the
  * same, and what left is the chooser, the fields and the users list.
  *
- * **The membership is not re-derived here.** The list is `paletteTokenIds`,
- * which the pane's title-bar count also reads, so the rows drawn and the number
+ * **The membership is not re-derived here.** The list is `paletteTokenIds`
+ * from `renderer-core`, which the pane's title-bar count also reads, so the rows drawn and the number
  * beside the title are one list rather than two that must agree; the figure
  * beside a token is the caller's `usage` walk, read per draw. The count the
  * author reads and the set a deletion moves therefore come from one owner

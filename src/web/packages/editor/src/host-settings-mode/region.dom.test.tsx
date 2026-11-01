@@ -32,9 +32,11 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import {
+  type AutostartAnswer,
   type DeviceSettings,
   type DisplayPreferences,
   type DisplayPreferencesWrite,
+  type HostMonitor,
   type HostSettingsClient,
   type PanelHint,
   type ThemeAnswers,
@@ -153,6 +155,18 @@ interface Fixture {
   readonly sourceTest?: TestResult;
   /** What a delete answers about a credential it no longer sees referenced. */
   readonly sourceRemoval?: RemovalAnswer;
+  /** The monitors the probe reports, for the local-display add form. */
+  readonly monitors?: readonly HostMonitor[];
+  /** The sentence a monitor probe fails with, or `undefined` for an answer. */
+  readonly refuseMonitors?: string;
+  /** The sentence an add fails with, or `undefined` for a landed add. */
+  readonly refuseAdd?: string;
+  /** The sentence a removal fails with, or `undefined` for a landed removal. */
+  readonly refuseRemove?: string;
+  /** What the sign-in registrar answers. */
+  readonly autostart?: AutostartAnswer;
+  /** The sentence a sign-in registration fails with, or `undefined`. */
+  readonly refuseAutostart?: string;
   /** The sentence a presentation write fails with, or `undefined`. */
   readonly refusePresentation?: string;
   /** What the host enumerates as attached panels. Absent is a machine with
@@ -193,6 +207,12 @@ interface Written {
   readonly reconnects: string[];
   /** The display renames, in order: id and the name sent. */
   readonly names: { readonly id: string; readonly label: string }[];
+  /** The local displays added, in order: the name and monitor sent. */
+  readonly added: { readonly label: string; readonly monitor: HostMonitor }[];
+  /** The displays a removal was asked for. */
+  readonly removed: string[];
+  /** How many sign-in registrations were asked for. */
+  autostarts: number;
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -217,6 +237,19 @@ function library(fixture: Fixture): ThemeLibraryClient {
   };
 }
 
+/** One attached screen, which is the ordinary machine's answer and enough for
+ *  the add form to offer. */
+const MONITORS: readonly HostMonitor[] = [
+  {
+    deviceName: "\\\\.\\DISPLAY1",
+    main: true,
+    positionX: 0,
+    positionY: 0,
+    currentResX: 1920,
+    currentResY: 1080,
+  },
+];
+
 /** The host's settings routes, as the shapes they answer, with every write
  *  recorded. `refuse` is the sentence a write fails with, or `undefined`. */
 function hostSettings(
@@ -239,6 +272,9 @@ function hostSettings(
     panels: [],
     reconnects: [],
     names: [],
+    added: [],
+    removed: [],
+    autostarts: 0,
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -331,6 +367,37 @@ function hostSettings(
         wrote.names.push({ id, label });
         return label;
       },
+      listMonitors: async () => {
+        if (fixture.refuseMonitors !== undefined) {
+          throw new Error(fixture.refuseMonitors);
+        }
+        return fixture.monitors ?? MONITORS;
+      },
+      createLocalDisplay: async (next) => {
+        wrote.added.push(next);
+        if (fixture.refuseAdd !== undefined) {
+          throw new Error(fixture.refuseAdd);
+        }
+        return "new-display";
+      },
+      removeDisplay: async (id) => {
+        wrote.removed.push(id);
+        if (fixture.refuseRemove !== undefined) {
+          throw new Error(fixture.refuseRemove);
+        }
+      },
+      registerAutostart: async () => {
+        wrote.autostarts += 1;
+        if (fixture.refuseAutostart !== undefined) {
+          throw new Error(fixture.refuseAutostart);
+        }
+        return (
+          fixture.autostart ?? {
+            ok: true,
+            message: "Yunari will start hidden at sign-in.",
+          }
+        );
+      },
     },
   };
 }
@@ -391,13 +458,13 @@ function sourcesClient(fixture: Fixture): {
 }
 
 /** Two displays, one of them holding no theme of its own, and the two themes the
- *  library calls them. This PC leads, as the route always answers it first. */
+ *  library calls them. Host leads, as the route always answers it first. */
 const TWO_DISPLAYS: Fixture = {
   fallback: "kitchen-strip",
   displays: [
     {
       id: "this-pc",
-      label: "This PC",
+      label: "Host",
       kind: "local",
       theme: null,
       shape: "rect",
@@ -451,7 +518,7 @@ async function mountHost(
   const published: (HostStatusLine | undefined)[] = [];
   const container = await mount(
     <HostSettingsRegion
-      mode="this-pc"
+      mode="host"
       client={library(fixture)}
       settings={settings.client}
       sources={sources.client}
@@ -674,8 +741,8 @@ it("names each display, and the default for the ones with none", async () => {
     container.querySelectorAll<HTMLElement>("[data-yunari-host-display]"),
   );
   expect(
-    rows.map((row) => row.textContent?.startsWith("This PC") ?? false),
-    "the route's own order is not kept, This PC first",
+    rows.map((row) => row.textContent?.startsWith("Host") ?? false),
+    "the route's own order is not kept, Host first",
   ).toEqual([true, false]);
 
   const own = displayRow(container, "hallway");
@@ -705,6 +772,39 @@ it("names each display, and the default for the ones with none", async () => {
     statusLine(published).status,
     "the line published does not rest on the page's own sentence",
   ).toBe(uiCopy.hostSettings.status.ready);
+});
+
+/**
+ * **The rows are one choice, announced as one.** The set is too large for
+ * Segmented, so DESIGN.md rule 7 makes it choice rows — radios in one labelled
+ * radiogroup, whose value is the checked row — rather than independent toggles
+ * whose pressed state a screen reader would report three times.
+ */
+it("draws the displays as one radiogroup, with the chosen row checked", async () => {
+  const { container } = await mountHost(TWO_DISPLAYS);
+
+  const group = must(
+    container.querySelector<HTMLElement>('[role="radiogroup"]'),
+    "the display radiogroup",
+  );
+  expect(group.getAttribute("aria-label")).toBe(
+    uiCopy.hostSettings.displays.label,
+  );
+
+  const checkedOf = (): readonly string[] =>
+    Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')).map(
+      (radio) =>
+        `${radio.getAttribute("data-yunari-host-display")}:${radio.getAttribute("aria-checked")}`,
+    );
+
+  expect(checkedOf()).toEqual(["this-pc:true", "hallway:false"]);
+
+  await act(async () => displayRow(container, "hallway").click());
+
+  expect(
+    checkedOf(),
+    "choosing a display did not move the group's checked row",
+  ).toEqual(["this-pc:false", "hallway:true"]);
 });
 
 /**
@@ -801,6 +901,212 @@ it("renames the chosen display and redraws its row", async () => {
   expect(displayRow(container, "hallway").textContent).toContain("Hallway TV");
 });
 
+/**
+ * **The add form is the local-display route's caller.** The monitor the probe
+ * reported is offered under a name a person can tell apart, and the add sends
+ * that monitor's hint rather than the whole probe entry: the geometry is read
+ * from the OS on every launch, while the name and serial are what find the
+ * screen again.
+ */
+it("adds a local display on the monitor the form offers", async () => {
+  const second: HostMonitor = {
+    deviceName: "\\\\.\\DISPLAY2",
+    main: false,
+    positionX: 1920,
+    positionY: 0,
+    currentResX: 2560,
+    currentResY: 1440,
+  };
+  const { container, wrote, published } = await mountHost({
+    ...TWO_DISPLAYS,
+    monitors: [MONITORS[0]!, second],
+  });
+
+  const monitorRow = must(
+    container.querySelector<HTMLElement>("[data-yunari-host-display-monitor]"),
+    "the monitor choice",
+  );
+  expect(
+    monitorRow.textContent,
+    "the monitor list does not name the screen it offers",
+  ).toContain(
+    uiCopy.hostSettings.displays.monitorOption(
+      MONITORS[0]!.deviceName,
+      1920,
+      1080,
+      true,
+    ),
+  );
+  expect(await offered(monitorRow)).toEqual(["0", "1"]);
+  await choose("1");
+
+  const name = must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-add-name]",
+    ),
+    "the add form's name field",
+  );
+  await type(name, "Desk");
+  await act(async () => {
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-display-add]"),
+      "the add action",
+    ).click();
+  });
+
+  expect(wrote.added).toEqual([{ label: "Desk", monitor: second }]);
+  expect(statusLine(published).status).toBe(
+    uiCopy.hostSettings.displays.added("Desk"),
+  );
+});
+
+/** A refused add is the host's own sentence on the mode's status line, and the
+ *  form keeps what was typed so it can be corrected. */
+it("renders a refused add in the host's words", async () => {
+  const refusal = "That monitor is already a display.";
+  const { container, published } = await mountHost({
+    ...TWO_DISPLAYS,
+    refuseAdd: refusal,
+  });
+
+  const name = must(
+    container.querySelector<HTMLInputElement>(
+      "[data-yunari-host-display-add-name]",
+    ),
+    "the add form's name field",
+  );
+  await type(name, "Desk");
+  await act(async () => {
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-display-add]"),
+      "the add action",
+    ).click();
+  });
+
+  expect(statusLine(published).status).toBe(
+    uiCopy.hostSettings.status.failed(refusal),
+  );
+  expect(name.value).toBe("Desk");
+});
+
+/** The removal route's caller. The confirmation names the display, the Host has
+ *  no command it would refuse, and a landed removal reports the name. */
+it("removes a display after a confirmation that names it", async () => {
+  const { container, wrote, published } = await mountHost(TWO_DISPLAYS);
+
+  expect(
+    container.querySelector('[data-yunari-host-display-remove="this-pc"]'),
+    "the Host is offered a removal the route refuses",
+  ).toBeNull();
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>(
+        '[data-yunari-host-display-remove="hallway"]',
+      ),
+      "the hallway's removal command",
+    ).click(),
+  );
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.removeAsk("Hallway panel"),
+  );
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>(
+        '[data-yunari-host-display-confirm-remove="hallway"]',
+      ),
+      "the removal confirmation",
+    ).click(),
+  );
+
+  expect(wrote.removed).toEqual(["hallway"]);
+  expect(statusLine(published).status).toBe(
+    uiCopy.hostSettings.displays.removed("Hallway panel"),
+  );
+  expect(
+    container.querySelector('[data-yunari-host-display-confirm="hallway"]'),
+  ).toBeNull();
+});
+
+/** The sign-in route's caller, and its answer is the registrar's own sentence:
+ *  the surface shows it rather than reporting a registration in its own words. */
+it("registers the host at sign-in and shows the registrar's message", async () => {
+  const message = "Registered. Windows starts Yunari at sign-in.";
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    autostart: { ok: true, message },
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
+      "the sign-in action",
+    ).click(),
+  );
+
+  expect(wrote.autostarts).toBe(1);
+  const result = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-host-autostart-result="ok"]',
+    ),
+    "the registrar's answer",
+  );
+  expect(result.textContent).toBe(message);
+});
+
+it("renders a refused sign-in registration in the host's words", async () => {
+  const refusal = "This host cannot register itself to start at sign-in.";
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    refuseAutostart: refusal,
+  });
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
+      "the sign-in action",
+    ).click(),
+  );
+
+  const result = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-host-autostart-result="failed"]',
+    ),
+    "the refused registration",
+  );
+  expect(result.textContent).toBe(refusal);
+});
+
+/** A probe that failed is not an empty monitor list, so the form is absent and
+ *  the host's reason is the sentence shown. */
+it("names the probe's reason instead of offering an add with no monitor", async () => {
+  const refusal = "Could not list the monitors (500).";
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    refuseMonitors: refusal,
+  });
+
+  const alert = must(
+    container.querySelector("[data-yunari-host-displays-monitor-error]"),
+    "the monitor-probe failure",
+  );
+  expect(alert.getAttribute("role")).toBe("alert");
+  expect(alert.textContent).toBe(refusal);
+  expect(container.querySelector("[data-yunari-host-display-add]")).toBeNull();
+});
+
+/** An empty probe answer is a fact too: there is no screen to put a display on,
+ *  so the sentence says so rather than drawing an add that would be refused. */
+it("says no monitor was reported rather than offering an add", async () => {
+  const { container } = await mountHost({ ...TWO_DISPLAYS, monitors: [] });
+
+  expect(container.textContent).toContain(
+    uiCopy.hostSettings.displays.noMonitors,
+  );
+  expect(container.querySelector("[data-yunari-host-display-add]")).toBeNull();
+});
+
 it("keeps the row's previous presentation when the write is refused", async () => {
   const refusal = "That angle is not a quarter turn.";
   const { container, published } = await mountHost({
@@ -862,14 +1168,14 @@ it("names the display file when the host could not read it", async () => {
   ).toBeNull();
 });
 
-/** This PC is the machine, not a paired screen: it has no record to present, so
+/** Host is the machine, not a paired screen: it has no record to present, so
  *  the section says why rather than drawing a disabled control. */
-it("draws no presentation controls for this-pc", async () => {
+it("draws no presentation controls for the Host", async () => {
   const { container } = await mountHost({
     displays: [
       {
         id: "this-pc",
-        label: "This PC",
+        label: "Host",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -893,7 +1199,7 @@ it("draws no presentation controls for this-pc", async () => {
  * The plan's first case, and the one that carries the per-display model: **a
  * theme that binds only `cpu.load` offers no GPU row for that display**.
  *
- * Three facts in one run, because they are one decision. This PC holds no theme
+ * Three facts in one run, because they are one decision. Host holds no theme
  * of its own, so the region asks about the default's — the fallback reaches the
  * route, which is what makes the questions the answers of a display's use of a
  * theme. That theme raises nothing, so no section is drawn at all. And the
@@ -1040,6 +1346,42 @@ it("commits a device name on the way out, not on every keystroke", async () => {
     wrote.devices.length,
     "a blur that changed nothing wrote the settings again",
   ).toBe(1);
+});
+
+it("does not commit a device name on the Enter of a composition", async () => {
+  const { container, wrote } = await mountHost({
+    ...TWO_DISPLAYS,
+    devices: DEVICES,
+  });
+  const field = nameField(container, "gpu-0");
+  await type(field, "Card");
+
+  await act(async () => {
+    field.dispatchEvent(
+      new CompositionEvent("compositionstart", { bubbles: true }),
+    );
+  });
+  await enter(field);
+  expect(wrote.devices, "a half-typed IME word was committed").toEqual([]);
+
+  await act(async () => {
+    field.dispatchEvent(
+      new CompositionEvent("compositionend", { bubbles: true }),
+    );
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true }),
+    );
+  });
+  expect(
+    wrote.devices,
+    "an Enter still carrying the composition committed",
+  ).toEqual([]);
+
+  await enter(field);
+  expect(
+    wrote.devices[0]?.names["gpu-0"],
+    "the finished word did not commit",
+  ).toBe("Card");
 });
 
 /** The display form sends both fields for the same reason the device form does,
@@ -1974,7 +2316,7 @@ const ONE_PANEL: Fixture = {
   displays: [
     {
       id: "this-pc",
-      label: "This PC",
+      label: "Host",
       kind: "local",
       theme: null,
       shape: "rect",
@@ -2031,6 +2373,44 @@ it("does not offer a panel that is already a display", async () => {
     "an already-added panel is still offered",
   ).toBeNull();
   expect(container.textContent).toContain(uiCopy.hostSettings.panels.allAdded);
+});
+
+it("states why a held port cannot be added", async () => {
+  // The host sees the device but another process holds its port. The row is
+  // the report: no add button, and the host's own sentence for the reason.
+  const reason =
+    'TURZX 5" Panel could not be opened: Access denied. Another program holding it — the TURZX vendor app is the usual one — has to be closed first.';
+  const { container } = await mountHost({
+    ...ONE_PANEL,
+    panels: [
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "PANEL0002",
+        label: 'TURZX 5" Panel',
+        held: false,
+        status: "disconnected",
+        reason,
+        commands: [],
+      },
+    ],
+  });
+
+  const row = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-panel="7531:262:PANEL0002"]',
+    ),
+    "the held port's row",
+  );
+
+  expect(row.textContent).toContain(reason);
+  expect(
+    row.querySelector("[data-yunari-panel-add]"),
+    "a port the host cannot open is still offered",
+  ).toBeNull();
+  expect(container.textContent).not.toContain(
+    uiCopy.hostSettings.panels.allAdded,
+  );
 });
 
 it("states the chosen panel's hardware record and warns on a firmware mismatch", async () => {

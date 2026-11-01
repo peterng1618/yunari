@@ -635,6 +635,106 @@ it("commits the offset well once, keeping the fraction it was given", async () =
   expect(mounted.commit).toHaveBeenCalledOnce();
 });
 
+it("clamps a typed percent to the next stop's offset", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 0.7, color: WHITE },
+    ],
+    angle: 0,
+  });
+
+  await click(mounted.find("gradient-stop-1"));
+  await typeAndEnter(mounted.find<HTMLInputElement>("gradient-offset"), "90");
+
+  const written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  // A percent past the next stop pins at that stop: the document's validator
+  // needs ascending offsets, and reordering would move the stop's identity.
+  expect(written?.stops.map((stop) => stop.offset)).toEqual([0, 0.7, 0.7]);
+  expect(
+    mounted.find<HTMLInputElement>("gradient-offset").value,
+    "the well shows the offset it actually wrote",
+  ).toBe("70");
+  expect(mounted.commit).toHaveBeenCalledOnce();
+});
+
+it("clamps a typed percent to the previous stop's offset", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0.2, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 0.7, color: WHITE },
+    ],
+    angle: 0,
+  });
+
+  await click(mounted.find("gradient-stop-1"));
+  await typeAndEnter(mounted.find<HTMLInputElement>("gradient-offset"), "10");
+
+  const written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  expect(written?.stops.map((stop) => stop.offset)).toEqual([0.2, 0.2, 0.7]);
+  expect(mounted.find<HTMLInputElement>("gradient-offset").value).toBe("20");
+});
+
+it("clamps the first and last stops against their one neighbour", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0.2, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 0.8, color: WHITE },
+    ],
+    angle: 0,
+  });
+  const offset = mounted.find<HTMLInputElement>("gradient-offset");
+
+  // The first stop has no previous neighbour, so the next stop is its upper.
+  await click(mounted.find("gradient-stop-0"));
+  await typeAndEnter(offset, "90");
+  let written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  expect(written?.stops.map((stop) => stop.offset)).toEqual([0.5, 0.5, 0.8]);
+
+  // The last stop has no next neighbour, so the previous stop is its lower.
+  await click(mounted.find("gradient-stop-2"));
+  await typeAndEnter(offset, "10");
+  written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  expect(written?.stops.map((stop) => stop.offset)).toEqual([0.5, 0.5, 0.5]);
+});
+
+it("pins a crossing drag at its neighbour instead of reordering", async () => {
+  const mounted = await mount({
+    stops: [
+      { offset: 0, color: BLACK },
+      { offset: 0.5, color: RED },
+      { offset: 1, color: WHITE },
+    ],
+    angle: 0,
+  });
+  stubRect(mounted.find("gradient-track"), 200);
+  const first = mounted.find("gradient-stop-0");
+
+  await pointer(first, "pointerdown", 0);
+  await pointer(first, "pointermove", 160);
+  await pointer(first, "pointerup", 160, 0);
+
+  const written = mounted.change.mock.calls.at(-1)?.[0] as
+    | { stops: Stops }
+    | undefined;
+  expect(written?.stops.map((stop) => stop.offset)).toEqual([0.5, 0.5, 1]);
+  expect(
+    written?.stops.map((stop) => stop.color),
+    "the stop keeps its index and its colour",
+  ).toEqual([BLACK, RED, WHITE]);
+});
+
 it("commits the angle well once", async () => {
   const stops: Stops = [
     { offset: 0, color: BLACK },

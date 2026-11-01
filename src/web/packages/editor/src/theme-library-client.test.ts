@@ -318,7 +318,7 @@ describe("ThemeLibraryClient", () => {
     const mockFetch = vi.fn(
       async () =>
         new Response(
-          "This PC has no trash command (gio, trash-put), so the theme was left alone.",
+          "The Host has no trash command (gio, trash-put), so the theme was left alone.",
           { status: 500 },
         ),
     );
@@ -478,7 +478,7 @@ describe("ThemeLibraryClient", () => {
           JSON.stringify({
             default: "living-room",
             displays: [
-              { id: "this-pc", label: "This PC", kind: "local", theme: null },
+              { id: "this-pc", label: "Host", kind: "local", theme: null },
               {
                 id: "kitchen-tablet",
                 label: "Kitchen Tablet",
@@ -506,7 +506,7 @@ describe("ThemeLibraryClient", () => {
       displays: [
         {
           id: "this-pc",
-          label: "This PC",
+          label: "Host",
           kind: "local",
           theme: null,
           shape: "rect",

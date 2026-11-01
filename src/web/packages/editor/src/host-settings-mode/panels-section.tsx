@@ -68,7 +68,9 @@ export function PanelFacts(props: {
  * A panel that is already a display is left out of the offer: the route refuses
  * a second record for one device, so an add button would be a choice whose only
  * outcome is a refusal. The row stays, though — a device the owner can see
- * plugged in is worth a line, and it is where its hardware record belongs. The
+ * plugged in is worth a line, and it is where its hardware record belongs. A
+ * present device the host cannot open, because another process holds its port,
+ * also keeps its row and states the host's reason; adding it could only fail. The
  * set is compared by the device's ids, which is what the record keys it by.
  */
 export function PanelsSection(props: {
@@ -80,7 +82,9 @@ export function PanelsSection(props: {
   readonly onAdd: (panel: PanelHint) => void;
 }): React.JSX.Element {
   const copy = uiCopy.hostSettings.panels;
-  const free = props.attached.filter((panel) => !panel.held);
+  const free = props.attached.filter(
+    (panel) => !panel.held && panel.reason === undefined,
+  );
 
   // **Nothing attached says nothing.** A desktop with no panel is the ordinary
   // case, not an error, and a section that read "no panels" on every machine
@@ -97,7 +101,7 @@ export function PanelsSection(props: {
     <Group testId="panels" name={copy.heading} hint={copy.hint}>
       {/* **Every attached panel gets a row**, held or free: the hardware record
           is a fact about the device, not about whether it can be added. */}
-      {free.length === 0 ? (
+      {free.length === 0 && props.attached.every((panel) => panel.held) ? (
         <p className="text-xs text-muted">{copy.allAdded}</p>
       ) : null}
       <div className="flex flex-col gap-[var(--space-6)]">
@@ -118,9 +122,16 @@ export function PanelsSection(props: {
                 {panel.label}
                 <PanelFacts panel={panel} />
               </span>
-              {/* A held device says which display drives it instead of offering
-                  a second claim the route would refuse. */}
-              {panel.held ? (
+              {/* A present device the host cannot drive says why instead of
+                  offering an add whose open would fail. */}
+              {panel.reason !== undefined ? (
+                <span
+                  data-yunari-panel-reason={key}
+                  className="text-2xs text-warn"
+                >
+                  {panel.reason}
+                </span>
+              ) : panel.held ? (
                 <span
                   data-yunari-panel-held={panel.heldId ?? ""}
                   className="flex-none text-2xs text-faint"

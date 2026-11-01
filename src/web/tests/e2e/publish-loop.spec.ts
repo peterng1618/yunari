@@ -123,8 +123,7 @@ async function startHost(): Promise<ChildProcess> {
 /** Saves the open document into the host's library — the write that publishes.
  *  The File menu owns it; there is no header button. */
 async function saveToLibrary(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save to library" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator("#status")).toContainText("Saved to library");
 }
 

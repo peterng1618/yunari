@@ -33,6 +33,12 @@ import {
   presignAllowed,
   UPLOAD_RESERVATION_TTL_MS,
 } from "../db/quota.js";
+import {
+  insertReport,
+  isReportCategory,
+  REPORT_CATEGORIES,
+  reportAllowed,
+} from "../db/reports.js";
 import type { ItemRow, UploadRow } from "../db/types.js";
 import { uploadsForVersion } from "../db/uploads.js";
 import type { Env } from "../env.js";
@@ -52,6 +58,8 @@ export const MAX_THUMBNAIL_BASE64 =
 export const MAX_FINALIZE_BODY = MAX_THUMBNAIL_BASE64 + MAX_JSON_BODY;
 /** UTF-8 bytes, not UTF-16 units: a 200-character CJK name is 600 bytes. */
 const MAX_ITEM_NAME_BYTES = 200;
+/** A report's optional note; the admin verdict reason uses the same bound. */
+const MAX_REPORT_NOTE_LENGTH = 1000;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /**
@@ -115,6 +123,8 @@ export async function handleMe(
     (request.method === "PUT" || request.method === "DELETE")
   )
     return favorite(request, env, itemId);
+  if (action === "report" && request.method === "POST")
+    return report(request, env, itemId);
   return undefined;
 }
 
@@ -172,6 +182,70 @@ async function favorite(
     ok: true,
     favorites: await favoriteCount(env.DB, itemId),
   });
+}
+
+/**
+ * Any signed-in account may report a published item. The target must be a live
+ * public listing, so a missing, hidden or removed item is the same 404; the
+ * report is intake only and never changes the item's status.
+ *
+ * One account reports one item once: the row's primary key collapses a repeat
+ * onto the existing row. A report costs the account's hourly budget, so a
+ * report on an already-reported item is answered from the same row.
+ */
+async function report(
+  request: Request,
+  env: Env,
+  itemId: string,
+): Promise<Response> {
+  const session = await sessionOf(request, env);
+  if (session === undefined) return unauthorized();
+
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const category = read.body["category"];
+  if (!isReportCategory(category))
+    return badRequest(
+      `A category is required: one of ${REPORT_CATEGORIES.join(", ")}.`,
+    );
+  const note = readNote(read.body["note"]);
+  if (!note.ok) return note.response;
+
+  const item = await itemById(env.DB, itemId);
+  if (item === undefined || item.status !== "published") return notFound();
+
+  const now = new Date();
+  if (!(await reportAllowed(env.DB, session.userId, itemId, now)))
+    return tooMany("Too many reports; try again in an hour.");
+
+  await insertReport(env.DB, {
+    userId: session.userId,
+    itemId,
+    category,
+    note: note.value,
+    at: now.toISOString(),
+  });
+  return Response.json({ ok: true });
+}
+
+type NoteRead =
+  | { readonly ok: true; readonly value: string | null }
+  | { readonly ok: false; readonly response: Response };
+
+/** A trimmed, bounded note; `null` when absent or empty. */
+function readNote(value: unknown): NoteRead {
+  if (value === undefined) return { ok: true, value: null };
+  if (typeof value !== "string")
+    return { ok: false, response: badRequest("A note must be a string.") };
+  const note = value.trim();
+  if (note.length > MAX_REPORT_NOTE_LENGTH)
+    return {
+      ok: false,
+      response: badRequest(
+        `A note may be at most ${MAX_REPORT_NOTE_LENGTH} characters.`,
+      ),
+    };
+  return { ok: true, value: note.length === 0 ? null : note };
 }
 
 /**

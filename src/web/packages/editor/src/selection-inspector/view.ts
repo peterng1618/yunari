@@ -212,6 +212,12 @@ export interface RunOptionView {
   readonly name: string;
   /** The heading a reading sits under; absent for prompts and flat lists. */
   readonly group?: string;
+  /**
+   * True when the host answered that this PC does not measure the key. The list
+   * keeps the entry, because a sensor that is working elsewhere is still a name
+   * the author can recognise; it just is not a choice here.
+   */
+  readonly disabled?: boolean;
 }
 
 /**

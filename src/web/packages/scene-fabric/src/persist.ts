@@ -81,6 +81,24 @@ export interface SerialisedScene {
   readonly [key: string]: unknown;
 }
 
+/**
+ * The keys Fabric writes that no author wrote. This list is the single answer to
+ * "what is derived", and the serialiser applies it: `SCENE_PERSISTED_PROPERTIES`
+ * says what Fabric must be asked to include, and nothing else on the object is
+ * excluded by that argument, because `toObject(propertiesToInclude)` only ever
+ * adds. So the derived keys are taken back out here, after serialisation.
+ *
+ * `text` is the key with both halves: `yunariText.runs` is the authored truth and
+ * the `text` rewritten beside it is the data-free fallback a reader shows before
+ * a reading arrives. It is handled where the runs are, in `stripDerivedState`.
+ */
+const SCENE_DERIVED_PROPERTIES = [
+  "styles",
+  "crossOrigin",
+  "subTargetCheck",
+  "interactive",
+] as const;
+
 /** Serialize all objects with identity and without Fabric defaults. */
 export function serialiseScene(canvas: StaticCanvas): SerialisedScene {
   // Keep the canvas in the same mode so stray serialization cannot emit a different shape.
@@ -90,12 +108,7 @@ export function serialiseScene(canvas: StaticCanvas): SerialisedScene {
   const scene = JSON.parse(
     JSON.stringify(canvas.toObject([...SCENE_PERSISTED_PROPERTIES])),
   ) as SerialisedScene;
-  removeRuntimeText(scene.objects);
-  removeGroupEntryFlags(scene.objects);
-  removeDerivedTextClips(scene.objects);
-  removeDerivedTextStyles(scene.objects);
-  removeImageCrossOrigin(scene.objects);
-  removeResolvedAssetSources(scene.objects);
+  stripDerivedState(scene.objects);
   return scene;
 }
 
@@ -314,125 +327,52 @@ function disposeObjects(objects: readonly object[]): void {
   }
 }
 
-/** Fabric serializes its display cache; replace sampled text with a data-free fallback. */
-function removeRuntimeText(
+/**
+ * Take every derived key out of the serialised document, in one walk.
+ *
+ * What each rule defends against, and why the key cannot simply be left alone:
+ *
+ * - `text` on a bound object is the last repaint's rendering. `yunariText.runs`
+ *   is the truth, so the saved text is rewritten to a data-free fallback: two
+ *   exports of one document otherwise disagree with nothing touched.
+ * - `clipPath` and `height` on a text object are caches of its authored box
+ *   (`yunariText.box`). `Textbox.initDimensions` derives the height and the clip
+ *   is rebuilt on refresh, so a file carrying either reads as already edited.
+ * - `styles` is Fabric's per-character table, written by every repaint whatever
+ *   the caller asked for; the authored equivalent is the run list.
+ * - `src` on an image that declares `yunariAsset` is whichever URL this session
+ *   decoded — for a pasted image a `blob:` handle no other reader can open. The
+ *   reference is authored; an image without one keeps its `src`.
+ * - `crossOrigin` is the network policy of the decoding session, not a choice.
+ * - `subTargetCheck` and `interactive` are armed by group entry, forced into
+ *   `Group.toObject`, and authored by nobody; `includeDefaultValues = false`
+ *   cannot drop them because an armed `true` differs from Fabric's default.
+ */
+function stripDerivedState(
   objects: readonly Readonly<Record<string, unknown>>[],
 ): void {
   for (const object of objects) {
-    const runs = valueRuns(object[YUNARI_TEXT_PROPERTY]);
-    if (runs !== undefined) {
-      (object as Record<string, unknown>)["text"] = runs
-        .map((run) => (run.kind === "literal" ? run.text : "—"))
-        .join("");
+    const record = object as Record<string, unknown>;
+    for (const key of SCENE_DERIVED_PROPERTIES) delete record[key];
+
+    const text = record[YUNARI_TEXT_PROPERTY];
+    if (isRecord(text)) {
+      const runs = valueRuns(text);
+      if (runs !== undefined) {
+        record["text"] = runs
+          .map((run) => (run.kind === "literal" ? run.text : "—"))
+          .join("");
+      }
+      delete record["clipPath"];
+      delete record["height"];
     }
-    const children = object["objects"];
-    if (Array.isArray(children)) removeRuntimeText(children.filter(isRecord));
-  }
-}
 
-/**
- * A text object's clip rect and its own `height` are caches of its authored
- * box, not authored state.
- *
- * Fabric serialises both, and the clip is the only thing clipping a text object
- * no refresh pass visits — an unbound label is never re-resolved, so a stale
- * rect from an earlier layout would be what a reader sees. `height` is the
- * sharper of the two: `Textbox.initDimensions` derives it from the wrapped text
- * on construction and every pass puts it back at the box, so a file that
- * carried it would show a different number the moment the document opened and
- * the editor would report the author's own document as edited (§67).
- * `yunariText.box` is the owner; `applyClip` and `assertBoxHeight` rebuild
- * these from it on the first refresh after revival.
- */
-function removeDerivedTextClips(
-  objects: readonly Readonly<Record<string, unknown>>[],
-): void {
-  for (const object of objects) {
-    if (isRecord(object[YUNARI_TEXT_PROPERTY])) {
-      delete (object as Record<string, unknown>)["clipPath"];
-      delete (object as Record<string, unknown>)["height"];
+    if (isFabricAssetReference(record[YUNARI_ASSET_PROPERTY])) {
+      delete record["src"];
     }
-    const children = object["objects"];
-    if (Array.isArray(children))
-      removeDerivedTextClips(children.filter(isRecord));
-  }
-}
 
-/**
- * An image that names its asset does not also carry a URL.
- *
- * Fabric writes `src` on every image regardless of what the caller asked to be
- * serialised, and what it wrote is whatever session happened to decode it — for
- * a pasted image, a `blob:` handle that means nothing to the next reader. The
- * reference is the authored truth and every reader resolves it before the load,
- * so persisting the URL ships a dead handle beside the live thing.
- *
- * Only where the reference is. An image with no `yunariAsset` has nothing to
- * resolve, and dropping its `src` would leave a picture no one can load.
- */
-function removeResolvedAssetSources(
-  objects: readonly Readonly<Record<string, unknown>>[],
-): void {
-  for (const object of objects) {
-    if (isFabricAssetReference(object[YUNARI_ASSET_PROPERTY])) {
-      delete (object as Record<string, unknown>)["src"];
-    }
-    const children = object["objects"];
-    if (Array.isArray(children))
-      removeResolvedAssetSources(children.filter(isRecord));
-  }
-}
-
-/**
- * Fabric's derived per-character style table is a repaint's output, not a
- * document.
- *
- * `FabricText.toObject` writes `styles` on every text object whatever the
- * caller asked for, and `stylesToArray` reports whatever ranges the last
- * repaint left — so two exports of one unchanged document disagree on it. The
- * authored equivalent is `yunariText.runs`, which nothing here touches, and
- * no reader reads `styles` back.
- */
-function removeDerivedTextStyles(
-  objects: readonly Readonly<Record<string, unknown>>[],
-): void {
-  for (const object of objects) {
-    delete (object as Record<string, unknown>)["styles"];
-    const children = object["objects"];
-    if (Array.isArray(children))
-      removeDerivedTextStyles(children.filter(isRecord));
-  }
-}
-
-/**
- * `crossOrigin` is the network policy of the session that decoded an image,
- * not a choice an author made, and a revived reader makes its own.
- *
- * Fabric persists it once set, because it is a set property rather than a
- * Fabric default, so a package can carry a CORS policy that meant something
- * only to the tab that saved it.
- */
-function removeImageCrossOrigin(
-  objects: readonly Readonly<Record<string, unknown>>[],
-): void {
-  for (const object of objects) {
-    delete (object as Record<string, unknown>)["crossOrigin"];
-    const children = object["objects"];
-    if (Array.isArray(children))
-      removeImageCrossOrigin(children.filter(isRecord));
-  }
-}
-
-/** Fabric forces both keys into `Group.toObject`; the grouping manager is their only writer. */
-function removeGroupEntryFlags(
-  objects: readonly Readonly<Record<string, unknown>>[],
-): void {
-  for (const object of objects) {
-    delete (object as Record<string, unknown>)["subTargetCheck"];
-    delete (object as Record<string, unknown>)["interactive"];
-    const children = object["objects"];
-    if (Array.isArray(children))
-      removeGroupEntryFlags(children.filter(isRecord));
+    const children = record["objects"];
+    if (Array.isArray(children)) stripDerivedState(children.filter(isRecord));
   }
 }
 

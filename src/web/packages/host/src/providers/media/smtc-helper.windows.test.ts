@@ -454,6 +454,19 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
       "$global:smtcProps.Thumbnail = $null",
       "$smtcWithoutArtwork = Get-SessionLine $smtcSession",
       '[Console]::Out.WriteLine("hasArtwork=$($smtcWithArtwork.hasArtwork),$($smtcWithoutArtwork.hasArtwork)")',
+      // One app, two windows: the same AUMID with different media properties
+      // must produce two ids, and the same track must keep its id across polls.
+      "$global:smtcProps = [pscustomobject]@{ Title = 'first'; Artist = 'a'; AlbumTitle = 'b'; Thumbnail = $null }",
+      "$idFirst = (Get-SessionLine $smtcSession).sessionId",
+      "$global:smtcProps = [pscustomobject]@{ Title = 'second'; Artist = 'a'; AlbumTitle = 'b'; Thumbnail = $null }",
+      "$idSecond = (Get-SessionLine $smtcSession).sessionId",
+      "$idFirstAgain = (Get-SessionLine $smtcSession).sessionId",
+      "[Console]::Out.WriteLine(\"sessionIds=$($idFirst -ne $idSecond),$($idSecond -eq $idFirstAgain),$($idFirst.StartsWith('app.exe'))\")",
+      // A session may publish no media properties at all; the id still forms
+      // instead of throwing inside the per-session try.
+      "$global:smtcProps = [pscustomobject]@{ Title = $null; Artist = $null; AlbumTitle = $null; Thumbnail = $null }",
+      "$idEmpty = (Get-SessionLine $smtcSession).sessionId",
+      "[Console]::Out.WriteLine(\"emptyId=$($idEmpty.StartsWith('app.exe:'))\")",
       // No registry entry exists for this AUMID, so the name falls back to
       // the AUMID itself rather than an empty or guessed label.
       '[Console]::Out.WriteLine("appFallback=" + (Get-AppName "yunari-no-such-aumid.exe"))',
@@ -482,6 +495,11 @@ describe.skipIf(!available)("SMTC helper on Windows", () => {
     expect(stdout).toContain('"reason":"exhausted"');
     // A thumbnail present reports true, and an absent one false.
     expect(stdout).toContain("hasArtwork=True,False");
+    // Two tracks of one app get two ids; the same track keeps its id and the
+    // id stays anchored to the AUMID.
+    expect(stdout).toContain("sessionIds=True,True,True");
+    // A session with no media properties still gets an id.
+    expect(stdout).toContain("emptyId=True");
     // An AUMID with no registered DisplayName is its own display name.
     expect(stdout).toContain("appFallback=yunari-no-such-aumid.exe");
   }, 30_000);

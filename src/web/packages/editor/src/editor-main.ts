@@ -81,7 +81,12 @@ async function start(): Promise<void> {
   // read, so a host that went away costs nothing.
   const layout = createShellLayout(root, {
     onModeChange: (next) => {
-      if (next === "editor") void sensors.refresh();
+      if (next !== "editor") return;
+      // The catalogue is read again on the visit, and the mounted column is
+      // re-projected when it answers: the pickers pull descriptors at render
+      // time, so without this the visit that follows a Host-page write would
+      // still offer the list it was built with.
+      void sensors.refresh().then(() => active?.extensions.catalogueChanged());
     },
   });
   const host = layout.hosts.canvas;

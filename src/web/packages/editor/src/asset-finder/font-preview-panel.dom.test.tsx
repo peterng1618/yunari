@@ -137,12 +137,14 @@ function panel(props: {
   readonly presets?: TypeTokens;
   readonly state?: FontPreviewState;
   readonly onChange?: (next: FontPreviewState) => void;
+  readonly favorite?: { readonly on: boolean; readonly toggle: () => void };
 }): React.ReactElement {
   return (
     <FontPreviewPanel
       selected={props.selected}
       presets={props.presets ?? starter}
       state={props.state ?? resting}
+      {...(props.favorite === undefined ? {} : { favorite: props.favorite })}
       onChange={props.onChange ?? (() => {})}
     />
   );
@@ -209,6 +211,33 @@ it("edits the sample line and re-renders the card", () => {
   for (const node of specimenRoles()) {
     expect(node.textContent).toBe("Ship it today");
   }
+});
+
+it("draws the trio's favourite toggle and reports its press", () => {
+  const toggle = vi.fn();
+  mount(panel({ selected: trio, favorite: { on: true, toggle } }));
+
+  const button = document.querySelector<HTMLButtonElement>(
+    "[data-yunari-font-favorite]",
+  );
+  expect(button?.getAttribute("aria-pressed")).toBe("true");
+  expect(button?.getAttribute("aria-label")).toBe(
+    uiCopy.assets.fontPreview.unfavorite,
+  );
+  act(() => {
+    button?.click();
+  });
+  expect(toggle).toHaveBeenCalledOnce();
+});
+
+it("draws no favourite toggle for a family or without a host store", () => {
+  mount(panel({ selected: family }));
+  expect(document.querySelector("[data-yunari-font-favorite]")).toBeNull();
+});
+
+it("draws no favourite toggle without a host favourites port", () => {
+  mount(panel({ selected: trio }));
+  expect(document.querySelector("[data-yunari-font-favorite]")).toBeNull();
 });
 
 it("names the apply scope and each before→after row", () => {

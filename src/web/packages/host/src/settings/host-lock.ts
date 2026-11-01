@@ -119,9 +119,9 @@ export async function acquireHostLock(
     ok: true,
     lock: {
       // Read back before unlinking. Something else can take this file while this
-      // process runs — a fixture that wipes the folder, or a hand deletion — and
-      // then this process's exit must not delete the lock of the host that took
-      // the folder over, which would let a third start against a held folder.
+      // process runs — a hand deletion, or a tool that takes the folder over —
+      // and then this process's exit must not delete the lock of the host that
+      // took the folder over, which would let a third start against a held folder.
       // A file that names nobody is removed too, so a release stays idempotent.
       release: async () => {
         const current = readHeld(await readJson(file));

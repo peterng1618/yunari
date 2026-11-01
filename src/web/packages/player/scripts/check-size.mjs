@@ -55,6 +55,28 @@ async function gzippedKb(files) {
   return total / 1024;
 }
 
+/**
+ * The CSS a built page carries inline.
+ *
+ * The player's own chrome lives in `index.html`'s `<style>` block rather than a
+ * `.css` file, so a budget that counted only emitted stylesheets reported
+ * `0.0 KB` for the styles it exists to bound.
+ */
+async function inlineCssKb(files) {
+  let total = 0;
+
+  for (const file of files.filter((f) => extname(f) === ".html")) {
+    const html = await readFile(file, "utf8");
+    for (const [, style] of html.matchAll(
+      /<style\b[^>]*>([\s\S]*?)<\/style>/gi,
+    )) {
+      total += gzipSync(style).byteLength;
+    }
+  }
+
+  return total / 1024;
+}
+
 async function main() {
   try {
     await stat(DIST);
@@ -70,7 +92,7 @@ async function main() {
   const css = files.filter((f) => extname(f) === ".css");
 
   const jsKb = await gzippedKb(js);
-  const cssKb = await gzippedKb(css);
+  const cssKb = (await gzippedKb(css)) + (await inlineCssKb(files));
 
   const rows = [
     { what: "JS (gzip)", actual: jsKb, budget: JS_GZIP_BUDGET_KB },

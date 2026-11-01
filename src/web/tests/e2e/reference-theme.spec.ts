@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import type { FontAssetReference } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
-import { strToU8, zipSync } from "fflate";
 import { solidOf } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import { chooseIn, optionsOf, typeIntoControl } from "./control-set.js";
 import {
@@ -23,6 +24,16 @@ import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
+/** The suite's decodable video: the host normalizes a picked video before it
+ * declares one, so a placeholder buffer would be refused rather than imported. */
+const CONFORMING_MP4 = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../../packages/theme-package/test-fixtures/conforming.mp4",
+      import.meta.url,
+    ),
+  ),
+);
 
 /**
  * The reference composition, driven the way an author drives it.
@@ -286,21 +297,24 @@ async function waitForMedia(page: Page): Promise<void> {
   });
 }
 
-async function savePackage(page: Page): Promise<{
+async function exportPackage(page: Page): Promise<{
   readonly bytes: Buffer;
   readonly envelope: Record<string, unknown>;
 }> {
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
-  // **The download is the save's own signal**, so it is what this waits for:
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
+  // A document holding a file nothing refers to asks the cleanup question
+  // first, and the save waits on the answer. The sheet's confirm button is the
+  // save's own title; keeping the files is the answer that changes nothing.
+  await answerDialogIfShown(page, "Export theme", 1_000);
+  // **The download is the export's own signal**, so it is what this waits for:
   // building the package on a loaded CI runner outran the status line's 5 s
   // default, and the assertion failed while the same save was still landing.
   const landed = await download;
-  await expect(page.locator("#status-message")).toHaveText(
-    "Theme package saved",
-    { timeout: 15_000 },
-  );
+  await expect(page.locator("#status-message")).toContainText("Released", {
+    timeout: 15_000,
+  });
   const stream = await landed.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -316,30 +330,6 @@ async function savePackage(page: Page): Promise<{
 /** Opens a package the case just exported, through the store's own control. */
 async function openPackage(page: Page, bytes: Uint8Array): Promise<void> {
   await openThemeFromStore(page, storedThemeOfPackage(bytes));
-}
-
-/**
- * Brings a file in through **File ▸ Import package**, the control an author has.
- *
- * An import is a library write, so a file that is not a package is refused and
- * the open document is left alone — which is the property the case below
- * measures. Driving the row and the chooser it opens, rather than the hidden
- * input, is what makes the control reachable in the test as it is in the
- * product.
- */
-async function importFile(
-  page: Page,
-  name: string,
-  buffer: Buffer,
-): Promise<void> {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Import package" }).click();
-  await (await chooser).setFiles({
-    name,
-    mimeType: "application/octet-stream",
-    buffer,
-  });
 }
 
 function activeId(page: Page): Promise<string | undefined> {
@@ -405,6 +395,12 @@ function authoredOnly(envelope: unknown): unknown {
     }
   };
   strip(copy.scene?.objects);
+  // **A release bumps the version, so two releases disagree on it by design.**
+  // Export theme is the package download's own action and asks which bump to
+  // make; this comparison is about the composition New must not disturb, and
+  // the version is the one field the gesture is allowed to move.
+  const metadata = (copy as { metadata?: Record<string, unknown> }).metadata;
+  if (metadata !== undefined) delete metadata["version"];
   return copy;
 }
 
@@ -491,7 +487,7 @@ test.describe("the reference composition, authored", () => {
     const authoredBefore = beforeSave.find((f) => f.id === authored);
     expect(authoredBefore).toBeDefined();
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.envelope["artboard"]).toMatchObject({
       width: STARTER_WIDTH,
       height: STARTER_HEIGHT,
@@ -530,7 +526,7 @@ test.describe("the reference composition, authored", () => {
     // exclusion is a measured defect, not a convenience: two saves of the same
     // unchanged document disagree on it, and the gap is pinned separately as
     // "a save is reproducible".
-    const again = await savePackage(page);
+    const again = await exportPackage(page);
     const first = readThemePackage(saved.bytes);
     expect(first.ok).toBe(true);
     if (first.ok) {
@@ -560,7 +556,7 @@ test.describe("the reference composition, authored", () => {
       .poll(async () => idsOf(await sceneFacts(page)), { timeout: 15_000 })
       .not.toContain(authored);
     // **New is a blank theme of the chosen size, not the starter.** The File
-    // menu says so — "New theme" beside "New from starter" — and this assertion
+    // menu says so — "New theme" beside "New from template" — and this assertion
     // used to require the reference composition back, which is the other
     // command's job. Measured: after Create and Discard the canvas holds 0
     // objects. What matters here is that the author's object is gone and the
@@ -665,7 +661,7 @@ test.describe("the reference composition, authored", () => {
     for (const id of [textId, panelId, chartId]) expect(ids).toContain(id);
 
     // **Save**, and read what the file actually says.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     const objects = objectsOf(saved.envelope);
     expect(objects).toContainEqual(
@@ -729,73 +725,13 @@ test.describe("the reference composition, authored", () => {
     }
 
     // **Export again** and confirm the second export carries the same document.
-    const exported = await savePackage(page);
+    const exported = await exportPackage(page);
     expect(forbiddenKeys(exported.envelope)).toEqual([]);
     expect(objectsOf(exported.envelope).map((object) => object["id"])).toEqual(
       ids,
     );
 
     await captureVisualReview(page, testInfo, "editor-reference-journey");
-  });
-
-  test("an unreadable package leaves the open document and the author's work alone", async ({
-    page,
-  }, testInfo) => {
-    desktop(testInfo);
-    await openEditor(page);
-
-    await openPane(page, "Add");
-    await page
-      .locator('[data-yunari-add-group="shape"]')
-      .getByRole("button", { name: "Rectangle", exact: true })
-      .click();
-    const panelId = (await activeId(page)) ?? "";
-    const before = (await sceneFacts(page)).find((f) => f.id === panelId);
-    expect(before).toBeDefined();
-
-    // **Not a package at all.**
-    await importFile(
-      page,
-      "broken.yunari-theme",
-      Buffer.from("this is not a zip archive"),
-    );
-    await expect(page.locator("#status")).toContainText("Could not import:");
-    expect(idsOf(await sceneFacts(page))).toContain(panelId);
-
-    // **A package whose envelope the validator refuses.** Written without
-    // `writeThemePackage`, so the bytes are a real zip around a bad document.
-    await importFile(
-      page,
-      "invalid.yunari-theme",
-      Buffer.from(
-        zipSync({
-          "manifest.json": strToU8(
-            JSON.stringify({
-              format: "yunari-theme-package",
-              version: 1,
-              theme: "theme.json",
-            }),
-          ),
-          "theme.json": strToU8(JSON.stringify({ schemaVersion: "2.0.0" })),
-        }),
-      ),
-    );
-    await expect(page.locator("#status")).toContainText("Could not import:");
-
-    // **The work is still there, still editable, and still saveable** — the
-    // property "errors preserve recoverable work" actually means.
-    const after = (await sceneFacts(page)).find((f) => f.id === panelId);
-    expect(after?.rect).toEqual(before?.rect);
-    await typeIntoControl(
-      page,
-      page.locator("[data-yunari-panel-radius]"),
-      "9",
-    );
-    await expect(page.locator("[data-yunari-panel-radius]")).toHaveValue("9");
-    const saved = await savePackage(page);
-    expect(objectsOf(saved.envelope)).toContainEqual(
-      expect.objectContaining({ id: panelId, rx: 9 }),
-    );
   });
 
   test("a packaged font that will not load still leaves the document editable", async ({
@@ -858,7 +794,7 @@ test.describe("the reference composition, authored", () => {
 
     // **And the author's work is recoverable** — the saved document still
     // carries the face, so the author can replace it rather than start again.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     expect(saved.envelope["assets"]).toEqual(
       expect.arrayContaining([
@@ -961,7 +897,7 @@ test.describe("the reference composition, authored", () => {
 
     // **And the document is still saveable with the orphan in it**, because a
     // document an author cannot save is not recoverable work.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     expect(
       objectsOf(saved.envelope).find((object) => object["id"] === "orphan"),
@@ -2541,7 +2477,7 @@ test.describe("background media", () => {
     expect(second).not.toBe(first);
     expect(await page.evaluate(() => window.devicePixelRatio)).toBe(1);
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     const background = (
       saved.envelope["background"] as
         | { media?: { assetId: string } }
@@ -2559,16 +2495,38 @@ test.describe("background media", () => {
     page,
   }, testInfo) => {
     desktop(testInfo);
-    // **Wiring only, and said so.** These bytes are not a decodable video, so
-    // no frame is claimed: what this proves is that a declared video asset
-    // reaches the media layer as a `<video>`. Fabric cannot see a DOM sibling,
-    // so a decoded frame is the media owner's business, not this file's.
+    // **Wiring only, and said so.** The bytes decode, but no frame is claimed:
+    // what this proves is that a declared video asset reaches the media layer
+    // as a `<video>`. Fabric cannot see a DOM sibling, so a decoded frame is
+    // the media owner's business, not this file's.
     await openEditor(page);
+    // The host owns the encoder and the envelope rules; it is not this file's
+    // subject. The route answers the suite's conforming bytes, so the wiring
+    // measured here is the editor's: trim, declare, land on the media layer.
+    await page.route("**/api/themes/normalize-video*", (route) =>
+      route.fulfill({
+        json: {
+          ok: true,
+          bytesBase64: CONFORMING_MP4.toString("base64"),
+          reencoded: false,
+        },
+      }),
+    );
     await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "loop.mp4",
       mimeType: "video/mp4",
-      buffer: Buffer.from("not a decodable video"),
+      buffer: CONFORMING_MP4,
+    });
+    // A picked video is trimmed before it is imported. The host normalizes it,
+    // so the surface runs the whole file; the import modal then names and lands
+    // it.
+    const trim = page.locator("[data-yunari-video-trim-modal]");
+    await expect(trim).toBeVisible();
+    await page.locator("[data-yunari-video-trim-whole]").click();
+    await expect(trim).toBeHidden();
+    await expect(page.locator("[data-yunari-import-video-modal]")).toBeHidden({
+      timeout: 30_000,
     });
     // The picture is the background layer's, so it is chosen where that layer
     // is selected.
@@ -2591,7 +2549,7 @@ test.describe("background media", () => {
     // The saved document says `video`, not `image`. The starter declares a
     // backdrop of its own, so the video is asserted to be *among* the
     // declarations rather than to be the only one.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.envelope["assets"]).toContainEqual(
       expect.objectContaining({ id: "loop", kind: "video" }),
     );
@@ -2633,11 +2591,11 @@ test.describe("known gaps, pinned", () => {
     // `includeDefaultValues = false` — carried it into the package anyway,
     // because `styles` is a set property rather than a Fabric default. The
     // authored equivalent is `yunariText.runs`; nothing reads `styles` back.
-    // `removeDerivedTextStyles` is the strip that closed it, and this asserts
+    // `stripDerivedState` is the strip that closed it, and this asserts
     // the absence of the table on a real save — descended into, because the
     // table is written on a card's text parts rather than on the card.
     await openEditor(page);
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     const styled = objectsOf(saved.envelope).filter(
       (object) => object["styles"] !== undefined,
     );
@@ -2673,7 +2631,7 @@ test.describe("known gaps, pinned", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
   });
 });

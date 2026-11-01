@@ -25,6 +25,12 @@ blob-report/
 # The installability proof's host store: its own library copy, on its own port,
 # so a worker registered against it cannot control the shared host (vg-577).
 .e2e-host-app-pwa/
+# The paired-display proof's second host: its own lock and settings, serving the
+# seeded library read-only, because two hosts on one app folder is a held folder.
+.e2e-host-app-media/
+# The host-move proof's store: its own library, on its own port, so a stream
+# can be closed by a rebind without touching another proof's host.
+.e2e-host-move-app/
 # Downloaded e2e font bytes; the licence is declared in the fixture envelope.
 .e2e-font-cache/
 # Staged third-party release binaries (LibreHardwareMonitor). Provenance is

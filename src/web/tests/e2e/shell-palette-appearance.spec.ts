@@ -9,7 +9,6 @@ import {
 } from "./shell-palette.js";
 import {
   backgroundAlpha,
-  CHROME_NOT_YET_OPAQUE,
   openEditor,
   shellColours,
 } from "./shell-palette-readers.js";
@@ -169,21 +168,17 @@ test.describe("shell palettes", () => {
     const failures: string[] = [];
     for (const palette of PALETTES) {
       await choosePalette(page, palette);
-      const exempt = CHROME_NOT_YET_OPAQUE.has(palette);
       const fill = await declaredFill();
       const declared = fill === null ? null : backgroundAlpha(fill);
 
-      // The exemption is a value, not a direction: a palette still listed whose
-      // fill now declares opaque is a stale row, and one that declares less than
-      // opaque without being listed is a new gap. Either way the set and the
-      // declarations disagree.
-      if (declared === null || exempt !== declared < 1) {
+      // Every palette's chrome is opaque. A palette whose `--panel` keeps any
+      // alpha composites against its own ground, which is the one thing the
+      // flat treatment forbids.
+      if (declared === null || declared < 1) {
         failures.push(
           `${palette}: its \`--panel\` declares alpha ${
             declared ?? "a form this assertion cannot read"
-          }, and CHROME_NOT_YET_OPAQUE ${
-            exempt ? "lists it" : "does not list it"
-          } — the exemption and the declaration disagree (vg-310)`,
+          }, so its chrome composites against the ground`,
         );
       }
 
