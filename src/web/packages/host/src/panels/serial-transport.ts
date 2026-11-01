@@ -334,8 +334,10 @@ class OpenSerialPort implements SerialTransport {
     this.closed = true;
     this.discarding = false;
     this.port.off("data", this.onData);
-    this.port.off("error", this.onPortError);
     this.port.off("close", this.onPortClosed);
+    // The error listener stays: Node throws on an `error` with no listener,
+    // and a write that was already inside the port when close began can still
+    // settle as an error after this returns. It would then crash the host.
     if (this.quiet !== undefined) {
       clearTimeout(this.quiet);
       this.quiet = undefined;

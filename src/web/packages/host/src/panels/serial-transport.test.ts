@@ -1,6 +1,27 @@
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
+import { createRequire } from "node:module";
+import { SerialPort } from "serialport";
 import { describe, expect, it } from "vitest";
 import { type SerialPortLike, transportOver } from "./serial-transport.js";
+
+/**
+ * `serialport`'s own mock binding, for the close-racing-a-write case.
+ *
+ * Its package `exports` map carries no `types` condition, so TypeScript cannot
+ * see the declarations that ship beside it; the shape used here is asserted
+ * locally instead.
+ */
+const { MockBinding } = createRequire(import.meta.url)(
+  "@serialport/binding-mock",
+) as {
+  readonly MockBinding: {
+    reset(): void;
+    createPort(path: string, options?: { readonly echo?: boolean }): void;
+  };
+};
+
+/** What `SerialPort`'s options call the hardware binding. */
+type PortBinding = ConstructorParameters<typeof SerialPort>[0]["binding"];
 
 /** A `SerialPort`-shaped emitter: enough for the transport's read seam. */
 class FakePort extends EventEmitter implements SerialPortLike {
@@ -319,5 +340,43 @@ describe("the serial transport's write", () => {
       code: "ERR_SERIAL_PORT_CLOSED",
     });
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("settles a write already inside the port when close begins, rather than hanging", async () => {
+    // `serialport`'s own mock binding, so this races the real stream's close
+    // against a write in flight. The fake port above cannot show it: its writes
+    // settle in the same tick they start, before a close can overtake them.
+    MockBinding.reset();
+    const path = "/dev/yunari-write-race";
+    MockBinding.createPort(path, { echo: false });
+    const port = new SerialPort({
+      binding: MockBinding as PortBinding,
+      path,
+      baudRate: 115_200,
+      autoOpen: true,
+    });
+    await once(port, "open");
+    const transport = transportOver(port as unknown as SerialPortLike);
+
+    // The promise is settled either way, so a rejection is not unhandled while
+    // `close` is awaited.
+    const writing = transport.write(Uint8Array.of(1)).then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    await transport.close();
+
+    // The write was already handed to the binding when close began. The stream
+    // cancels it rather than queueing it for an open that never comes, so the
+    // caller gets a rejection and not a write that never settles.
+    expect(await writing).toBeInstanceOf(Error);
+
+    // The stream surfaces the same failure as an `error` event on the port. Node
+    // throws when that event has no listener, so the close must leave one
+    // attached until the pending write has settled.
+    expect(
+      port.listenerCount("error"),
+      "a write that fails after close would crash the host",
+    ).toBeGreaterThan(0);
   });
 });
