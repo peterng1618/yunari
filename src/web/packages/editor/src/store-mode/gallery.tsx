@@ -102,7 +102,11 @@ export function Gallery(props: {
  * One item: its picture, its name, its byline and its facts band.
  *
  * The bands are fixed exactly — the picture at `2/1` with `object-fit:
- * cover`, the name, the mono byline, and the 26px band. **The band's left slot
+ * contain`, the name, the mono byline, and the 26px band. **The picture is
+ * contained, not cropped**: a card advertises the theme's own picture, and a
+ * cropped one shows a composition the author never drew. The band is the same
+ * for every card, so the grid keeps its shape and the item's ratio letterboxes
+ * inside it. **The band's left slot
  * has one occupant per half, and they are exclusive**: an online item draws the
  * kind badge and the download count, and a library item draws the origin pill
  * where the host holds a record of where the theme came from.
@@ -387,7 +391,7 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
         <img
           src={picture.url}
           alt=""
-          className="size-full object-cover"
+          className="size-full object-contain"
           onError={() => setBroken(picture.key)}
         />
       ) : null}

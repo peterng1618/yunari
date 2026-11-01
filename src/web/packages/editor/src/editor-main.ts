@@ -394,7 +394,9 @@ async function start(): Promise<void> {
       capture: () =>
         captureCanvas(
           shell.editor.canvas,
-          shell.backdrop(),
+          // A card is a picture of the theme, so the background is captured
+          // theme-fitted rather than as this preview display draws it.
+          shell.backdrop("theme"),
           undefined,
           // The bridge's own picture is a read of the document too: the
           // entered-group dim is lifted for it (`vg-527`).

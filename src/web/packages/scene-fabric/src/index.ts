@@ -21,6 +21,7 @@ export {
   fillArtboardPaint,
 } from "./artboard-paint.js";
 export {
+  type BackdropFit,
   type BackgroundMediaHandle,
   type BackgroundMediaOptions,
   type BackgroundMediaSource,
