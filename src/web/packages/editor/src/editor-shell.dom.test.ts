@@ -1123,6 +1123,21 @@ describe("the circle theme preview", () => {
     shell.destroy();
   });
 
+  it("restores the rect clip and the disc guide when the circle lens leaves", async () => {
+    const host = stageHost();
+    const shell = await mount({ host, artboard: CIRCLE });
+    shell.viewport.showDisplay("Circle");
+    expect(shell.editor.canvas.clipPath).toBeInstanceOf(Circle);
+
+    shell.viewport.showDisplay("16:9");
+
+    expect(shell.editor.canvas.clipPath).toBeInstanceOf(Rect);
+    expect(
+      host.querySelector<HTMLElement>("[data-yunari-theme-disc]")?.hidden,
+    ).toBe(false);
+    shell.destroy();
+  });
+
   it("keeps the rect clip and outlines the disc under a rect lens", async () => {
     const host = stageHost();
     const shell = await mount({ host, artboard: CIRCLE });

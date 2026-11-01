@@ -2,6 +2,7 @@ import {
   type Artboard,
   type AssetReference,
   type Background,
+  cropsToDisc,
   cssArtboardPaint,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
@@ -248,6 +249,26 @@ function artboardClipKey(artboard: Artboard, crop: boolean): string {
   return `${artboard.width}x${artboard.height}:${crop ? "circle" : "rect"}`;
 }
 
+/** Installs the boundary the canvas is cut to, if it is not already there.
+ * Returns whether it wrote, so a caller that skips the full paint pass can
+ * request its own render. The class is part of the guard as well as the key: an
+ * undo revives the scene with whatever clip it carried. */
+function syncClip(
+  canvas: Canvas,
+  artboard: Artboard,
+  crop: boolean,
+  memo: PaintMemo,
+): boolean {
+  const key = artboardClipKey(artboard, crop);
+  const Clip = crop ? Circle : Rect;
+  if (key === memo.clip && canvas.clipPath instanceof Clip) {
+    return false;
+  }
+  memo.clip = key;
+  canvas.clipPath = artboardClip(artboard, crop);
+  return true;
+}
+
 function applyArtboardPaint(
   editor: EditorInteraction,
   artboard: Artboard,
@@ -289,15 +310,8 @@ function applyArtboardPaint(
   // Same shape as the plate's guard: rebuilt when the board is resized, and
   // whenever it is missing, which is what `loadFromJSON` — and so every undo —
   // leaves behind. `reviveScene` restores it too, so this is the belt to that
-  // braces rather than the only copy of the rule. The class is checked as well
-  // as the key, because a circle lens changes the boundary without changing the
-  // board's size.
-  const clipKey = artboardClipKey(artboard, crop);
-  const Clip = crop ? Circle : Rect;
-  if (clipKey !== memo.clip || !(editor.canvas.clipPath instanceof Clip)) {
-    memo.clip = clipKey;
-    editor.canvas.clipPath = artboardClip(artboard, crop);
-  }
+  // braces rather than the only copy of the rule.
+  syncClip(editor.canvas, artboard, crop, memo);
   // A revived envelope from before the camera carried the artboard paint here;
   // left set it would cover the pasteboard again.
   editor.canvas.backgroundColor = "";
@@ -546,17 +560,14 @@ export async function mountEditorShell({
     // under the media and re-resolving it there would be a second owner
     // of the paint. Every paint pass goes through here so it cannot go stale.
     let artboardPaint: unknown;
-    /** Whether the canvas crops to the artboard's disc: a circle theme under a
-     *  circle lens. Every other pairing keeps the rect clip, because the corners
-     *  are authored and a rect preview has to show them. */
-    const cropToDisc = (): boolean => {
-      const id = editor.viewport.display();
-      return (
-        currentArtboard.shape === "circle" &&
-        id !== undefined &&
-        resolveLens(id)?.shape === "circle"
+    /** Whether the canvas crops to the artboard's disc. The rule itself belongs
+     *  to the vocabulary owner, so the clip and the preview frames that depend
+     *  on it cannot drift apart. */
+    const cropToDisc = (): boolean =>
+      cropsToDisc(
+        currentArtboard.shape ?? "rect",
+        editor.viewport.displayShape() ?? "rect",
       );
-    };
     /** The display's screen, painted from the board's own paint. Declared before
      *  the paint pass so the letterbox and the plate cannot drift apart, and
      *  created below once the container is in place. */
@@ -715,8 +726,10 @@ export async function mountEditorShell({
 
       // The guide marks the artboard's real bounds when the lens and the board
       // disagree; when they agree the two frames would coincide, so it is noise.
-      // Geometry is written before the visibility check, so a hidden guide is
-      // never left holding a stale frame for the next reveal.
+      // A crop disc is the third case: it already states the boundary, so the
+      // rect frame would only draw it twice. Geometry is written before the
+      // visibility check, so a hidden guide is never left holding a stale frame
+      // for the next reveal.
       const board = editor.viewport.artboardScreenRect();
       const side = Math.min(board.width, board.height);
       guide.style.left = `${board.left}px`;
@@ -751,10 +764,7 @@ export async function mountEditorShell({
 
       // A lens change is a clip change, and the camera does not repaint the
       // artboard; re-apply it here or the mount's rect outlives the lens.
-      const clipKey = artboardClipKey(currentArtboard, crop);
-      if (paintMemo.clip !== clipKey) {
-        paintMemo.clip = clipKey;
-        editor.canvas.clipPath = artboardClip(currentArtboard, crop);
+      if (syncClip(editor.canvas, currentArtboard, crop, paintMemo)) {
         editor.canvas.requestRenderAll();
       }
     };

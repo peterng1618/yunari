@@ -3,6 +3,7 @@ import {
   artboardTransformShape,
   type ContentFit,
   computeArtboardTransform,
+  cropsToDisc,
   documentToViewport,
   isFullyVisible,
   toCssTransform,
@@ -374,6 +375,15 @@ describe("artboardTransformShape", () => {
     expect(artboardTransformShape("rect", "circle")).toBe("circle");
     expect(artboardTransformShape(undefined, "rect")).toBe("rect");
     expect(artboardTransformShape(undefined, "circle")).toBe("circle");
+  });
+});
+
+describe("cropsToDisc", () => {
+  it("crops only when both the theme and the display are circles", () => {
+    expect(cropsToDisc("circle", "circle")).toBe(true);
+    expect(cropsToDisc("circle", "rect")).toBe(false);
+    expect(cropsToDisc("rect", "circle")).toBe(false);
+    expect(cropsToDisc("rect", "rect")).toBe(false);
   });
 });
 

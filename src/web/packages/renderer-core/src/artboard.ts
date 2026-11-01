@@ -21,6 +21,23 @@ export function artboardTransformShape(
   return themeShape === "circle" ? "rect" : displayShape;
 }
 
+/**
+ * Whether the canvas crops to the artboard's disc: a circle theme under a
+ * circle lens.
+ *
+ * **The one owner of that rule.** The editor's clip boundary and the frame it
+ * draws under a rect lens both ask this, so the clip and the guide cannot
+ * disagree. A circle theme's artboard keeps its corners — they are authored,
+ * and a rect preview has to show them — so any other pairing keeps the rect
+ * boundary.
+ */
+export function cropsToDisc(
+  themeShape: ArtboardShape,
+  displayShape: ArtboardShape,
+): boolean {
+  return themeShape === "circle" && displayShape === "circle";
+}
+
 /** How a display presents the composition: its glass and its mounting angle. */
 export interface DisplayPresentation {
   readonly shape: DisplayShape;

@@ -1,6 +1,7 @@
 import {
   type ArtboardShape,
   artboardTransformShape,
+  cropsToDisc,
 } from "@yunari/renderer-core";
 import { type Canvas, Point } from "fabric/es";
 import {
@@ -225,7 +226,7 @@ export function createViewportManager({
     // A circle theme's artboard is the disc's own canvas, so under a circle
     // lens the artboard *is* the screen. Growing a bounding square to the
     // diagonal would draw a window larger than the glass the board fills.
-    if (active.shape === "circle" && artboard().shape === "circle") {
+    if (cropsToDisc(artboard().shape ?? "rect", active.shape)) {
       return artboardScreenRect();
     }
     const box = lensBox(active, artboard());

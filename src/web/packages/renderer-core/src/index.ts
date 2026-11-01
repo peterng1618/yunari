@@ -16,6 +16,7 @@ export type {
 export {
   artboardTransformShape,
   computeArtboardTransform,
+  cropsToDisc,
   documentToViewport,
   isFullyVisible,
   rotationAllowed,
