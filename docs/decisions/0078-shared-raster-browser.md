@@ -5,6 +5,7 @@
 - **Paths:** `src/web/packages/host/src/panels/panel-raster-browser.ts`
   `src/web/packages/host/src/panels/panel-raster.ts`
   `src/web/packages/host/src/panels/panel-manager.ts`
+  `src/web/packages/host/src/panels/panel-manager.fixtures.ts`
 
 ## Problem
 

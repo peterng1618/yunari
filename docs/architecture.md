@@ -65,8 +65,11 @@ Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
   `panel-families.ts` only gathers those rows and resolves USB IDs; managers and
   UI never learn packet formats.
 - `panel-manager.ts` owns one serialized runner per display. It opens attached
-  hardware, coordinates start/stop/refresh, and owns cadence; `panel-raster.ts`
-  captures the host's own player through Chromium.
+  hardware, coordinates start/stop/refresh, and owns cadence.
+- One `panel-raster-browser.ts` Chromium runtime serves every panel: one profile,
+  one target per display, each target its own headless window. `panel-raster.ts`
+  captures one display's page through that target. The browser stops after the
+  last panel closes.
 - Streaming panels receive frames; storage panels write pixels to the device.
   The driver declares the minimum interval so a storage write does not become a
   per-second flash rewrite. Video-capable adapters own conversion and authored
