@@ -829,6 +829,27 @@ describe("a scene that already exists", () => {
     expect(adapter.objectFor("r")).toBe(existing);
     expect(absoluteCentre(existing)).toEqual({ x: 45, y: 45 });
   });
+
+  it("adopts an object inside an existing group by id", () => {
+    const canvas = new StaticCanvas(undefined, { width: 1920, height: 1080 });
+    const inner = new Rect({ width: 10, height: 10 });
+    const group = new Group([inner]);
+
+    inner.set("id", "r");
+    canvas.add(group);
+    canvases.push(canvas);
+
+    const adapter = createSceneAdapter({ canvas });
+    adapters.push(adapter);
+
+    adapter.apply(
+      plan([rectangle("r", { x: 40, y: 40, width: 10, height: 10 })]),
+    );
+
+    expect(adapter.objectFor("r")).toBe(inner);
+    expect(canvas.getObjects()).toEqual([group]);
+    expect(group.getObjects()).toEqual([inner]);
+  });
 });
 
 describe("a font arriving after the first paint", () => {

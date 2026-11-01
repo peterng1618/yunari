@@ -6,6 +6,7 @@ import {
 import {
   isLocked,
   SCENE_PERSISTED_PROPERTIES,
+  visitSceneObjects,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
 import {
@@ -65,14 +66,10 @@ function takenIds(
   bindings: ClipboardBindings | undefined,
 ): string[] {
   const ids: string[] = [];
-  const visit = (objects: readonly FabricObject[]): void => {
-    for (const object of objects) {
-      const id = object.get("id");
-      if (typeof id === "string") ids.push(id);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(canvas.getObjects());
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const id = object.get("id");
+    if (typeof id === "string") ids.push(id);
+  });
   for (const readings of Object.values(bindings?.read() ?? {})) {
     for (const binding of readings) ids.push(binding.id);
   }

@@ -10,6 +10,7 @@ import {
   Triangle,
 } from "fabric/es";
 import type { MediaBox } from "./background-media.js";
+import { visitSceneObjects } from "./scene-objects.js";
 import { Arc, sectorPath, Wedge } from "./sector-object.js";
 
 /**
@@ -350,10 +351,10 @@ export function createGlass(options: GlassOptions): GlassHandle {
     // it here would put a second owner on that list.
     const live = new Set<FabricObject>();
     const groups = new Set<Group>();
-    for (const object of walk(canvas.getObjects())) {
+    visitSceneObjects(canvas.getObjects(), (object) => {
       if (object instanceof Group) groups.add(object);
       if (glassTreatment(object) !== undefined) live.add(object);
-    }
+    });
     // A group is a collection too, and its own membership events never reach
     // the canvas. Grouping, ungrouping and a delete inside a group are all
     // invisible without this, and each leaves a panel sampling either a cache
@@ -998,13 +999,6 @@ function corner(
   from: number,
 ): void {
   ctx.ellipse(centreX, centreY, rx, ry, 0, from, from + Math.PI / 2, false);
-}
-
-function* walk(objects: readonly FabricObject[]): Generator<FabricObject> {
-  for (const object of objects) {
-    yield object;
-    if (object instanceof Group) yield* walk(object.getObjects());
-  }
 }
 
 /** A revived object carries the persisted id; a plan-built one need not. */

@@ -9,14 +9,10 @@ import {
 } from "@yunari/renderer-core";
 import {
   objectAssetReference,
+  sceneObjects,
   setObjectAssetReference,
 } from "@yunari/scene-fabric";
-import {
-  FabricImage,
-  type FabricObject,
-  Group,
-  type StaticCanvas,
-} from "fabric/es";
+import { FabricImage, type FabricObject, type StaticCanvas } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { boundedImageElement } from "../image-manager/index.js";
@@ -684,30 +680,6 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(hash)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-/**
- * Every object the scene holds, at any depth, roots first.
- *
- * The one walk a "does the scene still hold this" question reads. Depth is the
- * whole point: `canvas.getObjects()` is the root only, so an image the author
- * had grouped reported itself unused and its declaration was removed out from
- * under a live object, and a binding keyed by an object inside a card read as
- * dangling and was stripped on the first save. Both are the same mistake, so
- * both callers spend this walk rather than spelling it again.
- */
-export function sceneObjects(
-  objects: readonly FabricObject[],
-): readonly FabricObject[] {
-  const found: FabricObject[] = [];
-  const visit = (list: readonly FabricObject[]): void => {
-    for (const object of list) {
-      found.push(object);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(objects);
-  return found;
 }
 
 /**

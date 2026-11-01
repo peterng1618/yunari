@@ -15,7 +15,6 @@ import type {
 import { emptySampleSource, resolveTextSegments } from "@yunari/renderer-core";
 import {
   FabricText,
-  Group,
   IText,
   Rect,
   type StaticCanvas,
@@ -34,6 +33,7 @@ import {
 } from "./authored-box.js";
 import { paintFor } from "./paint.js";
 import { placementFor } from "./placement.js";
+import { visitSceneObjects } from "./scene-objects.js";
 import { textShapeFor } from "./text-runs.js";
 
 /**
@@ -451,74 +451,70 @@ export function refreshBoundText(
   artboardHeight?: number,
 ): void {
   let changed = false;
-  const refresh = (objects: readonly object[]): void => {
-    for (const object of objects) {
-      if (isTextObject(object)) {
-        const id = object.get("id");
-        const authored = object.get(YUNARI_TEXT_PROPERTY);
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    if (isTextObject(object)) {
+      const id = object.get("id");
+      const authored = object.get(YUNARI_TEXT_PROPERTY);
+      if (
+        typeof id === "string" &&
+        isTextContent(authored) &&
+        bindings[id] !== undefined &&
+        // The same reason as the authoring pass: the object the author is
+        // typing into is not repainted from a sample.
+        !isEditing(object)
+      ) {
+        const segments = resolveTextSegments(
+          id,
+          authored.runs,
+          bindings[id],
+          {
+            source,
+            ...(units === undefined ? {} : { units }),
+            ...(themeLanguage === undefined ? {} : { themeLanguage }),
+            ...(descriptors === undefined ? {} : { descriptors }),
+            ...(artboardHeight === undefined ? {} : { artboardHeight }),
+          },
+          globals ?? {},
+          [],
+        );
+        const layoutState = runtimeLayout(object, authored);
+        const shape = textShapeFor(segments, {}, (value) =>
+          object.graphemeSplit(value),
+        );
+        const paint = runTypePaint(segments[0]?.style);
+        // **Only a change to what it paints repaints.** A clock sampled once a
+        // second paints its seconds once a second, but a minutes or days clock
+        // paints only when its own text moves — the sample cadence is the
+        // host's, not the author's. The run's type is compared too: a role
+        // default can change while the string stays the same.
         if (
-          typeof id === "string" &&
-          isTextContent(authored) &&
-          bindings[id] !== undefined &&
-          // The same reason as the authoring pass: the object the author is
-          // typing into is not repainted from a sample.
-          !isEditing(object)
+          object.text === shape.text &&
+          (authored.align === undefined ||
+            object.textAlign === authored.align) &&
+          Object.entries(paint).every(
+            ([key, value]) =>
+              (object as unknown as Record<string, unknown>)[key] === value,
+          )
         ) {
-          const segments = resolveTextSegments(
-            id,
-            authored.runs,
-            bindings[id],
-            {
-              source,
-              ...(units === undefined ? {} : { units }),
-              ...(themeLanguage === undefined ? {} : { themeLanguage }),
-              ...(descriptors === undefined ? {} : { descriptors }),
-              ...(artboardHeight === undefined ? {} : { artboardHeight }),
-            },
-            globals ?? {},
-            [],
-          );
-          const layoutState = runtimeLayout(object, authored);
-          const shape = textShapeFor(segments, {}, (value) =>
-            object.graphemeSplit(value),
-          );
-          const paint = runTypePaint(segments[0]?.style);
-          // **Only a change to what it paints repaints.** A clock sampled once a
-          // second paints its seconds once a second, but a minutes or days clock
-          // paints only when its own text moves — the sample cadence is the
-          // host's, not the author's. The run's type is compared too: a role
-          // default can change while the string stays the same.
-          if (
-            object.text === shape.text &&
-            (authored.align === undefined ||
-              object.textAlign === authored.align) &&
-            Object.entries(paint).every(
-              ([key, value]) =>
-                (object as unknown as Record<string, unknown>)[key] === value,
-            )
-          ) {
-            continue;
-          }
-          changed = true;
-          guardBoxWidth(object);
-          // Measured by the `set` itself, for the reason given in
-          // `applyAuthoredText` above.
-          object.set({
-            ...paint,
-            text: shape.text,
-            styles: shape.styles,
-            ...(authored.align === undefined
-              ? {}
-              : { textAlign: authored.align }),
-          });
-          refreshLayout(object, segments, layoutState);
+          return;
         }
+        changed = true;
+        guardBoxWidth(object);
+        // Measured by the `set` itself, for the reason given in
+        // `applyAuthoredText` above.
+        object.set({
+          ...paint,
+          text: shape.text,
+          styles: shape.styles,
+          ...(authored.align === undefined
+            ? {}
+            : { textAlign: authored.align }),
+        });
+        refreshLayout(object, segments, layoutState);
       }
-      if (object instanceof Group) refresh(object.getObjects());
     }
-  };
+  });
 
-  refresh(canvas.getObjects());
   if (changed) canvas.requestRenderAll();
 }
 

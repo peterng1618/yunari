@@ -6,8 +6,8 @@ import {
   type WidgetProvenance,
   YUNARI_NAME_PROPERTY,
 } from "@yunari/renderer-core";
-import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
-import { type FabricObject, Group, util } from "fabric/es";
+import { visitSceneObjects, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
+import { type FabricObject, util } from "fabric/es";
 import {
   resolveCardToken,
   type TokenSubstitution,
@@ -605,14 +605,10 @@ function sceneIds(canvas: {
   getObjects(): readonly FabricObject[];
 }): Set<string> {
   const ids = new Set<string>();
-  const visit = (objects: readonly FabricObject[]): void => {
-    for (const object of objects) {
-      const id = object.get("id");
-      if (typeof id === "string") ids.add(id);
-      if (object instanceof Group) visit(object.getObjects());
-    }
-  };
-  visit(canvas.getObjects());
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const id = object.get("id");
+    if (typeof id === "string") ids.add(id);
+  });
   return ids;
 }
 

@@ -19,6 +19,7 @@ import {
 import { isTextObject, updateText } from "./fabric-text.js";
 import { drawnBox, withinGroup } from "./placement.js";
 import { clampRenderScale, DEFAULT_RENDER_SCALE } from "./render-scale.js";
+import { visitSceneObjects } from "./scene-objects.js";
 
 /**
  * Reconcile a pure `ScenePlan` onto existing Fabric objects. Revived scene
@@ -300,21 +301,13 @@ function adoptExisting(
   canvas: StaticCanvas,
   objects: Map<string, FabricObject>,
 ): void {
-  const visit = (list: readonly FabricObject[]): void => {
-    for (const object of list) {
-      const id = object.get("id");
+  visitSceneObjects(canvas.getObjects(), (object) => {
+    const id = object.get("id");
 
-      if (typeof id === "string" && id.length > 0) {
-        objects.set(id, object);
-      }
-
-      if (object instanceof Group) {
-        visit(object.getObjects());
-      }
+    if (typeof id === "string" && id.length > 0) {
+      objects.set(id, object);
     }
-  };
-
-  visit(canvas.getObjects());
+  });
 }
 
 /** Remeasure canvas text when existing or later-loaded fonts finish loading. */

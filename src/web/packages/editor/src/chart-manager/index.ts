@@ -15,6 +15,7 @@ import {
 import {
   chartAnimationFor,
   type SceneAdapter,
+  visitSceneObjects,
   YunariChart,
 } from "@yunari/scene-fabric";
 import { type FabricObject, Group } from "fabric/es";
@@ -346,7 +347,7 @@ export class ChartManager {
     // `getObjects()` — it has no `objects` property — so reading
     // `object.get("objects")` never descended into one and every chart inside
     // a card kept the token its whole group had just lost.
-    const visit = (object: FabricObject): void => {
+    visitSceneObjects(this.#editor.canvas.getObjects(), (object) => {
       if (object instanceof YunariChart) {
         const settings = reassignChartPaintReferences(
           object.settings,
@@ -360,9 +361,7 @@ export class ChartManager {
             this.#applyChart(id, object, { replace: true });
         }
       }
-      if (object instanceof Group) object.getObjects().forEach(visit);
-    };
-    this.#editor.canvas.getObjects().forEach(visit);
+    });
     this.#editor.canvas.requestRenderAll();
     // The reassignment runs with the palette's own fan-out, which re-renders
     // the column a moment later; this is for the chart the author is looking
@@ -528,46 +527,41 @@ export class ChartManager {
     // no longer uses it for placement; it is the empty-chart fallback,
     // and value charts read their latest sample instead.
     const nowMs = Date.now();
-    const visit = (objects: readonly object[]): void => {
-      for (const object of objects) {
-        if (object instanceof YunariChart) {
-          const id = object.get("id");
-          if (typeof id !== "string") continue;
-          // A source that throws costs that chart, the way a throwing option
-          // does: the draw is still attempted, so `#applyChart` reports it.
-          let reading: string | undefined;
-          try {
-            const content = {
-              family: object.family,
-              settings: object.settings,
-            } as ChartContent;
-            reading = chartReadingSignature(
-              content,
-              this.#bindings[id] ?? [],
-              this.#source,
-              this.#globals?.palette,
-              drawnEdgePxOf(object).drawnEdgePx,
-            );
-          } catch {
-            reading = undefined;
-          }
-          if (
-            force ||
-            reading === undefined ||
-            this.#drawnReading.get(id) !== reading
-          ) {
-            this.#applyChart(id, object, {
-              ...(reading === undefined ? {} : { reading }),
-              nowMs,
-            });
-            drawn = true;
-          }
-        } else if (object instanceof Group) {
-          visit(object.getObjects());
+    visitSceneObjects(this.#editor.canvas.getObjects(), (object) => {
+      if (object instanceof YunariChart) {
+        const id = object.get("id");
+        if (typeof id !== "string") return;
+        // A source that throws costs that chart, the way a throwing option
+        // does: the draw is still attempted, so `#applyChart` reports it.
+        let reading: string | undefined;
+        try {
+          const content = {
+            family: object.family,
+            settings: object.settings,
+          } as ChartContent;
+          reading = chartReadingSignature(
+            content,
+            this.#bindings[id] ?? [],
+            this.#source,
+            this.#globals?.palette,
+            drawnEdgePxOf(object).drawnEdgePx,
+          );
+        } catch {
+          reading = undefined;
+        }
+        if (
+          force ||
+          reading === undefined ||
+          this.#drawnReading.get(id) !== reading
+        ) {
+          this.#applyChart(id, object, {
+            ...(reading === undefined ? {} : { reading }),
+            nowMs,
+          });
+          drawn = true;
         }
       }
-    };
-    visit(this.#editor.canvas.getObjects());
+    });
     if (drawn) this.#editor.canvas.requestRenderAll();
   }
 
