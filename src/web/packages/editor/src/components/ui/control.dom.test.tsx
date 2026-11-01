@@ -150,6 +150,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     'a hidden `type="file"` input, driven by its own toolbar button',
   ],
   [
+    "editor-shell/editor-theme-settings.tsx",
+    "a package name read only by the Save draft and Export buttons, plus a file input for import: neither commits on Enter or blur, so there is no draft to compose or cancel",
+  ],
+  [
     "editor-shell/settings.tsx",
     "the credential field commits through its own Save button and is cleared there, never on blur or Enter",
   ],
