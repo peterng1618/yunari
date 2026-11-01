@@ -1,6 +1,7 @@
 // Ported: fork 9efdd78a src/editor/snapping-manager/scaling/scale-snap-candidates.ts
 /* eslint-disable no-use-before-define -- the exported function sits above its internal checks. */
 import type { ObjectBounds } from "../bounds.js";
+import { createSnapSourceLines } from "../protocol/candidates.js";
 import type { ScaleSceneAxis, ScaleSceneEdge } from "./scale-projection.js";
 import type {
   ScaleSnapCandidateCategory,
@@ -14,17 +15,6 @@ type ScaleSnapCandidateSource = Readonly<{
   edgeCategory?: Extract<
     ScaleSnapCandidateCategory,
     "domain-boundary" | "edge"
-  >;
-}>;
-
-/** A named line of the source object, before it is bound to a moving edge. */
-type ScaleSnapSourceLine = Readonly<{
-  key: "left" | "center-x" | "right" | "top" | "center-y" | "bottom";
-  axis: ScaleSceneAxis;
-  position: number;
-  category: Extract<
-    ScaleSnapCandidateCategory,
-    "domain-boundary" | "edge" | "center"
   >;
 }>;
 
@@ -42,7 +32,10 @@ export function createScaleSnapCandidates({
 
   const candidates: ScaleSnapCandidateInput[] = [];
   for (const source of sources) {
-    const sourceLines = createSourceLines({ source });
+    const sourceLines = createSnapSourceLines({
+      bounds: source.bounds,
+      edgeCategory: source.edgeCategory ?? "edge",
+    });
     for (const sourceLine of sourceLines) {
       for (const targetEdge of targetEdges) {
         if (resolveEdgeAxis(targetEdge) !== sourceLine.axis) continue;
@@ -112,39 +105,6 @@ function assertSourceBounds({
       `Scale snap source "${source.id}" centers must be derived from its edges`,
     );
   }
-}
-
-/** Returns the source object's edges and centres in a stable order. */
-function createSourceLines({
-  source,
-}: {
-  source: ScaleSnapCandidateSource;
-}): readonly ScaleSnapSourceLine[] {
-  const { bounds, edgeCategory = "edge" } = source;
-
-  return Object.freeze([
-    { key: "left", axis: "x", position: bounds.left, category: edgeCategory },
-    {
-      key: "center-x",
-      axis: "x",
-      position: bounds.centerX,
-      category: "center",
-    },
-    { key: "right", axis: "x", position: bounds.right, category: edgeCategory },
-    { key: "top", axis: "y", position: bounds.top, category: edgeCategory },
-    {
-      key: "center-y",
-      axis: "y",
-      position: bounds.centerY,
-      category: "center",
-    },
-    {
-      key: "bottom",
-      axis: "y",
-      position: bounds.bottom,
-      category: edgeCategory,
-    },
-  ]);
 }
 
 /** Returns the coordinate axis of the given resized object edge. */

@@ -1,5 +1,6 @@
 /* eslint-disable no-use-before-define -- the public function sits above its internal checks. */
 import type { ObjectBounds } from "./bounds.js";
+import { createSnapSourceLines } from "./protocol/candidates.js";
 
 /** A movement axis in scene coordinates. */
 export type MovementSceneAxis = "x" | "y";
@@ -52,14 +53,6 @@ export type MovementSnapEnvironment = Readonly<{
   zoom: number;
 }>;
 
-/** A named line of one source object. */
-type MovementSnapSourceLine = Readonly<{
-  key: "left" | "center-x" | "right" | "top" | "center-y" | "bottom";
-  axis: MovementSceneAxis;
-  position: number;
-  category: MovementSnapCandidateCategory;
-}>;
-
 /** Tolerance for comparing centres derived from exact edges. */
 const EXACT_BOUNDS_CENTER_EPSILON = 0.000000001;
 
@@ -79,7 +72,10 @@ export function createMovementSnapEnvironment({
   const spacingSources: MovementSnapSpacingSource[] = [];
 
   for (const source of sources) {
-    for (const line of createSourceLines({ source })) {
+    for (const line of createSnapSourceLines({
+      bounds: source.bounds,
+      edgeCategory: source.edgeCategory ?? "edge",
+    })) {
       candidates.push(
         Object.freeze({
           id: `${source.id}:${line.key}`,
@@ -159,37 +155,4 @@ function createBoundsSnapshot({
   }
 
   return Object.freeze({ left, right, top, bottom, centerX, centerY });
-}
-
-/** Returns the source edges and centres in stable order. */
-function createSourceLines({
-  source,
-}: {
-  source: MovementSnapCandidateSource;
-}): readonly MovementSnapSourceLine[] {
-  const { bounds, edgeCategory = "edge" } = source;
-
-  return Object.freeze([
-    { key: "left", axis: "x", position: bounds.left, category: edgeCategory },
-    {
-      key: "center-x",
-      axis: "x",
-      position: bounds.centerX,
-      category: "center",
-    },
-    { key: "right", axis: "x", position: bounds.right, category: edgeCategory },
-    { key: "top", axis: "y", position: bounds.top, category: edgeCategory },
-    {
-      key: "center-y",
-      axis: "y",
-      position: bounds.centerY,
-      category: "center",
-    },
-    {
-      key: "bottom",
-      axis: "y",
-      position: bounds.bottom,
-      category: edgeCategory,
-    },
-  ]);
 }

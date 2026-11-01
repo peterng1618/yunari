@@ -10,28 +10,24 @@ import {
   resolveMovementSnapPlan,
   verifyMovementSnapPlan,
 } from "./movement-snapping-resolver.js";
+import {
+  type DuplicateRuntimeStep,
+  type PlannedRuntimeStep,
+  type PlanToken,
+  SnappingSessionProtocol,
+} from "./protocol/session.js";
 
 /** A single-use movement plan id. */
-type MovementPlanToken = Readonly<{
-  sessionId: number;
-  step: number;
-}>;
+type MovementPlanToken = PlanToken;
 
 /** A fresh pointer step that may be applied exactly once. */
-type PlannedMovementRuntimeStep = Readonly<{
-  kind: "planned";
-  token: MovementPlanToken;
-  plan: MovementSnapPlan;
-}>;
+type PlannedMovementRuntimeStep = PlannedRuntimeStep<MovementSnapPlan>;
 
 /** A repeat of an already computed native pointer step. */
-type DuplicateMovementRuntimeStep = Readonly<{
-  kind: "duplicate";
-  phase: "pending" | "verified";
-  token: MovementPlanToken;
-  plan: MovementSnapPlan;
-  verification: MovementSnapVerification | null;
-}>;
+type DuplicateMovementRuntimeStep = DuplicateRuntimeStep<
+  MovementSnapPlan,
+  MovementSnapVerification
+>;
 
 /** A fresh or repeated movement-runtime result. */
 type MovementRuntimeStep =
@@ -43,24 +39,7 @@ type MovementRuntimeCleanup = Readonly<{
   didCleanup: boolean;
 }>;
 
-/** State of one native pointer marker. */
-type MovementRuntimeStepRecord = {
-  token: MovementPlanToken;
-  plan: MovementSnapPlan;
-  verification: MovementSnapVerification | null;
-};
-
-/** Mutable state of one active drag gesture. */
-type ActiveMovementRuntimeSession = {
-  id: number;
-  baseline: MovementGestureBaseline;
-  holdState: MovementHoldState;
-  markerRecords: WeakMap<object, MovementRuntimeStepRecord>;
-  pendingStep: MovementRuntimeStepRecord | null;
-  nextStep: number;
-};
-
-//** Next local movement-session id. */
+/** Next local movement-session id. */
 let nextMovementRuntimeSessionId = 1;
 
 /** The immutable result of a repeated teardown. */
@@ -73,29 +52,36 @@ const EMPTY_MOVEMENT_RUNTIME_CLEANUP: MovementRuntimeCleanup = Object.freeze({
  * verification. The runtime never mutates Fabric objects.
  */
 export class MovementSnappingRuntime {
-  private _session: ActiveMovementRuntimeSession | null = null;
-
-  private readonly _issuedTokens = new WeakSet<MovementPlanToken>();
-
-  private readonly _consumedTokens = new WeakSet<MovementPlanToken>();
+  private readonly _protocol = new SnappingSessionProtocol<
+    MovementGestureBaseline,
+    MovementHoldState,
+    MovementRawIntent,
+    MovementSnapPlan,
+    MovementSnapVerification,
+    FinalMovementGeometry
+  >({
+    label: "Movement",
+    freeHoldState: FREE_MOVEMENT_HOLD_STATE,
+    nextSessionId: () => {
+      const id = nextMovementRuntimeSessionId;
+      nextMovementRuntimeSessionId += 1;
+      return id;
+    },
+    snapshotIntent: (intent) => intent,
+    assertSameIntent: ({ record, intent }) =>
+      assertSameMovementIntent({
+        first: record.plan.rawIntent,
+        second: intent,
+      }),
+    resolvePlan: ({ baseline, intent, holdState }) =>
+      resolveMovementSnapPlan({ baseline, intent, holdState }),
+    verifyPlan: ({ baseline, plan, finalGeometry }) =>
+      verifyMovementSnapPlan({ baseline, plan, finalGeometry }),
+  });
 
   /** Starts a new movement session with an immutable baseline. */
   startSession({ baseline }: { baseline: MovementGestureBaseline }): void {
-    if (this._session) {
-      throw new Error(
-        "Movement snapping runtime already has an active session",
-      );
-    }
-
-    this._session = {
-      id: nextMovementRuntimeSessionId,
-      baseline,
-      holdState: FREE_MOVEMENT_HOLD_STATE,
-      markerRecords: new WeakMap<object, MovementRuntimeStepRecord>(),
-      pendingStep: null,
-      nextStep: 1,
-    };
-    nextMovementRuntimeSessionId += 1;
+    this._protocol.startSession({ baseline });
   }
 
   /** Returns the cached result instead of re-reading a mutated target. */
@@ -104,11 +90,7 @@ export class MovementSnappingRuntime {
   }: {
     marker: object;
   }): DuplicateMovementRuntimeStep | null {
-    const session = this._getActiveSession();
-    const record = session.markerRecords.get(marker);
-    if (!record) return null;
-
-    return createDuplicateMovementStep({ record });
+    return this._protocol.getDuplicateStep({ marker });
   }
 
   //** Issues at most one plan per native pointer marker. */
@@ -119,40 +101,7 @@ export class MovementSnappingRuntime {
     marker: object;
     intent: MovementRawIntent;
   }): MovementRuntimeStep {
-    const session = this._getActiveSession();
-    const duplicate = session.markerRecords.get(marker);
-    if (duplicate) {
-      assertSameMovementIntent({
-        first: duplicate.plan.rawIntent,
-        second: intent,
-      });
-      return createDuplicateMovementStep({ record: duplicate });
-    }
-    if (session.pendingStep) {
-      throw new Error(
-        "Previous movement plan token must be verified before the next pointer marker",
-      );
-    }
-
-    const plan = resolveMovementSnapPlan({
-      baseline: session.baseline,
-      intent,
-      holdState: session.holdState,
-    });
-    const token = this._createPlanToken({ session });
-    const record = {
-      token,
-      plan,
-      verification: null,
-    };
-    session.markerRecords.set(marker, record);
-    session.pendingStep = record;
-
-    return Object.freeze({
-      kind: "planned",
-      token,
-      plan,
-    });
+    return this._protocol.resolveStep({ marker, intent });
   }
 
   /** Verifies the applied plan and updates the transient hold state. */
@@ -163,104 +112,16 @@ export class MovementSnappingRuntime {
     token: MovementPlanToken;
     finalGeometry: FinalMovementGeometry;
   }): MovementSnapVerification {
-    const session = this._getActiveSession();
-    this._assertUsableToken({ session, token });
-
-    const { pendingStep } = session;
-    if (!pendingStep) {
-      throw new Error(
-        "Movement snapping runtime has no pointer step to verify",
-      );
-    }
-
-    const verification = verifyMovementSnapPlan({
-      baseline: session.baseline,
-      plan: pendingStep.plan,
-      finalGeometry,
-    });
-    this._consumedTokens.add(token);
-    pendingStep.verification = verification;
-    session.pendingStep = null;
-    session.holdState = verification.holdState;
-
-    return verification;
+    return this._protocol.verifyStep({ token, finalGeometry });
   }
 
   /** Ends the active session exactly once. */
   finishSession(): MovementRuntimeCleanup {
-    const session = this._session;
-    if (!session) return EMPTY_MOVEMENT_RUNTIME_CLEANUP;
+    const { didCleanup } = this._protocol.finishSession();
+    if (!didCleanup) return EMPTY_MOVEMENT_RUNTIME_CLEANUP;
 
-    const pendingToken = session.pendingStep?.token;
-    if (pendingToken) this._consumedTokens.add(pendingToken);
-
-    this._session = null;
-
-    return Object.freeze({
-      didCleanup: true,
-    });
+    return Object.freeze({ didCleanup: true });
   }
-
-  /** Returns the active session or fails loudly on a lifecycle violation. */
-  private _getActiveSession(): ActiveMovementRuntimeSession {
-    if (!this._session) {
-      throw new Error("Movement snapping runtime has no active session");
-    }
-
-    return this._session;
-  }
-
-  //** Creates a single-use token for the current pointer step. */
-  private _createPlanToken({
-    session,
-  }: {
-    session: ActiveMovementRuntimeSession;
-  }): MovementPlanToken {
-    const token = Object.freeze({
-      sessionId: session.id,
-      step: session.nextStep,
-    });
-    session.nextStep += 1;
-    this._issuedTokens.add(token);
-
-    return token;
-  }
-
-  /** Rejects foreign, stale or already-spent tokens. */
-  private _assertUsableToken({
-    session,
-    token,
-  }: {
-    session: ActiveMovementRuntimeSession;
-    token: MovementPlanToken;
-  }): void {
-    if (!this._issuedTokens.has(token)) {
-      throw new Error("Foreign movement plan token");
-    }
-    if (this._consumedTokens.has(token)) {
-      throw new Error("Movement plan token has already been used");
-    }
-    if (!session.pendingStep || session.pendingStep.token !== token) {
-      throw new Error(
-        "Movement plan token does not belong to the current pointer step",
-      );
-    }
-  }
-}
-
-/** Returns the immutable duplicate step from the stored record. */
-function createDuplicateMovementStep({
-  record,
-}: {
-  record: MovementRuntimeStepRecord;
-}): DuplicateMovementRuntimeStep {
-  return Object.freeze({
-    kind: "duplicate",
-    phase: record.verification ? "verified" : "pending",
-    token: record.token,
-    plan: record.plan,
-    verification: record.verification,
-  });
 }
 
 //** Ensures one marker is never reused with a different raw intent. */
