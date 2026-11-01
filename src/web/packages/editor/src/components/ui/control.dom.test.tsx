@@ -158,6 +158,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "the source form's fields are committed by the form's own Save button, never on blur or Enter",
   ],
   [
+    "host-settings-mode/displays-section.tsx",
+    "the display name is committed by the add form's own Add button, never on blur or Enter",
+  ],
+  [
     "host-settings-mode/panel-controls-section.tsx",
     "the brightness field is committed by its own Apply button, never on blur or Enter; Escape belongs to the dialog",
   ],

@@ -465,6 +465,41 @@ export const uiCopy = {
       presentationAbsent:
         "The Host's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
+      /** The local display the owner adds by choosing a monitor the Host
+       *  reports. The route needs both a name and a monitor, so the form offers
+       *  both and says nothing when no monitor was found. */
+      addHeading: "Add a local display",
+      addName: "Name",
+      addNameHint: "What this display is called. You can rename it later.",
+      addMonitor: "Monitor",
+      /** One screen, as the probe describes it: the device name it reports, its
+       *  own resolution, and whether it is the main display. */
+      monitorOption: (
+        name: string,
+        width: number,
+        height: number,
+        main: boolean,
+      ): string => `${name} - ${width}x${height}${main ? " (main)" : ""}`,
+      noMonitors:
+        "The Host reported no monitor, so a local display cannot be added here.",
+      add: "Add display",
+      adding: "Adding…",
+      added: (name: string): string => `Added ${name}.`,
+      /** Removing one display. The question names it and says what goes with it:
+       *  a removal is also the revocation of a paired display's credential. */
+      remove: "Remove",
+      removeDisplay: (name: string): string => `Remove ${name}`,
+      removeAsk: (name: string): string =>
+        `Remove ${name}? It loses its theme assignment and, if it was paired, its credential.`,
+      confirmRemove: "Remove display",
+      keep: "Keep",
+      removed: (name: string): string => `Removed ${name}.`,
+      /** The host starts at sign-in so every local display comes back after a
+       *  reboot. The route registers the host, not one display. */
+      autostart: "Start at sign-in",
+      autostartHint:
+        "Yunari starts hidden at sign-in, so every local display comes back after a reboot.",
+      autostartBusy: "Registering…",
     },
     panels: {
       heading: "USB panels",

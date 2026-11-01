@@ -59,6 +59,37 @@ export interface DeviceSettings {
  *  the slot absent where the theme follows this PC's own device settings. */
 export type ThemeAnswers = Readonly<Partial<Record<AssignableGroup, string>>>;
 
+/**
+ * One monitor attached to this PC, as `GET /api/displays/monitors` reports it.
+ *
+ * The geometry is what the host uses to put a window on the screen, and the
+ * serial (where the monitor reports one) is the identity a local display stores
+ * so it finds the same screen after a reboot.
+ */
+export interface HostMonitor {
+  readonly deviceName: string;
+  readonly serial?: string;
+  readonly main: boolean;
+  readonly positionX: number;
+  readonly positionY: number;
+  readonly currentResX: number;
+  readonly currentResY: number;
+}
+
+/** What a local display add sends: the name a person chose and the screen it is
+ *  on. The host mints the id and opens the window. */
+export interface LocalDisplayDraft {
+  readonly label: string;
+  readonly monitor: HostMonitor;
+}
+
+/** What the sign-in registrar answered. `ok` is the outcome and `message` is the
+ *  registrar's own words, which the surface shows rather than rewording. */
+export interface AutostartAnswer {
+  readonly ok: boolean;
+  readonly message: string;
+}
+
 export interface DisplayPreferences {
   /** The zone the reading is shown in. Absent is this PC's own zone — the
    *  absence of a choice, which the route also writes from `""`. */
@@ -168,6 +199,21 @@ export interface HostSettingsClient {
    *  not move with it: assignments and themes are keyed by the id minted when
    *  the display was created. */
   renameDisplay(id: string, label: string): Promise<string>;
+  /** The monitors attached to this PC right now, for the add form to choose one
+   *  from. A probe that fails throws rather than answering an empty list:
+   *  "nothing is attached" and "the host could not find out" are different
+   *  facts. */
+  listMonitors(): Promise<readonly HostMonitor[]>;
+  /** Adds a local display on one of those monitors and answers the id the host
+   *  minted, which is what the row above selects afterwards. */
+  createLocalDisplay(next: LocalDisplayDraft): Promise<string>;
+  /** Removes one display record. Removing is also revoking: a paired display's
+   *  credential goes with it, and so do its theme assignment and answers. */
+  removeDisplay(id: string): Promise<void>;
+  /** Registers this host to start at sign-in, so every local display comes back
+   *  after a reboot. Answers the registrar's own message, which the surface
+   *  shows verbatim. */
+  registerAutostart(): Promise<AutostartAnswer>;
   /** The USB panels attached to this PC right now, as the hardware reports
    *  them. A panel is *found* rather than admitted, so this is a list to choose
    *  from and implies no record. */
@@ -382,6 +428,49 @@ function readDevices(input: unknown): readonly AvailableDevice[] {
     const device = entry as { readonly id?: unknown; readonly name?: unknown };
     return typeof device?.id === "string" && typeof device.name === "string"
       ? [{ id: device.id, name: device.name }]
+      : [];
+  });
+}
+
+/** The monitors a probe reported, kept only where they carry the name and the
+ *  geometry a window needs. A partial entry is dropped rather than offered as a
+ *  choice the add route would read as no monitor at all. */
+function readMonitors(input: unknown): readonly HostMonitor[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((entry) => {
+    const monitor = entry as {
+      readonly deviceName?: unknown;
+      readonly serial?: unknown;
+      readonly main?: unknown;
+      readonly positionX?: unknown;
+      readonly positionY?: unknown;
+      readonly currentResX?: unknown;
+      readonly currentResY?: unknown;
+    };
+    const geometry = [
+      monitor?.positionX,
+      monitor.positionY,
+      monitor.currentResX,
+      monitor.currentResY,
+    ];
+    return typeof monitor?.deviceName === "string" &&
+      monitor.deviceName.length > 0 &&
+      geometry.every(
+        (value) => typeof value === "number" && Number.isFinite(value),
+      )
+      ? [
+          {
+            deviceName: monitor.deviceName,
+            ...(typeof monitor.serial === "string" && monitor.serial !== ""
+              ? { serial: monitor.serial }
+              : {}),
+            main: monitor.main === true,
+            positionX: monitor.positionX as number,
+            positionY: monitor.positionY as number,
+            currentResX: monitor.currentResX as number,
+            currentResY: monitor.currentResY as number,
+          },
+        ]
       : [];
   });
 }
@@ -785,6 +874,69 @@ export function createHostSettingsClient(options?: {
         throw new Error("The host did not report the display's name.");
       }
       return body.label;
+    },
+
+    async listMonitors(): Promise<readonly HostMonitor[]> {
+      const response = await fetcher(`${baseUrl}/api/displays/monitors`);
+      if (!response.ok) {
+        throw await refusal(response, "Could not list the monitors");
+      }
+      const body = (await response.json()) as { readonly monitors?: unknown };
+      return readMonitors(body?.monitors);
+    },
+
+    async createLocalDisplay(next): Promise<string> {
+      const response = await fetcher(`${baseUrl}/api/displays`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // The hint, not the probe entry: the record keeps what finds the screen
+        // again, and the geometry is read from the OS on every launch.
+        body: JSON.stringify({
+          label: next.label,
+          monitor: {
+            deviceName: next.monitor.deviceName,
+            ...(next.monitor.serial === undefined
+              ? {}
+              : { serial: next.monitor.serial }),
+          },
+        }),
+      });
+      if (!response.ok) {
+        throw await refusal(response, "Could not add that display");
+      }
+      const body = (await response.json()) as { readonly display?: unknown };
+      const added = body?.display as { readonly id?: unknown } | undefined;
+      if (typeof added?.id !== "string" || added.id === "") {
+        throw new Error("The host did not report the display it added.");
+      }
+      return added.id;
+    },
+
+    async removeDisplay(id): Promise<void> {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not remove that display");
+      }
+    },
+
+    async registerAutostart(): Promise<AutostartAnswer> {
+      const response = await fetcher(`${baseUrl}/api/displays/autostart`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw await refusal(response, "Could not register at sign-in");
+      }
+      const body = (await response.json()) as {
+        readonly ok?: unknown;
+        readonly message?: unknown;
+      };
+      if (typeof body?.ok !== "boolean" || typeof body.message !== "string") {
+        throw new Error("The host did not report the sign-in registration.");
+      }
+      return { ok: body.ok, message: body.message };
     },
 
     async listPanels() {
