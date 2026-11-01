@@ -11,10 +11,12 @@ import {
   parsePreviewRatio,
   previewCatalogueKey,
   previewLenses,
+  previewRatioKey,
   readPreviewRatioTokens,
   resolveLens,
   screenRect,
   setActivePreviewRatios,
+  sortPreviewTokens,
   subscribeLenses,
 } from "./display-lens.js";
 
@@ -26,11 +28,23 @@ const storageReturning = (value: string): Storage =>
 afterEach(() => setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS));
 
 describe("a preview ratio is a token in a closed vocabulary", () => {
-  it("parses integer pairs into a reduced id", () => {
-    expect(parsePreviewRatio("32:18")).toMatchObject({
-      id: "16:9",
-      width: 16,
+  it("keeps the spelling the author entered", () => {
+    // `21:9` is the name people recognise; reducing it to `7:3` would be a
+    // rename nobody asked for.
+    expect(parsePreviewRatio("21:9")).toMatchObject({
+      id: "21:9",
+      width: 21,
       height: 9,
+    });
+    expect(parsePreviewRatio("7:3")).toMatchObject({
+      id: "7:3",
+      width: 7,
+      height: 3,
+    });
+    expect(parsePreviewRatio("32:18")).toMatchObject({
+      id: "32:18",
+      width: 32,
+      height: 18,
     });
   });
 
@@ -43,12 +57,52 @@ describe("a preview ratio is a token in a closed vocabulary", () => {
   });
 
   it("parses Circle as a 1:1 disc", () => {
-    expect(parsePreviewRatio("Circle")).toEqual({
+    expect(parsePreviewRatio("circle")).toEqual({
       id: "Circle",
       width: 1,
       height: 1,
       shape: "circle",
     });
+  });
+
+  it("keys a rect by its long-over-short aspect, whichever the orientation", () => {
+    expect(previewRatioKey(parsePreviewRatio("21:9"))).toBe(
+      previewRatioKey(parsePreviewRatio("7:3")),
+    );
+    expect(previewRatioKey(parsePreviewRatio("16:9"))).toBe(
+      previewRatioKey(parsePreviewRatio("9:16")),
+    );
+  });
+
+  it("keeps Circle and 1:1 apart", () => {
+    // A disc crops the corners; a 1:1 rect lens shows them, so the two are
+    // different pictures and neither refuses the other.
+    expect(normalisePreviewRatioTokens(["1:1", "Circle"])).toEqual([
+      "1:1",
+      "Circle",
+    ]);
+    expect(normalisePreviewRatioTokens(["Circle", "1:1"])).toEqual([
+      "Circle",
+      "1:1",
+    ]);
+  });
+
+  it("drops invalid entries and keeps the first equivalent token", () => {
+    expect(
+      normalisePreviewRatioTokens(["16:9", "nope", "16:9", "Circle", 7]),
+    ).toEqual(["16:9", "Circle"]);
+    expect(normalisePreviewRatioTokens(["21:9", "7:3"])).toEqual(["21:9"]);
+  });
+
+  it("writes one token when an equivalent shape is added", () => {
+    setActivePreviewRatios(["16:9", "32:18"]);
+    expect(activePreviewRatioTokens()).toEqual(["16:9"]);
+  });
+
+  it("sorts rect tokens widest first, Circle last and ties by text", () => {
+    expect(
+      sortPreviewTokens(["Circle", "4:3", "16:9", "1:1", "9:16", "21:9"]),
+    ).toEqual(["21:9", "16:9", "9:16", "4:3", "1:1", "Circle"]);
   });
 
   it.each([

@@ -44,10 +44,10 @@ export const PREVIEW_RATIO_STORAGE_KEY = "yunari.editor.preview-ratios";
 /** A plain decimal edge: digits, optionally a fractional part. */
 const DECIMAL_EDGE = /^\d+(?:\.\d+)?$/;
 
-/** A ratio's normalised id, or a refusal. Two integer edges are divided by
- *  their greatest common divisor (`32:18` is `16:9`); an edge with a decimal is
- *  kept as typed, because `19.5:9` is the spelling its author knows and
- *  dividing a decimal would rename a ratio nobody edited. */
+/** A ratio's id, kept as the author typed it. `21:9` is the name people
+ *  recognise, so it is never reduced to `7:3`: an equivalent shape is refused
+ *  by `previewRatioKey` instead, because renaming what was entered is the one
+ *  thing the catalogue must not do. */
 export function parsePreviewRatio(input: string): PreviewRatio {
   const text = input.trim();
   if (text.toLowerCase() === "circle") {
@@ -83,30 +83,29 @@ export function parsePreviewRatio(input: string): PreviewRatio {
     throw new RangeError(`preview ratio edges must be positive, not ${input}`);
   }
 
-  if (!Number.isInteger(width) || !Number.isInteger(height)) {
-    return {
-      id: `${rawWidth}:${rawHeight}`,
-      width,
-      height,
-      shape: "rect",
-    };
-  }
-  const divisor = gcd(width, height);
-  return {
-    id: `${width / divisor}:${height / divisor}`,
-    width: width / divisor,
-    height: height / divisor,
-    shape: "rect",
-  };
+  return { id: `${rawWidth}:${rawHeight}`, width, height, shape: "rect" };
 }
 
-/** The stored list as the tokens that can be parsed, first duplicate winning.
+/** The long-over-short aspect two spellings of one rect share, so `21:9` and
+ *  `7:3` collide and `16:9` and `9:16` do too. Meaningful for a rect ratio
+ *  only: a circle is a disc rather than a rect of equal edges, so a caller
+ *  never compares its key with a rect's. */
+export function previewRatioKey(ratio: PreviewRatio): number {
+  return (
+    Math.max(ratio.width, ratio.height) / Math.min(ratio.width, ratio.height)
+  );
+}
+
+/** The stored list as the tokens that can be parsed, first equivalent token
+ *  winning. Equivalence is a rect's aspect; `Circle` only collides with
+ *  `Circle`, because a disc and a 1:1 rect are different pictures.
  *  Anything unreadable is not an author choice, so it becomes the defaults. */
 export function normalisePreviewRatioTokens(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return DEFAULT_PREVIEW_RATIO_TOKENS;
 
   const tokens: string[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<number>();
   for (const entry of value) {
     if (typeof entry !== "string") continue;
     let ratio: PreviewRatio;
@@ -115,11 +114,34 @@ export function normalisePreviewRatioTokens(value: unknown): readonly string[] {
     } catch {
       continue;
     }
-    if (seen.has(ratio.id)) continue;
-    seen.add(ratio.id);
+    if (seenIds.has(ratio.id)) continue;
+    if (ratio.shape === "rect") {
+      const key = previewRatioKey(ratio);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+    }
+    seenIds.add(ratio.id);
     tokens.push(ratio.id);
   }
   return tokens;
+}
+
+/** The list as the tab and the display menu draw it: rect tokens widest
+ *  first, ties by token text, and `Circle` last — a disc has no width to sort
+ *  by, so it cannot join the rect run. */
+export function sortPreviewTokens(
+  tokens: readonly string[],
+): readonly string[] {
+  const ratios = tokens.map((token) => parsePreviewRatio(token));
+  const rects = ratios
+    .filter((ratio) => ratio.shape === "rect")
+    .sort(
+      (a, b) =>
+        previewRatioKey(b) - previewRatioKey(a) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+  const circles = ratios.filter((ratio) => ratio.shape === "circle");
+  return [...rects, ...circles].map((ratio) => ratio.id);
 }
 
 /** The stored list, or the defaults where there is none or it cannot be read.
@@ -366,17 +388,6 @@ export function lensBox(
         width: artboard.width,
         height: artboard.width / lens.aspect,
       };
-}
-
-function gcd(a: number, b: number): number {
-  let x = a;
-  let y = b;
-  while (y !== 0) {
-    const remainder = x % y;
-    x = y;
-    y = remainder;
-  }
-  return x;
 }
 
 function sameTokens(a: readonly string[], b: readonly string[]): boolean {

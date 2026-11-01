@@ -167,20 +167,20 @@ export const uiCopy = {
     followSystemSessionOnly:
       "This browser is not keeping editor settings, so the choice lasts until the editor is reloaded.",
     /** The Previews tab. One row per stored token, showing the lens ids that
-     *  token derives; the add row's shape choice, field and action. */
+     *  token derives, and the add row's field and action. */
     previewRatiosHeading: "Preview ratios",
     previewRatiosHint:
       "The display menu offers each ratio below, in both orientations where it has two. Fit is always there.",
-    previewRatioShape: "Shape",
-    previewRatioRect: "Rect",
-    previewRatioCircle: "Circle",
     previewRatioField: "W:H ratio",
     previewRatioAdd: "Add",
     previewRatioRemove: "Remove preview ratio",
     previewRatioReset: "Reset",
-    /** the refusal rule: a refusal states its reason. `duplicate` is the derived lens ids,
-        not the typed text — a row of `16:9` already offers `9:16`. */
+    /** the refusal rule: a refusal states its reason. `duplicate` is the exact
+        token; `equivalent` names both spellings of one rect shape, because the
+        entered name is kept rather than reduced. */
     previewRatioDuplicate: "That ratio is already offered in the display menu.",
+    previewRatioEquivalent: (entered: string, existing: string): string =>
+      `${entered} is the same shape as ${existing}, which is already in the list.`,
     previewRatioInvalid:
       "A preview ratio is two positive numbers with a colon, like 16:9.",
     previewRatiosEmpty:

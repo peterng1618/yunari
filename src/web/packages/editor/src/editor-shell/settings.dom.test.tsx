@@ -350,19 +350,6 @@ function rows(tab: HTMLElement): readonly HTMLElement[] {
   );
 }
 
-/** The shape segment, by the word it prints — the control's labels are the
- *  options and the group's name is separate. */
-async function chooseShape(
-  tab: HTMLElement,
-  shape: "Rect" | "Circle",
-): Promise<void> {
-  const segment = Array.from(
-    tab.querySelectorAll<HTMLElement>('[role="group"] button'),
-  ).find((button) => button.textContent?.trim() === shape);
-  if (segment === undefined) throw new Error(`no ${shape} segment.`);
-  await press(segment);
-}
-
 async function typeRatio(tab: HTMLElement, value: string): Promise<void> {
   const input = tab.querySelector<HTMLInputElement>(
     "[data-yunari-preview-ratio-input]",
@@ -1007,28 +994,42 @@ describe("About", () => {
  *  per stored token, so a twin is offered by the row that owns it rather than
  *  becoming a second, independently removable ratio. */
 describe("Previews", () => {
-  it("adds a rect ratio and offers both orientations", async () => {
+  it("offers one field and no shape control", async () => {
+    // `Circle` is one lens in the list, not a mode the field switches to.
     const host = mount();
     await press(gear(host));
     const tab = await openPreviews();
 
-    await chooseShape(tab, "Rect");
+    expect(
+      tab.querySelector("[data-yunari-preview-ratio-shape]"),
+      "the Shape control is gone",
+    ).toBeNull();
+    expect(
+      tab.querySelector("[data-yunari-preview-ratio-input]"),
+      "the one field is always rendered",
+    ).not.toBeNull();
+  });
+
+  it("adds a rect ratio under the name its author typed, widest first", async () => {
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
     await typeRatio(tab, "21:9");
     await pressAdd(tab);
 
     expect(rows(tab).map((row) => row.textContent)).toEqual([
-      "16:9 9:16",
+      "21:9 9:21",
       "19.5:9 9:19.5",
+      "16:9 9:16",
       "4:3 3:4",
       "1:1",
       "Circle",
-      // `21:9` is normalised by the parser's GCD, so the row prints the ids
-      // the display menu will offer rather than the spelling that was typed.
-      "7:3 3:7",
     ]);
-    // The stored token is the parser's normalised id, not the typed spelling.
+    // `21:9` stays `21:9`: reducing it to `7:3` would rename a ratio the
+    // author recognises.
     expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBe(
-      JSON.stringify([...DEFAULT_PREVIEW_RATIO_TOKENS, "7:3"]),
+      JSON.stringify(["21:9", "19.5:9", "16:9", "4:3", "1:1", "Circle"]),
     );
   });
 
@@ -1051,9 +1052,24 @@ describe("Previews", () => {
     expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
   });
 
-  it("refuses a ratio whose derived lens the catalogue already frames", async () => {
-    // `16:9` derives `9:16` beside it, so typing `9:16` would add no lens the
-    // menu can offer. The duplicate test is the derived ids, not the typed id.
+  it("refuses an equivalent shape, naming both tokens", async () => {
+    // `7:3` is the same shape as the listed `21:9`, so it would add no lens.
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    await typeRatio(tab, "21:9");
+    await pressAdd(tab);
+    await typeRatio(tab, "7:3");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe(
+      uiCopy.settings.previewRatioEquivalent("7:3", "21:9"),
+    );
+    expect(rows(tab)).toHaveLength(6);
+  });
+
+  it("refuses a portrait twin of a listed landscape ratio", async () => {
     const host = mount();
     await press(gear(host));
     const tab = await openPreviews();
@@ -1061,7 +1077,9 @@ describe("Previews", () => {
     await typeRatio(tab, "9:16");
     await pressAdd(tab);
 
-    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+    expect(reason(tab)).toBe(
+      uiCopy.settings.previewRatioEquivalent("9:16", "16:9"),
+    );
     expect(rows(tab)).toHaveLength(5);
   });
 
@@ -1071,20 +1089,6 @@ describe("Previews", () => {
     const tab = await openPreviews();
 
     await typeRatio(tab, "wide");
-    await pressAdd(tab);
-
-    expect(reason(tab)).toBe(uiCopy.settings.previewRatioInvalid);
-    expect(rows(tab)).toHaveLength(5);
-  });
-
-  it("refuses the literal Circle in the Rect field", async () => {
-    // The shape control is the only way to choose a disc: a typed `Circle`
-    // under Rect would store a token the author did not choose there.
-    const host = mount();
-    await press(gear(host));
-    const tab = await openPreviews();
-
-    await typeRatio(tab, "Circle");
     await pressAdd(tab);
 
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioInvalid);
@@ -1161,7 +1165,7 @@ describe("Previews", () => {
     await typeRatio(tab, "21:9");
     await pressAdd(tab);
     expect(rows(tab)).toHaveLength(6);
-    expect(rows(tab)[5]?.textContent).toBe("7:3 3:7");
+    expect(rows(tab)[0]?.textContent).toBe("21:9 9:21");
 
     // Reset is the other storage branch: with no key to remove it must not
     // throw, and the session list still returns to the defaults.
@@ -1170,32 +1174,59 @@ describe("Previews", () => {
     expect(localStorage.length).toBe(0);
   });
 
-  it("adds a circle without asking for a ratio", async () => {
+  it("adds the word Circle typed into the one field", async () => {
     const host = mount();
     await press(gear(host));
     const tab = await openPreviews();
-
-    await chooseShape(tab, "Circle");
-    expect(
-      tab.querySelector("[data-yunari-preview-ratio-input]"),
-      "a circle is 1:1 by construction, so the field is absent",
-    ).toBeNull();
-    // The defaults already carry a circle, so that add is the duplicate case.
-    await pressAdd(tab);
-    expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
 
     const circle = rows(tab).find(
       (row) => row.getAttribute("data-yunari-preview-ratio") === "Circle",
     );
     if (circle === undefined) throw new Error("no Circle row.");
     await remove(circle);
-    expect(rows(tab)).toHaveLength(4);
 
+    await typeRatio(tab, "Circle");
     await pressAdd(tab);
+
     expect(rows(tab)[4]?.textContent).toBe("Circle");
     // And adding it back twice is a duplicate again.
+    await typeRatio(tab, "Circle");
     await pressAdd(tab);
     expect(reason(tab)).toBe(uiCopy.settings.previewRatioDuplicate);
+  });
+
+  it("accepts Circle while 1:1 is listed, and 1:1 while Circle is", async () => {
+    // A disc crops the corners a 1:1 rect lens shows, so they are different
+    // pictures: neither refuses the other.
+    const host = mount();
+    await press(gear(host));
+    const tab = await openPreviews();
+
+    const rowFor = (token: string): HTMLElement | undefined =>
+      rows(tab).find(
+        (row) => row.getAttribute("data-yunari-preview-ratio") === token,
+      );
+
+    const circle = rowFor("Circle");
+    if (circle === undefined) throw new Error("no Circle row.");
+    await remove(circle);
+    await typeRatio(tab, "Circle");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe("");
+    expect(rowFor("Circle")).toBeDefined();
+    expect(rowFor("1:1")).toBeDefined();
+
+    // The other direction: Circle listed, `1:1` typed in.
+    const square = rowFor("1:1");
+    if (square === undefined) throw new Error("no 1:1 row.");
+    await remove(square);
+    await typeRatio(tab, "1:1");
+    await pressAdd(tab);
+
+    expect(reason(tab)).toBe("");
+    expect(rowFor("1:1")).toBeDefined();
+    expect(rowFor("Circle")).toBeDefined();
   });
 
   it("boots on the authored list a reload reads from storage", () => {

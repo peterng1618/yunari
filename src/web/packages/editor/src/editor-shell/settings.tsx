@@ -12,7 +12,6 @@ import {
 } from "../asset-finder/credentials-client.js";
 import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
-import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
 import { Dialog } from "../components/ui/dialog.js";
 import {
@@ -20,11 +19,12 @@ import {
   clearPreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
   type PreviewRatio,
-  type PreviewShape,
   parsePreviewRatio,
   previewCatalogueKey,
   previewLenses,
+  previewRatioKey,
   setActivePreviewRatios,
+  sortPreviewTokens,
   subscribeLenses,
   writePreviewRatioTokens,
 } from "../display-lens.js";
@@ -262,10 +262,11 @@ function AppearanceTab({
  *
  *  **One row per stored token**, showing the lens ids that token derives — a
  *  row of `16:9` offers `16:9` and `9:16`, and Remove removes the token, not
- *  one of the two. The duplicate check is the same rule from the other side: it
- *  compares the derived lens count, so a typed `9:16` is refused where `16:9`
- *  already carries it. Deriving the twin rule here instead would be a second
- *  owner of it, and would drift from `previewLenses`.
+ *  one of the two. Two refusals, both worded: an exact token already listed is
+ *  a duplicate, and a rect of the same shape as one listed (`7:3` beside
+ *  `21:9`) is refused naming both, because renaming the entered spelling is
+ *  the one thing the catalogue must not do. `Circle` collides only with
+ *  `Circle`; a disc and a `1:1` rect are different pictures.
  *
  *  The tab writes storage and the module's live list together, exactly like the
  *  Appearance tab: the display menu and the viewport read the module state, and
@@ -281,7 +282,6 @@ function PreviewsTab({
   // window, a later surface — re-renders the list from the one module state.
   useSyncExternalStore(subscribeLenses, previewCatalogueKey);
   const tokens = activePreviewRatioTokens();
-  const [shape, setShape] = useState<PreviewShape>("rect");
   const [draft, setDraft] = useState("");
   /** Why the last Add did nothing, as the refusal rule words it. `undefined` is "no refusal"
    *  and renders nothing — never an empty line standing in for one. */
@@ -297,9 +297,7 @@ function PreviewsTab({
   const add = (): void => {
     let ratio: PreviewRatio;
     try {
-      // A circle is 1:1 by construction, so its token is the word itself and
-      // the field is not rendered for it.
-      ratio = parsePreviewRatio(shape === "circle" ? "Circle" : draft);
+      ratio = parsePreviewRatio(draft);
     } catch (error) {
       // The parser's only refusal is a `RangeError`; anything else is a defect
       // and belongs in the console rather than in the row.
@@ -307,22 +305,27 @@ function PreviewsTab({
       setReason(uiCopy.settings.previewRatioInvalid);
       return;
     }
-    // The shape control is the only way to choose a disc: `Circle` typed into
-    // the Rect field would store a token the author did not choose there.
-    if (ratio.shape === "circle" && shape === "rect") {
-      setReason(uiCopy.settings.previewRatioInvalid);
+    if (tokens.some((token) => parsePreviewRatio(token).id === ratio.id)) {
+      setReason(uiCopy.settings.previewRatioDuplicate);
       return;
     }
-    if (
-      previewLenses([...tokens, ratio.id]).length ===
-      previewLenses(tokens).length
-    ) {
-      setReason(uiCopy.settings.previewRatioDuplicate);
+    const equivalent =
+      ratio.shape === "rect"
+        ? tokens.find((token) => {
+            const existing = parsePreviewRatio(token);
+            return (
+              existing.shape === "rect" &&
+              previewRatioKey(existing) === previewRatioKey(ratio)
+            );
+          })
+        : undefined;
+    if (equivalent !== undefined) {
+      setReason(uiCopy.settings.previewRatioEquivalent(ratio.id, equivalent));
       return;
     }
     setReason(undefined);
     setDraft("");
-    commit([...tokens, ratio.id]);
+    commit(sortPreviewTokens([...tokens, ratio.id]));
   };
 
   const removeRatio = (id: string): void => {
@@ -381,33 +384,18 @@ function PreviewsTab({
           })}
         </div>
       )}
-      <ControlSegmented
-        label={uiCopy.settings.previewRatioShape}
-        value={shape}
-        options={[
-          { id: "rect", name: uiCopy.settings.previewRatioRect },
-          { id: "circle", name: uiCopy.settings.previewRatioCircle },
-        ]}
-        data={{ "data-yunari-preview-ratio-shape": "" }}
-        onChange={(next) => {
-          setShape(next);
-          setReason(undefined);
-        }}
-      />
       <div className="flex items-center gap-[var(--space-8)]">
-        {shape === "circle" ? null : (
-          <input
-            type="text"
-            aria-label={uiCopy.settings.previewRatioField}
-            value={draft}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setReason(undefined);
-            }}
-            data-yunari-preview-ratio-input=""
-            className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
-          />
-        )}
+        <input
+          type="text"
+          aria-label={uiCopy.settings.previewRatioField}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setReason(undefined);
+          }}
+          data-yunari-preview-ratio-input=""
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--bg)] px-[var(--space-8)] py-[var(--space-6)] font-mono text-sm"
+        />
         <button
           type="button"
           onClick={add}
