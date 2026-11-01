@@ -252,6 +252,28 @@ describe("CustomSourceProvider", () => {
     });
   });
 
+  it("waits for a first reading when the catalogue asks for one", async () => {
+    const store = storeOf({
+      sources: [
+        sourceOf({
+          id: "one",
+          fields: [fieldOf({ id: "temp", pointer: "/temp" })],
+        }),
+      ],
+      issues: [],
+    });
+    const { fetcher } = fetcherOf(() => json({ temp: 42 }));
+    const provider = providerOf(store, credentialsOf(), fetcher);
+    await provider.reload();
+
+    const key = "custom.one.temp";
+    const awaited = await provider.sample([key], Date.now(), {
+      awaitFirstReading: true,
+    });
+
+    expect(byKey(awaited).get(key)?.status).toBe("ok");
+  });
+
   it("reads a number, text and boolean into the matching Sample field", async () => {
     const store = storeOf({
       sources: [

@@ -265,7 +265,7 @@ async function saveToLibrary(page: Page): Promise<string> {
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save" }).click();
+  await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });

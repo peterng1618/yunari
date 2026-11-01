@@ -91,7 +91,7 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
       /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
   );
   await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save" }).click();
+  await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
   await expect(page.locator("#status")).toContainText("Saved to library", {
     timeout: 20_000,
   });
@@ -378,7 +378,7 @@ test.describe("hosted player over the real host", () => {
 
     // Save goes through PUT /api/themes/:id, not a download.
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save" }).click();
+    await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
     // Assets nothing holds are offered for cleanup before either save writes;
     // the sheet is answered the way an author answers it.
     await answerDialogIfShown(page, "Save", 1_000);
@@ -528,7 +528,7 @@ test.describe("hosted player over the real host", () => {
       .getByRole("button", { name: "Rectangle", exact: true })
       .click();
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save" }).click();
+    await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 15_000,
     });
@@ -1353,7 +1353,7 @@ test.describe("a display fed by the real host", () => {
         /^\/api\/themes\/[^/]+$/.test(new URL(request.url()).pathname),
     );
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save" }).click();
+    await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });
@@ -1656,7 +1656,7 @@ test.describe("a display fed by the real host", () => {
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
     await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Save" }).click();
+    await page.getByRole("menuitem", { name: /^Save(?! package)/ }).click();
     await expect(page.locator("#status")).toContainText("Saved to library", {
       timeout: 20_000,
     });

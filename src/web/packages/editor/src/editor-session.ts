@@ -1426,6 +1426,15 @@ export class EditorSession {
   }
 
   /**
+   * The readings the pickers offer moved. The column pulls `descriptors` at
+   * render time, so a projection after the catalogue answers is all a mounted
+   * picker needs to offer a key the host has just learned.
+   */
+  catalogueChanged(): void {
+    this.#selection.render();
+  }
+
+  /**
    * The refresh loop's own call, and a separate method from `refresh` because
    * the two halves of a repaint want different cadences.
    *

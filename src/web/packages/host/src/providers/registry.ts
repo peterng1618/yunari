@@ -238,7 +238,9 @@ export class ProviderRegistry {
       return { sensors, measured: [] };
     }
 
-    const cycle = await this.sample(keys, nowMs);
+    const cycle = await this.sample(keys, nowMs, {
+      awaitFirstReading: true,
+    });
 
     return {
       sensors,
