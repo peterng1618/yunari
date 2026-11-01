@@ -667,6 +667,11 @@ function extractFrame(
   done: (canvas: HTMLCanvasElement) => void,
 ): () => void {
   const probe = document.createElement("video");
+  // **Read by the host's overlay pause.** The overlay stops every video on the
+  // page to save decoding, and this probe is parked in the media layer waiting
+  // for a frame callback: pausing it strands the seek, the static glass card
+  // never gets its still, and the overlay returns a bare grey tint.
+  probe.dataset["yunariFrameProbe"] = "";
   probe.muted = true;
   probe.playsInline = true;
   probe.preload = "auto";

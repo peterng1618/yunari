@@ -77,6 +77,31 @@ describe("background media", () => {
     handle.destroy();
   });
 
+  it("marks its first-frame probe so a host pause leaves it alone", () => {
+    // The panel's overlay pauses every video on the page to stop decoding
+    // frames nobody reads. The probe is not one of those: it is mid-seek for
+    // the still a static glass card stands on, and a paused probe never
+    // delivers the frame it is waiting for.
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "loop", bounds: "theme" } },
+      artboard: ARTBOARD,
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+
+    expect(host.querySelector("video[data-yunari-frame-probe]")).not.toBeNull();
+    expect(
+      host.querySelector(
+        "[data-yunari-background-media] > video:not([data-yunari-frame-probe])",
+      ),
+      "the mounted video is not the probe",
+    ).not.toBeNull();
+
+    handle.destroy();
+  });
+
   it("replaces the old source when its media changes", () => {
     const host = document.createElement("div");
     const disposed: string[] = [];
