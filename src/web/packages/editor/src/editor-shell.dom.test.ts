@@ -314,8 +314,8 @@ describe("the dirty guard and what the renderer paints", () => {
 
     // The instrument for "the renderer moved" reads the live canvas, not a
     // snapshot: the per-character `styles` table Fabric writes while it paints
-    // a run is derived state, and `removeDerivedTextStyles` takes it off on the
-    // way into a document, so only the canvas itself still shows it.
+    // a run is derived state, and `stripDerivedState` takes it off on the way
+    // into a document, so only the canvas itself still shows it.
     const paintedStyles = (): number =>
       objectsDeep(shell.editor.canvas.getObjects()).filter((object) => {
         const styles = (

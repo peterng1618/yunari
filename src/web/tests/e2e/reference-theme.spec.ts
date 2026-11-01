@@ -2586,7 +2586,7 @@ test.describe("known gaps, pinned", () => {
     // `includeDefaultValues = false` — carried it into the package anyway,
     // because `styles` is a set property rather than a Fabric default. The
     // authored equivalent is `yunariText.runs`; nothing reads `styles` back.
-    // `removeDerivedTextStyles` is the strip that closed it, and this asserts
+    // `stripDerivedState` is the strip that closed it, and this asserts
     // the absence of the table on a real save — descended into, because the
     // table is written on a card's text parts rather than on the card.
     await openEditor(page);

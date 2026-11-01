@@ -949,6 +949,54 @@ describe("identity survives a round trip", () => {
     expect(serialiseScene(canvas).objects[0]!.text).toBe("CPU —");
   });
 
+  it("strips a foreign package's per-character styles on the next save", () => {
+    // A package the product did not author can carry Fabric's own table. It
+    // revives visibly, and the next save writes Yunari's text model — runs —
+    // without it. One model everywhere, rather than the serialiser stripping a
+    // key the dirty guard kept on this object.
+    const text = new FabricText("CPU 48", {
+      styles: { 0: { 0: { fill: "red" } } },
+    });
+    text.set("id", "readout");
+
+    const saved = serialiseScene(canvasOf(text)).objects[0]!;
+
+    expect(saved).not.toHaveProperty("styles");
+    expect(saved.text).toBe("CPU 48");
+  });
+
+  it("saves one document across a live repaint, so an untouched theme is not dirty", () => {
+    // The dirty guard compares two of these. A repaint rewrites `text` and
+    // `styles` on the live object; neither may reach the second document.
+    const text = new Textbox("CPU --", { width: 200, fontSize: 20 });
+    text.set("id", "readout");
+    text.set(YUNARI_TEXT_PROPERTY, {
+      runs: [
+        { kind: "literal", text: "CPU " },
+        { kind: "value", bindingId: "load" },
+      ],
+    });
+    const canvas = canvasOf(text);
+    const bindings = { readout: [{ id: "load", semanticKey: "cpu.load" }] };
+
+    const before = JSON.stringify(serialiseScene(canvas));
+    refreshBoundText(
+      canvas,
+      bindings,
+      { revision: 0, latest: () => sample(48), history: () => [] },
+      undefined,
+    );
+    refreshBoundText(
+      canvas,
+      bindings,
+      { revision: 1, latest: () => sample(91), history: () => [] },
+      undefined,
+    );
+
+    expect(text.text).toBe("CPU 91");
+    expect(JSON.stringify(serialiseScene(canvas))).toBe(before);
+  });
+
   it("reapplies ellipsis when a bound value grows at runtime", () => {
     const text = new Textbox("--", {
       width: 40,
