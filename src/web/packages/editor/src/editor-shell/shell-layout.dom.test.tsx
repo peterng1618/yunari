@@ -69,6 +69,7 @@ function facade(): EditorActionFacade {
     openLibraryTheme: vi.fn(async () => undefined),
     downloadPackage: vi.fn(async () => undefined),
     exportTheme: vi.fn(async () => undefined),
+    exportWidget: vi.fn(),
     activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
@@ -1416,6 +1417,7 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
     [uiCopy.file.newFromTemplate, undefined],
     [uiCopy.file.findAssets, "file.findAssets"],
     [uiCopy.file.openRecent, undefined],
+    [uiCopy.file.exportWidget, undefined],
   ]);
 
   const rows = menuItems();

@@ -280,6 +280,11 @@ export function ShellMenuBar({
               than a toolbar button: the toolbar's **Open** already opens the
               chooser, and this is the shortcut past it. */}
           {item(uiCopy.file.openRecent, () => void session?.openRecent())}
+          {/* The selected unit as a package. It is done to what is on the
+              canvas, so it belongs beside the rows that read the open document
+              rather than on the toolbar, which carries theme-document actions
+              and no selection command. */}
+          {item(uiCopy.file.exportWidget, () => session?.exportWidget())}
         </MenuGroup>
         <MenuGroup label={uiCopy.menus.view}>
           <ViewSetting

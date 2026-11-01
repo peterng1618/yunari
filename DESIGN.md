@@ -250,8 +250,8 @@ choices. A frequently changed control one level deeper is a tax paid on every
 use.
 
 `File` stays a menu because its rows are functions with no other home: New,
-New from template, Find assets and Open recent. The document actions the
-toolbar carries are not repeated there.
+New from template, Find assets, Open recent and Export selection as widget. The
+document actions the toolbar carries are not repeated there.
 
 ### The rail
 

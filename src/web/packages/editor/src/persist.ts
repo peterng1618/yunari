@@ -5,7 +5,9 @@ import {
 import {
   readThemePackage,
   type ThemeCredits,
+  type WidgetDocument,
   writeThemePackage,
+  writeWidgetPackage,
 } from "@yunari/theme-package";
 
 type PackageParseResult =
@@ -55,4 +57,18 @@ export function serializeThemePackage(
 export function fileNameFor(theme: { readonly id: string }): string {
   const base = STABLE_ID_PATTERN.test(theme.id) ? theme.id : "theme";
   return `${base}.yunari-theme`;
+}
+
+export function widgetFileNameFor(widget: { readonly id: string }): string {
+  const base = STABLE_ID_PATTERN.test(widget.id) ? widget.id : "widget";
+  return `${base}.yunari-widget`;
+}
+
+/** A selection's package uses the widget writer, which owns its manifest kind
+ *  and the envelope check a widget document must pass. */
+export function serializeWidgetPackage(
+  document: WidgetDocument,
+  assets: Readonly<Record<string, Uint8Array>> = {},
+): PackageSerializeResult {
+  return writeWidgetPackage({ document, assets });
 }

@@ -25,6 +25,10 @@ export * from "./video-envelope";
 
 const MANIFEST = "manifest.json";
 const THEME = "theme.json";
+const WIDGET = "widget.json";
+/** The format's own name, in one place: a manifest is the only member that
+ *  states which kind a package is. */
+const WIDGET_FORMAT = "yunari-widget-package";
 /**
  * The theme's picture, in a slot of its own beside the manifest and the
  * document. Not `assets/`: a declared asset is one the renderer loads, and a
@@ -145,7 +149,24 @@ export function writeThemePackage(input: {
   };
 }
 
-export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
+type ReadArchiveResult =
+  | {
+      readonly ok: true;
+      readonly files: Readonly<Record<string, Uint8Array>>;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * The one entry gate both package readers pass: size cap, the declared
+ * directory's own caps, and the member-name halves the caller owns. The theme
+ * and the widget share it because the danger is the archive, not the manifest
+ * it names.
+ */
+function readPackageArchive(
+  bytes: Uint8Array,
+  allowed: (name: string) => boolean,
+  unreadable: string,
+): ReadArchiveResult {
   if (bytes.byteLength > MAX_ARCHIVE_BYTES)
     return fail("That package is too large to open.");
   // Extraction allocates per declared entry, so a crafted end record is refused
@@ -169,19 +190,13 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
       filter(file) {
         entries += 1;
         expanded += file.originalSize;
-        const allowed =
-          file.name === MANIFEST ||
-          file.name === THEME ||
-          file.name === THUMBNAIL ||
-          file.name === CREDITS ||
-          /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(file.name);
         if (
           entries > ZIP_MAX_ENTRIES ||
           expanded > MAX_EXPANDED_BYTES ||
           file.originalSize > MAX_ENTRY_BYTES ||
           (file.compression !== 0 && file.compression !== 8) ||
           names.has(file.name) ||
-          !allowed
+          !allowed(file.name)
         )
           unsafe = true;
         names.add(file.name);
@@ -189,6 +204,26 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
       },
     });
     if (unsafe) return fail("That package contains unsafe archive entries.");
+    return { ok: true, files };
+  } catch {
+    return fail(unreadable);
+  }
+}
+
+export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
+  const archive = readPackageArchive(
+    bytes,
+    (name) =>
+      name === MANIFEST ||
+      name === THEME ||
+      name === THUMBNAIL ||
+      name === CREDITS ||
+      /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(name),
+    "That file is not a readable theme package.",
+  );
+  if (!archive.ok) return fail(archive.message);
+  {
+    const files = archive.files;
     const manifest = files[MANIFEST];
     const theme = files[THEME];
     if (manifest === undefined || theme === undefined)
@@ -251,8 +286,136 @@ export function readThemePackage(bytes: Uint8Array): ThemePackageResult {
       ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(credits === undefined ? {} : { credits }),
     };
-  } catch {
-    return fail("That file is not a readable theme package.");
+  }
+}
+
+/** A widget is a theme's scene fields without the artboard, which belongs to
+ *  the theme it was authored in rather than to the unit a selection becomes. */
+export type WidgetDocument = Omit<FabricThemeEnvelope, "artboard">;
+
+/**
+ * The artboard the validator is shown for a widget document. It is never
+ * written: the envelope validator decides the scene, bindings, globals and
+ * assets, and its artboard rule needs a value to read. A widget carries none,
+ * so the smallest valid board is supplied for the one check that asks.
+ */
+const WIDGET_VALIDATION_ARTBOARD = { width: 1, height: 1 } as const;
+
+export type WidgetPackageResult =
+  | {
+      readonly ok: true;
+      readonly document: WidgetDocument;
+      readonly assets: Readonly<Record<string, Uint8Array>>;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Writes a selection as a widget package: the manifest, the widget document
+ * and the bytes its declaration names — nothing else. The scene inside the
+ * document is the caller's extraction; this owner decides only that it is a
+ * valid scene, that its bindings resolve and that every declared asset
+ * travels.
+ */
+export function writeWidgetPackage(input: {
+  readonly document: WidgetDocument;
+  readonly assets: Readonly<Record<string, Uint8Array>>;
+}):
+  | { readonly ok: true; readonly bytes: Uint8Array }
+  | { readonly ok: false; readonly message: string } {
+  const validation = validateFabricThemeEnvelope(
+    {
+      ...input.document,
+      artboard: WIDGET_VALIDATION_ARTBOARD,
+    },
+    // A widget carries the token its selection is set in, not a theme's three
+    // roles: the role requirement is the theme envelope's, not the unit's.
+    { requireTrioRoles: false },
+  );
+  if (!validation.ok)
+    return {
+      ok: false,
+      message: validation.issues[0]?.message ?? "Invalid widget.",
+    };
+  const assetsCheck = checkDeclaredAssets(validation.envelope, input.assets);
+  if (!assetsCheck.ok) return assetsCheck;
+  return {
+    ok: true,
+    bytes: zipSync(
+      {
+        [MANIFEST]: strToU8(
+          JSON.stringify({
+            format: WIDGET_FORMAT,
+            version: 1,
+            widget: WIDGET,
+          }),
+        ),
+        [WIDGET]: strToU8(JSON.stringify(input.document)),
+        ...input.assets,
+      },
+      { level: 6 },
+    ),
+  };
+}
+
+export function readWidgetPackage(bytes: Uint8Array): WidgetPackageResult {
+  const archive = readPackageArchive(
+    bytes,
+    (name) =>
+      name === MANIFEST ||
+      name === WIDGET ||
+      /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(name),
+    "That file is not a readable widget package.",
+  );
+  if (!archive.ok) return fail(archive.message);
+  {
+    const files = archive.files;
+    const manifest = files[MANIFEST];
+    const widget = files[WIDGET];
+    if (manifest === undefined || widget === undefined)
+      return fail("A widget package needs manifest.json and widget.json.");
+    const parsedManifest = JSON.parse(strFromU8(manifest)) as Record<
+      string,
+      unknown
+    >;
+    if (
+      parsedManifest["format"] !== WIDGET_FORMAT ||
+      parsedManifest["version"] !== 1 ||
+      parsedManifest["widget"] !== WIDGET
+    )
+      return fail("Unsupported widget package manifest.");
+    const parsedWidget = JSON.parse(strFromU8(widget));
+    if (
+      typeof parsedWidget !== "object" ||
+      parsedWidget === null ||
+      Array.isArray(parsedWidget) ||
+      "artboard" in parsedWidget
+    )
+      return fail("A widget document must not carry an artboard.");
+    const validation = readFabricThemeEnvelope(
+      {
+        ...parsedWidget,
+        artboard: WIDGET_VALIDATION_ARTBOARD,
+      },
+      { requireTrioRoles: false },
+    );
+    if (!validation.ok)
+      return fail(validation.issues[0]?.message ?? "Invalid widget.");
+    const paths = new Set(
+      validation.envelope.assets?.map((asset) => asset.path) ?? [],
+    );
+    const assets = Object.fromEntries(
+      Object.entries(files).filter(([path]) => path.startsWith("assets/")),
+    );
+    if (
+      Object.keys(files).some(
+        (path) => path !== MANIFEST && path !== WIDGET && !paths.has(path),
+      ) ||
+      Object.keys(assets).length !== paths.size ||
+      [...paths].some((path) => assets[path] === undefined)
+    )
+      return fail("Package assets must exactly match the widget declaration.");
+    const { artboard: _artboard, ...document } = validation.envelope;
+    return { ok: true, document, assets };
   }
 }
 
@@ -266,6 +429,9 @@ function carryable(bytes: Uint8Array | undefined): Uint8Array | undefined {
     : undefined;
 }
 
-function fail(message: string): ThemePackageResult {
+function fail(message: string): {
+  readonly ok: false;
+  readonly message: string;
+} {
   return { ok: false, message };
 }

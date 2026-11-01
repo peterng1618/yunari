@@ -60,6 +60,7 @@ function facadeStub(): EditorActionFacade {
     openLibraryTheme: vi.fn(async () => undefined),
     downloadPackage: vi.fn(async () => undefined),
     exportTheme: vi.fn(async () => undefined),
+    exportWidget: vi.fn(),
     activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),

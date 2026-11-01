@@ -1,8 +1,13 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
-import type { ThemeCredits } from "@yunari/theme-package";
+import type { ThemeCredits, WidgetDocument } from "@yunari/theme-package";
 import { createElement } from "react";
 import { openModal } from "../components/ui/modal-host.js";
-import { fileNameFor, serializeThemePackage } from "../persist.js";
+import {
+  fileNameFor,
+  serializeThemePackage,
+  serializeWidgetPackage,
+  widgetFileNameFor,
+} from "../persist.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   ReplaceDocumentPrompt,
@@ -76,6 +81,17 @@ export class PersistenceManager {
     }
     this.#downloader(fileNameFor(theme), result.bytes);
     this.#savedDocument = documentKey(theme, assets);
+  }
+
+  /** Downloads a selection's widget package. It is not a save: the document's
+   *  own baseline is untouched, because the theme did not change. */
+  exportWidget(
+    document: WidgetDocument,
+    assets: Readonly<Record<string, Uint8Array>> = {},
+  ): void {
+    const result = serializeWidgetPackage(document, assets);
+    if (!result.ok) throw new Error(result.message);
+    this.#downloader(widgetFileNameFor(document), result.bytes);
   }
 
   destroy(): void {}

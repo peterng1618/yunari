@@ -133,6 +133,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     importPackage: () => options.onImportPackage?.(),
     downloadPackage: () => document.save(),
     exportTheme: () => document.release(),
+    exportWidget: () => document.exportWidget(),
     activate: () => document.activateTheme(),
     openLibrary: () => document.openLibrary(),
     // The finder's Fonts body, wired to the document's writes. The panel is

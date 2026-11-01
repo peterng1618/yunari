@@ -77,6 +77,7 @@ import {
 } from "./type-preset-manager/index.js";
 import { tokenIdOfFace } from "./type-token-manager/name.js";
 import { uiCopy } from "./ui-copy.js";
+import { extractSelectionWidget } from "./widget-export.js";
 
 /** Whether a save may go on. `message` is a host refusal the author must
  *  read; a cancel carries none. */
@@ -431,6 +432,35 @@ export class EditorDocument {
       options.onSaved("Theme package saved");
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Downloads the current selection as a `yunari-widget-package`.
+   *
+   * The extraction owns what a widget is — the selected subtree, the bindings
+   * keyed by it, the globals and assets it names — and this document supplies
+   * the live scene and the package writer. A refusal is reported whole-file:
+   * a widget with a member left out would open as a different unit than the
+   * author selected.
+   */
+  exportWidget(): void {
+    const result = extractSelectionWidget({
+      canvas: this.#shell.editor.canvas,
+      envelope: this.snapshot(),
+      declarations: this.#assets.declarations,
+      assets: this.#assets.assets,
+    });
+    if (!result.ok) {
+      this.#source.onError?.(result.message);
+      return;
+    }
+    try {
+      this.#persistence.exportWidget(result.document, result.assets);
+    } catch (error) {
+      this.#source.onError?.(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 

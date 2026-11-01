@@ -27,6 +27,9 @@ export interface EditorActionFacade {
   downloadPackage(): Promise<void>;
   /** **Export theme**: asks for the release bump, then downloads the package. */
   exportTheme(): Promise<void>;
+  /** **Export selection as widget**: downloads the current selection as a
+   *  `yunari-widget-package`, or reports why the whole file was refused. */
+  exportWidget(): void;
   /** **Activate**: saves the document when it is not stored or not clean, then
    *  asks the host to show it on the default display. Never reports success for
    *  a save or an assignment that did not land. */

@@ -924,6 +924,9 @@ export const uiCopy = {
     /** Writes the open document under a new theme id, leaving the theme it came
      *  from as it is. The editor then continues as the new theme. */
     saveAs: "Save as",
+    /** Exports the current selection as a `yunari-widget-package`: the objects,
+     *  their bindings, the globals they use and the files they reference. */
+    exportWidget: "Export selection as widget",
   },
   /** The chooser `New` opens before the document exists. The first control is
    *  the display a theme is for, and its entries are the display switch's own
@@ -1881,6 +1884,17 @@ export const uiCopy = {
     missingGlyph:
       "A character in this text has no glyph in the face it is set in, so it cannot be converted to paths.",
     locked: "Unlock the object before converting it to paths.",
+  },
+  /** Why the selection could not be exported as a widget package. Each refusal
+   *  refuses the whole file and names what stopped it, so the author can fix
+   *  the selection rather than guess which member was left out. */
+  widgetExport: {
+    nothingSelected: "Select something to export as a widget.",
+    locked: (name: string): string =>
+      `Unlock "${name}" before exporting the selection as a widget.`,
+    missingAsset: (path: string): string =>
+      `The selection uses "${path}", but its bytes are missing.`,
+    unreadableScene: "The selection could not be read from the scene.",
   },
   /** One label per arrange action; keys mirror `ArrangeAction`. */
   arrangeLabels: {
