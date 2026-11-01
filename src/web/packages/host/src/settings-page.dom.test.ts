@@ -3,7 +3,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import * as themeListModule from "../public/theme-list.js";
 
 /**
  * The prompts `/settings` puts above its device dropdowns.
@@ -29,23 +28,17 @@ const BODY_HTML = PAGE.slice(
   PAGE.indexOf("</body>"),
 ).replace(/<script[\s\S]*?<\/script>/, "");
 
-/** The page's one module, with its import handed the real `theme-list.js`:
- *  `/settings/theme-list.js` is a URL only a host serves, and the page calls
- *  the module's own resolution rule as well as drawing its rows through it. */
-const SCRIPT = (
-  PAGE.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1] ?? ""
-).replace(
-  /^\s*import\s*\{([^}]*)\}[^\n]*$/m,
-  (_statement, names: string) => `const {${names}} = __themeList;`,
-);
+/** The page's one module, evaluated as it is written: this page imports no
+ *  `/settings/theme-list.js`, so there is no import to hand a stand-in to. */
+const SCRIPT =
+  PAGE.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1] ?? "";
 
 type Body = () => Promise<void>;
 const AsyncFunction = Object.getPrototypeOf(
   async (): Promise<void> => undefined,
 ).constructor as new (
-  parameter: string,
   source: string,
-) => (themeList: unknown) => Body;
+) => () => Body;
 
 interface Device {
   readonly id: string;
@@ -118,7 +111,7 @@ async function render(hardware: Hardware): Promise<void> {
   document.body.innerHTML = BODY_HTML;
   requested = [];
   stubFetch(hardware);
-  await new AsyncFunction("__themeList", SCRIPT)(themeListModule);
+  await new AsyncFunction(SCRIPT)();
 }
 
 afterEach(() => {
