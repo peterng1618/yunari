@@ -124,7 +124,7 @@ function bridge(rows: readonly LayerRow[], overrides = {}): EditorShellBridge {
     moveLayer: () => false,
     subscribe: () => () => undefined,
     run: vi.fn(),
-    session: { savePackage: vi.fn() } as never,
+    session: { downloadPackage: vi.fn() } as never,
     editor: {} as never,
     destroy: vi.fn(),
     ...overrides,

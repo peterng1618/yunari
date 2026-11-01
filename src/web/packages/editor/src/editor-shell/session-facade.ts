@@ -19,8 +19,18 @@ export interface EditorActionFacade {
   /** The package picker. An import writes into the library and leaves the open
    *  document alone, so this replaces nothing. */
   importPackage(): void;
-  savePackage(): Promise<void>;
-  releasePackage(): Promise<void>;
+  /** The plain package download, with no version bump. The toolbar has no row
+   *  for it: **Export theme** is the author-facing package export, and it
+   *  reaches this same writer through the document's release path. Kept as the
+   *  seam for callers that need the package without a release, which the unit
+   *  suites are. */
+  downloadPackage(): Promise<void>;
+  /** **Export theme**: asks for the release bump, then downloads the package. */
+  exportTheme(): Promise<void>;
+  /** **Activate**: saves the document when it is not stored or not clean, then
+   *  asks the host to show it on the default display. Never reports success for
+   *  a save or an assignment that did not land. */
+  activate(): Promise<void>;
   openLibrary(): Promise<void>;
   /** The finder's Fonts pane: the role presets and the writes a chosen result
    *  offers. The shell draws the buttons; the session owns their effects. */
@@ -47,7 +57,7 @@ export interface EditorActionFacade {
   /** The File menu's **Open recent**: the newest stored theme that is not the
    *  document that is open. */
   openRecent(): Promise<void>;
-  /** The File menu's **Save as**: writes the open document under a new theme
+  /** The toolbar's **Save as**: writes the open document under a new theme
    *  and continues as it, leaving the theme it came from untouched. */
   saveAs(): Promise<void>;
   addText(): void;

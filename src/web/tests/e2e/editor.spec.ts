@@ -1170,7 +1170,7 @@ test.describe("Fabric editor route", () => {
     ).toBeVisible();
     await captureVisualReview(page, testInfo, "editor-chart-creation");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const chart = sceneObjects(saved.parsed.envelope)
@@ -1279,7 +1279,7 @@ test.describe("Fabric editor route", () => {
     await expect(fill).toBeVisible();
 
     await typeInto(page, border, "3");
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const panel = sceneObjects(saved.parsed.envelope).find(
@@ -1586,7 +1586,7 @@ test.describe("Fabric editor route", () => {
 
     // Save, reopen, and the treatment is still authored state rather than a
     // cache the round trip dropped.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     const reopened = (await saveEnvelope(page)) as {
@@ -2230,7 +2230,7 @@ test.describe("Fabric editor route", () => {
     const weight = page.locator("[data-yunari-token-weight]");
     expect(await choiceOf(weight)).toBe("600 (not in package)");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     await openThemeFromStore(page, storedThemeOfPackage(saved.bytes));
     // Reopening a package remounts the shell, so the pane is shut again.
     await openPane(page, "Design tokens");
@@ -2427,14 +2427,13 @@ test.describe("Fabric editor route", () => {
     );
     await page.goto(EDITOR);
     // Dirty by an authoring act first, for the reason the replacement capture
-    // gives. An untouched starter is *not* dirty: File → Open would ask
+    // gives. An untouched starter is *not* dirty: the toolbar's Open would ask
     // nothing, and `answerDialogIfShown` would then find the chooser's own
     // dialog and spend its budget waiting inside it for a Discard button.
     await openPane(page, "Add");
     await insertShape(page, "Rectangle");
 
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
     await answerDialogIfShown(page, "Discard");
     const chooser = page.locator('[role="dialog"]', {
       hasText: "Open a theme",
@@ -2977,7 +2976,7 @@ test.describe("Fabric editor route", () => {
       "Brand mark",
     );
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     const envelope = saved.parsed.envelope as {
@@ -3051,7 +3050,7 @@ test.describe("Fabric editor route", () => {
 
     // Ctrl+S is the library save now; a package leaves through File > Save
     // package, which is the path this case round-trips through.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     expect(saved.parsed.envelope.id).toBe("source");
@@ -3259,7 +3258,7 @@ test.describe("Fabric editor route", () => {
     // to is the card the import declared.
     await assetCard(page, "logo.png").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-assets");
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     // One declaration, holding the replacement's bytes — the same extension the
@@ -3337,7 +3336,7 @@ test.describe("Fabric editor route", () => {
       .scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-background-media");
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) return;
     expect(saved.parsed.envelope.background?.media).toEqual({
@@ -4091,8 +4090,7 @@ test.describe("Fabric editor route", () => {
     // **The File row, not `Control+o`.** That chord now prints beside, and
     // drives, the *Import theme* row — and an import replaces nothing, so it
     // asks no question. The row that still opens a document is this one.
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
@@ -4626,7 +4624,7 @@ test.describe("Fabric editor route", () => {
       afterSubUnit.boxWidth,
     );
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.parsed.ok).toBe(true);
     if (!saved.parsed.ok) throw new Error(saved.parsed.message);
     const persisted = sceneObjects(saved.parsed.envelope).find(
@@ -5529,38 +5527,31 @@ test.describe("Fabric editor route", () => {
 });
 
 async function saveEnvelope(page: Page): Promise<unknown> {
-  const { parsed } = await savePackage(page);
+  const { parsed } = await exportPackage(page);
   expect(parsed.ok).toBe(true);
   if (!parsed.ok) throw new Error(parsed.message);
   return parsed.envelope;
 }
 
-async function savePackage(page: Page): Promise<{
+async function exportPackage(page: Page): Promise<{
   readonly parsed: ReturnType<typeof readThemePackage>;
   readonly bytes: Buffer;
 }> {
   const download = page.waitForEvent("download");
-  // The File menu owns Save; the header's own button is gone, so the row is the
-  // one route an author takes.
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  // **Not `exact`, and the row is why.** A row that prints a chord carries the
-  // chord's `aria-label` inside it (`shell-menu-bar.tsx`), and a descendant's
-  // `aria-label` joins the ancestor's name-from-content — measured: the three
-  // chorded File rows compute a name their own label does not equal, so
-  // `exact: true` matched none of them. Which rows print a chord is the markup's
-  // business, so demanding the label *be* the whole name makes the locator fail
-  // whenever the product adds one.
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  // **Export theme is the package download's own action.** The toolbar's
+  // Activate instructs the player; it does not write a file.
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
   // A package with unused assets asks before it writes; the download only
   // starts after that sheet is answered.
-  await answerDialogIfShown(page, "Save package", 1_000);
+  await answerDialogIfShown(page, "Export theme", 1_000);
   // **Contained, not exact.** The status line also carries whatever diagnostic
   // is on screen, and a diagnostic is retired by the next *committed* edit — so
   // a save immediately after a refusal reads as both. The claim here is that
-  // the save happened, which is what the contained text states; demanding the
+  // the export happened, which is what the contained text states; demanding the
   // line be empty of everything else would be demanding the shell forget a
   // message the author has not yet had an edit to replace it.
-  await expect(page.locator("#status")).toContainText("Theme package saved");
+  await expect(page.locator("#status")).toContainText("Released");
   const stream = await (await download).createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));

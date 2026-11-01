@@ -58,8 +58,9 @@ function facadeStub(): EditorActionFacade {
     newFromStarter: vi.fn(async () => undefined),
     importPackage: vi.fn(),
     openLibraryTheme: vi.fn(async () => undefined),
-    savePackage: vi.fn(async () => undefined),
-    releasePackage: vi.fn(async () => undefined),
+    downloadPackage: vi.fn(async () => undefined),
+    exportTheme: vi.fn(async () => undefined),
+    activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
     openRecent: vi.fn(async () => undefined),
@@ -232,7 +233,7 @@ it("draws each bound row's own chord, and none on a row the table binds nothing 
       item.querySelector("kbd")?.textContent ?? undefined,
     ]),
   );
-  // The spoken name is `aria-label` on the chip, as it is on the Edit menu's:
+  // The spoken name is `aria-label` on the chip, as it is on a menu row's:
   // a `kbd` reading `Ctrl+D` is a screen reader saying "control D" at best.
   const spoken = new Map(
     opened.items.map((item) => [

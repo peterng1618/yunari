@@ -577,6 +577,31 @@ export class EditorDocument {
     return this.#library.save();
   }
 
+  /**
+   * Makes the open theme the one the player switches to.
+   *
+   * **A theme must be stored to be activated, so the document saves first.**
+   * The press means "show what I am looking at", and a save it did not make
+   * would put the last stored version on the display while the screen shows
+   * the author's edits. A save that did not land stops the activation: the
+   * save path owns its own refusal message, and no assignment is attempted
+   * against a folder the host does not hold.
+   *
+   * The assignment itself is the manager's — the host's default display key,
+   * so a display with a theme of its own keeps showing that theme.
+   */
+  async activateTheme(): Promise<void> {
+    if (!this.#library.isStored() || this.isDirty()) {
+      await this.#library.save();
+      // Read after the save rather than trusting its return: the cleanup sheet
+      // can cancel without an error, and a conflicted save can be dismissed
+      // with the document still dirty. Either way the host does not hold what
+      // this document says, and the player must not be told it does.
+      if (!this.#library.isStored() || this.isDirty()) return;
+    }
+    await this.#library.activate(this.#envelope.id);
+  }
+
   /** Whether this document descends from one the library holds, which is what
    *  a publish reads: a document with no stored base has no folder. */
   isStored(): boolean {
@@ -657,7 +682,7 @@ export class EditorDocument {
    * serializer's own sentence, so nothing is removed and nothing is written.
    */
   async confirmAssetCleanup(
-    title: string = uiCopy.file.savePackage,
+    title: string = uiCopy.file.exportTheme,
   ): Promise<CleanupAnswer> {
     const unused = this.unusedAssets();
     if (unused.length === 0) return { proceed: true };

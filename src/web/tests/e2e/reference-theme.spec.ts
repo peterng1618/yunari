@@ -297,25 +297,24 @@ async function waitForMedia(page: Page): Promise<void> {
   });
 }
 
-async function savePackage(page: Page): Promise<{
+async function exportPackage(page: Page): Promise<{
   readonly bytes: Buffer;
   readonly envelope: Record<string, unknown>;
 }> {
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
   // A document holding a file nothing refers to asks the cleanup question
   // first, and the save waits on the answer. The sheet's confirm button is the
   // save's own title; keeping the files is the answer that changes nothing.
-  await answerDialogIfShown(page, "Save package", 1_000);
-  // **The download is the save's own signal**, so it is what this waits for:
+  await answerDialogIfShown(page, "Export theme", 1_000);
+  // **The download is the export's own signal**, so it is what this waits for:
   // building the package on a loaded CI runner outran the status line's 5 s
   // default, and the assertion failed while the same save was still landing.
   const landed = await download;
-  await expect(page.locator("#status-message")).toHaveText(
-    "Theme package saved",
-    { timeout: 15_000 },
-  );
+  await expect(page.locator("#status-message")).toContainText("Released", {
+    timeout: 15_000,
+  });
   const stream = await landed.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -396,6 +395,12 @@ function authoredOnly(envelope: unknown): unknown {
     }
   };
   strip(copy.scene?.objects);
+  // **A release bumps the version, so two releases disagree on it by design.**
+  // Export theme is the package download's own action and asks which bump to
+  // make; this comparison is about the composition New must not disturb, and
+  // the version is the one field the gesture is allowed to move.
+  const metadata = (copy as { metadata?: Record<string, unknown> }).metadata;
+  if (metadata !== undefined) delete metadata["version"];
   return copy;
 }
 
@@ -482,7 +487,7 @@ test.describe("the reference composition, authored", () => {
     const authoredBefore = beforeSave.find((f) => f.id === authored);
     expect(authoredBefore).toBeDefined();
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.envelope["artboard"]).toMatchObject({
       width: STARTER_WIDTH,
       height: STARTER_HEIGHT,
@@ -521,7 +526,7 @@ test.describe("the reference composition, authored", () => {
     // exclusion is a measured defect, not a convenience: two saves of the same
     // unchanged document disagree on it, and the gap is pinned separately as
     // "a save is reproducible".
-    const again = await savePackage(page);
+    const again = await exportPackage(page);
     const first = readThemePackage(saved.bytes);
     expect(first.ok).toBe(true);
     if (first.ok) {
@@ -656,7 +661,7 @@ test.describe("the reference composition, authored", () => {
     for (const id of [textId, panelId, chartId]) expect(ids).toContain(id);
 
     // **Save**, and read what the file actually says.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     const objects = objectsOf(saved.envelope);
     expect(objects).toContainEqual(
@@ -720,7 +725,7 @@ test.describe("the reference composition, authored", () => {
     }
 
     // **Export again** and confirm the second export carries the same document.
-    const exported = await savePackage(page);
+    const exported = await exportPackage(page);
     expect(forbiddenKeys(exported.envelope)).toEqual([]);
     expect(objectsOf(exported.envelope).map((object) => object["id"])).toEqual(
       ids,
@@ -789,7 +794,7 @@ test.describe("the reference composition, authored", () => {
 
     // **And the author's work is recoverable** — the saved document still
     // carries the face, so the author can replace it rather than start again.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     expect(saved.envelope["assets"]).toEqual(
       expect.arrayContaining([
@@ -892,7 +897,7 @@ test.describe("the reference composition, authored", () => {
 
     // **And the document is still saveable with the orphan in it**, because a
     // document an author cannot save is not recoverable work.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
     expect(
       objectsOf(saved.envelope).find((object) => object["id"] === "orphan"),
@@ -2472,7 +2477,7 @@ test.describe("background media", () => {
     expect(second).not.toBe(first);
     expect(await page.evaluate(() => window.devicePixelRatio)).toBe(1);
 
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     const background = (
       saved.envelope["background"] as
         | { media?: { assetId: string } }
@@ -2544,7 +2549,7 @@ test.describe("background media", () => {
     // The saved document says `video`, not `image`. The starter declares a
     // backdrop of its own, so the video is asserted to be *among* the
     // declarations rather than to be the only one.
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(saved.envelope["assets"]).toContainEqual(
       expect.objectContaining({ id: "loop", kind: "video" }),
     );
@@ -2590,7 +2595,7 @@ test.describe("known gaps, pinned", () => {
     // the absence of the table on a real save — descended into, because the
     // table is written on a card's text parts rather than on the card.
     await openEditor(page);
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     const styled = objectsOf(saved.envelope).filter(
       (object) => object["styles"] !== undefined,
     );
@@ -2626,7 +2631,7 @@ test.describe("known gaps, pinned", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
-    const saved = await savePackage(page);
+    const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
   });
 });

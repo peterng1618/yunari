@@ -396,7 +396,7 @@ describe("EditorDocument save cleanup", () => {
 
     expect(cleanupMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: uiCopy.file.savePackage,
+        title: uiCopy.file.exportTheme,
         documentName: "System dashboard",
         files: [
           expect.objectContaining({

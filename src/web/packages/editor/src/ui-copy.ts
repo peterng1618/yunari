@@ -385,12 +385,16 @@ export const uiCopy = {
     label: "Readings",
   },
   menus: {
-    /** The menubar's own name, so a screen reader reaching the three menus is
+    /** The menubar's own name, so a screen reader reaching the two menus is
      *  told what the group is before it reads each one. */
     label: "Editor menus",
     file: "File",
-    edit: "Edit",
     view: "View",
+  },
+  /** The header toolbar's own name. The buttons inside name themselves; this
+   *  says what the row is — the open theme document's actions. */
+  toolbar: {
+    label: "Theme document actions",
   },
   /**
    * The shell's three modes, as the header's switch names them.
@@ -891,23 +895,26 @@ export const uiCopy = {
   },
   file: {
     newDocument: "New theme",
-    /** The finder's one entry in this menu. It sits above *Import theme*
-     *  because both add something and the finder is the one that fetches. */
+    /** The finder's one entry in this menu. It sits above *Open recent*
+     *  because both are editor-level rather than one theme's. */
     findAssets: "Find assets…",
     /** The reference composition, offered as what it is: a template the
      *  product ships. `New` is the author's own blank document; this is the one
      *  they can open a copy of. */
     newFromTemplate: "New from template",
-    /** **Import theme**, which is the store mode's own action and what the row
-     *  does: the theme package is written into the library and the open
-     *  document is untouched. The store's `open` action is the route that opens
-     *  a document. */
+    /** **Import theme**, a toolbar button. It is the store mode's own action
+     *  and what the press does: the theme package is written into the library
+     *  and the open document is untouched. The store's `open` action is the
+     *  route that opens a document. */
     importPackage: "Import theme",
-    /** The document written out as a package file. It downloads rather than
-     *  recording anything, so its name says what the author gets. */
-    savePackage: "Save package",
+    /** **Activate**: puts the stored theme on the display that holds no theme
+     *  of its own, so the player switches to it. A document that is not stored
+     *  is saved first — the display cannot show a theme the host does not
+     *  hold. */
+    activate: "Activate",
     /** A package with a bumped version, written the same way: the release the
-     *  author hands on, not the save that keeps their work. */
+     *  author hands on, not the save that keeps their work. It is also where
+     *  the plain package download lives now — there is no separate row. */
     exportTheme: "Export theme",
     openLibrary: "Open",
     /** The newest stored theme that is not the open document, opened by its own
@@ -1358,6 +1365,14 @@ export const uiCopy = {
     /** The status line's word after a save-as, naming the theme the editor now
      *  continues as. */
     savedAs: (name: string): string => `Saved as ${name}`,
+    /** A landed Activate. It says what the host now holds rather than "the
+     *  player switched", because the write is to the default assignment: a
+     *  display with a theme of its own keeps showing it. */
+    activated:
+      "Activated: displays with no theme of their own now show this one.",
+    /** A refused Activate, carrying the host's own sentence — "No such theme."
+     *  or "No such display." — unwrapped. */
+    activateFailed: (reason: string): string => `Could not activate: ${reason}`,
     /** Open recent with no candidate: every stored theme is the open one, or
      *  the library is empty. Said rather than left silent, because a menu row
      *  that does nothing is indistinguishable from a broken one. */
@@ -1701,7 +1716,7 @@ export const uiCopy = {
   /** The cleanup offered before either save: the files nothing holds, which
    *  the author may send to the platform's trash in the same press. The save's
    *  own title is the one it was pressed with (`file.saveLibrary` /
-   *  `file.savePackage`), so it is not repeated here. */
+   *  `file.exportTheme`), so it is not repeated here. */
   saveCleanup: {
     heading: "Unused files",
     count: (count: number, size: string): string =>

@@ -193,13 +193,16 @@ test.describe("the rebuilt composition, on a display", () => {
     await buildComposition(page);
     await importBackdrop(page, BACKDROP);
 
-    /** The File menu's own Save row, written where the host can serve it. */
+    /** **Export theme**, written where the host can serve it. The export asks
+     *  for a release bump first; the package is what the host seeds from. */
     const saveToHost = async (): Promise<void> => {
       const download = page.waitForEvent("download");
-      await page.getByRole("button", { name: "File", exact: true }).click();
-      await page.getByRole("menuitem", { name: "Save package" }).click();
+      page.once("dialog", (dialog) => dialog.accept("patch"));
+      await page
+        .getByRole("button", { name: "Export theme", exact: true })
+        .click();
       const file = await (await download).path();
-      expect(file, "Save package should write a package").not.toBeNull();
+      expect(file, "Export theme should write a package").not.toBeNull();
       copyFileSync(file!, EXPORTED);
       seedLibraryFromPackage(EXPORTED);
     };

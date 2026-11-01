@@ -137,16 +137,15 @@ async function openEditor(page: Page): Promise<void> {
   await page.waitForFunction(() => "yunariEditorBridge" in window);
 }
 
-/** Drives **File ▸ Import theme**, the row an author has, and answers the
- *  chooser it opens. */
+/** Presses the toolbar's **Import theme**, the action an author has, and
+ *  answers the chooser it opens. */
 async function importFile(
   page: Page,
   name: string,
   buffer: Buffer,
 ): Promise<void> {
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Import theme" }).click();
+  await page.getByRole("button", { name: "Import theme", exact: true }).click();
   await (await chooser).setFiles({
     name,
     mimeType: "application/octet-stream",
@@ -173,10 +172,10 @@ function objectsOf(envelope: unknown): readonly Record<string, unknown>[] {
   return all;
 }
 
-async function savePackage(page: Page): Promise<Buffer> {
+async function exportPackage(page: Page): Promise<Buffer> {
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
   const stream = await (await download).createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -254,7 +253,7 @@ test("an unreadable package is refused with the reader's own sentence and leaves
   });
   await typeIntoControl(page, page.locator("[data-yunari-panel-radius]"), "9");
   await expect(page.locator("[data-yunari-panel-radius]")).toHaveValue("9");
-  const saved = readThemePackage(await savePackage(page));
+  const saved = readThemePackage(await exportPackage(page));
   expect(saved.ok).toBe(true);
   if (!saved.ok) return;
   expect(objectsOf(saved.envelope)).toContainEqual(
@@ -277,8 +276,8 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   // is what makes the declaration unused, so the next save has a question.
   await page.keyboard.press("Delete");
 
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
   const dialog = page.locator('[role="dialog"]');
   await expect(dialog).toBeVisible();
 
@@ -325,7 +324,7 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   );
   await remove.check();
   await dialog
-    .getByRole("button", { name: uiCopy.file.savePackage, exact: true })
+    .getByRole("button", { name: uiCopy.file.exportTheme, exact: true })
     .click();
 
   await expect

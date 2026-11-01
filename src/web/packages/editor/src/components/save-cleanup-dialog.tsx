@@ -150,7 +150,7 @@ function SaveCleanupDialog({
  */
 export async function confirmSaveCleanup(input: {
   /** The save the author pressed: `uiCopy`'s own "Save" or
-   *  "Save package". */
+   *  "Export theme". */
   readonly title: string;
   /** The document's name, drawn under the save's title; absent when it has
    *  none. */

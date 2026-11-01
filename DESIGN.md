@@ -219,9 +219,16 @@ already looks, and only the stage changes between the two surfaces.
 
 **Document-level and editor-level actions only.** A command that has a rightful
 home elsewhere is not repeated here — Insert lives in the Add pane, so the
-header has no Insert menu.
+header has no Insert menu, and Edit lives in the Composition pane's footer
+toolbar, so the header has no Edit menu.
 
-- Left: brand mark, then the **mode switch**, then `File`, `Edit`, `View`.
+- Left: brand mark, then the **mode switch**, then the `File` and `View`
+  menus, then the **theme toolbar**.
+- The toolbar is the open theme document's own actions, as **icon buttons**
+  from the editor's one glyph set: Import theme, Open, Save, Save as, Activate,
+  Export theme. It is a toolbar, not rows nested in a menu, and it carries no
+  selection command: copy, cut, duplicate, delete, group and arrange act on
+  individual elements and stay on the surfaces that own a selection.
 - Right: the publish chord, then the **primary button**. `Publish` is the only
   filled, accent-coloured button in the editor.
 - **The header never shows the document's identity** and never shows a
@@ -231,16 +238,20 @@ header has no Insert menu.
 The shell has three modes — the editor, the theme store and the host — and the
 switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
 and `Host`. A strip under the header would be a second horizontal bar, so the
-header owns the choice and its **right-hand region is per-mode**: `File`/`Edit`/
-`View` and the publish control belong to the editor; a mode with actions of its
-own carries them there; a mode with none shows nothing beside the switch. The
-editor's own body is hidden, not unmounted, while another mode shows — a mode
+header owns the choice and its **right-hand region is per-mode**: the menus, the
+theme toolbar and the publish control belong to the editor; a mode with actions
+of its own carries them there; a mode with none shows nothing beside the switch.
+The editor's own body is hidden, not unmounted, while another mode shows — a mode
 switch never loses an unsaved document, and it asks before leaving a dirty one.
 
-`View` stays in the header because its commands — preview/source, run display —
-are changed *while* designing, many times a session. Settings is for
-once-in-a-while choices. A frequently changed control one level deeper is a tax
-paid on every use.
+`View` stays in the header because its commands — preview/source — are changed
+*while* designing, many times a session. Settings is for once-in-a-while
+choices. A frequently changed control one level deeper is a tax paid on every
+use.
+
+`File` stays a menu because its rows are functions with no other home: New,
+New from template, Find assets and Open recent. The document actions the
+toolbar carries are not repeated there.
 
 ### The rail
 

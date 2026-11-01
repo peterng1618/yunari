@@ -50,6 +50,8 @@ import {
   Plus,
   Radar,
   RefreshCw,
+  Save,
+  SaveAll,
   Scan,
   Search,
   Settings,
@@ -309,6 +311,23 @@ export const OPEN_ITEM_GLYPH: LucideIcon = Folder;
 export const ASSIGN_ITEM_GLYPH: LucideIcon = Monitor;
 export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
 export const DELETE_ITEM_GLYPH: LucideIcon = Trash2;
+
+/**
+ * The header toolbar's theme-document actions, one glyph each.
+ *
+ * **These are chrome marks, not the object actions'**, so the toolbar names
+ * them here rather than reaching for `lucide-react` itself. Import and Open
+ * are two different doors — a package file in, a stored theme in — so they do
+ * not wear one folder; Save and Save as are one disc and a stack of discs;
+ * Activate wears the monitor because it puts the theme on a display; Export
+ * wears the download arrow the store's export action already owns.
+ */
+export const IMPORT_THEME_GLYPH: LucideIcon = FolderInput;
+export const OPEN_THEME_GLYPH: LucideIcon = FolderOpen;
+export const SAVE_THEME_GLYPH: LucideIcon = Save;
+export const SAVE_THEME_AS_GLYPH: LucideIcon = SaveAll;
+export const ACTIVATE_THEME_GLYPH: LucideIcon = Monitor;
+export const EXPORT_THEME_GLYPH: LucideIcon = Download;
 
 /** The online cell's *Install* control, which the copy marks with an upload
  *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`

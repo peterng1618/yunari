@@ -1001,6 +1001,15 @@ body,
   display: flex;
   gap: 4px;
 }
+/* The theme toolbar: the open document's actions as the design's 26px icon
+   buttons. It is a sibling of the menus rather than rows inside them, so a
+   press is one gesture and the glyph-only hover rule is `ControlIconButton`'s
+   own. The 4px gap is the menubar's, because the two regions read as one row. */
+.editor-shell-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
 .editor-shell-menubar button {
   color: var(--shell-text);
   border: 0;
@@ -3116,14 +3125,16 @@ body,
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
   /* **The compact header keeps the mode switch and the publish control.** The
-     brand and the menubar are the two regions that stand down: together with
-     the switch and the publish control they measure more than the glass, while
-     the switch alone plus publish fit. The menubar's actions stay on their
-     shortcuts, and the header is not where a phone-width author edits a
-     document's menus. The row does not wrap: the publish control is the
-     editor's one filled accent button and belongs at the right edge. */
+     brand, the menubar and the theme toolbar are the three regions that stand
+     down: together with the switch and the publish control they measure more
+     than the glass, while the switch alone plus publish fit. The menubar's and
+     toolbar's actions stay on their shortcuts, and the header is not where a
+     phone-width author edits a document's menus. The row does not wrap: the
+     publish control is the editor's one filled accent button and belongs at
+     the right edge. */
   .editor-shell-header strong,
-  .editor-shell-menubar {
+  .editor-shell-menubar,
+  .editor-shell-toolbar {
     display: none;
   }
   .editor-shell-header {

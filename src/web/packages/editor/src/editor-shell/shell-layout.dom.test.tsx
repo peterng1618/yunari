@@ -30,6 +30,7 @@ import type {
   EditorViewControls,
 } from "./session-facade.js";
 import { createShellLayout } from "./shell-layout.js";
+import { THEME_TOOLBAR_ACTIONS } from "./shell-menu-bar.js";
 
 // Base UI's popup needs two browser APIs jsdom has none of: floating-ui observes
 // its anchor, and the popup waits for its own open transition before reporting
@@ -66,8 +67,9 @@ function facade(): EditorActionFacade {
     newFromStarter: vi.fn(async () => undefined),
     importPackage: vi.fn(),
     openLibraryTheme: vi.fn(async () => undefined),
-    savePackage: vi.fn(async () => undefined),
-    releasePackage: vi.fn(async () => undefined),
+    downloadPackage: vi.fn(async () => undefined),
+    exportTheme: vi.fn(async () => undefined),
+    activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
     openRecent: vi.fn(async () => undefined),
@@ -1227,7 +1229,7 @@ it("routes the readings submenu's choice to setSourceMode", async () => {
   layout.destroy();
 });
 
-it("has no Insert menu, and every insertable group is still reachable from the Add pane", async () => {
+it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   layout.setBridge(bridgeStub({ session: facade() }), undefined);
@@ -1247,14 +1249,31 @@ it("has no Insert menu, and every insertable group is still reachable from the A
   );
   await Promise.resolve();
 
-  // the header rule: Insert lives in the Add pane, so the header has no Insert menu. The
-  // three that remain are the three DESIGN.md names — a fourth coming back is
-  // the second rendering this plan exists to prevent.
+  // the header rule: Insert lives in the Add pane and Edit lives in the
+  // Composition pane's footer toolbar, so the header's two menus are File and
+  // View — a third coming back is the duplication this ruling removed.
   expect(
     [...root.querySelectorAll(".editor-shell-menubar button")].map(
       (button) => button.textContent,
     ),
-  ).toEqual([uiCopy.menus.file, uiCopy.menus.edit, uiCopy.menus.view]);
+  ).toEqual([uiCopy.menus.file, uiCopy.menus.view]);
+
+  // The document's own actions are icon buttons in one toolbar, not rows in a
+  // menu. The list is the owner's own, so a new row cannot escape this read.
+  const toolbar = root.querySelector<HTMLElement>(
+    "[data-yunari-theme-toolbar]",
+  );
+  if (toolbar === null) throw new Error("No theme toolbar.");
+  expect(toolbar.getAttribute("role")).toBe("toolbar");
+  expect(toolbar.getAttribute("aria-label")).toBe(uiCopy.toolbar.label);
+  const toolbarNames = [...toolbar.querySelectorAll("button")].map((button) =>
+    button.getAttribute("aria-label"),
+  );
+  expect(toolbarNames).toEqual(THEME_TOOLBAR_ACTIONS.map((row) => row.label));
+  // The selection's commands are not the document's: they live in the pane
+  // that names the selection, not in the header.
+  expect(toolbarNames).not.toContain(uiCopy.actions.copy);
+  expect(toolbarNames).not.toContain(uiCopy.actions.delete);
 
   // And the menu's removal cost no capability: walking `insertGroups()` — the
   // one owner of what an author can insert — must find every label in the
@@ -1264,6 +1283,57 @@ it("has no Insert menu, and every insertable group is still reachable from the A
   expect(paneGroups(pane.root)).toEqual(groupsOf(insertGroups()));
 
   layout.destroy();
+});
+
+/** Whether a focusable element is in the page's tab order. Native buttons are
+ *  unless a `tabindex` takes them out. */
+function tabbable(element: HTMLElement): boolean {
+  const tabIndex = element.getAttribute("tabindex");
+  return tabIndex === null || Number(tabIndex) >= 0;
+}
+
+it("reaches every toolbar button by keyboard and runs the one it presses", async () => {
+  const root = document.createElement("div");
+  // In the document, because `focus()` on a detached tree leaves focus on
+  // `body`: this case is about the tab order, not a data attribute.
+  document.body.append(root);
+  const layout = createShellLayout(root);
+  const session = facade();
+  layout.setBridge(bridgeStub({ session }), undefined);
+  await Promise.resolve();
+
+  const toolbar = root.querySelector<HTMLElement>(
+    "[data-yunari-theme-toolbar]",
+  );
+  if (toolbar === null) throw new Error("No theme toolbar.");
+  const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>("button")];
+  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length);
+  // Buttons, not divs with handlers: the native button is the keyboard's own
+  // Enter/Space target, and nothing may take it out of the tab order.
+  for (const button of buttons) {
+    expect(button.tagName).toBe("BUTTON");
+    expect(button.type).toBe("button");
+    expect(tabbable(button), button.getAttribute("aria-label") ?? "").toBe(
+      true,
+    );
+  }
+  // Focus really reaches them in reading order, and a press reaches the owner.
+  buttons[0]?.focus();
+  expect(document.activeElement).toBe(buttons[0]);
+  buttons[0]?.click();
+  expect(session.importPackage).toHaveBeenCalledTimes(1);
+
+  // Activate is one of them and is wired to its own owner rather than to Save.
+  const activate = buttons.find(
+    (button) => button.getAttribute("aria-label") === uiCopy.file.activate,
+  );
+  if (activate === undefined) throw new Error("No Activate button.");
+  activate.click();
+  expect(session.activate).toHaveBeenCalledTimes(1);
+  expect(session.saveLibrary).not.toHaveBeenCalled();
+
+  layout.destroy();
+  root.remove();
 });
 
 /** `insertGroups()` in the shape the two readers above return: the entries that
@@ -1294,16 +1364,17 @@ it("prints the chord on the menu rows the shortcut table binds", async () => {
   // Open it, assert, and close it — do not add a second one. Read straight
   // after the gesture, as the View and Insert tests do, so the assertion names
   // the menu this click opened rather than whichever poll settles first.
-  menubarEntry(root, uiCopy.menus.edit).click();
+  menubarEntry(root, uiCopy.menus.file).click();
   await Promise.resolve();
   // `openPopup()` reads the open menu rather than the bare class: the display
   // switch's popup is kept mounted and closed, so the class alone is not
   // necessarily the menu an author has open.
   const popup = openPopup();
-  // The first `kbd` is Undo's, and the assertion is against `shortcutLabel`
-  // rather than a literal so it reads the same chord the row does.
+  // The first `kbd` is New theme's, and the assertion is against
+  // `shortcutLabel` rather than a literal so it reads the same chord the row
+  // does.
   expect(popup.querySelector("kbd")?.textContent).toBe(
-    shortcutLabel("edit.undo"),
+    shortcutLabel("file.new"),
   );
 
   // **And it re-reads the live table.** Review Focus 3 on this surface: a menu
@@ -1316,43 +1387,12 @@ it("prints the chord on the menu rows the shortcut table binds", async () => {
     key: "j",
     modifier: true,
     shift: false,
-    action: "edit.undo",
+    action: "file.new",
   };
   act(() => {
-    setActiveShortcuts(resolveShortcuts({ "edit.undo": moved }));
+    setActiveShortcuts(resolveShortcuts({ "file.new": moved }));
   });
   expect(openPopup().querySelector("kbd")?.textContent).toBe("Ctrl+J");
-
-  layout.destroy();
-});
-
-it("disables the Edit commands for a background selection, which has no object", async () => {
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  layout.setBridge(
-    bridgeStub({
-      snapshot: () => ({
-        objectCount: 0,
-        tokenCount: 0,
-        selectedCount: 1,
-        locked: false,
-        activeKind: "background",
-        documentName: undefined,
-        selectionPresetId: undefined,
-      }),
-    }),
-    undefined,
-  );
-  menubarEntry(root, uiCopy.menus.edit).click();
-  await Promise.resolve();
-
-  // The four object-scoped rows reach a Fabric manager, and a background has no
-  // object for any of them, so the menu says so rather than dispatching a
-  // silent no-op. Undo and redo act on the document and keep working — their
-  // chords already did, so greying them was the menu disagreeing with itself.
-  expect(menuItems().map((item) => item.getAttribute("aria-disabled"))).toEqual(
-    [null, null, "true", "true", "true", "true"],
-  );
 
   layout.destroy();
 });
@@ -1365,26 +1405,17 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
 
   // Each row's own id, and the pairing is the ruled one (vg-185): a chord is
   // taught where the `PRODUCT_SHORTCUTS` id reaches the same call the row
-  // reaches, which for these three is one method on the same receiver —
-  // `file.save`/`saveLibrary` both end at `#document.saveLibrary()`, `file.new`
-  // and `newDocument` at `#document.newDocument()`, and `file.open` and the
-  // *Import theme* row at the session's own `importPackage()`, which is the
-  // package picker. The four rows with no id stay chordless; the
-  // menu does not pair a chord by eye, which is how a menu starts teaching a
-  // key that runs something else.
+  // reaches — `file.new` and `newDocument` at `#document.newDocument()`, and
+  // `file.findAssets` at the finder's own opener. The toolbar's Save and
+  // Import theme carry the other two; `newFromTemplate` and `openRecent` stay
+  // chordless because the table binds nothing for them, not because a row
+  // cannot have one. The menu does not pair a chord by eye, which is how a
+  // menu starts teaching a key that runs something else.
   const keyed = new Map<string, ProductShortcutId | undefined>([
     [uiCopy.file.newDocument, "file.new"],
     [uiCopy.file.newFromTemplate, undefined],
     [uiCopy.file.findAssets, "file.findAssets"],
-    [uiCopy.file.importPackage, "file.open"],
-    [uiCopy.file.savePackage, undefined],
-    [uiCopy.file.exportTheme, undefined],
-    [uiCopy.file.openLibrary, undefined],
     [uiCopy.file.openRecent, undefined],
-    // Before `saveLibrary`: the row lookup below takes the first key a row's
-    // text starts with, and "Save as" starts with "Save".
-    [uiCopy.file.saveAs, undefined],
-    [uiCopy.file.saveLibrary, "file.save"],
   ]);
 
   const rows = menuItems();
@@ -1404,24 +1435,18 @@ it("teaches a File row exactly the chord whose id runs the call that row runs", 
   layout.destroy();
 });
 
-/** The finder's own entry: a File row above *Import theme*, because both add
- *  something and the finder is the one that fetches (entry drawing). */
-it("opens the finder from the File menu, above Import theme", async () => {
+/** The finder's own entry: a File row, because it is editor-level rather than
+ *  an action on one theme document. */
+it("opens the finder from the File menu", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   await act(async () => menubarEntry(root, uiCopy.menus.file).click());
   await Promise.resolve();
 
-  const rows = menuItems();
-  const finderRow = rows.find((row) =>
+  const finderRow = menuItems().find((row) =>
     (row.textContent ?? "").startsWith(uiCopy.file.findAssets),
   );
-  const importRow = rows.find((row) =>
-    (row.textContent ?? "").startsWith(uiCopy.file.importPackage),
-  );
   if (finderRow === undefined) throw new Error("No Find assets row.");
-  if (importRow === undefined) throw new Error("No Import theme row.");
-  expect(rows.indexOf(finderRow)).toBeLessThan(rows.indexOf(importRow));
 
   await act(async () => finderRow.click());
   // The finder is portalled to `body`, so the root subtree cannot answer it.
@@ -1433,17 +1458,46 @@ it("opens the finder from the File menu, above Import theme", async () => {
 });
 
 /**
- * **The File row reaches the import** — `file.open` → `importPackage()` → the
- * package picker, which is the product's only import trigger now that the row
- * is named for what it does.
- *
- * The row is clicked the way a person clicks it, File then the row, so this is
- * the wiring rather than the table: the case above proves the chord and the row
- * name the same id, and this proves the row runs the call that id reaches. It
- * matters more after A.7b than before it, because the row no longer opens a
- * document and nothing else imports one.
+ * **The toolbar's Import theme reaches the import** — `file.open` →
+ * `importPackage()` → the package picker, which is the product's only import
+ * trigger. The button is pressed the way a person presses it, so this is the
+ * wiring rather than the table: the case above proves the chord and the button
+ * name the same id, and this proves the button runs the call that id reaches.
  */
-it("runs the import from the File row, and nothing else", async () => {
+it("runs the import from the toolbar button, and nothing else", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const session = facade();
+  layout.setBridge(bridgeStub({ session }), undefined);
+  await Promise.resolve();
+
+  const button = [
+    ...root.querySelectorAll<HTMLButtonElement>(
+      "[data-yunari-theme-toolbar] button",
+    ),
+  ].find(
+    (candidate) =>
+      candidate.getAttribute("aria-label") === uiCopy.file.importPackage,
+  );
+  if (button === undefined) throw new Error("No Import theme button.");
+  await act(async () => button.click());
+
+  expect(
+    session.importPackage,
+    "the toolbar button does not reach the import",
+  ).toHaveBeenCalledTimes(1);
+  expect(
+    session.openLibrary,
+    "the toolbar button imported and opened a library theme as well",
+  ).not.toHaveBeenCalled();
+
+  layout.destroy();
+});
+
+/** The two library rows the top bar owes, each its own entry rather than a
+ *  modifier of Open or Save, which is the ruling (`#35`): **Open recent** is a
+ *  File row, and **Save as** is a toolbar button. */
+it("runs Open recent from its File row", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const session = facade();
@@ -1451,53 +1505,41 @@ it("runs the import from the File row, and nothing else", async () => {
   await Promise.resolve();
 
   await act(async () => menubarEntry(root, uiCopy.menus.file).click());
+  await Promise.resolve();
   const row = menuItems().find((item) =>
-    (item.textContent ?? "").startsWith(uiCopy.file.importPackage),
+    (item.textContent ?? "").startsWith(uiCopy.file.openRecent),
   );
-  if (row === undefined) throw new Error("No Import theme row.");
+  if (row === undefined) throw new Error("No Open recent row.");
   await act(async () => row.click());
 
-  expect(
-    session.importPackage,
-    "the File row does not reach the import",
-  ).toHaveBeenCalledTimes(1);
-  expect(
-    session.openLibrary,
-    "the File row imported and opened a library theme as well",
-  ).not.toHaveBeenCalled();
+  expect(session.openRecent).toHaveBeenCalledTimes(1);
+  expect(session.saveAs).not.toHaveBeenCalled();
 
   layout.destroy();
 });
 
-/** The two library rows the top bar owes, each its own entry rather than a
- *  modifier of Open or Save, which is the ruling (`#35`). */
-for (const [label, pick] of [
-  [uiCopy.file.openRecent, (session: EditorActionFacade) => session.openRecent],
-  [uiCopy.file.saveAs, (session: EditorActionFacade) => session.saveAs],
-] as const) {
-  it(`runs ${label} from its own File row`, async () => {
-    const root = document.createElement("div");
-    const layout = createShellLayout(root);
-    const session = facade();
-    layout.setBridge(bridgeStub({ session }), undefined);
-    await Promise.resolve();
+it("runs Save as from its toolbar button", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const session = facade();
+  layout.setBridge(bridgeStub({ session }), undefined);
+  await Promise.resolve();
 
-    await act(async () => menubarEntry(root, uiCopy.menus.file).click());
-    await Promise.resolve();
-    const row = menuItems().find((item) =>
-      (item.textContent ?? "").startsWith(label),
-    );
-    if (row === undefined) throw new Error(`No ${label} row.`);
-    await act(async () => row.click());
+  const button = [
+    ...root.querySelectorAll<HTMLButtonElement>(
+      "[data-yunari-theme-toolbar] button",
+    ),
+  ].find(
+    (candidate) => candidate.getAttribute("aria-label") === uiCopy.file.saveAs,
+  );
+  if (button === undefined) throw new Error("No Save as button.");
+  await act(async () => button.click());
 
-    expect(
-      pick(session),
-      `${label} did not reach the session`,
-    ).toHaveBeenCalledTimes(1);
+  expect(session.saveAs).toHaveBeenCalledTimes(1);
+  expect(session.saveLibrary).not.toHaveBeenCalled();
 
-    layout.destroy();
-  });
-}
+  layout.destroy();
+});
 
 /** The three mode segments, in the order the header draws them. */
 function modeSegments(root: HTMLElement): readonly HTMLButtonElement[] {
@@ -1771,11 +1813,20 @@ it("draws the editor's own header actions only in editor mode", async () => {
     expect(root.querySelector("[data-yunari-publish]")).not.toBeNull(),
   );
 
-  const actions = (): { menus: number; publish: boolean } => ({
+  const actions = (): {
+    menus: number;
+    toolbar: number;
+    publish: boolean;
+  } => ({
     menus: root.querySelectorAll(".editor-shell-menubar button").length,
+    toolbar: root.querySelectorAll("[data-yunari-theme-toolbar] button").length,
     publish: root.querySelector("[data-yunari-publish]") !== null,
   });
-  const editorActions = { menus: 3, publish: true };
+  const editorActions = {
+    menus: 2,
+    toolbar: THEME_TOOLBAR_ACTIONS.length,
+    publish: true,
+  };
 
   expect(actions(), "the editor draws no actions of its own").toEqual(
     editorActions,
@@ -1784,12 +1835,14 @@ it("draws the editor's own header actions only in editor mode", async () => {
   await act(async () => modeSegments(root)[1]?.click());
   expect(actions(), "themes mode still draws the editor's actions").toEqual({
     menus: 0,
+    toolbar: 0,
     publish: false,
   });
 
   await act(async () => modeSegments(root)[2]?.click());
   expect(actions(), "host mode still draws the editor's actions").toEqual({
     menus: 0,
+    toolbar: 0,
     publish: false,
   });
 

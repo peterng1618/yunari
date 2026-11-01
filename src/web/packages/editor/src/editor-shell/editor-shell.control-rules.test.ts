@@ -173,7 +173,7 @@ function colourBearingMarkableControls(): readonly string[] {
  * stops declaring a colour does not fail, because that is a deletion and this
  * guard is about colours arriving.
  *
- *  - `.editor-shell-menubar button` — the File/Edit menubar's entries.
+ *  - `.editor-shell-menubar button` — the File/View menubar's entries.
  *  - `.editor-shell-rail button` — the rail's pane slots.
  *  - `.editor-shell-rail button[aria-pressed="true"]` — the selected slot.
  *  - `.editor-shell-rail button.editor-shell-rail-settings` — the settings gear.

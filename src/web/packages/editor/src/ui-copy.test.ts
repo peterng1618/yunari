@@ -16,7 +16,7 @@
  * landed React surfaces.
  */
 import { expect, it } from "vitest";
-import { EDIT_MENU_ROWS } from "./editor-shell/shell-menu-bar.js";
+import { THEME_TOOLBAR_ACTIONS } from "./editor-shell/shell-menu-bar.js";
 import { uiCopy } from "./ui-copy.js";
 
 /**
@@ -231,24 +231,27 @@ it("pins the submission's sentences as literals", () => {
 });
 
 /**
- * the refusal rule: a menu's rows are sentence case. The list is the menu's own — its three
- * names, its File and Edit rows and its View settings — not the whole table,
- * which carries `W`, `H`, `CPU`, `2K`, `(empty)` and `Left`/`Right`:
- * abbreviations, marks and a parenthesised gap, none of them a row a menu
- * prints. A row title-cased (`New From Starter`) or lower-cased (`value runs`)
- * is what this catches.
+ * the refusal rule: a menu row and a toolbar button's name are sentence case.
+ * The list is the chrome's own — its two menus, the File rows, the toolbar's
+ * six actions and its View setting — not the whole table, which carries `W`,
+ * `H`, `CPU`, `2K`, `(empty)` and `Left`/`Right`: abbreviations, marks and a
+ * parenthesised gap, none of them a row a menu prints. A row title-cased (`New
+ * From Starter`) or lower-cased (`value runs`) is what this catches.
  *
  * **The count is guarded, in the same shape as the per-surface assertion.** The
- * case could pass by being fed nothing, so the Edit rows are counted against the
- * six the menu is specified to hold (`EDIT_MENU_ROWS`), not against the length of
- * the list the case derives: a row dropped from the menu's owner shrinks both it
- * and this list together, which a derived count could not see.
+ * case could pass by being fed nothing, so the toolbar's six names are counted
+ * against the owner list (`THEME_TOOLBAR_ACTIONS`), not against the length of
+ * the list the case derives.
  */
-it("prints every menu row in sentence case", () => {
+it("prints every menu row and toolbar name in sentence case", () => {
   const rows = menuRows();
-  const editLabels = new Set(EDIT_MENU_ROWS.map((row) => row.label));
+  const toolbarLabels = new Set(
+    THEME_TOOLBAR_ACTIONS.map((action) => action.label),
+  );
   expect(rows.length).toBeGreaterThan(0);
-  expect(rows.filter((row) => editLabels.has(row)).length).toBe(6);
+  expect(rows.filter((row) => toolbarLabels.has(row)).length).toBe(
+    THEME_TOOLBAR_ACTIONS.length,
+  );
   for (const row of rows) expect(isSentenceCase(row), row).toBe(true);
 });
 
@@ -279,22 +282,24 @@ it("names a remix's parent in one sentence", () => {
 });
 
 /**
- * The rows `ShellMenuBar` renders. Read from the menu's own owners rather than
- * from the whole table: the three names are `uiCopy.menus`, the File rows are
- * `uiCopy.file`, the Edit rows are `EDIT_MENU_ROWS` — the const the menu itself
- * maps over, because `uiCopy.actions` holds fourteen keys and only six are Edit
- * rows, so no `Object.values` derives them — and the View rows are `uiCopy.view`
- * less the one entry no menu prints: `previewDetail` is the status line under
- * the source control (`live-source.ts`), not a row. A row added to File or View
- * is covered by the derivation; one added to Edit is covered by the const.
+ * The chrome's words. Read from its own owners rather than from the whole
+ * table: the two menu names are `uiCopy.menus`, the File rows are
+ * `uiCopy.file` (the toolbar reads the same six labels), and the View rows are
+ * `uiCopy.view` less the one entry no menu prints: `previewDetail` is the
+ * status line under the source control (`live-source.ts`), not a row. A row
+ * added to File or View is covered by the derivation; one added to the toolbar
+ * is covered by `THEME_TOOLBAR_ACTIONS`.
  */
 function menuRows(): string[] {
+  const toolbarLabels = new Set(
+    THEME_TOOLBAR_ACTIONS.map((action) => action.label),
+  );
   return [
     uiCopy.menus.file,
-    uiCopy.menus.edit,
     uiCopy.menus.view,
-    ...Object.values(uiCopy.file),
-    ...EDIT_MENU_ROWS.map((row) => row.label),
+    // The toolbar buttons read the same six labels; they are added once below.
+    ...Object.values(uiCopy.file).filter((row) => !toolbarLabels.has(row)),
+    ...toolbarLabels,
     ...Object.values(uiCopy.view).filter(
       (row) => row !== uiCopy.view.previewDetail,
     ),

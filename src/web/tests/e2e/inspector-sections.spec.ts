@@ -612,12 +612,12 @@ function geometryOf(scene: readonly SceneObject[], id: string) {
   return object;
 }
 
-/** Saves the open document and hands back the package bytes. */
-async function savePackage(page: Page): Promise<Buffer> {
+/** Exports the open document and hands back the package bytes. */
+async function exportPackage(page: Page): Promise<Buffer> {
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Save package" }).click();
-  await expect(page.locator("#status")).toContainText("Theme package saved");
+  page.once("dialog", (dialog) => dialog.accept("patch"));
+  await page.getByRole("button", { name: "Export theme", exact: true }).click();
+  await expect(page.locator("#status")).toContainText("Released");
   const stream = await (await download).createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -1195,7 +1195,7 @@ test.describe("the per-kind inspector column", () => {
       animationEasingUpdate: "linear",
     });
 
-    const bytes = await savePackage(page);
+    const bytes = await exportPackage(page);
     await openPackage(page, bytes);
     // By the name the author gave it: a reopened document's ids are the
     // document's own, so the tree row is the name the panel paints.

@@ -13,6 +13,7 @@ import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import {
   createThemeLibraryClient,
+  DEFAULT_DISPLAY_KEY,
   ThemeConflictError,
   type ThemeLibraryClient,
 } from "../theme-library-client.js";
@@ -257,6 +258,33 @@ export class ThemeLibraryManager {
       if (error instanceof ThemeConflictError) {
         await this.#resolveConflict(current, client);
       }
+    }
+  }
+
+  /**
+   * Puts one stored theme on the display that holds no theme of its own — the
+   * host's default assignment, which is what the player falls back to.
+   *
+   * **The write is the client's own `assign`**, the route the store's Assign
+   * control already uses; this manager only names the theme and reports the
+   * answer. A refusal is the host's own sentence — "No such theme." — and is
+   * printed rather than replaced with a sentence about activation, because the
+   * host is the one that knows which half of the request failed.
+   *
+   * A theme with no stored document is not activatable: the caller saves
+   * first, and a save that did not land never reaches here.
+   */
+  async activate(id: string): Promise<void> {
+    const options = this.#options;
+    try {
+      await this.#client().assign(DEFAULT_DISPLAY_KEY, id);
+      options.onSaved(uiCopy.library.activated);
+    } catch (error) {
+      options.onError?.(
+        uiCopy.library.activateFailed(
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
     }
   }
 

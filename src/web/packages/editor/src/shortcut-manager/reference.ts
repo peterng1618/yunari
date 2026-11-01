@@ -34,7 +34,7 @@ interface ShortcutReferenceGroup {
 /**
  * One word per action, reusing `uiCopy`'s existing names rather than writing a
  * second vocabulary for the same things: `Redo` is `uiCopy.actions.redo` in the
- * Edit menu, in the context menu and here. The `satisfies` is load-bearing — a
+ * context menu and here. The `satisfies` is load-bearing — a
  * `ProductShortcutId` added to the table with no word fails to compile, which is
  * the only thing standing between a new binding and a silently shorter sheet.
  */

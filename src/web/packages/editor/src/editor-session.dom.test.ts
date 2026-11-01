@@ -236,7 +236,10 @@ import {
 } from "./editor-shell/shell-stores.js";
 import { fontTrio } from "./font-catalog.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
-import { ThemeConflictError } from "./theme-library-client.js";
+import {
+  DEFAULT_DISPLAY_KEY,
+  ThemeConflictError,
+} from "./theme-library-client.js";
 import { base64Of } from "./video-normalizer.js";
 
 /** What the chooser answered, per test. The chooser is a modal dialog with no
@@ -352,7 +355,7 @@ describe("EditorSession", () => {
       undefined,
     );
 
-    await session.savePackage();
+    await session.downloadPackage();
     expect(onSaved).toHaveBeenCalled();
 
     await session.saveLibrary();
@@ -686,7 +689,7 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
-  it("bumps the release version only from Release", async () => {
+  it("bumps the release version only from Export theme", async () => {
     vi.stubGlobal(
       "prompt",
       vi.fn(() => "patch"),
@@ -739,7 +742,7 @@ describe("EditorSession", () => {
     // nothing laid out, so it renders none and the export happens regardless.
     // The fourth is the credits member, and a document that imported nothing
     // has none.
-    await session.savePackage();
+    await session.downloadPackage();
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         metadata: { version: "1.2.3", themeLanguage: "en" },
@@ -749,7 +752,7 @@ describe("EditorSession", () => {
       undefined,
     );
 
-    await session.releasePackage();
+    await session.exportTheme();
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         metadata: { version: "1.2.4", themeLanguage: "en" },
@@ -759,6 +762,107 @@ describe("EditorSession", () => {
       undefined,
     );
     extensions.destroy();
+  });
+
+  it("activates by saving first, assigns the default display, and reports a refusal", async () => {
+    const shell = {
+      editor: {
+        canvas: {
+          on: vi.fn(),
+          off: vi.fn(),
+          getActiveObject: () => undefined,
+          getObjects: () => [],
+          requestRenderAll: vi.fn(),
+        },
+        clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+        textManager: {
+          addText: vi.fn(),
+          setAuthoringView: vi.fn(),
+          setRepaint: vi.fn(),
+          setMentions: vi.fn(),
+        },
+        cropManager: idleCrop(),
+        historyManager: { attachGlobals: () => {} },
+      },
+      scene: {},
+      snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+      setBackgroundMedia: vi.fn(),
+    };
+    const open = (client: Record<string, unknown>) => {
+      const onSaved = vi.fn();
+      const onError = vi.fn();
+      const extensions = new EditorSession({
+        assetManager: new AssetManager(),
+        shell: shell as never,
+        source: {} as never,
+        envelope,
+        panelHosts: {
+          add: document.body,
+          assets: document.body,
+          document: document.body,
+          tokens: document.body,
+          selection: document.body,
+        },
+        libraryClient: client as never,
+        onNew: vi.fn(),
+        onNewFromStarter: vi.fn(),
+        onSaved,
+        onError,
+      });
+      return { extensions, onSaved, onError };
+    };
+
+    // No stored base: Activate saves first, then puts the theme on the display
+    // a display with no choice of its own falls to.
+    const client = {
+      list: vi.fn(async () => []),
+      open: vi.fn(),
+      save: vi.fn(async () => "base-after-save"),
+      assign: vi.fn(async () => undefined),
+      listDisplays: vi.fn(async () => ({ default: null, displays: [] })),
+    };
+    const first = open(client);
+    await first.extensions.actionFacade().activate();
+    expect(client.save).toHaveBeenCalledTimes(1);
+    expect(client.assign).toHaveBeenCalledWith(
+      DEFAULT_DISPLAY_KEY,
+      envelope.id,
+    );
+    expect(first.onSaved).toHaveBeenCalledWith(uiCopy.library.activated);
+    expect(first.onError).not.toHaveBeenCalled();
+
+    // The assignment is refused in the host's own sentence. The refusal is
+    // printed, and no success is claimed for it.
+    const refusal = "No such theme.";
+    client.assign.mockRejectedValueOnce(new Error(refusal));
+    first.onSaved.mockClear();
+    await first.extensions.actionFacade().activate();
+    expect(first.onError).toHaveBeenLastCalledWith(
+      uiCopy.library.activateFailed(refusal),
+    );
+    expect(first.onSaved).not.toHaveBeenCalled();
+    first.extensions.destroy();
+
+    // A save that did not land never reaches the assignment: Activate cannot
+    // put on screen a theme the host does not hold. A fresh session has no
+    // base, which is what makes the save necessary.
+    const refusing = {
+      list: vi.fn(async () => []),
+      open: vi.fn(),
+      save: vi.fn(async () => {
+        throw new Error("No such theme.");
+      }),
+      assign: vi.fn(async () => undefined),
+      listDisplays: vi.fn(async () => ({ default: null, displays: [] })),
+    };
+    const second = open(refusing);
+    await second.extensions.actionFacade().activate();
+    expect(refusing.assign).not.toHaveBeenCalled();
+    expect(second.onSaved).not.toHaveBeenCalled();
+    expect(second.onError).toHaveBeenCalledWith(
+      "Could not save to library: No such theme.",
+    );
+    second.extensions.destroy();
   });
 
   it("adopts a trio, replacing every role token and leaving a non-role alone", async () => {
@@ -1460,7 +1564,7 @@ describe("EditorSession", () => {
     });
 
     // The `.yunari-theme` the author shares.
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     const shipped = saveMock.mock.calls.at(-1) as
       | [unknown, unknown, Uint8Array | undefined]
       | undefined;
@@ -2031,7 +2135,7 @@ describe("a save the host refused", () => {
       onError: vi.fn(),
     });
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
 
     // A `.yunari-theme` an author shares is a file, not a write to the
     // library: refusing it would break sharing a theme.
@@ -2427,7 +2531,7 @@ describe("the Wallpaper Engine import transaction", () => {
     );
     expect(setBackgroundMedia).toHaveBeenCalled();
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.anything(),
@@ -2474,7 +2578,7 @@ describe("the Wallpaper Engine import transaction", () => {
       ok: true,
     });
     expect(requests).toContain("/api/themes/normalize-video");
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.anything(),
@@ -2523,7 +2627,7 @@ describe("the Wallpaper Engine import transaction", () => {
     expect(importSpy).not.toHaveBeenCalled();
     expect(setBackgroundMedia).not.toHaveBeenCalled();
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     // A refusal writes no credit: the package's credits member never appears.
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -2580,7 +2684,7 @@ describe("the Wallpaper Engine import transaction", () => {
       sourceUrl: workshopUrl,
     });
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.anything(),
@@ -2635,7 +2739,7 @@ describe("the Wallpaper Engine import transaction", () => {
       sourceUrl: profileUrl,
     });
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     const write = saveMock.mock.calls.at(-1) as
       | [
           unknown,
@@ -2754,7 +2858,7 @@ describe("the Wallpaper Engine import transaction", () => {
     });
     expect(manager.declarations[0]?.sourceUrl).toBeUndefined();
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     // A package declares no source and no author: the file carries neither.
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -2812,7 +2916,7 @@ describe("the Wallpaper Engine import transaction", () => {
     expect(new Uint8Array(await imported.arrayBuffer())).toEqual(normalized);
     expect(setBackgroundMedia).toHaveBeenCalled();
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     // A video carries no attribution: no credit member reaches the writer.
     expect(saveMock).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -2988,7 +3092,7 @@ describe("the local font import", () => {
     ]);
     expect(addCredit).toHaveBeenCalledTimes(1);
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??
@@ -3047,7 +3151,7 @@ describe("the local font import", () => {
       { kind: "font", family: "Inter", weight: 700, format: "ttf" },
     ]);
     expect(addCredit).not.toHaveBeenCalled();
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     expect(
       Object.values(
@@ -3151,7 +3255,7 @@ describe("the local font import", () => {
       ).toBeNull();
     });
 
-    await extensions.actionFacade().savePackage();
+    await extensions.actionFacade().downloadPackage();
     const saved = saveMock.mock.calls.at(-1) as unknown[] | undefined;
     const presets =
       (saved?.[0] as FabricThemeEnvelope | undefined)?.globals?.typeTokens ??

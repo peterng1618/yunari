@@ -120,7 +120,8 @@ function wallpaperActions(host: ActionFacadeHost): WallpaperActions {
   };
 }
 
-/** The shell menus' one reachability surface, built from the session's owners. */
+/** The shell's header one reachability surface, built from the session's owners:
+ *  the File and View menus and the theme toolbar all dispatch through it. */
 export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
   const { options, document, assets, charts } = host;
   const editor = options.shell.editor;
@@ -130,8 +131,9 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // The picker, and nothing of the document's: an import lands in the
     // library while whatever is open stays open.
     importPackage: () => options.onImportPackage?.(),
-    savePackage: () => document.save(),
-    releasePackage: () => document.release(),
+    downloadPackage: () => document.save(),
+    exportTheme: () => document.release(),
+    activate: () => document.activateTheme(),
     openLibrary: () => document.openLibrary(),
     // The finder's Fonts body, wired to the document's writes. The panel is
     // presentational: every refusal reaches the author through

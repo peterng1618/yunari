@@ -488,10 +488,10 @@ export function createShellLayout(
       <div className="editor-shell">
         {/* A full-width strip, not a floating card: the header is the window's
             top edge, and the header rule gives it document- and editor-level actions only.
-            The brand and the three menus sit left; the publish control is the
-            editor's one filled accent button, on the right. No tagline and no
-            document readout — a per-document fact belongs on the canvas,
-            and the readout only grew with the LAN. The shell palette is not
+            The brand, the two menus and the theme toolbar sit left; the publish
+            control is the editor's one filled accent button, on the right. No
+            tagline and no document readout — a per-document fact belongs on the
+            canvas, and the readout only grew with the LAN. The shell palette is not
             here either: the shell layout makes it a set-once choice and it lives in
             Settings, at the accepted cost of no at-a-glance readout. */}
         <header className="editor-shell-header">
