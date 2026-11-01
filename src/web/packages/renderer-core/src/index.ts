@@ -3,6 +3,7 @@
 export type {
   ArtboardBars,
   ArtboardCrop,
+  ArtboardShape,
   ArtboardSize,
   ArtboardTransform,
   ComputeArtboardTransformInput,
@@ -13,6 +14,7 @@ export type {
   ViewportSize,
 } from "./artboard.js";
 export {
+  artboardTransformShape,
   computeArtboardTransform,
   documentToViewport,
   isFullyVisible,

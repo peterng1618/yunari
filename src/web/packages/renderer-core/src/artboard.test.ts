@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  artboardTransformShape,
   type ContentFit,
   computeArtboardTransform,
   documentToViewport,
@@ -358,6 +359,21 @@ describe("toCssTransform", () => {
     expect(toCssTransform(t)).toBe(
       "translate(525px, 0px) rotate(90deg) scale(0.5)",
     );
+  });
+});
+
+describe("artboardTransformShape", () => {
+  it("lays a circle theme out by the rect rules", () => {
+    // A circle theme's artboard is the authored canvas; the disc is a mask over
+    // it, not the glass the artboard is inscribed in.
+    expect(artboardTransformShape("circle", "circle")).toBe("rect");
+    expect(artboardTransformShape("circle", "rect")).toBe("rect");
+  });
+
+  it("keeps every other theme on the display's own geometry", () => {
+    expect(artboardTransformShape("rect", "circle")).toBe("circle");
+    expect(artboardTransformShape(undefined, "rect")).toBe("rect");
+    expect(artboardTransformShape(undefined, "circle")).toBe("circle");
   });
 });
 

@@ -169,6 +169,9 @@ describe("published Fabric theme schema", () => {
 
     expect(artboard["contentFit"]).toEqual({ enum: ["contain", "cover"] });
     expect(artboard["fitMode"]).toBeUndefined();
+    // The shape's vocabulary is published; its square rule is the validator's,
+    // because JSON Schema cannot compare two properties.
+    expect(artboard["shape"]!["enum"]).toEqual(["rect", "circle"]);
   });
 
   it("publishes the background media's bounds, flips and ranges the validator accepts", () => {

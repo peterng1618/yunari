@@ -84,6 +84,47 @@ describe("artboard", () => {
       }),
     ).toContain("unknown-field");
   });
+
+  it("accepts a circle shape on a square artboard, and a rect shape", () => {
+    expectValid({
+      ...baseEnvelope(),
+      artboard: { width: 1080, height: 1080, shape: "circle" },
+    });
+    expectValid({
+      ...baseEnvelope(),
+      artboard: { width: 1920, height: 1080, shape: "rect" },
+    });
+  });
+
+  it("keeps the shape optional, so a document without one is a rectangle", () => {
+    expectValid(baseEnvelope());
+  });
+
+  it("refuses a circle artboard that is not square", () => {
+    // A circle theme's disc is inscribed in the artboard, so a non-square board
+    // would show an ellipse: the rule is the validator's because JSON Schema
+    // cannot compare two properties.
+    const issues = issuesFor({
+      ...baseEnvelope(),
+      artboard: { width: 1080, height: 900, shape: "circle" },
+    });
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe("out-of-range");
+    expect(issues[0]!.path).toBe("/artboard/height");
+    expect(issues[0]!.message).toMatch(/square/i);
+  });
+
+  it("refuses a shape outside the vocabulary", () => {
+    const issues = issuesFor({
+      ...baseEnvelope(),
+      artboard: { width: 1080, height: 1080, shape: "round" },
+    });
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe("invalid-enum");
+    expect(issues[0]!.path).toBe("/artboard/shape");
+  });
 });
 
 describe("background paint", () => {

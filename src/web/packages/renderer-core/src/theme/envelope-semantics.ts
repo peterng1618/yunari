@@ -262,6 +262,39 @@ function validateArtboard(issues: Issues, value: unknown): void {
       "contentFit",
     );
   }
+
+  const shape = value["shape"];
+  if (shape !== undefined) {
+    issues.enumValue(
+      shape,
+      ["rect", "circle"] as const,
+      "/artboard/shape",
+      "shape",
+    );
+  }
+
+  // A circle artboard's disc is inscribed in it, so a non-square board would
+  // show an ellipse. JSON Schema cannot compare two properties, so this is the
+  // validator's rule; a dimension already refused as out of range is not blamed
+  // twice, which is why the check needs both to be positive numbers.
+  const width = value["width"];
+  const height = value["height"];
+  if (
+    shape === "circle" &&
+    typeof width === "number" &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === "number" &&
+    Number.isFinite(height) &&
+    height > 0 &&
+    width !== height
+  ) {
+    issues.add(
+      "out-of-range",
+      "/artboard/height",
+      "A circle artboard must be square: width and height must be equal.",
+    );
+  }
 }
 
 /** Returns valid `group.id` references. */

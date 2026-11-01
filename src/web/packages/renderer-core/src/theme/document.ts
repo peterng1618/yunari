@@ -1,3 +1,4 @@
+import type { ArtboardShape } from "../artboard.js";
 import type { BarSettings } from "../charts/bar.js";
 import type { LineSettings } from "../charts/line.js";
 import type { PieSettings } from "../charts/pie.js";
@@ -178,6 +179,13 @@ export interface Artboard {
    * the model rather than a choice, and absent means contain.
    */
   readonly contentFit?: "contain" | "cover";
+  /**
+   * The authored canvas's shape. A circle artboard is square and the disc is
+   * inscribed in it, so the artboard is the canvas and the corners are masked;
+   * it travels with the theme rather than living on the display. Absent means
+   * rect.
+   */
+  readonly shape?: ArtboardShape;
 }
 
 /** The two boxes a background media layer can be sized to. Exported because the

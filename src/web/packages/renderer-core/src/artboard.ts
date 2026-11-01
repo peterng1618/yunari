@@ -2,8 +2,24 @@
 
 export type ContentFit = "contain" | "cover";
 
+/** The authored canvas's shape: a rectangle, or a square masked by a disc. */
+export type ArtboardShape = "rect" | "circle";
+
 /** Rectangular glass, or a round panel whose disc is the screen. */
-export type DisplayShape = "rect" | "circle";
+export type DisplayShape = ArtboardShape;
+
+/**
+ * The display geometry a theme is laid out against.
+ *
+ * A circle theme's artboard is the authored canvas and the disc masks it, so it
+ * lays out by the rect rules; every other theme keeps the display's own geometry.
+ */
+export function artboardTransformShape(
+  themeShape: ArtboardShape | undefined,
+  displayShape: DisplayShape,
+): DisplayShape {
+  return themeShape === "circle" ? "rect" : displayShape;
+}
 
 /** How a display presents the composition: its glass and its mounting angle. */
 export interface DisplayPresentation {

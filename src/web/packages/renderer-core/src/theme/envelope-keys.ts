@@ -30,7 +30,7 @@ const KNOWN_KEYS = {
     "tags",
     "remixOf",
   ],
-  artboard: ["width", "height", "contentFit"],
+  artboard: ["width", "height", "contentFit", "shape"],
   // `format` and `timeZone` are validated below and authored by the editor's
   // runs panel; omitting them here refused the key before that code ran.
   binding: [
