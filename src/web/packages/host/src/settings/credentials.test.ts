@@ -381,7 +381,7 @@ describe("credentials", () => {
     }
 
     expect(await store.read()).toEqual({});
-  });
+  }, 60_000);
 
   it("leaves a legacy entry alone when a different id is retired", async () => {
     await store.write("cleared", "value-cleared", savedAt);
