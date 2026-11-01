@@ -194,6 +194,85 @@ test("every row carries a role and a mark, and the role adds no height", async (
 });
 
 /**
+ * Which glyph each row draws, read off the rendered icon rather than inferred
+ * from the mark's attribute.
+ *
+ * The jsdom cases pin the same mapping, but they apply no stylesheet and see no
+ * rendered surface. This case is the browser half: the row's mark is the only
+ * place an author can tell a gauge from a radar without reading the role column,
+ * and the Add pane draws the same vocabulary, so a change that swapped or
+ * copied a glyph reddens here even though the class list still looks right.
+ *
+ * The lucide class names are read from the `svg` lucide renders. They are
+ * literals because nothing on the page carries the icon's name otherwise — and a
+ * literal that goes stale fails here rather than passing over a changed mark.
+ */
+test("a row's mark draws its kind's glyph, and the Add pane draws the same", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  /** The row's own mark, not a nested row's. */
+  const markGlyph = async (id: string): Promise<string | null> =>
+    page
+      .locator(`[data-yunari-layer="${id}"]`)
+      .locator(".yunari-layer-mark [data-yunari-layer-mark]")
+      .first()
+      .locator("svg")
+      .getAttribute("class");
+
+  const rowMark = (id: string) =>
+    page
+      .locator(`[data-yunari-layer="${id}"]`)
+      .locator(".yunari-layer-mark [data-yunari-layer-mark]")
+      .first();
+
+  // A group says "this holds others" with the chrome's stack glyph, and a text
+  // row with the vocabulary's T — never the object's own words or bytes.
+  await expect(rowMark("group-cpu-card")).toHaveAttribute(
+    "data-yunari-layer-mark",
+    "group",
+  );
+  expect(await markGlyph("group-cpu-card")).toContain("lucide-layers-2");
+  await expect(rowMark("cpu-card-title")).toHaveAttribute(
+    "data-yunari-layer-mark",
+    "text",
+  );
+  expect(await markGlyph("cpu-card-title")).toContain("lucide-type");
+
+  // A chart's mark answers the family, not just the kind: three families in
+  // this document wear three glyphs, and none of them is the generic chart mark.
+  const families = new Map([
+    ["cpu-card-sparkline", "lucide-chart-line"],
+    ["ram-gauge", "lucide-gauge"],
+    ["storage-bar", "lucide-chart-column"],
+  ]);
+  for (const [id, glyph] of families) {
+    expect(await markGlyph(id), id).toContain(glyph);
+  }
+  expect(new Set(await Promise.all([...families].map(
+    ([id]) => markGlyph(id),
+  ))).size, "each family wears its own glyph").toBe(3);
+
+  // The Add pane's chart tiles draw the same family glyphs — one vocabulary,
+  // two surfaces. Radar is not in this document, so it also proves the tile
+  // reads its family rather than repeating the row it was opened beside.
+  await openPane(page, "Add");
+  const tileGlyph = (label: string) =>
+    page
+      .locator(`[data-yunari-add-group="chart"] button[aria-label="${label}"]`)
+      .locator("svg");
+  expect(await tileGlyph("Gauge").getAttribute("class")).toContain(
+    "lucide-gauge",
+  );
+  expect(await tileGlyph("Radar").getAttribute("class")).toContain(
+    "lucide-radar",
+  );
+});
+
+/**
  * DESIGN.md's 24×24 dense-target rule against the row's own 20px rhythm.
  *
  * The twisty's paint box is the row's 20px square; the extra area is
