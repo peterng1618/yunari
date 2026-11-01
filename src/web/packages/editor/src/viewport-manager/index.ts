@@ -430,11 +430,24 @@ export function createViewportManager({
       const viewport = viewportSize();
       if (viewport === undefined) return;
       const bounds = active.getBoundingRect();
-      const box = framingBox(viewport);
-      const scale = Math.min(
-        box.width / Math.max(bounds.width, 1),
-        box.height / Math.max(bounds.height, 1),
-      );
+      // The lens the camera is looking through, at the camera it is in: the
+      // scene-anchored screen, not a second host-space box. Fit has no screen,
+      // so it frames the host.
+      const lensRect = displayScreenRect();
+      const box = lensRect ?? framingBox(viewport);
+      const lensShape =
+        lens === undefined ? undefined : resolveLens(lens)?.shape;
+      const shape = lensRect === undefined ? "rect" : (lensShape ?? "rect");
+      // A circle lens clips to its disc, so a selection fits when its **diagonal**
+      // meets the diameter — its bounding square's fit would leave the corners
+      // outside the glass. The rule is the fit's own, not a second one.
+      const scale =
+        shape === "circle"
+          ? box.width / Math.max(Math.hypot(bounds.width, bounds.height), 1)
+          : Math.min(
+              box.width / Math.max(bounds.width, 1),
+              box.height / Math.max(bounds.height, 1),
+            );
       const next = Math.min(
         Math.max(scale * SELECTION_FIT_FILL, MIN_ZOOM),
         MAX_ZOOM,

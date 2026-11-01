@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssArtboardPaint } from "./artboard-paint.js";
+import { cssArtboardPaint, cssArtboardPaintMapped } from "./artboard-paint.js";
 
 const gradient = {
   kind: "gradient" as const,
@@ -38,5 +38,78 @@ describe("cssArtboardPaint", () => {
   it("answers nothing for a paint neither form can draw", () => {
     expect(cssArtboardPaint(undefined)).toBeUndefined();
     expect(cssArtboardPaint({ kind: "gradient" })).toBeUndefined();
+  });
+});
+
+describe("cssArtboardPaintMapped", () => {
+  const box = { left: 0, top: 0, width: 200, height: 100 };
+
+  it("keeps a solid paint, which has no line to map", () => {
+    expect(
+      cssArtboardPaintMapped("#102030", box, {
+        left: 50,
+        top: 0,
+        width: 100,
+        height: 100,
+      }),
+    ).toBe("#102030");
+  });
+
+  it("maps the plate's line across the element, not the element's own", () => {
+    // A 100px board centred in a 200px element: its line spans the middle half,
+    // so the plate's endpoints land at 25% and 75% of the element's line.
+    expect(
+      cssArtboardPaintMapped(gradient, box, {
+        left: 50,
+        top: 0,
+        width: 100,
+        height: 100,
+      }),
+    ).toBe("linear-gradient(90deg, #102030 25%, #d0e0f0 75%)");
+  });
+
+  it("carries a board that is not centred to its own position", () => {
+    // The board's line starts at the element's centre, so only its far half
+    // reaches the element's end.
+    expect(
+      cssArtboardPaintMapped(gradient, box, {
+        left: 100,
+        top: 0,
+        width: 100,
+        height: 100,
+      }),
+    ).toBe("linear-gradient(90deg, #102030 50%, #d0e0f0 100%)");
+  });
+
+  it("clamps a board that overflows the element", () => {
+    // The plate's line is twice the element's, so its ends are outside any
+    // pixel the element draws; the gradient's own clamping is the answer.
+    expect(
+      cssArtboardPaintMapped(
+        gradient,
+        { ...box, width: 100 },
+        {
+          left: -50,
+          top: 0,
+          width: 200,
+          height: 100,
+        },
+      ),
+    ).toBe("linear-gradient(90deg, #102030 0%, #d0e0f0 100%)");
+  });
+
+  it("falls back to the bare form for a degenerate element", () => {
+    expect(
+      cssArtboardPaintMapped(
+        gradient,
+        { ...box, width: 0 },
+        {
+          left: 0,
+          top: 0,
+          width: 100,
+          height: 100,
+        },
+      ),
+    ).toBe(cssArtboardPaint(gradient));
   });
 });

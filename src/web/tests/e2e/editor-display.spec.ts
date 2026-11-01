@@ -12,6 +12,7 @@ import {
   openMenu,
   openNewDocument,
   pickPreview,
+  SCREEN,
   STARTER,
 } from "./editor-stage.js";
 import { isDesktopSurface } from "./surface.js";
@@ -97,6 +98,33 @@ test.describe("the stage looks through a display", () => {
       }),
       "the drawn frame carries the same aspect as the camera's",
     ).toBeCloseTo(16 / 9, 2);
+  });
+
+  test("opens fitted when the catalogue is empty", async ({ page }) => {
+    // An empty list is a real author choice — every preview removed in Settings.
+    // The camera must then be Fit: the whole board in the window, no display
+    // frame drawn around a lens nobody can see.
+    await page.addInitScript(() => {
+      window.localStorage.setItem("yunari.editor.preview-ratios", "[]");
+    });
+    await openDisplayStage(page);
+
+    const state = await page.evaluate(() => {
+      const bridge = (window as unknown as { yunariEditorBridge: Bridge })
+        .yunariEditorBridge;
+      return {
+        display: bridge.editor.viewport.display(),
+        fitted: bridge.editor.viewport.isFitted(),
+        screen: bridge.editor.viewport.displayScreenRect(),
+      };
+    });
+    expect(state.display, "no lens to look through").toBeUndefined();
+    expect(state.screen, "and no screen to draw").toBeUndefined();
+    expect(state.fitted, "so the camera opens at Fit").toBe(true);
+    await expect(
+      page.locator(SCREEN),
+      "the screen element is not drawn either",
+    ).toBeHidden();
   });
 
   test("frames a new theme through the display the author asked for", async ({

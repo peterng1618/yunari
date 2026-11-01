@@ -285,6 +285,7 @@ export {
   artboardGradientLine,
   artboardSolidColor,
   cssArtboardPaint,
+  cssArtboardPaintMapped,
   isArtboardGradient,
 } from "./theme/artboard-paint.js";
 export {

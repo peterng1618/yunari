@@ -540,6 +540,54 @@ describe("the display lens", () => {
     }
   });
 
+  it("fits a selection inside a circle lens's disc, not its bounding square", () => {
+    const { canvas, camera } = setup({ lens: "Circle" });
+    const bounds = { left: 100, top: 100, width: 400, height: 400 };
+    vi.spyOn(canvas, "getActiveObject").mockReturnValue({
+      getBoundingRect: () => bounds,
+    } as never);
+
+    // The framing box the fit is measured against, before the fit moves it.
+    const screen = camera.displayScreenRect();
+    if (screen === undefined) throw new Error("no display screen rect");
+    camera.zoomToSelection();
+
+    // The selection is centred on the disc, so its half-diagonal is what has to
+    // meet the radius: the square's edge would put the corners outside the glass.
+    expect(camera.zoom()).toBeCloseTo(
+      (screen.width / Math.hypot(bounds.width, bounds.height)) * 0.9,
+      6,
+    );
+    const viewportTransform = canvas.viewportTransform;
+    const scale = viewportTransform[0];
+    expect(
+      viewportTransform[4] + (bounds.left + bounds.width / 2) * scale,
+      "centred on the disc",
+    ).toBeCloseTo(screen.left + screen.width / 2, 4);
+    expect(
+      viewportTransform[5] + (bounds.top + bounds.height / 2) * scale,
+    ).toBeCloseTo(screen.top + screen.height / 2, 4);
+  });
+
+  it("fits a selection to a rect lens by its edges", () => {
+    const { canvas, camera } = setup({ lens: "19.5:9" });
+    const bounds = { left: 100, top: 100, width: 400, height: 100 };
+    vi.spyOn(canvas, "getActiveObject").mockReturnValue({
+      getBoundingRect: () => bounds,
+    } as never);
+
+    const screen = camera.displayScreenRect();
+    if (screen === undefined) throw new Error("no display screen rect");
+    camera.zoomToSelection();
+
+    // No disc, so the bounding box is the right measure.
+    expect(camera.zoom()).toBeCloseTo(
+      Math.min(screen.width / bounds.width, screen.height / bounds.height) *
+        0.9,
+      6,
+    );
+  });
+
   it("moves the display box with the camera after a zoom", () => {
     const camera = createCamera({
       width: 800,

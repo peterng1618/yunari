@@ -19,7 +19,10 @@ import { openPane } from "./editor-rail.js";
  *  *player* — and the whole file would wait for `#yunari-fabric-editor` that
  *  is not there. That is what an exclusion list would have papered over
  *  instead: the spec would stay out of the default gate rather than join it. */
-export const EDITOR = "http://127.0.0.1:4174/";
+/** The port is overridable so a second worktree's preview can be measured
+ *  without taking the shared one. */
+export const EDITOR =
+  process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/";
 
 /** The starter's artboard, as the theme declares it. */
 export const STARTER = { width: 1672, height: 941 } as const;
@@ -48,6 +51,7 @@ export type Bridge = {
         height: number;
       };
       panBy(deltaX: number, deltaY: number): void;
+      isFitted(): boolean;
     };
   };
   selectLayer(id: string): void;

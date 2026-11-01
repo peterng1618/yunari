@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { writeThemePackage } from "@yunari/theme-package";
 import { lensBox } from "../../packages/editor/src/display-lens.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { openDisplayStage } from "./editor-display-entry.js";
@@ -12,6 +13,7 @@ import {
   chooseDisplay,
   corners,
   createBlankTheme,
+  EDITOR,
   fillDisplayBounds,
   importBackground,
   isColour,
@@ -26,7 +28,9 @@ import {
   solidPng,
   stageBackground,
 } from "./editor-stage.js";
+import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
+import { withRoleTokens } from "./theme-fixture.js";
 
 /**
  * What the lens draws: the guide frame over a mismatched board, the circle
@@ -134,6 +138,67 @@ test.describe("the stage looks through a display", () => {
     // thousandth-of-a-pixel comparison calls a failure.
     expect(panned.left - zoomed.left).toBeCloseTo(40, 1);
     expect(panned.top - zoomed.top).toBeCloseTo(-20, 1);
+  });
+
+  test("the display screen's drawn box follows the camera through a zoom and a pan", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    await chooseDisplay(page, "4:3");
+
+    const read = async () => {
+      const m = await measure(page);
+      const box = await boxOf(page, SCREEN);
+      return { m, box };
+    };
+    /** The element's own laid-out box against the camera's rect: two paths to
+     *  one frame, not the camera's arithmetic twice. */
+    const expectOnScreen = (
+      reading: Awaited<ReturnType<typeof read>>,
+      step: string,
+    ): void => {
+      expect(reading.m.screen.width / reading.m.screen.height).toBeCloseTo(
+        4 / 3,
+        2,
+      );
+      expect(reading.box.x, `the drawn screen's left ${step}`).toBeCloseTo(
+        reading.m.stage.x + reading.m.screen.left,
+        0,
+      );
+      expect(reading.box.y, `its top ${step}`).toBeCloseTo(
+        reading.m.stage.y + reading.m.screen.top,
+        0,
+      );
+      expect(reading.box.width, `its width ${step}`).toBeCloseTo(
+        reading.m.screen.width,
+        0,
+      );
+      expect(reading.box.height, `and its height ${step}`).toBeCloseTo(
+        reading.m.screen.height,
+        0,
+      );
+    };
+
+    const fitted = await read();
+    expectOnScreen(fitted, "at the fit");
+
+    // Bare `=`, the camera's own zoom-in key.
+    await page.keyboard.press("=");
+    const zoomed = await read();
+    expect(
+      zoomed.m.screen.width,
+      "the camera really did zoom, or the comparison below is vacuous",
+    ).not.toBeCloseTo(fitted.m.screen.width, 3);
+    expectOnScreen(zoomed, "after a zoom");
+
+    await panCamera(page, 40, -20);
+    const panned = await read();
+    expect(
+      panned.box.x - zoomed.box.x,
+      "the drawn box follows the pan",
+    ).toBeCloseTo(40, 1);
+    expect(panned.box.y - zoomed.box.y).toBeCloseTo(-20, 1);
+    expectOnScreen(panned, "after a 40/−20 pan");
   });
 
   test("the guide frame marks a mismatched artboard, and leaves a near-match alone", async ({
@@ -275,11 +340,33 @@ test.describe("the stage looks through a display", () => {
     expect(isColour(centre, [255, 0, 0]), "the centre is the picture").toBe(
       true,
     );
-    const corner = await pixelAt(page, box.x + 6, box.y + 6);
+    const cornerPoint = { x: box.x + 6, y: box.y + 6 };
+    const corner = await pixelAt(page, cornerPoint.x, cornerPoint.y);
     expect(
       isColour(corner, [255, 0, 0]),
       "the square's corner is outside the disc, so it is not the picture",
     ).toBe(false);
+    // And it is the **stage**: hide the two clipped layers and read the same
+    // pixel. A corner that is merely "not red" could be any third surface.
+    const setLayerVisibility = (visibility: "hidden" | ""): Promise<void> =>
+      page.evaluate((next) => {
+        for (const selector of [
+          "[data-yunari-display-screen]",
+          "[data-yunari-background-media]",
+        ]) {
+          const node = document.querySelector<HTMLElement>(selector);
+          if (node !== null) node.style.visibility = next;
+        }
+      }, visibility);
+    await setLayerVisibility("hidden");
+    const stageCorner = await pixelAt(page, cornerPoint.x, cornerPoint.y);
+    await setLayerVisibility("");
+    for (const [index, channel] of corner.slice(0, 3).entries()) {
+      expect(
+        Math.abs(channel - (stageCorner[index] ?? 0)),
+        "the disc's corner is the stage the lens reveals",
+      ).toBeLessThanOrEqual(2);
+    }
 
     await chooseDisplay(page, "4:3");
     await expect(screen, "a rect lens clears the screen's radius").toHaveCSS(
@@ -433,5 +520,80 @@ test.describe("the stage looks through a display", () => {
       paint.computed,
       "the letterbox is the plate's paint, not a second copy of the token",
     ).toBe(paint.normalized);
+  });
+
+  test("the letterbox continues the plate's gradient mapping", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    // A 4:3 board under a 19.5:9 lens leaves side bars, and a horizontal
+    // gradient makes the board's edge and the bar meet on one axis.
+    const envelope = withRoleTokens({
+      schemaVersion: "2.0.0" as const,
+      fabricVersion: "7.4.0" as const,
+      id: "e2e-gradient-lens",
+      metadata: { name: "Gradient lens", themeLanguage: "en" },
+      artboard: { width: 1000, height: 750 },
+      background: { color: { ref: "palette.background" as const } },
+      globals: {
+        palette: {
+          none: {
+            name: "None",
+            value: { kind: "solid" as const, color: "transparent" },
+          },
+          background: {
+            name: "Background",
+            value: {
+              kind: "gradient" as const,
+              angle: 0,
+              stops: [
+                { offset: 0, color: "#000000" },
+                { offset: 1, color: "#ffffff" },
+              ],
+            },
+          },
+        },
+      },
+      scene: { version: "7.4.0", objects: [] },
+    });
+    const fixture = writeThemePackage({ envelope, assets: {} });
+    if (!fixture.ok) throw new Error(fixture.message);
+    expect(fixture.ok).toBe(true);
+
+    await page.goto(EDITOR);
+    await openThemeFromStore(page, storedThemeOfPackage(fixture.bytes));
+    await chooseDisplay(page, "19.5:9");
+
+    const m = await measure(page);
+    expect(m.board.left, "the board leaves a bar on each side").toBeGreaterThan(
+      m.screen.left + 20,
+    );
+    const y = m.stage.y + m.screen.top + m.screen.height / 2;
+    const boardLeft = m.stage.x + m.board.left;
+    const boardRight = m.stage.x + m.board.left + m.board.width;
+
+    // The plate's own ends, sampled inside the board.
+    const plateLeft = await pixelAt(page, boardLeft + 6, y);
+    const plateRight = await pixelAt(page, boardRight - 6, y);
+    expect(isColour(plateLeft, [0, 0, 0], 8), "the plate starts black").toBe(
+      true,
+    );
+    expect(isColour(plateRight, [255, 255, 255], 8), "and ends white").toBe(
+      true,
+    );
+
+    // Just outside it, the bars must be the gradient **continued**: clamped to
+    // the plate's first and last stops. A gradient restarted over the lens box
+    // would read roughly 48 and 207 here instead.
+    const leftBar = await pixelAt(page, boardLeft - 6, y);
+    const rightBar = await pixelAt(page, boardRight + 6, y);
+    expect(
+      isColour(leftBar, [0, 0, 0], 8),
+      "the left bar is the plate's first stop",
+    ).toBe(true);
+    expect(
+      isColour(rightBar, [255, 255, 255], 8),
+      "the right bar is the plate's last stop",
+    ).toBe(true);
   });
 });

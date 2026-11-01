@@ -4,6 +4,7 @@ import {
   type Background,
   cropsToDisc,
   cssArtboardPaint,
+  cssArtboardPaintMapped,
   type FabricThemeEnvelope,
   type FabricThemeEnvelopeInput,
   type Globals,
@@ -579,6 +580,24 @@ export async function mountEditorShell({
      *  the paint pass so the letterbox and the plate cannot drift apart, and
      *  created below once the container is in place. */
     let screen: HTMLElement | undefined;
+    /** The screen's own paint — the letterbox. It is the plate's paint with the
+     *  plate's mapping, so a gradient continues across the board's edge instead
+     *  of restarting on the lens box. The camera moves the board inside the
+     *  screen, so this is read after every camera change, not once at mount. */
+    const paintScreen = (): void => {
+      if (screen === undefined) return;
+      const lens = editor.viewport.displayScreenRect();
+      const mapped =
+        lens === undefined
+          ? undefined
+          : cssArtboardPaintMapped(
+              artboardPaint,
+              lens,
+              editor.viewport.artboardScreenRect(),
+            );
+      screen.style.background =
+        mapped ?? cssArtboardPaint(artboardPaint) ?? "#000";
+    };
     const paintArtboard = (): void => {
       artboardPaint = applyArtboardPaint(
         editor,
@@ -588,9 +607,7 @@ export async function mountEditorShell({
         paintMemo,
         cropToDisc(),
       );
-      if (screen !== undefined) {
-        screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";
-      }
+      paintScreen();
     };
     // No observer here: `createViewportManager` registers one on the host at
     // construction and owns the refit decision, reading the box the camera was
@@ -722,8 +739,9 @@ export async function mountEditorShell({
       screen.style.borderRadius =
         editor.viewport.displayShape() === "circle" ? "50%" : "";
       // Repainted here as well as in `paintArtboard`, because the screen did not
-      // exist when the first paint pass ran.
-      screen.style.background = cssArtboardPaint(artboardPaint) ?? "#000";
+      // exist when the first paint pass ran, and the mapping follows the board
+      // rather than the element.
+      paintScreen();
       if (rect !== undefined) {
         screen.style.left = `${rect.left}px`;
         screen.style.top = `${rect.top}px`;
