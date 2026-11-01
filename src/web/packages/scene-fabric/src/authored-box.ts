@@ -203,16 +203,21 @@ export function assertBox(object: PlanTextObject, box: PlanBox): void {
  * edges. Writing one alone would leave `{ height }` with no width, and
  * `authoredBox` would multiply an `undefined` width by the scale on the next
  * pass — the object loses its width and stops producing a bounding rect.
+ *
+ * Returns whether the box took the value. This is the box's **one** minimum:
+ * a surface that reads a drawn dimension must hand it over in box units and
+ * let the answer stand, rather than flooring the drawn number first and
+ * dividing a floor below this one.
  */
 export function writeAuthoredBoxDimension(
   object: PlanTextObject,
   dimension: "width" | "height",
   value: number,
-): void {
-  if (!Number.isFinite(value) || value < 1) return;
+): boolean {
+  if (!Number.isFinite(value) || value < 1) return false;
 
   const authored = object.get("yunariText");
-  if (typeof authored !== "object" || authored === null) return;
+  if (typeof authored !== "object" || authored === null) return false;
 
   const content = authored as Record<string, unknown>;
   const box = (content["box"] ?? {}) as {
@@ -231,6 +236,7 @@ export function writeAuthoredBoxDimension(
       [dimension]: value,
     },
   });
+  return true;
 }
 
 /**

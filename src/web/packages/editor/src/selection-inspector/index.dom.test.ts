@@ -1712,6 +1712,26 @@ describe("the size of a text object", () => {
     expect(box().height * text.scaleY, "H draws the number typed").toBe(60);
   });
 
+  it("lets the authored box refuse a drawn dimension below its own floor", async () => {
+    // `yunariText.box` is unscaled, so on this scale-2 caption a drawn 1 is a
+    // box of 0.5 — below the box's own minimum of one. The funnel must hand the
+    // box units to the writer and take its answer. Flooring the *drawn* number
+    // first divided that floor by the scale, so the writer refused a value the
+    // funnel had already promised, the box did not move, and a history entry
+    // recorded a write that never happened.
+    const text = scaledCaption();
+    const { host, history } = setup(text);
+    const before = JSON.stringify(text.get("yunariText"));
+
+    await edit(
+      host.querySelector<HTMLInputElement>('[data-yunari-geometry="width"]')!,
+      "1",
+    );
+
+    expect(JSON.stringify(text.get("yunariText"))).toBe(before);
+    expect(history.saveState).not.toHaveBeenCalled();
+  });
+
   it("reads the numbers back where the object's edges carry the box", () => {
     // The state the text pass leaves every text object in: `assertBox` puts the
     // box onto the object's own edges, so the readout agrees with the box it

@@ -73,11 +73,6 @@ export function createFieldDispatch(args: {
       caller can batch several writes into one entry. Returns whether the write
       was applied: a text without a box refuses its dimensions. */
   const write: FieldWrite = (object, key, value) => {
-    // A dimension below one unit would make the object vanish from the canvas
-    // and from its own selection box. The pre-plan Size pair carried this floor
-    // as a field bound that landed the value on it rather than refusing; it is
-    // the funnel's now, once, for both dimensions.
-    const dimension = Math.max(value, MIN_DIMENSION);
     switch (key) {
       case "left":
         object.set({ left: value });
@@ -98,30 +93,36 @@ export function createFieldDispatch(args: {
         // is the owner, and the renderer re-asserts it.
         //
         // The unit the box is written in is the object's own, unscaled one:
-        // `dimension` is what the field *shows*, which is the drawn edge —
-        // `readField` reads `width * scaleX` — and a scaled text object draws
-        // `box × scale`. So the write divides by the same scale the read
-        // multiplies by, or the control cannot round-trip: a 140 × 27 box at
-        // scale 2 read 280, typing 280 back stored 280, and the object drew
-        // 560 (vg-109). A dragged handle writes the same unscaled unit
-        // (`text-manager`'s `adoptResizedBox`, `controls-manager`'s height
-        // control), and `scaleOf` is the rule for a zero scale, so neither side
-        // re-spells it. A drawn number below the object's own scale divides
-        // below the box's floor of 1 and the writer refuses it, which is this
-        // control's floor read in the other unit — the box does not vanish for
-        // it, and the field keeps the number it had.
+        // the field shows the drawn edge — `readField` reads `width * scaleX` —
+        // and a scaled text object draws `box × scale`. So the write divides by
+        // the same scale the read multiplies by, or the control cannot
+        // round-trip: a 140 × 27 box at scale 2 read 280, typing 280 back
+        // stored 280, and the object drew 560 (vg-109). A dragged handle writes
+        // the same unscaled unit (`text-manager`'s `adoptResizedBox`,
+        // `controls-manager`'s height control), and `scaleOf` is the rule for a
+        // zero scale, so neither side re-spells it.
+        //
+        // The box owns its own minimum, in box units. A drawn number is handed
+        // over divided by the scale and may be refused there; flooring the
+        // drawn number first would divide a floor (1) below the box's own
+        // (1/scale on a scaled text) and turn the refusal into a silent no-op
+        // with a history entry over it.
         if (isTextObject(object)) {
-          writeAuthoredBoxDimension(
+          const written = writeAuthoredBoxDimension(
             object as PlanTextObject,
             "width",
-            dimension / scaleOf(object.scaleX),
+            value / scaleOf(object.scaleX),
           );
+          if (!written) return false;
           applyAuthoredText(editor.canvas, state.globals, {
             artboardHeight: editor.artboard().height,
           });
           break;
         }
-        // Scale rather than resize: a chart's own width is its raster size.
+        // Scale rather than resize: a chart's own width is its raster size. A
+        // dimension below one unit would make the object vanish from the canvas
+        // and from its own selection box; the funnel lands it on that floor.
+        const dimension = Math.max(value, MIN_DIMENSION);
         const next = dimension / (object.width <= 0 ? 1 : object.width);
         object.set({ scaleX: next });
         break;
@@ -132,17 +133,20 @@ export function createFieldDispatch(args: {
           // Same unit as the width above, and as `writeAuthoredBoxDimension`'s
           // own seeding of the other dimension from the object's edges — those
           // are unscaled too, so the first Size edit still produces a whole box
-          // in one unit (vg-057).
-          writeAuthoredBoxDimension(
+          // in one unit (vg-057). The box refuses a dimension below its own
+          // minimum; the funnel takes that refusal rather than flooring it.
+          const written = writeAuthoredBoxDimension(
             object as PlanTextObject,
             "height",
-            dimension / scaleOf(object.scaleY),
+            value / scaleOf(object.scaleY),
           );
+          if (!written) return false;
           applyAuthoredText(editor.canvas, state.globals, {
             artboardHeight: editor.artboard().height,
           });
           break;
         }
+        const dimension = Math.max(value, MIN_DIMENSION);
         const next = dimension / (object.height <= 0 ? 1 : object.height);
         object.set({ scaleY: next });
         break;

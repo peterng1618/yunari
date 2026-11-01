@@ -287,10 +287,15 @@ const GEOMETRY_LABELS: Readonly<Record<GeometryKey, string>> = {
   angle: uiCopy.inspectorFields.rotation,
 };
 
-/** The fewest whole units a dimension can be: zero would make the object
+/** The fewest whole units a **scaled** size can be: zero would make the object
     vanish from the canvas and from its own selection box. The write funnel
-    applies it — the pre-plan `numberField` landed an out-of-range value on the
-    bound it crossed rather than refusing it, and that is the rule kept. */
+    applies it to a shape's or chart's own size — the pre-plan `numberField`
+    landed an out-of-range value on the bound it crossed rather than refusing
+    it, and that is the rule kept. A text's authored box is not this floor: it
+    is measured in box units, owns its own minimum in
+    `writeAuthoredBoxDimension`, and the funnel hands it the drawn value divided
+    by the scale so there is one floor rather than two.
+ */
 export const MIN_DIMENSION = 1;
 
 /**

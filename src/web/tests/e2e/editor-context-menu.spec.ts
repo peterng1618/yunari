@@ -106,12 +106,15 @@ const TOP_BAND = 0.15;
  * Both are measured, not chosen: three clicks at different x put the popup's
  * left edge 1.4–1.8px right of the click and its top a constant 5.64px above it
  * (2026-10-12, `chromium`, 1280×1000), which is the popup's own edge rather than
- * a position the pointer did not choose. The bounds admit that rounding; the
- * failures they are here to catch are hundreds of pixels wide — a popup at the
- * window's corner reads left ≈ 0, and one anchored to the canvas or to a trigger
- * does not move between two clicks at all.
+ * a position the pointer did not choose. The horizontal bound is the vertical
+ * one (8px), not the 2px it carried: at 2px the measured 1.8px left 0.2px of
+ * headroom, so a second device pixel ratio or a font metric could redden a
+ * placement that had not moved. The failures these catch are hundreds of pixels
+ * wide — a popup at the window's corner reads left ≈ 0, and one anchored to the
+ * canvas or to a trigger does not move between two clicks at all — so 8px keeps
+ * both red while admitting the placement's own rounding.
  */
-const ANCHOR_X_PX = 2;
+const ANCHOR_X_PX = 8;
 const ANCHOR_Y_PX = 8;
 
 /**
