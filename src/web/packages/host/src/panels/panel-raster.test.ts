@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CdpReply, Devtools } from "./panel-raster.js";
 import {
@@ -6,8 +7,12 @@ import {
   connectDevtools,
   createPageRasterizer,
   setOverlayMode,
+  startBrowser,
   startScreencast,
 } from "./panel-raster.js";
+
+const spawnMock = vi.hoisted(() => vi.fn());
+vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 
 interface Sent {
   readonly method: string;
@@ -406,5 +411,22 @@ describe("connectDevtools", () => {
     ]);
 
     expect(outcome).toBe("rejected");
+  });
+});
+
+describe("startBrowser", () => {
+  it("kills the child when the devtools port never starts", async () => {
+    const child = Object.assign(new EventEmitter(), {
+      stderr: new EventEmitter(),
+      kill: vi.fn(),
+      exitCode: null,
+    });
+    spawnMock.mockReturnValue(child);
+    queueMicrotask(() => child.emit("exit", 1));
+
+    await expect(
+      startBrowser("C:/fake/chrome.exe", "C:/tmp/profile"),
+    ).rejects.toThrow(/before starting/);
+    expect(child.kill).toHaveBeenCalledTimes(1);
   });
 });

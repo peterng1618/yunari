@@ -124,6 +124,8 @@ export function createRasterBrowser(
   let closed = false;
   /** Rasterizers handed out and not closed yet. */
   let active = 0;
+  /** Creates still opening a target: a browser they may use is not idle. */
+  let pending = 0;
   let stopping: Promise<void> | undefined;
   let failureReported = false;
 
@@ -217,7 +219,7 @@ export function createRasterBrowser(
   };
 
   const armIdle = (): void => {
-    if (idle !== undefined || closed || active > 0) return;
+    if (idle !== undefined || closed || active > 0 || pending > 0) return;
 
     idle = setTimeout(() => {
       idle = undefined;
@@ -251,9 +253,8 @@ export function createRasterBrowser(
     options.openTarget ??
     ((client: Devtools) => openWindow(client, endpoint ?? ""));
 
-  const create = async (page: RasterPageOptions): Promise<Rasterizer> => {
+  const openPage = async (page: RasterPageOptions): Promise<Rasterizer> => {
     assertOpen();
-    clearIdle();
 
     let browserClient: Devtools | undefined;
     let target: TargetHandle | undefined;
@@ -286,9 +287,6 @@ export function createRasterBrowser(
         }
       }
 
-      // No panel is attached, but the browser may have started for this
-      // attempt: let the idle stop reclaim it rather than leave it running.
-      if (active === 0 && browserClient !== undefined && !closed) armIdle();
       throw error;
     }
 
@@ -315,6 +313,21 @@ export function createRasterBrowser(
         }
       },
     };
+  };
+
+  const create = async (page: RasterPageOptions): Promise<Rasterizer> => {
+    assertOpen();
+    clearIdle();
+    pending += 1;
+
+    try {
+      return await openPage(page);
+    } finally {
+      pending -= 1;
+      // A failed create leaves no rasterizer, but the browser may have started
+      // for it: let the idle stop reclaim it rather than leave it running.
+      if (active === 0 && !closed && browser !== undefined) armIdle();
+    }
   };
 
   return {

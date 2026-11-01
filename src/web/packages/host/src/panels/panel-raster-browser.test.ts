@@ -315,6 +315,33 @@ describe("createRasterBrowser", () => {
     }
   });
 
+  it("does not idle-stop the browser under a create still opening", async () => {
+    const over = harness();
+    const browser = browserOver(over);
+
+    const first = await browser.create(pageOptions());
+    over.holdPageConnect();
+    const opening = browser.create(pageOptions());
+    await until(
+      () =>
+        over.connect.mock.calls.filter(([url]) =>
+          String(url).startsWith(PAGE_URL),
+        ).length === 2,
+    );
+
+    await first.close();
+    await pause(80);
+
+    expect(over.children[0]?.kill).not.toHaveBeenCalled();
+
+    over.releasePageConnect();
+    const second = await opening;
+    expect(over.children[0]?.kill).not.toHaveBeenCalled();
+
+    await second.close();
+    await browser.stop();
+  });
+
   it("stops the browser after the idle deadline when the last rasterizer closes", async () => {
     vi.useFakeTimers();
     try {

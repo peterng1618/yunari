@@ -408,8 +408,18 @@ export async function startBrowser(
     windowsHide: true,
   });
 
-  const endpoint = await waitForEndpoint(child);
-  return { child, endpoint };
+  try {
+    const endpoint = await waitForEndpoint(child);
+    return { child, endpoint };
+  } catch (error) {
+    // The caller never sees this child, so this is its only chance to free it.
+    try {
+      child.kill();
+    } catch {
+      // It exited on its own.
+    }
+    throw error;
+  }
 }
 
 /**
