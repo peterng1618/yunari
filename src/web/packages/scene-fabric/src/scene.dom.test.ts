@@ -164,6 +164,127 @@ describe("mountFabricScene's artboard paint", () => {
   });
 });
 
+describe("mountFabricScene's theme shape", () => {
+  /** A 100x100 circle theme: its artboard is a square with the disc inscribed,
+   *  so the composition clips to the disc and the corners are the surround. */
+  function mountCircleTheme(
+    element: HTMLElement,
+    options: Partial<Parameters<typeof mountFabricScene>[0]> = {},
+  ) {
+    return mountFabricScene({
+      host: element,
+      plan: plan({ width: 100, height: 100 }),
+      artboard: { width: 100, height: 100 },
+      themeShape: "circle",
+      ...options,
+    });
+  }
+
+  it("fills the box by the rect rule and clips to the inscribed disc", () => {
+    // A circle theme is a square artboard, so it takes the rect contain rule
+    // rather than the diagonal inscription a rect theme gets on a round panel.
+    const element = host();
+    resizeHost(element, 200, 200);
+    const scene = mountCircleTheme(element, {
+      presentation: { shape: "rect" },
+    });
+
+    expect(scene.transform().scale).toBe(2);
+    expect(scene.artboard.style.clipPath).toBe("circle(100px at 100px 100px)");
+    expect(
+      element.querySelector<HTMLElement>("[data-yunari-artboard-plate]")?.style
+        .clipPath,
+      "the board's plate is the disc too",
+    ).toBe("circle(50% at 50% 50%)");
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("centres the disc on the artboard's screen centre, not the host's short edge", () => {
+    const element = host();
+    resizeHost(element, 300, 200);
+    const scene = mountCircleTheme(element);
+
+    // The artboard is 100x100, fitted into a 300x200 host at scale 2, so it sits
+    // at x=50..250. The disc's centre is the artboard's, not the host's.
+    expect(scene.transform().scale).toBe(2);
+    expect(scene.artboard.style.clipPath).toBe("circle(100px at 150px 100px)");
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("keeps a rect theme's inscribed scale on a circle presentation", () => {
+    const element = host();
+    resizeHost(element, 200, 200);
+    const scene = mountFabricScene({
+      host: element,
+      plan: plan({ width: 100, height: 100 }),
+      artboard: { width: 100, height: 100 },
+      presentation: { shape: "circle" },
+    });
+
+    expect(scene.transform().scale).toBeCloseTo(200 / Math.hypot(100, 100), 9);
+    expect(scene.artboard.style.clipPath).toContain("circle(");
+
+    scene.dispose();
+    element.remove();
+  });
+
+  it("clips theme-bounded media to the disc but leaves display-bounded media alone", () => {
+    const themeHost = host();
+    const themeBounded = mountCircleTheme(themeHost, {
+      background: { media: { assetId: "hero", bounds: "theme" } },
+      assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    expect(
+      themeHost.querySelector<HTMLElement>("[data-yunari-background-media]")
+        ?.style.borderRadius,
+      "theme media is the picture, so it is the disc",
+    ).toBe("50%");
+    themeBounded.dispose();
+    themeHost.remove();
+
+    const displayHost = host();
+    const displayBounded = mountCircleTheme(displayHost, {
+      background: { media: { assetId: "hero", bounds: "display" } },
+      assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    expect(
+      displayHost.querySelector<HTMLElement>("[data-yunari-background-media]")
+        ?.style.borderRadius,
+      "display media is the window, which stays rectangular here",
+    ).toBe("");
+    displayBounded.dispose();
+    displayHost.remove();
+  });
+
+  it("keeps the theme mask across a presentation change", () => {
+    // The mask belongs to the loaded document, so leaving the round presentation
+    // must not take it away — the rect branch is where the discarded clip lived.
+    const element = host();
+    resizeHost(element, 200, 200);
+    const scene = mountCircleTheme(element, {
+      presentation: { shape: "circle" },
+    });
+    expect(scene.artboard.style.clipPath).toContain("circle(");
+
+    scene.updatePresentation({ shape: "rect" });
+
+    expect(scene.artboard.style.clipPath).toBe("circle(100px at 100px 100px)");
+    expect(
+      element.querySelector<HTMLElement>("[data-yunari-artboard-plate]")?.style
+        .clipPath,
+    ).toBe("circle(50% at 50% 50%)");
+
+    scene.dispose();
+    element.remove();
+  });
+});
+
 describe("mountFabricScene's resize", () => {
   it("re-fits only when the host's pixel size changes", () => {
     // A `ResizeObserver` fires for layout changes that leave the pixel size

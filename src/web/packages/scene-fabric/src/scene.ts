@@ -1,7 +1,9 @@
 import {
   type Artboard,
+  type ArtboardShape,
   type ArtboardTransform,
   type AssetReference,
+  artboardTransformShape,
   type Background,
   computeArtboardTransform,
   cssArtboardPaint,
@@ -17,7 +19,7 @@ import {
   type SceneAdapter,
   type SceneAdapterOptions,
 } from "./adapter.js";
-import { artboardBackdrop } from "./artboard-backdrop.js";
+import { type ArtboardSurface, artboardBackdrop } from "./artboard-backdrop.js";
 import {
   type BackgroundMediaHandle,
   type BackgroundMediaSource,
@@ -70,6 +72,10 @@ export interface FabricSceneOptions
   /** The display's shape and mounting angle. Absent is a rectangular, upright
    * display, which is the scene's behaviour before a record was known. */
   readonly presentation?: DisplayPresentation;
+  /** The authored canvas's shape. Absent is a rectangle, which is every theme
+   * written before the field existed. A circle theme fits by the rect rule and
+   * clips its composition to the disc inscribed in its square artboard. */
+  readonly themeShape?: ArtboardShape;
 }
 
 export interface FabricSceneHandle extends SceneHandle {
@@ -145,6 +151,10 @@ export function mountFabricScene(
   let presentation: DisplayPresentation = options.presentation ?? {
     shape: "rect",
   };
+  const themeShape: ArtboardShape = options.themeShape ?? "rect";
+  /** A circle theme's glass is the disc inscribed in its square artboard: the
+   *  composition is clipped to it and the four corners are the surround. */
+  const masked = themeShape === "circle";
   /** The disc's own DOM element, created on the first circle presentation and
    *  reused after: it is the screen's paint, behind the media layer. */
   let disc: HTMLDivElement | undefined;
@@ -177,6 +187,16 @@ export function mountFabricScene(
   // is wired whether or not a media layer exists, because the paint is the whole
   // backdrop for a theme that declares none, and the canvas is no longer allowed
   // to hold it: a fill there sits above the media and hides it.
+  /** The screen's own surface: a circle theme's glass is the disc inscribed in
+   *  its artboard, so a panel samples black outside that disc rather than the
+   *  rectangular window. */
+  function screenSurface(): ArtboardSurface {
+    const shape = masked ? "circle" : presentation.shape;
+    return {
+      shape,
+      box: displayBox(host.clientWidth, host.clientHeight, shape),
+    };
+  }
   const glass = createGlass({
     canvas,
     backdrop: () =>
@@ -189,14 +209,7 @@ export function mountFabricScene(
         // not. Without this the paint a panel sees where the media is absent
         // would be the turned board rather than the host or the disc.
         angle: presentation.rotation ?? 0,
-        surface: {
-          shape: presentation.shape,
-          box: displayBox(
-            host.clientWidth,
-            host.clientHeight,
-            presentation.shape,
-          ),
-        },
+        surface: screenSurface(),
       }),
     ...(options.onGlassError === undefined
       ? {}
@@ -260,6 +273,11 @@ export function mountFabricScene(
     const width = host.clientWidth;
     const height = host.clientHeight;
     const box = displayBox(width, height, presentation.shape);
+    // A masked composition's glass is the disc inscribed in the artboard's
+    // mapped box, so both the clip and the guide read the same geometry.
+    const radius = (Math.min(board.width, board.height) * transform.scale) / 2;
+    const cx = transform.offsetX + (board.width * transform.scale) / 2;
+    const cy = transform.offsetY + (board.height * transform.scale) / 2;
     applyBoardPlate(paint, transform, board);
     if (presentation.shape === "circle") {
       // Outside the disc is outside the screen, so the host is black and the
@@ -277,9 +295,13 @@ export function mountFabricScene(
       return;
     }
     // Rect: the host is the screen around the board, exactly as before a record
-    // existed, and the disc is not part of the composition.
+    // existed, and the disc is not part of the composition. A circle theme's
+    // board still clips to its inscribed disc, and the corners keep the screen
+    // fill the host already carries.
     host.style.background = paint;
-    element.style.clipPath = "";
+    element.style.clipPath = masked
+      ? `circle(${radius}px at ${cx}px ${cy}px)`
+      : "";
     if (disc !== undefined) disc.style.display = "none";
   }
 
@@ -302,6 +324,9 @@ export function mountFabricScene(
     plateElement.style.height = `${board.height * transform.scale}px`;
     plateElement.style.transform =
       transform.rotation === 0 ? "" : `rotate(${transform.rotation}deg)`;
+    // The plate is the board's paint, so a circle theme's corners are outside it
+    // just as the composition's are.
+    plateElement.style.clipPath = masked ? "circle(50% at 50% 50%)" : "";
     plateElement.style.background = paint;
   }
 
@@ -347,7 +372,7 @@ export function mountFabricScene(
       artboard: { width: geometry.width, height: geometry.height },
       viewport: { width: host.clientWidth, height: host.clientHeight },
       contentFit: geometry.contentFit ?? "contain",
-      shape: presentation.shape,
+      shape: artboardTransformShape(themeShape, presentation.shape),
       ...(presentation.rotation === undefined
         ? {}
         : { rotation: presentation.rotation }),
@@ -387,6 +412,9 @@ export function mountFabricScene(
           width: geometry.width * transform.scale,
           height: geometry.height * transform.scale,
           angle: transform.rotation,
+          // A circle theme's picture is the disc, so theme-bounded media is
+          // clipped to it; display-bounded media keeps the window.
+          ...(masked ? { radius: "circle" as const } : {}),
         },
         display: displayBox(
           host.clientWidth,
