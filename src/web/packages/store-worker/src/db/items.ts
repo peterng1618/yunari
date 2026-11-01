@@ -331,8 +331,32 @@ export async function setStatus(
   at: string,
   reason: string | null = null,
 ): Promise<boolean> {
+  const result = await setStatusStatement(
+    db,
+    itemId,
+    from,
+    to,
+    at,
+    reason,
+  ).run();
+  return result.meta.changes > 0;
+}
+
+/**
+ * `setStatus` as a statement, for a caller that must batch the write with
+ * another in one transaction — the owner's removal, which resolves the item's
+ * open reports in the same act. The guard and bindings are identical.
+ */
+export function setStatusStatement(
+  db: D1Database,
+  itemId: string,
+  from: readonly string[],
+  to: string,
+  at: string,
+  reason: string | null = null,
+): D1PreparedStatement {
   const placeholders = from.map(() => "?").join(", ");
-  const result = await db
+  return db
     .prepare(
       `UPDATE item SET status = ?, updated_at = ?,
          published_at = CASE WHEN ? = 'published' THEN ? ELSE published_at END,
@@ -341,9 +365,7 @@ export async function setStatus(
          status_reason = ?
        WHERE id = ? AND status IN (${placeholders})`,
     )
-    .bind(to, at, to, at, to, at, to, at, reason, itemId, ...from)
-    .run();
-  return result.meta.changes > 0;
+    .bind(to, at, to, at, to, at, to, at, reason, itemId, ...from);
 }
 
 /**

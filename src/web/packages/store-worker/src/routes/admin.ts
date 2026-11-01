@@ -1,12 +1,24 @@
 import { isOwner } from "../auth/owner.js";
 import { sessionOf } from "../auth/session.js";
 import type { QueueListing } from "../db/items.js";
-import { itemById, queueListings, setStatus } from "../db/items.js";
+import {
+  itemById,
+  queueListings,
+  setStatus,
+  setStatusStatement,
+} from "../db/items.js";
+import {
+  openReports,
+  reportStatusOf,
+  resolveReportsOnRemovalStatement,
+  setReportStatus,
+} from "../db/reports.js";
 import type { Env } from "../env.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
+const REPORTS = "/api/admin/reports";
 const MAX_REASON_LENGTH = 500;
 
 /** One pending item as the owner's queue shows it. */
@@ -24,14 +36,33 @@ export interface QueueEntry {
   readonly status: string;
 }
 
+/** One open report as the owner's triage queue shows it. */
+export interface ReportEntry {
+  readonly itemId: string;
+  readonly itemName: string;
+  readonly itemStatus: string;
+  readonly reporterUserId: string;
+  readonly category: string;
+  readonly note: string | null;
+  readonly createdAt: string;
+  /** Open reports on the same item, tallied from this queue's own rows. */
+  readonly openReports: number;
+}
+
 /**
- * The owner's half of the store: the pending queue, the status transitions and
- * author verification.
+ * The owner's half of the store: the pending queue, item status transitions,
+ * author verification and report triage.
  *
  * A session is resolved before any route work, and a signed-in non-owner is
  * answered 404 exactly like a missing path — the admin surface must not tell an
- * author it exists. The queue answers `{ entries: QueueEntry[] }`, oldest first.
+ * author it exists. The queues answer `{ entries }`; the pending queue is oldest
+ * first, and the report queue is the same order so the oldest complaint leads.
  * An unmatched path returns `undefined`, leaving the Worker's default 404.
+ *
+ * A report is resolved or dismissed once. `POST .../resolve` and `.../dismiss`
+ * name the report by its two-key identity — `reports/<userId>/<itemId>/<action>`
+ * — because one account reports one item once. The verdict is `status` plus
+ * `resolved_at`; a takedown also writes the removal reason to `outcome`.
  */
 export async function handleAdmin(
   request: Request,
@@ -52,10 +83,17 @@ export async function handleAdmin(
 
 type Route =
   | { readonly kind: "queue" }
+  | { readonly kind: "reports" }
   | {
       readonly kind: "item";
       readonly itemId: string;
       readonly action: "approve" | "reject" | "remove" | "restore";
+    }
+  | {
+      readonly kind: "report";
+      readonly userId: string;
+      readonly itemId: string;
+      readonly action: "resolve" | "dismiss";
     }
   | {
       readonly kind: "author";
@@ -65,9 +103,24 @@ type Route =
 
 function matchRoute(method: string, pathname: string): Route | undefined {
   if (method === "GET" && pathname === QUEUE) return { kind: "queue" };
+  if (method === "GET" && pathname === REPORTS) return { kind: "reports" };
   if (method !== "POST") return undefined;
 
   const parts = pathname.slice(ADMIN_PREFIX.length).split("/");
+  if (parts[0] === "reports") {
+    const [, userId, itemId, action, ...rest] = parts;
+    if (
+      rest.length === 0 &&
+      userId !== undefined &&
+      userId.length > 0 &&
+      itemId !== undefined &&
+      itemId.length > 0 &&
+      (action === "resolve" || action === "dismiss")
+    )
+      return { kind: "report", userId, itemId, action };
+    return undefined;
+  }
+
   const [head, subject, action, ...rest] = parts;
   if (rest.length > 0 || action === undefined) return undefined;
 
@@ -96,9 +149,59 @@ async function dispatch(
   env: Env,
 ): Promise<Response> {
   if (route.kind === "queue") return queue(env);
+  if (route.kind === "reports") return reportQueue(env);
+  if (route.kind === "report")
+    return reportAction(route.userId, route.itemId, route.action, env);
   if (route.kind === "author")
     return setVerified(env, route.userId, route.verified);
   return itemAction(route.action, route.itemId, request, env);
+}
+
+async function reportQueue(env: Env): Promise<Response> {
+  // One statement for every open report and its item. The per-item count is
+  // tallied from these rows, so the number the owner sees and the rows they act
+  // on cannot disagree.
+  const rows = await openReports(env.DB);
+  const openByItem = new Map<string, number>();
+  for (const row of rows) {
+    openByItem.set(row.item_id, (openByItem.get(row.item_id) ?? 0) + 1);
+  }
+  const entries: ReportEntry[] = rows.map((row) => ({
+    itemId: row.item_id,
+    itemName: row.item_name,
+    itemStatus: row.item_status,
+    reporterUserId: row.user_id,
+    category: row.category,
+    note: row.note,
+    createdAt: row.created_at,
+    openReports: openByItem.get(row.item_id) ?? 0,
+  }));
+  return Response.json({ entries });
+}
+
+async function reportAction(
+  userId: string,
+  itemId: string,
+  action: "resolve" | "dismiss",
+  env: Env,
+): Promise<Response> {
+  const status = action === "resolve" ? "resolved" : "dismissed";
+  const changed = await setReportStatus(
+    env.DB,
+    userId,
+    itemId,
+    status,
+    new Date().toISOString(),
+  );
+  if (!changed) {
+    const current = await reportStatusOf(env.DB, userId, itemId);
+    if (current === undefined) return notFound();
+    return new Response(
+      `Report on item "${itemId}" by user "${userId}" is ${current}; this action needs open.`,
+      { status: 409 },
+    );
+  }
+  return Response.json({ ok: true, status });
 }
 
 async function queue(env: Env): Promise<Response> {
@@ -150,14 +253,35 @@ async function itemAction(
     reason = read;
   }
 
-  const changed = await setStatus(
-    env.DB,
-    itemId,
-    transition.from,
-    transition.to,
-    new Date().toISOString(),
-    reason,
-  );
+  const at = new Date().toISOString();
+  let changed: boolean;
+  if (action === "remove") {
+    // A removal resolves every open report on the item in the same act, so a
+    // crash cannot leave an item taken down with its reports still open. The
+    // report statement is guarded by the status write's own `removed_at`: a
+    // failed precondition resolves nothing.
+    const results = await env.DB.batch([
+      setStatusStatement(
+        env.DB,
+        itemId,
+        transition.from,
+        transition.to,
+        at,
+        reason,
+      ),
+      resolveReportsOnRemovalStatement(env.DB, itemId, reason ?? "", at),
+    ]);
+    changed = (results[0]?.meta.changes ?? 0) > 0;
+  } else {
+    changed = await setStatus(
+      env.DB,
+      itemId,
+      transition.from,
+      transition.to,
+      at,
+      reason,
+    );
+  }
   if (!changed) {
     return new Response(
       `Item "${itemId}" is ${item.status}; this action needs ${transition.from.join(" or ")}.`,

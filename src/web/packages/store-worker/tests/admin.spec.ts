@@ -76,16 +76,22 @@ describe("admin", () => {
     expect((await admin(author, `authors/${AUTHOR_ID}/verify`)).status).toBe(
       404,
     );
+    expect((await admin(author, "reports")).status).toBe(404);
+    expect(
+      (await admin(author, `reports/${AUTHOR_ID}/${ITEM_ID}/resolve`)).status,
+    ).toBe(404);
 
     for (const path of [
       "queue",
+      "reports",
       `items/${ITEM_ID}/approve`,
       `items/${ITEM_ID}/remove`,
       `items/${ITEM_ID}/restore`,
       `authors/${AUTHOR_ID}/verify`,
+      `reports/${AUTHOR_ID}/${ITEM_ID}/resolve`,
     ]) {
-      // The queue is the one GET; the rest are POST-only.
-      const method = path === "queue" ? "GET" : "POST";
+      // The queues are the GETs; the rest are POST-only.
+      const method = path === "queue" || path === "reports" ? "GET" : "POST";
       expect(
         (await SELF.fetch(`${BASE}/api/admin/${path}`, { method })).status,
       ).toBe(401);
@@ -530,14 +536,14 @@ async function testHelpers(): Promise<TestHelpers> {
   return (context as unknown as { test: TestHelpers }).test;
 }
 
-/** GETs the queue, or POSTs a path with an optional raw body. */
+/** GETs a queue, or POSTs a path with an optional raw body. */
 async function admin(
   headers: Record<string, string>,
   path: string,
   body?: string,
 ): Promise<Response> {
-  if (body === undefined && path === "queue")
-    return SELF.fetch(`${BASE}/api/admin/queue`, { headers });
+  if (body === undefined && (path === "queue" || path === "reports"))
+    return SELF.fetch(`${BASE}/api/admin/${path}`, { headers });
   return SELF.fetch(`${BASE}/api/admin/${path}`, {
     method: "POST",
     headers: {

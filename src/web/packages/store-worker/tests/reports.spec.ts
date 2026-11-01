@@ -5,9 +5,11 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAuth } from "../src/auth";
 import { REPORT_LIMIT } from "../src/db/reports";
 import { BASE } from "./helpers";
-import { ITEM_ID, seedPublished, statusOf } from "./seed";
+import { ITEM_ID, seedItem, seedPublished, statusOf } from "./seed";
 
 const MISSING_ID = "00000000-0000-4000-8000-000000000000";
+const OTHER_ID = "10000000-0000-4000-8000-000000000004";
+const OWNER_EMAIL = "owner@example.com";
 
 describe("reports", () => {
   beforeAll(async () => {
@@ -196,11 +198,183 @@ describe("reports", () => {
     }
     expect(await reports()).toHaveLength(0);
   });
+
+  it("lists open reports oldest first with a per-item count", async () => {
+    const owner = await loginAs(OWNER_EMAIL);
+    await seedPublished();
+    await seedItem(OTHER_ID, "user-other-author", { status: "published" });
+    await seedReport("reporter-a", ITEM_ID, {
+      category: "spam",
+      note: "first",
+      at: "2026-10-02T00:00:00.000Z",
+    });
+    await seedReport("reporter-b", ITEM_ID, {
+      category: "harassment",
+      at: "2026-10-03T00:00:00.000Z",
+    });
+    await seedReport("reporter-c", OTHER_ID, {
+      category: "violence",
+      at: "2026-10-01T00:00:00.000Z",
+    });
+    // A closed report is neither listed nor counted.
+    await seedReport("reporter-d", OTHER_ID, {
+      at: "2026-10-04T00:00:00.000Z",
+      status: "resolved",
+    });
+
+    const response = await admin(owner.headers, "reports");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      entries: [
+        {
+          itemId: OTHER_ID,
+          itemName: "Seeded theme",
+          itemStatus: "published",
+          reporterUserId: "reporter-c",
+          category: "violence",
+          note: null,
+          createdAt: "2026-10-01T00:00:00.000Z",
+          openReports: 1,
+        },
+        {
+          itemId: ITEM_ID,
+          itemName: "Yunari smoke theme",
+          itemStatus: "published",
+          reporterUserId: "reporter-a",
+          category: "spam",
+          note: "first",
+          createdAt: "2026-10-02T00:00:00.000Z",
+          openReports: 2,
+        },
+        {
+          itemId: ITEM_ID,
+          itemName: "Yunari smoke theme",
+          itemStatus: "published",
+          reporterUserId: "reporter-b",
+          category: "harassment",
+          note: null,
+          createdAt: "2026-10-03T00:00:00.000Z",
+          openReports: 2,
+        },
+      ],
+    });
+  });
+
+  it("resolves or dismisses one report, recording the verdict", async () => {
+    const owner = await loginAs(OWNER_EMAIL);
+    await seedPublished();
+    await seedReport("reporter-a", ITEM_ID);
+    await seedReport("reporter-b", ITEM_ID);
+
+    const resolved = await admin(
+      owner.headers,
+      `reports/reporter-a/${ITEM_ID}/resolve`,
+    );
+    expect(resolved.status).toBe(200);
+    expect(await resolved.json()).toEqual({ ok: true, status: "resolved" });
+
+    const dismissed = await admin(
+      owner.headers,
+      `reports/reporter-b/${ITEM_ID}/dismiss`,
+    );
+    expect(dismissed.status).toBe(200);
+    expect(await dismissed.json()).toEqual({ ok: true, status: "dismissed" });
+
+    expect(await verdicts(ITEM_ID)).toEqual([
+      {
+        user_id: "reporter-a",
+        status: "resolved",
+        outcome: null,
+        resolved: true,
+      },
+      {
+        user_id: "reporter-b",
+        status: "dismissed",
+        outcome: null,
+        resolved: true,
+      },
+    ]);
+
+    // A closed report is not closed twice; a missing one is still a 404.
+    const again = await admin(
+      owner.headers,
+      `reports/reporter-a/${ITEM_ID}/resolve`,
+    );
+    expect(again.status).toBe(409);
+    expect(await again.text()).toContain("resolved");
+    expect(
+      (await admin(owner.headers, `reports/ghost/${ITEM_ID}/dismiss`)).status,
+    ).toBe(404);
+  });
+
+  it("resolves every open report on removal with the removal reason", async () => {
+    const owner = await loginAs(OWNER_EMAIL);
+    await seedPublished();
+    await seedItem(OTHER_ID, "user-other-author", { status: "published" });
+    await seedReport("reporter-a", ITEM_ID);
+    await seedReport("reporter-b", ITEM_ID);
+    await seedReport("reporter-c", OTHER_ID);
+
+    const response = await admin(
+      owner.headers,
+      `items/${ITEM_ID}/remove`,
+      JSON.stringify({ reason: "  Broken preview  " }),
+    );
+    expect(response.status).toBe(200);
+    expect(await statusOf(env.DB, ITEM_ID)).toBe("removed");
+
+    // Both reports on the removed item carry the trimmed reason; the other
+    // item's report is untouched.
+    expect(await verdicts(ITEM_ID)).toEqual([
+      {
+        user_id: "reporter-a",
+        status: "resolved",
+        outcome: "Broken preview",
+        resolved: true,
+      },
+      {
+        user_id: "reporter-b",
+        status: "resolved",
+        outcome: "Broken preview",
+        resolved: true,
+      },
+    ]);
+    expect(await verdicts(OTHER_ID)).toEqual([
+      {
+        user_id: "reporter-c",
+        status: "open",
+        outcome: null,
+        resolved: false,
+      },
+    ]);
+  });
+
+  it("leaves reports open when the removal transition is refused", async () => {
+    const owner = await loginAs(OWNER_EMAIL);
+    await seedPublished({ status: "draft" });
+    await seedReport("reporter-a", ITEM_ID);
+
+    const refused = await admin(
+      owner.headers,
+      `items/${ITEM_ID}/remove`,
+      JSON.stringify({ reason: "Broken" }),
+    );
+    expect(refused.status).toBe(409);
+    expect(await verdicts(ITEM_ID)).toEqual([
+      {
+        user_id: "reporter-a",
+        status: "open",
+        outcome: null,
+        resolved: false,
+      },
+    ]);
+  });
 });
 
 /** Any signed-in account; the user row is created once per pool state. */
 async function loginAs(
   email: string,
+  emailVerified = true,
 ): Promise<{ headers: Record<string, string>; userId: string }> {
   const context = await createAuth(env).$context;
   const test = (context as unknown as { test: TestHelpers }).test;
@@ -209,7 +383,7 @@ async function loginAs(
     .bind(userId)
     .first();
   if (existing === null) {
-    await test.saveUser(test.createUser({ id: userId, email }));
+    await test.saveUser(test.createUser({ id: userId, email, emailVerified }));
   }
   const { headers } = await test.login({ userId });
   return { headers: Object.fromEntries(headers.entries()), userId };
@@ -267,4 +441,82 @@ async function seedReports(
       .bind(userId, index === 0 ? "old-report" : `prior-${index}`, at)
       .run();
   }
+}
+
+/** GETs the report queue, or POSTs an admin path with an optional body. */
+async function admin(
+  headers: Record<string, string>,
+  path: string,
+  body?: string,
+): Promise<Response> {
+  if (body === undefined && path === "reports")
+    return SELF.fetch(`${BASE}/api/admin/reports`, { headers });
+  return SELF.fetch(`${BASE}/api/admin/${path}`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body }),
+  });
+}
+
+interface SeedReportOptions {
+  readonly at?: string;
+  readonly category?: string;
+  readonly note?: string | null;
+  readonly status?: "open" | "resolved" | "dismissed";
+}
+
+/** One report row in a named triage state; the caller clears the table first. */
+async function seedReport(
+  userId: string,
+  itemId: string,
+  options: SeedReportOptions = {},
+): Promise<void> {
+  const status = options.status ?? "open";
+  const at = options.at ?? "2026-10-01T00:00:00.000Z";
+  await env.DB.prepare(
+    `INSERT INTO report (user_id, item_id, category, note, created_at,
+       status, outcome, resolved_at)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+  )
+    .bind(
+      userId,
+      itemId,
+      options.category ?? "spam",
+      options.note ?? null,
+      at,
+      status,
+      status === "open" ? null : at,
+    )
+    .run();
+}
+
+/** One item's report verdicts, ordered by reporter so a test can name them. */
+async function verdicts(itemId: string): Promise<
+  {
+    user_id: string;
+    status: string;
+    outcome: string | null;
+    resolved: boolean;
+  }[]
+> {
+  const result = await env.DB.prepare(
+    `SELECT user_id, status, outcome, resolved_at IS NOT NULL AS resolved
+     FROM report WHERE item_id = ? ORDER BY user_id`,
+  )
+    .bind(itemId)
+    .all<{
+      user_id: string;
+      status: string;
+      outcome: string | null;
+      resolved: number;
+    }>();
+  return result.results.map((row) => ({
+    user_id: row.user_id,
+    status: row.status,
+    outcome: row.outcome,
+    resolved: row.resolved === 1,
+  }));
 }
