@@ -1,12 +1,12 @@
 import { Tabs } from "@base-ui/react/tabs";
 import type * as React from "react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { Glyph } from "../editor-shell/icons.js";
+import type { ShellPalette } from "../editor-shell/palette.js";
+import type { ShellMode } from "../editor-shell/shell-layout.js";
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
 import type { ThemeLibraryClient } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import type { ShellMode } from "../editor-shell/shell-layout.js";
-import type { ShellPalette } from "../editor-shell/palette.js";
-import { Glyph } from "../editor-shell/icons.js";
 import type { HostSettingsClient } from "./client.js";
 import { useHostSettings } from "./host-state.js";
 import { SETTINGS_GROUPS, SETTINGS_PAGES, type SettingsPage } from "./nav.js";
@@ -53,7 +53,9 @@ export function SettingsRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
   readonly sources?: SourcesClient | undefined;
-  readonly onStatus?: ((line: SettingsStatusLine | undefined) => void) | undefined;
+  readonly onStatus?:
+    | ((line: SettingsStatusLine | undefined) => void)
+    | undefined;
   readonly storage: Storage | undefined;
   readonly palette: ShellPalette;
   readonly following: boolean;
@@ -89,7 +91,9 @@ function Settings(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly settings?: HostSettingsClient | undefined;
   readonly sources?: SourcesClient | undefined;
-  readonly onStatus?: ((line: SettingsStatusLine | undefined) => void) | undefined;
+  readonly onStatus?:
+    | ((line: SettingsStatusLine | undefined) => void)
+    | undefined;
   readonly storage: Storage | undefined;
   readonly palette: ShellPalette;
   readonly following: boolean;
@@ -125,7 +129,9 @@ function Settings(props: {
   const nav = useRef<HTMLDivElement>(null);
   useEffect(() => {
     nav.current
-      ?.querySelector<HTMLElement>('[data-yunari-settings-nav-item][aria-selected="true"]')
+      ?.querySelector<HTMLElement>(
+        '[data-yunari-settings-nav-item][aria-selected="true"]',
+      )
       ?.focus();
   }, []);
 

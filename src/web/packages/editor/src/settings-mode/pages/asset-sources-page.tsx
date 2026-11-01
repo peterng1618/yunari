@@ -70,7 +70,9 @@ export function AssetSourcesPage(): React.JSX.Element {
         data-yunari-connections=""
       >
         {rows.length === 0 ? (
-          <p className="text-sm text-muted">{uiCopy.settings.connectionsEmpty}</p>
+          <p className="text-sm text-muted">
+            {uiCopy.settings.connectionsEmpty}
+          </p>
         ) : (
           <div className="grid gap-[var(--space-12)] xl:grid-cols-2">
             {rows.map((row) => (
@@ -162,7 +164,9 @@ export function AssetSourcesPage(): React.JSX.Element {
             ))}
           </div>
         )}
-        <p className="text-sm text-muted">{uiCopy.settings.connectionsFooter}</p>
+        <p className="text-sm text-muted">
+          {uiCopy.settings.connectionsFooter}
+        </p>
       </div>
     </Page>
   );

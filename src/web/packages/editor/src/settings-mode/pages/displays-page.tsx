@@ -1,13 +1,13 @@
 import type * as React from "react";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { uiCopy } from "../../ui-copy.js";
-import { AddDisplaySection, AutostartSection, DisplaysList } from "../displays-section.js";
 import { DisplayPresentationSection } from "../display-presentation-section.js";
 import {
-  devicesFor,
-  type HostState,
-  nameOfDevice,
-} from "../host-state.js";
+  AddDisplaySection,
+  AutostartSection,
+  DisplaysList,
+} from "../displays-section.js";
+import { devicesFor, type HostState, nameOfDevice } from "../host-state.js";
 import { Page } from "../page.js";
 import { PanelControlsSection } from "../panel-controls-section.js";
 import { PanelsSection } from "../panels-section.js";
@@ -31,7 +31,7 @@ export function DisplaysPage(state: HostState): React.JSX.Element {
 
   return (
     <Page page="displays">
-      <div className="grid gap-[var(--space-24)] lg:grid-cols-[minmax(260px,300px)_minmax(0,1.2fr)] xl:grid-cols-[minmax(260px,300px)_minmax(0,1.2fr)_minmax(300px,0.9fr)]">
+      <div className="grid gap-[var(--space-24)] lg:grid-cols-[minmax(var(--settings-card-min-width),var(--settings-card-max-width))_minmax(0,1.2fr)] xl:grid-cols-[minmax(var(--settings-card-min-width),var(--settings-card-max-width))_minmax(0,1.2fr)_minmax(var(--settings-card-max-width),0.9fr)]">
         <div className="flex min-w-0 flex-col gap-[var(--space-24)]">
           <DisplaysList
             displays={state.displays}

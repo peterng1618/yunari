@@ -7,9 +7,8 @@ export const EDITOR = "http://127.0.0.1:4174/";
  *  the header. Named by the class only that control carries. */
 export const SETTINGS_GEAR = ".editor-shell-rail-settings";
 
-/** The modal, read by its own name rather than by class — the reference sheet
- *  is a Base UI dialog too. */
-export const SETTINGS_DIALOG = { name: "Settings" } as const;
+/** The Settings mode's region, the surface the gear opens. */
+export const SETTINGS_REGION = "[data-yunari-settings-region]";
 
 /** Read from the same list the editor uses, so a palette added there cannot
  *  escape a sweep over it. Kept as a literal because a spec file cannot import
@@ -37,36 +36,41 @@ export async function openShell(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
-/** The Appearance tab, open, returning the modal it is in.
- *
- *  Base UI tabs keep the inactive panels out of the DOM, so a caller that wants
- *  the six swatches has to be on the tab as well as in the modal. Idempotent: a
- *  caller that already opened the modal — or one that opened it for a different
- *  tab — lands on the same surface. */
-export async function openAppearance(page: Page): Promise<Locator> {
-  const dialog = page.getByRole("dialog", SETTINGS_DIALOG);
-  if (!(await dialog.isVisible())) {
-    await page.locator(SETTINGS_GEAR).click();
-    await expect(dialog).toBeVisible();
-  }
-  await dialog.getByRole("tab", { name: "Appearance" }).click();
-  return dialog;
+/** Leave Settings for the editor through the header's own mode switch, so the
+ *  surface a spec measures next is the editor rather than a mode's page. */
+export async function leaveSettings(page: Page): Promise<void> {
+  await page.locator("#yunari-shell-modes-editor").click();
+  await expect(page.locator(SETTINGS_REGION)).toBeHidden();
 }
 
-/** Choose a palette the way an author does: the gear, the Appearance tab, the
- *  row. Asserts the attribute rather than trusting the click, so a modal that
+/** The Appearance page, open, returning the Settings region it is in.
+ *
+ *  Idempotent: a caller that already opened Settings — or one that opened it on
+ *  a different page — lands on the same surface. */
+export async function openAppearance(page: Page): Promise<Locator> {
+  const region = page.locator(SETTINGS_REGION);
+  if (!(await region.isVisible())) {
+    await page.locator(SETTINGS_GEAR).click();
+    await expect(region).toBeVisible();
+  }
+  await region.getByRole("tab", { name: "Appearance" }).click();
+  return region;
+}
+
+/** Choose a palette the way an author does: the gear, the Appearance page, the
+ *  row. Asserts the attribute rather than trusting the click, so a surface that
  *  failed to apply the choice fails here rather than six assertions later
- *  against whatever was in force. */
+ *  against whatever was in force. Leaves Settings so the caller is back in the
+ *  editor, which is where every caller continues. */
 export async function choosePalette(
   page: Page,
   palette: Palette,
 ): Promise<void> {
-  const dialog = await openAppearance(page);
-  await dialog.getByRole("radio", { name: palette, exact: true }).click();
+  const region = await openAppearance(page);
+  await region.getByRole("radio", { name: palette, exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-shell-palette",
     palette,
   );
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await leaveSettings(page);
 }

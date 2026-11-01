@@ -44,15 +44,8 @@ import {
   type WeatherRead,
   type WeatherSettings,
 } from "./client.js";
-import {
-  SETTINGS_GROUPS,
-  SETTINGS_PAGES,
-  type SettingsPage,
-} from "./nav.js";
-import {
-  SettingsRegion,
-  type SettingsStatusLine,
-} from "./region.js";
+import { SETTINGS_GROUPS, SETTINGS_PAGES, type SettingsPage } from "./nav.js";
+import { SettingsRegion, type SettingsStatusLine } from "./region.js";
 import {
   type RemovalAnswer,
   type Source,

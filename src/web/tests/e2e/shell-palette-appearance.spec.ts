@@ -4,6 +4,7 @@ import { captureVisualReview } from "./editor-canvas.js";
 import {
   choosePalette,
   EDITOR,
+  leaveSettings,
   openAppearance,
   PALETTES,
 } from "./shell-palette.js";
@@ -269,7 +270,7 @@ test.describe("shell palettes", () => {
     await expect(
       dialog.getByRole("radio", { name: "light", exact: true }),
     ).toHaveAttribute("aria-checked", "true");
-    await page.keyboard.press("Escape");
+    await leaveSettings(page);
 
     const colours = await shellColours(page);
     expect(colours.header).not.toBe("rgba(0, 0, 0, 0)");

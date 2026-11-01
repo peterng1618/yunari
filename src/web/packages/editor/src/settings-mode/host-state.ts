@@ -1,7 +1,4 @@
-import type {
-  AssignableGroup,
-  UnitPreferences,
-} from "@yunari/renderer-core";
+import type { AssignableGroup, UnitPreferences } from "@yunari/renderer-core";
 import { useEffect, useRef, useState } from "react";
 import {
   createThemeLibraryClient,
@@ -113,10 +110,16 @@ export interface HostState {
   readonly themes: readonly ThemeLibraryEntry[];
   readonly devices: DeviceSettings | undefined;
   readonly preferences:
-    | { readonly settings: DisplayPreferences; readonly zones: readonly string[] }
+    | {
+        readonly settings: DisplayPreferences;
+        readonly zones: readonly string[];
+      }
     | undefined;
   readonly questions:
-    | { readonly required: readonly AssignableGroup[]; readonly answers: ThemeAnswers }
+    | {
+        readonly required: readonly AssignableGroup[];
+        readonly answers: ThemeAnswers;
+      }
     | undefined;
   readonly asked: readonly AssignableGroup[];
   readonly panels: readonly PanelHint[] | undefined;
@@ -148,11 +151,17 @@ export interface HostState {
   readonly replaceName: (id: string, label: string) => void;
   readonly replacePresentation: (
     id: string,
-    saved: { readonly shape: ThemedDisplay["shape"]; readonly rotation: number },
+    saved: {
+      readonly shape: ThemedDisplay["shape"];
+      readonly rotation: number;
+    },
   ) => void;
   readonly reconnectPanel: (id: string) => Promise<void>;
   readonly addPanel: (panel: PanelHint) => void;
-  readonly addDisplay: (label: string, monitor: HostMonitor) => Promise<boolean>;
+  readonly addDisplay: (
+    label: string,
+    monitor: HostMonitor,
+  ) => Promise<boolean>;
   readonly removeDisplay: (display: ThemedDisplay) => Promise<boolean>;
   readonly report: (status: string) => void;
 }
@@ -444,7 +453,10 @@ export function useHostSettings(props: {
 
   const replacePresentation = (
     id: string,
-    saved: { readonly shape: ThemedDisplay["shape"]; readonly rotation: number },
+    saved: {
+      readonly shape: ThemedDisplay["shape"];
+      readonly rotation: number;
+    },
   ): void => {
     if (!mounted.current) return;
     setMap((current) =>
@@ -571,10 +583,7 @@ export function useHostSettings(props: {
     }
   };
 
-  const asked = unanswered(
-    questions?.required ?? [],
-    questions?.answers ?? {},
-  );
+  const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
 
   return {
     displays,

@@ -59,7 +59,7 @@ export function AboutPage(props: {
         hint={uiCopy.settings.aboutProvenance}
       >
         <div
-          className="editor-shell-about flex max-w-[560px] flex-col gap-[var(--space-8)]"
+          className="editor-shell-about flex max-w-[var(--dialog-max-width)] flex-col gap-[var(--space-8)]"
           data-yunari-about=""
         >
           <dl>

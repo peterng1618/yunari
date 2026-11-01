@@ -585,15 +585,23 @@ body,
      sections, the import modal one progress block. */
   --guide-dialog-width: 420px;
   --import-dialog-width: 360px;
-  --settings-tabs-width: 150px;
+  /* The Settings mode's two tracks: a fixed navigation column, and the page
+     measure beside it. The measure is generous because a page is a grid of
+     sections rather than one form: a 2560px window spends the space on columns
+     instead of stretching a single label-and-well row past reading. */
+  --settings-nav-width: 176px;
+  --settings-page-measure: 1200px;
+  /* A displays card's band: wide enough for a display's name and shape, narrow
+     enough that the chosen display's form still leads the page. The readings
+     page's aside is the weather card beside the source list. */
+  --settings-card-min-width: 260px;
+  --settings-card-max-width: 300px;
+  --settings-aside-min-width: 320px;
+  --settings-aside-max-width: 380px;
   --field-label-width: 72px;
   --layer-rename-min-height: 22px;
   --view-readout-min-width: 56px;
   --compact-layer-panel-width: 246px;
-  /* How wide the Host mode's sections run. A settings form is read, not
-     scanned, and its rows are label-and-well pairs that a 2560px window would
-     stretch past reading. The measure is its own. */
-  --host-settings-measure: 640px;
   /* The finder's dimensions and the Assets card's mark are the panels' own;
      the specimen glyph sizes are the two panels' own. The specimen backdrop is fixed on purpose: a font
      preview has to read the same under every palette, so it cannot be a palette
@@ -1378,11 +1386,13 @@ body,
    pair was declared for this and read by nothing until `vg-458`, so every
    scroller painted the OS default.
 
-   **The two portalled scrollers join by name (`vg-480`).** A menu popup and a
-   dialog mount outside `.editor-shell`, so a rule scoped to it never reached
-   them. Named rather than hoisted to the document root, which would restyle
-   every scrollable surface in the host page; the cost is a list that can go
-   stale, and `editor-shell.control-rules.test.ts` is what holds it.
+   **The portalled surfaces and the Settings tracks join by name (`vg-480`).**
+   A menu popup and a dialog mount outside `.editor-shell`, and the Settings
+   mode's navigation and page are scrollers of their own, so a rule scoped to
+   the shell frame never reached them. Named rather than hoisted to the document
+   root, which would restyle every scrollable surface in the host page; the cost
+   is a list that can go stale, and `editor-shell.control-rules.test.ts` is what
+   holds it.
 
    **The pane's scroller is the pane's body** (`vg-208`), so the list names that
    and not the column it sits in — the column has no scrollbar to style.
@@ -1399,7 +1409,9 @@ body,
 .editor-shell-pane-body,
 .editor-shell-inspector,
 .editor-shell-menu-popup,
-.editor-shell-dialog {
+.editor-shell-dialog,
+.settings-mode-nav,
+.settings-mode-content {
   scrollbar-width: thin;
   scrollbar-color: var(--yunari-scrollbar-thumb) var(--yunari-scrollbar-track);
 }
@@ -2037,47 +2049,53 @@ body,
   border-color: var(--shell-muted);
 }
 
-/* The settings modal's own navigation and body. A `150px` column of three
-   glyph+label rows beside the panel, the active row lifted and marked with a
-   2px accent bar on its leading edge; the horizontal word strip this replaces is
-   not drawn.
+/* The Settings mode: a fixed navigation column beside a page measure, the
+   active row lifted and marked with a 2px accent bar on its leading edge. The
+   header keeps the mode switch and shows no second horizontal bar, so the
+   destinations run down the left where the author's eye already is.
 
-   **The axis is this surface's rule because the written rules leave it open.**
-   The vocabulary opens with
-   "The vocabulary is closed. A control is one of these, or it is not a control."
-   and no *tab* control is in it, so no rule requires the horizontal form; the design
-   fixes the three tabs and what each holds, never their direction. The column
-   keeps the three rows beside the panel instead of adding a second strip above
-   it. The primitive stays Base UI's
-   and only its orientation and treatment change: `data-active` is still the
-   primitive's own selected marker, not a second class to keep in step.
+   **The column is the exact track.** It is a border-box width, so no padding or
+   border sits on it; the nav inset lives on its rows, and the hairline between
+   column and content is the content's own `border-left`.
 
-   **The 150px is on this element and nothing else may be.** It is a border-box
-   width, so a padding or a border here would shorten the content box the parity
-   row reads (`settings nav — column width`); the nav's inset lives on its rows
-   and the hairline between it and the panel is the panel's own `border-left`.
-
-   **The column ground (`#0e1217`) is not painted.** It is the hex
-   `vg-217` already records: the palette rule forbids it in a surface and no palette token is
-   that tone — `--shell-backdrop` is a *gradient* under `light`, so it is a
-   ground rather than a column's fill, and every other surface role is lighter
-   than the panel, the wrong direction. The column therefore reads on the frame's
-   own surface, which is that ruling's `var(--panel)`, and is distinguished by
-   its hairline, its rows and the active row's accent bar. */
-.editor-shell-settings {
+   **The column ground is not painted.** The surface tokens are the panel's own
+   and every other role is lighter than the panel, the wrong direction for a
+   column; the active row's lift and accent bar are what distinguish it. */
+.settings-mode {
   display: flex;
   align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
-.editor-shell-settings-tabs {
+.settings-mode-nav {
+  flex: 0 0 auto;
+  width: var(--settings-nav-width);
+  padding: var(--space-12) var(--space-8) var(--space-12) 0;
+  overflow-y: auto;
+}
+.settings-mode-nav-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  flex: 0 0 auto;
-  width: var(--settings-tabs-width);
+  margin: 0;
   padding: 0;
   border: 0;
 }
-.editor-shell-settings-tab {
+/* A group heading is the same eyebrow the pages draw over their sections: the
+   word is a label for rows, not a destination. */
+.settings-mode-nav-group {
+  padding: var(--space-12) var(--space-8) var(--space-4);
+  color: var(--shell-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.settings-mode-nav-list > .settings-mode-nav-group:first-child {
+  padding-top: var(--space-4);
+}
+.settings-mode-nav-item {
   appearance: none;
   display: flex;
   align-items: center;
@@ -2093,36 +2111,34 @@ body,
   text-align: left;
   cursor: pointer;
 }
-.editor-shell-settings-tab:hover {
+.settings-mode-nav-item:hover {
   color: var(--shell-text);
 }
-/* The active row's marks: the leading accent bar, a lift, and
-   the glyph stroked in the accent while the word keeps the shell's text. The
-   lift is a wash of the shell's own text role rather than a hex, the same shape
-   the rail's hover uses, so it reads on all six palettes. */
-.editor-shell-settings-tab[data-active] {
+.settings-mode-nav-item[data-active] {
   background: color-mix(in srgb, var(--shell-text) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--shell-accent);
   color: var(--shell-text);
 }
-.editor-shell-settings-tab[data-active] svg {
+.settings-mode-nav-item[data-active] svg {
   color: var(--shell-accent);
 }
-.editor-shell-settings-tab:focus-visible {
+.settings-mode-nav-item:focus-visible {
   outline: 2px solid var(--shell-accent);
   outline-offset: -2px;
 }
-/* The body beside the column: one element owns the hairline and the gutter, so
-   the column keeps its exact width (see above). */
-.editor-shell-settings-panel {
+/* The page beside the column: one element owns the hairline, the gutter and the
+   scroll, so the column keeps its exact width (see above). The page measure is
+   the page's own; the content track may be wider on a large screen. */
+.settings-mode-content {
   flex: 1;
   min-width: 0;
-  padding-left: var(--space-14);
+  min-height: 0;
+  padding: var(--space-4) 0 var(--space-24) var(--space-20);
   border-left: 1px solid var(--shell-edge);
+  overflow-y: auto;
 }
-.editor-shell-settings-panel:focus-visible {
-  outline: 2px solid var(--shell-accent);
-  outline-offset: 2px;
+.settings-mode-page {
+  max-width: var(--settings-page-measure);
 }
 
 /* The panel's own header: the tab's glyph in the accent, the panel's name, and

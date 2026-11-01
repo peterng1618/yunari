@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Status:** accepted
-- **Paths:** `src/web/packages/editor/src/editor-shell/shell-layout.tsx`
+- **Paths:** `src/web/packages/editor/src/editor-shell/shell-layout.tsx`, `src/web/packages/editor/src/editor-shell/editor-shell.css`, `src/web/packages/editor/src/settings-mode/region.tsx`, `src/web/packages/editor/src/settings-mode/nav.ts`, `src/web/packages/editor/src/settings-mode/pages/`, `src/web/packages/editor/src/shortcut-manager/index.ts`
 
 ## Problem
 

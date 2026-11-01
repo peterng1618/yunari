@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { ProductShortcutId } from "../../shortcut-manager/index.js";
-import type { ShortcutOverrides } from "../../shortcut-manager/bindings.js";
 import { SettingsKeyboard } from "../../editor-shell/settings-keyboard.js";
+import type { ShortcutOverrides } from "../../shortcut-manager/bindings.js";
+import type { ProductShortcutId } from "../../shortcut-manager/index.js";
 import { Page } from "../page.js";
 
 /**

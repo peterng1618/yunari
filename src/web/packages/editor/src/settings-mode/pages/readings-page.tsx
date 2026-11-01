@@ -12,11 +12,8 @@ import { WeatherSection } from "../weather-section.js";
 export function ReadingsPage(state: HostState): React.JSX.Element {
   return (
     <Page page="readings">
-      <div className="grid gap-[var(--space-24)] xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
-        <SourcesSection
-          sources={state.sourcesClient}
-          report={state.report}
-        />
+      <div className="grid gap-[var(--space-24)] xl:grid-cols-[minmax(0,1fr)_minmax(var(--settings-aside-min-width),var(--settings-aside-max-width))]">
+        <SourcesSection sources={state.sourcesClient} report={state.report} />
         <WeatherSection settings={state.settingsClient} report={state.report} />
       </div>
     </Page>

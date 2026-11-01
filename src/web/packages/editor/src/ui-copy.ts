@@ -151,7 +151,8 @@ export const uiCopy = {
      *  the hints their sections already owned; the two editor pages that had a
      *  modal rather than a page gain the sentence that says what they hold. */
     pageHints: {
-      displays: "Each display shows its own theme. Assign one from the theme's row in Themes.",
+      displays:
+        "Each display shows its own theme. Assign one from the theme's row in Themes.",
       hardware:
         "Which hardware the Host reports. These apply to every theme, unless a theme asks for something different.",
       units:

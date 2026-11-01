@@ -17,7 +17,7 @@ import {
  * Split out of `host-walkthrough.spec.ts` under Ruling L. Where a control is and
  * how focus reaches it is `walkthrough-focus.ts`'s; what a control *means* —
  * a document, a rail pane, a selected row, a field — is this module's, and the
- * spec holds the tests and nothing else. The settings modal's own vocabulary
+ * spec holds the tests and nothing else. The Settings surface's own vocabulary
  * (the palette, the shortcut capture) is `walkthrough-settings.ts`'s, split out
  * of here when it passed the 800-line stop.
  */

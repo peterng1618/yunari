@@ -11,13 +11,13 @@ import { STACK_GLYPH } from "./editor-shell/icons.js";
 import { LayerActions } from "./editor-shell/layer-panel.js";
 import { Pane } from "./editor-shell/pane.js";
 import { Rail } from "./editor-shell/rail.js";
-import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 import { chooseArtboardSize } from "./new-document-chooser.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { createPalettePanel } from "./palette-manager/panel.js";
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import { createTokenInspectorPanel } from "./panes/tokens/token-inspector.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
+import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 import { createTypeTokenPanel } from "./type-preset-manager/panel.js";
 import { uiCopy } from "./ui-copy.js";
 

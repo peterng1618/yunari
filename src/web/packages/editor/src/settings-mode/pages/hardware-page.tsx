@@ -1,5 +1,5 @@
-import type * as React from "react";
 import type { AssignableGroup } from "@yunari/renderer-core";
+import type * as React from "react";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { uiCopy } from "../../ui-copy.js";
 import { DeviceNameRow } from "../device-name-row.js";
@@ -31,11 +31,7 @@ export function HardwarePage(state: HostState): React.JSX.Element {
         <p className="text-xs text-muted">{copy.empty}</p>
       ) : (
         <div className="grid gap-[var(--space-24)] lg:grid-cols-2">
-          <Group
-            testId="devices"
-            name={copy.heading}
-            hint={copy.hint}
-          >
+          <Group testId="devices" name={copy.heading} hint={copy.hint}>
             {(["gpu", "system-disk", "data-disk"] as const).map((group) => {
               const options = devicesFor(devices, group);
               // A slot with nothing behind it is not a question: the page draws

@@ -1,4 +1,3 @@
-import { uiCopy } from "../ui-copy.js";
 import {
   CONNECTIONS_GLYPH,
   DISPLAYS_GLYPH,
@@ -10,6 +9,7 @@ import {
   READINGS_GLYPH,
   UNITS_GLYPH,
 } from "../editor-shell/icons.js";
+import { uiCopy } from "../ui-copy.js";
 
 /** The eight Settings destinations. The type is also the active-page state the
  *  shell holds, so a page added here and not handled there fails to compile. */
@@ -109,8 +109,6 @@ export function pageCopy(page: SettingsPage): {
 }
 
 /** The copy keys use camel case; the page ids use the shell's kebab case. */
-function pageKey(
-  page: SettingsPage,
-): keyof typeof uiCopy.settings.pages {
+function pageKey(page: SettingsPage): keyof typeof uiCopy.settings.pages {
   return page === "asset-sources" ? "assetSources" : page;
 }

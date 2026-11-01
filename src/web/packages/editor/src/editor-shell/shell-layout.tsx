@@ -11,13 +11,13 @@ import {
   readPreviewRatioTokens,
   setActivePreviewRatios,
 } from "../display-lens.js";
+import { CompositionPane } from "../panes/composition/composition-pane.js";
+import { confirmDocumentReplacement } from "../persistence-manager/index.js";
+import type { SettingsPage } from "../settings-mode/nav.js";
 import {
   SettingsRegion,
   type SettingsStatusLine,
 } from "../settings-mode/region.js";
-import type { SettingsPage } from "../settings-mode/nav.js";
-import { CompositionPane } from "../panes/composition/composition-pane.js";
-import { confirmDocumentReplacement } from "../persistence-manager/index.js";
 import {
   readShortcutOverrides,
   resolveShortcuts,
@@ -328,8 +328,7 @@ export function createShellLayout(
      *  above: it is shell chrome, not document state, and it is never
      *  serialized. The gear keeps the last page; a surface that asks for one
      *  (the finder's needs-key path) sets it before switching. */
-    const [settingsPage, setSettingsPage] =
-      useState<SettingsPage>("displays");
+    const [settingsPage, setSettingsPage] = useState<SettingsPage>("displays");
     /** The author's bindings, held here because the effective table lives
      *  outside React. Initialized from storage — the same read
      *  `createShellLayout` made for the live table — and moved from there by
@@ -343,9 +342,9 @@ export function createShellLayout(
      *  region withdraws the line when it unmounts, so this state is one visit's
      *  and never outlives it — otherwise the next visit's strip would mount
      *  holding the last visit's sentence. */
-    const [hostStatus, setHostStatus] = useState<SettingsStatusLine | undefined>(
-      undefined,
-    );
+    const [hostStatus, setHostStatus] = useState<
+      SettingsStatusLine | undefined
+    >(undefined);
     /** The Themes mode's own reading, published by its region for the same
      *  reason and through the same shape as the host's: the region owns what
      *  the strip says, the shell owns where it goes. */

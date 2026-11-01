@@ -1,8 +1,6 @@
 import { RadioGroup } from "@base-ui/react/radio-group";
-import { useSyncExternalStore, useState } from "react";
-import {
-  ControlChoiceRow,
-} from "../../components/ui/control-choice-row.js";
+import { useState, useSyncExternalStore } from "react";
+import { ControlChoiceRow } from "../../components/ui/control-choice-row.js";
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { ControlToggle } from "../../components/ui/control-toggle.js";
 import { ControlWell } from "../../components/ui/control-well.js";
@@ -54,7 +52,7 @@ export function AppearancePage(props: {
 }): React.JSX.Element {
   return (
     <Page page="appearance">
-      <div className="grid gap-[var(--space-24)] xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+      <div className="grid gap-[var(--space-24)] xl:grid-cols-[minmax(0,1.2fr)_minmax(var(--dialog-min-width),0.8fr)]">
         <PaletteSection
           storage={props.storage}
           palette={props.palette}
@@ -247,7 +245,10 @@ function PreviewsSection(props: {
       name={uiCopy.settings.previewRatiosHeading}
       hint={uiCopy.settings.previewRatiosHint}
     >
-      <div className="flex flex-col gap-[var(--space-8)]" data-yunari-previews="">
+      <div
+        className="flex flex-col gap-[var(--space-8)]"
+        data-yunari-previews=""
+      >
         {tokens.length === 0 ? (
           <p className="text-sm text-muted">
             {uiCopy.settings.previewRatiosEmpty}
@@ -311,7 +312,11 @@ function PreviewsSection(props: {
           </button>
         </div>
         {reason === undefined ? null : (
-          <p className="text-sm" data-yunari-preview-ratio-reason="" role="alert">
+          <p
+            className="text-sm"
+            data-yunari-preview-ratio-reason=""
+            role="alert"
+          >
             {reason}
           </p>
         )}

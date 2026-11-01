@@ -56,15 +56,15 @@ import {
   shellPalettes,
 } from "./editor-shell/palette.js";
 import { PublishControl } from "./editor-shell/publish-control.js";
-import { AppearancePage } from "./settings-mode/pages/appearance-page.js";
-import { AboutPage } from "./settings-mode/pages/about-page.js";
-import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 import { createShellLayout } from "./editor-shell/shell-layout.js";
 import type { PublishSurfaceStore } from "./editor-shell/shell-stores.js";
 import { ShortcutReference } from "./editor-shell/shortcut-reference.js";
 import { NewDocumentChooser } from "./new-document-chooser.js";
 import { STARTER_TEMPLATE } from "./new-fabric-theme.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
+import { AboutPage } from "./settings-mode/pages/about-page.js";
+import { AppearancePage } from "./settings-mode/pages/appearance-page.js";
+import { KeyboardPage } from "./settings-mode/pages/keyboard-page.js";
 // The reference table owns the words for actions no menu prints, so the walk
 // reads the Keyboard tab through its carve-out rather than demanding the copy
 // table own the shortcut registry.

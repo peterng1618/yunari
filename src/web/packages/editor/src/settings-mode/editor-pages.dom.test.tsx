@@ -160,9 +160,9 @@ it("offers the six palettes as named radios in one labelled group", async () => 
     "the page does not offer the palettes the palette module owns",
   ).toEqual([...shellPalettes]);
   expect(
-    group.querySelector('[role="radio"][aria-checked="true"]')?.getAttribute(
-      "aria-label",
-    ),
+    group
+      .querySelector('[role="radio"][aria-checked="true"]')
+      ?.getAttribute("aria-label"),
     "the palette in force is not the one marked checked",
   ).toBe(DEFAULT_SHELL_PALETTE);
   expect(
