@@ -502,4 +502,40 @@ describe("collectSnapSources", () => {
     // twice in the ranking and once again in the equal-spacing chain.
     expect(ids).not.toContain("sole-part");
   });
+
+  it("offers a stroke-carrying part repeating its group's line once", () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const sole = new Rect({
+      id: "sole-part",
+      left: 0,
+      top: 0,
+      width: 80,
+      height: 80,
+      stroke: "#000",
+      strokeWidth: 1,
+    });
+    const card = new Group([sole]);
+    card.set("id", "card");
+    // A saved card declares its box; the child's `getBoundingRect()` still
+    // includes its own stroke, so the two boxes differ by half a stroke a side.
+    card.set({ width: 80, height: 80 });
+    card.setCoords();
+    const mover = new Rect({
+      id: "mover",
+      left: 900,
+      top: 700,
+      width: 40,
+      height: 40,
+    });
+    canvas.add(card, mover);
+
+    const ids = candidateIds(
+      collectSnapSources({ canvas, bounds: artboard, activeObject: mover }),
+    );
+
+    expect(ids).toContain("card");
+    // The candidate line is the group's line. A part whose only difference is
+    // its own stroke draws no second line at that coordinate.
+    expect(ids).not.toContain("sole-part");
+  });
 });

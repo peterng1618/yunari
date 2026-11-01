@@ -71,36 +71,49 @@ function toSnapSource(
  * the float drift between a group's laid-out box and its child's own. */
 const SNAP_SOURCE_BOUNDS_EPSILON = 0.000000001;
 
+/** How far one object's stroke pushes each edge of its box outwards, in scene
+ * units. `getBoundingRect()` includes half the stroke on every side, scaled with
+ * the object — unless `strokeUniform` keeps it at its authored width — which is
+ * the only way a child's box can differ from a group laid out around it. */
+function strokePadding(object: FabricObject): number {
+  const width = Math.abs(object.strokeWidth ?? 0);
+  if (width === 0) return 0;
+  const scale = object.strokeUniform
+    ? 1
+    : Math.max(Math.abs(object.scaleX), Math.abs(object.scaleY));
+  return (width * scale) / 2;
+}
+
 /** Whether a nested object repeats every line its enclosing box already offers.
  *
- * **This fires when the enclosing box equals the child's, which depends on
- * whether the group was fitted or declared.** Fabric fits a group around its
- * children, so `new Group([sole])` takes the child's own box — stroke included,
- * `strokeWidth` 1 and 81×81 on both sides — and the dedupe fires. A group that
- * *declares* a `width`/`height` keeps that box, while a child's
- * `getBoundingRect()` still includes its own stroke, so the two differ and the
- * part *is* offered. Measured on the nested fixture's card: the group's declared
- * box is its 400×200, its `left-card-part` child is 61×81 at 360…421, and the
- * starter's card is the same story with a 2-unit stroke.
+ * **The rule is stroke-inclusive boxes with a stroke-derived tolerance, because
+ * that is the box the author sees and the box the candidate lines come from.**
+ * A part's `getBoundingRect()` includes its own stroke; a group fitted around
+ * that part measures the same box, so the boxes match even at the float epsilon.
+ * A group that *declares* a `width`/`height` keeps that box instead, so the
+ * child's visible edge sits half a stroke outside it — the two differ by exactly
+ * the stroke the author cannot separate from the line. Absorbing that half
+ * stroke is what makes the group's line offered once: the candidate line is the
+ * group's, and a part whose own edges are inside that tolerance draws no line
+ * the group does not already offer.
  *
- * The narrow scope is a standing gap rather than a settled question, and it is
- * shape-dependent: a stroke-carrying part repeats its group's line exactly on
- * `snapping.spec.ts`'s own `source("group", …)` shape, as a shared left/top edge
- * on the starter's cards, and not at all on the nested fixture's (`vg-526`).
- * Widening the epsilon to absorb the stroke would be the other choice and is not
- * this task's. */
+ * The other shapes stay distinct for free. The nested fixture's card is 400×200
+ * and its `left-card-part` is 61×81 at 360…421, far outside any stroke, so the
+ * part keeps its own lines (`vg-526`). */
 function repeatsEnclosingBounds(
   bounds: ObjectBounds,
   enclosing: ObjectBounds | null,
+  object: FabricObject,
 ): boolean {
   if (enclosing === null) return false;
+  const tolerance = SNAP_SOURCE_BOUNDS_EPSILON + strokePadding(object);
   return (
     Math.max(
       Math.abs(bounds.left - enclosing.left),
       Math.abs(bounds.right - enclosing.right),
       Math.abs(bounds.top - enclosing.top),
       Math.abs(bounds.bottom - enclosing.bottom),
-    ) <= SNAP_SOURCE_BOUNDS_EPSILON
+    ) <= tolerance
   );
 }
 
@@ -153,8 +166,8 @@ export function readMovementModifiers({
  * was every object while the scene was flat, and once cards are groups a part
  * inside one is content an author can align against now that selection can
  * enter a group. A nested part that adds no line of its own — a group wrapped
- * around a single part — is not offered a second time; see
- * `repeatsEnclosingBounds` for how rarely that actually holds.
+ * around a single part, or one whose only difference is its own stroke — is not
+ * offered a second time; see `repeatsEnclosingBounds` for the rule.
  */
 export function collectSnapSources({
   canvas,
@@ -181,7 +194,7 @@ export function collectSnapSources({
     index += 1;
     if (
       source !== undefined &&
-      !repeatsEnclosingBounds(source.bounds, enclosing)
+      !repeatsEnclosingBounds(source.bounds, enclosing, object)
     )
       sources.push(source);
     for (const part of partsOf(object)) visit(part, objectBounds);
