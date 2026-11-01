@@ -16,6 +16,11 @@ export interface FacetOption {
   readonly name: string;
   readonly count: number;
   readonly group?: string;
+  /** Whether `name` is a word from `uiCopy` rather than a reading from the
+   *  library. The copy net skips facet rows wholesale because most names are
+   *  data — an author, a sensor label, a ratio — so a name that *is* copy
+   *  declares itself on the span and is read like any other marked word. */
+  readonly nameIsCopy?: boolean;
 }
 
 /** One facet of the row: its own name, the sentence its popover says above the
@@ -222,7 +227,11 @@ function FacetOptionRow(props: {
           <Glyph icon={CHECK_GLYPH} size={10} />
         </Checkbox.Indicator>
       </span>
-      <span data-yunari-facet-option-name="" className="flex-1">
+      <span
+        data-yunari-facet-option-name=""
+        className="flex-1"
+        {...(option.nameIsCopy === true ? { "data-yunari-copy": "" } : {})}
+      >
         {option.name}
       </span>
       <span className="flex-none font-mono text-2xs text-faint">

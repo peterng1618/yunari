@@ -118,11 +118,13 @@ function optionsFrom(
     readonly id: string;
     readonly name: string;
     readonly group?: string;
+    /** Set where the name is a `uiCopy` word rather than a library reading. */
+    readonly nameIsCopy?: boolean;
   }[],
 ): readonly FacetOption[] {
   const found = new Map<
     string,
-    { name: string; count: number; group?: string }
+    { name: string; count: number; group?: string; nameIsCopy?: boolean }
   >();
   for (const item of items) {
     for (const reading of readings(item)) {
@@ -132,6 +134,7 @@ function optionsFrom(
           name: reading.name,
           count: 1,
           ...(reading.group === undefined ? {} : { group: reading.group }),
+          ...(reading.nameIsCopy === true ? { nameIsCopy: true } : {}),
         });
       } else {
         seen.count += 1;
@@ -139,11 +142,12 @@ function optionsFrom(
     }
   }
   return [...found.entries()]
-    .map(([id, { name, count, group }]) => ({
+    .map(([id, { name, count, group, nameIsCopy }]) => ({
       id,
       name,
       count,
       ...(group === undefined ? {} : { group }),
+      ...(nameIsCopy === true ? { nameIsCopy: true } : {}),
     }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
@@ -160,7 +164,13 @@ function colourModeOptions(
       const mode = item.facets.colourMode;
       return mode === "unclassified"
         ? []
-        : [{ id: mode, name: uiCopy.store.colourModes[mode] }];
+        : [
+            {
+              id: mode,
+              name: uiCopy.store.colourModes[mode],
+              nameIsCopy: true,
+            },
+          ];
     },
   );
 }
@@ -226,6 +236,7 @@ function shapeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
       id: item.facets.orientation,
       name: uiCopy.store.orientations[item.facets.orientation],
       group: headings.orientation,
+      nameIsCopy: true,
     },
   ]);
   const buckets = optionsFrom(items, (item) => [
@@ -236,6 +247,9 @@ function shapeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
           ? uiCopy.store.otherShape
           : item.facets.aspect,
       group: headings.aspect,
+      // A ratio is the record's reading; only the word standing in for the
+      // shapes no bucket names is the table's.
+      ...(item.facets.aspect === "other" ? { nameIsCopy: true } : {}),
     },
   ]);
   return [...orientations, ...buckets, ...sizeOptions(items)];

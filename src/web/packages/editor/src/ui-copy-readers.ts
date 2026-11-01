@@ -201,9 +201,11 @@ export function spokenIn(element: Element): string[] {
     // the value is the record's own reading for most facets — an author's name,
     // a sensor's `label`, a ratio, a size — and the count is the library's, so
     // neither is a word this table owns. Reading the row would mean a carve-out
-    // per facet shape and would make a ratio or a size an ownerless word. What
-    // the facet *says* is read: its name from the trigger, and its sentence and
-    // its group headings from the popup.
+    // per facet shape and would make a ratio or a size an ownerless word. The
+    // few names that *are* copy (a colour mode, an orientation, the "Other"
+    // bucket) carry `data-yunari-copy` on their own span and are read by the
+    // marked-copy loop above. What the facet *says* is read: its name from the
+    // trigger, and its sentence and its group headings from the popup.
     if (button.hasAttribute("data-yunari-facet-option")) continue;
     // The readout's trigger prints the reading alone, so the button half has no
     // words of its own; the concept above is where its name is read.
