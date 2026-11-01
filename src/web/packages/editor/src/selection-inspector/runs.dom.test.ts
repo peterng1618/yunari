@@ -126,6 +126,11 @@ describe("binding a text run to a sensor", () => {
   });
 
   it("previews the tokens as they are typed, and stores what was typed", async () => {
+    // The preview renders at one read of the clock and the assertion takes
+    // another, so a midnight rollover between them would make the two disagree.
+    // Pin the clock so both reads share one instant, as the zone case below does.
+    const pinned = Date.parse("2026-10-13T04:24:30Z");
+    vi.spyOn(Date, "now").mockReturnValue(pinned);
     const box = mountRunEditor({ runs: literalClock });
     await choose(
       box.host,
@@ -139,7 +144,7 @@ describe("binding a text run to a sensor", () => {
     // The same instant the editor's own preview source reads, so the preview is
     // the reading the run will paint rather than an example of one.
     expect(box.pick('[data-yunari-run-format-preview="0"]').textContent).toBe(
-      formatInstant(instantIn(Date.now()), "[It is ]dddd"),
+      formatInstant(instantIn(pinned), "[It is ]dddd"),
     );
 
     await blur(input);
@@ -187,6 +192,11 @@ describe("binding a text run to a sensor", () => {
   });
 
   it("falls back to the key's own default when the format is cleared", async () => {
+    // `HH:mm` changes every minute, so a preview rendered just before a minute
+    // boundary and an assertion read just after it would disagree. Pin the clock
+    // before the mount so both reads are the same instant.
+    const pinned = Date.parse("2026-10-13T04:24:30Z");
+    vi.spyOn(Date, "now").mockReturnValue(pinned);
     const box = mountRunEditor({ runs: literalClock });
     await choose(
       box.host,
@@ -209,7 +219,7 @@ describe("binding a text run to a sensor", () => {
     const cleared = box.pick<HTMLInputElement>('[data-yunari-run-format="0"]');
     await typeInto(cleared, "");
     expect(box.pick('[data-yunari-run-format-preview="0"]').textContent).toBe(
-      formatInstant(instantIn(Date.now()), "HH:mm"),
+      formatInstant(instantIn(pinned), "HH:mm"),
     );
 
     await blur(cleared);
@@ -277,6 +287,10 @@ describe("binding a text run to a sensor", () => {
   });
 
   it("previews a format in the document's own language", async () => {
+    // The render and the assertion read the clock separately; pin them to one
+    // instant so a midnight rollover cannot change the weekday between them.
+    const pinned = Date.parse("2026-10-13T04:24:30Z");
+    vi.spyOn(Date, "now").mockReturnValue(pinned);
     const box = mountRunEditor({
       runs: [
         {

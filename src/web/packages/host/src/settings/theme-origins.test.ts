@@ -68,9 +68,12 @@ describe("theme origins", () => {
   it("never answers a reader racing a write with a half-written map", async () => {
     // Seeded so an empty answer is visibly wrong: `readOrigins` swallows a
     // parse error into `{}`, so a reader landing inside a truncating save
-    // silently drops every origin rather than reporting a fault.
+    // silently drops every origin rather than reporting a fault. Three hundred
+    // entries is enough to make the save's window non-trivial; the property is
+    // losing the map, not how large it is, and a 3000-entry map made this case
+    // cost ~20 s under a loaded gate.
     const seeded = Object.fromEntries(
-      Array.from({ length: 3000 }, (_unused, index) => [
+      Array.from({ length: 300 }, (_unused, index) => [
         `theme-${index}`,
         origin(`catalogue-${index}`),
       ]),
