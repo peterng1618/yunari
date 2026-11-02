@@ -94,7 +94,12 @@ export function FinderSegmented<T extends string>(props: {
 }
 
 /** One source, on or off. A source whose key is missing or failing says so
- *  with a mark rather than a second sentence. */
+ *  with a mark rather than a second sentence.
+ *
+ *  `disabled` is for a source the host always reads and never lets the author
+ *  turn off. It is a reading, not an unavailable control: it keeps the pressed
+ *  accent ink and only loses the pointer, so it reads as on beside the
+ *  configurable sources rather than as a greyed-out one. */
 export function FinderChip(props: {
   readonly label: string;
   readonly pressed: boolean;
@@ -110,10 +115,10 @@ export function FinderChip(props: {
       aria-pressed={props.pressed}
       disabled={props.disabled}
       onClick={props.onToggle}
-      className={`inline-flex h-7 items-center gap-[var(--space-6)] rounded-[var(--radius-md)] border px-[var(--space-10)] text-xs disabled:text-faint ${
+      className={`inline-flex h-7 items-center gap-[var(--space-6)] rounded-[var(--radius-md)] border px-[var(--space-10)] text-xs disabled:cursor-default ${
         props.pressed
           ? "border-accent text-accent"
-          : "border-edge text-muted hover:border-muted hover:text-text"
+          : "border-edge text-muted enabled:hover:border-muted enabled:hover:text-text"
       }`}
     >
       {props.label}

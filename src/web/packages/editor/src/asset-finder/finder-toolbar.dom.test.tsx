@@ -2,7 +2,8 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { FinderFilters } from "./finder-toolbar.js";
+import type { AssetSourceListing } from "@yunari/renderer-core";
+import { FinderFilters, FinderSourceChips } from "./finder-toolbar.js";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -96,4 +97,32 @@ it("chooses a new field without touching the order", () => {
   });
   expect(onSort).toHaveBeenCalledWith("size");
   expect(onDirection).not.toHaveBeenCalled();
+});
+
+it("keeps a built-in source's chip in the on ink although it cannot be turned off", () => {
+  const curated: AssetSourceListing = {
+    id: "curated-fonts",
+    label: "Curated fonts",
+    category: "font",
+    body: "font-picker",
+    requires: null,
+    configurable: false,
+    presetKind: null,
+    host: null,
+  };
+  mount(
+    <FinderSourceChips
+      sources={[curated]}
+      disabled={new Set()}
+      failures={new Map()}
+      onToggle={() => {}}
+    />,
+  );
+
+  const chip = document.querySelector<HTMLButtonElement>(
+    '[data-yunari-asset-chip="curated-fonts"]',
+  );
+  expect(chip?.disabled).toBe(true);
+  expect(chip?.classList).toContain("text-accent");
+  expect(chip?.classList).not.toContain("text-faint");
 });
