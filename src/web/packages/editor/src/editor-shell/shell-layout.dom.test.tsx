@@ -16,6 +16,7 @@ import { DARK_GROUND, fixtureEntry } from "../store-mode/item-fixture.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import type { EditorShellBridge } from "./bridge.js";
+import type { LayerRow } from "./layer-tree.js";
 import type { RailSlot } from "./rail.js";
 import type {
   EditorActionFacade,
@@ -204,6 +205,25 @@ function selectingBridge(): EditorShellBridge {
   });
 }
 
+/** A tree row, for the selection the shell reads back from the layer tree. */
+function layerRow(id: string, selected: boolean): LayerRow {
+  return {
+    id,
+    name: id,
+    kind: "shape",
+    mark: { kind: "shape", shape: undefined },
+    role: { kind: "shape" },
+    bound: [],
+    depth: 0,
+    parentId: undefined,
+    hasChildren: false,
+    collapsed: false,
+    visible: true,
+    locked: false,
+    selected,
+  };
+}
+
 it("keeps the inspector whatever is selected, and its handle folds it", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
@@ -223,6 +243,66 @@ it("keeps the inspector whatever is selected, and its handle folds it", async ()
   expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 
   await act(async () => toggle?.click());
+  expect(body?.dataset["inspector"]).toBeUndefined();
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+
+  layout.destroy();
+});
+
+it("reopens a folded inspector when a new object is selected", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
+  const inspector = root.querySelector<HTMLElement>(".editor-shell-inspector");
+  const toggle = root.querySelector<HTMLButtonElement>(
+    "[data-yunari-inspector-toggle]",
+  );
+  let selected: string | undefined;
+  const listeners = new Set<() => void>();
+  const changed = (): void => {
+    for (const listener of listeners) listener();
+  };
+  layout.setBridge(
+    bridgeStub({
+      snapshot: () => ({
+        objectCount: selected === undefined ? 0 : 1,
+        tokenCount: 0,
+        selectedCount: selected === undefined ? 0 : 1,
+        locked: false,
+        activeKind: selected === undefined ? "none" : "object",
+        documentName: undefined,
+        selectionPresetId: undefined,
+      }),
+      layers: () => [
+        layerRow("shape", selected === "shape"),
+        layerRow("label", selected === "label"),
+      ],
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    }),
+    undefined,
+  );
+
+  await act(async () => {
+    selected = "shape";
+    changed();
+  });
+  await act(async () => toggle?.click());
+  expect(inspector?.dataset["collapsed"]).toBe("true");
+
+  // A layer update while the same object is selected does not undo the fold.
+  await act(async () => changed());
+  expect(body?.dataset["inspector"]).toBe("collapsed");
+
+  // A new subject is the author asking for its panel.
+  await act(async () => {
+    selected = "label";
+    changed();
+  });
   expect(body?.dataset["inspector"]).toBeUndefined();
   expect(toggle?.getAttribute("aria-expanded")).toBe("true");
 

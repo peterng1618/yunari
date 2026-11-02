@@ -1418,15 +1418,20 @@ body,
 }
 /* The fold handle sits at the column's top-right corner and stays there while
    the column scrolls. 26px with a --space-6 inset either side is the track the
-   fold keeps, so the same control is the route back. */
+   fold keeps, so the same control is the route back. Its negative bottom margin
+   cancels its own row, so the handle shares the subject row beneath it instead
+   of spending a row on one 26px control; the subject block reserves the same
+   32px on its right so neither the name nor the key runs under it. */
 .editor-shell-inspector-toggle {
+  --inspector-toggle-size: 26px;
   position: sticky;
   top: var(--space-6);
   z-index: 2;
   display: flex;
-  width: 26px;
-  height: 26px;
-  margin: var(--space-6) var(--space-6) 0 auto;
+  width: var(--inspector-toggle-size);
+  height: var(--inspector-toggle-size);
+  margin: var(--space-6) var(--space-6) calc(-1 * var(--inspector-toggle-size))
+    auto;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--edge);

@@ -432,7 +432,8 @@ export function createShellLayout(
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, assetCount } = useSelection(store);
+    const selection = useSelection(store);
+    const { releaseVersion, objectCount, assetCount } = selection;
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -466,6 +467,25 @@ export function createShellLayout(
       setInspectorCollapsed((current) => !current);
       refitOnViewportChange();
     };
+
+    /** A newly selected object reopens the inspector.
+     *
+     * Folding is the author's while the selection stands, but a column folded
+     * and then forgotten has no route back from the canvas — the selection is
+     * what should lead them to it. The snapshot carries no object id, so the
+     * change is read from the selected rows of the layer tree, the same
+     * projection the composition pane draws. Comparing the joined ids keeps an
+     * unrelated layer update from undoing a fold. */
+    const shownSelection = useRef("");
+    useEffect(() => {
+      const next = (store.bridge?.layers() ?? [])
+        .filter((row) => row.selected)
+        .map((row) => row.id)
+        .join("\n");
+      if (next === shownSelection.current) return;
+      shownSelection.current = next;
+      if (next !== "") setInspectorCollapsed(false);
+    }, [selection]);
 
     /** Each pane's scroll offset, kept across the swap.
      *

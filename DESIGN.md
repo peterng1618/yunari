@@ -339,7 +339,13 @@ thing actually raises**, and describes what the thing *is*:
   `--text-md`, and the binding key beneath the row when one is bound — a
   multi-selection, which has no kind of its own, draws the name alone. It does
   not open with a chrome label, and **the kind is that glyph, not a line of its
-  own**.
+  own**. The column's fold handle shares the subject's row at its right end and
+  stays at the column's top while the sections scroll; the row reserves the
+  handle's track so the name and key never run beneath it.
+- **Folding is the author's while the selection stands, but a new selection
+  reopens the column.** A fold made by accident must not hide the panel the
+  subject the author just chose needs, and the canvas offers no route back to a
+  folded column.
 - **A section with nothing in it is not rendered** — no header, no zero count.
 - **Every section opens; none starts closed**, with one exception: the
   `advanced` treatment, a disclosure a caller mounts deliberately and that a
