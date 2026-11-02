@@ -552,14 +552,15 @@ export async function createPageRasterizer(
         return frozenOverlay;
       }
 
-      // **The mode is entered once and kept.** A video panel asks for an
-      // overlay on every tick, and hiding then restoring the media layer per
-      // tick is page work on the same event loop that feeds the device its
-      // clip; the mode only changes back when a still is asked for.
-      if (!overlay) {
-        await setOverlayMode(connected(), true);
-        overlay = true;
-      }
+      // **Re-asserted on every capture, never remembered.** The mode lives in
+      // the page: a publish reload navigates the document and takes the
+      // injected style and the host's transparent paint with it. Keeping a
+      // "already on" flag left the overlay opaque over the device's still-
+      // playing clip — the video looked frozen until the panel was reassigned
+      // (TURZX, 2026-11-03). The script is idempotent, so re-entry is cheap;
+      // switching back stays a still's job.
+      await setOverlayMode(connected(), true);
+      overlay = true;
 
       const image = await shot(connected(), options.geometry, "png");
 
