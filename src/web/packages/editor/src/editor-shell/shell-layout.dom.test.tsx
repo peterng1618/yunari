@@ -1828,119 +1828,12 @@ it("draws the editor's own header actions only in editor mode", async () => {
   vi.unstubAllGlobals();
 });
 
-/** The prompt the switch asks, or a failure saying it asked nothing. */
-function openedPrompt(): HTMLElement {
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-  if (dialog === null) throw new Error("the mode switch asked no question");
-  return dialog;
-}
-
-async function answerPrompt(word: string): Promise<void> {
-  const button = [...openedPrompt().querySelectorAll("button")].find(
-    (candidate) => candidate.textContent === word,
-  );
-  if (button === undefined) throw new Error(`the prompt offers no "${word}"`);
-  await act(async () => {
-    button.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
-    );
-  });
-}
-
 /**
- * The plan's one invariant, driven directly: a mode switch never loses an
- * unsaved document.
- *
- * A dirty document is the case that separates a guard from a no-op, so the
- * bridge is told the document differs from its last save and the question is
- * answered all three ways. **The refusal is the load-bearing half**: a `cancel`
- * must leave the chosen segment where it was, which is what "the mode does not
- * change until it answers" means, and a test that only read the accept path
- * would pass on a switch that never asked.
- *
- * It is the editor's **existing** replacement prompt, asked with the switch's
- * own words — so the instrument is read for what it offers (Save among the
- * three answers) and for the question it was given, not merely for appearing.
+ * A mode switch hides the editor's body rather than unmounting it, so a dirty
+ * document keeps its unsaved work and the switch asks nothing. The replacement
+ * prompt stays on New/Open, which do replace the document.
  */
-it("asks the editor's own replacement prompt before it leaves a dirty document", async () => {
-  // Base UI's dialog dispatches through a pointer event, which jsdom lacks.
-  window.PointerEvent ??= MouseEvent as never;
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  // A save that lands clears the dirty mark, which is the only thing the shell
-  // reads back — so the stub has to move it, or the successful path is
-  // indistinguishable from the failed one.
-  let dirty = true;
-  const saveLibrary = vi.fn(async () => {
-    dirty = false;
-  });
-  layout.setBridge(
-    bridgeStub({
-      session: { ...facade(), isDirty: () => dirty, saveLibrary },
-    }),
-    undefined,
-  );
-  await Promise.resolve();
-
-  await act(async () => modeSegments(root)[0]?.click());
-  const dialog = openedPrompt();
-  expect(dialog.getAttribute("aria-label")).toBe(uiCopy.modes.unsaved);
-  expect(dialog.querySelector(".editor-shell-dialog-lead")?.textContent).toBe(
-    uiCopy.modes.unsaved,
-  );
-
-  await answerPrompt(uiCopy.replaceDocument.cancel);
-  expect(chosen(root), "the mode moved while the guard was refusing").toEqual([
-    "false",
-    "true",
-    "false",
-  ]);
-  expect(saveLibrary, "a refusal saved the document").not.toHaveBeenCalled();
-
-  await act(async () => modeSegments(root)[0]?.click());
-  await answerPrompt(uiCopy.replaceDocument.save);
-  await act(async () => {});
-  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
-  expect(chosen(root), "the guard's save did not move the mode").toEqual([
-    "true",
-    "false",
-    "false",
-  ]);
-  expect(
-    document.querySelector('[role="dialog"]'),
-    "the prompt outlived its answer",
-  ).toBeNull();
-
-  // And the other half of the guard: a clean document is not asked at all.
-  layout.setBridge(
-    bridgeStub({ session: { ...facade(), isDirty: () => false } }),
-    undefined,
-  );
-  await act(async () => modeSegments(root)[1]?.click());
-  await act(async () => modeSegments(root)[0]?.click());
-  expect(chosen(root), "a clean document was not switched").toEqual([
-    "true",
-    "false",
-    "false",
-  ]);
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-
-  layout.destroy();
-});
-
-/**
- * A save that does not land keeps the author in the editor.
- *
- * `saveLibrary()` resolves either way — `ThemeLibraryManager.save()` reports its
- * own failure through the editor's error channel — so "the save was awaited" is
- * not "the save happened". The only thing that tells the two apart is the
- * document's own dirty mark, read after the await.
- *
- * The save is made to fail by leaving the mark where it was: `isDirty()` keeps
- * answering `true` and `saveLibrary()` resolves without clearing it, which is
- * exactly the shape a refused or failed write has.
- */
-it("stays in the editor when the save does not land", async () => {
+it("switches away from a dirty editor without asking, and keeps the document", async () => {
   window.PointerEvent ??= MouseEvent as never;
   const root = document.createElement("div");
   const layout = createShellLayout(root);
@@ -1952,17 +1845,25 @@ it("stays in the editor when the save does not land", async () => {
     undefined,
   );
   await Promise.resolve();
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
 
   await act(async () => modeSegments(root)[0]?.click());
-  await answerPrompt(uiCopy.replaceDocument.save);
-  await act(async () => {});
 
-  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
-  expect(chosen(root), "the mode moved past a save that did not land").toEqual([
-    "false",
+  expect(chosen(root), "the switch did not move").toEqual([
     "true",
     "false",
+    "false",
   ]);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(
+    saveLibrary,
+    "a mode switch saved the document",
+  ).not.toHaveBeenCalled();
+  expect(body?.hidden, "the editor body was unmounted, not hidden").toBe(true);
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(chosen(root)).toEqual(["false", "true", "false"]);
+  expect(body?.hidden).toBe(false);
 
   layout.destroy();
 });

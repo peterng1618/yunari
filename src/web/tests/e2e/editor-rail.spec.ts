@@ -1135,7 +1135,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     `the chosen segment is inked with the accent (${report})`,
   ).not.toBe(paint.accent);
 
-  // ── The guard, on a document the product dirtied ──────────────────────────
+  // ── The round trip, on a document the product dirtied ─────────────────────
   const identity = page.locator(".editor-shell-identity");
   await expect(identity).toHaveAttribute("data-dirty", "false");
   await selectLayer(page, "group-cpu-card");
@@ -1175,36 +1175,14 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "the editor painted nothing before the switch, so the round trip is untested",
   ).toBeGreaterThan(0);
 
-  // The question, refused. The instrument is the editor's own replacement
-  // prompt, so it is answered in the DOM rather than through `page.on("dialog")`.
-  const prompt = page.getByRole("dialog");
+  // A mode switch hides the editor's body rather than unmounting it, so it
+  // keeps the dirty document and asks nothing. The replacement prompt belongs
+  // to New/Open, which do replace the document.
   await segment(uiCopy.modes.themes).click();
-  await expect(prompt, "leaving a dirty document asked nothing").toBeVisible();
-  await expect(prompt).toHaveAttribute("aria-label", uiCopy.modes.unsaved);
-  // Save is offered, which is the whole reason the instrument is the editor's
-  // own prompt and not a browser dialog. It is not *pressed* here: a real save
-  // downloads a package, and the dom case covers that path instead.
   await expect(
-    prompt.getByRole("button", {
-      name: uiCopy.replaceDocument.save,
-      exact: true,
-    }),
-  ).toBeVisible();
-  await prompt
-    .getByRole("button", { name: uiCopy.replaceDocument.cancel, exact: true })
-    .click();
-  await expect(prompt).toHaveCount(0);
-  await expect(
-    segment(uiCopy.modes.editor),
-    "the mode moved while the guard was refused",
-  ).toHaveAttribute("aria-pressed", "true");
-
-  // The question, discarded: the mode moves, and the editor's own header actions
-  // do not follow it — the right-hand region is per-mode.
-  await segment(uiCopy.modes.themes).click();
-  await prompt
-    .getByRole("button", { name: uiCopy.replaceDocument.discard, exact: true })
-    .click();
+    page.getByRole("dialog"),
+    "leaving a dirty document asked a question it cannot lose the answer to",
+  ).toHaveCount(0);
   await expect(segment(uiCopy.modes.themes)).toHaveAttribute(
     "aria-pressed",
     "true",

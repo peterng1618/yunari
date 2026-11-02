@@ -485,11 +485,6 @@ export const uiCopy = {
     /** The third surface: this PC's settings and the editor's own preferences,
      *  one page each. It was called Host while it held host settings only. */
     settings: "Settings",
-    /** Asked before the editor is left with unsaved work. It is the question
-     *  the editor's own replacement prompt is given, so it offers the same
-     *  three answers — Save, Discard, Cancel — and the author can save rather
-     *  than choose between losing the work and staying put. */
-    unsaved: "Save changes before leaving the editor?",
   },
   /**
    * The Host mode's own surface: the machine and its display.

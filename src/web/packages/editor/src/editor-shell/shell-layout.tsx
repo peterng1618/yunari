@@ -17,7 +17,6 @@ import {
   readUserPathPresets,
   setActiveUserPathPresets,
 } from "../path-presets.js";
-import { confirmDocumentReplacement } from "../persistence-manager/index.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
   SettingsRegion,
@@ -976,31 +975,11 @@ export function createShellLayout(
     }, []);
     const requestMode = (next: ShellMode): void => {
       if (next === mode) return;
-      // The one place a mode change lands: the boot's announcement reads the
-      // mode the switch actually took, not one a refused dirty-document guard
-      // would have stopped.
-      const switchTo = (chosen: ShellMode): void => {
-        setMode(chosen);
-        options.onModeChange?.(chosen);
-      };
-      const session = store.bridge?.session;
-      if (
-        next !== "themes" ||
-        session === undefined ||
-        session.isDirty() !== true
-      ) {
-        switchTo(next);
-        return;
-      }
-      void (async () => {
-        const choice = await confirmDocumentReplacement(uiCopy.modes.unsaved);
-        if (choice === "cancel") return;
-        if (choice === "save") {
-          await session.saveLibrary();
-          if (session.isDirty()) return;
-        }
-        switchTo(next);
-      })().catch(() => undefined);
+      // A mode switch hides the editor's body, never unmounts it, so it moves
+      // no document and can lose no unsaved work. The replacement prompt
+      // belongs to New/Open, which do replace the document.
+      setMode(next);
+      options.onModeChange?.(next);
     };
     return <Shell mode={mode} onModeChange={requestMode} />;
   }
