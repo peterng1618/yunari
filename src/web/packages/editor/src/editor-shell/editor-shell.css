@@ -1199,8 +1199,10 @@ body,
   color: var(--shell-primary-text);
   border-radius: 8px;
   /* The button leaves a visible gap above and below inside the 42px header,
-     rather than filling the strip it sits in. */
-  padding: 6px 14px;
+     rather than filling the strip it sits in. The 18px line plus 4px of padding
+     either side is a 28px button — the header control size — so the filled
+     block clears the strip's edges by 7px rather than sitting on them. */
+  padding: 4px 14px;
   cursor: pointer;
   font-weight: 600;
 }
