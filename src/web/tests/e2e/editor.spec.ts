@@ -3067,12 +3067,12 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
     // **The pane is opened first, because an author opens it first.** The import
-    // and replace below go through the controls the file section renders, and a
+    // and replace below go through the controls the Assets pane renders, and a
     // control behind a closed pane is not one a person can press. Driving the
     // hidden input directly is the route this finding is about: it stays green
     // while the feature is unreachable, so it proves nothing.
-    await openPane(page, "Add");
-    const assets = page.locator('[data-yunari-panel="add"]');
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
     await expect(assets.locator("[data-yunari-asset-import]")).toBeVisible();
     await expect(assets.locator("[data-yunari-asset-replace]")).toBeVisible();
     await chooseAssetFile(page, "import", {
@@ -3253,8 +3253,8 @@ test.describe("Fabric editor route", () => {
       controls: { tl: true, tr: true, bl: true, br: true },
       hasSelectionGeometry: true,
     });
-    await openPane(page, "Add");
-    // The declared-asset library is the file section's body, so what is scrolled
+    await openPane(page, "Assets");
+    // The declared-asset library is the Assets pane's body, so what is scrolled
     // to is the card the import declared.
     await assetCard(page, "logo.png").scrollIntoViewIfNeeded();
     await captureVisualReview(page, testInfo, "editor-assets");
@@ -3286,8 +3286,8 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
-    await openPane(page, "Add");
-    const assets = page.locator('[data-yunari-panel="add"]');
+    await openPane(page, "Assets");
+    const assets = page.locator('[data-yunari-panel="assets"]');
     // A fake `.ttf`: nothing parses until Create type preset, which this case
     // does not press — a parseable font binary is not available to the test.
     await chooseAssetFile(page, "import", {
@@ -3312,7 +3312,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
-    await openPane(page, "Add");
+    await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
       mimeType: "image/png",

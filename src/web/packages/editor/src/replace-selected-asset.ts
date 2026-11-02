@@ -25,7 +25,7 @@ import { uiCopy } from "./ui-copy.js";
 export interface ReplaceSelectedAssetHost {
   readonly editor: EditorInteraction;
   readonly assets: AssetManager;
-  /** Told the declaration list moved, so the file section and the background
+  /** Told the declaration list moved, so the Assets pane and the background
    *  column re-resolve. */
   readonly onChanged?: () => void;
   /** Reported to the shell's status line, where every refusal is read. */

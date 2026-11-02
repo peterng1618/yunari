@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * The file section: the declared files, grouped by kind, one card each, and the
+ * The Assets pane: the declared files, grouped by kind, one card each, and the
  * import that puts them there.
  *
  * **The list is the declarations, not the placed objects.** A font or a video is
@@ -225,7 +225,7 @@ async function selectCard(host: HTMLElement, name: string): Promise<void> {
   await act(async () => row.click());
 }
 
-describe("the file section", () => {
+describe("the Assets pane", () => {
   it("groups cards by kind and marks the chosen row's actions", async () => {
     const { host } = mount([IMAGE, OTHER_IMAGE, FONT]);
 
@@ -334,7 +334,7 @@ describe("the file section", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The import and the behaviours the Add pane's file section used to own.
+// The import and the behaviours the Add pane's Assets pane used to own.
 // ---------------------------------------------------------------------------
 
 /**
@@ -388,7 +388,7 @@ interface Harness {
   readonly fire: (event: string) => void;
 }
 
-/** The file section over a real `AssetManager`, on an editor stub that answers
+/** The Assets pane over a real `AssetManager`, on an editor stub that answers
  *  only what the pane asks it: the canvas walk, the history and the errors. */
 async function mountWithManager(
   isReferenced: (assetId: string) => boolean = () => false,
@@ -624,7 +624,7 @@ const isChosen = (host: HTMLElement, name: string): boolean =>
     ?.querySelector("[data-yunari-asset-select]")
     ?.getAttribute("aria-pressed") === "true";
 
-describe("the file section's import", () => {
+describe("the Assets pane's import", () => {
   it("opens the finder from its own control", async () => {
     const { host, onFindAssets } = await mountWithManager();
 
@@ -946,7 +946,7 @@ describe("the file section's import", () => {
   });
 });
 
-describe("the behaviours the file section carried", () => {
+describe("the behaviours the Assets pane carried", () => {
   it("refuses to remove an asset the scene or the document still references, in words", async () => {
     const image = new FabricImage(document.createElement("img"), {
       id: "image-1",

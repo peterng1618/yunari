@@ -65,7 +65,7 @@ const FIELDS = "input,select,textarea";
  *
  * `[hidden]` is `display: none`, and a browser puts no such element in the
  * accessibility tree — it cannot be focused, and it is not announced. Measured
- * in Chromium over the Add pane's file section: the tree holds `combobox "Asset"`,
+ * in Chromium over the Add pane's Assets pane: the tree holds `combobox "Asset"`,
  * `button "Import a file"`, `button "Replace asset"`, `button "Remove asset"` and
  * the alert, and **neither** `<input type="file">` is in it, though the markup
  * has both. They are the two file pickers the Import and Replace buttons drive,
@@ -292,7 +292,7 @@ describe("editor panels", () => {
       // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
       // section at all rather than a switch that writes nothing.
       "INPUT[type=checkbox][aria-hidden]", // Frosted glass, shape
-      // The file section's two file pickers, `[hidden]` and driven by the Import
+      // The Assets pane's two file pickers, `[hidden]` and driven by the Import
       // and Replace controls. The declared-asset chooser that used to sit ahead
       // of them was a `ControlSelect`; the list is a card per file now, so it
       // renders no value carrier.
@@ -510,7 +510,7 @@ function mountPanels(): { root: HTMLElement } {
   mountSelectionInspector(root);
 
   // The Add pane draws only the insert tiles now; the declared files and their
-  // import live in the file section, so the audit has to read both panes.
+  // import live in the Assets pane, so the audit has to read both panes.
   const editor = {
     canvas: {
       add: vi.fn(),

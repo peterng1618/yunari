@@ -14,7 +14,7 @@ export async function openEditor(page: Page): Promise<void> {
  * `documentSelect` is the **control set's** select — a `role="combobox"`
  * trigger. Measured: the first match in the panel is the Tokens pane's
  * paint-library chooser (`data-yunari-palette-token`); the Add pane's asset-list
- * trigger held that place until the asset library moved to the file section and
+ * trigger held that place until the asset library moved to the Assets pane and
  * became a card button rather than a select. It is named by the control set's
  * own role rather than by that hook because the panes are hidden rather than
  * unmounted, so a pane-specific selector would say "document" about whichever
@@ -32,7 +32,7 @@ export async function openEditor(page: Page): Promise<void> {
  * control-set well would be a surface, but one painted by `--panel-2`, so it
  * would not restore what this entry used to cover. The consequence is stated
  * rather than hidden: `--yunari-control-bg` now paints only conditional
- * surfaces — the file section's import buttons, the crop row, the modal's own
+ * surfaces — the Assets pane's import buttons, the crop row, the modal's own
  * buttons, the keyboard sheet's chips — so this sweep no longer verifies that
  * token on a surface that is always mounted, and
  * `editor-shell.tokens.test.ts` is what covers its declaration per palette.

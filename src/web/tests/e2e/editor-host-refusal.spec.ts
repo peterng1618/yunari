@@ -267,8 +267,8 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   desktop(testInfo);
   await openEditor(page);
 
-  await openPane(page, "Add");
-  const assets = page.locator('[data-yunari-panel="add"]');
+  await openPane(page, "Assets");
+  const assets = page.locator('[data-yunari-panel="assets"]');
   await chooseAssetFile(page, "import", LOGO);
   await expect(assets).toContainText("logo.png");
 

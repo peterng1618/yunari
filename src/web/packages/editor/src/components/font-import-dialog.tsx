@@ -20,7 +20,7 @@ export type FontImportCommit = (
 
 /**
  * The token inspector's import flow: one picked local file, its metadata, and
- * the same two answers the file section's form gives — Create declares the file
+ * the same two answers the Assets pane's form gives — Create declares the file
  * with a token, Cancel declares it without one.
  *
  * The form draws no role select: a token's family is chosen here, and a role's

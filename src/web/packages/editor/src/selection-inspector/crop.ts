@@ -8,7 +8,7 @@ import type { CropView } from "./view.js";
  *
  * It lives in the selection inspector rather than in the Add pane's file
  * section because it acts on the *selection*, not on the asset library: an
- * author crops the image they have already placed, and the file section lists
+ * author crops the image they have already placed, and the Assets pane lists
  * and replaces what the package declares. The inspector is where a control over
  * a selected object already lives.
  *

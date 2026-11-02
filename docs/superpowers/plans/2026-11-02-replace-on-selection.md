@@ -1,19 +1,14 @@
-# Assets are placed objects — plan
+# Replace on the selection — plan
 
 - **Date:** 2026-11-02
-- **Spec:** `docs/superpowers/specs/2026-11-02-assets-are-placed-objects-design.md`
+- **Spec:** `docs/superpowers/specs/2026-11-02-replace-on-selection-design.md`
 - **Issue:** #66
 
-## Task 1 — Move the file list into the Add pane
+## Task 1 — Keep the declaration surface
 
-- `shell-layout.tsx`: drop the Assets `Pane`; render the existing
-  `hosts.assets` node under the Add pane's host, under a **Files** heading.
-- `rail.tsx`: remove `assets` from `RailSlot` and `RAIL_SLOTS`.
-- `ui-copy.ts`: remove `rail.slots.assets`; keep `paneCounts.files` for the
-  file section heading count.
-- Update `rail.dom.test.tsx`, `shell-layout.dom.test.tsx`,
-  `accessible-names.dom.test.ts`, and the e2e helpers/specs that opened the
-  Assets slot (they now open Add; `assetCard` scopes to the Add pane).
+- No rail-slot, pane or host change: the Assets pane keeps its slot, title
+  count, declared-file list, import/background import, previews, video and font
+  editors, removal and its reference refusal.
 
 ## Task 2 — Replace on the selection
 
@@ -28,9 +23,10 @@
   `FabricImage.setElement(element, {width, height})` to keep the authored box,
   re-point `setObjectAssetReference`, `setCoords`, `requestRenderAll`, then
   `historyManager.saveState()`.
-- Tests: registry eligibility (image/svg yes; group, locked, unregistered no)
-  and a DOM case proving the swap keeps position/size and changes the
-  reference.
+- Tests: registry eligibility (image/svg yes; group, locked, unregistered no),
+  bridge projection, and a DOM case proving the swap keeps position/size and
+  changes the reference; a refused video is dropped without touching the
+  object.
 
 ## Task 3 — Verify
 

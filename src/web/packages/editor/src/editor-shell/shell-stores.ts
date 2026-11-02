@@ -11,7 +11,7 @@ import type { RailSlot } from "./rail.js";
  * owns, and the document's identity, which the session does — so every reader
  * shares one subscription and a late-set bridge still propagates. */
 export interface SelectionSnapshot extends EditorShellSnapshot {
-  /** The file section's list count. The manager is the session's, not the
+  /** The Assets pane's list count. The manager is the session's, not the
    *  shell's, so the session reports it; `undefined` means no document, which
    *  must not read as "0 files". */
   readonly assetCount: number | undefined;
@@ -63,7 +63,7 @@ export class SelectionStore {
       // No scene to count, so the strip's count readout has nothing to draw —
       // never `0`, which is a blank document's own answer. The Tokens pane's
       // count is absent for the same reason: no document is no palette. The
-      // file section's count is the session's and goes with the document too.
+      // Assets pane's count is the session's and goes with the document too.
       this.#assetCount = undefined;
       this.#snapshot = {
         objectCount: undefined,
@@ -79,7 +79,7 @@ export class SelectionStore {
     for (const listener of this.#listeners) listener();
   }
 
-  /** The file section's count, reported by the session after every declaration
+  /** The Assets pane's count, reported by the session after every declaration
    *  change — the manager has no event to subscribe to. */
   setAssetCount(count: number): void {
     if (this.#assetCount === count) return;

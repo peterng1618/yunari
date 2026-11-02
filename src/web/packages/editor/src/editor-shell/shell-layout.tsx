@@ -164,9 +164,8 @@ interface ShellHosts {
   readonly canvas: HTMLElement;
   /** The Add pane's body: shapes, text and the card library. */
   readonly add: HTMLElement;
-  /** The file section below the Add pane's tiles: every declared file, its
-      import and placement, and the finder link. A file is not a pane of its
-      own — the declared list lives where insertion is offered. */
+  /** The Assets pane: every declared file, its import and placement, and the
+      finder link. */
   readonly assets: HTMLElement;
   /** The Tokens pane: the theme's paints and type presets. */
   readonly tokens: HTMLElement;
@@ -550,8 +549,8 @@ export function createShellLayout(
                 the `layers` name is only the DOM handle.
 
                 **Each title bar carries its own list's count, and the
-                list is named at the mount rather than in the pane.** Three of
-                the four panes are imperative hosts, so no React component
+                list is named at the mount rather than in the pane.** Four of
+                the five panes are imperative hosts, so no React component
                 inside one owns its list and the count has to be sourced here.
                 The source of each:
                 - Composition — the scene's objects, through the bridge's own
@@ -567,6 +566,9 @@ export function createShellLayout(
                   holds no list of its own, so it draws no count rather than a
                   fabricated `0` (the same rule the two counts above take before
                   a bridge is set).
+                - Assets — the asset manager's declarations, through
+                  `assetCount`, which the session reports because the manager is
+                  the session's and the shell never holds it.
 
                 A count is `undefined` where the list has not loaded, and `Pane`
                 then draws no count span at all. */}
@@ -585,12 +587,9 @@ export function createShellLayout(
             >
               <CompositionPane bridge={store.bridge} />
             </Pane>
-            {/* The Add pane's body is two sections: the insert tiles, then the
-                declared files. A file is not a document object with its own
-                identity to browse — it becomes a layer when placed — so the
-                list lives where insertion is offered rather than behind a rail
-                slot of its own. The section keeps its own heading and count
-                because the pane's title counts the card library, not files. */}
+            {/* The Add pane's body is one host and one React tree: shapes,
+                text and the card library. Local files belong to the Assets slot.
+                */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}
@@ -600,18 +599,22 @@ export function createShellLayout(
               bodyRef={paneBody}
             >
               <Host node={hosts.add} hidden={slot !== "add"} />
-              <section
-                className="mt-[var(--space-12)] border-t border-edge pt-[var(--space-10)]"
-                data-yunari-files-section=""
-              >
-                <h2 className="mb-[var(--space-6)] text-[10px] uppercase tracking-[0.11em] text-muted">
-                  {uiCopy.panels.files}
-                  {assetCount === undefined
-                    ? null
-                    : ` · ${uiCopy.paneCounts.files(assetCount)}`}
-                </h2>
-                <Host node={hosts.assets} hidden={slot !== "add"} />
-              </section>
+            </Pane>
+            {/* The declared files' own pane. Its body is the persistent host
+                the session's asset library mounts into. */}
+            <Pane
+              id="assets"
+              title={uiCopy.rail.slots.assets}
+              icon={RAIL_GLYPHS.assets}
+              count={
+                assetCount === undefined
+                  ? undefined
+                  : uiCopy.paneCounts.files(assetCount)
+              }
+              hidden={slot !== "assets"}
+              bodyRef={paneBody}
+            >
+              <Host node={hosts.assets} hidden={slot !== "assets"} />
             </Pane>
             <Pane
               id="tokens"

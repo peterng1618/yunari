@@ -46,7 +46,7 @@ import { isPreviewable, openAssetPreview } from "./preview-modal.js";
 import { VideoTrimModal } from "./video-trim-modal.js";
 
 /**
- * The file section's body: every declared file as a card, grouped by kind.
+ * The Assets pane's body: every declared file as a card, grouped by kind.
  *
  * **The list is the declarations, not the placed objects.** A video or a font
  * is declared only — no canvas object can carry it — so a list built from the
