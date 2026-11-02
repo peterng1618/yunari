@@ -59,6 +59,7 @@ function facade(): EditorActionFacade {
     newFromStarter: vi.fn(async () => undefined),
     importPackage: vi.fn(),
     openLibraryTheme: vi.fn(async () => undefined),
+    themeRemoved: vi.fn(),
     downloadPackage: vi.fn(async () => undefined),
     exportTheme: vi.fn(async () => undefined),
     exportWidget: vi.fn(),

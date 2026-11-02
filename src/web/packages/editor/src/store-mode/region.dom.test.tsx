@@ -4109,6 +4109,7 @@ it("exports a theme's package through the library client", async () => {
  */
 it("deletes a theme through the library client and drops it from the listing", async () => {
   const removed: string[] = [];
+  const deleted: string[] = [];
   const entries = [
     fixtureEntry({
       id: "living-room",
@@ -4121,12 +4122,18 @@ it("deletes a theme through the library client and drops it from the listing", a
       ground: DARK_GROUND,
     }),
   ];
-  await mountClient({
-    ...clientListing(entries),
-    remove: async (id: string) => {
-      removed.push(id);
-    },
-  });
+  await mount(
+    <StoreModeRegion
+      mode="themes"
+      client={{
+        ...clientListing(entries),
+        remove: async (id: string) => {
+          removed.push(id);
+        },
+      }}
+      onThemeDeleted={(id) => deleted.push(id)}
+    />,
+  );
 
   const deleteButton = must(
     document.body.querySelector<HTMLButtonElement>(
@@ -4150,6 +4157,9 @@ it("deletes a theme through the library client and drops it from the listing", a
   expect(removed, "the host's removal route was not called").toEqual([
     "porch-strip",
   ]);
+  expect(deleted, "the document's base did not hear about the removal").toEqual(
+    ["porch-strip"],
+  );
   expect(drawnIds(), "the deleted theme is still listed").toEqual([
     "living-room",
   ]);

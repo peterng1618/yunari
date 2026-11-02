@@ -13,7 +13,9 @@ import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import type { EditorInteraction } from "../../editor-interaction.js";
 import {
   DELETE_ITEM_GLYPH,
+  FIND_GLYPH,
   Glyph,
+  IMPORT_FILE_GLYPH,
   KIND_GLYPHS,
   PLACE_ON_CANVAS_GLYPH,
   REPLACE_ASSET_GLYPH,
@@ -80,10 +82,9 @@ interface AssetsPaneProps {
   /** Told the declarations moved, so the document's own panels re-resolve: the
    *  artboard's background media, its bytes, and the pane's title count. */
   readonly onChanged?: () => void;
-  /** One declaration that is no longer there. The pane removes the file; a
-   *  credit that attributes it is the document's to drop, and this is the only
-   *  route the pane has into it. Optional so a pane mounted without a document
-   *  still draws. */
+  /** One declaration that is no longer there. The pane removes the file; the
+   *  credit that attributes it is the document's to drop. Optional, so a pane
+   *  mounted without a document still draws. */
   readonly onRemoved?: (assetId: string) => void;
   /** Opens the finder. Optional so the pane draws without a shell. */
   readonly onFindAssets?: () => void;
@@ -615,17 +616,19 @@ export function AssetsPane({
           type="button"
           data-yunari-asset-import=""
           onClick={() => importInput.current?.click()}
-          className="flex-1 rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] py-[var(--space-6)] text-sm text-accent"
+          className="inline-flex h-[26px] flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] text-sm text-accent"
         >
+          <Glyph icon={IMPORT_FILE_GLYPH} size={13} />
           {uiCopy.panels.importFile}
         </button>
         <button
           type="button"
           data-yunari-find-assets=""
           onClick={() => onFindAssets?.()}
-          className="flex-1 rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm text-muted"
+          className="inline-flex h-[26px] flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] text-sm text-muted"
         >
-          {uiCopy.file.findAssets}
+          <Glyph icon={FIND_GLYPH} size={13} />
+          {uiCopy.panels.assetFinder}
         </button>
       </div>
       {/* A picked font has no card until the form's commit or cancel, so its

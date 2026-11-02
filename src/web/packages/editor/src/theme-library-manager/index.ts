@@ -229,6 +229,18 @@ export class ThemeLibraryManager {
     this.#base = undefined;
   }
 
+  /**
+   * The library no longer holds `id`.
+   *
+   * When that id is the document's own stored theme, there is nothing left for
+   * a save to be based on: the next one is a first save and must carry every
+   * declared byte, or the host's reply is a refusal about an asset folder that
+   * no longer exists. A different theme being removed leaves this base alone.
+   */
+  themeRemoved(id: string): void {
+    if (this.#base?.id === id) this.#base = undefined;
+  }
+
   /** Saves into the library, or says in the editor's own words that it did not
    *  happen — the document is untouched either way. */
   async save(): Promise<void> {
@@ -313,6 +325,7 @@ export class ThemeLibraryManager {
         undefined,
         {
           client,
+          onRemoved: (id) => this.themeRemoved(id),
         },
       );
       if (choice === undefined) return;

@@ -640,6 +640,13 @@ export class EditorDocument {
     return this.#library.openById(id, onAccepted);
   }
 
+  /** The store removed a theme. If it was this document's own stored theme,
+   *  the next save recreates it rather than claiming a folder the host no
+   *  longer holds. */
+  noteThemeRemoved(id: string): void {
+    this.#library.themeRemoved(id);
+  }
+
   /** Saves into the host's library, which is the stored document's half of a
    *  save — the package's half is {@link save}. */
   saveLibrary(): Promise<void> {

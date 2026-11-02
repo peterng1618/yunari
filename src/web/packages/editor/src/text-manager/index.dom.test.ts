@@ -590,6 +590,52 @@ describe("a width the author dragged", () => {
   });
 });
 
+describe("editing and resizing a Text box", () => {
+  it("runs the edit unwrapped and wraps again once it ends", () => {
+    // A box wraps at its authored width, but while the author types a line
+    // longer than the box that break is not theirs to make. The edit alone is
+    // unwrapped; the next measurement after it ends wraps again.
+    const object = authoredReading();
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+    canvas.setActiveObject(object);
+
+    object.enterEditing();
+    object.set(
+      "text",
+      "a line that is far longer than the authored box ".repeat(3),
+    );
+    expect(object.textLines).toHaveLength(1);
+
+    object.exitEditing();
+    object.initDimensions();
+    expect(object.textLines.length).toBeGreaterThan(1);
+    text.destroy();
+  });
+
+  it("bakes both drawn dimensions of a corner drag into the authored box", () => {
+    // A corner handle grows the box on both axes. Writing only the width left
+    // the taller text clipped by the old height, so the draw failed to show
+    // what the gesture asked for.
+    const object = authoredReading();
+    const canvas = scene(object);
+    const text = createTextManager(canvas, vi.fn());
+    const drawn = { width: object.width, height: object.height };
+
+    object.set({ scaleX: 1.5, scaleY: 1.2 });
+    canvas.fire("object:modified", { target: object } as never);
+
+    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
+      box?: { width: number; height: number };
+    };
+    expect(authored.box?.width).toBeCloseTo(drawn.width * 1.5, 6);
+    expect(authored.box?.height).toBeCloseTo(drawn.height * 1.2, 6);
+    expect(object.scaleX).toBe(1);
+    expect(object.scaleY).toBe(1);
+    text.destroy();
+  });
+});
+
 describe("typing over an object that carries more than one run", () => {
   /**
    * A value and its unit: the shape a card is built from. Fabric hands back one

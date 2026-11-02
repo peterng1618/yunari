@@ -472,6 +472,44 @@ export function createTextManager(
     canvas.requestRenderAll();
   };
 
+  /**
+   * A `Textbox` wraps at its authored width, which is right for the frame and
+   * wrong while the author is typing a line longer than the box: the words past
+   * the edge disappear onto a second line before the author has chosen the
+   * break. The edit alone runs unwrapped, so the line runs past the box the
+   * way the unclipped frame already allows. The repaint on exit restores the
+   * authored box, and with it the wrap.
+   *
+   * Overridden on the instance rather than the prototype: only the object being
+   * edited is open, and a prototype change would leave every Textbox unwrapped
+   * after the first edit.
+   */
+  const unwrapWhileEditing = (target: IText): void => {
+    if (
+      !(target instanceof Textbox) ||
+      Object.hasOwn(target, "_splitTextIntoLines")
+    ) {
+      return;
+    }
+    const split = (
+      IText.prototype as unknown as {
+        _splitTextIntoLines: (text: string) => unknown;
+      }
+    )._splitTextIntoLines;
+    Object.defineProperty(target, "_splitTextIntoLines", {
+      configurable: true,
+      value: (text: string) => split.call(target, text),
+    });
+    target.initDimensions();
+    canvas.requestRenderAll();
+  };
+
+  /** Puts Fabric's own wrapping back; the repaint that follows restores the box. */
+  const restoreWrap = (target: IText): void => {
+    if (!Object.hasOwn(target, "_splitTextIntoLines")) return;
+    Reflect.deleteProperty(target, "_splitTextIntoLines");
+  };
+
   const onEditingEntered = (event: { target?: unknown }): void => {
     const target = event.target;
     if (!(target instanceof IText)) return;
@@ -482,6 +520,7 @@ export function createTextManager(
     editing = { target, painted: target.text, entryText: target.text };
     attachMentions(target);
     unclipWhileEditing(target);
+    unwrapWhileEditing(target);
   };
 
   const onEditingExited = (event: { target?: unknown }): void => {
@@ -490,6 +529,7 @@ export function createTextManager(
 
     closeMentions();
     detachMentions();
+    restoreWrap(target);
 
     // A chosen reading is not typed text to keep: the runs and the binding are
     // already written, so the settle below would parse the display a second
@@ -561,8 +601,11 @@ export function createTextManager(
       editing?.target === target ? editing.entryText : target.text;
     showAuthoringView(target);
     // The authoring pass is written with `isEditing` down so it can paint, so it
-    // re-applies the box's clip on the way through. Typing needs the box open.
+    // re-applies the box's clip on the way through. Typing needs the box open
+    // and unwrapped, or a line longer than the box breaks before the author
+    // chooses to.
     unclipWhileEditing(target);
+    unwrapWhileEditing(target);
     // The painted token is this edit's baseline for "did the author type
     // anything"; `entryText` stays the display Fabric saw, which is what says
     // whether Fabric will report the edit at all.
@@ -638,26 +681,34 @@ export function createTextManager(
       target.set(YUNARI_TEXT_PROPERTY, { ...authored, runs });
     }
 
-    // The model has no stretched text, so a corner drag's drawn width is baked
-    // into the authored box rather than thrown away with the reset. `width` is
-    // the box *before* `scaleX` — `assertBox` divides the stored number by the
-    // scale — so the drawn width is `width * scaleX`. After the runs write,
+    // The model has no stretched text, so a corner drag's drawn box is baked
+    // into the authored box rather than thrown away with the reset. Each size
+    // is the box *before* its scale — `assertBox` divides the stored number by
+    // the scale — so the drawn box is `width * scaleX` by `height * scaleY`.
+    // The height is as much the gesture as the width: leaving it behind clips
+    // the larger text at the old box's bottom edge. After the runs write,
     // because `writeAuthoredBoxDimension` reads the authored content back.
     //
     // Only at the commit: `adoptResizedBox` runs on every step of the drag and
     // writes the unscaled `width`, so baking there would multiply the box once
-    // per step (`vg-233`). Written with `scaleX` still on the object, and reset
+    // per step (`vg-233`). Written with the scale still on the object, and reset
     // in the same synchronous step, so the stored box is unscaled from the
     // moment the next pass reads it.
-    if (
-      target instanceof Textbox &&
-      Math.abs(target.scaleX - 1) > SCALE_UNITY_EPSILON
-    ) {
-      writeAuthoredBoxDimension(
-        target,
-        "width",
-        Math.abs(target.width * target.scaleX),
-      );
+    if (target instanceof Textbox) {
+      if (Math.abs(target.scaleX - 1) > SCALE_UNITY_EPSILON) {
+        writeAuthoredBoxDimension(
+          target,
+          "width",
+          Math.abs(target.width * target.scaleX),
+        );
+      }
+      if (Math.abs(target.scaleY - 1) > SCALE_UNITY_EPSILON) {
+        writeAuthoredBoxDimension(
+          target,
+          "height",
+          Math.abs(target.height * target.scaleY),
+        );
+      }
     }
 
     target.set({ scaleX: 1, scaleY: 1 });

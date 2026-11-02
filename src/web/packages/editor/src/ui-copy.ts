@@ -2223,6 +2223,10 @@ export const uiCopy = {
         extension decides whether it becomes a layer, a face, a video or a
         package. */
     importFile: "Import file",
+    /** The Finder's door from the Assets pane. Named for what it reaches rather
+        than the verb: the pane already shows every declared file, so "find"
+        would describe a search of this list rather than the library beyond it. */
+    assetFinder: "Asset Finder",
     /** Asked after a picture is declared: both destinations are one press, and
         the kind alone does not say which one the author wants. */
     placeImage: {

@@ -89,6 +89,36 @@ describe("ThemeLibraryManager", () => {
     ]);
   });
 
+  it("carries the whole theme after the store removes the theme it was based on", async () => {
+    // Deleting the open theme from the store leaves the document holding a base
+    // whose folder is gone. Keeping it would send an asset digest the host can
+    // no longer reconstruct, so the next save must be a first save: every
+    // declared byte, and no base to claim.
+    const assets = assetsWith([declaration("backdrop", "digest")], {
+      "assets/backdrop.png": PNG,
+    });
+    const { manager, save } = harness({ assets, base: "living-room" });
+
+    manager.themeRemoved("another-theme");
+    expect(manager.isStored(), "another theme's removal leaves it alone").toBe(
+      true,
+    );
+
+    manager.themeRemoved("living-room");
+    expect(manager.isStored()).toBe(false);
+
+    await manager.save();
+
+    expect(savedCalls(save)).toEqual([
+      {
+        id: "living-room",
+        base: undefined,
+        assets: { "assets/backdrop.png": PNG },
+        overwrite: false,
+      },
+    ]);
+  });
+
   it("says a refused save did not happen, in the editor's own words, and keeps the document", async () => {
     const { manager, onError, markSaved, onSaved, announceChange } = harness({
       assets: assetsWith([declaration("backdrop", "digest")], {

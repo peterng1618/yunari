@@ -24,6 +24,7 @@ import {
   FerrisWheel,
   FilePlus2,
   FileText,
+  FileUp,
   FolderInput,
   FolderOpen,
   Gauge,
@@ -312,6 +313,10 @@ export const VISIBLE_GLYPH: LucideIcon = Eye;
 export const HIDDEN_GLYPH: LucideIcon = EyeOff;
 /** The finder's footer button that opens the same preview a double-click does. */
 export const PREVIEW_GLYPH: LucideIcon = Maximize2;
+
+/** The Assets pane's own import door: a file into this theme. The Finder beside
+ *  it wears `FIND_GLYPH`, the mark every other search in the chrome uses. */
+export const IMPORT_FILE_GLYPH: LucideIcon = FileUp;
 
 /** The Assets pane's two card actions that have no other surface: putting a
  *  file on the canvas, and swapping the bytes of the asset already chosen. The

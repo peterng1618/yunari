@@ -462,6 +462,10 @@ export function StoreModeRegion(props: {
    *  while the chosen half has not answered. The shell places it; the count is
    *  this region's own. */
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  /** A theme left the library. The shell hands the session's route, because
+   *  deleting the open theme leaves the document's save with no stored folder
+   *  to base itself on. */
+  readonly onThemeDeleted?: ((id: string) => void) | undefined;
   /** The half the shell's header chose. The shell owns it because the control
    *  moved into the header; a direct mount without one keeps its own. */
   readonly tab?: StoreTab | undefined;
@@ -474,6 +478,9 @@ export function StoreModeRegion(props: {
         ? {}
         : { onOpenTheme: props.onOpenTheme })}
       {...(props.onStatus === undefined ? {} : { onStatus: props.onStatus })}
+      {...(props.onThemeDeleted === undefined
+        ? {}
+        : { onThemeDeleted: props.onThemeDeleted })}
       {...(props.tab === undefined ? {} : { tab: props.tab })}
       {...(props.onTab === undefined ? {} : { onTab: props.onTab })}
     />
@@ -489,6 +496,7 @@ function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  readonly onThemeDeleted?: ((id: string) => void) | undefined;
   /** The half the shell's header chose. The shell owns it because the control
    *  moved into the header; a direct mount without one keeps its own. */
   readonly tab?: StoreTab | undefined;
@@ -681,6 +689,7 @@ function StoreRegion(props: {
         // what the listing holds.
         setOpenId((current) => (current === id ? undefined : current));
         setAssignId((current) => (current === id ? undefined : current));
+        props.onThemeDeleted?.(id);
       },
       (error: unknown) => {
         setDeleteRefusal(uiCopy.store.deleteFailed(messageOf(error)));

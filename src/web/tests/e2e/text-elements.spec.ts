@@ -198,7 +198,7 @@ async function exitEditing(page: Page, id: string): Promise<void> {
 async function dragHandle(
   page: Page,
   id: string,
-  key: "ml" | "mr" | "br",
+  key: "ml" | "mr" | "br" | "tl",
   deltaX: number,
   deltaY = 0,
 ): Promise<void> {
@@ -529,6 +529,25 @@ test.describe("text and text box elements", () => {
       boxOf(afterScale),
       "scaling a Text writes no authored box",
     ).toBeUndefined();
+
+    // Every corner is the same gesture. A top-left drag grows the text away
+    // from its bottom-right corner, so the object's own corner must move with
+    // the pointer rather than being put back where the gesture found it.
+    const beforeCorner = scaled;
+    await dragHandle(page, placed.id, "tl", -40, -30);
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
+      .toBeGreaterThan(beforeCorner.width + 10);
+    const cornerScaled = await textState(page, placed.id);
+    if (cornerScaled === undefined)
+      throw new Error("the text vanished after the corner drag");
+    expect(cornerScaled.scaleX).toBe(1);
+    expect(cornerScaled.scaleY).toBe(1);
+    expect(
+      cornerScaled.left,
+      "the top-left corner follows the pointer",
+    ).toBeLessThan(beforeCorner.left - 5);
+    expect(cornerScaled.top).toBeLessThan(beforeCorner.top - 5);
   });
 
   test("drag draws a Text box at the rectangle, wraps, and its ml/mr controls change the width", async ({
@@ -553,19 +572,18 @@ test.describe("text and text box elements", () => {
 
     const typed = await typeInto(page, placed.id, WRAPPED_TEXT);
 
-    // The drawn rectangle survives typing: the width is the wrap measure and the
-    // text reflows inside it instead of widening the object.
+    // The drawn rectangle survives typing: the width is still the box, but the
+    // edit itself is unwrapped, so a line longer than the box runs past its
+    // edge instead of breaking before the author has chosen to.
     expect(typed.width).toBe(drawn.width);
     expect(typed.left).toBe(drawn.left);
     expect(typed.top).toBe(drawn.top);
-    expect(
-      typed.lines,
-      "the text wraps while it is being typed",
-    ).toBeGreaterThan(1);
+    expect(typed.lines, "the edit does not wrap at the box").toBe(1);
 
     await exitEditing(page, placed.id);
     // The words survive the repaint that leaving the edit runs, and the box is
-    // still the drawn one rather than being widened by the paragraph.
+    // still the drawn one rather than being widened by the paragraph. Wrapped
+    // again, now that the edit is over.
     const committed = await textState(page, placed.id);
     if (committed === undefined) throw new Error("the box vanished");
     expect(committed.text).toBe(WRAPPED_TEXT);
@@ -619,6 +637,38 @@ test.describe("text and text box elements", () => {
     expect(widened.width).toBeLessThan(widthBeforeDrag + 80);
     const widenedBox = boxOf(await readObject(page, placed.name ?? "Text box"));
     expect(widenedBox?.width).toBeCloseTo(widened.width, 0);
+
+    // A corner drag scales both axes, so the drawn box grows in both. The text
+    // grows with it rather than being clipped by a height the gesture left
+    // behind.
+    await dragHandle(page, placed.id, "br", 40, 30);
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
+      .toBeGreaterThan(widened.width + 10);
+    const cornered = await textState(page, placed.id);
+    if (cornered === undefined)
+      throw new Error("the box vanished after a corner drag");
+    expect(cornered.scaleX).toBe(1);
+    expect(cornered.scaleY).toBe(1);
+    expect(
+      cornered.height,
+      "the corner drag grows the box's height too",
+    ).toBeGreaterThan(widened.height + 5);
+
+    // The top-left corner is the same gesture from the other anchor: the box
+    // grows away from its bottom-right, so its own corner follows the pointer.
+    await dragHandle(page, placed.id, "tl", -40, -30);
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
+      .toBeGreaterThan(cornered.width + 10);
+    const topLeft = await textState(page, placed.id);
+    if (topLeft === undefined)
+      throw new Error("the box vanished after a top-left drag");
+    expect(topLeft.height).toBeGreaterThan(cornered.height + 5);
+    expect(topLeft.left).toBeLessThan(cornered.left - 5);
+    expect(topLeft.top).toBeLessThan(cornered.top - 5);
+    expect(topLeft.scaleX).toBe(1);
+    expect(topLeft.scaleY).toBe(1);
   });
 
   test("words typed into a placed Text survive the repaint and a save/reopen", async ({
@@ -707,6 +757,24 @@ test.describe("text and text box elements", () => {
     expect(runs.map((run) => run.kind)).toEqual(["literal", "value"]);
     expect(runs[0]?.text).toBe("Load ");
     expect(runs[1]?.bindingId).toMatch(/^binding-/);
+
+    // A reading-bearing Text still folds a corner drag into its runs: the size
+    // grows and the object returns to unit scale, without losing either run.
+    const beforeDrag = await textState(page, placed.id);
+    if (beforeDrag === undefined)
+      throw new Error("the placed text is not live");
+    await dragHandle(page, placed.id, "br", 40, 30);
+    await expect
+      .poll(async () => (await textState(page, placed.id))?.width ?? 0)
+      .toBeGreaterThan(beforeDrag.width + 10);
+    const scaled = await textState(page, placed.id);
+    expect(scaled?.scaleX, "the commit leaves no scale on the object").toBe(1);
+    expect(scaled?.scaleY).toBe(1);
+    expect(
+      runsOf(await readObject(page, placed.name ?? "Text")).map(
+        (run) => run.kind,
+      ),
+    ).toEqual(["literal", "value"]);
 
     // The binding is document state, not a canvas decoration.
     const id = await saveToLibrary(page);

@@ -778,6 +778,7 @@ export function createShellLayout(
                   onModeChange("editor"),
                 );
               }}
+              onThemeDeleted={(id) => store.bridge?.session.themeRemoved(id)}
             />
             {/* The Host mode's region, beside the store's rather than chosen
                 between here: each is handed the mode and draws itself in its

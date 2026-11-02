@@ -105,11 +105,15 @@ export function ThemeLibraryChooser({
   themes,
   templates,
   client,
+  onRemoved,
   settle,
 }: {
   readonly themes: readonly ThemeLibraryEntry[];
   readonly templates: readonly TemplateEntry[];
   readonly client?: ThemeLibraryClient | undefined;
+  /** A theme the host accepted a removal for. The library manager listens so
+   *  the open document stops claiming a folder that no longer exists. */
+  readonly onRemoved?: ((id: string) => void) | undefined;
   readonly settle: ModalSettle<ThemeLibraryChoice>;
 }): React.JSX.Element {
   /** What the author has selected, and their own themes, which a removal
@@ -181,6 +185,7 @@ export function ThemeLibraryChooser({
     if (canRemove === undefined) return;
     try {
       await canRemove(id);
+      onRemoved?.(id);
       setOwn((current) => current.filter((entry) => entry.id !== id));
       setStatus(undefined);
       // The removed row was the selection: the list moves to its first option
@@ -475,13 +480,18 @@ export function ThemeSaveAsDialog({
 export function promptThemeSelection(
   themes: readonly ThemeLibraryEntry[],
   templates: readonly TemplateEntry[] = [STARTER_TEMPLATE],
-  options?: { readonly client?: ThemeLibraryClient },
+  options?: {
+    readonly client?: ThemeLibraryClient;
+    /** Told when the chooser's own delete succeeds. */
+    readonly onRemoved?: (id: string) => void;
+  },
 ): Promise<ThemeLibraryChoice | undefined> {
   return openModal((settle) =>
     createElement(ThemeLibraryChooser, {
       themes,
       templates,
       client: options?.client,
+      onRemoved: options?.onRemoved,
       settle,
     }),
   );

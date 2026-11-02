@@ -66,6 +66,9 @@ export interface EditorActionFacade {
    *  the replacement question is answered and before the theme is read, so a
    *  caller that must move a surface moves it only for an open that happens. */
   openLibraryTheme(id: string, onAccepted?: () => void): Promise<void>;
+  /** One theme left the library. A store removal reaches the document's base
+   *  through this, so a save after deleting the open theme recreates it. */
+  themeRemoved(id: string): void;
   saveLibrary(): Promise<void>;
   /** File's **Open recent**: the newest stored theme that is not the document
    *  that is open. */

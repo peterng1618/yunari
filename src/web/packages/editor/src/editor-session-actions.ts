@@ -263,6 +263,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     },
     openLibraryTheme: (id, onAccepted) =>
       document.openLibraryTheme(id, onAccepted),
+    themeRemoved: (id) => document.noteThemeRemoved(id),
     saveLibrary: () => document.saveLibrary(),
     openRecent: () => document.openRecentLibrary(),
     saveAs: () => document.saveLibraryAs(),

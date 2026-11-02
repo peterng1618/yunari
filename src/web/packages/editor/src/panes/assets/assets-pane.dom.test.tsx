@@ -645,7 +645,7 @@ describe("the Assets pane's import", () => {
       "[data-yunari-find-assets]",
     );
     if (control === null) throw new Error("no Find assets control.");
-    expect(control.textContent).toContain(uiCopy.file.findAssets);
+    expect(control.textContent).toContain(uiCopy.panels.assetFinder);
 
     await act(async () => control.click());
     expect(onFindAssets).toHaveBeenCalledTimes(1);
