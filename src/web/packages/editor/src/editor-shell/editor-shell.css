@@ -1992,6 +1992,13 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   color: var(--muted);
 }
 
+/* The finder's rail is also the way out's row: the mark centres in it rather
+   than sitting at the sheet's corner inset, so it lines up with the heading and
+   the tabs. 3rem is the rail's min height. */
+.editor-shell-dialog--finder .editor-shell-dialog-close {
+  top: calc((3rem - 28px) / 2);
+}
+
 /* The sheet's own type, on the shell's text tokens so it recolours with the
    palette rather than with any authored theme. The lead names the surface the
    same way the panel headings do; each group is a heading over a two-column
@@ -2091,7 +2098,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   line-height: var(--text-xs--line-height);
   color: var(--shell-muted);
 }
-.editor-shell-dialog > button {
+.editor-shell-dialog > button:not(.editor-shell-dialog-close) {
   margin-top: 16px;
   padding: 6px 12px;
   border: 1px solid var(--shell-edge);
@@ -2099,15 +2106,16 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   background: var(--yunari-control-bg);
   color: var(--shell-text);
   /* the type scale — `--text-sm` 12px, "Control text": a dialog's own button is a
-     control, and this rule reaches the two dialogs that draw one directly (the
-     settings modal's Close and the `?` sheet's) rather than letting them inherit
-     the portalled document's 13px. The three dialogs that wrap their buttons in
-     `.yunari-dialog-actions` already take `text-sm` from `ACTION_BUTTON`. */
+     control, and this rule reaches the dialogs that draw one directly rather
+     than letting them inherit the portalled document's 13px. The dialogs that
+     wrap their buttons in `.yunari-dialog-actions` already take `text-sm` from
+     `ACTION_BUTTON`. The corner close is excluded: it is the sheet's mark, and
+     this rule's margin, padding and border would move and widen it. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   cursor: pointer;
 }
-.editor-shell-dialog > button:hover {
+.editor-shell-dialog > button:not(.editor-shell-dialog-close):hover {
   border-color: var(--shell-muted);
 }
 
