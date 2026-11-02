@@ -526,6 +526,7 @@ export class EditorSession {
       // author and a licence the declaration never carries still surface.
       creditFor: (assetId) => this.#document.creditForAsset(assetId),
       onFontCommit: (input) => commitFont(this.#fontHost(), input),
+      sizeSummary: () => this.#document.sizeSummary(),
       onImportVideo: (file, isPackage, onStep, trim) =>
         this.importPickedVideo(file, {
           package: isPackage,

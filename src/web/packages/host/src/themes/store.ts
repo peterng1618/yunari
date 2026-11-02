@@ -19,6 +19,7 @@ import {
 } from "@yunari/renderer-core";
 import {
   CREDITS,
+  MAX_THEME_BYTES,
   readThemeCredits,
   type ThemeCredits,
 } from "@yunari/theme-package";
@@ -345,7 +346,10 @@ const MAX_CREDITS_FILE_BYTES = 1024 * 1024;
  *  editor sends it are the bytes this store would have accepted. */
 export const MAX_ASSET_BYTES = 80 * 1024 * 1024;
 const MAX_ASSET_COUNT = 128;
-const MAX_TOTAL_ASSET_BYTES = 90 * 1024 * 1024;
+/** The theme's whole allowance, from the format's own owner. The store writes
+ *  only declared assets, so it measures them alone against a bound that also
+ *  covers the document and credits the editor keeps beside them. */
+const MAX_TOTAL_ASSET_BYTES = MAX_THEME_BYTES;
 /** What a trash request may carry on the wire for a whole theme's assets.
  *
  *  The body is base64 — four characters per three bytes — and Task 19 sends

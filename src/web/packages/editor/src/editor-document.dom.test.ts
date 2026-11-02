@@ -14,7 +14,7 @@ import {
   AssetManager,
   type LocalAssetReference,
 } from "./asset-manager/index.js";
-import { EditorDocument } from "./editor-document.js";
+import { EditorDocument, themeSizeRefusal } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryEnvelopePort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
@@ -476,6 +476,36 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
+  it("counts the document and referenced bytes, and reports unused bytes apart", () => {
+    const assetManager = managerWith([imageAsset("photo"), imageAsset("logo")]);
+    const document = documentWith(undefined, {
+      assetManager,
+      objects: [placedObject("logo")],
+      envelope: bareEnvelope(),
+    });
+
+    const size = document.sizeSummary();
+
+    expect(size.unusedBytes).toBe(1);
+    // `logo`'s byte plus the serialized document; the unused `photo` is not in
+    // either measure.
+    expect(size.themeBytes).toBeGreaterThan(1);
+    expect(size.limitBytes).toBe(90 * 1024 * 1024);
+    document.destroy();
+  });
+
+  it("refuses a theme past its bound, and could not be made to fit by pruning", () => {
+    expect(
+      themeSizeRefusal(90 * 1024 * 1024, 90 * 1024 * 1024),
+    ).toBeUndefined();
+    expect(themeSizeRefusal(90 * 1024 * 1024 + 1, 90 * 1024 * 1024)).toBe(
+      uiCopy.saveCleanup.themeTooLarge(
+        uiCopy.panels.assetCard.size(90 * 1024 * 1024 + 1),
+        uiCopy.panels.assetCard.size(90 * 1024 * 1024),
+      ),
+    );
+  });
+
   it("cancel writes nothing and keeps the file", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onSaved = vi.fn();
@@ -512,7 +542,7 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
-  it("keep saves and keeps the assets and their credits", async () => {
+  it("keep leaves the file in the document and out of the package", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const linked: ThemeCreditsEntry = {
       ...entry("photo", "https://example.test/photo"),
@@ -528,8 +558,10 @@ describe("EditorDocument save cleanup", () => {
 
     expect(save).toHaveBeenCalledTimes(1);
     const [current, assets] = save.mock.calls[0] ?? [];
-    expect(current?.assets?.map((asset) => asset.id)).toEqual(["photo"]);
-    expect(Object.keys(assets ?? {})).toEqual(["assets/photo.png"]);
+    // Nothing references the file, so the package carries neither its
+    // declaration, its bytes nor its credit.
+    expect(current?.assets).toEqual([]);
+    expect(assets).toEqual({});
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
     ]);
@@ -580,6 +612,9 @@ describe("EditorDocument save cleanup", () => {
       .mockResolvedValue(undefined);
     const document = documentWith(undefined, {
       assetManager,
+      // `logo` is on the canvas, so only `photo` is the question; choosing it
+      // must not take the file the author kept.
+      objects: [placedObject("logo")],
       envelope: bareEnvelope(),
     });
 
@@ -775,7 +810,10 @@ describe("EditorDocument save cleanup", () => {
     await document.release();
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(markSaved).toHaveBeenCalledTimes(1);
+    // The save marks the package it wrote, then the document marks its own
+    // full snapshot: the export strips unused files from the package but must
+    // not make the author's document read dirty for keeping them.
+    expect(markSaved).toHaveBeenCalledTimes(2);
     expect(onSaved).toHaveBeenCalledWith("Released 0.1.0");
     expect(document.isDirty()).toBe(false);
     document.destroy();

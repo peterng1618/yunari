@@ -1900,6 +1900,8 @@ export const uiCopy = {
     } satisfies Record<LocalAssetReference["kind"], string>,
     note: "Nothing on the canvas, the background, or a type token refers to these files. Their attribution goes with them.",
     removeAll: "Remove all unused assets",
+    themeTooLarge: (size: string, limit: string): string =>
+      `This theme comes to ${size}; a theme may be at most ${limit}. Remove an asset, then save again.`,
     warning:
       "Moves them to the Recycle Bin. The theme itself is saved either way.",
     cancel: "Cancel",
@@ -2335,6 +2337,13 @@ export const uiCopy = {
       remove: "Remove",
       createTypeToken: "Create type token",
       size: fileSize,
+    },
+    /** The pane's size meter, under its Import row. The percentage carries the
+     *  same state as the colour, so the reading survives without it. */
+    assetSizes: {
+      theme: (percent: number, limit: string): string =>
+        `Theme ${percent}% of ${limit}`,
+      unused: (size: string): string => `Unused ${size}`,
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */

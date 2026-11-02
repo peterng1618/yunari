@@ -142,6 +142,11 @@ function mount(
   options: {
     readonly isReferenced?: (assetId: string) => boolean;
     readonly previewUrl?: (assetId: string) => string | undefined;
+    readonly sizeSummary?: () => {
+      readonly themeBytes: number;
+      readonly unusedBytes: number;
+      readonly limitBytes: number;
+    };
   } = {},
 ): { readonly host: HTMLElement; readonly manager: AssetManager } {
   const host = document.createElement("div");
@@ -156,6 +161,10 @@ function mount(
         editor={editorStub()}
         isReferenced={options.isReferenced ?? (() => false)}
         onFontCommit={async () => ({ ok: true, message: "" })}
+        sizeSummary={
+          options.sizeSummary ??
+          (() => ({ themeBytes: 0, unusedBytes: 0, limitBytes: 1024 }))
+        }
       />,
     ),
   );
@@ -226,6 +235,47 @@ async function selectCard(host: HTMLElement, name: string): Promise<void> {
 }
 
 describe("the Assets pane", () => {
+  it("reads the theme's size and unused bytes, and colours the reading", () => {
+    const read = (
+      themeBytes: number,
+    ): { readonly text: string; readonly tone: string } => {
+      const { host } = mount([], {
+        sizeSummary: () => ({
+          themeBytes,
+          unusedBytes: 1024 * 1024,
+          limitBytes: 10 * 1024 * 1024,
+        }),
+      });
+      const meter = host.querySelector<HTMLElement>("[data-yunari-theme-size]");
+      return {
+        text: meter?.textContent ?? "",
+        tone: meter?.className ?? "",
+      };
+    };
+
+    const roomy = read(5 * 1024 * 1024);
+    expect(roomy.text).toBe(
+      uiCopy.panels.assetSizes.theme(
+        50,
+        uiCopy.panels.assetCard.size(10 * 1024 * 1024),
+      ),
+    );
+    expect(roomy.tone).toContain("text-ok");
+    expect(read(9.5 * 1024 * 1024).tone).toContain("text-warn");
+    expect(read(11 * 1024 * 1024).tone).toContain("text-error");
+
+    const { host } = mount([], {
+      sizeSummary: () => ({
+        themeBytes: 0,
+        unusedBytes: 1024 * 1024,
+        limitBytes: 1024,
+      }),
+    });
+    expect(host.querySelector("[data-yunari-unused-size]")?.textContent).toBe(
+      uiCopy.panels.assetSizes.unused("1 MB"),
+    );
+  });
+
   it("groups cards by kind and marks the chosen row's actions", async () => {
     const { host } = mount([IMAGE, OTHER_IMAGE, FONT]);
 
@@ -475,6 +525,11 @@ async function mountWithManager(
         onFindAssets={onFindAssets}
         onFontCommit={fontCommit}
         onImportVideo={importVideo}
+        sizeSummary={() => ({
+          themeBytes: 0,
+          unusedBytes: 0,
+          limitBytes: 1024,
+        })}
         {...(options.subscribeDocumentChange === undefined
           ? {}
           : { subscribeDocumentChange: options.subscribeDocumentChange })}

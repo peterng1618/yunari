@@ -547,6 +547,7 @@ function mountPanels(): { root: HTMLElement } {
     } as never,
     isReferenced: () => false,
     onFontCommit: async () => ({ ok: true, message: "" }),
+    sizeSummary: () => ({ themeBytes: 0, unusedBytes: 0, limitBytes: 1024 }),
   });
 
   // The new-theme chooser, opened as the session opens it: a `Dialog`, so it is

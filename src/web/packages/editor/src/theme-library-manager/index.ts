@@ -128,10 +128,14 @@ interface ThemeLibraryManagerOptions {
   readonly snapshot: () => FabricThemeEnvelope;
   /** The document's own declared bytes, which is what a save sends. */
   readonly assets: AssetManager;
-  /** The attribution member this document carries, or nothing. It travels with
-   *  every save because the stored folder is written whole: a save that sent no
-   *  credits would drop the ones the theme already had. */
-  readonly credits?: () => ThemeCredits | undefined;
+  /** The copy a save stores: the envelope it is writing without the
+   *  declarations nothing references, nor their bytes or credits. A publish
+   *  starts from the same copy, so an unused file never reaches the library. */
+  readonly output: (envelope: FabricThemeEnvelope) => {
+    readonly envelope: FabricThemeEnvelope;
+    readonly assets: Readonly<Record<string, Uint8Array>>;
+    readonly credits?: ThemeCredits;
+  };
   /** The picture a save ships, or the one this document arrived with: a
    *  capture that fails must cost the preview, not the theme. */
   readonly picture: () => Promise<Uint8Array | undefined>;
@@ -576,19 +580,19 @@ export class ThemeLibraryManager {
     adopt?: () => void,
   ): Promise<void> {
     const options = this.#options;
-    const credits = options.credits?.();
+    const output = options.output(envelope);
     this.#base = libraryBase(
       await client.save(
         id,
         {
-          envelope,
-          assets: this.#payload(base, overwrite),
-          ...(credits === undefined ? {} : { credits }),
+          envelope: output.envelope,
+          assets: this.#payload(base, overwrite, output),
+          ...(output.credits === undefined ? {} : { credits: output.credits }),
           ...(base === undefined ? {} : { base: base.id }),
         },
         { overwrite },
       ),
-      options.assets.declarations,
+      output.envelope.assets ?? [],
     );
 
     adopt?.();
@@ -629,24 +633,33 @@ export class ThemeLibraryManager {
   #payload(
     base: LibraryBase | undefined,
     overwrite: boolean,
+    output: {
+      readonly envelope: FabricThemeEnvelope;
+      readonly assets: Readonly<Record<string, Uint8Array>>;
+    },
   ): Readonly<Record<string, Uint8Array>> {
-    const all = this.#options.assets.assets;
+    const all = output.assets;
     if (base === undefined || overwrite) {
       return all;
     }
     const payload: Record<string, Uint8Array> = {};
-    for (const declared of this.#options.assets.declarations) {
-      const sha256 = declared.sha256;
-      if (sha256 !== undefined && base.hashes.get(declared.path) === sha256) {
+    const declaredByPath = new Map(
+      (output.envelope.assets ?? []).map((asset) => [asset.path, asset]),
+    );
+    for (const [assetPath, bytes] of Object.entries(output.assets)) {
+      const declared =
+        declaredByPath.get(assetPath) ??
+        this.#options.assets.declarations.find(
+          (asset) => asset.path === assetPath,
+        );
+      const sha256 = declared?.sha256;
+      if (sha256 !== undefined && base.hashes.get(assetPath) === sha256) {
         continue;
       }
       // A declaration with no bytes is a document that is already broken; the
       // host refuses a theme that names an asset nobody can produce, which is
       // the honest answer, and sending an empty file would not be.
-      const bytes = all[declared.path];
-      if (bytes !== undefined) {
-        payload[declared.path] = bytes;
-      }
+      payload[assetPath] = bytes;
     }
     return payload;
   }

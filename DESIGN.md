@@ -99,6 +99,8 @@ palette resolves it:
 | `--attention` | Work in flight: unsaved or unpublished changes, a pending operation, a reading awaiting the author |
 | `--warn` | Something needs attention; not an error |
 | `--hot` | Destructive. Delete, and only delete |
+| `--ok` | A reading inside its healthy range, such as a theme under its size bound |
+| `--error` | A reading whose bound is crossed and therefore blocks the action |
 
 **`--accent` is rationed.** At most one accent-filled element is visible in a
 region at a time: the selected rail slot, the focused control, the selected row,
@@ -112,6 +114,12 @@ only on an unsaved or unpublished indicator, an operation still running, or a
 reading that is stale and waiting for the author. It never fills a button,
 never shares an element with `--accent`, and does not stand in for `--warn`
 (something needs attention) or `--hot` (destructive).
+
+**`--ok` and `--error` are readings, not affordances.** They state a value's
+relation to its bound — a theme at 60% of its limit is `--ok`, one past 100% is
+`--error` — and never paint a control. A reading that blocks an action carries
+`--error`; the control it blocks still uses its own vocabulary, and a fault that
+is not destructive never borrows `--hot`.
 
 ## Typography
 

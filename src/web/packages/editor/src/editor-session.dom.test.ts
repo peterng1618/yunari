@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import type { FabricPalette, FabricThemeEnvelope } from "@yunari/renderer-core";
+import { setObjectAssetReference } from "@yunari/scene-fabric";
 import {
   MAX_CREDITS_ENTRIES,
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
-import { IText } from "fabric/es";
+import { IText, Rect } from "fabric/es";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { presetLibrary } from "./preset-library/index.js";
@@ -2228,13 +2229,18 @@ describe("a save the host refused", () => {
  * was handed rather than on what the host did with it.
  */
 describe("a save that carries only what changed", () => {
+  /** The declared badge is on the canvas, so it is part of the theme a save
+   *  writes; the backdrop is the envelope's own media below. Both therefore
+   *  reach the payload, which is what these cases measure. */
+  const badgeObject = new Rect();
+  setObjectAssetReference(badgeObject, { assetId: "badge", kind: "svg" });
   const shell = () => ({
     editor: {
       canvas: {
         on: vi.fn(),
         off: vi.fn(),
         getActiveObject: () => undefined,
-        getObjects: () => [],
+        getObjects: () => [badgeObject],
         requestRenderAll: vi.fn(),
       },
       clipboardManager: {
@@ -2286,6 +2292,7 @@ describe("a save that carries only what changed", () => {
   const opened: FabricThemeEnvelope = {
     ...envelope,
     assets: [storedBackdrop, storedBadge],
+    background: { media: { assetId: "backdrop", bounds: "theme" } },
   };
   const bytes = {
     "assets/backdrop.png": backdrop,

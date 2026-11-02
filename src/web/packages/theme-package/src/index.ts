@@ -71,6 +71,10 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 /** Exported so a downloader can stop at the same cap *while reading*: the
  *  reader only ever sees bytes that are already in memory. */
 export const MAX_ARCHIVE_BYTES = 95 * 1024 * 1024;
+/** The most a theme's own content — its document and every asset it declares —
+ *  may come to. The host's stored-theme cap and the editor's size meter share
+ *  this number, so a bar the editor shows as full is one a save will refuse. */
+export const MAX_THEME_BYTES = 90 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 80 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 180 * 1024 * 1024;
 
