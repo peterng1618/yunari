@@ -276,6 +276,8 @@ describe("a theme whose vocabulary is not the starter's", () => {
       for (const child of partsOf(object)) visit(child);
     };
     visit(copied.card);
+    const value = runsOf(copied.card).find((run) => run["kind"] === "value");
+    expect(value?.["style"]).toMatchObject({ fontSize: { value: 90 } });
     expect(
       copied.substitutions.filter((entry) =>
         entry.from.startsWith("typeTokens."),

@@ -142,11 +142,17 @@ export function addSceneObject(
       incoming.push([root, bindings]);
     }
   } else if (isRecord(bindings)) {
+    const mintedIds = new Set(minted.values());
     for (const [authoredId, list] of Object.entries(bindings)) {
-      incoming.push([
-        minted.get(authoredId) ?? authoredId,
-        list as readonly Binding[],
-      ]);
+      const target =
+        minted.get(authoredId) ??
+        (mintedIds.has(authoredId) ? authoredId : undefined);
+      if (target === undefined) {
+        throw new Error(
+          `There is no object "${authoredId}" in this insertion.`,
+        );
+      }
+      incoming.push([target, list as readonly Binding[]]);
     }
   }
 

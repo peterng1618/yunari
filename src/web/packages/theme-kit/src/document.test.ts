@@ -74,6 +74,18 @@ describe("scene mutation", () => {
     ).toThrow(/Binding id "chart-cpu"/);
   });
 
+  it("refuses a binding record keyed by an object it is not inserting", () => {
+    expect(() =>
+      addSceneObject(
+        blank(),
+        { type: "Group", id: "card" },
+        {
+          missing: [{ id: "cpu-load", semanticKey: "cpu.load" }],
+        },
+      ),
+    ).toThrow(/There is no object "missing" in this insertion/);
+  });
+
   it("refuses a binding id repeated inside one insertion", () => {
     expect(() =>
       addSceneObject(

@@ -2,7 +2,7 @@
   Yunari's mark, at the smallest size that still reads.
 
   There is no logo file in this repository to reuse: the wordmark is a Fabric
-  text object in the reference theme (new-fabric-theme.ts), and the only SVGs
+  text object in the reference theme (theme-kit/src/starter.ts), and the only SVGs
   under public/ are theme fixture artwork. So this is the wordmark reduced
   rather than designed: its initial, in the wordmark's own declared face (the
   "Wordmark" type preset) and the shell's default editorial palette

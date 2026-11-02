@@ -694,13 +694,13 @@ function idsOf(card: object): readonly string[] {
 
 describe("the starter theme", () => {
   /** The starter is what this plan changed, so it is measured rather than
-   * assumed: `new-fabric-theme.test.ts` states these parts so a card that
+   * assumed: `theme-kit/src/starter.test.ts` states these parts so a card that
    * gained or lost one fails where the failure can name itself. The GPU card is
    * the eight-part one; this is not a limit. */
   const CARD_PARTS = 8;
   /** Ten top-level rows, not eight: the wordmark and the strapline are loose by
    * design — they are not a card, and a design that made every object a group
-   * is the cage this project is written to avoid (`new-fabric-theme.test.ts`
+   * is the cage this project is written to avoid (`theme-kit/src/starter.test.ts`
    * pins that). Eight is the count of *cards*, which is what the plan's prose
    * means; the row count an author reads is ten. */
   const TOP_LEVEL_ROWS = 10;
