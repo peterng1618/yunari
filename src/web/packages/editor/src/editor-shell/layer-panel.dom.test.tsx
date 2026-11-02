@@ -134,9 +134,10 @@ function bridge(rows: readonly LayerRow[], overrides = {}): EditorShellBridge {
   } as EditorShellBridge;
 }
 
-it("titles a row with what it says rather than the key behind it", async () => {
-  // A tooltip printing the raw uuid told the author nothing the row did not,
-  // and the name is what every other surface shows for this object.
+it("carries no hover tooltip repeating what the row already says", async () => {
+  // A native `title` appears on hover and printed the name — or, for an
+  // unnamed object, the kind's own word, which is the object's class. The
+  // hover state is the state controls; the row's text is already on the row.
   const host = document.createElement("div");
   const root = createRoot(host);
   await act(async () =>
@@ -146,7 +147,7 @@ it("titles a row with what it says rather than the key behind it", async () => {
   );
 
   const row = host.querySelector<HTMLElement>('[data-yunari-layer="wordmark"]');
-  expect(row?.title).toBe("Brand mark");
+  expect(row?.hasAttribute("title")).toBe(false);
 });
 
 it("indents a group child and carries the row's controls once it is selected", async () => {
@@ -1611,10 +1612,11 @@ it("prints the bound key the projection reported, and nothing where there is non
     );
 
   expect(bound("gauge")?.textContent).toBe("ram.used.percent");
-  // Three keys, so the separator earns its place; the title keeps the full
-  // list for the row that clips it.
+  // Three keys, so the separator earns its place; the full list stays the
+  // span's text, never a hover tooltip beside it.
   expect(bound("trends")?.textContent).toContain("cpu.load");
   expect(bound("trends")?.textContent).toContain("ram.used.percent");
+  expect(bound("trends")?.hasAttribute("title")).toBe(false);
   // A row bound to nothing carries nothing. A word printed here on every
   // unbound row would be repeated ink paid for out of the layer *name*, and an
   // unbound row must never claim a key it has not got.
@@ -1902,10 +1904,10 @@ it("says a row's role once, outside the mark and outside a title", async () => {
   const span = row.querySelector<HTMLElement>(".yunari-layer-role")!;
   expect(span.getAttribute("title")).toBeNull();
   expect(span.getAttribute("aria-hidden")).toBeNull();
-  // The key beside it keeps its own tooltip: the role is visible text, and the
-  // one column whose tooltip earns its place is the one that clips.
+  // The key beside it is text, and hover carries the state controls rather
+  // than a tooltip repeating it.
   expect(row.querySelector(".yunari-layer-bound")?.getAttribute("title")).toBe(
-    "cpu.load",
+    null,
   );
 });
 
