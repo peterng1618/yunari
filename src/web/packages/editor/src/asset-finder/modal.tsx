@@ -419,6 +419,22 @@ export function AssetFinder({
           if (!next && previewing !== undefined) return;
           onOpenChange(next);
         }}
+        onEscape={() => {
+          // A selected card is the first thing Escape drops. An empty
+          // selection leaves the key to the dialog, which closes the finder.
+          if (view.selection !== undefined) {
+            patch(active, (current) => ({
+              ...current,
+              selection: undefined,
+            }));
+            return true;
+          }
+          if (wallpaperTab.local.selection !== undefined) {
+            wallpaperTab.clearSelection();
+            return true;
+          }
+          return false;
+        }}
         label={uiCopy.assets.title}
         closeLabel={uiCopy.assets.close}
         className="editor-shell-dialog--finder"

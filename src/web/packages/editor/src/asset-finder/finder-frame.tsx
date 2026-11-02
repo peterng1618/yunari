@@ -36,6 +36,10 @@ export function FinderFrame(props: {
   readonly statusTone?: "ok" | "failed";
   readonly actions?: React.ReactNode;
   readonly detail?: React.ReactNode;
+  /** Handles Escape before the dialog closes, and says whether it did. A
+   *  selection is what the author meant to drop first; false leaves Escape to
+   *  the dialog's own dismissal. */
+  readonly onEscape?: () => boolean;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const showFooter = props.status !== undefined || props.actions !== undefined;
@@ -47,6 +51,11 @@ export function FinderFrame(props: {
       closeLabel={props.closeLabel}
       closeIcon
       {...(props.className === undefined ? {} : { className: props.className })}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || props.onEscape?.() !== true) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
     >
       <Tabs.Root
         value={props.active}

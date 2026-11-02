@@ -105,6 +105,7 @@ export function Dialog({
   closeLabel,
   closeIcon = false,
   className,
+  onKeyDown,
   children,
 }: {
   readonly open: boolean;
@@ -116,6 +117,9 @@ export function Dialog({
   readonly closeIcon?: boolean;
   /** An extra class on the popup, for a dialog that sizes itself. */
   readonly className?: string;
+  /** A key the content handles before the primitive's own dismissal sees it.
+   *  The caller stops propagation itself when it consumed the key. */
+  readonly onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -136,6 +140,9 @@ export function Dialog({
               : `editor-shell-dialog ${className}`
           }
           aria-label={label}
+          // Capture, so a key the content consumes never reaches the
+          // primitive's own dismissal listener on the same element.
+          onKeyDownCapture={onKeyDown}
         >
           {children}
           {closeLabel === undefined ? null : (

@@ -201,6 +201,8 @@ export function useWallpaperTab(props: {
     busyId,
     runAction,
     select,
+    clearSelection: () =>
+      setLocal((current) => ({ ...current, selection: undefined })),
     preview,
     apply,
     setQuery,

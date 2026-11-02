@@ -637,6 +637,40 @@ describe("AssetFinder's media preview", () => {
     return card;
   }
 
+  it("drops a selected card on Escape before closing the finder", async () => {
+    const onOpenChange = vi.fn();
+    await openImages({ onOpenChange });
+
+    act(() => {
+      photoCard().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await settle();
+    expect(photoCard().getAttribute("aria-selected")).toBe("true");
+
+    act(() => {
+      photoCard().dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+
+    expect(photoCard().getAttribute("aria-selected")).toBe("false");
+    expect(
+      document.querySelector('[data-yunari-asset-tab="image"]'),
+      "the finder outlives the selection it dropped",
+    ).not.toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    // A second Escape has no selection left, so it is the dialog's own.
+    act(() => {
+      photoCard().dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("opens on a double-click and closes before the finder", async () => {
     const onOpenChange = vi.fn();
     await openImages({ onOpenChange });
