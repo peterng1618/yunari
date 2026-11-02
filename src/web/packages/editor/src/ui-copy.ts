@@ -1430,6 +1430,12 @@ export const uiCopy = {
       default: "Default",
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",
+      /** The confirming press: choosing a display stages it, and this writes
+       *  the assignment. Its two other words are the write's own states, so a
+       *  press that is out cannot read as one that has not been made. */
+      assignButton: "Assign",
+      assigning: "Assigning…",
+      assignedButton: "Assigned",
       /** What a landed assignment says where the choice stays on screen. It
        *  names the display, so the confirmation is the assignment rather than
        *  a bare "done" (`assign-display.tsx`). */

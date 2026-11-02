@@ -4,7 +4,7 @@ import {
   type ControlOption,
   ControlSelect,
 } from "../components/ui/control-select.js";
-import { Dialog } from "../components/ui/dialog.js";
+import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import {
   DEFAULT_DISPLAY_KEY,
   type ThemedDisplay,
@@ -62,6 +62,12 @@ function reason(error: unknown): string {
  * Reading `""` for the default too would be a real answer rendered as absence,
  * and the two states would collapse into one rendering.
  *
+ * **Choosing a display stages it; the Assign press writes it.** A select that
+ * assigned on its own change made the list itself the destructive control, so a
+ * pointer browsing the options could assign a theme by looking. The press owns
+ * the write and its two other states — in flight, then the display it landed
+ * on — and the dialog closes only from that landed answer, never from a choice.
+ *
  * **A landed assignment confirms beside the choice.** The dialog form closes on
  * success, so it never needs the confirmation; the theme's own page keeps the
  * choice open and shows which display the theme went to.
@@ -101,6 +107,12 @@ export function AssignChoice(props: {
    *  say where the theme went until the next read, and the choice must not fall
    *  back to the display that held it before. */
   const [chosen, setChosen] = useState<string | undefined>(undefined);
+  /** The display the select is showing before the Assign press. It is the
+   *  staged answer: the write happens on the press, not on the change. */
+  const [picked, setPicked] = useState<string | undefined>(undefined);
+  /** Whether this choice's own assignment is out. One write at a time, so a
+   *  second press cannot ride the same select twice. */
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -132,13 +144,19 @@ export function AssignChoice(props: {
   // `default` naming it is the next, because that is what a display with no
   // choice of its own is served. `""` is left for neither.
   const heldBy =
+    picked ??
     chosen ??
     displays.find((display) => display.theme === themeId)?.id ??
     (answered?.default === themeId ? DEFAULT_DISPLAY_KEY : "");
+  /** What the select shows before anything was staged. It is never a route: the
+   *  pair row opens a window on change and is not a value this choice holds. */
+  const value = heldBy === PAIR_DISPLAY ? "" : heldBy;
+  const canAssign =
+    !busy && answered !== undefined && value !== "" && value !== PAIR_DISPLAY;
 
-  /** Choosing a display is the assignment; the pair row navigates instead. A
-   *  refusal leaves the choice where it is, with the host's reason beside it,
-   *  so another display can be tried. */
+  /** Choosing a display stages it; the pair row navigates instead. Unlike the
+   *  old select-as-assignment, a change writes nothing, so browsing the list
+   *  cannot assign a theme by looking. */
   const choose = (display: string): void => {
     setRefusal(undefined);
     setConfirmation(undefined);
@@ -160,15 +178,29 @@ export function AssignChoice(props: {
       return;
     }
 
-    setChosen(display);
+    setPicked(display);
+  };
+
+  /** The one write, from the confirm press. A refusal leaves the staged
+   *  display where it is, with the host's reason beside it, so another display
+   *  can be tried without reading the list again. */
+  const assign = (): void => {
+    if (!canAssign) return;
+    setBusy(true);
+    setRefusal(undefined);
+    setConfirmation(undefined);
+    const display = value;
     void client.assign(display, themeId).then(
       () => {
+        setBusy(false);
+        setChosen(display);
         const where =
           options.find((option) => option.id === display)?.name ?? display;
         setConfirmation(uiCopy.store.assign.assigned(where));
         onAssigned();
       },
       (error: unknown) => {
+        setBusy(false);
         setRefusal(reason(error));
       },
     );
@@ -177,13 +209,35 @@ export function AssignChoice(props: {
   return (
     <>
       {answered === undefined ? null : (
-        <ControlSelect
-          label={uiCopy.store.assign.display}
-          data={{ "data-yunari-store-assign-display": "" }}
-          value={heldBy}
-          options={options}
-          onChange={choose}
-        />
+        <div
+          className="flex flex-col gap-[var(--space-8)]"
+          data-yunari-store-assign-form=""
+        >
+          <ControlSelect
+            label={uiCopy.store.assign.display}
+            data={{ "data-yunari-store-assign-display": "" }}
+            density="dialog"
+            value={value}
+            options={options}
+            onChange={choose}
+            disabled={busy}
+          />
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              data-yunari-store-assign-confirm=""
+              className={ACTION_BUTTON}
+              disabled={!canAssign}
+              onClick={assign}
+            >
+              {busy
+                ? uiCopy.store.assign.assigning
+                : confirmation === undefined
+                  ? uiCopy.store.assign.assignButton
+                  : uiCopy.store.assign.assignedButton}
+            </button>
+          </div>
+        </div>
       )}
       {/* **Mounted whether or not it says anything**, as the library chooser's
           status is: a live region added together with its own text is the less
