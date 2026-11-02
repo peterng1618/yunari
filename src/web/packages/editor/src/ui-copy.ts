@@ -1759,7 +1759,6 @@ export const uiCopy = {
         updated: "Updated",
         size: "Size",
       } satisfies Record<"name" | "updated" | "size", string>,
-      directionLabel: "Order",
       direction: {
         asc: "Ascending",
         desc: "Descending",

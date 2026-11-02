@@ -47,7 +47,7 @@ export function PlaceImageModal({
           <img
             src={previewUrl}
             alt=""
-            className="max-h-[180px] w-full rounded-[var(--radius-md)] border border-edge-2 bg-panel-2 object-contain"
+            className="max-h-[var(--place-image-preview-height)] w-full rounded-[var(--radius-md)] border border-edge-2 bg-panel-2 object-contain"
           />
         )}
         <div className="flex items-center justify-end gap-[var(--space-6)]">

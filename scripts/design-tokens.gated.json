@@ -1,6 +1,6 @@
 {
   "remainderCeiling": 2,
-  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 158, 180, 246, 270, 272, 276, 760, 960],
+  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 158, 246, 270, 272, 276, 760, 960],
   "gated": [
     "src/web/packages/editor/src/asset-finder/font-preview-panel.tsx",
     "src/web/packages/editor/src/asset-finder/fonts.tsx",

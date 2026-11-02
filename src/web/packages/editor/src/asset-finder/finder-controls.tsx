@@ -3,6 +3,7 @@ import { ToggleGroup } from "@base-ui/react/toggle-group";
 import type * as React from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
+import type { LucideIcon } from "../editor-shell/icons.js";
 import { BUSY_GLYPH, CONNECTIONS_GLYPH, Glyph } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ActionOutcome } from "./modal.js";
@@ -32,7 +33,7 @@ export function FinderSearch(props: {
       placeholder={props.placeholder}
       aria-label={props.placeholder}
       data-yunari-asset-search=""
-      className="h-7 w-64 max-w-full rounded-[var(--radius-md)] border border-edge bg-[var(--bg)] px-[var(--space-10)] text-sm"
+      className="h-7 w-[var(--finder-search-width)] max-w-full rounded-[var(--radius-md)] border border-edge bg-[var(--bg)] px-[var(--space-10)] text-sm"
     />
   );
 }
@@ -45,9 +46,18 @@ export function FinderSegmented<T extends string>(props: {
   readonly options: readonly {
     readonly id: T;
     readonly label: string;
+    /** A mark the pressed option carries, when the choice has a second
+     *  dimension the label cannot spell — a sort's direction. */
+    readonly glyph?: LucideIcon;
+    /** The option's full name when the visible label and glyph together are
+     *  not self-describing, as on a sort button that shows only an arrow. */
+    readonly ariaLabel?: string;
     readonly data?: Readonly<Record<`data-${string}`, string>>;
   }[];
   readonly onChange: (id: T) => void;
+  /** A press on the already-pressed option. Base UI reports that as an empty
+   *  selection, which single-choice groups otherwise ignore. */
+  readonly onPressedAgain?: (id: T) => void;
 }): React.JSX.Element {
   return (
     <ToggleGroup
@@ -55,7 +65,11 @@ export function FinderSegmented<T extends string>(props: {
       aria-label={props.label}
       onValueChange={(next) => {
         const chosen = next[0];
-        if (chosen !== undefined) props.onChange(chosen as T);
+        if (chosen === undefined) {
+          props.onPressedAgain?.(props.value);
+          return;
+        }
+        props.onChange(chosen as T);
       }}
       className="flex h-7 items-center gap-1 rounded-[var(--radius-md)] border border-edge bg-panel-2 p-1"
     >
@@ -64,9 +78,13 @@ export function FinderSegmented<T extends string>(props: {
           {...option.data}
           key={option.id}
           value={option.id}
-          className="min-w-0 flex-1 rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
+          aria-label={option.ariaLabel}
+          className="inline-flex min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
         >
           {option.label}
+          {option.glyph === undefined ? null : (
+            <Glyph icon={option.glyph} size={12} />
+          )}
         </Toggle>
       ))}
     </ToggleGroup>

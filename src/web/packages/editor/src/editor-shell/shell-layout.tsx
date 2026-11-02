@@ -36,12 +36,12 @@ import { DisplaySwitch } from "./display-switch.js";
 import { DocumentIdentity } from "./document-identity.js";
 import { HostingStore } from "./hosting-store.js";
 import {
+  EDITOR_MODE_GLYPH,
   Glyph,
   type LucideIcon,
-  OPEN_THEME_GLYPH,
-  PAGE_GLYPH,
   RAIL_GLYPHS,
   SETTINGS_GLYPH,
+  THEMES_MODE_GLYPH,
 } from "./icons.js";
 import { LayerActions } from "./layer-panel.js";
 import {
@@ -121,8 +121,8 @@ const MODE_ORDER = [
 
 /** One glyph per mode, in the header's own icon vocabulary. */
 const MODE_GLYPHS: Record<ShellMode, LucideIcon> = {
-  editor: PAGE_GLYPH,
-  themes: OPEN_THEME_GLYPH,
+  editor: EDITOR_MODE_GLYPH,
+  themes: THEMES_MODE_GLYPH,
   settings: SETTINGS_GLYPH,
 };
 

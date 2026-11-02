@@ -786,7 +786,7 @@ function StoreRegion(props: {
         {/* The well with the query in it, and no magnifier glyph: the well is
             the control, the placeholder is the word, and a mark beside a word
             is read twice. */}
-        <ControlWell widthClassName="w-[180px] flex-none">
+        <ControlWell widthClassName="w-[var(--store-search-width)] flex-none">
           <input
             type="search"
             data-yunari-store-search=""

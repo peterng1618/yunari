@@ -5,6 +5,7 @@ import type {
   PresetKind,
 } from "@yunari/renderer-core";
 import type * as React from "react";
+import { ASCENDING_GLYPH, DESCENDING_GLYPH } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import { FinderChip, FinderSegmented } from "./finder-controls.js";
 import type { KindFilter } from "./finder-model.js";
@@ -57,21 +58,25 @@ export function FinderFilters(props: {
           options={(["name", "updated", "size"] as const).map((sort) => ({
             id: sort,
             label: copy.sort[sort],
+            // The pressed button carries the order; pressing it again is how
+            // the other order is asked for, so there is no second row.
+            ...(sort !== props.localSort
+              ? {}
+              : {
+                  glyph:
+                    props.localDirection === "asc"
+                      ? ASCENDING_GLYPH
+                      : DESCENDING_GLYPH,
+                  ariaLabel: `${copy.sort[sort]}, ${copy.direction[props.localDirection]}`,
+                }),
             data: { "data-yunari-wallpaper-engine-sort": sort },
           }))}
           onChange={props.onLocalSortChange}
-        />
-        <FinderSegmented
-          label={copy.directionLabel}
-          value={props.localDirection}
-          options={(["asc", "desc"] as const).map((direction) => ({
-            id: direction,
-            label: copy.direction[direction],
-            data: {
-              "data-yunari-wallpaper-engine-direction": direction,
-            },
-          }))}
-          onChange={props.onLocalDirectionChange}
+          onPressedAgain={() => {
+            props.onLocalDirectionChange(
+              props.localDirection === "asc" ? "desc" : "asc",
+            );
+          }}
         />
       </div>
     );

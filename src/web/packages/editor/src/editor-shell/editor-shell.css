@@ -559,6 +559,11 @@ body,
   --finder-height: 880px;
   --finder-compact-width: 720px;
   --finder-footer-height: 52px;
+  /* The one search field in the finder, and the store's own. Both are twice
+     the width a first draft used; an exact pixel value needs a name like every
+     other dimension (`vg-274`). */
+  --finder-search-width: 510px;
+  --store-search-width: 360px;
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
   --finder-card-min-width: 168px;
   /* The asset preview's box and right panel: the finder's inset-24 size, a
@@ -586,6 +591,8 @@ body,
      sections, the import modal one progress block. */
   --guide-dialog-width: 420px;
   --import-dialog-width: 360px;
+  /* The picture the import modal previews before its placement is chosen. */
+  --place-image-preview-height: 180px;
   /* The Settings mode's two tracks: a fixed navigation column, and the page
      measure beside it. The measure is generous because a page is a grid of
      sections rather than one form: a 2560px window spends the space on columns

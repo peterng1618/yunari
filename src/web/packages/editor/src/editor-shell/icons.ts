@@ -1,6 +1,8 @@
 import type { ListingCategory } from "@yunari/renderer-core";
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   ChartColumn,
   ChartLine,
   ChartNoAxesCombined,
@@ -19,6 +21,7 @@ import {
   Ellipse,
   Eye,
   EyeOff,
+  FerrisWheel,
   FileText,
   FolderInput,
   FolderOpen,
@@ -45,6 +48,7 @@ import {
   OctagonAlert,
   Palette,
   Pencil,
+  PencilRuler,
   Pipette,
   Play,
   Plus,
@@ -159,6 +163,13 @@ export const VIDEO_GLYPH: LucideIcon = Play;
 
 /** The page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
+/** The two mode glyphs: the library is browsed like a fairground, and the
+ *  editor makes a document rather than reading one. */
+export const THEMES_MODE_GLYPH: LucideIcon = FerrisWheel;
+export const EDITOR_MODE_GLYPH: LucideIcon = PencilRuler;
+/** The two sort directions a listing shows on its active sort button. */
+export const ASCENDING_GLYPH: LucideIcon = ArrowUp;
+export const DESCENDING_GLYPH: LucideIcon = ArrowDown;
 /** The header's two menus, drawn as icon controls: the page the File rows act
  *  on, and the eye View reads the canvas through. */
 export const FILE_MENU_GLYPH: LucideIcon = FileText;
