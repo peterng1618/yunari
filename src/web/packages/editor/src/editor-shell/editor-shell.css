@@ -1687,36 +1687,13 @@ body,
   max-height: var(--asset-preview-max-height);
   object-fit: contain;
 }
-/* The panes' remaining plain-DOM controls, **named by the surface that needs
-   them**. As `.editor-shell-panel button, .editor-shell-panel input` this was the
-   half of `vg-298` one ancestor to the left of the inspector's: the panes render
-   the React control set now (`panes/document/metadata-fields.tsx` composes
-   `ControlText`), and an unlayered ancestor-wide rule beat the control set's own
-   utilities — a 30px bordered input inside a 26px bordered well, the same double
-   box the inspector had, and a 4px right margin pulling a well off the column
-   the surface draws. What is left that still needs a box is one surface's own
-   DOM: the Add pane's asset buttons, which no control in the set draws.
-   Add a hook rather than widening the selector back to the ancestor. */
-.editor-shell-panel [data-yunari-asset-import],
-.editor-shell-panel [data-yunari-asset-replace],
-.editor-shell-panel [data-yunari-asset-remove],
-.editor-shell-panel [data-yunari-asset-fill] {
-  max-width: 100%;
-  min-height: 30px;
-  margin: 4px 4px 4px 0;
-  padding: 4px 8px;
-  border: 1px solid var(--shell-edge);
-  border-radius: 6px;
-  /* the type scale — both plain-DOM groups state control text, and this rule stated no
-     type at all, so it took the shell root's `--text-md` 13px instead. */
-  font-size: var(--text-sm);
-  line-height: var(--text-sm--line-height);
-  background: var(--yunari-control-bg);
-  color: var(--shell-text);
-}
-/* The Composition pane's inline rename field: the other input the panes render
-   as plain DOM, and the one place the old rule's `padding: 4px 6px` was still
-   doing work. A field the control set draws takes its own box from its well. */
+/* The Composition pane's inline rename field: the one plain-DOM input left in
+   the panes. Every other pane control is drawn by the React control set, whose
+   own well is the box; an ancestor-wide rule here beat that box and put a 30px
+   bordered control inside a 26px well (`vg-298`), so this rule names the one
+   class that still needs it. `[data-yunari-asset-import]` and the card actions
+   were the last holdouts, and they are React controls now — the stale rule was
+   what made the Assets pane's Import button 30px beside a 26px Asset Finder. */
 .editor-shell-panel .yunari-layer-rename {
   max-width: 100%;
   min-height: 30px;
@@ -1769,13 +1746,6 @@ body,
 .editor-shell-inspector [data-yunari-crop-aspect]:hover,
 .editor-shell-inspector [data-yunari-crop-apply]:hover,
 .editor-shell-inspector [data-yunari-crop-cancel]:hover {
-  border-color: var(--shell-accent);
-  color: var(--shell-accent);
-}
-.editor-shell-panel [data-yunari-asset-import]:hover,
-.editor-shell-panel [data-yunari-asset-replace]:hover,
-.editor-shell-panel [data-yunari-asset-remove]:hover,
-.editor-shell-panel [data-yunari-asset-fill]:hover {
   border-color: var(--shell-accent);
   color: var(--shell-accent);
 }

@@ -51,6 +51,58 @@ async function importLogo(page: Page): Promise<void> {
   await chooseAssetCard(page, "logo.png");
 }
 
+test("keeps the asset pane's import row on one line", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(EDITOR);
+  await openPane(page, "Assets");
+
+  const reading = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const button = document.querySelector(selector);
+      if (button === null) return null;
+      const box = button.getBoundingClientRect();
+      const glyph = button.querySelector("svg")?.getBoundingClientRect();
+      const label = button.querySelector("span")?.getBoundingClientRect();
+      return {
+        top: box.top,
+        height: box.height,
+        left: box.left,
+        width: box.width,
+        glyphLeft: glyph?.left,
+        glyphTop: glyph?.top,
+        labelLeft: label?.left,
+      };
+    };
+    return {
+      importFile: read("[data-yunari-asset-import]"),
+      findAssets: read("[data-yunari-find-assets]"),
+    };
+  });
+  console.log(`asset import row ${JSON.stringify(reading)}`);
+  testInfo.annotations.push({
+    type: "asset-import-row",
+    description: JSON.stringify(reading),
+  });
+
+  const { importFile, findAssets } = reading;
+  if (importFile === null || findAssets === null)
+    throw new Error("the asset pane drew no import row");
+  expect(findAssets.top, "the two controls start on different rows").toBe(
+    importFile.top,
+  );
+  expect(findAssets.height, "the two controls have different heights").toBe(
+    importFile.height,
+  );
+  expect(findAssets.width, "the two controls have different widths").toBe(
+    importFile.width,
+  );
+  expect(findAssets.glyphTop, "the two glyphs sit on different rows").toBe(
+    importFile.glyphTop,
+  );
+});
+
 test("opens the preview at the Finder's box and gives an image one primary verb", async ({
   page,
 }, testInfo) => {
