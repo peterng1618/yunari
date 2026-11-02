@@ -2433,6 +2433,11 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 /* The layer tree: one dense line per layer, indentation carrying the depth. */
 [data-yunari-panel="layers"] [role="tree"] {
   position: relative;
+  /* A selected row's wash is the row's own box, so without a gap the first
+     row's fill meets the pane name's baseline. Margin, not padding: the
+     drop-line is absolute in this box and its `top` is the row index times
+     the row height, so padding would shift every marker half a step. */
+  margin-top: var(--space-6);
 }
 .yunari-layer-row {
   display: flex;
