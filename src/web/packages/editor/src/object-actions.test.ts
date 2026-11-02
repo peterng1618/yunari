@@ -43,6 +43,7 @@ describe("object action registry", () => {
       "duplicate",
       "copy",
       "cut",
+      "paste",
       "front",
       "bring-forward",
       "send-backward",
@@ -119,7 +120,9 @@ describe("object action registry", () => {
       target: () => target({ kind: "none" }),
       canArrange: () => false,
     };
-    expect(objectActionsFor(none)).toEqual([]);
+    expect(objectActionsFor(none).map((action) => action.id)).toEqual([
+      "paste",
+    ]);
 
     // A single unlocked object: the object actions that apply to it, in
     // registry order, and never an arrange action — those grey rather than
@@ -130,6 +133,7 @@ describe("object action registry", () => {
       "duplicate",
       "copy",
       "cut",
+      "paste",
       "front",
       "bring-forward",
       "send-backward",
@@ -148,6 +152,7 @@ describe("object action registry", () => {
       canArrange: () => false,
     };
     expect(objectActionsFor(locked).map((action) => action.id)).toEqual([
+      "paste",
       "front",
       "bring-forward",
       "send-backward",
@@ -236,13 +241,13 @@ describe("object actions and the shortcut table", () => {
     }
   });
 
-  it("names the eight chords the canvas offers", () => {
+  it("names the nine chords the canvas offers", () => {
     const named = OBJECT_ACTIONS.filter(
       (action) => action.shortcut !== undefined,
     )
       .map((action) => action.id)
       .sort();
-    // Written out rather than counted: eight today, and `arrangeActions()` is
+    // Written out rather than counted: nine today, and `arrangeActions()` is
     // deliberately absent from this list because the product binds none of them.
     expect(named).toEqual([
       "back",
@@ -252,6 +257,7 @@ describe("object actions and the shortcut table", () => {
       "duplicate",
       "front",
       "group",
+      "paste",
       "ungroup",
     ]);
   });

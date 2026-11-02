@@ -110,8 +110,8 @@ export const uiCopy = {
       assets: "Assets",
       tokens: "Design tokens",
       /** The artboard, background, metadata and reference panels — one pane,
-       *  because they are the document's own settings. */
-      document: "Document",
+       *  because they are the theme's own settings. */
+      document: "Theme settings",
     },
   },
   /** The settings modal the rail's gear opens. A modal is a surface, not
@@ -1023,9 +1023,9 @@ export const uiCopy = {
      *  what is being chosen. The host's own library comes first, because it is
      *  what an author already has. */
     halves: {
-      label: "Theme halves",
-      local: "Your themes",
-      online: "Store",
+      label: "Theme libraries",
+      local: "Local library",
+      online: "Online store",
     },
     /** The author's own listing, behind a toggle in the online half's row. The
      *  empty sentence is the surface's own: an author with nothing submitted is
@@ -1115,6 +1115,21 @@ export const uiCopy = {
        *  is asked about, which is R115's rule and the reason the groups are
        *  labelled at all. */
       shapeHint: "A theme must match every group.",
+      /** A value facet's search field. One name for all four: the popover they
+       *  sit in is already named by the facet, so a sentence repeating it would
+       *  print the facet's name twice to a screen reader. */
+      search: "Search values",
+      searchPlaceholder: "Search values",
+      /** A query that matches no value, where the facet does have values. */
+      noSearchMatches: "No value matches that search.",
+      /** A facet whose values the listing does not carry; the surface says so
+       *  rather than drawing a popover that looks like a failed load. */
+      empty: "No theme declares a value for this filter.",
+      /** The colour facet's own empty sentence: a library of themes with a
+       *  picture behind the board has no background colour for the record to
+       *  classify, which is why it offers neither mode. */
+      colourModeEmpty:
+        "No theme declares a background color, so this filter has no values.",
     },
     /** The facet values that are words rather than data: the two colour modes a
      *  person can ask for, the three orientations, and the aspect bucket that is
@@ -1212,7 +1227,7 @@ export const uiCopy = {
      *  submission failed, so its own words are passed through unchanged
      *  (`use-submit.ts`). */
     submit: {
-      label: "Submit to the store",
+      label: "Publish to theme store",
       busy: "Submitting…",
       /** The host holds the sign-in conversation in its own window; this surface
        *  has no code to name, only the author's part left to do. */
@@ -1311,6 +1326,18 @@ export const uiCopy = {
     },
     /** The failure's one way forward: read the same listing again. */
     retry: "Try again",
+    /** A removal the host refused, in the host's own words where it gave
+     *  them: the theme is still in the library, so this is a PC that could not
+     *  move one to its recycle bin rather than a lost document. */
+    deleteFailed: (reason: string): string =>
+      `Could not delete the theme: ${reason}`,
+    /** A client that cannot delete is offered no deletion; the cell still
+     *  reports the press rather than failing at the moment it is made. */
+    deleteUnavailable: "This host cannot delete themes.",
+    /** An export that could not be read back or written, in the failure's own
+     *  words: nothing was downloaded, so the sentence is the whole outcome. */
+    exportFailed: (reason: string): string =>
+      `Could not export the theme package: ${reason}`,
     /** The sort well, whose keys are per half because the two share none: the
      *  catalogue knows when an item was published and how often it was taken,
      *  and the host's library knows only what the author wrote. */
@@ -1342,15 +1369,9 @@ export const uiCopy = {
       actions: {
         open: "Open in editor",
         assign: "Assign to display",
-        export: "Export package",
+        export: "Export theme package",
         delete: "Delete",
       } satisfies Record<CellAction, string>,
-      /** Why an action this build does not run is disabled. The surface gives
-       *  every cell four actions, so all four are drawn and the two no phase
-       *  owns are disabled with this reason rather than answering a press with
-       *  nothing (R164). It names no owner and promises no date, because the
-       *  only thing true of them is that no phase has one. */
-      unavailable: "Not available yet",
       /** The online half's three answers, keyed by `InstallState` less `none`
        *  — a library item has no catalogue to be installed from, so it draws
        *  the local half's four actions rather than one of these. */
@@ -1729,6 +1750,20 @@ export const uiCopy = {
       search: "Search titles",
       filterKind: "Kind",
       filterAll: "All",
+      /** The local library's order: three fields, each with both directions.
+       *  `updated` is the item directory's last write, which is what a Steam
+       *  subscribe or update changes. */
+      sortLabel: "Sort by",
+      sort: {
+        name: "Name",
+        updated: "Updated",
+        size: "Size",
+      } satisfies Record<"name" | "updated" | "size", string>,
+      directionLabel: "Order",
+      direction: {
+        asc: "Ascending",
+        desc: "Descending",
+      } satisfies Record<"asc" | "desc", string>,
       guide: "Guide",
       refresh: "Refresh library",
       importPackage: "Import a .mpkg video",
@@ -1870,6 +1905,12 @@ export const uiCopy = {
    *  words that turn it on have to say what it is. */
   publish: {
     qrName: (url: string): string => `QR code: ${url}`,
+    /** The display the open theme is put on, and the route for a display that
+     *  is not listed yet. */
+    displayLabel: "Display",
+    pairNew: "Pair a new remote display",
+    pairUnavailable: "Turn on publishing to pair a display.",
+    assignFailed: (reason: string): string => `Could not assign: ${reason}`,
     /** The `?` sheet's row for the header's chord. The chord opens the surface
      *  and moves nothing, so the row names the opening rather than the act the
      *  switch inside the surface performs. */
@@ -1940,6 +1981,7 @@ export const uiCopy = {
     redo: "Redo",
     copy: "Copy",
     cut: "Cut",
+    paste: "Paste",
     outlineText: "Convert to paths",
     replaceFile: "Replace file…",
   },
@@ -2182,15 +2224,18 @@ export const uiCopy = {
     cards: "Card",
     shapes: "Shape",
     charts: "Chart",
-    /** The Assets pane's two import paths. An author imports a *file* — the
-        extension is what decides whether it becomes a layer or is only
-        declared — and the second control forces the file into background
-        media instead of the kind's automatic placement. */
-    importFile: "Import a file",
-    /** The import that skips the kind's automatic placement: an image would
-        otherwise land on the canvas, and the author wanted it as the board's
-        background. */
-    importAsBackground: "Import as background",
+    /** The Assets pane's one import path. An author imports a *file* — the
+        extension decides whether it becomes a layer, a face, a video or a
+        package. */
+    importFile: "Import file",
+    /** Asked after a picture is declared: both destinations are one press, and
+        the kind alone does not say which one the author wants. */
+    placeImage: {
+      title: "Add image",
+      close: "Close",
+      place: "Place on canvas",
+      background: "Background",
+    },
     /** Replace file… accepts only the two kinds a placed object can carry. */
     replaceUnsupported: "Only an image or SVG can replace a placed picture.",
     /** The Assets pane's cards. `kind` is the metadata line's word, a total map
@@ -2209,6 +2254,7 @@ export const uiCopy = {
       replace: "Replace",
       remove: "Remove",
       createTypeToken: "Create type token",
+      size: fileSize,
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */
@@ -2227,12 +2273,9 @@ export const uiCopy = {
     /** Shown when an import declared the file and put it on the canvas. */
     assetPlaced: "Imported and placed on the canvas.",
     /** Shown when an import declared the file and wrote it as the artboard's
-        background media — the automatic choice for a video, and the forced one
-        for Import as background. */
+        background media — the automatic choice for a video, and the modal's
+        background answer for a picture. */
     assetBackgroundSet: "Imported and set as the background.",
-    /** Shown when Import as background is given a font: a face has no
-        background form, and the file is not declared either. */
-    assetBackgroundFontRefused: "A font cannot be set as the background.",
     assetDeclaredFont:
       "Imported and declared. A font is not placed on the canvas.",
     /** Shown when the kind's automatic placement had no callback to run — a

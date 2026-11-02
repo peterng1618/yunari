@@ -3,6 +3,7 @@ import {
   destructiveMarker,
   hasSelection,
   OBJECT_ACTIONS,
+  type ObjectTarget,
   objectActionsFor,
 } from "../object-actions.js";
 import type { EditorShellBridge } from "./bridge.js";
@@ -46,13 +47,24 @@ export function LayerActions({
     bridge === undefined || !selected
       ? OBJECT_ACTIONS
       : objectActionsFor(bridge);
+  // The no-selection row greys the commands that need a subject. Paste's
+  // subject is the clipboard, so it stays live: the registry's own rule answers
+  // this rather than the footer hard-coding an id.
+  const noSubject: ObjectTarget = {
+    kind: "none",
+    locked: false,
+    memberCount: 0,
+    isGroup: false,
+  };
   return (
     <footer className="editor-shell-pane-actions" data-yunari-layer-actions="">
       {actions.map((action) => (
         <ControlIconButton
           key={action.id}
           label={action.label}
-          disabled={!selected}
+          disabled={
+            bridge === undefined || (!selected && !action.eligible(noSubject))
+          }
           // The mark is the whole mechanism: `destructiveMarker` carries the
           // registry's flag to every surface, and the one
           // `[data-yunari-destructive]` rule in the shell paints it `--hot`.

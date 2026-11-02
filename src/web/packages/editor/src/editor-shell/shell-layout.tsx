@@ -24,6 +24,8 @@ import {
   type ShortcutOverrides,
   setActiveShortcuts,
 } from "../shortcut-manager/bindings.js";
+import { StoreHalves } from "../store-mode/halves.js";
+import type { StoreTab } from "../store-mode/region.js";
 import { StoreModeRegion } from "../store-mode/region.js";
 import { uiCopy } from "../ui-copy.js";
 import type { EditorShellBridge } from "./bridge.js";
@@ -33,7 +35,14 @@ import { DiagnosticMessage } from "./diagnostic-message.js";
 import { DisplaySwitch } from "./display-switch.js";
 import { DocumentIdentity } from "./document-identity.js";
 import { HostingStore } from "./hosting-store.js";
-import { RAIL_GLYPHS } from "./icons.js";
+import {
+  Glyph,
+  type LucideIcon,
+  OPEN_THEME_GLYPH,
+  PAGE_GLYPH,
+  RAIL_GLYPHS,
+  SETTINGS_GLYPH,
+} from "./icons.js";
 import { LayerActions } from "./layer-panel.js";
 import {
   applyShellPalette,
@@ -102,12 +111,20 @@ const MODE_NAMES: Record<ShellMode, string> = {
 };
 
 /** The order the header draws them in, which is a separate decision from what
- *  each is called. */
+ *  each is called. The store leads because it is the surface a session starts
+ *  from; the editor is where a theme is made, and Settings stays last. */
 const MODE_ORDER = [
-  "editor",
   "themes",
+  "editor",
   "settings",
 ] as const satisfies readonly ShellMode[];
+
+/** One glyph per mode, in the header's own icon vocabulary. */
+const MODE_GLYPHS: Record<ShellMode, LucideIcon> = {
+  editor: PAGE_GLYPH,
+  themes: OPEN_THEME_GLYPH,
+  settings: SETTINGS_GLYPH,
+};
 
 /** The switch's id, and the stem of each segment's. The control-id rule wants every
  *  control to carry an id; the segment's is derived from the mode the way
@@ -149,6 +166,7 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
           value={mode}
           className={hitTargetClasses}
         >
+          <Glyph icon={MODE_GLYPHS[mode]} size={14} />
           {MODE_NAMES[mode]}
         </Toggle>
       ))}
@@ -329,6 +347,9 @@ export function createShellLayout(
      *  serialized. The gear keeps the last page; a surface that asks for one
      *  (the finder's needs-key path) sets it before switching. */
     const [settingsPage, setSettingsPage] = useState<SettingsPage>("displays");
+    /** The store's half is a mode-level choice now that its control is in the
+     *  header, so it lives beside the mode rather than inside the region. */
+    const [storeTab, setStoreTab] = useState<StoreTab>("local");
     /** The author's bindings, held here because the effective table lives
      *  outside React. Initialized from storage — the same read
      *  `createShellLayout` made for the live table — and moved from there by
@@ -359,8 +380,7 @@ export function createShellLayout(
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, tokenCount, assetCount } =
-      useSelection(store);
+    const { releaseVersion, objectCount, assetCount } = useSelection(store);
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -496,6 +516,9 @@ export function createShellLayout(
               the rail rule forbids a second horizontal bar, and two stacked rows of
               navigation make the first read as chrome rather than a choice. */}
           <ModeSwitch mode={mode} onModeChange={onModeChange} />
+          {mode === "themes" && (
+            <StoreHalves tab={storeTab} onTab={setStoreTab} />
+          )}
           {/* the header rule: the right-hand region is **per-mode**. The menus and the
               publish chord are the editor's own actions — they act on the open
               document, and neither of the other two modes has one — so a mode
@@ -509,7 +532,11 @@ export function createShellLayout(
                 getView={getView}
                 onFindAssets={() => finder.set(true)}
               />
-              <PublishControl hosting={hosting} surface={publishSurface} />
+              <PublishControl
+                hosting={hosting}
+                surface={publishSurface}
+                session={store.bridge?.session}
+              />
             </>
           )}
         </header>
@@ -560,8 +587,9 @@ export function createShellLayout(
                   `insertGroups()`'s objects: the pane's insert grid adds
                   primitives and a text object to the library, and the Add pane's
                   title bar counts the library.
-                - Tokens — the theme's paints, through the bridge's
-                  `tokenCount`, whose membership rule `PaintList` shares.
+                - Tokens — nothing, because its body is two libraries with
+                  their own headings; each heading carries its own count
+                  beside it rather than one total over both.
                 - Document — nothing. Its body is two sections of fields and it
                   holds no list of its own, so it draws no count rather than a
                   fabricated `0` (the same rule the two counts above take before
@@ -620,11 +648,6 @@ export function createShellLayout(
               id="tokens"
               title={uiCopy.rail.slots.tokens}
               icon={RAIL_GLYPHS.tokens}
-              count={
-                tokenCount === undefined
-                  ? undefined
-                  : uiCopy.paneCounts.tokens(tokenCount)
-              }
               hidden={slot !== "tokens"}
               bodyRef={paneBody}
             >
@@ -741,6 +764,8 @@ export function createShellLayout(
                 and a cancelled open leaves the author in the store. */}
             <StoreModeRegion
               mode={mode}
+              tab={storeTab}
+              onTab={setStoreTab}
               onStatus={setStoreStatus}
               onOpenTheme={(id) => {
                 void store.bridge?.session.openLibraryTheme(id, () =>

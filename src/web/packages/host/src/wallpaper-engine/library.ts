@@ -22,6 +22,9 @@ export interface LibraryItem {
   readonly type: "scene" | "video" | "web";
   readonly preview: string | undefined;
   readonly filesize: number;
+  /** When the item's directory last changed on disk — a subscribe or a Steam
+   *  update. Absent when the directory cannot be statted, never zero. */
+  readonly updatedAt?: number;
   readonly tags: readonly string[];
   readonly authorSteamId: string | undefined;
   readonly workshopUrl: string | undefined;
@@ -68,6 +71,16 @@ async function sizeOf(file: string): Promise<number> {
     return (await fs.stat(file)).size;
   } catch {
     return 0;
+  }
+}
+
+/** The directory's own last write: what a Steam subscribe or update touches.
+ *  A miss is absent, not the epoch, which would sort as the oldest item. */
+async function updatedAtOf(directory: string): Promise<number | undefined> {
+  try {
+    return (await fs.stat(directory)).mtimeMs;
+  } catch {
+    return undefined;
   }
 }
 
@@ -162,6 +175,7 @@ async function readItem(
     type === "scene" && (await isFile(packagePath)) ? packagePath : named;
   const row = cache.get(workshopId);
   const preview = stringOf(project.preview);
+  const updatedAt = await updatedAtOf(directory);
   const tags = Array.isArray(row?.tags)
     ? row.tags.filter((tag): tag is string => typeof tag === "string")
     : [];
@@ -175,6 +189,7 @@ async function readItem(
     preview:
       preview === undefined ? undefined : path.resolve(directory, preview),
     filesize: numberOf(row?.filesize) ?? (await sizeOf(payload)),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
     tags,
     authorSteamId: idOf(row?.authorsteamid),
     workshopUrl: stringOf(row?.workshopurl),

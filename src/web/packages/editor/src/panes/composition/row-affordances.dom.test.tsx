@@ -397,15 +397,18 @@ it("draws the registry's commands disabled with nothing selected, and its filter
   for (const { what, target } of cases) {
     const { host, labels, disabled, offered, run } = await renderFooter(target);
     const nothing = target.kind === "none";
-    const expected = (nothing ? OBJECT_ACTIONS : offered).map(
-      (action) => action.label,
-    );
+    const shown = nothing ? OBJECT_ACTIONS : offered;
+    const expected = shown.map((action) => action.label);
     expect(labels, what).toEqual(expected);
-    expect(disabled, what).toEqual(expected.map(() => nothing));
+    // Paste's subject is the clipboard, so an empty canvas leaves it live; every
+    // command that needs a selection stays disabled.
+    expect(disabled, what).toEqual(
+      shown.map((action) => nothing && action.id !== "paste"),
+    );
     // The press carries the registry's own id, so the footer is rendering the
     // registry's entries rather than a list of its own that happens to match —
     // and a disabled control carries nothing at all.
-    const first = (nothing ? OBJECT_ACTIONS : offered)[0];
+    const first = shown[0];
     if (first !== undefined) {
       await act(async () =>
         host.querySelector<HTMLButtonElement>("button")?.click(),
@@ -418,8 +421,8 @@ it("draws the registry's commands disabled with nothing selected, and its filter
   // The absences the filter buys once there is a subject, said outright: a locked
   // object is offered no Delete and no Lock, and it is offered Unlock. The
   // no-selection row is the one that does not filter, and the disabled flags
-  // above are what say so — rendering the registry and leaving it *enabled*
-  // would put a control on the footer that the selection cannot run.
+  // above are what say so for every command whose subject is the selection —
+  // Paste is the one whose subject is the clipboard.
   const locked = await renderFooter({
     kind: "object",
     locked: true,

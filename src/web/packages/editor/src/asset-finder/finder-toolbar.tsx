@@ -10,6 +10,7 @@ import { FinderChip, FinderSegmented } from "./finder-controls.js";
 import type { KindFilter } from "./finder-model.js";
 import type { FontFilterState } from "./fonts.js";
 import { FontsFilter } from "./fonts.js";
+import type { WallpaperDirection, WallpaperSort } from "./use-wallpaper-tab.js";
 
 /** The tab's own filter row: font kind and sort, the Wallpaper Engine kind, or
  *  the Colours presets. */
@@ -20,6 +21,10 @@ export function FinderFilters(props: {
   readonly onFontFilterChange: (next: FontFilterState) => void;
   readonly localKind: "all" | "video" | "scene";
   readonly onLocalKindChange: (kind: "all" | "video" | "scene") => void;
+  readonly localSort: WallpaperSort;
+  readonly onLocalSortChange: (sort: WallpaperSort) => void;
+  readonly localDirection: WallpaperDirection;
+  readonly onLocalDirectionChange: (direction: WallpaperDirection) => void;
   readonly kinds: readonly PresetKind[];
   readonly presetFilter: KindFilter;
   readonly onPresetFilterChange: (kind: KindFilter) => void;
@@ -33,20 +38,42 @@ export function FinderFilters(props: {
     );
   }
   if (props.local) {
+    const copy = uiCopy.assets.wallpaperEngine;
     return (
-      <FinderSegmented
-        label={uiCopy.assets.wallpaperEngine.filterKind}
-        value={props.localKind}
-        options={(["all", "video", "scene"] as const).map((kind) => ({
-          id: kind,
-          label:
-            kind === "all"
-              ? uiCopy.assets.wallpaperEngine.filterAll
-              : uiCopy.assets.wallpaperEngine.kind[kind],
-          data: { "data-yunari-wallpaper-engine-kind-filter": kind },
-        }))}
-        onChange={props.onLocalKindChange}
-      />
+      <div className="flex flex-wrap items-center gap-[var(--space-8)]">
+        <FinderSegmented
+          label={copy.filterKind}
+          value={props.localKind}
+          options={(["all", "video", "scene"] as const).map((kind) => ({
+            id: kind,
+            label: kind === "all" ? copy.filterAll : copy.kind[kind],
+            data: { "data-yunari-wallpaper-engine-kind-filter": kind },
+          }))}
+          onChange={props.onLocalKindChange}
+        />
+        <FinderSegmented
+          label={copy.sortLabel}
+          value={props.localSort}
+          options={(["name", "updated", "size"] as const).map((sort) => ({
+            id: sort,
+            label: copy.sort[sort],
+            data: { "data-yunari-wallpaper-engine-sort": sort },
+          }))}
+          onChange={props.onLocalSortChange}
+        />
+        <FinderSegmented
+          label={copy.directionLabel}
+          value={props.localDirection}
+          options={(["asc", "desc"] as const).map((direction) => ({
+            id: direction,
+            label: copy.direction[direction],
+            data: {
+              "data-yunari-wallpaper-engine-direction": direction,
+            },
+          }))}
+          onChange={props.onLocalDirectionChange}
+        />
+      </div>
     );
   }
   if (props.active === "colour" && props.kinds.length > 1) {

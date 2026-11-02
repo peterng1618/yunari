@@ -2,10 +2,14 @@ import { Menu } from "@base-ui/react/menu";
 import {
   type ReactNode,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
-import { ControlIconButton } from "../components/ui/control-icon-button.js";
+import {
+  ControlIconButton,
+  useControlTooltip,
+} from "../components/ui/control-icon-button.js";
 import {
   activeShortcuts,
   subscribeShortcuts,
@@ -20,12 +24,14 @@ import {
   ACTIVATE_THEME_GLYPH,
   CHECK_GLYPH,
   EXPORT_THEME_GLYPH,
+  FILE_MENU_GLYPH,
   Glyph,
   IMPORT_THEME_GLYPH,
   type LucideIcon,
   OPEN_THEME_GLYPH,
   SAVE_THEME_AS_GLYPH,
   SAVE_THEME_GLYPH,
+  VIEW_MENU_GLYPH,
 } from "./icons.js";
 import type {
   EditorActionFacade,
@@ -35,14 +41,26 @@ import { type SelectionStore, useSelection } from "./shell-stores.js";
 
 function MenuGroup({
   label,
+  icon,
   children,
 }: {
   readonly label: string;
+  readonly icon: LucideIcon;
   readonly children: ReactNode;
 }): React.JSX.Element {
+  const ref = useRef<HTMLButtonElement>(null);
+  // The glyph is the whole visible control, so the tooltip and the accessible
+  // name are the menu's one word, mounted through the control set's one owner.
+  useControlTooltip(ref, label);
   return (
     <Menu.Root>
-      <Menu.Trigger>{label}</Menu.Trigger>
+      <Menu.Trigger
+        ref={ref}
+        aria-label={label}
+        className="editor-shell-menubar-icon"
+      >
+        <Glyph icon={icon} size={15} />
+      </Menu.Trigger>
       <Menu.Portal>
         {/* Base UI centres a positioned popup on its trigger by default, which
             floats the menu over the middle of its own label; a menu belongs at
@@ -258,7 +276,7 @@ export function ShellMenuBar({
   return (
     <>
       <nav className="editor-shell-menubar" aria-label={uiCopy.menus.label}>
-        <MenuGroup label={uiCopy.menus.file}>
+        <MenuGroup label={uiCopy.menus.file} icon={FILE_MENU_GLYPH}>
           {/* A File row prints a chord where the row and its
               `PRODUCT_SHORTCUTS` id run the same call — `item`'s fourth
               argument. `newFromTemplate` and `openRecent` carry none because
@@ -286,7 +304,7 @@ export function ShellMenuBar({
               and no selection command. */}
           {item(uiCopy.file.exportWidget, () => session?.exportWidget())}
         </MenuGroup>
-        <MenuGroup label={uiCopy.menus.view}>
+        <MenuGroup label={uiCopy.menus.view} icon={VIEW_MENU_GLYPH}>
           <ViewSetting
             label={uiCopy.view.dataSource}
             value={source}

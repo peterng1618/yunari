@@ -1,8 +1,9 @@
 import { Checkbox } from "@base-ui/react/checkbox";
 import { Popover } from "@base-ui/react/popover";
 import type * as React from "react";
+import { useState } from "react";
 import { optionRuns } from "../components/ui/control-select.js";
-import { wellClasses } from "../components/ui/control-well.js";
+import { ControlWell, wellClasses } from "../components/ui/control-well.js";
 import { CHECK_GLYPH, Glyph } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import type { FacetSelection } from "./local-source.js";
@@ -24,11 +25,20 @@ export interface FacetOption {
 }
 
 /** One facet of the row: its own name, the sentence its popover says above the
- *  options where the surface draws one, and the values it offers. */
+ *  options where the surface draws one, and the values it offers.
+ *
+ *  **`searchable` is the four value facets** — Author, Sensors, Shape and Style.
+ *  Colour mode carries at most two values, and a search field over two choices
+ *  is a field that can only hide one of them.
+ *
+ *  **`empty` is the facet's own sentence for a listing that offers it no
+ *  values**, where silence would look like a control that failed to load. */
 export interface Facet {
   readonly id: string;
   readonly name: string;
   readonly hint?: string;
+  readonly searchable?: boolean;
+  readonly empty?: string;
   readonly options: readonly FacetOption[];
 }
 
@@ -97,9 +107,30 @@ function FacetButton(props: {
 }): React.JSX.Element {
   const { facet, chosen, onToggle } = props;
   const count = chosen.length;
+  const [query, setQuery] = useState("");
+  const wanted = query.trim().toLowerCase();
+  // **A chosen value stays reachable under any query.** A search that hid the
+  // value a person already chose would leave it filtering the list with no way
+  // to see or clear it from the popover it was chosen in.
+  const visible = facet.options.filter(
+    (option) =>
+      wanted === "" ||
+      chosen.includes(option.id) ||
+      option.name.toLowerCase().includes(wanted),
+  );
+  const empty =
+    facet.options.length === 0
+      ? (facet.empty ?? uiCopy.store.facets.empty)
+      : uiCopy.store.facets.noSearchMatches;
 
   return (
-    <Popover.Root>
+    <Popover.Root
+      onOpenChange={(open) => {
+        // The query belongs to one opening: reopening the popover is a fresh
+        // look at the values, not the last search still narrowing them.
+        if (!open) setQuery("");
+      }}
+    >
       {/* The trigger is the well the control set already draws, with the
           chevron `ControlSelect` puts in its own: one idiom for "opens a list".
           The open state raises the resting `--edge` to `--muted`, which is the control set
@@ -144,6 +175,23 @@ function FacetButton(props: {
                 {facet.hint}
               </p>
             )}
+            {/* The four value facets carry their own search. It narrows by the
+                option's name and by nothing else: a query that reached a
+                count or an id would hide values by facts the popover does not
+                print. */}
+            {facet.searchable === true ? (
+              <ControlWell widthClassName="w-full flex-none">
+                <input
+                  type="search"
+                  data-yunari-facet-search={facet.id}
+                  aria-label={uiCopy.store.facets.search}
+                  placeholder={uiCopy.store.facets.searchPlaceholder}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="h-full w-full bg-transparent text-sm text-text outline-none"
+                />
+              </ControlWell>
+            ) : null}
             {/* **The groups are drawn, not flattened**: each run of values
                 sharing a group takes the eyebrow as its
                 heading, and a value filed under nothing — a sensor whose key
@@ -156,33 +204,46 @@ function FacetButton(props: {
                 the groups landed, which is where their spacing came from; two
                 branches each carrying their own would disagree the moment one
                 of them changed — as they did, drawing an ungrouped facet's rows
-                flush against a grouped one's 4px. */}
-            {optionRuns(facet.options).map((run) => (
-              <span
-                key={run.group ?? "ungrouped"}
-                {...(run.group === undefined
-                  ? {}
-                  : {
-                      role: "group" as const,
-                      "aria-label": run.group,
-                      "data-yunari-facet-group": run.group,
-                    })}
-                className={RUN_CLASSES}
+                flush against a grouped one's 4px.
+
+                **A search filters the runs, it does not flatten them**: the
+                groups that remain keep their headings, so a narrowed Shape
+                still says its values are ANDed. */}
+            {visible.length === 0 ? (
+              <p
+                data-yunari-facet-empty=""
+                className="px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted"
               >
-                {run.group === undefined ? null : (
-                  <span className={RUN_HEADING_CLASSES}>{run.group}</span>
-                )}
-                {run.options.map((option) => (
-                  <FacetOptionRow
-                    key={option.id}
-                    facet={facet}
-                    option={option}
-                    checked={chosen.includes(option.id)}
-                    onToggle={() => onToggle(option.id)}
-                  />
-                ))}
-              </span>
-            ))}
+                {empty}
+              </p>
+            ) : (
+              optionRuns(visible).map((run) => (
+                <span
+                  key={run.group ?? "ungrouped"}
+                  {...(run.group === undefined
+                    ? {}
+                    : {
+                        role: "group" as const,
+                        "aria-label": run.group,
+                        "data-yunari-facet-group": run.group,
+                      })}
+                  className={RUN_CLASSES}
+                >
+                  {run.group === undefined ? null : (
+                    <span className={RUN_HEADING_CLASSES}>{run.group}</span>
+                  )}
+                  {run.options.map((option) => (
+                    <FacetOptionRow
+                      key={option.id}
+                      facet={facet}
+                      option={option}
+                      checked={chosen.includes(option.id)}
+                      onToggle={() => onToggle(option.id)}
+                    />
+                  ))}
+                </span>
+              ))
+            )}
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

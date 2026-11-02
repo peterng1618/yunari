@@ -93,8 +93,8 @@ it("words the local origin badge the way the surface does", () => {
  * A case asserting the key would stay green through the value changing again.
  */
 it("names the store's two halves the way the surfaces label the tabs", () => {
-  expect(uiCopy.store.halves.local).toBe("Your themes");
-  expect(uiCopy.store.halves.online).toBe("Store");
+  expect(uiCopy.store.halves.local).toBe("Local library");
+  expect(uiCopy.store.halves.online).toBe("Online store");
 });
 
 it("names the dashboard theme kind the way the surfaces badge it", () => {
@@ -173,7 +173,7 @@ it("tells an install's no-package, refusal, stale-listing and success cases apar
  * green if two were rewritten into one.
  */
 it("pins the submission's sentences as literals", () => {
-  expect(uiCopy.store.submit.label).toBe("Submit to the store");
+  expect(uiCopy.store.submit.label).toBe("Publish to theme store");
   expect(uiCopy.store.submit.busy).toBe("Submitting…");
   expect(uiCopy.store.submit.authorising).toBe("Waiting for you to sign in…");
   expect(uiCopy.store.submit.submitted("pending")).toBe(

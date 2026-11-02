@@ -93,7 +93,8 @@ it("draws the registry's commands disabled with nothing selected, never an empty
   // them disabled — not the Add pane's constructions (`vg-460`'s answer, which
   // was never asked for), and not an empty row. Emptying this footer again, or
   // putting the constructions back, reddens here: the labels are the registry's
-  // own list and every one of them is disabled.
+  // own list and every one that needs a subject is disabled. Paste's subject is
+  // the clipboard, so it alone stays live on an empty canvas.
   const empty = render(bridge(nothing()));
   const emptyButtons = [
     ...(empty.host
@@ -104,7 +105,7 @@ it("draws the registry's commands disabled with nothing selected, never an empty
     emptyButtons.map((button) => button.getAttribute("aria-label")),
   ).toEqual(OBJECT_ACTIONS.map((action) => action.label));
   expect(emptyButtons.map((button) => button.disabled)).toEqual(
-    OBJECT_ACTIONS.map(() => true),
+    OBJECT_ACTIONS.map((action) => action.id !== "paste"),
   );
 
   // One unlocked object: the registry's own filter answers, and what it keeps is

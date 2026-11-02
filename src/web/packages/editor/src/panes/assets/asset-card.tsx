@@ -26,6 +26,9 @@ export interface AssetCardProps {
    *  it holds, where a single file is titled by its own name and metadata. */
   readonly label?: string;
   readonly detail?: string;
+  /** A picture's or a video's declared size, appended to the metadata line.
+   *  Absent when the bytes have not arrived, which is a miss and not `0`. */
+  readonly sizeBytes?: number;
   readonly onChoose: () => void;
   readonly actions?: React.ReactNode;
 }
@@ -37,9 +40,15 @@ export function AssetCard({
   previewUrl,
   label,
   detail,
+  sizeBytes,
   onChoose,
   actions,
 }: AssetCardProps): React.JSX.Element {
+  const metadata = detail ?? metadataOf(asset);
+  const line =
+    sizeBytes === undefined || asset.kind === "font"
+      ? metadata
+      : `${metadata} · ${uiCopy.panels.assetCard.size(sizeBytes)}`;
   return (
     <div
       data-yunari-asset-card={asset.id}
@@ -57,13 +66,22 @@ export function AssetCard({
         <AssetMark
           kind={asset.kind}
           {...(previewUrl === undefined ? {} : { previewUrl })}
+          {...("family" in asset
+            ? {
+                face: {
+                  family: asset.family,
+                  weight: asset.weight,
+                  style: asset.style,
+                },
+              }
+            : {})}
         />
         <span className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)]">
           <span className="truncate text-xs text-text">
             {label ?? assetFileName(asset)}
           </span>
           <span className="truncate font-mono text-[10px] text-muted">
-            {detail ?? metadataOf(asset)}
+            {line}
           </span>
         </span>
         <span
@@ -86,17 +104,37 @@ export function AssetCard({
   );
 }
 
-/** The mark a declared file wears: the manager's own preview for a picture,
- *  `Aa` for a face, and the play mark for a video, which no declared preview
- *  can show. Shared with the save cleanup sheet so the same file wears the same
- *  mark wherever it is listed. */
+/** The mark a declared file wears: the manager's own preview for a picture or
+ *  a video, `Aa` drawn in the face itself for a font, and each kind's glyph
+ *  where no preview can be drawn. Shared with the save cleanup sheet so the
+ *  same file wears the same mark wherever it is listed. */
 export function AssetMark({
   kind,
   previewUrl,
+  face,
 }: {
   readonly kind: LocalAssetReference["kind"];
   readonly previewUrl?: string;
+  /** The declared face, so the specimen is the font and not a stand-in. */
+  readonly face?: {
+    readonly family: string;
+    readonly weight: string | number;
+    readonly style: string;
+  };
 }): React.JSX.Element {
+  if (previewUrl !== undefined && kind === "video") {
+    return (
+      <video
+        src={previewUrl}
+        muted
+        playsInline
+        preload="metadata"
+        aria-hidden="true"
+        data-yunari-asset-preview=""
+        className="size-[var(--asset-thumbnail-size)] flex-none rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 object-cover"
+      />
+    );
+  }
   if (previewUrl !== undefined && (kind === "image" || kind === "svg")) {
     return (
       <img
@@ -110,7 +148,17 @@ export function AssetMark({
   return (
     <span
       aria-hidden="true"
+      data-yunari-asset-mark={kind}
       className="flex size-[var(--asset-thumbnail-size)] flex-none items-center justify-center rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 text-base text-text"
+      {...(face === undefined
+        ? {}
+        : {
+            style: {
+              fontFamily: face.family,
+              fontWeight: face.weight,
+              fontStyle: face.style,
+            },
+          })}
     >
       {kind === "font" ? "Aa" : null}
       {kind === "video" ? <Glyph icon={VIDEO_GLYPH} size={13} /> : null}

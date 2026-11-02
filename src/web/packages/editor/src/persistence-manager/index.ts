@@ -16,7 +16,9 @@ import {
 
 export type Downloader = (name: string, bytes: Uint8Array) => void;
 
-function defaultDownloader(name: string, bytes: Uint8Array): void {
+/** One blob, one anchor, and the URL released before a second click can leak it.
+ *  Exported because the store's export action writes a package the same way. */
+export function downloadBytes(name: string, bytes: Uint8Array): void {
   const blob = new Blob([bytes as unknown as BlobPart], {
     type: "application/octet-stream",
   });
@@ -49,7 +51,7 @@ export class PersistenceManager {
       options?.unsaved === true
         ? undefined
         : documentKey(initial, initialAssets);
-    this.#downloader = options?.downloader ?? defaultDownloader;
+    this.#downloader = options?.downloader ?? downloadBytes;
   }
 
   isDirty(

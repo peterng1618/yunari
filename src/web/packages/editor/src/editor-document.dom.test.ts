@@ -230,6 +230,32 @@ describe("EditorDocument credits", () => {
     expect(document.creditForAsset("asset-missing")).toBeUndefined();
   });
 
+  it("drops a removed asset's credit and leaves the others", async () => {
+    const document = documentWith();
+    const assetA: ThemeCreditsEntry = {
+      ...entry("house", "https://lucide.dev/icons/house"),
+      assetId: "asset-a",
+    };
+    const assetB: ThemeCreditsEntry = { ...assetA, assetId: "asset-b" };
+    const unlinked = entry("star", "https://lucide.dev/icons/star");
+    document.addCredit(assetA);
+    document.addCredit(assetB);
+    document.addCredit(unlinked);
+    const changed = vi.fn();
+    document.subscribeDocumentChange(changed);
+
+    expect(document.removeCreditForAsset("asset-a")).toBe(true);
+
+    expect(document.credits()).toEqual([assetB, unlinked]);
+    // A second removal has nothing left to drop, and does not announce.
+    expect(document.removeCreditForAsset("asset-a")).toBe(false);
+    // The announcement is batched onto a microtask, so the count is read after
+    // that pass rather than inside the removal's own turn.
+    await Promise.resolve();
+    expect(changed).toHaveBeenCalledTimes(1);
+    document.destroy();
+  });
+
   it("refuses the entry past the package's own cap, but not a repeat", () => {
     const document = documentWith();
     const first = entry("icon-0", "https://lucide.dev/icons/icon-0");

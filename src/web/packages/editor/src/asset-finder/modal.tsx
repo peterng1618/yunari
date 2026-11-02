@@ -459,6 +459,10 @@ export function AssetFinder({
             onFontFilterChange={fontTab.setFontFilter}
             localKind={wallpaperTab.local.kind}
             onLocalKindChange={wallpaperTab.setKind}
+            localSort={wallpaperTab.sort}
+            onLocalSortChange={wallpaperTab.setSort}
+            localDirection={wallpaperTab.direction}
+            onLocalDirectionChange={wallpaperTab.setDirection}
             kinds={kinds}
             presetFilter={presetFilter}
             onPresetFilterChange={(kind) => {

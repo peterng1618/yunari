@@ -32,6 +32,7 @@ import {
   DARK_GROUND,
   type FixtureTheme,
   fixtureEntry,
+  fixtureEnvelope,
   LIGHT_GROUND,
 } from "./item-fixture.js";
 import type { CellAction, FacetSelection } from "./local-source.js";
@@ -3876,3 +3877,408 @@ it("publishes no count for a listing that did not arrive", async () => {
     "a failed read published a count",
   ).toBe(true);
 });
+
+/**
+ * **Choosing a colour mode narrows the listing** (#310). The filter's matcher
+ * and the facet's ids are one vocabulary, so a value the popover offers must be
+ * the value `matchesFacets` reads.
+ */
+it("narrows the listing when a colour mode is chosen", async () => {
+  await mountStore([
+    fixtureEntry({ id: "dark-one", name: "A", ground: DARK_GROUND }),
+    fixtureEntry({ id: "light-one", name: "B", ground: LIGHT_GROUND }),
+    fixtureEntry({ id: "dark-two", name: "C", ground: DARK_GROUND }),
+  ]);
+
+  expect(drawnIds()).toEqual(["dark-one", "light-one", "dark-two"]);
+
+  await openFacet("colour-mode", uiCopy.store.facets.colourMode);
+  await clickFacetOption("dark");
+
+  expect(drawnIds()).toEqual(["dark-one", "dark-two"]);
+});
+
+/**
+ * **A colour facet with nothing to offer says why** (#310). A library whose
+ * themes all carry a picture behind the board has no colour mode to read, so
+ * the facet is dead: an empty popover would look like a control that failed to
+ * load, not like a fact about the themes.
+ */
+it("says why the colour facet offers no value when every theme is unclassified", async () => {
+  await mountStore([
+    fixtureEntry({ id: "filmed-one" }),
+    fixtureEntry({ id: "filmed-two" }),
+  ]);
+
+  const colour = await openFacet("colour-mode", uiCopy.store.facets.colourMode);
+
+  expect(colour.runs, "an unclassified library offers a colour value").toEqual(
+    [],
+  );
+  expect(
+    facetPopup("colour-mode").querySelector("[data-yunari-facet-empty]")
+      ?.textContent,
+    "the colour facet draws nothing in place of the values it has none of",
+  ).toBe(uiCopy.store.facets.colourModeEmpty);
+  expect(
+    facetPopup("colour-mode").querySelector(
+      '[data-yunari-facet-search="colour-mode"]',
+    ),
+    "the colour facet offers a search it has no values for",
+  ).toBeNull();
+});
+
+/**
+ * **The four value facets can be searched, and Colour mode cannot** (#311): a
+ * search narrows by the option's name, keeps a chosen value reachable even when
+ * the query does not name it, and resets when the popover closes.
+ */
+it("searches a facet's values, keeps the chosen ones and resets on close", async () => {
+  await mountStore([
+    fixtureEntry({
+      id: "one",
+      name: "One",
+      author: "Ada",
+      ground: DARK_GROUND,
+    }),
+    fixtureEntry({
+      id: "two",
+      name: "Two",
+      author: "Bob",
+      ground: DARK_GROUND,
+    }),
+  ]);
+
+  await openFacet("author", uiCopy.store.facets.author);
+  const search = must(
+    facetPopup("author").querySelector<HTMLInputElement>(
+      '[data-yunari-facet-search="author"]',
+    ),
+    "author search",
+  );
+  expect(
+    search.getAttribute("aria-label"),
+    "the facet search has no programmatic name",
+  ).toBe(uiCopy.store.facets.search);
+  expect(visibleFacetNames("author")).toEqual(["Ada", "Bob"]);
+
+  await clickFacetOption("Ada");
+  await typeFacetSearch("author", "BO");
+  expect(
+    visibleFacetNames("author"),
+    "a search dropped a chosen value or matched case-sensitively",
+  ).toEqual(["Ada", "Bob"]);
+
+  await typeFacetSearch("author", "zzz");
+  expect(
+    visibleFacetNames("author"),
+    "a search that matches nothing drops the value that is chosen",
+  ).toEqual(["Ada"]);
+
+  const trigger = must(
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-yunari-facet="author"]',
+    ),
+    "author facet",
+  );
+  await act(async () => trigger.click());
+  await act(async () => trigger.click());
+
+  expect(
+    must(
+      facetPopup("author").querySelector<HTMLInputElement>(
+        '[data-yunari-facet-search="author"]',
+      ),
+      "reopened author search",
+    ).value,
+    "the search kept its query after the popover closed",
+  ).toBe("");
+  expect(visibleFacetNames("author")).toEqual(["Ada", "Bob"]);
+});
+
+/**
+ * **A search keeps the grouping it is filtering** (#311): the Shape popover's
+ * headings are what explains that every group must hold, so a narrowed run
+ * still carries its own heading rather than flattening into one list.
+ */
+it("keeps a facet's group headings while its values are searched", async () => {
+  await mountStore([
+    fixtureEntry({
+      id: "wide",
+      width: 1920,
+      height: 1080,
+      ground: DARK_GROUND,
+    }),
+    fixtureEntry({
+      id: "tall",
+      width: 1080,
+      height: 1920,
+      ground: DARK_GROUND,
+    }),
+  ]);
+
+  await openFacet("shape", uiCopy.store.facets.shape);
+  await typeFacetSearch("shape", "portrait");
+
+  expect(facetRuns("shape")).toEqual([
+    {
+      group: uiCopy.store.facets.shapeGroups.orientation,
+      values: [uiCopy.store.orientations.portrait],
+    },
+  ]);
+});
+
+/**
+ * **Export reads the stored theme and writes its package** (#315). The library
+ * is a folder rather than an archive, so the region opens the theme through the
+ * same client the rest of the surface uses and downloads what the package
+ * serialiser writes.
+ */
+it("exports a theme's package through the library client", async () => {
+  const opened: string[] = [];
+  const client: ThemeLibraryClient = {
+    ...clientListing([fixtureEntry({ id: "porch-strip" })]),
+    open: async (id: string) => {
+      opened.push(id);
+      return {
+        // The package writer validates the document, so the fixture carries the
+        // three type tokens every theme needs.
+        envelope: {
+          ...fixtureEnvelope({ id }),
+          globals: {
+            typeTokens: {
+              heading: { family: "system-ui, sans-serif", weight: "600" },
+              body: { family: "system-ui, sans-serif", weight: "400" },
+              mono: { family: "monospace", weight: "400" },
+            },
+          },
+        },
+        assets: {},
+      };
+    },
+  };
+  const create = vi
+    .spyOn(URL, "createObjectURL")
+    .mockReturnValue("blob:package");
+  const revoke = vi
+    .spyOn(URL, "revokeObjectURL")
+    .mockImplementation(() => undefined);
+  try {
+    await mount(<StoreModeRegion mode="themes" client={client} />);
+    await pressCell("porch-strip", "export");
+    // The export continues after the press resolves, so the package's write
+    // lands on the next microtask rather than inside the click's own turn.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(opened, "the export did not read the theme it names").toEqual([
+      "porch-strip",
+    ]);
+    expect(
+      create,
+      "no package was handed to the download",
+    ).toHaveBeenCalledOnce();
+  } finally {
+    create.mockRestore();
+    revoke.mockRestore();
+  }
+});
+
+/**
+ * **Delete moves the theme to the host's trash and leaves the listing** (#309).
+ * The button is live, the host's own removal route is the one called, and the
+ * item's open surface closes with the item it was reading.
+ */
+it("deletes a theme through the library client and drops it from the listing", async () => {
+  const removed: string[] = [];
+  const entries = [
+    fixtureEntry({
+      id: "living-room",
+      name: "Living room",
+      ground: DARK_GROUND,
+    }),
+    fixtureEntry({
+      id: "porch-strip",
+      name: "Porch strip",
+      ground: DARK_GROUND,
+    }),
+  ];
+  await mountClient({
+    ...clientListing(entries),
+    remove: async (id: string) => {
+      removed.push(id);
+    },
+  });
+
+  const deleteButton = must(
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-yunari-store-cell="porch-strip"] [data-yunari-store-cell-action="delete"]',
+    ),
+    "cell delete",
+  );
+  expect(deleteButton.disabled, "delete is drawn dead").toBe(false);
+
+  await pressCellSurface("porch-strip");
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-yunari-store-item-action="delete"]',
+      ),
+      "item delete",
+    ).click(),
+  );
+  await settle();
+
+  expect(removed, "the host's removal route was not called").toEqual([
+    "porch-strip",
+  ]);
+  expect(drawnIds(), "the deleted theme is still listed").toEqual([
+    "living-room",
+  ]);
+  expect(itemIsOpen(), "the deleted theme's surface stayed open").toBe(false);
+});
+
+/**
+ * **A display choice opened on the theme closes with it** (#309): the choice
+ * reads the same listing, so a theme the host no longer holds must not leave a
+ * picker on screen offering to assign it.
+ */
+it("closes a display choice left open on a deleted theme", async () => {
+  const entries = [
+    fixtureEntry({
+      id: "living-room",
+      name: "Living room",
+      ground: DARK_GROUND,
+    }),
+    fixtureEntry({
+      id: "porch-strip",
+      name: "Porch strip",
+      ground: DARK_GROUND,
+    }),
+  ];
+  await mountClient({
+    ...clientListing(entries),
+    remove: async () => undefined,
+  });
+
+  await openAssign("porch-strip");
+  expect(assignIsOpen(), "the display choice did not open").toBe(true);
+
+  await pressCell("porch-strip", "delete");
+  await settle();
+
+  expect(
+    assignIsOpen(),
+    "a deleted theme's display choice stayed on screen",
+  ).toBe(false);
+});
+
+/**
+ * **A refused removal is words, and the theme stays** (#309): the host's trash
+ * is recoverable, but a trash that refuses is not a deleted theme, so the
+ * listing keeps it and the surface says what the host said.
+ */
+it("states a refused deletion and keeps the theme listed", async () => {
+  const entries = [
+    fixtureEntry({
+      id: "living-room",
+      name: "Living room",
+      ground: DARK_GROUND,
+    }),
+  ];
+  await mountClient({
+    ...clientListing(entries),
+    remove: () => Promise.reject(new Error("The trash is full.")),
+  });
+
+  await pressCell("living-room", "delete");
+  await settle();
+
+  expect(drawnIds(), "a refused deletion dropped the theme").toEqual([
+    "living-room",
+  ]);
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>(
+        "[data-yunari-store-delete-refusal]",
+      ),
+      "refused deletion",
+    ).textContent,
+    "a refused deletion is not stated in the host's words",
+  ).toBe(uiCopy.store.deleteFailed("The trash is full."));
+});
+
+/** The facet popover a case reads, by the facet it belongs to. */
+function facetPopup(facetId: string): HTMLElement {
+  return must(
+    document.body.querySelector<HTMLElement>(
+      `[data-yunari-facet-popup="${facetId}"]`,
+    ),
+    `${facetId} popover`,
+  );
+}
+
+/** The values a facet popover draws, in its own order. */
+function visibleFacetNames(facetId: string): readonly string[] {
+  return Array.from(
+    facetPopup(facetId).querySelectorAll("[data-yunari-facet-option]"),
+  ).map(
+    (row) =>
+      row
+        .querySelector("[data-yunari-facet-option-name]")
+        ?.textContent?.trim() ?? "",
+  );
+}
+
+/** One value's checkbox row, pressed the way a person presses it. */
+async function clickFacetOption(optionId: string): Promise<void> {
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLElement>(
+        `[data-yunari-facet-option="${optionId}"]`,
+      ),
+      `${optionId} option`,
+    ).click(),
+  );
+}
+
+/** A facet's search field, typed into the way React reads a controlled input. */
+async function typeFacetSearch(facetId: string, query: string): Promise<void> {
+  const well = must(
+    facetPopup(facetId).querySelector<HTMLInputElement>(
+      `[data-yunari-facet-search="${facetId}"]`,
+    ),
+    `${facetId} search`,
+  );
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(well, query);
+    well.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The runs a facet popover currently draws, rebuilt from the rows' owners. */
+function facetRuns(facetId: string): readonly {
+  readonly group: string | undefined;
+  readonly values: readonly string[];
+}[] {
+  const runs: { group: string | undefined; values: string[] }[] = [];
+  for (const row of facetPopup(facetId).querySelectorAll<HTMLElement>(
+    "[data-yunari-facet-option]",
+  )) {
+    const owner = row.parentElement?.closest("[data-yunari-facet-group]");
+    const group = owner?.getAttribute("data-yunari-facet-group") ?? undefined;
+    const value =
+      row
+        .querySelector("[data-yunari-facet-option-name]")
+        ?.textContent?.trim() ?? "";
+    const last = runs.at(-1);
+    if (last !== undefined && last.group === group) last.values.push(value);
+    else runs.push({ group, values: [value] });
+  }
+  return runs;
+}

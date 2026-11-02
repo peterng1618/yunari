@@ -363,8 +363,9 @@ export async function importBackground(
   const before =
     (await images.count()) === 0 ? null : await images.getAttribute("src");
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("[data-yunari-asset-import-background]").click();
+  await page.locator("[data-yunari-asset-import]").click();
   await (await chooser).setFiles(file);
+  await page.locator("[data-yunari-place-image-background]").click();
   await expect
     .poll(
       () =>

@@ -558,9 +558,19 @@ async function pickFile(
   });
 }
 
-/** Imports through the control the author presses. */
+/** Imports through the control the author presses, then takes the modal's
+ *  canvas answer. A face, a package and a video open their own surfaces, so
+ *  there is nothing to answer there. */
 async function importFile(host: HTMLElement, chosen: File): Promise<void> {
   await pickFile(host, "[data-yunari-asset-import-input]", chosen);
+  const place = document.querySelector<HTMLButtonElement>(
+    "[data-yunari-place-image-canvas]",
+  );
+  if (place === null) return;
+  await act(async () => {
+    place.click();
+    await drain();
+  });
 }
 
 /** jsdom has no parser; a font's bytes are declared at the form's commit, so a
@@ -589,17 +599,20 @@ async function declareFont(host: HTMLElement): Promise<void> {
   });
 }
 
-/** Imports through *Import as background*. */
-async function importAsBackground(
+/** Imports a picture and answers the modal with the background. */
+async function importToBackground(
   host: HTMLElement,
   chosen: File,
 ): Promise<void> {
-  const control = host.querySelector<HTMLButtonElement>(
-    "[data-yunari-asset-import-background]",
-  );
-  if (control === null) throw new Error("no Import as background control.");
-  await act(async () => control.click());
   await pickFile(host, "[data-yunari-asset-import-input]", chosen);
+  const background = document.querySelector<HTMLButtonElement>(
+    "[data-yunari-place-image-background]",
+  );
+  if (background === null) throw new Error("no Background answer.");
+  await act(async () => {
+    background.click();
+    await drain();
+  });
 }
 
 /** Chooses an asset and swaps its bytes, in that order. */
@@ -693,14 +706,17 @@ describe("the Assets pane's import", () => {
     expect(importSpy).not.toHaveBeenCalled();
   });
 
-  it("disables Import as background where no callback can set one", async () => {
+  it("offers no background answer where no callback can set one", async () => {
     const { host } = await mountWithManager(() => false, [], false);
-    // The same disabled treatment the cards' unwired actions get: a control
-    // that offers a write the pane cannot perform stays off.
-    const control = host.querySelector<HTMLButtonElement>(
-      "[data-yunari-asset-import-background]",
-    )!;
-    expect(control.disabled).toBe(true);
+    // The modal draws the answer only where the pane has a document write;
+    // an unwired background is absent rather than a control that does nothing.
+    await pickFile(host, "[data-yunari-asset-import-input]", IMAGE_FILE);
+    expect(
+      document.querySelector("[data-yunari-place-image-background]"),
+    ).toBeNull();
+    expect(
+      document.querySelector("[data-yunari-place-image-canvas]"),
+    ).not.toBeNull();
   });
 
   it("opens the font details form on a pick and declares nothing yet", async () => {
@@ -857,11 +873,11 @@ describe("the Assets pane's import", () => {
     expect(alert(host).textContent).toBe(uiCopy.panels.assetPlaced);
   });
 
-  it("forces an image into background media with Import as background", async () => {
+  it("sets an imported picture as the background when the modal says so", async () => {
     const { host, manager, placeImage, onBackground } =
       await mountWithManager();
 
-    await importAsBackground(host, IMAGE_FILE);
+    await importToBackground(host, IMAGE_FILE);
 
     expect(manager.declarations.map((asset) => asset.kind)).toEqual(["image"]);
     expect(placeImage).not.toHaveBeenCalled();
@@ -869,20 +885,6 @@ describe("the Assets pane's import", () => {
       expect.objectContaining({ id: "logo", kind: "image" }),
     );
     expect(alert(host).textContent).toBe(uiCopy.panels.assetBackgroundSet);
-  });
-
-  it("refuses Import as background for a font, and declares nothing", async () => {
-    const { host, manager, onBackground } = await mountWithManager();
-
-    await importAsBackground(host, FONT_FILE);
-
-    // Refused before the manager sees it: the library would otherwise collect
-    // a file the author asked not to import.
-    expect(manager.declarations).toEqual([]);
-    expect(onBackground).not.toHaveBeenCalled();
-    expect(alert(host).textContent).toBe(
-      uiCopy.panels.assetBackgroundFontRefused,
-    );
   });
 
   it("keeps a declared-but-unplaced font in the list, because it has no layer", async () => {
@@ -926,6 +928,17 @@ describe("the Assets pane's import", () => {
     // evidence is that the second file never reached the manager.
     expect(manager.declarations.map((asset) => asset.id)).toEqual(["logo"]);
     expect(cardOf(host, "logo.png")).not.toBeNull();
+    // Nothing is placed until the destination is answered, so the first pick
+    // has committed no edit yet.
+    expect(saveState).not.toHaveBeenCalled();
+    const place = document.querySelector<HTMLButtonElement>(
+      "[data-yunari-place-image-canvas]",
+    );
+    if (place === null) throw new Error("no placement answer.");
+    await act(async () => {
+      place.click();
+      await drain();
+    });
     expect(saveState).toHaveBeenCalledTimes(1);
   });
 
@@ -1163,15 +1176,11 @@ describe("the behaviours the Assets pane carried", () => {
     const importButton = host.querySelector<HTMLElement>(
       "[data-yunari-asset-import]",
     )!;
-    const backgroundButton = host.querySelector<HTMLElement>(
-      "[data-yunari-asset-import-background]",
-    )!;
     const replaceButton = host.querySelector<HTMLElement>(
       "[data-yunari-asset-replace]",
     )!;
 
     expect(importButton.textContent).toBe(uiCopy.panels.importFile);
-    expect(backgroundButton.textContent).toBe(uiCopy.panels.importAsBackground);
     // The card's actions are glyph-led, so the name is the accessible one.
     expect(replaceButton.getAttribute("aria-label")).toBe(
       uiCopy.panels.assetCard.replace,
@@ -1193,12 +1202,11 @@ describe("the behaviours the Assets pane carried", () => {
     ];
     await act(async () => {
       importButton.click();
-      backgroundButton.click();
       replaceButton.click();
     });
 
-    // Import and Import as background are one picker with two intents.
-    expect(opened[0]).toHaveBeenCalledTimes(2);
+    // Import is one picker; the destination is asked after the pick.
+    expect(opened[0]).toHaveBeenCalledOnce();
     expect(opened[1]).toHaveBeenCalledOnce();
   });
 });

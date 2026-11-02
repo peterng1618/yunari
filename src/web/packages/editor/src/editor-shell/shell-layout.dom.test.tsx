@@ -87,6 +87,7 @@ function facade(): EditorActionFacade {
     redo: vi.fn(),
     copy: vi.fn(),
     cut: vi.fn(),
+    paste: vi.fn(),
     deleteActive: vi.fn(),
     duplicate: vi.fn(),
     group: vi.fn(),
@@ -251,7 +252,11 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(6);
   // The horizontal bar is gone, not merely hidden.
   expect(root.querySelector(".editor-shell-pane-bar")).toBeNull();
-  expect(root.textContent).toContain("File");
+  expect(
+    root
+      .querySelector(".editor-shell-menubar button")
+      ?.getAttribute("aria-label"),
+  ).toBe(uiCopy.menus.file);
   // The Arrange menu is gone: the arrange toolbar above the canvas already
   // carries all eight actions, and the menu offered two of them with nothing
   // saying the rest existed. Asserting its absence is the point — a test that
@@ -354,19 +359,20 @@ it("prints each pane's own count, and no count where a pane has no list", async 
   );
 
   expect(countOf("layers")).toBe(uiCopy.statusBar.objects(52));
-  expect(countOf("tokens")).toBe(uiCopy.paneCounts.tokens(5));
+  // The Tokens pane prints no title-bar total: its two libraries are separate
+  // lists, and each section heading carries its own count.
+  expect(countOf("tokens")).toBeNull();
   expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
   expect(countOf("document")).toBeNull();
   expect(countOf("assets")).toBeNull();
-  // Three spans, not five: Document and Assets are the two panes that print
-  // none.
-  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(3);
+  // Two spans, not five: Tokens, Document and Assets print none.
+  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(2);
 
   // The session's own reading of the manager moves the Assets count, and the
   // bridge snapshot's silence on it never fabricates a zero.
   await act(async () => layout.selection.setAssetCount(4));
   expect(countOf("assets")).toBe(uiCopy.paneCounts.files(4));
-  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(4);
+  expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(3);
   // No document is no assets: the store drops the reading with the bridge.
   layout.setBridge(undefined, undefined);
   expect(countOf("assets")).toBeNull();
@@ -459,11 +465,16 @@ function segment(root: HTMLElement, id: RailSlot): HTMLButtonElement {
   return found;
 }
 
-/** The menubar trigger for a menu, found by the text it carries. */
+/** The menubar trigger for a menu, found by the word it carries as its
+ *  accessible name — the two are glyph controls, so the word is not text. */
 function menubarEntry(root: HTMLElement, label: string): HTMLButtonElement {
   const entry = Array.from(
     root.querySelectorAll<HTMLButtonElement>(".editor-shell-menubar button"),
-  ).find((button) => button.textContent === label);
+  ).find(
+    (button) =>
+      button.getAttribute("aria-label") === label ||
+      button.textContent === label,
+  );
   if (entry === undefined) throw new Error(`No "${label}" menu.`);
   return entry;
 }
@@ -1253,8 +1264,8 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
   // Composition pane's footer toolbar, so the header's two menus are File and
   // View — a third coming back is the duplication this ruling removed.
   expect(
-    [...root.querySelectorAll(".editor-shell-menubar button")].map(
-      (button) => button.textContent,
+    [...root.querySelectorAll(".editor-shell-menubar button")].map((button) =>
+      button.getAttribute("aria-label"),
     ),
   ).toEqual([uiCopy.menus.file, uiCopy.menus.view]);
 
@@ -1580,16 +1591,16 @@ it("offers the three modes and marks the active one", async () => {
   expect(
     modeSegments(root).map((segment) => segment.textContent),
     "the header does not offer the three modes, in order",
-  ).toEqual([uiCopy.modes.editor, uiCopy.modes.themes, uiCopy.modes.settings]);
-  expect(chosen(root)).toEqual(["true", "false", "false"]);
+  ).toEqual([uiCopy.modes.themes, uiCopy.modes.editor, uiCopy.modes.settings]);
+  expect(chosen(root)).toEqual(["false", "true", "false"]);
   // the control-id rule: every control carries an id, the group's and each segment's.
   expect(
     root.querySelector(".editor-shell-mode-switch")?.id,
     "the switch carries no id",
   ).toBe("yunari-shell-modes");
   expect(modeSegments(root).map((segment) => segment.id)).toEqual([
-    "yunari-shell-modes-editor",
     "yunari-shell-modes-themes",
+    "yunari-shell-modes-editor",
     "yunari-shell-modes-settings",
   ]);
   expect(root.querySelector<HTMLElement>(".editor-shell-body")?.hidden).toBe(
@@ -1597,11 +1608,11 @@ it("offers the three modes and marks the active one", async () => {
   );
   expect(root.querySelector("[data-yunari-mode-region]")).toBeNull();
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
 
   expect(chosen(root), "the chosen segment did not move").toEqual([
-    "false",
     "true",
+    "false",
     "false",
   ]);
   expect(
@@ -1615,9 +1626,9 @@ it("offers the three modes and marks the active one", async () => {
     "the themes mode renders no region",
   ).toBe("themes");
 
-  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => modeSegments(root)[1]?.click());
 
-  expect(chosen(root)).toEqual(["true", "false", "false"]);
+  expect(chosen(root)).toEqual(["false", "true", "false"]);
   expect(root.querySelector<HTMLElement>(".editor-shell-body")?.hidden).toBe(
     false,
   );
@@ -1638,15 +1649,15 @@ it("reports only the mode changes the switch actually made", async () => {
     onModeChange: (mode) => seen.push(mode),
   });
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   expect(seen).toEqual(["themes"]);
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   expect(seen, "the segment already showing reported a change").toEqual([
     "themes",
   ]);
 
-  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => modeSegments(root)[1]?.click());
   expect(seen).toEqual(["themes", "editor"]);
 
   layout.destroy();
@@ -1695,7 +1706,7 @@ it("moves the shell only when the open's replacement is accepted", async () => {
 
   const root = document.createElement("div");
   const layout = createShellLayout(root);
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   const openControl = (): HTMLButtonElement | null =>
     root.querySelector<HTMLButtonElement>(
       "[data-yunari-store-cell-action='open']",
@@ -1733,7 +1744,7 @@ it("moves the shell only when the open's replacement is accepted", async () => {
   expect(
     chosen(root),
     "a declined open moved the shell out of the store",
-  ).toEqual(["false", "true", "false"]);
+  ).toEqual(["true", "false", "false"]);
 
   // Accepted: the same click, on a session that reports the answer.
   const accepting = facade();
@@ -1743,8 +1754,8 @@ it("moves the shell only when the open's replacement is accepted", async () => {
   layout.setBridge(bridgeStub({ session: accepting }), viewStub());
   await press();
   expect(chosen(root), "an accepted open left the shell in the store").toEqual([
-    "true",
     "false",
+    "true",
     "false",
   ]);
 
@@ -1833,7 +1844,7 @@ it("draws the editor's own header actions only in editor mode", async () => {
     editorActions,
   );
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   expect(actions(), "themes mode still draws the editor's actions").toEqual({
     menus: 0,
     toolbar: 0,
@@ -1847,7 +1858,7 @@ it("draws the editor's own header actions only in editor mode", async () => {
     publish: false,
   });
 
-  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => modeSegments(root)[1]?.click());
   expect(actions(), "the editor's actions did not come back").toEqual(
     editorActions,
   );
@@ -1910,7 +1921,7 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
   );
   await Promise.resolve();
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   const dialog = openedPrompt();
   expect(dialog.getAttribute("aria-label")).toBe(uiCopy.modes.unsaved);
   expect(dialog.querySelector(".editor-shell-dialog-lead")?.textContent).toBe(
@@ -1919,19 +1930,19 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
 
   await answerPrompt(uiCopy.replaceDocument.cancel);
   expect(chosen(root), "the mode moved while the guard was refusing").toEqual([
-    "true",
     "false",
+    "true",
     "false",
   ]);
   expect(saveLibrary, "a refusal saved the document").not.toHaveBeenCalled();
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   await answerPrompt(uiCopy.replaceDocument.save);
   await act(async () => {});
   expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
   expect(chosen(root), "the guard's save did not move the mode").toEqual([
-    "false",
     "true",
+    "false",
     "false",
   ]);
   expect(
@@ -1944,11 +1955,11 @@ it("asks the editor's own replacement prompt before it leaves a dirty document",
     bridgeStub({ session: { ...facade(), isDirty: () => false } }),
     undefined,
   );
-  await act(async () => modeSegments(root)[0]?.click());
   await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   expect(chosen(root), "a clean document was not switched").toEqual([
-    "false",
     "true",
+    "false",
     "false",
   ]);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -1981,18 +1992,53 @@ it("stays in the editor when the save does not land", async () => {
   );
   await Promise.resolve();
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   await answerPrompt(uiCopy.replaceDocument.save);
   await act(async () => {});
 
   expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
   expect(chosen(root), "the mode moved past a save that did not land").toEqual([
-    "true",
     "false",
+    "true",
     "false",
   ]);
 
   layout.destroy();
+});
+
+/**
+ * **The two halves are a mode-level choice, so they live in the header**
+ * (#304): the shell draws them beside the mode switch and hands the chosen half
+ * to the region, which is what the region's own fallback is for a direct mount.
+ */
+it("puts the store's halves in the header and not in the region", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ themes: [], templates: [] }), {
+          status: 200,
+        }),
+    ),
+  );
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+
+  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => {});
+
+  const header = root.querySelector(".editor-shell-header");
+  expect(
+    header?.querySelector("[data-yunari-store-halves]"),
+    "the header does not hold the store's halves",
+  ).not.toBeNull();
+  expect(
+    root.querySelector("[data-yunari-store-region] [data-yunari-store-halves]"),
+    "the region draws a second half control under the header",
+  ).toBeNull();
+
+  layout.destroy();
+  vi.unstubAllGlobals();
 });
 
 /**
@@ -2042,7 +2088,7 @@ it("shows the Settings mode's own region, and the store's only in Themes", async
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  await act(async () => modeSegments(root)[1]?.click());
+  await act(async () => modeSegments(root)[0]?.click());
   expect(
     root.querySelector("[data-yunari-store-region]"),
     "the Themes mode drew no store region",
@@ -2218,7 +2264,7 @@ it("paints no line from the previous visit when the Settings mode is re-entered"
     uiCopy.hostSettings.status.displays(1),
   );
 
-  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => modeSegments(root)[1]?.click());
 
   // **What is asserted is the moment the strip's live region is created**, and
   // not a later read of the DOM. React commits the mode change and flushes the

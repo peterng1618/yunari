@@ -388,7 +388,9 @@ describe("AssetManager", () => {
     // `logo` is declared and its bytes never arrived, which is what a document
     // opened without its package looks like.
     expect(manager.previewUrl("logo")).toBeUndefined();
-    expect(manager.previewUrl("clip")).toBeUndefined();
+    // A video's declared bytes are as showable as a picture's: the pane draws
+    // it as a thumbnail and the preview modal plays it.
+    expect(manager.previewUrl("clip")).toBe("blob:probe");
     expect(manager.previewUrl("never-declared")).toBeUndefined();
     // Readable, so the miss is a wrong answer rather than a crash.
     expect(manager.previewUrl("logo")).not.toBe("blob:probe");

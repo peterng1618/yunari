@@ -709,6 +709,9 @@ export async function importBackdrop(page: Page, file: string): Promise<void> {
     .locator('[data-yunari-panel="assets"] [data-yunari-asset-import]')
     .click();
   await (await chooser).setFiles(file);
+  // The picture is declared first, then asked where it goes. This helper is
+  // the backdrop's, so it answers the modal's background.
+  await page.locator("[data-yunari-place-image-background]").click();
   // The card lists the asset by the file the author chose. That is the only
   // handle a card carries — the row is a choose button, not a popup select, so
   // it exposes no `data-yunari-option` id. The label is the file's own name,

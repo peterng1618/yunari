@@ -66,6 +66,26 @@ afterEach(() => {
   root = undefined;
   host?.remove();
   host = undefined;
+  // A focus-opened tooltip is portalled to `body`, so unmounting the rail does
+  // not take it with the tree; blur is what the control hears.
+  for (const popup of document.querySelectorAll(".editor-shell-tooltip"))
+    popup.remove();
+});
+
+it("names every slot in a tooltip, Composition and Theme settings included", () => {
+  // The two ends of the rail are the ones a report saw with no label. Focus is
+  // the tooltip's other door and opens without the hover delay, so this proves
+  // the pairing for every slot rather than the gesture that reported it.
+  const host = mount({ slot: "composition" });
+  for (const id of RAIL_SLOTS) {
+    const button = slot(host, id);
+    act(() => button.focus());
+    expect(
+      document.querySelector(".editor-shell-tooltip")?.textContent,
+      id,
+    ).toBe(uiCopy.rail.slots[id]);
+    act(() => button.blur());
+  }
 });
 
 it("has five slots with Assets between Add and Tokens", () => {

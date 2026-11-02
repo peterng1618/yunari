@@ -24,7 +24,7 @@ import type { SubmitControl } from "./use-submit.js";
  * **One modal for every kind.** `kind` is the seam the storefront reads, so what
  * changes with the kind is which pills appear and which actions the foot offers —
  * the online half carries Install, Installed or Update in place of the library's
- * grid, and the library's foot carries Submit to the store above it.
+ * grid, and the library's foot carries Publish to theme store above it.
  */
 
 /** The stage's own reading: the size the theme is drawn at, then the fit verb.

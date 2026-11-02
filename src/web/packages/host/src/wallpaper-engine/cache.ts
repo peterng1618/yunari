@@ -19,7 +19,7 @@ import type { StoredItem } from "./wire.js";
  */
 
 /** Bumped whenever the entry's shape or the scan's meaning changes. */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_FILE = "listing.json";
 const SCENE_PACKAGE = "scene.pkg";
 
@@ -114,6 +114,7 @@ function itemOf(
     type,
     preview,
     filesize,
+    updatedAt,
     tags,
     authorSteamId,
     workshopUrl,
@@ -131,6 +132,8 @@ function itemOf(
     typeof filesize !== "number" ||
     !Number.isFinite(filesize) ||
     filesize < 0 ||
+    (updatedAt !== undefined &&
+      (typeof updatedAt !== "number" || !Number.isFinite(updatedAt))) ||
     !Array.isArray(tags) ||
     !tags.every((tag) => typeof tag === "string") ||
     (authorSteamId !== undefined && typeof authorSteamId !== "string") ||
@@ -152,6 +155,7 @@ function itemOf(
     payload,
     type,
     filesize,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
     tags,
     properties,
     preview,
@@ -169,6 +173,7 @@ function storedOf(value: unknown): StoredItem | undefined {
     kind,
     previewUrl,
     filesize,
+    updatedAt,
     tags,
     properties,
     stillAtRest,
@@ -185,6 +190,8 @@ function storedOf(value: unknown): StoredItem | undefined {
     typeof filesize !== "number" ||
     !Number.isFinite(filesize) ||
     filesize < 0 ||
+    (updatedAt !== undefined &&
+      (typeof updatedAt !== "number" || !Number.isFinite(updatedAt))) ||
     !Array.isArray(tags) ||
     !tags.every((tag) => typeof tag === "string") ||
     (stillAtRest !== undefined && typeof stillAtRest !== "boolean") ||

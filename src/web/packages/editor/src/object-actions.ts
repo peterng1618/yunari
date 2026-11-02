@@ -11,6 +11,7 @@ import {
   ArrowDownToLine,
   ArrowUp,
   ArrowUpToLine,
+  ClipboardPaste,
   Copy,
   CopyPlus,
   Group,
@@ -59,6 +60,7 @@ export type ObjectCommandId =
   | "duplicate"
   | "copy"
   | "cut"
+  | "paste"
   | "delete"
   | "front"
   | "bring-forward"
@@ -221,6 +223,18 @@ export const OBJECT_ACTIONS: readonly ObjectAction[] = [
     shortcut: "edit.cut",
     eligible: hasUnlockedSelection,
     run: (e) => void e.clipboardManager.cut(),
+  },
+  // Paste is the one command that needs no subject: its subject is the
+  // clipboard, and an empty canvas is exactly where a paste is useful. The
+  // always-true rule is stated here rather than in each surface, so the dock,
+  // context menu and footer cannot decide it differently.
+  {
+    id: "paste",
+    label: uiCopy.actions.paste,
+    icon: ClipboardPaste,
+    shortcut: "edit.paste",
+    eligible: () => true,
+    run: (e) => void e.clipboardManager.paste(),
   },
   // No manager refuses on lock for the ordering actions, so they stay on bare
   // hasSelection: narrowing further would advertise a refusal that never happens.

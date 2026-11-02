@@ -464,11 +464,11 @@ export class AssetManager {
   }
 
   /**
-   * A URL for an image or SVG asset, owned by this manager and revoked when it
-   * is destroyed. A declaration with no bytes answers `undefined` rather than
-   * throwing: this is what a caller resolving a scene reference asks, and a
-   * reference it cannot name has to be a miss the caller can handle, not an
-   * exception out of a revival.
+   * A URL for a declared media asset — image, SVG or video — owned by this
+   * manager and revoked when it is destroyed. A declaration with no bytes
+   * answers `undefined` rather than throwing: this is what a caller resolving
+   * a scene reference asks, and a reference it cannot name has to be a miss
+   * the caller can handle, not an exception out of a revival.
    */
   previewUrl(assetId: string): string | undefined {
     const asset = this.#declarations.find(
@@ -509,8 +509,7 @@ export class AssetManager {
     if (bytes === undefined) return undefined;
     const extension = extensionOf(asset.path);
     const type = extension === undefined ? undefined : typeOf(extension);
-    if (type === undefined || type.kind !== asset.kind || type.kind === "video")
-      return undefined;
+    if (type === undefined || type.kind !== asset.kind) return undefined;
     const preview = extension === "svg" ? sanitisedSvg(bytes) : bytes;
     const url = URL.createObjectURL(
       new Blob([preview as unknown as BlobPart], { type: type.mime }),

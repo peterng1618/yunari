@@ -10,6 +10,7 @@ import {
   INSTALL_ITEM_GLYPH,
   type LucideIcon,
   OPEN_ITEM_GLYPH,
+  PUBLISH_ITEM_GLYPH,
 } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 import { CELL_ACTION_REASONS } from "./cell-actions.js";
@@ -17,6 +18,7 @@ import type { InstallControl } from "./install-item.js";
 import { type InstallState, installStateOf } from "./install-state.js";
 import type { CellAction, StoreItem } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
+import type { SubmitControl } from "./use-submit.js";
 
 /**
  * The gallery: the cell, and the grid of them.
@@ -79,6 +81,10 @@ export function Gallery(props: {
   /** The online half's install press, which the region owns because the
    *  re-listing it causes is the listing's fact rather than a cell's. */
   readonly install: InstallControl;
+  /** The local half's publish press, owned by the region for the same reason:
+   *  a landed submission re-lists the library. Absent on a surface with no
+   *  submission flow, which draws the four actions alone. */
+  readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
   return (
     <ul
@@ -92,6 +98,7 @@ export function Gallery(props: {
           onAction={props.onAction}
           onOpenItem={props.onOpenItem}
           install={props.install}
+          submit={props.submit}
         />
       ))}
     </ul>
@@ -116,8 +123,9 @@ function Cell(props: {
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
+  readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
-  const { item, onAction, onOpenItem, install } = props;
+  const { item, onAction, onOpenItem, install, submit } = props;
   const catalogue = item.catalogue;
   // The left slot branches on whether the item has catalogue facts; the action
   // slot on the install decision. They read different facts on purpose: a
@@ -231,41 +239,61 @@ function Cell(props: {
           )}
           <span className="flex-1" />
           {installState === "none" ? (
-            /* **All four are drawn and the two a build does not run are
-               disabled** (R164): the surface gives every cell four, and a
-               control that looks live and answers a press with nothing is the
-               defect the ruling answers. The reason travels beside the button
-               rather than in a tooltip, because a disabled control is one the
-               pointer cannot ask. */
-            CELL_ACTIONS.map((action) => {
-              const reason = CELL_ACTION_REASONS[action];
-              const controlId = cellActionId(item.id, action);
-              return (
-                <Fragment key={action}>
-                  <ControlIconButton
-                    id={controlId}
-                    label={uiCopy.store.cell.actions[action]}
-                    disabled={reason !== undefined}
-                    // `exactOptionalPropertyTypes` wants the prop omitted rather
-                    // than handed `undefined`, and a button with a reason of its
-                    // own must not describe itself by one it does not have.
-                    {...(reason === undefined
-                      ? {}
-                      : { describedById: `${controlId}-reason` })}
-                    destructive={action === "delete"}
-                    data={{ "data-yunari-store-cell-action": action }}
-                    onClick={() => onAction(action, item.id)}
-                  >
-                    <Glyph icon={CELL_ACTION_GLYPHS[action]} size={14} />
-                  </ControlIconButton>
-                  {reason === undefined ? null : (
-                    <span id={`${controlId}-reason`} className="sr-only">
-                      {reason}
-                    </span>
-                  )}
-                </Fragment>
-              );
-            })
+            <>
+              {/* **Only a theme the host holds no store record of can be
+                  published**, and the press belongs to the same submission the
+                  item's own surface runs. It sits beside the four actions
+                  rather than inside `CELL_ACTIONS`, because the union is the
+                  library's four and publishing is the author's own extra. */}
+              {submit !== undefined && item.origin === undefined ? (
+                <ControlIconButton
+                  id={`yunari-store-cell-${item.id}-publish`}
+                  label={uiCopy.store.submit.label}
+                  disabled={
+                    submit.inFlight ||
+                    (submit.itemId === item.id && submit.state === "submitted")
+                  }
+                  aria-busy={
+                    submit.itemId === item.id && submit.inFlight
+                      ? true
+                      : undefined
+                  }
+                  data={{ "data-yunari-store-cell-action": "publish" }}
+                  onClick={() => submit.onSubmit(item)}
+                >
+                  <Glyph icon={PUBLISH_ITEM_GLYPH} size={14} />
+                </ControlIconButton>
+              ) : null}
+              {CELL_ACTIONS.map((action) => {
+                const reason = CELL_ACTION_REASONS[action];
+                const controlId = cellActionId(item.id, action);
+                return (
+                  <Fragment key={action}>
+                    <ControlIconButton
+                      id={controlId}
+                      label={uiCopy.store.cell.actions[action]}
+                      disabled={reason !== undefined}
+                      // `exactOptionalPropertyTypes` wants the prop omitted rather
+                      // than handed `undefined`, and a button with a reason of its
+                      // own must not describe itself by one it does not have.
+                      {...(reason === undefined
+                        ? {}
+                        : { describedById: `${controlId}-reason` })}
+                      destructive={action === "delete"}
+                      data={{ "data-yunari-store-cell-action": action }}
+                      onClick={() => onAction(action, item.id)}
+                    >
+                      <Glyph icon={CELL_ACTION_GLYPHS[action]} size={14} />
+                    </ControlIconButton>
+                    {reason === undefined ? null : (
+                      <span id={`${controlId}-reason`} className="sr-only">
+                        {reason}
+                      </span>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </>
           ) : (
             <InstallAction item={item} state={installState} install={install} />
           )}

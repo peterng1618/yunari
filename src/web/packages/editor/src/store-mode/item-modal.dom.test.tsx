@@ -561,12 +561,11 @@ it("names the item in the panel and writes its actions in the short words", asyn
  * shell's rule paints `--hot`; no box is filled — an accent fill would make one
  * of four the act.
  *
- * **Delete is disabled by R164 today, so the palette paints it `--faint`, not `--hot`.**
- * jsdom computes no colour, so this case reads the mark and the disabled state
- * rather than the paint; `editor-shell.control-rules.test.ts` holds that the
- * shell declines to paint a disabled mark.
+ * **Delete runs**, so the palette paints its mark `--hot` and the box carries no
+ * disabled reason. jsdom computes no colour, so this case reads the mark and the
+ * enabled state rather than the paint.
  */
-it("gives Delete the destructive marker and its R164 reason", async () => {
+it("gives Delete the destructive marker and leaves it live", async () => {
   await mount(modal(LANDSCAPE));
 
   const actions = Array.from(
@@ -612,31 +611,21 @@ it("gives Delete the destructive marker and its R164 reason", async () => {
   );
   expect(
     deleteBox.disabled,
-    "R164 no longer disables Delete, so the shell would paint it --hot",
-  ).toBe(true);
-  const describedBy = deleteBox.getAttribute("aria-describedby") ?? "";
-  expect(describedBy, "Delete no longer states its R164 reason").not.toBe("");
+    "Delete is drawn dead, so the shell would not paint its mark --hot",
+  ).toBe(false);
   expect(
-    must(
-      document.body.querySelector<HTMLElement>(`#${describedBy}`),
-      "Delete's reason",
-    ).textContent,
-    "Delete's reason is not the copy table's",
-  ).toBe(uiCopy.store.cell.unavailable);
+    deleteBox.getAttribute("aria-describedby"),
+    "Delete runs but still describes itself by an unavailable reason",
+  ).toBeNull();
 });
 
 /**
- * **The footer draws the four and only two of them run** (R164).
+ * **The footer draws the four and all four run.**
  *
- * Delete and Export package are drawn because the surface draws them, and no
- * task in this plan and no phase owns either — so
- * they are disabled with their reason rather than answering a press with
- * nothing. Every button is read through `must`, because a case that passed by
- * finding nothing would prove nothing, and the two that run are pressed in the
- * same pass: the disabled pair's silence is then a reading rather than a harness
- * that never fired.
+ * Every button is read through `must`, because a case that passed by finding
+ * nothing would prove nothing, and all four are pressed in the same pass.
  */
-it("runs the footer's two actions and disables the two it has not", async () => {
+it("runs the footer's four actions", async () => {
   const ran: string[] = [];
   await mount(
     <ItemModal
@@ -663,27 +652,12 @@ it("runs the footer's two actions and disables the two it has not", async () => 
     await act(async () => actionButton(action).click());
   }
 
-  expect(
-    ran,
-    "the two actions this build runs did not both report, so the disabled pair's silence would prove nothing",
-  ).toEqual(["assign", "open"]);
-
-  // The pair that does not run: `disabled` is what makes a button unpressable,
-  // read off the control rather than inferred from a click that changed nothing,
-  // and the reason is a node in the tree rather than a tooltip.
-  for (const action of ["delete", "export"] as const) {
-    const button = actionButton(action);
-    expect(button.disabled, `${action} is drawn live`).toBe(true);
-    const describedBy = button.getAttribute("aria-describedby") ?? "";
-    expect(describedBy, `${action} states no reason`).not.toBe("");
-    expect(
-      must(
-        document.body.querySelector<HTMLElement>(`#${describedBy}`),
-        `${action}'s reason`,
-      ).textContent,
-      `${action}'s reason is not the copy table's`,
-    ).toBe(uiCopy.store.cell.unavailable);
-  }
+  expect(ran, "the four actions did not all report").toEqual([
+    "delete",
+    "export",
+    "assign",
+    "open",
+  ]);
 });
 
 /**

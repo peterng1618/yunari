@@ -1,18 +1,35 @@
 // @vitest-environment jsdom
 import type { Binding } from "@yunari/renderer-core";
-import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
+import {
+  objectAssetReference,
+  setObjectAssetReference,
+  YUNARI_ASSET_PROPERTY,
+  YUNARI_TEXT_PROPERTY,
+} from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Canvas,
+  FabricImage,
   type FabricObject,
   Group,
   Rect,
   Textbox,
 } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AssetManager } from "../asset-manager/index.js";
 import { createDeletionManager } from "../deletion-manager/index.js";
 import { createErrorManager } from "../error-manager/index.js";
+import { createClipboardAssets } from "./asset-port.js";
 import { type ClipboardBindings, createClipboardManager } from "./index.js";
+
+const PNG = new Uint8Array([137, 80, 78, 71]);
+
+function pngFile(name = "photo.png"): File {
+  return Object.assign(new File([PNG], name, { type: "image/png" }), {
+    arrayBuffer: async () =>
+      PNG.buffer.slice(PNG.byteOffset, PNG.byteOffset + PNG.byteLength),
+  });
+}
 
 function setup(bindings?: ClipboardBindings["read"]) {
   const canvas = new Canvas(document.createElement("canvas"));
@@ -31,11 +48,30 @@ function setup(bindings?: ClipboardBindings["read"]) {
   return { canvas, clipboard, save, importImage };
 }
 
+/** One theme's clipboard: its own canvas, its own declarations and bytes. */
+function theme() {
+  const canvas = new Canvas(document.createElement("canvas"));
+  const save = vi.fn();
+  const assets = new AssetManager();
+  const declarationsChanged = vi.fn();
+  const clipboard = createClipboardManager({
+    canvas,
+    save,
+    errors: createErrorManager(canvas),
+    deletion: createDeletionManager(canvas, save),
+    importImage: vi.fn(async () => null),
+    assets: createClipboardAssets(assets, declarationsChanged),
+  });
+  return { canvas, assets, clipboard, save, declarationsChanged };
+}
+
 beforeEach(() => {
+  localStorage.clear();
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn(async () => {}), write: vi.fn(async () => {}) },
   });
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:clipboard-test");
 });
 
 describe("ClipboardManager", () => {
@@ -118,6 +154,126 @@ describe("ClipboardManager", () => {
     expect(new Set(ids).size).toBe(4);
   });
 
+  it("re-declares a referenced file when pasting into another theme", async () => {
+    const source = theme();
+    const declared = await source.assets.import(pngFile());
+    const object = new Rect({
+      id: "photo-object",
+      left: 4,
+      top: 6,
+      width: 10,
+      height: 10,
+    });
+    setObjectAssetReference(object, {
+      assetId: declared.id,
+      kind: "image",
+    });
+    source.canvas.add(object);
+    source.canvas.setActiveObject(object);
+
+    expect(await source.clipboard.copy()).toBe(true);
+
+    // A theme switch builds a new shell and a new manager. The held clone is
+    // gone; the stored payload is what the destination reads. The destination
+    // already declares a file of that name, so the carried bytes must be given
+    // a fresh id rather than reusing the source's.
+    const destination = theme();
+    const existing = await destination.assets.import(pngFile());
+    expect(await destination.clipboard.paste()).toBe(true);
+
+    const pasted = destination.canvas.getObjects()[0]!;
+    const reference = objectAssetReference(pasted);
+    expect(reference).toBeDefined();
+    expect(reference?.assetId).not.toBe(declared.id);
+    expect(reference?.assetId).not.toBe(existing.id);
+    const declaration = destination.assets.declarations.find(
+      (entry) => entry.id === reference?.assetId,
+    );
+    expect(declaration).toBeDefined();
+    // The bytes travelled; the reference names bytes this theme now holds.
+    expect(destination.assets.assets[declaration!.path]).toEqual(PNG);
+    expect(destination.declarationsChanged).toHaveBeenCalledOnce();
+  });
+
+  it("re-points an image to the destination's bytes before enlivening it", async () => {
+    const source = theme();
+    const declared = await source.assets.import(pngFile());
+    const image = new FabricImage(document.createElement("img"), {
+      id: "photo",
+      left: 4,
+      top: 6,
+    });
+    setObjectAssetReference(image, { assetId: declared.id, kind: "image" });
+    source.canvas.add(image);
+    source.canvas.setActiveObject(image);
+    expect(await source.clipboard.copy()).toBe(true);
+
+    const destination = theme();
+    // A destination declaration of the same name makes the fresh allocation
+    // observable: the pasted image must point at its own bytes, not at this one.
+    const existing = await destination.assets.import(pngFile());
+    const seen: Record<string, unknown>[] = [];
+    // Fabric enlivens from the serialized `src` alone. Recording what it is
+    // handed proves the paste rewrote that handle before revival rather than
+    // after the image had already failed to load.
+    const fromObject = vi
+      .spyOn(FabricImage, "fromObject")
+      .mockImplementation(async (serialized: Record<string, unknown>) => {
+        seen.push(serialized);
+        const revived = new FabricImage(document.createElement("img"), {
+          id: serialized["id"] as string,
+          left: serialized["left"] as number,
+          top: serialized["top"] as number,
+        });
+        revived.set(YUNARI_ASSET_PROPERTY, serialized[YUNARI_ASSET_PROPERTY]);
+        return revived;
+      });
+    try {
+      expect(await destination.clipboard.paste()).toBe(true);
+    } finally {
+      fromObject.mockRestore();
+    }
+
+    const reference = objectAssetReference(destination.canvas.getObjects()[0]!);
+    expect(reference?.assetId).not.toBe(declared.id);
+    expect(reference?.assetId).not.toBe(existing.id);
+    expect(seen[0]?.["src"]).toBe("blob:clipboard-test");
+    expect(
+      (seen[0]?.[YUNARI_ASSET_PROPERTY] as { assetId?: string } | undefined)
+        ?.assetId,
+    ).toBe(reference?.assetId);
+  });
+
+  it("refuses a malformed stored clipboard without touching the document", async () => {
+    localStorage.setItem("yunari.editor.clipboard", "{not json");
+    const { canvas, clipboard } = setup();
+
+    expect(await clipboard.paste()).toBe(false);
+    expect(canvas.getObjects()).toEqual([]);
+  });
+
+  it("refuses a stored object whose file the payload does not carry", async () => {
+    localStorage.setItem(
+      "yunari.editor.clipboard",
+      JSON.stringify({
+        version: 1,
+        objects: [
+          {
+            type: "Rect",
+            id: "photo",
+            yunariAsset: { assetId: "missing", kind: "image" },
+          },
+        ],
+        assets: [],
+        bindings: {},
+      }),
+    );
+    const { canvas, clipboard } = setup();
+
+    expect(await clipboard.paste()).toBe(false);
+    expect(canvas.getObjects()).toEqual([]);
+  });
+
   it("fires editor:object-pasted so charts can rehydrate", async () => {
     const { canvas, clipboard } = setup();
     const object = new Rect({ id: "shape", width: 10, height: 10 });
@@ -190,6 +346,27 @@ describe("ClipboardManager", () => {
 
     expect(importImage).toHaveBeenCalledWith({ source: file });
     await canvas.dispose();
+  });
+
+  it("leaves a focused text field's own paste alone", async () => {
+    const { canvas, clipboard } = setup();
+    const object = new Rect({ id: "shape", width: 10, height: 10 });
+    canvas.add(object);
+    canvas.setActiveObject(object);
+    expect(await clipboard.copy()).toBe(true);
+
+    const field = document.createElement("input");
+    document.body.append(field);
+    const event = new Event("paste", { bubbles: true }) as Event & {
+      clipboardData: unknown;
+    };
+    Object.defineProperty(event, "clipboardData", {
+      value: { items: [], getData: () => "" },
+    });
+    field.dispatchEvent(event);
+
+    expect(canvas.getObjects()).toHaveLength(1);
+    field.remove();
   });
 
   it("stops listening for paste after destroy", async () => {

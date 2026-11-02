@@ -17,6 +17,8 @@ export interface WallpaperEngineItem {
   readonly kind: "video" | "scene";
   readonly previewUrl: string | undefined;
   readonly filesize: number;
+  /** The item directory's last write, where the host could read it. */
+  readonly updatedAt?: number;
   readonly tags: readonly string[];
   readonly stillAtRest: boolean | undefined;
   readonly hasText: boolean | undefined;
@@ -140,6 +142,10 @@ function itemOf(value: unknown): WallpaperEngineItem | undefined {
     kind,
     previewUrl: stringAt(record, "previewUrl"),
     filesize,
+    ...(typeof record.updatedAt === "number" &&
+    Number.isFinite(record.updatedAt)
+      ? { updatedAt: record.updatedAt }
+      : {}),
     tags: Array.isArray(tags)
       ? tags.filter((tag): tag is string => typeof tag === "string")
       : [],

@@ -532,6 +532,7 @@ function mountPanels(): { root: HTMLElement } {
         { id: "clip", kind: "video", path: "assets/clip.mp4" },
       ],
       previewUrl: () => "blob:hero",
+      assets: {},
       placeImage: vi.fn(async () => undefined),
       remove: vi.fn(() => false),
       import: vi.fn(async () => ({

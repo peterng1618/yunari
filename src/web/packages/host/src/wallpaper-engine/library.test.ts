@@ -140,6 +140,7 @@ describe("scanning the workshop library", () => {
       type: "scene",
       preview: path.join(library, "101", "preview.jpg"),
       filesize: 1234,
+      updatedAt: expect.any(Number),
       tags: ["Abstract", "Dark"],
       authorSteamId: "76561198000000001",
       workshopUrl: "https://steamcommunity.com/sharedfiles/filedetails/?id=101",

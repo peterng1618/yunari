@@ -68,6 +68,7 @@ function facadeStub(): EditorActionFacade {
     redo: vi.fn(),
     copy: vi.fn(),
     cut: vi.fn(),
+    paste: vi.fn(),
     deleteActive: vi.fn(),
     duplicate: vi.fn(),
     group: vi.fn(),

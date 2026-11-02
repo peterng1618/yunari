@@ -533,9 +533,9 @@ function SubmitFooter(props: {
 }
 
 /** The panel's foot: the author's command and the submission above the library's
- *  2×2 boxes, or the online half's install reading in their place. The two boxes
- *  a build does not run are drawn disabled (R164) with their reason in the tree
- *  beside them: a disabled control is one the pointer cannot ask, so a tooltip
+ *  2×2 boxes, or the online half's install reading in their place. The box a
+ *  build does not run is drawn disabled (R164) with its reason in the tree
+ *  beside it: a disabled control is one the pointer cannot ask, so a tooltip
  *  would reach nobody. */
 export function PanelFoot(props: {
   readonly item: StoreItem;

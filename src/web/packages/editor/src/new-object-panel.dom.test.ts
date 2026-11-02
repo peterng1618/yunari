@@ -478,7 +478,7 @@ describe("new object panel", () => {
 
     for (const selector of [
       "[data-yunari-asset-import]",
-      "[data-yunari-asset-import-background]",
+      "[data-yunari-place-image-modal]",
       "[data-yunari-find-assets]",
       "[data-yunari-asset-select]",
     ]) {

@@ -12,6 +12,7 @@ import type { ImportOutcome } from "./asset-finder/actions.js";
 import type { AssetManager } from "./asset-manager/index.js";
 import { type CanvasNudge } from "./canvas-nudge.js";
 import { ChartManager } from "./chart-manager/index.js";
+import { createClipboardAssets } from "./clipboard-manager/asset-port.js";
 import { EditorDocument } from "./editor-document.js";
 import {
   type ActionFacadeHost,
@@ -508,6 +509,10 @@ export class EditorSession {
       subscribeDocumentChange: (listener) =>
         this.#document.subscribeDocumentChange(listener),
       onChanged: () => this.#declarationsChanged(),
+      // A removed declaration's credit goes with it: the package must not
+      // credit a file the theme no longer holds. The manager's Remove is not
+      // the document's prune, so the document is told here.
+      onRemoved: (assetId) => this.#document.removeCreditForAsset(assetId),
       onFindAssets: () => options.onFindAssets?.(),
       // The preview reads the package's credit for the asset it shows, so an
       // author and a licence the declaration never carries still surface.
@@ -567,6 +572,12 @@ export class EditorSession {
       read: () => this.#document.envelope.bindings ?? {},
       write: (bindings) => this.#document.addBindings(bindings),
     });
+    // A copy that leaves this theme carries the declared bytes it references.
+    // The destination declares them under fresh ids before the paste re-points
+    // the object, so a cross-theme paste never names files the theme lacks.
+    options.shell.editor.clipboardManager.setAssets(
+      createClipboardAssets(this.#assets, () => this.#declarationsChanged()),
+    );
     this.#document.refreshBackgroundMedia();
     // The dispatcher's chords are one owner: every one reaches the control it
     // is printed beside rather than a second implementation of the command.

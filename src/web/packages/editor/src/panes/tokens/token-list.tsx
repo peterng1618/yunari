@@ -55,9 +55,17 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
       data-yunari-type-presets=""
       className="flex flex-col gap-[var(--space-8)]"
     >
-      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.typeTokens}
-      </h2>
+      <div className="flex items-baseline justify-between gap-[var(--space-6)]">
+        <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
+          {uiCopy.panels.typeTokens}
+        </h2>
+        <span
+          data-yunari-type-token-count=""
+          className="flex-none text-2xs text-faint tabular-nums"
+        >
+          {uiCopy.paneCounts.tokens(entries.length)}
+        </span>
+      </div>
       <ul className="flex flex-col gap-[var(--space-4)]">
         {entries.map(({ id, token }) => (
           <li key={id}>

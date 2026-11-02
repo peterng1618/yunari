@@ -59,7 +59,10 @@ import {
 } from "./persistence-manager/index.js";
 import type { SelectionInspector } from "./selection-inspector/index.js";
 import { textToOutlines } from "./text-outlines.js";
-import type { ThemeLibraryClient } from "./theme-library-client.js";
+import {
+  DEFAULT_DISPLAY_KEY,
+  type ThemeLibraryClient,
+} from "./theme-library-client.js";
 import { ThemeLibraryManager } from "./theme-library-manager/index.js";
 import { captureThumbnail } from "./thumbnail-capture.js";
 import {
@@ -384,6 +387,18 @@ export class EditorDocument {
     return this.#credits.find((entry) => entry.assetId === assetId);
   }
 
+  /** Drops the credit a removed asset carried, where it had one. A credit is
+   *  attribution and not a reference, so nothing keeps an asset alive through
+   *  it; but a package must not credit a file the theme no longer holds. A
+   *  credit written before `assetId` existed has none and answers `false`. */
+  removeCreditForAsset(assetId: string): boolean {
+    const at = this.#credits.findIndex((entry) => entry.assetId === assetId);
+    if (at === -1) return false;
+    this.#credits.splice(at, 1);
+    this.announceChange();
+    return true;
+  }
+
   /** Whether one more credit can be held: the package writer refuses a list
    *  past its cap, so the refusal happens before the bytes are declared rather
    *  than at the next save. A prune can free a slot, but only by removing the
@@ -645,6 +660,20 @@ export class EditorDocument {
    * so a display with a theme of its own keeps showing that theme.
    */
   async activateTheme(): Promise<void> {
+    await this.assignThemeTo(DEFAULT_DISPLAY_KEY);
+  }
+
+  /** The displays this theme can be put on, read from the host when the choice
+   *  opens. */
+  listDisplays() {
+    return this.#library.listDisplays();
+  }
+
+  /** Puts this theme on one display, saving first when the host does not hold
+   *  the document or the document has moved. A save that did not land never
+   *  reaches the assignment: the player must not be shown bytes the host does
+   *  not have. */
+  async assignThemeTo(display: string): Promise<void> {
     if (!this.#library.isStored() || this.isDirty()) {
       await this.#library.save();
       // Read after the save rather than trusting its return: the cleanup sheet
@@ -653,7 +682,7 @@ export class EditorDocument {
       // this document says, and the player must not be told it does.
       if (!this.#library.isStored() || this.isDirty()) return;
     }
-    await this.#library.activate(this.#envelope.id);
+    await this.#library.assignTo(display, this.#envelope.id);
   }
 
   /** Whether this document descends from one the library holds, which is what

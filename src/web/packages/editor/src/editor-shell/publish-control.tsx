@@ -1,14 +1,20 @@
 import { Popover } from "@base-ui/react/popover";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  type ControlOption,
+  ControlSelect,
+} from "../components/ui/control-select.js";
 import { displayUrl } from "../hosting-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
   shortcutLabel,
   shortcutSpokenLabel,
 } from "../shortcut-manager/display.js";
+import { DEFAULT_DISPLAY_KEY } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import type { HostingStore } from "./hosting-store.js";
 import { QrCode } from "./qr-symbol.js";
+import type { EditorActionFacade } from "./session-facade.js";
 import type { PublishSurfaceStore } from "./shell-stores.js";
 
 /**
@@ -31,6 +37,14 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
 /** The one control that carries the warning, so a fixed id is the whole address. */
 const WARNING_ID = "yunari-publish-warning";
 
+/** The value in the display list that is a route rather than a display: it
+ *  opens the host's pairing page instead of assigning a theme. */
+const PAIR_DISPLAY = "pair";
+
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** What is left of the window, as mm:ss in the reader's own clock. The host
  *  answers an instant; a countdown is what a person can watch run out. An
  *  instant the clock cannot parse, or one that has passed, answers nothing and
@@ -48,12 +62,17 @@ export function remainingOf(at: string, now: number): string {
 export function PublishControl({
   hosting,
   surface,
+  session,
 }: {
   /** What the host is doing, owned by the shell so the status bar reads it too. */
   readonly hosting: HostingStore;
   /** Whether this popover is showing. The header's chord reaches it from
    *  outside React, so the control subscribes rather than holding the flag. */
   readonly surface: PublishSurfaceStore;
+  /** The open theme's own session: the display list and the assignment are the
+   *  document's, and the surface only asks. Absent with no document, and the
+   *  choice is then not drawn. */
+  readonly session?: EditorActionFacade | undefined;
 }): React.JSX.Element | null {
   const state = useSyncExternalStore(
     hosting.subscribe,
@@ -78,8 +97,35 @@ export function PublishControl({
   // no timer and a stale one catches up the moment it opens again.
   const [clock, setClock] = useState<number>(() => Date.now());
   const [minting, setMinting] = useState(false);
+  /** The host's displays, read each time the surface opens: a list held across
+   *  opens would go stale the moment a display paired or left. */
+  const [displays, setDisplays] = useState<{
+    readonly default: string | null;
+    readonly displays: readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly theme: string | null;
+    }[];
+  }>();
+  const [assignError, setAssignError] = useState<string>();
   const shownCode = known?.pairing;
   const expiresAt = shownCode?.expiresAt;
+
+  useEffect(() => {
+    if (!surfaceOpen || session?.listDisplays === undefined) return;
+    let live = true;
+    session.listDisplays().then(
+      (answer) => {
+        if (live) setDisplays(answer);
+      },
+      (error: unknown) => {
+        if (live) setAssignError(reasonOf(error));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [surfaceOpen, session]);
 
   useEffect(() => {
     if (!surfaceOpen || expiresAt === undefined) return;
@@ -117,6 +163,41 @@ export function PublishControl({
       : undefined;
   const code = known.pairing;
   const left = code === undefined ? "" : remainingOf(code.expiresAt, clock);
+  const currentTheme = session?.publishableDocument()?.id;
+  const displayOptions: readonly ControlOption[] =
+    displays === undefined
+      ? []
+      : [
+          { id: DEFAULT_DISPLAY_KEY, name: uiCopy.store.assign.default },
+          ...displays.displays.map((display) => ({
+            id: display.id,
+            name: display.label,
+          })),
+          { id: PAIR_DISPLAY, name: uiCopy.publish.pairNew },
+        ];
+  const heldBy =
+    displays?.displays.find((display) => display.theme === currentTheme)?.id ??
+    DEFAULT_DISPLAY_KEY;
+  /** A display choice is the assignment; the pair row is the one choice that
+   *  navigates instead, to the host's own pairing page. */
+  const chooseDisplay = (choice: string): void => {
+    setAssignError(undefined);
+    if (choice === PAIR_DISPLAY) {
+      if (shown === undefined) {
+        setAssignError(uiCopy.publish.pairUnavailable);
+        return;
+      }
+      window.open(
+        `https://${shown.host}:${shown.port}/pair`,
+        "_blank",
+        "noopener",
+      );
+      return;
+    }
+    void session?.assignThemeTo?.(choice).catch((error: unknown) => {
+      setAssignError(uiCopy.publish.assignFailed(reasonOf(error)));
+    });
+  };
   const label = open
     ? uiCopy.publish.stop
     : pending === true
@@ -186,6 +267,27 @@ export function PublishControl({
             className="editor-shell-publish-popup"
             aria-label={uiCopy.publish.surface}
           >
+            {/* The theme's destination, above the surface's own switch: assigning
+                is why the control is pressed, and the list carries the route for
+                a display that has not paired yet. */}
+            {displayOptions.length === 0 ? null : (
+              <ControlSelect
+                label={uiCopy.publish.displayLabel}
+                data={{ "data-yunari-publish-display": "" }}
+                value={heldBy}
+                options={displayOptions}
+                onChange={chooseDisplay}
+              />
+            )}
+            {assignError === undefined ? null : (
+              <span
+                className="editor-shell-publish-reason"
+                role="alert"
+                data-yunari-publish-assign-error=""
+              >
+                {assignError}
+              </span>
+            )}
             {/* The choice the warning is about, so the warning is bound to the
                 control that makes it rather than to the one that opens this. */}
             <button

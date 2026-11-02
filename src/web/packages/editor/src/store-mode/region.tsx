@@ -1,5 +1,4 @@
 import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
 import {
   type SemanticFamily,
   semanticKeysByFamily,
@@ -7,15 +6,14 @@ import {
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import { ControlSelect } from "../components/ui/control-select.js";
-import {
-  ControlWell,
-  hitTargetClasses,
-} from "../components/ui/control-well.js";
+import { ControlWell } from "../components/ui/control-well.js";
 import {
   createPageSizePreference,
   type PageSize,
 } from "../editor-shell/page-size.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
+import { fileNameFor, serializeThemePackage } from "../persist.js";
+import { downloadBytes } from "../persistence-manager/index.js";
 import {
   createThemeLibraryClient,
   type ThemeLibraryClient,
@@ -29,6 +27,7 @@ import {
   toggleFacet,
 } from "./facet-row.js";
 import { Gallery } from "./gallery.js";
+import { StoreHalves } from "./halves.js";
 import { ItemModal } from "./item-modal.js";
 import {
   type CellAction,
@@ -49,32 +48,13 @@ import { useSubmit } from "./use-submit.js";
  * The store's two halves. `local` is the host's own library — what the author
  * already has — and `online` is the catalogue; Local is first for that reason.
  *
- * A half is **not** a shell mode and not a second bar: it is the region's own
- * control over what the region lists, the way a pane's title bar sits inside its
- * pane. The shell's navigation is the header, and the rail rule forbids a horizontal bar
- * under it — which is why the halves sit in the region's *first row* beside the
- * filter and the sort rather than in a strip of their own.
+ * A half is **not** a shell mode: it is the region's own control over what the
+ * region lists. The control lives in the shell's header (`halves.tsx`) because
+ * the header is where mode-level choices belong; the region reads the choice it
+ * is handed rather than owning a strip of its own under the header, which the
+ * rail rule forbids.
  */
 export type StoreTab = "local" | "online";
-
-/** The order the row draws them in, which is a separate decision from what each
- *  is called — the same split `MODE_ORDER` and `MODE_NAMES` make. */
-const TAB_ORDER = ["local", "online"] as const satisfies readonly StoreTab[];
-
-/** Each half's name, as a **total** lookup: a `StoreTab` added to the union
- *  without a label fails to compile here rather than rendering a segment with no
- *  name. */
-const TAB_NAMES: Record<StoreTab, string> = {
-  local: uiCopy.store.halves.local,
-  online: uiCopy.store.halves.online,
-};
-
-/** The halves' group id, and the stem of each segment's — the control-id rule wants every
- *  control to carry an id, derived from the half the way `useControlIds` derives
- *  one from the control it names. */
-const HALVES_ID = "yunari-store-halves";
-
-const halvesSegmentId = (tab: StoreTab): string => `${HALVES_ID}-${tab}`;
 
 /** The sort well's id, named rather than minted: the row has one sort and the
  *  browser case reaches for it by name. */
@@ -92,6 +72,11 @@ function browserStorage(): Storage | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The host's refusal in the words it gave, or a string for nothing better. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -307,12 +292,18 @@ function sizeOptions(items: readonly StoreItem[]): readonly FacetOption[] {
  * **Style's values are the documents' own tags**, and its facet is drawn with
  * none where no theme declares one — which is what a library of untagged themes
  * looks like rather than a facet that cannot filter.
+ *
+ * **The four value facets are searchable; Colour mode is not.** At most two
+ * modes exist, so a field over them can only hide a choice. Colour mode instead
+ * carries the sentence a library with no classified ground says in place of the
+ * values it cannot offer.
  */
 function storeFacets(items: readonly StoreItem[]): readonly Facet[] {
   return [
     {
       id: "author",
       name: uiCopy.store.facets.author,
+      searchable: true,
       options: optionsFrom(items, (item) =>
         item.author === undefined
           ? []
@@ -322,11 +313,13 @@ function storeFacets(items: readonly StoreItem[]): readonly Facet[] {
     {
       id: "colour-mode",
       name: uiCopy.store.facets.colourMode,
+      empty: uiCopy.store.facets.colourModeEmpty,
       options: colourModeOptions(items),
     },
     {
       id: "sensors",
       name: uiCopy.store.facets.sensors,
+      searchable: true,
       options: sensorOptions(items),
     },
     {
@@ -335,11 +328,13 @@ function storeFacets(items: readonly StoreItem[]): readonly Facet[] {
       // Its own sentence, above the three groups it explains: a theme
       // must match every group, which is what makes the headings worth drawing.
       hint: uiCopy.store.facets.shapeHint,
+      searchable: true,
       options: shapeOptions(items),
     },
     {
       id: "style",
       name: uiCopy.store.facets.style,
+      searchable: true,
       options: styleOptions(items),
     },
   ];
@@ -389,47 +384,6 @@ type Body =
   | { readonly kind: "empty-catalogue" }
   | { readonly kind: "empty-filter" }
   | { readonly kind: "items"; readonly items: readonly StoreItem[] };
-
-/**
- * The two halves, as the `Segmented` in its **bare** form — the well holding
- * the labels, the chosen one lifted to `--stage` with `--text`, and no row label
- * beside it. The header's mode switch is the same
- * control in the same kind of strip, composed the same way for the same reason:
- * the region's header row is a bar rather than a field row, so there is no label
- * column to fill, and the set's one `ControlSegmented` is a labelled row.
- *
- * The group is its own name (the control-id rule): a screen reader reaching two segments
- * is told what is being chosen, and each segment carries an id.
- */
-function Halves(props: {
-  readonly tab: StoreTab;
-  readonly onTab: (tab: StoreTab) => void;
-}): React.JSX.Element {
-  return (
-    <ToggleGroup
-      id={HALVES_ID}
-      data-yunari-store-halves=""
-      aria-label={uiCopy.store.halves.label}
-      value={[props.tab]}
-      onValueChange={(next) => {
-        const chosen = next[0];
-        if (chosen !== undefined) props.onTab(chosen as StoreTab);
-      }}
-      className="flex flex-none gap-[var(--space-4)] rounded-md border border-edge bg-panel-2 p-[var(--space-4)]"
-    >
-      {TAB_ORDER.map((tab) => (
-        <Toggle
-          key={tab}
-          id={halvesSegmentId(tab)}
-          value={tab}
-          className={`${hitTargetClasses} min-w-0 flex-1 rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
-        >
-          {TAB_NAMES[tab]}
-        </Toggle>
-      ))}
-    </ToggleGroup>
-  );
-}
 
 /** One of the two empty sentences, as a centred pair of lines at the spacing scale's
  *  empty-state breathing room. */
@@ -508,6 +462,10 @@ export function StoreModeRegion(props: {
    *  while the chosen half has not answered. The shell places it; the count is
    *  this region's own. */
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  /** The half the shell's header chose. The shell owns it because the control
+   *  moved into the header; a direct mount without one keeps its own. */
+  readonly tab?: StoreTab | undefined;
+  readonly onTab?: ((tab: StoreTab) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "themes" ? (
     <StoreRegion
@@ -516,6 +474,8 @@ export function StoreModeRegion(props: {
         ? {}
         : { onOpenTheme: props.onOpenTheme })}
       {...(props.onStatus === undefined ? {} : { onStatus: props.onStatus })}
+      {...(props.tab === undefined ? {} : { tab: props.tab })}
+      {...(props.onTab === undefined ? {} : { onTab: props.onTab })}
     />
   ) : null;
 }
@@ -529,8 +489,14 @@ function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  /** The half the shell's header chose. The shell owns it because the control
+   *  moved into the header; a direct mount without one keeps its own. */
+  readonly tab?: StoreTab | undefined;
+  readonly onTab?: ((tab: StoreTab) => void) | undefined;
 }): React.JSX.Element {
-  const [tab, setTab] = useState<StoreTab>("local");
+  const [innerTab, setInnerTab] = useState<StoreTab>("local");
+  const tab = props.tab ?? innerTab;
+  const setTab = props.onTab ?? setInnerTab;
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Record<StoreTab, string>>({
     ...DEFAULT_SORT,
@@ -553,6 +519,18 @@ function StoreRegion(props: {
    *  where the failure is what the body states. */
   const [listingFailed, setListingFailed] = useState(false);
   const [listingAttempt, setListingAttempt] = useState(0);
+  /** The last removal the host refused, in its own words. A removed theme is a
+   *  fact the listing already answers by losing the item; a refusal is the one
+   *  answer no other state can carry. */
+  const [deleteRefusal, setDeleteRefusal] = useState<string | undefined>(
+    undefined,
+  );
+  /** The last export the browser could not complete, in the same slot a
+   *  removal's refusal uses: no file was written, so the listing is unchanged
+   *  and the sentence is the whole answer. */
+  const [exportRefusal, setExportRefusal] = useState<string | undefined>(
+    undefined,
+  );
 
   // One client and one source for the life of the region: a client built per
   // render would be a new one every time, and the listing would reach a host the
@@ -677,14 +655,75 @@ function StoreRegion(props: {
   }, [onStatus, statusCount]);
 
   /**
+   * The theme's own removal, through the library client's `DELETE` route.
+   *
+   * The host moves the folder to its recycle bin, so the listing drops the item
+   * only after the host accepts it; a refusal leaves the item where it was and
+   * says why. A client that cannot delete reports that rather than removing a
+   * row it never moved.
+   */
+  const deleteTheme = (id: string): void => {
+    const remove = client.remove;
+    if (remove === undefined) {
+      setDeleteRefusal(uiCopy.store.deleteUnavailable);
+      return;
+    }
+    setDeleteRefusal(undefined);
+    void remove.call(client, id).then(
+      () => {
+        setItems((current) =>
+          current === undefined
+            ? current
+            : current.filter((item) => item.id !== id),
+        );
+        // **The item's own surfaces close with it.** A modal or display choice
+        // left reading a theme the host no longer has is a second answer to
+        // what the listing holds.
+        setOpenId((current) => (current === id ? undefined : current));
+        setAssignId((current) => (current === id ? undefined : current));
+      },
+      (error: unknown) => {
+        setDeleteRefusal(uiCopy.store.deleteFailed(messageOf(error)));
+      },
+    );
+  };
+
+  /**
+   * The theme's package, read from the host and written by the same serialiser
+   * the document's export uses.
+   *
+   * The library is a folder rather than an archive, so there is no stored file
+   * to hand over: the region opens the stored theme and builds the package the
+   * format documents. A refusal writes nothing and says why.
+   */
+  const exportTheme = (id: string): void => {
+    setExportRefusal(undefined);
+    void client.open(id).then(
+      (content) => {
+        const written = serializeThemePackage(
+          content.envelope,
+          content.assets,
+          undefined,
+          content.credits,
+        );
+        if (!written.ok) {
+          setExportRefusal(uiCopy.store.exportFailed(written.message));
+          return;
+        }
+        downloadBytes(fileNameFor({ id }), written.bytes);
+      },
+      (error: unknown) => {
+        setExportRefusal(uiCopy.store.exportFailed(messageOf(error)));
+      },
+    );
+  };
+
+  /**
    * The one callback a cell's four actions and the modal's footer share.
    *
-   * **`open` and `assign` are the two a build runs.** Export and delete are
-   * drawn on every cell and in the item's footer and **no task in this plan and
-   * no phase owns either**, so they are drawn
-   * disabled with their reason rather than reaching this callback at all
-   * (`cell-actions.ts`, R164). A phase that takes one up moves it out of that
-   * map, and wires it here in the same change.
+   * **All four are the actions this build runs.** Export reads the stored theme
+   * and writes its package (`exportTheme` above); the other three are the
+   * library's own operations.
    *
    * **`open` opens a document and not this modal** (R134). Its label is *Open
    * in editor*, and the library's own operation of that name loads the stored
@@ -695,10 +734,22 @@ function StoreRegion(props: {
    * footer alike, because the modal draws the cell's own four actions and
    * reports them through this one callback. It reads the displays when it opens
    * and keeps none of them (`assign-display.tsx`).
+   *
+   * **`delete` moves the stored theme to the host's recycle bin**, from the cell
+   * and the modal alike; the host's trash is recoverable, which is why the
+   * action asks nothing before it acts.
    */
   const onAction = (action: CellAction, id: string): void => {
     if (action === "open") {
       props.onOpenTheme?.(id);
+      return;
+    }
+    if (action === "delete") {
+      deleteTheme(id);
+      return;
+    }
+    if (action === "export") {
+      exportTheme(id);
       return;
     }
     if (action === "assign") {
@@ -727,7 +778,11 @@ function StoreRegion(props: {
         data-yunari-store-header=""
         className="flex flex-none flex-wrap items-center gap-[var(--space-16)] px-[var(--space-16)] pt-[var(--space-12)]"
       >
-        <Halves tab={tab} onTab={setTab} />
+        {/* A region mounted directly owns its half control; the shell hands
+            one down and draws the same control in the header instead. */}
+        {props.onTab === undefined ? (
+          <StoreHalves tab={tab} onTab={setTab} />
+        ) : null}
         {/* The well with the query in it, and no magnifier glyph: the well is
             the control, the placeholder is the word, and a mark beside a word
             is read twice. */}
@@ -819,9 +874,31 @@ function StoreRegion(props: {
             onAction={onAction}
             onOpenItem={setOpenId}
             install={install.control}
+            submit={submit.control}
           />
         ) : null}
       </div>
+
+      {/* The host's refusal of a removal, beside the listing it did not change:
+          the theme is still there, so a sentence saying why is the whole of the
+          answer rather than a toast over a row that vanished. */}
+      {deleteRefusal === undefined ? null : (
+        <p
+          data-yunari-store-delete-refusal=""
+          className="flex-none px-[var(--space-16)] pt-[var(--space-8)] text-xs text-warn"
+        >
+          {deleteRefusal}
+        </p>
+      )}
+
+      {exportRefusal === undefined ? null : (
+        <p
+          data-yunari-store-export-refusal=""
+          className="flex-none px-[var(--space-16)] pt-[var(--space-8)] text-xs text-warn"
+        >
+          {exportRefusal}
+        </p>
+      )}
 
       {/* Below the grid and above the pager: what the catalogue read could not
           use, one line per kind, so the grid says what it holds and this says
@@ -913,7 +990,10 @@ function StoreRegion(props: {
         aria-live="polite"
         className="sr-only"
       >
-        {online.announcement || install.announcement || submit.announcement}
+        {deleteRefusal ||
+          online.announcement ||
+          install.announcement ||
+          submit.announcement}
       </span>
     </div>
   );

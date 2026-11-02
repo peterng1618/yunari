@@ -136,6 +136,8 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     exportTheme: () => document.release(),
     exportWidget: () => document.exportWidget(),
     activate: () => document.activateTheme(),
+    listDisplays: () => document.listDisplays(),
+    assignThemeTo: (display) => document.assignThemeTo(display),
     openLibrary: () => document.openLibrary(),
     // The finder's Fonts body, wired to the document's writes. The panel is
     // presentational: every refusal reaches the author through
@@ -303,6 +305,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     redo: () => void editor.historyManager.redo(),
     copy: () => void editor.clipboardManager.copy(),
     cut: () => void editor.clipboardManager.cut(),
+    paste: () => void editor.clipboardManager.paste(),
     deleteActive: () => void editor.deletionManager.deleteActive(),
     duplicate: () => void editor.clipboardManager.duplicate(),
     group: () => editor.groupingManager.group(),

@@ -123,7 +123,11 @@ function createSession(
           requestRenderAll: vi.fn(),
           fire: vi.fn(),
         },
-        clipboardManager: { setImageImporter: vi.fn(), setBindings: vi.fn() },
+        clipboardManager: {
+          setImageImporter: vi.fn(),
+          setBindings: vi.fn(),
+          setAssets: vi.fn(),
+        },
         textManager: {
           addText: vi.fn(),
           setAuthoringView: vi.fn(),

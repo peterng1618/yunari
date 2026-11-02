@@ -585,11 +585,16 @@ function answeringSettle<T>(): ModalSettle<T> {
   return { close: () => undefined, dismiss: () => undefined };
 }
 
-/** The menubar trigger for a menu, found by the text it carries. */
+/** The menubar trigger for a menu, found by its word — text on a word trigger,
+ *  accessible name on the two glyph controls. */
 function menubarEntry(root: HTMLElement, label: string): HTMLButtonElement {
   const entry = Array.from(
     root.querySelectorAll<HTMLButtonElement>(".editor-shell-menubar button"),
-  ).find((button) => button.textContent === label);
+  ).find(
+    (button) =>
+      button.textContent === label ||
+      button.getAttribute("aria-label") === label,
+  );
   if (entry === undefined) throw new Error(`No "${label}" menu.`);
   return entry;
 }

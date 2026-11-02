@@ -13,13 +13,13 @@ import {
   CircleX,
   CircuitBoard,
   Clock,
+  CloudUpload,
   Cpu,
   Download,
   Ellipse,
   Eye,
   EyeOff,
   FileText,
-  Folder,
   FolderInput,
   FolderOpen,
   Gauge,
@@ -58,6 +58,7 @@ import {
   Shapes,
   Spline,
   Square,
+  SquarePen,
   SquarePlus,
   Star,
   Trash2,
@@ -158,6 +159,10 @@ export const VIDEO_GLYPH: LucideIcon = Play;
 
 /** The page, the Document slot. */
 export const PAGE_GLYPH: LucideIcon = FileText;
+/** The header's two menus, drawn as icon controls: the page the File rows act
+ *  on, and the eye View reads the canvas through. */
+export const FILE_MENU_GLYPH: LucideIcon = FileText;
+export const VIEW_MENU_GLYPH: LucideIcon = Eye;
 /** Settings mode's four This PC pages: the screens, the sensors that feed
  *  them, the units readings print in, and the external readings themselves. */
 export const DISPLAYS_GLYPH: LucideIcon = Monitor;
@@ -308,15 +313,18 @@ export const REPLACE_ASSET_GLYPH: LucideIcon = RefreshCw;
  *  their literal meaning. */
 export const REFRESH_GLYPH: LucideIcon = RefreshCw;
 
-/** The store cell's four actions, from the facts band: a folder for
- *  opening the item, a monitor for assigning it to a display, a download for
- *  exporting it as a package, and the bin for deleting it — the last is the one
- *  the mark in the palette paints `--hot`, which the control's own `destructive` flag
- *  carries. */
-export const OPEN_ITEM_GLYPH: LucideIcon = Folder;
+/** The store cell's four actions, from the facts band: a pen-in-a-square for
+ *  opening the item in the editor, a monitor for assigning it to a display, a
+ *  download for exporting it as a package, and the bin for deleting it — the
+ *  last is the one the mark in the palette paints `--hot`, which the control's
+ *  own `destructive` flag carries. */
+export const OPEN_ITEM_GLYPH: LucideIcon = SquarePen;
 export const ASSIGN_ITEM_GLYPH: LucideIcon = Monitor;
 export const EXPORT_ITEM_GLYPH: LucideIcon = Download;
 export const DELETE_ITEM_GLYPH: LucideIcon = Trash2;
+/** The library cell's publish control: an upload into the store, the same mark
+ *  the online half's install wears for taking an item out of it. */
+export const PUBLISH_ITEM_GLYPH: LucideIcon = CloudUpload;
 
 /**
  * The header toolbar's theme-document actions, one glyph each.

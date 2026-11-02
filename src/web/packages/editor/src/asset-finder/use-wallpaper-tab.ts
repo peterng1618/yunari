@@ -18,9 +18,31 @@ import {
 import type { WallpaperActions } from "./wallpaper.js";
 import { wallpaperActionsOf } from "./wallpaper.js";
 
+/** The Wallpaper Engine tab's sort fields and the two orders. */
+export type WallpaperSort = "name" | "updated" | "size";
+export type WallpaperDirection = "asc" | "desc";
+
+/** A field the host could not read sorts last in both orders rather than
+ *  reading as the oldest or the smallest: absent is not zero. */
+function compareWallpapers(
+  left: WallpaperEngineItem,
+  right: WallpaperEngineItem,
+  sort: WallpaperSort,
+  direction: WallpaperDirection,
+): number {
+  const factor = direction === "asc" ? 1 : -1;
+  if (sort === "name") return left.title.localeCompare(right.title) * factor;
+  const a = sort === "updated" ? left.updatedAt : left.filesize;
+  const b = sort === "updated" ? right.updatedAt : right.filesize;
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return (a - b) * factor;
+}
+
 /** The Wallpaper Engine tab's lifecycle: the library fetched once on first
- *  activation, its own filter, selection and completed writes, and the one
- *  write each card can run. */
+ *  activation, its own filter, sort, selection and completed writes, and the
+ *  one write each card can run. */
 export function useWallpaperTab(props: {
   readonly open: boolean;
   readonly active: ListingCategory | undefined;
@@ -31,6 +53,8 @@ export function useWallpaperTab(props: {
   const { open, active, client, wallpaper, setPreviewing } = props;
   const [library, setLibrary] = useState<WallpaperEngineAnswer | undefined>();
   const [local, setLocal] = useState<LocalView>(EMPTY_LOCAL);
+  const [sort, setSort] = useState<WallpaperSort>("name");
+  const [direction, setDirection] = useState<WallpaperDirection>("asc");
   const [localRunning, setLocalRunning] = useState<string | undefined>();
   /** The Wallpaper Engine video whose span the author is choosing. A video's
    *  "set background" opens the trim surface before the host normalizer runs. */
@@ -67,11 +91,13 @@ export function useWallpaperTab(props: {
       ? uiCopy.assets.wallpaperEngine.reason[library.reason]
       : undefined;
   const needle = local.query.trim().toLowerCase();
-  const items = libraryItems.filter(
-    (item) =>
-      (local.kind === "all" || item.kind === local.kind) &&
-      (needle === "" || item.title.toLowerCase().includes(needle)),
-  );
+  const items = libraryItems
+    .filter(
+      (item) =>
+        (local.kind === "all" || item.kind === local.kind) &&
+        (needle === "" || item.title.toLowerCase().includes(needle)),
+    )
+    .sort((left, right) => compareWallpapers(left, right, sort, direction));
   const footer = wallpaperActionsOf(local.selection, wallpaper);
   const busyId =
     localRunning !== undefined && local.selection !== undefined
@@ -179,6 +205,10 @@ export function useWallpaperTab(props: {
     apply,
     setQuery,
     setKind,
+    sort,
+    direction,
+    setSort,
+    setDirection,
     refresh,
     showMessage,
     actionsFor,

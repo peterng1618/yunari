@@ -42,6 +42,7 @@ import {
   ImportVideoModal,
   type VideoImportStep,
 } from "./import-video-modal.js";
+import { PlaceImageModal } from "./place-image-modal.js";
 import { isPreviewable, openAssetPreview } from "./preview-modal.js";
 import { VideoTrimModal } from "./video-trim-modal.js";
 
@@ -79,6 +80,11 @@ interface AssetsPaneProps {
   /** Told the declarations moved, so the document's own panels re-resolve: the
    *  artboard's background media, its bytes, and the pane's title count. */
   readonly onChanged?: () => void;
+  /** One declaration that is no longer there. The pane removes the file; a
+   *  credit that attributes it is the document's to drop, and this is the only
+   *  route the pane has into it. Optional so a pane mounted without a document
+   *  still draws. */
+  readonly onRemoved?: (assetId: string) => void;
   /** Opens the finder. Optional so the pane draws without a shell. */
   readonly onFindAssets?: () => void;
   /** The package's credit for a declared asset, where the caller can reach one.
@@ -131,6 +137,7 @@ export function AssetsPane({
   isReferenced,
   subscribeDocumentChange,
   onChanged,
+  onRemoved,
   onFindAssets,
   creditFor,
   onBackground,
@@ -139,13 +146,21 @@ export function AssetsPane({
 }: AssetsPaneProps): React.JSX.Element {
   const importInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
-  /** Which import the next pick is: the picker answers with files, never an
-   *  intent, so the control that opened it is what decides. */
-  const importIntent = useRef<"auto" | "background">("auto");
   const [chosenId, setChosenId] = useState<string | undefined>(
     () => manager.declarations[0]?.id,
   );
   const [message, setMessage] = useState("");
+  /** A just-declared picture waiting for its destination. The file is declared
+   *  at the pick so the modal's preview can read the manager's bytes; the
+   *  destination is the author's answer, not the kind's. */
+  const [placement, setPlacement] = useState<
+    | {
+        readonly file: File;
+        readonly asset: LocalAssetReference;
+        readonly previewUrl: string | undefined;
+      }
+    | undefined
+  >();
   /** The pick the modal is running: a video or package the host prepares before
    *  anything is declared. */
   const [videoImport, setVideoImport] = useState<
@@ -225,24 +240,15 @@ export function AssetsPane({
   };
 
   /**
-   * Takes the one automatic placement a file's kind makes unambiguous: a
-   * picture is placed, a font opens its metadata form, and a video or package
-   * waits on the import modal — nothing is declared at the pick, so a file the
-   * author walks away from leaves no declaration.
-   *
-   * `background` is the author overriding that choice: an image is forced into
-   * background media, and a font is refused before the manager declares it, so
-   * no control leaves a file the author asked not to import.
+   * Takes the one automatic path a file's kind makes unambiguous: a font opens
+   * its metadata form, a video or package waits on the import modal — nothing
+   * is declared at the pick, so a file the author walks away from leaves no
+   * declaration. A picture is declared and then asks where it goes, because
+   * "on the canvas" and "the artboard's background" are both valid and the
+   * kind does not choose between them.
    */
-  const importFile = async (
-    file: File,
-    intent: "auto" | "background",
-  ): Promise<void> => {
-    if (intent === "background" && mimeOf(file.name)?.startsWith("font/")) {
-      setMessage(uiCopy.panels.assetBackgroundFontRefused);
-      return;
-    }
-    if (intent === "auto" && mimeOf(file.name)?.startsWith("font/")) {
+  const importFile = async (file: File): Promise<void> => {
+    if (mimeOf(file.name)?.startsWith("font/")) {
       setFont({ file, metadata: fontMetadataFromFilename(file.name) });
       setMessage("");
       return;
@@ -274,35 +280,53 @@ export function AssetsPane({
       refuse(error);
       return;
     }
-    if (intent === "background") {
-      // The sentence names what actually ran: a pane mounted without the
-      // callback declared the file and set no background.
-      if (onBackground === undefined) {
-        setMessage(uiCopy.panels.assetDeclaredOnly);
-      } else {
-        onBackground(asset);
-        setMessage(uiCopy.panels.assetBackgroundSet);
-      }
+    if (asset.kind === "image" || asset.kind === "svg") {
+      setPlacement({
+        file,
+        asset,
+        previewUrl: manager.previewUrl(asset.id),
+      });
+      setMessage("");
       onChanged?.();
       return;
-    }
-    if (asset.kind === "image" || asset.kind === "svg") {
-      try {
-        await manager.placeImage(editor, file, asset);
-        // One committed edit for the declaration and the object together.
-        editor.historyManager.saveState();
-        editor.canvas.requestRenderAll();
-      } catch (error) {
-        // The bytes are declared even when nothing took them — the author can
-        // still see the file and remove it, which is better than a silent loss.
-        refuse(error);
-        onChanged?.();
-        return;
-      }
     }
     setMessage(importMessage(asset));
     // The selection stays where it was: an author pointing at one asset must
     // not find the list moved because they added a file.
+    onChanged?.();
+  };
+
+  /** The placement answer. The bytes are declared already; a failed placement
+   *  leaves them declared, which the card shows so the author can still remove
+   *  the file rather than losing it silently. */
+  const placeDeclared = async (
+    pending: NonNullable<typeof placement>,
+  ): Promise<void> => {
+    setPlacement(undefined);
+    try {
+      await manager.placeImage(editor, pending.file, pending.asset);
+      // One committed edit for the declaration and the object together.
+      editor.historyManager.saveState();
+      editor.canvas.requestRenderAll();
+    } catch (error) {
+      refuse(error);
+      onChanged?.();
+      return;
+    }
+    setMessage(importMessage(pending.asset));
+    onChanged?.();
+  };
+
+  /** The background answer. A pane mounted without a document has no write to
+   *  offer, so the modal draws no button for it there. */
+  const backgroundDeclared = (pending: NonNullable<typeof placement>): void => {
+    setPlacement(undefined);
+    if (onBackground === undefined) {
+      setMessage(uiCopy.panels.assetDeclaredOnly);
+      return;
+    }
+    onBackground(pending.asset);
+    setMessage(uiCopy.panels.assetBackgroundSet);
     onChanged?.();
   };
 
@@ -458,7 +482,9 @@ export function AssetsPane({
     }
     let removed = false;
     for (const id of ids) {
-      removed = manager.remove(id) || removed;
+      if (!manager.remove(id)) continue;
+      removed = true;
+      onRemoved?.(id);
     }
     if (removed) {
       setMessage("");
@@ -473,31 +499,17 @@ export function AssetsPane({
 
   /**
    * Opens the asset's own surface, with the pane's closures so its commands run
-   * through `submit()` exactly as the card's do.
-   *
-   * A video has no URL from the manager — `previewUrl` answers `undefined` for
-   * one — so the pane mints the stage's blob URL and releases it when the modal
-   * reports it has closed. Nothing is written: the URL is a reading of the
-   * declared bytes.
+   * through `submit()` exactly as the card's do. The URL is the manager's, so
+   * the modal and the card read the same declared bytes; nothing is written.
    */
   const openPreview = (asset: LocalAssetReference): void => {
     if (!isPreviewable(asset)) return;
     const bytes = manager.assets[asset.path];
-    let videoUrl: string | undefined;
-    if (asset.kind === "video" && bytes !== undefined) {
-      const type = mimeOf(asset.path);
-      videoUrl = URL.createObjectURL(
-        new Blob([bytes as unknown as BlobPart], {
-          ...(type === undefined ? {} : { type }),
-        }),
-      );
-    }
     setChosenId(asset.id);
     void openAssetPreview({
       asset,
       credit: creditFor?.(asset.id),
-      previewUrl:
-        asset.kind === "video" ? videoUrl : manager.previewUrl(asset.id),
+      previewUrl: manager.previewUrl(asset.id),
       inUse: referenced(asset.id),
       sizeBytes: bytes?.byteLength,
       onRemove: () => submit(() => remove(asset)),
@@ -513,9 +525,6 @@ export function AssetsPane({
         asset.kind === "video"
           ? undefined
           : () => void submit(() => place(asset)),
-      onClose: () => {
-        if (videoUrl !== undefined) URL.revokeObjectURL(videoUrl);
-      },
     });
   };
 
@@ -605,25 +614,10 @@ export function AssetsPane({
         <button
           type="button"
           data-yunari-asset-import=""
-          onClick={() => {
-            importIntent.current = "auto";
-            importInput.current?.click();
-          }}
+          onClick={() => importInput.current?.click()}
           className="flex-1 rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] py-[var(--space-6)] text-sm text-accent"
         >
           {uiCopy.panels.importFile}
-        </button>
-        <button
-          type="button"
-          data-yunari-asset-import-background=""
-          disabled={onBackground === undefined}
-          onClick={() => {
-            importIntent.current = "background";
-            importInput.current?.click();
-          }}
-          className="flex-1 rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-sm text-muted"
-        >
-          {uiCopy.panels.importAsBackground}
         </button>
         <button
           type="button"
@@ -661,6 +655,7 @@ export function AssetsPane({
               {rowsOf(assets).map((row) => {
                 const asset = row.asset;
                 const previewUrl = manager.previewUrl(asset.id);
+                const sizeBytes = manager.assets[asset.path]?.byteLength;
                 const rowChosen =
                   chosen !== undefined && row.ids.includes(chosen.id);
                 return (
@@ -670,6 +665,7 @@ export function AssetsPane({
                       chosen={rowChosen}
                       referenced={row.ids.some(referenced)}
                       {...(previewUrl === undefined ? {} : { previewUrl })}
+                      {...(sizeBytes === undefined ? {} : { sizeBytes })}
                       {...(row.label === undefined ? {} : { label: row.label })}
                       {...(row.detail === undefined
                         ? {}
@@ -702,6 +698,21 @@ export function AssetsPane({
           </section>
         );
       })}
+      {placement === undefined ? null : (
+        <PlaceImageModal
+          name={assetFileName(placement.asset)}
+          {...(placement.previewUrl === undefined
+            ? {}
+            : { previewUrl: placement.previewUrl })}
+          onPlace={() => void submit(() => placeDeclared(placement))}
+          onBackground={
+            onBackground === undefined
+              ? undefined
+              : () => backgroundDeclared(placement)
+          }
+          onClose={() => setPlacement(undefined)}
+        />
+      )}
       {videoTrim === undefined ? null : (
         <VideoTrimModal
           src={videoTrim.src}
@@ -742,8 +753,7 @@ export function AssetsPane({
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          const intent = importIntent.current;
-          if (file !== undefined) void submit(() => importFile(file, intent));
+          if (file !== undefined) void submit(() => importFile(file));
         }}
       />
       <input

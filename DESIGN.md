@@ -223,7 +223,10 @@ header has no Insert menu, and Edit lives in the Composition pane's footer
 toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then the `File` and `View`
-  menus, then the **theme toolbar**.
+  controls as **icon buttons** — each glyph opens its menu — then the **theme
+  toolbar**. The two glyphs are the page the File rows act on and the eye View
+  reads the canvas through; each carries its word as the tooltip and the
+  accessible name, so no visible label is repeated beside it.
 - The toolbar is the open theme document's own actions, as **icon buttons**
   from the editor's one glyph set: Import theme, Open, Save, Save as, Activate,
   Export theme. It is a toolbar, not rows nested in a menu, and it carries no
@@ -255,11 +258,12 @@ The mode's status line is the shell's strip, not a second bar inside the page.
 `View` stays in the header because its commands — preview/source — are changed
 *while* designing, many times a session. Settings is for once-in-a-while
 choices. A frequently changed control one level deeper is a tax paid on every
-use.
+use. It is drawn as an icon control like `File`, and its menu keeps the source
+choice.
 
-`File` stays a menu because its rows are functions with no other home: New,
-New from template, Find assets, Open recent and Export selection as widget. The
-document actions the toolbar carries are not repeated there.
+`File` stays a menu behind an icon because its rows are functions with no other
+home: New, New from template, Find assets, Open recent and Export selection as
+widget. The document actions the toolbar carries are not repeated there.
 
 ### The rail
 

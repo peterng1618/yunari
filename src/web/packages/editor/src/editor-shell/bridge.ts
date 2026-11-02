@@ -337,11 +337,13 @@ export function createEditorShellBridge(input: {
     canArrange(input.editor, action);
   const gate = { target, canArrange: canArrangeAction };
   /** Eligibility is owned by the registry; all this adds is the selection gate —
-   * and the one exemption from it. A construction needs no subject, so it is
-   * available with nothing selected, which is the whole of what `vg-460` asks
-   * for; every other action still has to have one. */
+   * and its two exemptions. A construction needs no subject, so it is available
+   * with nothing selected, which is the whole of what `vg-460` asks for. Paste
+   * needs no subject either: its subject is the clipboard, and an empty canvas
+   * is where it is most useful. Every other action still has to have one. */
   const can = (action: ShellAction): boolean =>
     isConstructionAction(action) ||
+    action === "paste" ||
     (activeObject() !== undefined && actionEnabled(gate, action));
   /** The entered group, as objects — the manager's own transient state (§67). */
   const enteredContext = (): readonly FabricObject[] =>
@@ -792,6 +794,7 @@ export function createEditorShellBridge(input: {
         void input.editor.clipboardManager.duplicate();
       else if (action === "copy") void input.editor.clipboardManager.copy();
       else if (action === "cut") void input.editor.clipboardManager.cut();
+      else if (action === "paste") input.session.paste();
       else if (action === "delete") input.editor.deletionManager.deleteActive();
       else if (action === "front") input.editor.layerManager.bringToFront();
       else if (action === "bring-forward")

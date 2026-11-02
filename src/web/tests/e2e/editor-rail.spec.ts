@@ -2930,7 +2930,7 @@ test("a missing identity opens the host's sign-in window and names the author's 
   await expect(
     submit,
     "the library item's surface offers no submission",
-  ).toHaveText("Submit to the store");
+  ).toHaveText("Publish to theme store");
   await submit.click();
 
   await expect(

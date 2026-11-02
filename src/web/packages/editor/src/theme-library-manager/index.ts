@@ -275,9 +275,21 @@ export class ThemeLibraryManager {
    * first, and a save that did not land never reaches here.
    */
   async activate(id: string): Promise<void> {
+    await this.assignTo(DEFAULT_DISPLAY_KEY, id);
+  }
+
+  /** The host's displays, read when a choice opens. The answer is the host's:
+   *  a display this build does not know is not offered, and a failed read is
+   *  the caller's to print rather than an empty list. */
+  listDisplays() {
+    return this.#client().listDisplays();
+  }
+
+  /** Puts one stored theme on one display, by the display's own id. */
+  async assignTo(display: string, id: string): Promise<void> {
     const options = this.#options;
     try {
-      await this.#client().assign(DEFAULT_DISPLAY_KEY, id);
+      await this.#client().assign(display, id);
       options.onSaved(uiCopy.library.activated);
     } catch (error) {
       options.onError?.(

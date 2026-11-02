@@ -5,9 +5,9 @@
  * **What this file owns.** The plan's own case — a theme with no picture is
  * filled from its own artboard rather than left empty — plus the claims the
  * brief's rulings add: the picture a theme does not have is dropped rather than
- * left broken and a replaced address draws again, the two actions a build runs
- * travel through the one `onAction` callback while the two it does not are drawn
- * disabled and say why (R164), and the byline is fixed.
+ * left broken and a replaced address draws again, the four actions travel
+ * through the one `onAction` callback, publishing is offered only on a theme
+ * with no store record, and the byline is fixed.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
  * grid's `272px` minimum and the picture's `2/1` are declarations read off the
@@ -27,6 +27,7 @@ import { Gallery } from "./gallery.js";
 import type { InstallControl } from "./install-item.js";
 import { installStateOf } from "./install-state.js";
 import type { CatalogueFacts, StoreItem } from "./local-source.js";
+import type { SubmitControl } from "./use-submit.js";
 
 // Base UI's tooltip needs three browser APIs jsdom has none of: floating-ui
 // observes its anchor, the popup waits for its own open transition, and it asks
@@ -176,6 +177,19 @@ const NO_INSTALL: InstallControl = {
   onInstall: () => undefined,
   installingIds: new Set(),
   refusal: undefined,
+};
+
+/** The submission control a gallery mount that is not about publishing hands
+ *  down: idle, and belonging to no item. */
+const NO_SUBMIT: SubmitControl = {
+  onSubmit: () => undefined,
+  itemId: undefined,
+  state: "idle",
+  inFlight: false,
+  url: undefined,
+  version: undefined,
+  refusal: undefined,
+  status: undefined,
 };
 
 /** The cell's picture box, which every case here reads through. */
@@ -363,22 +377,21 @@ it("asks for the picture again only when the theme itself changed", async () => 
 });
 
 /**
- * The four actions are drawn, the two a build runs report through the one
- * callback, and **the two it does not run are not actionable** (R164).
+ * The four actions are drawn, the three a build runs report through the one
+ * callback, and **the one it does not run is not actionable** (R164).
  *
- * The surface gives every cell four actions, so all four stay drawn; the two no
- * phase owns are disabled and state why, because a control that looks live and
- * answers a press with nothing is the defect the ruling answers. The cell draws
- * four, so `onAction` carries which one as well as which item — the plan's
- * `onOpen(id)` could not express the other three, and four separate props would
- * be four a caller can half-wire.
+ * The surface gives every cell four actions, so all four stay drawn; Export
+ * package has no phase and is disabled and states why, because a control that
+ * looks live and answers a press with nothing is the defect the ruling answers.
+ * The cell draws four, so `onAction` carries which one as well as which item —
+ * the plan's `onOpen(id)` could not express the other three, and four separate
+ * props would be four a caller can half-wire.
  *
  * **Every button is read through `must`**, so a locator that matched nothing
- * fails rather than passing by absence, and the two that run are pressed in the
- * same pass: the disabled pair's silence is then a reading rather than a harness
- * that never fired.
+ * fails rather than passing by absence, and all four are pressed in the same
+ * pass.
  */
-it("draws its four actions, runs the two it has and disables the two it has not", async () => {
+it("draws its four actions and runs all four", async () => {
   const onAction = vi.fn();
   const container = await mount(
     <Gallery
@@ -415,31 +428,55 @@ it("draws its four actions, runs the two it has and disables the two it has not"
     await act(async () => button.click());
   }
 
-  expect(
-    onAction.mock.calls,
-    "the two actions this build runs did not both report, so the disabled pair's silence would prove nothing",
-  ).toEqual([
+  expect(onAction.mock.calls, "the four actions did not all report").toEqual([
     ["open", "living-room"],
     ["assign", "living-room"],
+    ["export", "living-room"],
+    ["delete", "living-room"],
   ]);
+});
 
-  // The pair that does not run. `disabled` is what makes a button unpressable,
-  // so it is read off the control rather than inferred from a click that
-  // changed nothing — and the reason is a node in the tree, not a tooltip a
-  // person without a pointer cannot reach.
-  for (const action of ["export", "delete"] as const) {
-    const button = actionButton(action);
-    expect(button.disabled, `${action} is drawn live`).toBe(true);
-    const describedBy = button.getAttribute("aria-describedby") ?? "";
-    expect(describedBy, `${action} states no reason`).not.toBe("");
-    expect(
-      must(
-        container.querySelector<HTMLElement>(`#${describedBy}`),
-        `${action}'s reason`,
-      ).textContent,
-      `${action}'s reason is not the copy table's`,
-    ).toBe(uiCopy.store.cell.unavailable);
-  }
+/**
+ * **Publishing is offered only where there is nothing in the store yet.** A
+ * theme the host holds no origin record of was made here, so the press belongs
+ * to its cell; an installed copy already came from the catalogue and has no
+ * publish control. The press reports the item, which is what the region's
+ * submission flow acts on.
+ */
+it("offers publish on a local-only theme and not on one from the store", async () => {
+  const onSubmit = vi.fn();
+  const container = await mount(
+    <Gallery
+      items={[
+        item({ id: "made-here" }),
+        item({ id: "installed", origin: ORIGIN }),
+      ]}
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+      submit={{ ...NO_SUBMIT, onSubmit }}
+    />,
+  );
+
+  const publish = container.querySelectorAll<HTMLButtonElement>(
+    '[data-yunari-store-cell-action="publish"]',
+  );
+  expect(
+    publish,
+    "publish is not offered on exactly the local-only cell",
+  ).toHaveLength(1);
+  expect(
+    must(
+      publish[0]?.closest("[data-yunari-store-cell]") as HTMLElement | null,
+      "the cell holding the publish control",
+    ).getAttribute("data-yunari-store-cell"),
+    "publish was offered on the installed copy",
+  ).toBe("made-here");
+
+  await act(async () => publish[0]?.click());
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "made-here" }),
+  );
 });
 
 /**

@@ -1,3 +1,4 @@
+import { paletteTokenIds } from "@yunari/renderer-core";
 import { uiCopy } from "../../ui-copy.js";
 import { PaintList, type PaintListProps } from "./paint-list.js";
 
@@ -21,9 +22,17 @@ import { PaintList, type PaintListProps } from "./paint-list.js";
 export function TokensPane(props: PaintListProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
-      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.paintTokens}
-      </h2>
+      <div className="flex items-baseline justify-between gap-[var(--space-6)]">
+        <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
+          {uiCopy.panels.paintTokens}
+        </h2>
+        <span
+          data-yunari-paint-token-count=""
+          className="flex-none text-2xs text-faint tabular-nums"
+        >
+          {uiCopy.paneCounts.tokens(paletteTokenIds(props.palette).length)}
+        </span>
+      </div>
       <PaintList {...props} />
     </div>
   );

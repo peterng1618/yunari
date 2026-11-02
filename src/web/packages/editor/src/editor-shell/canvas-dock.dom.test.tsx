@@ -160,12 +160,18 @@ function unmount(): void {
  *  like this is two surfaces answering one question: the row that used to draw
  *  them has to stop, and this is the instrument that notices if it does not. */
 describe("the canvas dock's one half", () => {
-  it("draws no button at all with nothing selected", async () => {
+  it("draws only Paste with nothing selected", async () => {
     const container = await mount(bridgeOverSelection(0, false));
 
+    // Paste's subject is the clipboard, so it is the one command the selection
+    // gate does not withhold on an empty canvas.
     expect(
-      container.querySelectorAll("[data-yunari-canvas-toolbar] button").length,
-    ).toBe(0);
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[data-yunari-canvas-toolbar] button",
+        ),
+      ].map((button) => button.getAttribute("aria-label")),
+    ).toEqual([uiCopy.actions.paste]);
   });
 
   it("carries no arrange action, whatever the selection is", async () => {

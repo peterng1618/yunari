@@ -16,10 +16,11 @@ describe("productShortcutIds", () => {
     // Four actions are bound twice — `edit.redo` to Ctrl+Shift+Z and Ctrl+Y,
     // `edit.delete` to Delete and Backspace, and front/back to a bare and a
     // shifted bracket each — so a list that repeated them would make the sheet
-    // say "Redo" twice. 21 distinct actions come out of the table's 25 bindings:
+    // say "Redo" twice. 22 distinct actions come out of the table's 26 bindings:
     // Task 3.3's `help.shortcuts` made it 19, plan 5's Task 3 added
-    // `publish.surface`, and the asset finder's `file.findAssets` made it 21.
-    expect(ids).toHaveLength(21);
+    // `publish.surface`, the asset finder's `file.findAssets` made it 21, and
+    // the clipboard's `edit.paste` made it 22.
+    expect(ids).toHaveLength(22);
     expect(new Set(ids).size).toBe(ids.length);
     // First and last, so the order is the table's own and not sorted by accident.
     // Task 3.3 appends `help.shortcuts`, which raised this to 19 and moved the

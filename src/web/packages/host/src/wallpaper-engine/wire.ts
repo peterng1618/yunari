@@ -19,6 +19,8 @@ export interface StoredItem {
   readonly kind: ItemPayload["kind"];
   readonly previewUrl?: string;
   readonly filesize: number;
+  /** The item directory's last write, where the host could read it. */
+  readonly updatedAt?: number;
   readonly tags: readonly string[];
   readonly properties: unknown;
   /** Scene items only; absent when unclassified. */
@@ -55,6 +57,7 @@ export function toStoredItem(
           previewUrl: `/api/wallpaper-engine/item/${encodeURIComponent(item.workshopId)}/preview`,
         }),
     filesize: item.filesize,
+    ...(item.updatedAt === undefined ? {} : { updatedAt: item.updatedAt }),
     tags: item.tags,
     properties: item.properties,
     ...(facts === undefined

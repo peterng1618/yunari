@@ -9,6 +9,7 @@ import type { AssetPlacement, ImportOutcome } from "../asset-finder/actions.js";
 import type { FontActions } from "../asset-finder/fonts.js";
 import type { WallpaperActions } from "../asset-finder/wallpaper.js";
 import type { ShapeKind } from "../new-object-defaults.js";
+import type { ThemedDisplay } from "../theme-library-client.js";
 
 /** Document-level editor actions the shell dispatches. Every method delegates to
  * an existing owner; the façade adds reachability, never logic. */
@@ -34,6 +35,15 @@ export interface EditorActionFacade {
    *  asks the host to show it on the default display. Never reports success for
    *  a save or an assignment that did not land. */
   activate(): Promise<void>;
+  /** The displays this open theme can be put on. Optional: a session with no
+   *  host has no list, and the header draws no choice rather than an empty one. */
+  listDisplays?(): Promise<{
+    readonly default: string | null;
+    readonly displays: readonly ThemedDisplay[];
+  }>;
+  /** Puts the open theme on one display. Saves first through the same path
+   *  Activate uses; a save that did not land assigns nothing. */
+  assignThemeTo?(display: string): Promise<void>;
   openLibrary(): Promise<void>;
   /** The finder's Fonts pane: the role presets and the writes a chosen result
    *  offers. The shell draws the buttons; the session owns their effects. */
@@ -84,6 +94,9 @@ export interface EditorActionFacade {
   redo(): void;
   copy(): void;
   cut(): void;
+  /** The clipboard's own paste: the held copy first, else the payload a theme
+   *  switch left in the browser's store. */
+  paste(): void;
   deleteActive(): void;
   duplicate(): void;
   group(): void;

@@ -11,6 +11,7 @@ export type ProductShortcutId =
   | "edit.delete"
   | "edit.copy"
   | "edit.cut"
+  | "edit.paste"
   | "edit.duplicate"
   | "edit.group"
   | "edit.ungroup"
@@ -54,6 +55,11 @@ export const PRODUCT_SHORTCUTS: readonly ShortcutBinding[] = [
   { key: "y", modifier: true, action: "edit.redo" },
   { key: "c", modifier: true, action: "edit.copy" },
   { key: "x", modifier: true, action: "edit.cut" },
+  // Displayed but deliberately not dispatched by this manager: the browser's own
+  // paste event is what distinguishes a copied object from an image another
+  // application put on the clipboard. The clipboard manager's listener is the
+  // one handler, so a keydown handler here would swallow external image pastes.
+  { key: "v", modifier: true, action: "edit.paste" },
   { key: "d", modifier: true, action: "edit.duplicate" },
   { key: "g", modifier: true, shift: true, action: "edit.ungroup" },
   { key: "g", modifier: true, action: "edit.group" },
@@ -133,12 +139,13 @@ const MODIFIED_KEY_DEFERRED_ACTION_IDS: ReadonlySet<ProductShortcutId> =
     "file.findAssets",
     "edit.undo",
     "edit.redo",
+    "edit.paste",
     "canvas.select-all",
   ]);
 
 /** Whether an action's bindings already defer to a focused text field: every
  *  unmodified binding does (`bindingFor`'s deferral rule reads `!modifier`), and
- *  the four above defer on their modified chords too.
+ *  the actions above defer on their modified chords too.
  *
  *  A capture asks this, because a modifier-less letter bound to an action that
  *  does *not* defer would make that action stop reaching the author while they

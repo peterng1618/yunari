@@ -46,9 +46,10 @@ export interface AssetPreviewInput {
   readonly onReplace: () => void;
   readonly onBackground: (() => void) | undefined;
   readonly onPlace: (() => void) | undefined;
-  /** Called once, after the surface has closed, so the caller can release a
-   *  URL it minted for the preview. */
-  readonly onClose: () => void;
+  /** Called once, after the surface has closed, so a caller that minted a URL
+   *  for the preview can release it. The pane reads the manager's URL, so it
+   *  has nothing of its own to release and omits this. */
+  readonly onClose?: () => void;
 }
 
 type PreviewAction = "remove" | "replace" | "background" | "place";
@@ -419,13 +420,13 @@ function AssetPreviewModal({
 /**
  * Opens the asset preview and resolves when it closes.
  *
- * `onClose` runs after the surface has unmounted, which is where the caller
- * releases anything it minted (the pane's video blob URL).
+ * `onClose` runs after the surface has unmounted, which is where a caller that
+ * minted its own URL releases it.
  */
 export function openAssetPreview(input: AssetPreviewInput): Promise<void> {
   return openModal<void>((settle) => (
     <AssetPreviewModal input={input} settle={settle} />
-  )).then(() => input.onClose());
+  )).then(() => input.onClose?.());
 }
 
 /** The pane's half: a declaration is previewable when a picture or a movie is

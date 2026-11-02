@@ -51,6 +51,7 @@ export const SHORTCUT_LABELS = {
   "edit.delete": uiCopy.actions.delete,
   "edit.copy": uiCopy.actions.copy,
   "edit.cut": uiCopy.actions.cut,
+  "edit.paste": uiCopy.actions.paste,
   "edit.duplicate": uiCopy.actions.duplicate,
   "edit.group": uiCopy.actions.group,
   "edit.ungroup": uiCopy.actions.ungroup,

@@ -17,6 +17,7 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import { HostingStore } from "./hosting-store.js";
 import { PublishControl, remainingOf } from "./publish-control.js";
+import type { EditorActionFacade } from "./session-facade.js";
 import { PublishSurfaceStore } from "./shell-stores.js";
 
 const CODE = "ABC234";
@@ -171,7 +172,7 @@ afterEach(() => {
 /** The control as the header mounts it. `createRoot` rather than
  *  `@testing-library/react`, which this workspace does not depend on. The store
  *  asks the host on construction, so the fetch stub is already in place. */
-async function mount(): Promise<HTMLDivElement> {
+async function mount(session?: EditorActionFacade): Promise<HTMLDivElement> {
   const mounted = document.createElement("div");
   host = mounted;
   document.body.append(mounted);
@@ -181,7 +182,13 @@ async function mount(): Promise<HTMLDivElement> {
   const opened = new PublishSurfaceStore();
   surface = opened;
   await act(async () =>
-    created.render(<PublishControl hosting={hosting} surface={opened} />),
+    created.render(
+      <PublishControl
+        hosting={hosting}
+        surface={opened}
+        {...(session === undefined ? {} : { session })}
+      />,
+    ),
   );
   await vi.waitFor(() =>
     expect(mounted.querySelector("[data-yunari-publish]")).not.toBeNull(),
@@ -262,6 +269,92 @@ it("keeps the publish chord in the control's names, not beside it in the header"
   });
   expect(headerControl(container)?.getAttribute("title")).toContain("Ctrl+J");
   expect(container.querySelector("[data-yunari-publish-chord]")).toBeNull();
+});
+
+/** The display choice's trigger, once the surface has read the host's list. */
+async function displayTrigger(): Promise<HTMLElement> {
+  await vi.waitFor(() =>
+    expect(
+      document.querySelector("[data-yunari-publish-display]"),
+      "the surface never drew the display choice",
+    ).not.toBeNull(),
+  );
+  return document.querySelector<HTMLElement>(
+    "[data-yunari-publish-display]",
+  ) as HTMLElement;
+}
+
+/** Opens the display choice and answers its options, in the order offered. */
+async function openDisplayChoice(): Promise<readonly HTMLElement[]> {
+  const trigger = await displayTrigger();
+  await act(async () => trigger.click());
+  await vi.waitFor(() =>
+    expect(
+      document.querySelectorAll('[role="option"]').length,
+      "the display choice offered nothing",
+    ).toBeGreaterThan(0),
+  );
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'));
+}
+
+const SESSION_WITH_DISPLAYS = {
+  publishableDocument: () => ({ id: "theme-a" }),
+  listDisplays: async () => ({
+    default: null,
+    displays: [
+      {
+        id: "phone",
+        label: "Kitchen phone",
+        kind: "paired" as const,
+        theme: null,
+        shape: "rect" as const,
+        rotation: 0,
+      },
+    ],
+  }),
+  assignThemeTo: vi.fn(async () => undefined),
+} as unknown as EditorActionFacade;
+
+it("lists the displays with a pair-a-new-display row, and assigns the chosen one", async () => {
+  hostServing({ lan: true });
+  const container = await mount(SESSION_WITH_DISPLAYS);
+  await openSurface(container);
+
+  const options = await openDisplayChoice();
+  expect(
+    options.map((option) => option.textContent),
+    "the choice does not list the default, the display and the pair row",
+  ).toEqual([
+    uiCopy.store.assign.default,
+    "Kitchen phone",
+    uiCopy.publish.pairNew,
+  ]);
+
+  await act(async () => options[1]?.click());
+  expect(
+    SESSION_WITH_DISPLAYS.assignThemeTo,
+    "choosing a display did not assign the open theme to it",
+  ).toHaveBeenCalledWith("phone");
+});
+
+it("opens the host's pairing page from the pair-a-new-display row", async () => {
+  hostServing({ lan: true });
+  const open = vi.fn(() => null);
+  vi.stubGlobal("open", open);
+  const container = await mount(SESSION_WITH_DISPLAYS);
+  await openSurface(container);
+
+  const options = await openDisplayChoice();
+  await act(async () => options[2]?.click());
+
+  expect(
+    open,
+    "the pair row did not open the host's pairing page",
+  ).toHaveBeenCalledWith(
+    `https://${ADDRESS}:${PORT}/pair`,
+    "_blank",
+    "noopener",
+  );
 });
 
 it("opens the surface without moving the host, and keeps every fact behind the press", async () => {

@@ -63,6 +63,7 @@ export {
 } from "./glass.js";
 export {
   type FabricAssetReference,
+  isFabricAssetReference,
   objectAssetReference,
   setObjectAssetReference,
   YUNARI_ASSET_PROPERTY,

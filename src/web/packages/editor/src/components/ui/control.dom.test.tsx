@@ -142,6 +142,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   ],
   ["store-mode/region.tsx", "the search well: a filter, not an authored value"],
   [
+    "store-mode/facet-row.tsx",
+    "the popover's search is a filter, not an authored value",
+  ],
+  [
     "asset-finder/finder-controls.tsx",
     "the search field is a filter that re-runs on a debounce: nothing is authored to commit or cancel",
   ],
