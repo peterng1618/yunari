@@ -445,6 +445,7 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
       updatedAt: "2026-10-30",
     },
     commands: [],
+    geometry: { width: SIZE, height: SIZE },
     attached: () => Promise.resolve(attachedKrakens()),
     open: () => openKraken("The NZXT Kraken"),
   },

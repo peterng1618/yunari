@@ -14,7 +14,11 @@ import {
 import { requiredDeviceGroups } from "../settings/required-devices.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
-import { isValidThemeId, type ThemeStore } from "../themes/store.js";
+import {
+  isValidThemeId,
+  type ThemeStore,
+  ThemeValidationError,
+} from "../themes/store.js";
 import { SHIPPED_TEMPLATES } from "../themes/templates.js";
 import type { ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
@@ -44,6 +48,9 @@ interface ActiveDisplay {
   readonly panel?: {
     readonly status: "connected" | "connecting" | "disconnected";
     readonly commands: readonly string[];
+    /** The raster size the family declares, so a consumer can size a preview
+     *  without opening the device. Absent when no driver claims the ids. */
+    readonly geometry?: { readonly width: number; readonly height: number };
   };
 }
 
@@ -150,6 +157,9 @@ export function createThemeRoutes(
                   panel: {
                     status: options.panels.status(record.id),
                     commands: family?.commands ?? [],
+                    ...(family === undefined
+                      ? {}
+                      : { geometry: family.geometry }),
                   },
                 }),
           };
@@ -557,6 +567,83 @@ export function createThemeRoutes(
         "cache-control": "no-store",
       });
       response.end(Buffer.from(media.bytes));
+      return true;
+    }
+
+    // A panel-sized PNG of a theme, for an authoring tool that has to see the
+    // glass before deploying. It renders through the panels' own browser and
+    // never opens the device: a preview must not take a panel away from the
+    // theme it is showing.
+    const previewMatch = url.pathname.match(
+      /^\/api\/themes\/([^/]+)\/panel-preview$/,
+    );
+    if (previewMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Panel previews are available on this PC only.",
+        );
+        return true;
+      }
+      const rawId = decodeURIComponent(previewMatch[1] ?? "");
+      if (!isValidThemeId(rawId)) {
+        sendText(response, 400, "Invalid theme id.");
+        return true;
+      }
+      const panels = options.panels;
+      if (panels === undefined) {
+        sendText(response, 503, "This host drives no panels.");
+        return true;
+      }
+
+      // `read` rather than `readEnvelope`: the preview must refuse a stored
+      // theme that does not validate, and only `read` tells that apart from an
+      // absent one.
+      let theme: Awaited<ReturnType<ThemeStore["read"]>>;
+      try {
+        theme = await themeStore.read(rawId);
+      } catch (error) {
+        if (error instanceof ThemeValidationError) {
+          sendJson(response, 422, {
+            error: `Theme "${rawId}" is stored but does not validate.`,
+            issues: error.issues,
+          });
+          return true;
+        }
+        throw error;
+      }
+      if (theme === undefined) {
+        sendText(response, 404, "Theme not found.");
+        return true;
+      }
+
+      const named = url.searchParams.get("display");
+      const record = named === null ? undefined : await displays?.find(named);
+      if (record === undefined) {
+        sendText(response, 404, "No such display.");
+        return true;
+      }
+      if (record.kind !== "panel") {
+        sendText(response, 409, "That display is not a panel.");
+        return true;
+      }
+
+      const bytes = await panels.capturePreview(
+        record.id,
+        rawId,
+        url.searchParams.get("clip") === "1",
+      );
+      response.writeHead(200, {
+        "content-type": "image/png",
+        "x-content-type-options": "nosniff",
+        "cache-control": "no-store",
+      });
+      response.end(Buffer.from(bytes));
       return true;
     }
 

@@ -920,6 +920,10 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: ["1.88"],
       updatedAt: "2026-10-29",
     },
+    geometry: {
+      width: TURZX_GEOMETRY.width,
+      height: TURZX_GEOMETRY.height,
+    },
     attached: () => attachedTurzxPanels(),
     open: (options) => openTurzxPanel(options),
   },
