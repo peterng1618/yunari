@@ -389,7 +389,8 @@ test("the layer row's leading slot is one glyph, flush at the root", async ({
       return {
         depth: row.style.getPropertyValue("--layer-depth"),
         paddingLeft: getComputedStyle(row).paddingLeft,
-        leadingLeft: firstBox === undefined ? null : firstBox.left - rowBox.left,
+        leadingLeft:
+          firstBox === undefined ? null : firstBox.left - rowBox.left,
         leading: first?.matches(".yunari-layer-mark")
           ? "mark"
           : first?.getAttribute("aria-expanded") === null

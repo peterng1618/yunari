@@ -186,9 +186,7 @@ it("indents a group child and carries the row's controls once it is selected", a
   // The group row is marked as a group for the stylesheet, which bolds its
   // name, and its one leading slot is the twisty rather than a second glyph.
   expect(rows[0]?.getAttribute("data-kind")).toBe("group");
-  expect(
-    rows[0]?.querySelector('[data-yunari-layer-mark="group"]'),
-  ).toBeNull();
+  expect(rows[0]?.querySelector('[data-yunari-layer-mark="group"]')).toBeNull();
   expect(rows[0]?.querySelector('button[aria-expanded="true"]')).not.toBeNull();
 });
 

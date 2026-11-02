@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+
+import type { AssetSourceListing } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AssetSourceListing } from "@yunari/renderer-core";
 import { FinderFilters, FinderSourceChips } from "./finder-toolbar.js";
 
 (
