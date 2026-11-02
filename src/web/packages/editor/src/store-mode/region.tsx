@@ -955,8 +955,13 @@ function StoreRegion(props: {
       </div>
 
       {/* The gallery's own scroller, so the header and the pager stay still
-          while the grid moves — the pane body's model. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[var(--space-16)]">
+          while the grid moves — the pane body's model. The bar is the shell's:
+          this element inherits the themed pair from `.editor-shell`, and the
+          hook exists so a browser check can read the computed value. */}
+      <div
+        data-yunari-store-scroller=""
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[var(--space-16)]"
+      >
         {body.kind === "failed" ? (
           <Failure
             message={

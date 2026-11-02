@@ -403,10 +403,12 @@ menus.** Anything actionable belongs to a region that owns it.
 - **Chrome stays still.** Pane title and footer stay outside the scrolling body;
   inspector sections share one vertical scroller. Preserve per-pane offsets and
   disclosure state across routine updates. Use native scrollbars and reserve
-  their gutter where necessary; no custom scrollbar and no scroll-jacking owner,
-  with one exception — the shell's own two scrollers, the pane's body and the
-  inspector, restyle the native bar from the three `--yunari-scrollbar-*`
-  tokens. No other surface paints a scrollbar.
+  their gutter where necessary; no custom scrollbar and no scroll-jacking owner.
+  Every scroller in the editor and Settings chrome takes the same native bar
+  from the `--yunari-scrollbar-*` tokens. The shell root states the pair once;
+  the colour inherits, the width is applied to the roots' descendants, and
+  portalled surfaces join at the portal root. No surface paints a scrollbar of
+  its own.
 - **Clusters cannot collide.** Identity may truncate its name; view controls may
   wrap or use the labelled lens chooser. Never omit a lens, zoom command or
   focused target to fit a screenshot. Pointer events belong to the controls, not

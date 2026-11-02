@@ -359,8 +359,11 @@ describe("the shell's focus fallback", () => {
  * and read by nothing, so the platform painted them.
  *
  * `vg-480`: two of the four scrollers are portalled out of `.editor-shell`, so
- * the rule names them by name — which is a list that can go stale, and this is
- * the case that holds it.
+ * the rule names their portal rather than each scroller. Stating the pair once
+ * on the shell root and letting it inherit is what keeps a new scroller — the
+ * Themes page's gallery — from painting the platform bar; naming individual
+ * scrollers was the list that went stale and this is the case that holds the
+ * roots.
  *
  * `vg-491`: the `::-webkit-scrollbar*` family that stood beside the standard
  * pair painted nothing. Measured in the Chromium the browser suite runs: either
@@ -373,16 +376,16 @@ describe("the shell's focus fallback", () => {
  * absence.
  */
 describe("the scrollers' scrollbar", () => {
-  /** The six the rows name: the pane's body and the inspector — the shell's own
-   *  two scrollers, the first of which is the body rather than the column around
-   *  it (`vg-208`) — the two surfaces Base UI portals out of `.editor-shell`,
-   *  and the Settings mode's navigation and page tracks. This is the rule's own
-   *  selector list. */
+  /** The roots the rule states: the shell frame (whose descendants inherit the
+   *  pair, so a new scroller — the Themes page's gallery, a finder body — needs
+   *  no selector of its own), the two surfaces Base UI portals out of the shell
+   *  and their portal root, and the Settings mode's navigation and page tracks.
+   *  This is the rule's own selector list. */
   const SCROLLERS = [
-    ".editor-shell-pane-body",
-    ".editor-shell-inspector",
-    ".editor-shell-menu-popup",
+    ".editor-shell,",
     ".editor-shell-dialog",
+    ".editor-shell-menu-popup",
+    "[data-base-ui-portal]",
     ".settings-mode-nav",
     ".settings-mode-content",
   ] as const;

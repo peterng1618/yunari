@@ -56,6 +56,27 @@ test("opens the store from the URL", async ({ page }, testInfo) => {
   );
 });
 
+/**
+ * **The Themes page's gallery takes the chrome's scrollbar.** The pair is
+ * stated once on `.editor-shell` and inherited, so this reads the computed
+ * value rather than a class: a descendant that is not in the rule's selector
+ * list still has to answer with the token's colour.
+ */
+test("themes the store's own scroller", async ({ page }, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(`${EDITOR}?mode=themes`);
+  const bar = await page
+    .locator("[data-yunari-store-scroller]")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { width: style.scrollbarWidth, color: style.scrollbarColor };
+    });
+  expect(bar.width).toBe("thin");
+  expect(bar.color, "the gallery paints the platform's scrollbar").not.toBe(
+    "auto",
+  );
+});
+
 test("opens Settings from the URL", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=settings`);

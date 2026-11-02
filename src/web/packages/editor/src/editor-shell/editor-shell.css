@@ -1452,16 +1452,17 @@ body,
    pair was declared for this and read by nothing until `vg-458`, so every
    scroller painted the OS default.
 
-   **The portalled surfaces and the Settings tracks join by name (`vg-480`).**
-   A menu popup and a dialog mount outside `.editor-shell`, and the Settings
-   mode's navigation and page are scrollers of their own, so a rule scoped to
-   the shell frame never reached them. Named rather than hoisted to the document
-   root, which would restyle every scrollable surface in the host page; the cost
-   is a list that can go stale, and `editor-shell.control-rules.test.ts` is what
-   holds it.
+   **Every scroller in the chrome takes the pair from its owner.** The shell
+   root states it once: `scrollbar-color` inherits, so a new scroller — the
+   Themes page's gallery, a finder body, a popup — takes the themed colour
+   without adding a selector; `scrollbar-width` does not inherit, so the roots
+   repeat it on their descendants. Portalled surfaces mount outside
+   `.editor-shell`, so they join at their portal root; the Settings mode is a
+   separate page and joins by name. A named list of individual scrollers is what
+   let the Themes page keep the platform's bar while its siblings were themed.
 
-   **The pane's scroller is the pane's body** (`vg-208`), so the list names that
-   and not the column it sits in — the column has no scrollbar to style.
+   **The pane's scroller is the pane's body** (`vg-208`), which inherits from
+   the root like every other scroller.
 
    **The standard pair is the whole styling (`vg-491`).** The
    `::-webkit-scrollbar*` family stood here and painted nothing: measured in
@@ -1472,14 +1473,24 @@ body,
    never read the family. A hover colour is what the pair cannot express, and
    nothing else can either: the family that had one is inert wherever the pair
    is declared. The thumb is those tokens and never a literal of its own. */
-.editor-shell-pane-body,
-.editor-shell-inspector,
-.editor-shell-menu-popup,
+.editor-shell,
 .editor-shell-dialog,
+.editor-shell-menu-popup,
+[data-base-ui-portal],
 .settings-mode-nav,
 .settings-mode-content {
   scrollbar-width: thin;
   scrollbar-color: var(--yunari-scrollbar-thumb) var(--yunari-scrollbar-track);
+}
+/* `scrollbar-color` inherits, `scrollbar-width` does not: the colour reaches
+   every scroller from the roots above, and the width needs one rule on the
+   descendants. Both stay on scrollers only because these properties have no
+   effect on a box that does not scroll. */
+.editor-shell *,
+[data-base-ui-portal] *,
+.settings-mode-nav *,
+.settings-mode-content * {
+  scrollbar-width: thin;
 }
 /* `cursor: pointer` is the shell's standing convention for a control, and it is
    the **only** thing this rule may say about an inspector button. The rest of
