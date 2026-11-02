@@ -1,0 +1,30 @@
+{
+  "name": "@yunari/mcp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "stdio MCP server that designs Yunari themes against a loopback host.",
+  "bin": {
+    "yunari-mcp": "./bin/yunari-mcp.js"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "@yunari/renderer-core": "*",
+    "@yunari/theme-kit": "*",
+    "@yunari/theme-package": "*",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

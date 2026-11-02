@@ -15,6 +15,7 @@
     "packages/theme-kit",
     "packages/fake-source",
     "packages/host",
+    "packages/mcp",
     "packages/store-worker"
   ],
   "scripts": {
