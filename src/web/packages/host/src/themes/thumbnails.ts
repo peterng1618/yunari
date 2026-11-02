@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { inflateSync } from "node:zlib";
+import { relativeLuminanceOf } from "@yunari/renderer-core";
 import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
 
@@ -76,6 +78,163 @@ export function pngDimensions(
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+/** Channels per pixel, keyed by the PNG colour type. Palette images (type 3)
+ *  are absent: no capture writes one, and decoding the palette would add a
+ *  table this reader never meets. */
+const CHANNELS: Readonly<Record<number, number>> = { 0: 1, 2: 3, 4: 2, 6: 4 };
+
+/** One reconstructed scanline's filter, applied to the bytes already read. */
+function unfilter(
+  method: number,
+  row: Uint8Array,
+  previous: Uint8Array,
+  bytesPerPixel: number,
+): boolean {
+  for (let index = 0; index < row.length; index += 1) {
+    const left = index < bytesPerPixel ? 0 : row[index - bytesPerPixel]!;
+    const up = previous[index]!;
+    const upLeft = index < bytesPerPixel ? 0 : previous[index - bytesPerPixel]!;
+    switch (method) {
+      case 0:
+        break;
+      case 1:
+        row[index] = (row[index]! + left) & 0xff;
+        break;
+      case 2:
+        row[index] = (row[index]! + up) & 0xff;
+        break;
+      case 3:
+        row[index] = (row[index]! + ((left + up) >> 1)) & 0xff;
+        break;
+      case 4: {
+        const estimate = left + up - upLeft;
+        const toLeft = Math.abs(estimate - left);
+        const toUp = Math.abs(estimate - up);
+        const toUpLeft = Math.abs(estimate - upLeft);
+        const nearest =
+          toLeft <= toUp && toLeft <= toUpLeft
+            ? left
+            : toUp <= toUpLeft
+              ? up
+              : upLeft;
+        row[index] = (row[index]! + nearest) & 0xff;
+        break;
+      }
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The mean WCAG relative luminance of a stored thumbnail, or `undefined` for a
+ * PNG this reader cannot decode.
+ *
+ * The colour-mode facet classifies a theme by what a viewer sees, and once
+ * media is behind the board that is the picture rather than the paint token.
+ * The picture is the host's own capture, always 8-bit and non-interlaced, so
+ * this decodes exactly that shape with `node:zlib` and refuses the rest rather
+ * than growing an image library for a case the capture cannot produce.
+ *
+ * **Transparency is ignored**: a captured dashboard is opaque, and a
+ * transparent pixel has no colour of its own to average.
+ *
+ * ponytail: one full decode per listing entry. Cache the mean beside the
+ * picture's mtime if library listings grow large enough for it to show.
+ */
+export function thumbnailLuminance(bytes: Uint8Array): number | undefined {
+  const dimensions = pngDimensions(bytes);
+  if (dimensions === undefined) return undefined;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const compressed: Uint8Array[] = [];
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colourType = -1;
+  let compression = 0;
+  let filterMethod = 0;
+  let interlace = 0;
+
+  let offset = PNG_SIGNATURE.length;
+  while (offset + 12 <= bytes.byteLength) {
+    const length = view.getUint32(offset);
+    if (length > bytes.byteLength - offset - 12) return undefined;
+    const type = String.fromCharCode(
+      bytes[offset + 4]!,
+      bytes[offset + 5]!,
+      bytes[offset + 6]!,
+      bytes[offset + 7]!,
+    );
+    const data = bytes.subarray(offset + 8, offset + 8 + length);
+    if (type === "IHDR") {
+      if (length < 13) return undefined;
+      width = view.getUint32(offset + 8);
+      height = view.getUint32(offset + 12);
+      bitDepth = bytes[offset + 16]!;
+      colourType = bytes[offset + 17]!;
+      compression = bytes[offset + 18]!;
+      filterMethod = bytes[offset + 19]!;
+      interlace = bytes[offset + 20]!;
+    } else if (type === "IDAT") {
+      compressed.push(data);
+    } else if (type === "IEND") {
+      break;
+    }
+    offset += 12 + length;
+  }
+
+  const channels = CHANNELS[colourType];
+  if (
+    channels === undefined ||
+    bitDepth !== 8 ||
+    compression !== 0 ||
+    filterMethod !== 0 ||
+    interlace !== 0 ||
+    width === 0 ||
+    height === 0 ||
+    width * height > MAX_THUMBNAIL_PIXELS
+  ) {
+    return undefined;
+  }
+
+  let raw: Uint8Array;
+  try {
+    raw = new Uint8Array(inflateSync(Buffer.concat(compressed)));
+  } catch {
+    return undefined;
+  }
+
+  const stride = width * channels;
+  if (raw.byteLength < (stride + 1) * height) return undefined;
+
+  const row = new Uint8Array(stride);
+  const previous = new Uint8Array(stride);
+  let source = 0;
+  let total = 0;
+
+  for (let line = 0; line < height; line += 1) {
+    const method = raw[source]!;
+    source += 1;
+    row.set(raw.subarray(source, source + stride));
+    source += stride;
+    if (!unfilter(method, row, previous, channels)) return undefined;
+
+    for (let pixel = 0; pixel < stride; pixel += channels) {
+      const red = row[pixel]!;
+      // Greyscale has one channel, and its alpha-bearing form has the same
+      // colour in the first slot; both describe a grey pixel.
+      const green = channels <= 2 ? red : row[pixel + 1]!;
+      const blue = channels <= 2 ? red : row[pixel + 2]!;
+      total += relativeLuminanceOf(red, green, blue);
+    }
+    previous.set(row);
+  }
+
+  return total / (width * height);
 }
 
 /** Why a picture's declared size is past what the library will render, or

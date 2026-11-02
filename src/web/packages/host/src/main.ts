@@ -62,7 +62,10 @@ import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThemeMedia } from "./themes/theme-media.js";
-import { createThumbnailStore } from "./themes/thumbnails.js";
+import {
+  createThumbnailStore,
+  thumbnailLuminance,
+} from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
 import { openTrayAction } from "./tray/actions.js";
 import { type TrayController } from "./tray/controller.js";
@@ -362,9 +365,22 @@ export async function run(argv: readonly string[]): Promise<number> {
   // same reason `launcher` is.
   let panels: PanelManager | undefined;
 
+  // A thumbnail is this machine's rendering of a theme, so it lives in that
+  // theme's own folder rather than in a directory of its own. The editor
+  // writes it after the save that replaced the folder, which is why the
+  // library always has a picture for what was just saved.
+  const thumbnails = createThumbnailStore(themesDir);
+
   // One store for the routes and the panels: a panel's clip is the same theme
-  // the player would show, read from the library the host serves.
-  const themeStore = createThemeStore(themesDir);
+  // the player would show, read from the library the host serves. The colour
+  // mode reads the stored picture's mean luminance, because a picture or video
+  // behind the board is what a viewer sees there rather than the paint token.
+  const themeStore = createThemeStore(themesDir, {
+    thumbnailLuminance: async (id) => {
+      const picture = await thumbnails.read(id);
+      return picture === undefined ? undefined : thumbnailLuminance(picture);
+    },
+  });
 
   // The tray, once it exists. The stop path closes it first, so a click on Exit
   // does not leave an icon behind; undefined until the server is reachable.
@@ -434,7 +450,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     // theme's own folder rather than in a directory of its own. The editor
     // writes it after the save that replaced the folder, which is why the
     // library always has a picture for what was just saved.
-    thumbnails: createThumbnailStore(themesDir),
+    thumbnails,
     // The derived pictures a panel's page loads instead of the theme video.
     // Disposable, named by their inputs, and regenerated when the name is
     // missing — a theme save only clears the entries it invalidated.

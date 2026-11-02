@@ -657,6 +657,44 @@ describe("ThemeStore", () => {
     expect(typeof byId.get("night-sky")?.updatedAt).toBe("string");
   });
 
+  it("classifies by the stored picture, and falls back when there is none", async () => {
+    // A picture is behind the board, so the token underneath is not what a
+    // viewer sees; the mean the caller reads off the thumbnail decides.
+    const media: FabricThemeEnvelope = {
+      ...envelopeFor("night-sky", "Night Sky"),
+      background: {
+        media: { assetId: "loop", bounds: "theme" },
+      },
+      assets: [
+        {
+          id: "loop",
+          kind: "video",
+          path: "assets/loop.webm",
+          license: { name: "CC0", attribution: "Yunari test fixture." },
+        },
+      ],
+    };
+    await createThemeStore(tmpDir).write("night-sky", {
+      envelope: media,
+      assets: { "assets/loop.webm": new Uint8Array([1, 2, 3]) },
+    });
+
+    const lit = createThemeStore(tmpDir, {
+      thumbnailLuminance: async () => 0.9,
+    });
+    expect((await lit.list())[0]?.facets.colourMode).toBe("light");
+    expect((await lit.read("night-sky"))?.facets.colourMode).toBe("light");
+
+    // A reader that fails is the same absence as no picture: the paint behind
+    // the media is unreadable on its own, so the facet stays honest.
+    const failing = createThemeStore(tmpDir, {
+      thumbnailLuminance: async () => {
+        throw new Error("unreadable");
+      },
+    });
+    expect((await failing.list())[0]?.facets.colourMode).toBe("unclassified");
+  });
+
   it("carries each theme's ground on the entry it already built", async () => {
     const store = createThemeStore(tmpDir);
     // The palette's own colour, resolved through the document's own resolver and

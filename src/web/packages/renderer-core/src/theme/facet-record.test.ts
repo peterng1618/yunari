@@ -3,6 +3,7 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
 import {
   ASPECT_BUCKETS,
   backgroundPaintOf,
+  colourModeOfLuminance,
   facetRecordOf,
   PUBLISHED_BUCKETS,
 } from "./facet-record.js";
@@ -91,6 +92,24 @@ describe("facetRecordOf", () => {
   it("answers the paint when nothing is behind the board", () => {
     // The absence above is about the media, not about the owner refusing paint.
     expect(backgroundPaintOf(ground("#000000"))).toBe("#000000");
+  });
+
+  it("classifies by the stored picture's mean luminance, not the paint", () => {
+    // A video or picture behind the board is what a viewer sees, so the
+    // thumbnail's mean wins over a paint token the viewer never sees.
+    const document = envelope({
+      background: {
+        color: { value: "#000000" },
+        media: { assetId: "photo", bounds: "theme" },
+      },
+    } as unknown as Partial<FabricThemeEnvelope>);
+
+    expect(facetRecordOf(document, 0.9).colourMode).toBe("light");
+    expect(facetRecordOf(document, 0.01).colourMode).toBe("dark");
+    // The same document with no picture keeps the paint's true answer.
+    expect(facetRecordOf(document).colourMode).toBe("unclassified");
+    // A mean in the same perceptual band is the third value, not a coin flip.
+    expect(colourModeOfLuminance(0.2)).toBe("unclassified");
   });
 
   it("is unclassified for a ground it cannot read", () => {

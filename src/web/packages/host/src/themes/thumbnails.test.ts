@@ -1,11 +1,17 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import { relativeLuminanceOf } from "@yunari/renderer-core";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createThemeStore } from "./store.js";
-import { createThumbnailStore, pngDimensions } from "./thumbnails.js";
+import {
+  createThumbnailStore,
+  pngDimensions,
+  thumbnailLuminance,
+} from "./thumbnails.js";
 
 /** A real 1×1 PNG: the header's declared size is what the store bounds. */
 const PNG = new Uint8Array([
@@ -26,6 +32,51 @@ function pngDeclaring(width: number, height: number): Uint8Array {
   view.setUint32(16, width);
   view.setUint32(20, height);
   return bytes;
+}
+
+/**
+ * A PNG of 8-bit samples, each scanline already carrying its filter byte — the
+ * exact shape the host's own capture writes. The CRC is left zero because the
+ * luminance reader parses chunks and never checks it.
+ */
+function pngOf(
+  width: number,
+  height: number,
+  colourType: number,
+  raw: Uint8Array,
+): Uint8Array {
+  const ihdr = new Uint8Array(13);
+  const header = new DataView(ihdr.buffer);
+  header.setUint32(0, width);
+  header.setUint32(4, height);
+  ihdr[8] = 8;
+  ihdr[9] = colourType;
+
+  const chunk = (type: string, data: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    for (let index = 0; index < 4; index += 1) {
+      out[4 + index] = type.charCodeAt(index);
+    }
+    out.set(data, 8);
+    return out;
+  };
+
+  const parts = [
+    Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", new Uint8Array(deflateSync(raw))),
+    chunk("IEND", new Uint8Array()),
+  ];
+  const out = new Uint8Array(
+    parts.reduce((total, part) => total + part.length, 0),
+  );
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 const envelopeFor = (id: string): FabricThemeEnvelope => ({
@@ -266,5 +317,50 @@ describe("thumbnails", () => {
     );
     expect(opened.ok).toBe(true);
     expect(opened.ok ? Object.keys(opened.assets) : []).toEqual([]);
+  });
+
+  it("reads a picture's mean relative luminance", () => {
+    // Black beside white averages 0.5; a greyscale pixel feeds all three
+    // channels, and an alpha channel is ignored rather than averaged as colour.
+    expect(
+      thumbnailLuminance(
+        pngOf(2, 1, 2, Uint8Array.from([0, 0, 0, 0, 255, 255, 255])),
+      ),
+    ).toBeCloseTo(0.5, 10);
+    expect(thumbnailLuminance(pngOf(1, 1, 0, Uint8Array.from([0, 0])))).toBe(0);
+    expect(thumbnailLuminance(pngOf(1, 1, 0, Uint8Array.from([0, 255])))).toBe(
+      1,
+    );
+  });
+
+  it("reconstructs the scanline filters a capture writes", () => {
+    // Greyscale, two pixels on each of two rows, so every filter is exercised
+    // against values chosen so a wrong neighbour shows as the wrong mean. Row
+    // one is Sub-filtered: 10, then 10+20. Row two is Up-filtered: 40+10 and
+    // 10+30. Paeth is a uniform row, where left is the nearest predictor.
+    const subUp = Uint8Array.from([1, 10, 20, 2, 40, 10]);
+    const samples = [10, 30, 50, 40];
+    expect(thumbnailLuminance(pngOf(2, 2, 0, subUp))).toBeCloseTo(
+      samples.reduce(
+        (total, value) => total + relativeLuminanceOf(value, value, value),
+        0,
+      ) / samples.length,
+      10,
+    );
+    expect(
+      thumbnailLuminance(pngOf(3, 1, 0, Uint8Array.from([4, 200, 0, 0]))),
+    ).toBeCloseTo(relativeLuminanceOf(200, 200, 200), 10);
+  });
+
+  it("refuses a picture it cannot decode rather than guessing a mean", () => {
+    expect(thumbnailLuminance(new Uint8Array())).toBeUndefined();
+    // Palette images and an unknown filter are outside the shape a capture
+    // writes, and a partial image is not a darker one.
+    expect(
+      thumbnailLuminance(pngOf(1, 1, 3, Uint8Array.from([0, 0]))),
+    ).toBeUndefined();
+    expect(
+      thumbnailLuminance(pngOf(1, 1, 0, Uint8Array.from([9, 0]))),
+    ).toBeUndefined();
   });
 });

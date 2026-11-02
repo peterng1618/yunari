@@ -32,6 +32,27 @@ export interface Hsva {
 const toRgb = converter("rgb");
 const hsvOf = converter("hsv");
 
+/** One sRGB channel, linearised as WCAG 2's relative luminance defines it. */
+function linearChannel(value: number): number {
+  const channel = value / 255;
+  return channel <= 0.03928
+    ? channel / 12.92
+    : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG 2 relative luminance of sRGB channels 0–255: 0 is black, 1 is white. */
+export function relativeLuminanceOf(
+  red: number,
+  green: number,
+  blue: number,
+): number {
+  return (
+    0.2126 * linearChannel(red) +
+    0.7152 * linearChannel(green) +
+    0.0722 * linearChannel(blue)
+  );
+}
+
 /**
  * One parser for every stored colour: hex, `rgb()`, `hsl()` and CSS names.
  * `undefined` is a refusal, never a coerced value.

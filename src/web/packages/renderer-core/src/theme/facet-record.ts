@@ -1,4 +1,4 @@
-import { parseColor } from "../color.js";
+import { parseColor, relativeLuminanceOf } from "../color.js";
 import {
   describeSemanticKey,
   type SemanticFamily,
@@ -110,11 +110,22 @@ export const ASPECT_BUCKETS: readonly {
  */
 const ASPECT_TOLERANCE = 0.005;
 
-/** Derives the record from the envelope alone. */
-export function facetRecordOf(envelope: FabricThemeEnvelope): FacetRecord {
+/** Derives the record from the envelope alone.
+ *
+ *  `thumbnailLuminance` is the mean relative luminance of the theme's most
+ *  recently stored picture, when a host has one. It wins over the background
+ *  paint because the paint is not what a viewer sees once media is behind the
+ *  board; the paint remains the fallback for a theme never captured. */
+export function facetRecordOf(
+  envelope: FabricThemeEnvelope,
+  thumbnailLuminance?: number,
+): FacetRecord {
   return {
     author: envelope.metadata?.author,
-    colourMode: colourModeOf(envelope),
+    colourMode:
+      thumbnailLuminance === undefined
+        ? colourModeOf(envelope)
+        : colourModeOfLuminance(thumbnailLuminance),
     sensors: sensorsOf(envelope),
     tags: tagsOf(envelope),
     orientation: orientationOf(
@@ -186,6 +197,25 @@ function colourModeOf(envelope: FabricThemeEnvelope): ColourMode {
 
   const lightness = groundLightness(ground);
   if (lightness === undefined) return "unclassified";
+  return modeOfLightness(lightness);
+}
+
+/**
+ * The mode a mean relative luminance falls in, on the same `L*` bounds the
+ * paint's own reading uses. A picture's mean is linear luminance, so it is
+ * converted through the transfer the paint's channel luminance already passes
+ * before the bounds are read.
+ */
+export function colourModeOfLuminance(luminance: number): ColourMode {
+  if (!Number.isFinite(luminance) || luminance < 0 || luminance > 1) {
+    return "unclassified";
+  }
+  const transfer =
+    luminance > EPSILON ? Math.cbrt(luminance) : (KAPPA * luminance + 16) / 116;
+  return modeOfLightness(116 * transfer - 16);
+}
+
+function modeOfLightness(lightness: number): ColourMode {
   if (lightness < DARK_BELOW) return "dark";
   if (lightness > LIGHT_ABOVE) return "light";
   return "unclassified";
@@ -215,19 +245,10 @@ function lightnessOf(color: string): number | undefined {
   const red = rgb.r;
   const green = rgb.g;
   const blue = rgb.b;
-  const luminance =
-    0.2126 * linearise(red / 255) +
-    0.7152 * linearise(green / 255) +
-    0.0722 * linearise(blue / 255);
+  const luminance = relativeLuminanceOf(red, green, blue);
   const transfer =
     luminance > EPSILON ? Math.cbrt(luminance) : (KAPPA * luminance + 16) / 116;
   return 116 * transfer - 16;
-}
-
-function linearise(channel: number): number {
-  return channel <= 0.03928
-    ? channel / 12.92
-    : ((channel + 0.055) / 1.055) ** 2.4;
 }
 
 function orientationOf(width: number, height: number): Orientation {

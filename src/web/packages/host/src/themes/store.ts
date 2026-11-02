@@ -254,6 +254,12 @@ interface ThemeStoreOptions {
    *  one; a test substitutes it so the retry can be told apart from the
    *  filesystem it retries. */
   readonly rename?: (from: string, to: string) => Promise<void>;
+  /** A theme's stored picture as its mean relative luminance, when a host keeps
+   *  pictures beside the themes. The entry's colour mode reads it instead of
+   *  the background paint, which a picture or video behind the board replaces.
+   *  `undefined` falls back to the paint — an uncaptured theme, or this host
+   *  having no picture store. */
+  readonly thumbnailLuminance?: (id: string) => Promise<number | undefined>;
 }
 
 /**
@@ -851,11 +857,17 @@ function groundOf(envelope: FabricThemeEnvelope): string | undefined {
   return cssArtboardPaint(backgroundPaintOf(envelope));
 }
 
-/** One library line: what the document says, and when the folder changed. */
+/** One library line: what the document says, and when the folder changed.
+ *
+ *  `thumbnailLuminance` is read before the facets are built, because the colour
+ *  mode is what the picture shows rather than what the paint token says. A
+ *  picture read that fails is the same absence as no picture: the paint is
+ *  still a true reading of a board nothing is behind. */
 async function entryFor(
   library: string,
   id: string,
   envelope: FabricThemeEnvelope,
+  thumbnailLuminance?: (id: string) => Promise<number | undefined>,
 ): Promise<ThemeStoreEntry | undefined> {
   try {
     const stat = await fs.stat(path.join(library, id));
@@ -863,6 +875,7 @@ async function entryFor(
     const version = envelope.metadata?.version;
     const remixOf = envelope.metadata?.remixOf;
     const ground = groundOf(envelope);
+    const luminance = await thumbnailLuminance?.(id).catch(() => undefined);
     return {
       id,
       name: envelope.metadata?.name ?? id,
@@ -873,7 +886,7 @@ async function entryFor(
       // From the envelope this entry was already handed, so the listing pays
       // nothing new for it: no asset is opened and no second read is made.
       costs: performanceCostsOf(envelope),
-      facets: facetRecordOf(envelope),
+      facets: facetRecordOf(envelope, luminance),
       ...(ground === undefined ? {} : { ground }),
     };
   } catch {
@@ -886,6 +899,7 @@ export function createThemeStore(
   options?: ThemeStoreOptions,
 ): ThemeStore {
   const trash = options?.trash ?? moveToTrash;
+  const luminanceOf = options?.thumbnailLuminance;
   // Read through `fs` on every call rather than bound here: a test swaps the
   // real rename after the store exists, and a captured function would leave the
   // test renaming folders it believes it replaced.
@@ -923,7 +937,7 @@ export function createThemeStore(
               const envelope = await storedEnvelope(directory, entry.name);
               return envelope === undefined
                 ? undefined
-                : entryFor(directory, entry.name, envelope);
+                : entryFor(directory, entry.name, envelope, luminanceOf);
             }),
         );
         return themes
@@ -943,7 +957,7 @@ export function createThemeStore(
         return undefined;
       }
       const { envelope } = stored;
-      const entry = await entryFor(directory, id, envelope);
+      const entry = await entryFor(directory, id, envelope, luminanceOf);
       if (entry === undefined) {
         return undefined;
       }
@@ -1231,7 +1245,7 @@ export function createThemeStore(
           await fs.rm(retired, { recursive: true, force: true });
         }
 
-        const entry = await entryFor(directory, id, envelope);
+        const entry = await entryFor(directory, id, envelope, luminanceOf);
         if (entry === undefined) {
           throw new Error("The theme could not be read back after saving.");
         }
