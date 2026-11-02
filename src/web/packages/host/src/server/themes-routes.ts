@@ -17,6 +17,7 @@ import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import {
   isValidThemeId,
   type ThemeStore,
+  ThemeTooLargeError,
   ThemeValidationError,
 } from "../themes/store.js";
 import { SHIPPED_TEMPLATES } from "../themes/templates.js";
@@ -615,6 +616,10 @@ export function createThemeRoutes(
           });
           return true;
         }
+        if (error instanceof ThemeTooLargeError) {
+          sendText(response, 413, error.message);
+          return true;
+        }
         throw error;
       }
       if (theme === undefined) {
@@ -630,6 +635,21 @@ export function createThemeRoutes(
       }
       if (record.kind !== "panel") {
         sendText(response, 409, "That display is not a panel.");
+        return true;
+      }
+      // A record whose ids no family claims, or one with no hardware half, is
+      // a display this build cannot render. The manager refuses it too; naming
+      // it here is what turns its 500 into a reason the caller can act on.
+      const hardware = record.panel;
+      if (
+        hardware === undefined ||
+        familyFor(hardware.vendorId, hardware.productId) === undefined
+      ) {
+        sendText(
+          response,
+          409,
+          "The host has no panel driver for that display.",
+        );
         return true;
       }
 

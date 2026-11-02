@@ -269,6 +269,28 @@ describe("createPanelManager", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  it("closes the preview target when the capture fails", async () => {
+    const open = vi.fn(async () => deviceOver());
+    const close = vi.fn(async () => {});
+
+    h.family = familyOver(open);
+    h.rasterizer = () => ({
+      capture: vi.fn(async () => {
+        throw new Error("the page stopped composing");
+      }),
+      captureOverlay: vi.fn(),
+      close,
+    });
+    const manager = managerOver();
+
+    await expect(
+      manager.capturePreview("strip", "night", false),
+    ).rejects.toThrow(/stopped composing/);
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("refuses a preview for a display that is not a claimed panel", async () => {
     h.family = familyOver(async () => deviceOver());
 

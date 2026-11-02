@@ -563,12 +563,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   // down with it.
   panels = createPanelManager({
     displays,
-    pageFor: (displayId, clip, themeId) => {
-      const page = panelPageUrl(bound, displayId, clip);
-      return themeId === undefined
-        ? page
-        : `${page}&theme=${encodeURIComponent(themeId)}`;
-    },
+    pageFor: (displayId, clip, themeId) =>
+      panelPageUrl(bound, displayId, clip, themeId),
     // A panel's encoded clip is disposable host data, kept beside the other
     // caches so a restart reuses the transcode instead of paying for it again.
     videoCacheDir: path.join(path.dirname(settingsDir), "cache", "panel-video"),

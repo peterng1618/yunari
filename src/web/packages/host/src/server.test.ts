@@ -922,6 +922,13 @@ describe("Host theme routes", () => {
       model: "lianli-9-2",
     });
     const tablet = await displays.create("Tablet", "token");
+    // A record whose ids this build no longer claims: an existing record from
+    // an older build, or a hand-edited store. The host cannot render it.
+    const mystery = await displays.createPanel("Mystery", {
+      vendorId: 0x1c8e,
+      productId: 0xa092,
+      model: "gone",
+    });
 
     const captured: {
       displayId: string;
@@ -1003,6 +1010,31 @@ describe("Host theme routes", () => {
         `/api/themes/living-room/panel-preview?display=${tablet.id}`,
       );
       expect(notAPanel.status).toBe(409);
+
+      const noDriver = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${mystery.id}`,
+      );
+      expect(noDriver.status).toBe(409);
+      expect(noDriver.text()).toBe(
+        "The host has no panel driver for that display.",
+      );
+
+      // A route that answers any method would answer a write it cannot perform.
+      const written = await request(
+        previewing.server,
+        "POST",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(written.status).toBe(405);
+
+      const badId = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/bad%20id/panel-preview?display=${strip.id}`,
+      );
+      expect(badId.status).toBe(400);
 
       // A stored theme the renderer cannot read is understood but invalid,
       // which is the 422 the editor's own open answers.
