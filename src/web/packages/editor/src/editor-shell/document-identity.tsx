@@ -1,4 +1,6 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import { useDraftCommit } from "../components/ui/control-well.js";
+import { uiCopy } from "../ui-copy.js";
 import type { SelectionStore } from "./shell-stores.js";
 
 /**
@@ -38,18 +40,53 @@ export function DocumentIdentity({
     subscribe,
     () => session?.isDirty() ?? false,
   );
+  /** The name being typed, or `null` while the chip only reads. Nullable
+   *  because that is the shape the control set's commit hook cancels on. */
+  const [draft, setDraft] = useState<string | null>(null);
+  const finish = (value: string): void => {
+    setDraft(null);
+    // An emptied name is a cancelled rename, not a document called "": the
+    // schema refuses that and the chip would fall back to the id.
+    const next = value.trim();
+    if (next !== "" && next !== documentName) session?.renameTheme?.(next);
+  };
+  // Enter, Escape and the IME composing guard come from the one hook every
+  // input in the editor takes them from; blur is this field's own commit.
+  const keys = useDraftCommit({
+    draft,
+    setDraft,
+    commit: () => finish(draft ?? ""),
+  });
   if (documentName === undefined) return null;
 
   return (
-    <p className="editor-shell-identity" data-dirty={dirty}>
+    <p
+      className="editor-shell-identity"
+      data-dirty={dirty}
+      onDoubleClick={() => {
+        if (session?.renameTheme === undefined) return;
+        setDraft(documentName);
+      }}
+    >
       {/* The record dot (the filled glyph): warn while the document differs
           from what was saved, faint when it does not. */}
       <span className="editor-shell-identity-dot" aria-hidden="true" />
-      {/* The whole name is the reading a text-overflow clip would hide, so the
-          title carries it back for a name the chip is too narrow to print. */}
-      <span className="editor-shell-identity-name" title={documentName}>
-        {documentName}
-      </span>
+      {draft === null ? (
+        /* The whole name is the reading a text-overflow clip would hide, so the
+           title carries it back for a name the chip is too narrow to print. */
+        <span className="editor-shell-identity-name" title={documentName}>
+          {documentName}
+        </span>
+      ) : (
+        <input
+          className="editor-shell-identity-input"
+          aria-label={uiCopy.panels.name}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={(event) => finish(event.currentTarget.value)}
+          {...keys}
+        />
+      )}
     </p>
   );
 }

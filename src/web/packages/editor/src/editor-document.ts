@@ -707,6 +707,13 @@ export class EditorDocument {
     });
   }
 
+  /** Rewrites the theme's display name in place. The stored id, the version
+   *  and every other metadata field stay; only the name the identity chip and
+   *  the library listing read moves. */
+  renameTheme(name: string): void {
+    this.setMetadata({ ...(this.#envelope.metadata ?? {}), name });
+  }
+
   /** Opens one theme the library already holds, by id: the store's own route,
    *  which has read the theme's name off the listing it drew. The replacement
    *  question and the base's bookkeeping are the library's, because this

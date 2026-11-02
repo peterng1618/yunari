@@ -134,6 +134,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // library while whatever is open stays open.
     importPackage: () => options.onImportPackage?.(),
     downloadPackage: () => document.downloadPackage(),
+    renameTheme: (name) => document.renameTheme(name),
     exportTheme: () => document.release(),
     exportWidget: () => document.exportWidget(),
     activate: () => document.activateTheme(),

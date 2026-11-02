@@ -371,6 +371,12 @@ camera: it is absent for an image, a gradient or no media, because there is
 nothing there to pause. Its state is transient and is never written to the
 theme.
 
+**The identity's name is edited in place.** Double-click the chip's name to
+replace it with a one-line field inside the same chip; Enter or leaving the
+field commits, Escape cancels, and an emptied name cancels rather than becoming
+the id. A rename changes the document's display name only — the stored theme id
+never moves with it.
+
 **The dock renders the action registries and decides nothing itself.** It
 carries the object half alone, *filtered* — an action this selection cannot run
 is absent — and asks the registry for eligibility, so the surface never

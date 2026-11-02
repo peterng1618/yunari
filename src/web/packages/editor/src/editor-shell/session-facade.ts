@@ -82,6 +82,10 @@ export interface EditorActionFacade {
   /** The toolbar's **Save as**: writes the open document under a new theme
    *  and continues as it, leaving the theme it came from untouched. */
   saveAs(): Promise<void>;
+  /** Rewrites the open theme's display name, leaving its id and every other
+   *  metadata field alone. The identity chip's double-click rename is the one
+   *  caller; a facade with no document behind it omits it. */
+  renameTheme?(name: string): void;
   addText(): void;
   /** Freezes the selected text, as the author sees it, into vector paths. The
    *  document owns the theme's fonts and the bindings the frozen object stops

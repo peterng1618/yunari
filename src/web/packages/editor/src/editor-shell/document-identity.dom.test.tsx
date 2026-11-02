@@ -2,7 +2,7 @@
 
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { uiCopy } from "../ui-copy.js";
 import type { EditorShellBridge } from "./bridge.js";
@@ -13,7 +13,10 @@ import { SelectionStore } from "./shell-stores.js";
 
 /** Only what the marks read. The session owns both answers; a stub here would
  *  be a second implementation of them. */
-function stubSession(dirty: () => boolean): {
+function stubSession(
+  dirty: () => boolean,
+  renameTheme?: (name: string) => void,
+): {
   readonly facade: EditorActionFacade;
   announce(): void;
 } {
@@ -21,6 +24,7 @@ function stubSession(dirty: () => boolean): {
   return {
     facade: {
       isDirty: dirty,
+      ...(renameTheme === undefined ? {} : { renameTheme }),
       subscribeDocumentChange: (listener: () => void) => {
         listeners.add(listener);
         return () => {
@@ -157,5 +161,98 @@ describe("the document's identity", () => {
     expect(dot()).not.toBeNull();
     expect(edited()).toBeNull();
     expect(saveState()).toBe(uiCopy.saveState.unsaved);
+  });
+
+  /** The controlled field needs the native setter: assigning `.value` directly
+   *  moves the DOM but not React's own tracker, so the change never reaches
+   *  state. */
+  function type(input: HTMLInputElement, value: string): void {
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    act(() => {
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  it("renames the theme from a double-click, committing on Enter", () => {
+    const rename = vi.fn();
+    const session = stubSession(() => false, rename);
+    const store = new SelectionStore();
+    const { bridge } = stubBridge(session.facade, "System dashboard");
+    act(() => {
+      store.set(bridge);
+    });
+    const mounted = mount(<DocumentIdentity store={store} />);
+    const chip = mounted.querySelector(".editor-shell-identity");
+    if (chip === null) throw new Error("the chip did not draw");
+
+    act(() =>
+      chip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+    );
+    const input = mounted.querySelector<HTMLInputElement>(
+      ".editor-shell-identity-input",
+    );
+    if (input === null) throw new Error("the rename field did not open");
+    expect(input.value).toBe("System dashboard");
+    expect(input.getAttribute("aria-label")).toBe(uiCopy.panels.name);
+
+    type(input, "Kitchen");
+    act(() =>
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+
+    expect(rename).toHaveBeenCalledWith("Kitchen");
+    expect(mounted.querySelector(".editor-shell-identity-input")).toBeNull();
+  });
+
+  it("cancels a rename on Escape and refuses an emptied name", () => {
+    const rename = vi.fn();
+    const session = stubSession(() => false, rename);
+    const store = new SelectionStore();
+    const { bridge } = stubBridge(session.facade, "System dashboard");
+    act(() => {
+      store.set(bridge);
+    });
+    const mounted = mount(<DocumentIdentity store={store} />);
+    const chip = mounted.querySelector(".editor-shell-identity");
+    if (chip === null) throw new Error("the chip did not draw");
+
+    const open = (): HTMLInputElement => {
+      act(() =>
+        chip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+      );
+      const input = mounted.querySelector<HTMLInputElement>(
+        ".editor-shell-identity-input",
+      );
+      if (input === null) throw new Error("the rename field did not open");
+      return input;
+    };
+
+    const escaped = open();
+    type(escaped, "Kitchen");
+    act(() =>
+      escaped.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    expect(rename, "Escape still renamed the theme").not.toHaveBeenCalled();
+    expect(mounted.querySelector(".editor-shell-identity-input")).toBeNull();
+
+    const emptied = open();
+    type(emptied, "   ");
+    act(() =>
+      emptied.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    expect(
+      rename,
+      "an emptied name reached the document",
+    ).not.toHaveBeenCalled();
   });
 });
