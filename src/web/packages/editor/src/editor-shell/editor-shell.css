@@ -2425,7 +2425,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-left: calc(6px + var(--layer-depth, 0) * 13px);
+  padding-left: calc(var(--layer-depth, 0) * 8px);
   padding-right: 4px;
   /* The control set's panel rhythm, and the half of `ROW_HEIGHT` in
      `composition-pane.tsx` that CSS owns: the drop-line's `top` is
@@ -2511,7 +2511,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .yunari-layer-dropline {
   position: absolute;
   top: var(--layer-dropline-top, 0);
-  left: var(--layer-dropline-left, 6px);
+  left: var(--layer-dropline-left, 0);
   right: 6px;
   height: 2px;
   border-radius: 1px;
@@ -2618,47 +2618,17 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .yunari-layer-row button:hover {
   border-color: var(--muted);
 }
-/* The twisty column, whether the row draws one or only reserves its place.
-   Fixed rather than left to its content: measured on canvas, a button-sized
-   twisty next to a 20px placeholder left the column ~4px narrower than the
-   button is wide, and the flexible bound column absorbed the difference — so
-   the *name* re-flowed every time a row gained or lost its twisty. */
-.yunari-layer-twisty,
-.yunari-layer-row > button:first-child {
+/* The leading column: a group's twisty or a leaf's kind mark, never both. The
+   glyph starts at the row's left edge rather than centring in the column, so a
+   root row's mark is flush with the pane and the name gets the rest. */
+.yunari-layer-row > button:first-child,
+.yunari-layer-mark {
   flex: 0 0 20px;
   width: 20px;
-  display: inline-flex;
-  justify-content: center;
-}
-/* The kind, drawn as one glyph. One slot for all six arms, so every row's
-   name starts on the same left edge — which is what makes a column of them
-   scannable at all.
-
-   28px, re-cut for the design's 246px pane. The 40px this column carried
-   was the budget a 360px pane allowed, and it stopped fitting when the pane
-   narrowed: measured on canvas at 1600×900 with every group open, the row
-   `group-trends-card` ran its role `Performance trends` 11px past its own right
-   edge, and the row clips its overflow — so the role was cut mid-word. The role
-   is `flex: none` and must never be the column that gives way; this slot is the
-   one *designed* to clip, so the 12px comes from here. That measurement was
-   taken on the text specimen this slot used to draw; what sits here now is a
-   13px glyph, so the 28px is slack rather than tight, and the width is left
-   where the ruling put it.
-
-   **Held at 28px after the 2026-10-12 ruling narrowed it to 20px, because the
-   measurement that ruling asked for shows the lever cannot do what it was ruled
-   for.** Narrowing to 20px leaves the attended row's own numbers *identical* at
-   the three-control shape it draws now — the name is 28px short and the key
-   41px short at both widths — because both columns are already at their floors
-   and the freed 8px only shortens how far the line overruns into the reserved
-   strip (the role's coverage falls 58px → 50px). The ruling that followed held
-   the column at 28px; `vg-260` carries the counts. */
-.yunari-layer-mark {
-  flex: 0 0 28px;
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
 }
 /* The name is the row's identity and it is the first column to yield, because

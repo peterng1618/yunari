@@ -183,12 +183,13 @@ it("indents a group child and carries the row's controls once it is selected", a
   expect(rows[1]?.style.getPropertyValue("--layer-depth")).toBe("1");
   expect(rows[1]?.querySelectorAll("button")).toHaveLength(2);
   expect(rows[1]?.querySelector('[aria-label="Unlock"]')).not.toBeNull();
-  // The group row is marked as a group for the stylesheet, which bolds its name,
-  // and it carries the generic stack glyph the kind arm draws.
+  // The group row is marked as a group for the stylesheet, which bolds its
+  // name, and its one leading slot is the twisty rather than a second glyph.
   expect(rows[0]?.getAttribute("data-kind")).toBe("group");
   expect(
     rows[0]?.querySelector('[data-yunari-layer-mark="group"]'),
-  ).not.toBeNull();
+  ).toBeNull();
+  expect(rows[0]?.querySelector('button[aria-expanded="true"]')).not.toBeNull();
 });
 
 /** The rename field is seeded with `defaultValue`, which React tracks on the

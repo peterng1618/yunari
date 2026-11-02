@@ -155,11 +155,12 @@ export const ROW_HEIGHT = 26;
 
 /** The row's indentation: `LAYER_ROW_INDENT` at the root and
  *  `LAYER_ROW_INDENT_STEP` per level, matched by `.yunari-layer-row`'s
- *  `calc(6px + var(--layer-depth, 0) * 13px)` and by the drop line's
+ *  `calc(0px + var(--layer-depth, 0) * 8px)` and by the drop line's
  *  `--layer-dropline-left`, which promises the slot the row it crosses would
- *  take. */
-export const LAYER_ROW_INDENT = 6;
-export const LAYER_ROW_INDENT_STEP = 13;
+ *  take. The root is flush with the pane so the leading glyph — a group's
+ *  twisty or a leaf's kind mark — starts at the pane's own edge. */
+export const LAYER_ROW_INDENT = 0;
+export const LAYER_ROW_INDENT_STEP = 8;
 
 /** The entered group and everything under it. The projection emits a parent
  * before its children, so one forward pass reaches any depth — and a row whose
@@ -695,6 +696,10 @@ export function CompositionPane({
                 }
               }}
             >
+              {/* One leading slot per row: a group's twisty takes it, and a
+                  leaf's kind mark does. A group draws no second glyph, because
+                  the row's role ("Group · 8 units") already says what it is and
+                  the name is the column that runs out of room first. */}
               {expandable ? (
                 <RowIconButton
                   label={`${twisty} ${row.name}`}
@@ -709,9 +714,8 @@ export function CompositionPane({
                   <Glyph icon={Twisty} size={13} />
                 </RowIconButton>
               ) : (
-                <span aria-hidden className="yunari-layer-twisty" />
+                <KindMark mark={row.mark} />
               )}
-              <KindMark mark={row.mark} />
               {editing === row.id ? (
                 <input
                   // Intended autofocus: the field only exists because the author double-clicked the row.

@@ -365,7 +365,58 @@ test("the row's twisty paints at 20px and takes a 24×24 target", async ({
 });
 
 /**
- * `vg-265`: the row's state slot is absolutely positioned over the row's right
+ * The row's leading slot is one glyph, not two.
+ *
+ * A group used to draw a twisty column and then a second kind glyph, costing a
+ * narrow pane 32px before the name. The twisty now takes the kind's slot, a leaf
+ * keeps the kind mark in the same slot, and both start at the row's own left
+ * edge. The child step is the other half: a root row is flush with the pane and
+ * each level adds 8px.
+ */
+test("the layer row's leading slot is one glyph, flush at the root", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+  await openEveryGroup(page);
+
+  const rows = await page.locator(".yunari-layer-row").evaluateAll((elements) =>
+    elements.map((row) => {
+      const first = row.firstElementChild as HTMLElement | null;
+      const rowBox = row.getBoundingClientRect();
+      const firstBox = first?.getBoundingClientRect();
+      return {
+        depth: row.style.getPropertyValue("--layer-depth"),
+        paddingLeft: getComputedStyle(row).paddingLeft,
+        leadingLeft: firstBox === undefined ? null : firstBox.left - rowBox.left,
+        leading: first?.matches(".yunari-layer-mark")
+          ? "mark"
+          : first?.getAttribute("aria-expanded") === null
+            ? "other"
+            : "twisty",
+        glyphs: row.querySelectorAll(".yunari-layer-mark").length,
+      };
+    }),
+  );
+
+  expect(rows.length, "no layer rows in the tree").toBeGreaterThan(0);
+  for (const row of rows) {
+    const indent = Number(row.depth) * 8;
+    expect(row.paddingLeft, "the child step is not 8px per level").toBe(
+      `${indent}px`,
+    );
+    expect(
+      row.leadingLeft,
+      "the leading glyph does not start at the row's content edge",
+    ).toBe(indent);
+    // A group's twisty is its whole leading slot; a leaf's kind mark is its own.
+    expect(row.glyphs).toBe(row.leading === "mark" ? 1 : 0);
+    expect(row.leading).not.toBe("other");
+  }
+});
+
+/**
  * edge and always carries its own surface, so the slot covers the last glyphs
  * of the role on a row that draws no key — the role is *covered*, not clipped,
  * which is why the case above (the role's box against the row's right edge)
