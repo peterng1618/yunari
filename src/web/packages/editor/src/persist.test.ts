@@ -161,8 +161,18 @@ describe("serializeThemePackage", () => {
 });
 
 describe("fileNameFor", () => {
-  it("uses the theme id with .yunari-theme extension", () => {
+  it("names the package after the theme name", () => {
     expect(fileNameFor(validEnvelope)).toBe("living-room.yunari-theme");
+    expect(
+      fileNameFor({
+        id: "0f4a96dc-f806-460a-bdbe-0cf4ccefee91",
+        metadata: { name: "Kraken test 4" },
+      }),
+    ).toBe("kraken-test-4.yunari-theme");
+  });
+
+  it("falls back to the stored id when the document has no name", () => {
+    expect(fileNameFor({ id: "living-room" })).toBe("living-room.yunari-theme");
   });
 
   it("falls back to theme.yunari-theme when id is not filename-safe", () => {

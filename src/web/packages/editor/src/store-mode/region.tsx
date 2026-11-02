@@ -791,10 +791,25 @@ function StoreRegion(props: {
   const exportTheme = (id: string): void => {
     setExportRefusal(undefined);
     void client.open(id).then(
-      (content) => {
+      async (content) => {
+        // The package is the one-way copy, exactly as the open document's
+        // export is: the stored theme keeps its crops and source bytes.
+        const baked = await bakeStoredThemeCrops({
+          envelope: content.envelope,
+          assets: content.assets,
+        });
+        if (
+          baked.baked > 0 &&
+          !(await confirmOutputBake({
+            title: uiCopy.file.exportTheme,
+            crops: baked.baked,
+          }))
+        ) {
+          return;
+        }
         const written = serializeThemePackage(
-          content.envelope,
-          content.assets,
+          baked.envelope,
+          baked.assets,
           undefined,
           content.credits,
         );
@@ -802,7 +817,7 @@ function StoreRegion(props: {
           setExportRefusal(uiCopy.store.exportFailed(written.message));
           return;
         }
-        downloadBytes(fileNameFor({ id }), written.bytes);
+        downloadBytes(fileNameFor(baked.envelope), written.bytes);
       },
       (error: unknown) => {
         setExportRefusal(uiCopy.store.exportFailed(messageOf(error)));

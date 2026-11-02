@@ -4078,15 +4078,18 @@ it("keeps a facet's group headings while its values are searched", async () => {
  */
 it("exports a theme's package through the library client", async () => {
   const opened: string[] = [];
+  const downloads: string[] = [];
   const client: ThemeLibraryClient = {
-    ...clientListing([fixtureEntry({ id: "porch-strip" })]),
+    ...clientListing([
+      fixtureEntry({ id: "porch-strip", name: "Front Porch" }),
+    ]),
     open: async (id: string) => {
       opened.push(id);
       return {
         // The package writer validates the document, so the fixture carries the
         // three type tokens every theme needs.
         envelope: {
-          ...fixtureEnvelope({ id }),
+          ...fixtureEnvelope({ id, name: "Front Porch" }),
           globals: {
             typeTokens: {
               heading: { family: "system-ui, sans-serif", weight: "600" },
@@ -4105,12 +4108,20 @@ it("exports a theme's package through the library client", async () => {
   const revoke = vi
     .spyOn(URL, "revokeObjectURL")
     .mockImplementation(() => undefined);
+  // jsdom fires the anchor but does not navigate; the attribute the browser
+  // would save under is the package's own name.
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
   try {
     await mount(<StoreModeRegion mode="themes" client={client} />);
     await pressCell("porch-strip", "export");
     // The export continues after the press resolves, so the package's write
-    // lands on the next microtask rather than inside the click's own turn.
+    // lands on the next microtasks rather than inside the click's own turn.
     await act(async () => {
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -4121,9 +4132,156 @@ it("exports a theme's package through the library client", async () => {
       create,
       "no package was handed to the download",
     ).toHaveBeenCalledOnce();
+    expect(downloads, "the package is not named after the theme").toEqual([
+      "front-porch.yunari-theme",
+    ]);
   } finally {
     create.mockRestore();
     revoke.mockRestore();
+    click.mockRestore();
+  }
+});
+
+/**
+ * **A library export warns before it flattens crops** (#329). The stored theme
+ * keeps its live crop, so the copy is the place to say that the copy is not the
+ * library's picture — and a cancelled warning writes nothing.
+ */
+it("warns before a library export bakes a crop", async () => {
+  const downloads: string[] = [];
+  const client: ThemeLibraryClient = {
+    ...clientListing([
+      fixtureEntry({ id: "porch-strip", name: "Front Porch" }),
+    ]),
+    open: async (id: string) => ({
+      envelope: {
+        ...fixtureEnvelope({ id, name: "Front Porch" }),
+        globals: {
+          typeTokens: {
+            heading: { family: "system-ui, sans-serif", weight: "600" },
+            body: { family: "system-ui, sans-serif", weight: "400" },
+            mono: { family: "monospace", weight: "400" },
+          },
+        },
+        assets: [
+          {
+            id: "photo",
+            kind: "image" as const,
+            path: "assets/photo.png",
+            sha256: "old",
+          },
+        ],
+        scene: {
+          version: "7.4.0",
+          objects: [
+            {
+              type: "Image",
+              id: "photo-object",
+              left: 200,
+              top: 100,
+              width: 100,
+              height: 100,
+              yunariCrop: true,
+              yunariAsset: { assetId: "photo", kind: "image" },
+              clipPath: {
+                type: "Rect",
+                left: 0,
+                top: 0,
+                width: 50,
+                height: 40,
+              },
+            },
+          ],
+        },
+      },
+      assets: { "assets/photo.png": Uint8Array.from([1, 2, 3]) },
+    }),
+  };
+  vi.stubGlobal("createImageBitmap", async () => ({
+    width: 100,
+    height: 100,
+    close: () => undefined,
+  }));
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+    "data:image/png;base64,AAAA",
+  );
+  const create = vi
+    .spyOn(URL, "createObjectURL")
+    .mockReturnValue("blob:package");
+  const revoke = vi
+    .spyOn(URL, "revokeObjectURL")
+    .mockImplementation(() => undefined);
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+
+  try {
+    await mount(<StoreModeRegion mode="themes" client={client} />);
+    await pressCell("porch-strip", "export");
+
+    await vi.waitFor(() => {
+      must(
+        document.body.querySelector<HTMLElement>(
+          ".editor-shell-dialog-overlay",
+        ),
+        "the crop warning",
+      );
+    });
+    expect(downloads, "the export ran before the warning was answered").toEqual(
+      [],
+    );
+
+    await act(async () =>
+      must(
+        Array.from(document.body.querySelectorAll("button")).find(
+          (button) => button.textContent === uiCopy.outputBake.cancel,
+        ) ?? null,
+        "the warning's cancel",
+      ).click(),
+    );
+    await vi.waitFor(() => {
+      expect(
+        document.body.querySelector(".editor-shell-dialog-overlay"),
+        "cancel left the warning open",
+      ).toBeNull();
+    });
+    expect(downloads, "cancel still wrote the package").toEqual([]);
+
+    await pressCell("porch-strip", "export");
+    await vi.waitFor(() => {
+      must(
+        document.body.querySelector<HTMLElement>(
+          ".editor-shell-dialog-overlay",
+        ),
+        "the crop warning after the second press",
+      );
+    });
+    await act(async () => {
+      must(
+        Array.from(document.body.querySelectorAll("button")).find(
+          (button) => button.textContent === uiCopy.outputBake.confirm,
+        ) ?? null,
+        "the warning's continue",
+      ).click();
+    });
+    await vi.waitFor(
+      () => {
+        expect(downloads, "the confirmed export wrote no package").toEqual([
+          "front-porch.yunari-theme",
+        ]);
+      },
+      { timeout: 3000 },
+    );
+    expect(create).toHaveBeenCalledOnce();
+  } finally {
+    create.mockRestore();
+    revoke.mockRestore();
+    click.mockRestore();
   }
 });
 

@@ -5,6 +5,7 @@ import {
 import {
   readThemePackage,
   type ThemeCredits,
+  themeIdFromName,
   type WidgetDocument,
   writeThemePackage,
   writeWidgetPackage,
@@ -54,8 +55,20 @@ export function serializeThemePackage(
   });
 }
 
-export function fileNameFor(theme: { readonly id: string }): string {
-  const base = STABLE_ID_PATTERN.test(theme.id) ? theme.id : "theme";
+/** A package file named after the theme, not its opaque library id. The name
+ *  is the document's own, slugged for a filesystem; a document that names
+ *  nothing keeps the id it was stored under. */
+export function fileNameFor(theme: {
+  readonly id: string;
+  readonly metadata?: { readonly name?: string } | undefined;
+}): string {
+  const named = themeIdFromName(theme.metadata?.name ?? "");
+  const base =
+    named !== ""
+      ? named
+      : STABLE_ID_PATTERN.test(theme.id)
+        ? theme.id
+        : "theme";
   return `${base}.yunari-theme`;
 }
 
