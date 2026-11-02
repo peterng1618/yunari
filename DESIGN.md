@@ -121,6 +121,12 @@ relation to its bound — a theme at 60% of its limit is `--ok`, one past 100% i
 `--error`; the control it blocks still uses its own vocabulary, and a fault that
 is not destructive never borrows `--hot`.
 
+**A sensor key's availability is a dot before its name.** Green (`--ok`) means
+the host reports the key now, red (`--error`) means the theme binds it but the
+host does not report it, and grey (`--faint`) means unknown — the host has not
+answered, or the key is neither reported nor bound. The row's accessible name
+repeats the state, because colour alone does not reach every author.
+
 ## Typography
 
 Three families, each with one job.

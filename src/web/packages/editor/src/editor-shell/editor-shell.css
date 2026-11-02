@@ -1160,6 +1160,24 @@ body,
   line-height: var(--text-sm--line-height);
   cursor: pointer;
 }
+/* A reading's state, in the gutter before its name. Colour is the fast read;
+   the row's accessible name repeats the state. Green reporting now, red bound
+   but unavailable, grey unknown or not yet answered. */
+.editor-shell-sensor-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-6);
+  border-radius: 50%;
+  background: var(--faint);
+}
+.editor-shell-sensor-dot[data-status="reporting"] {
+  background: var(--ok);
+}
+.editor-shell-sensor-dot[data-status="bound"] {
+  background: var(--error);
+}
 .editor-shell-text-mentions [role="option"][aria-selected="true"] {
   background: color-mix(in srgb, var(--shell-text) 12%, transparent);
 }

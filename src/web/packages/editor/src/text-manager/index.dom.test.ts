@@ -1384,6 +1384,39 @@ describe("inline reading insert", () => {
     expect(text.isEditing).toBe(false);
   });
 
+  it("draws a reading's state before its name and repeats it as the name", () => {
+    // The same list the run picker offers: one dot per key, and an accessible
+    // name that says the state colour alone cannot.
+    const { canvas, text } = authored();
+    createTextManager(canvas, vi.fn()).setMentions({
+      descriptors: () => [RAM, GPU],
+      measured: () => new Set(["ram.used.percent"]),
+      bound: () => new Set(["gpu.load.percent"]),
+      insert: () => true,
+      settle: () => true,
+    });
+    const textarea = edit(text);
+
+    type(textarea, "Hi @");
+    const rows = options();
+    expect(
+      rows.map((row) =>
+        row
+          .querySelector(".editor-shell-sensor-dot")
+          ?.getAttribute("data-status"),
+      ),
+    ).toEqual(["reporting", "bound"]);
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual([
+      "RAM used, reporting now",
+      "GPU load, bound but unavailable",
+    ]);
+    // The dot is a mark, not part of the row's text.
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "RAM used",
+      "GPU load",
+    ]);
+  });
+
   it("moves the highlight with the arrow keys", () => {
     const { canvas, text } = authored();
     const insert = vi.fn(

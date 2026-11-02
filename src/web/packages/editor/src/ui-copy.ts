@@ -413,6 +413,13 @@ export const uiCopy = {
     runColour: "Color",
     runSource: "Reads",
     staticText: "Static text",
+    /** What the dot before a reading says about this PC. The accessible name
+        repeats the state, because colour alone does not reach every author. */
+    sensorStatus: {
+      reporting: "reporting now",
+      bound: "bound but unavailable",
+      unknown: "unknown",
+    },
     runFormat: "Format",
     /**
      * The token vocabulary, under the field. The formatter's own rule is that

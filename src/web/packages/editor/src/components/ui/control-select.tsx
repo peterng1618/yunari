@@ -21,6 +21,11 @@ export type ControlOption = {
   readonly name: string;
   readonly disabled?: boolean;
   readonly group?: string;
+  /** A mark drawn in a fixed gutter before the name — a status dot, not a
+   *  second label. The option's text stays the name alone. */
+  readonly leading?: React.ReactNode;
+  /** The accessible name where the mark carries state the name does not. */
+  readonly ariaLabel?: string;
 };
 
 /** Runs of consecutive options sharing a group, in the order offered. A change
@@ -212,8 +217,16 @@ export function SelectControl(
                     // Namespaced like every other hook, so the string a locator
                     // names and the string the control commits are one string.
                     data-yunari-option={option.id}
-                    className="cursor-default rounded-sm px-[var(--space-8)] py-[var(--space-4)] data-[highlighted]:bg-panel-2"
+                    {...(option.ariaLabel === undefined
+                      ? {}
+                      : { "aria-label": option.ariaLabel })}
+                    className="flex cursor-default items-center rounded-sm px-[var(--space-8)] py-[var(--space-4)] data-[highlighted]:bg-panel-2"
                   >
+                    {option.leading === undefined ? null : (
+                      <span aria-hidden className="flex flex-none items-center">
+                        {option.leading}
+                      </span>
+                    )}
                     <Select.ItemText>{option.name}</Select.ItemText>
                   </Select.Item>
                 ));

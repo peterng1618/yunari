@@ -1176,6 +1176,17 @@ export class EditorDocument {
     );
   }
 
+  /** Every semantic key the theme binds, across its nodes. A reading picker
+   *  marks a key on this set that the host does not answer as bound but
+   *  unavailable; a key off it that is likewise unanswered is only unknown. */
+  boundKeys(): ReadonlySet<string> {
+    const keys = new Set<string>();
+    for (const bindings of Object.values(this.envelope.bindings ?? {})) {
+      for (const binding of bindings) keys.add(binding.semanticKey);
+    }
+    return keys;
+  }
+
   setBindings(id: string, bindings: readonly Binding[]): void {
     this.addBindings({ [id]: bindings });
   }

@@ -13,6 +13,7 @@ import {
   blur,
   choose,
   click,
+  flush,
   mountRunEditor,
   optionsOf,
   press,
@@ -1103,58 +1104,92 @@ describe("which readings a run may name", () => {
     expectedTier: "extended",
   };
 
-  it("groups the built-ins by family and puts a discovered key in its family", () => {
-    // The catalogue is the host's answer rather than a second table, so a key a
-    // provider reports sits under the same heading as the built-ins it belongs
-    // with instead of at the end of one flat list.
+  it("lists the catalogue flat, with a discovered key in its family's place", () => {
+    // The catalogue is the host's answer rather than a second table, and one
+    // list has no room for a heading per family: a discovered key takes the
+    // place its family occupies in the catalogue rather than the end of the list.
     const box = mountRunEditor({
       runs: literalClock,
       descriptors: () => [...SEMANTIC_KEYS, fan],
     });
     const sources = box.sources();
 
-    expect(sources.find((source) => source.id === "cpu.load")?.group).toBe(
-      "cpu",
-    );
-    expect(sources.find((source) => source.id === "custom.fan")).toEqual({
+    expect(sources.every((source) => source.group === undefined)).toBe(true);
+    expect(sources.find((source) => source.id === "custom.fan")).toMatchObject({
       id: "custom.fan",
       name: "Fan speed",
-      group: "cpu",
+      status: "unknown",
     });
-    const cpu = sources
-      .map((source, index) => ({ ...source, index }))
-      .filter((source) => source.group === "cpu");
-    const at = cpu.findIndex((source) => source.id === "custom.fan");
+    const keys = sources.map((source) => source.id);
+    const at = keys.indexOf("custom.fan");
     expect(at).toBeGreaterThan(0);
-    expect(cpu[at]?.index).toBe((cpu[at - 1]?.index ?? -2) + 1);
+    expect(at).toBeLessThan(keys.length - 1);
     return box.dispose();
   });
 
   it("marks a key the host does not measure, and leaves a measured one offered", () => {
     // The catalogue lists every key the vocabulary can name. What this PC
     // answers is a separate fact, so an unmeasured key stays recognisable in
-    // the list but is not a choice; a measured one is offered as before.
+    // the list but is not a choice; a measured one is offered as before. A key
+    // the theme binds that is not answered is the red state, and one neither
+    // answered nor bound is grey.
     const box = mountRunEditor({
       runs: literalClock,
       measured: new Set(["ram.used"]),
+      bound: new Set(["cpu.load"]),
     });
     const sources = box.sources();
 
-    expect(sources.find((source) => source.id === "cpu.load")?.disabled).toBe(
-      true,
+    expect(sources.find((source) => source.id === "cpu.load")).toMatchObject({
+      disabled: true,
+      status: "bound",
+    });
+    expect(sources.find((source) => source.id === "ram.used")).toMatchObject({
+      status: "reporting",
+    });
+    expect(sources.find((source) => source.id === "ram.used")?.disabled).toBe(
+      undefined,
     );
-    expect(
-      sources.find((source) => source.id === "ram.used")?.disabled,
-    ).toBeUndefined();
+    expect(sources.find((source) => source.id === "time.now")).toMatchObject({
+      disabled: true,
+      status: "unknown",
+    });
     return box.dispose();
   });
 
   it("marks nothing when the host has not said what it measures", () => {
     const box = mountRunEditor({ runs: literalClock });
+    const sources = box.sources();
 
-    expect(box.sources().some((source) => source.disabled === true)).toBe(
-      false,
+    expect(sources.some((source) => source.disabled === true)).toBe(false);
+    const statuses = sources
+      .map((source) => source.status)
+      .filter((status) => status !== undefined);
+    expect(statuses.length).toBeGreaterThan(0);
+    expect(statuses.every((status) => status === "unknown")).toBe(true);
+    return box.dispose();
+  });
+
+  it("draws a key's state and repeats it in the accessible name", async () => {
+    const box = mountRunEditor({
+      runs: literalClock,
+      measured: new Set(["ram.used"]),
+      bound: new Set(["cpu.load"]),
+    });
+    await click(box.pick('[data-yunari-run-source="0"]'));
+    await flush();
+
+    const item = document.querySelector<HTMLElement>(
+      '[data-yunari-option="cpu.load"]',
     );
+    expect(item?.getAttribute("aria-label")).toBe(
+      "CPU load, bound but unavailable",
+    );
+    expect(
+      item
+        ?.querySelector(".editor-shell-sensor-dot")
+        ?.getAttribute("data-status"),
+    ).toBe("bound");
     return box.dispose();
   });
 
@@ -1168,12 +1203,20 @@ describe("which readings a run may name", () => {
       ],
       declared: [{ id: "saved", semanticKey: "retired.key" }],
       descriptors: () => [fan],
+      measured: new Set(["custom.fan"]),
     });
 
-    expect(box.sources()).toContainEqual({
+    const retained = box
+      .sources()
+      .find((source) => source.id === "retired.key");
+    expect(retained).toMatchObject({
       id: "retired.key",
       name: "retired.key",
+      status: "bound",
     });
+    // The way back to the key the document holds stays a choice even though the
+    // host does not answer it: the binding is already there.
+    expect(retained?.disabled).toBeUndefined();
     expect(valueText(box.host, 'data-yunari-run-source="0"')).toBe(
       "retired.key",
     );

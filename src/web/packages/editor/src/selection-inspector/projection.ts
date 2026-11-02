@@ -78,6 +78,7 @@ export function createProjection(args: {
         ? {}
         : { descriptors: options.descriptors }),
       ...(options.measured === undefined ? {} : { measured: options.measured }),
+      ...(options.bound === undefined ? {} : { bound: options.bound }),
       ...(chartFields === undefined ? {} : { chartFields }),
     };
   };
