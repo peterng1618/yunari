@@ -77,7 +77,7 @@ export function FinderFrame(props: {
               to be reachable by a finger. */}
           <div className="flex min-h-12 flex-none flex-wrap items-center border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))]">
             {props.heading === undefined ? null : (
-              <h2 className="mr-[var(--space-12)] whitespace-nowrap text-sm font-medium text-text">
+              <h2 className="mr-[var(--space-12)] whitespace-nowrap text-sm font-medium text-accent">
                 {props.heading}
               </h2>
             )}
