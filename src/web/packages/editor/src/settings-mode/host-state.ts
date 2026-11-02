@@ -157,6 +157,7 @@ export interface HostState {
     },
   ) => void;
   readonly reconnectPanel: (id: string) => Promise<void>;
+  readonly disconnectPanel: (id: string) => Promise<void>;
   readonly addPanel: (panel: PanelHint) => void;
   readonly addDisplay: (
     label: string,
@@ -312,6 +313,18 @@ export function useHostSettings(props: {
       },
       () => {
         // The reconnect itself succeeded; the poll above will re-read.
+      },
+    );
+  };
+
+  const disconnectPanel = async (id: string): Promise<void> => {
+    await settings.disconnectPanel(id);
+    await client.listDisplays().then(
+      (answer) => {
+        if (mounted.current) setMap(answer);
+      },
+      () => {
+        // The disconnect itself succeeded; the poll above will re-read.
       },
     );
   };
@@ -618,6 +631,7 @@ export function useHostSettings(props: {
     replaceName,
     replacePresentation,
     reconnectPanel,
+    disconnectPanel,
     addPanel,
     addDisplay,
     removeDisplay,

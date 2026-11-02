@@ -582,6 +582,37 @@ describe("createPanelManager", () => {
     await manager.stop("strip");
   });
 
+  it("keeps a disconnected panel stopped until a reconnect", async () => {
+    let opens = 0;
+    h.family = familyOver(async () => {
+      opens += 1;
+      return deviceOver();
+    });
+
+    const manager = managerOver({ reconcileIntervalMs: 10 });
+
+    try {
+      await manager.start("strip");
+      expect(manager.status("strip")).toBe("connected");
+
+      await manager.disconnect("strip");
+      expect(manager.status("strip")).toBe("disconnected");
+      expect(manager.stopped("strip")).toBe(true);
+
+      // The retry pass owns no entry for it and must not open it again.
+      await manager.reconcile();
+      await pause(30);
+      expect(opens).toBe(1);
+
+      await manager.reconnect("strip");
+      expect(manager.stopped("strip")).toBe(false);
+      expect(opens).toBe(2);
+      expect(manager.status("strip")).toBe("connected");
+    } finally {
+      await manager.stopAll();
+    }
+  });
+
   it("detaches a lost panel and the retry pass opens it again", async () => {
     const errors: string[] = [];
     let opens = 0;

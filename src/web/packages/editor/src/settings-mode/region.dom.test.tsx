@@ -366,6 +366,7 @@ function hostSettings(
         wrote.reconnects.push(id);
         return "connected";
       },
+      disconnectPanel: async () => "disconnected",
       renameDisplay: async (id, label) => {
         wrote.names.push({ id, label });
         return label;

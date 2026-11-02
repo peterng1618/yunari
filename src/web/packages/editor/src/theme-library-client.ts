@@ -158,6 +158,9 @@ export interface ThemedDisplay {
 /** What the host says about one panel display's device. */
 export interface ThemedPanel {
   readonly status: PanelConnectionStatus;
+  /** The owner disconnected this panel: it stays off until a reconnect or a
+   *  host restart, so nothing promises the retry loop will bring it back. */
+  readonly stopped?: boolean;
   /** The command kinds the family accepts. Spelled as strings here because this
    *  seam reads the wire; the controls surface filters them. */
   readonly commands: readonly string[];
@@ -299,8 +302,9 @@ function readDisplayKind(value: unknown): ThemedDisplay["kind"] {
 function readPanelState(value: unknown): { readonly panel?: ThemedPanel } {
   if (typeof value !== "object" || value === null) return {};
 
-  const { status, commands } = value as {
+  const { status, stopped, commands } = value as {
     readonly status?: unknown;
+    readonly stopped?: unknown;
     readonly commands?: unknown;
   };
   if (
@@ -314,6 +318,7 @@ function readPanelState(value: unknown): { readonly panel?: ThemedPanel } {
   return {
     panel: {
       status,
+      ...(stopped === true ? { stopped: true } : {}),
       commands: Array.isArray(commands)
         ? commands.filter((kind): kind is string => typeof kind === "string")
         : [],

@@ -567,6 +567,7 @@ describe("ThemeLibraryClient", () => {
                 rotation: 0,
                 panel: {
                   status: "disconnected",
+                  stopped: true,
                   commands: ["brightness", "restart", 7],
                 },
               },
@@ -591,6 +592,7 @@ describe("ThemeLibraryClient", () => {
           rotation: 0,
           panel: {
             status: "disconnected",
+            stopped: true,
             commands: ["brightness", "restart"],
           },
         },

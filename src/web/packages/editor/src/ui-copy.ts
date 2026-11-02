@@ -624,10 +624,18 @@ export const uiCopy = {
          *  host's retry cadence, stated so the owner knows to wait rather than
          *  unplug anything. */
         disconnectedHint: "The host tries this panel again every 15 seconds.",
+        /** The owner disconnected it. This is not the retry loop's state, so
+         *  the surface must not promise the panel will come back on its own. */
+        stoppedHint:
+          "Disconnected by hand. It stays off until you reconnect it or Yunari restarts.",
         reconnect: "Reconnect",
         reconnecting: "Reconnecting…",
         reconnectFailed: (reason: string): string =>
           `The panel could not be reconnected: ${reason}`,
+        disconnect: "Disconnect",
+        disconnecting: "Disconnecting…",
+        disconnectFailed: (reason: string): string =>
+          `The panel could not be disconnected: ${reason}`,
         dialogTitle: (panel: string): string => `Controls — ${panel}`,
         close: "Close",
         brightness: "Brightness",
