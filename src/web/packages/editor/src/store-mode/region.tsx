@@ -1099,7 +1099,6 @@ function StoreRegion(props: {
         }}
         label={uiCopy.store.deleteConfirm.title}
         closeLabel={uiCopy.store.deleteConfirm.cancel}
-        closeIcon
         className="editor-shell-dialog--delete-theme"
       >
         <div

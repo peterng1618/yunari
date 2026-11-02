@@ -93,17 +93,15 @@ export function ActionBox(props: {
  *
  * **`closeLabel` renders the one way out that needs no Escape key.** Base UI's
  * own contract for a modal is a `Dialog.Close` inside the popup so a touch
- * screen reader can leave it; a caller that wants that control passes the word
- * for it, and a caller that draws its own (the sheet below) omits it. A caller
- * whose window has no title bar to put the word in passes `closeIcon` and gets
- * the same control as an ×.
+ * screen reader can leave it; a caller that wants that control passes its
+ * accessible name, and a caller that draws its own omits it. The control draws
+ * the same × in every window: the word lives only in the label.
  */
 export function Dialog({
   open,
   onOpenChange,
   label,
   closeLabel,
-  closeIcon = false,
   className,
   onKeyDown,
   children,
@@ -112,9 +110,6 @@ export function Dialog({
   readonly onOpenChange: (open: boolean) => void;
   readonly label: string;
   readonly closeLabel?: string;
-  /** Draw the way out as a mark rather than a word, for a window with no title
-   *  bar: the finder is nearly the whole editor and has no footer either. */
-  readonly closeIcon?: boolean;
   /** An extra class on the popup, for a dialog that sizes itself. */
   readonly className?: string;
   /** A key the content handles before the primitive's own dismissal sees it.
@@ -150,7 +145,7 @@ export function Dialog({
               className="editor-shell-dialog-close"
               aria-label={closeLabel}
             >
-              {closeIcon ? <Glyph icon={CLOSE_GLYPH} size={16} /> : closeLabel}
+              <Glyph icon={CLOSE_GLYPH} size={16} />
             </DialogPrimitive.Close>
           )}
         </DialogPrimitive.Popup>

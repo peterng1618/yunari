@@ -80,7 +80,6 @@ export function VideoTrimModal({
       }}
       label={copy.title}
       closeLabel={uiCopy.assets.close}
-      closeIcon
       className="editor-shell-dialog--video-trim"
     >
       <div

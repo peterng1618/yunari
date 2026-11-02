@@ -36,7 +36,6 @@ export function PlaceImageModal({
       }}
       label={copy.title}
       closeLabel={copy.close}
-      closeIcon
     >
       <div
         data-yunari-place-image-modal=""

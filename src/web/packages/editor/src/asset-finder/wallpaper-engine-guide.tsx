@@ -18,7 +18,6 @@ export function WallpaperEngineGuide(props: {
       onOpenChange={props.onOpenChange}
       label={copy.guideTitle}
       closeLabel={copy.close}
-      closeIcon
     >
       <div
         data-yunari-wallpaper-engine-guide-dialog=""

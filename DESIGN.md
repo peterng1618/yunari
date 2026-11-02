@@ -519,8 +519,9 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
 
 **A dialog's way out sits in its top-right corner.** The close control is a
-mark (or its one-word label) at `--space-8` from those two edges, never a
-bottom-row action: the bottom row answers the dialog, ordered cancel then
+mark at `--space-8` from those two edges, never a bottom-row action: the word
+lives in its accessible name, not on it. The bottom row answers the dialog,
+ordered cancel then
 confirm, right-aligned. A sheet that draws its own close control is the defect,
 not a variant.
 

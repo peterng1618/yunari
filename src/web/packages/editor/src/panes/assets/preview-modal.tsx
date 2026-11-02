@@ -280,7 +280,6 @@ function AssetPreviewModal({
       }}
       label={assetFileName(asset)}
       closeLabel={copy.close}
-      closeIcon
       className="editor-shell-dialog--asset-preview"
     >
       <div

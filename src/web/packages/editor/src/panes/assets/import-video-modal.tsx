@@ -79,7 +79,7 @@ export function ImportVideoModal({
         if (!next && !running) close();
       }}
       label={copy.title}
-      {...(running ? {} : { closeLabel: copy.close, closeIcon: true })}
+      {...(running ? {} : { closeLabel: copy.close })}
     >
       <div
         data-yunari-import-video-modal=""

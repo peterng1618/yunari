@@ -52,7 +52,6 @@ export function FinderFrame(props: {
       onOpenChange={props.onOpenChange}
       label={props.label}
       closeLabel={props.closeLabel}
-      closeIcon
       {...(props.className === undefined ? {} : { className: props.className })}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || props.onEscape?.() !== true) return;
