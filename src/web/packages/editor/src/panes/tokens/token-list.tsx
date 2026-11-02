@@ -1,5 +1,5 @@
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
-import { Glyph, PLUS_GLYPH } from "../../editor-shell/icons.js";
+import { ADD_GLYPH, Glyph } from "../../editor-shell/icons.js";
 import {
   type TokenSelectionStore,
   useTokenSelection,
@@ -117,7 +117,7 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
           data={{ "data-yunari-type-preset-add": "" }}
           onClick={onAdd}
         >
-          <Glyph icon={PLUS_GLYPH} size={14} />
+          <Glyph icon={ADD_GLYPH} size={14} />
         </ControlIconButton>
       </div>
     </div>

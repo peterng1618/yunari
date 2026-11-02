@@ -32,9 +32,9 @@ import {
   useDraftCommit,
 } from "../components/ui/control-well.js";
 import {
+  ADD_GLYPH,
   DELETE_ITEM_GLYPH,
   Glyph,
-  PLUS_GLYPH,
   TWISTY_GLYPHS,
 } from "../editor-shell/icons.js";
 import {
@@ -882,7 +882,7 @@ export function RunEditor(props: {
             if (edits.addRun()) setFollowLast(true);
           }}
         >
-          <Glyph icon={PLUS_GLYPH} size={12} />
+          <Glyph icon={ADD_GLYPH} size={12} />
         </button>
       </div>
 

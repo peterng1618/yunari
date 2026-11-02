@@ -308,6 +308,14 @@ it("says the scene is not set rather than inventing a count when there is no usa
 it("adds a token under the first free unroled id", async () => {
   const { host, change } = await mount(withWeight);
 
+  // A circled plus, not a bare one: the bare mark read as a glyph rather than
+  // the control it is.
+  expect(
+    host
+      .querySelector("[data-yunari-type-preset-add] svg")
+      ?.getAttribute("class"),
+  ).toContain("lucide-circle-plus");
+
   await click(host.querySelector("[data-yunari-type-preset-add]") as Element);
 
   const added = change.mock.calls[0]?.[0] as TypeTokens;

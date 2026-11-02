@@ -5,7 +5,7 @@ import {
 } from "@yunari/renderer-core";
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
-import { Glyph, PLUS_GLYPH } from "../../editor-shell/icons.js";
+import { ADD_GLYPH, Glyph } from "../../editor-shell/icons.js";
 import {
   type TokenSelectionStore,
   useTokenSelection,
@@ -133,7 +133,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
           data={{ "data-yunari-palette-add": "" }}
           onClick={add}
         >
-          <Glyph icon={PLUS_GLYPH} size={14} />
+          <Glyph icon={ADD_GLYPH} size={14} />
         </ControlIconButton>
       </div>
     </div>

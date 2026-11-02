@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  CirclePlus,
   CircleX,
   CircuitBoard,
   Clock,
@@ -203,6 +204,10 @@ export const INSPECTOR_EXPAND_GLYPH: LucideIcon = ChevronLeft;
 export const PIPETTE_GLYPH: LucideIcon = Pipette;
 /** The Add slot's plus, and the camera cluster's zoom-in. */
 export const PLUS_GLYPH: LucideIcon = Plus;
+/** An add control's mark. A circled plus reads as a button where a bare plus
+ *  reads as a glyph; the camera cluster keeps `PLUS_GLYPH`, because there the
+ *  plus is a zoom step and shares the toolbar's stroke weight with `MINUS`. */
+export const ADD_GLYPH: LucideIcon = CirclePlus;
 /** The Assets slot: the declared files as one open collection, rather than the
  *  store's `Folder` for opening a single item. */
 export const ASSETS_GLYPH: LucideIcon = FolderOpen;
@@ -397,7 +402,7 @@ export const CLOSE_GLYPH: LucideIcon = X;
  *  for them to disagree. */
 export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
   composition: STACK_GLYPH,
-  add: PLUS_GLYPH,
+  add: ADD_GLYPH,
   assets: ASSETS_GLYPH,
   tokens: PALETTE_GLYPH,
   document: PAGE_GLYPH,

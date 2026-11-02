@@ -1,7 +1,7 @@
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { colorAt } from "@yunari/renderer-core";
 import { useRef, useState } from "react";
-import { Glyph, MINUS_GLYPH, PLUS_GLYPH } from "../../editor-shell/icons.js";
+import { ADD_GLYPH, Glyph, MINUS_GLYPH } from "../../editor-shell/icons.js";
 import { presetLibrary } from "../../preset-library/index.js";
 import { usePresetLibrary } from "../../preset-library/use-preset-library.js";
 import { uiCopy } from "../../ui-copy.js";
@@ -293,7 +293,7 @@ export function GradientEditor({
           data={{ "data-testid": "gradient-add" }}
           onClick={addMidpoint}
         >
-          <Glyph icon={PLUS_GLYPH} size={14} />
+          <Glyph icon={ADD_GLYPH} size={14} />
         </ControlIconButton>
         <ControlIconButton
           label={uiCopy.panels.removeStop}
