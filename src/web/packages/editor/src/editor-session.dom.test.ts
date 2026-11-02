@@ -49,8 +49,10 @@ async function flushPopups(): Promise<void> {
 }
 
 /**
- * A token's two-press delete: the first press reveals the reassignment list,
- * the choice names where the references go, and the second press deletes.
+ * A token's delete: a referenced token's first press reveals the reassignment
+ * list, the choice names where the references go, and the second press deletes.
+ * An unreferenced token has nothing to move, so its first press deletes and
+ * there is no list to choose from.
  *
  * Base UI commits a list item only when the press that precedes the click
  * started on it, so the press is part of the interaction.
@@ -63,7 +65,9 @@ async function deleteToken(
 ): Promise<void> {
   column.querySelector<HTMLButtonElement>(buttonHook)?.click();
   await flushPopups();
-  column.querySelector<HTMLElement>(selectHook)?.click();
+  const select = column.querySelector<HTMLElement>(selectHook);
+  if (select === null) return;
+  select.click();
   await flushPopups();
   const option = document.querySelector<HTMLElement>(
     `[role="option"][data-yunari-option="${target}"]`,

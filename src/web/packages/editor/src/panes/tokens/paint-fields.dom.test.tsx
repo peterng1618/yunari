@@ -89,6 +89,7 @@ function Harness(props: {
   readonly usage: PaintFieldsProps["usage"];
   readonly onDelete: PaintFieldsProps["onDelete"];
   readonly onSettled: PaintFieldsProps["onSettled"];
+  readonly background: PaintFieldsProps["background"];
   readonly change: (palette: FabricPalette) => void;
 }): React.JSX.Element {
   const [palette, setPalette] = useState(props.initial);
@@ -103,6 +104,7 @@ function Harness(props: {
       usage={props.usage}
       onDelete={props.onDelete}
       onSettled={props.onSettled}
+      background={props.background}
       onChange={(next) => {
         props.change(next);
         setPalette(next);
@@ -117,6 +119,7 @@ async function mount(
   options: {
     readonly usage?: PaintFieldsProps["usage"];
     readonly onDelete?: PaintFieldsProps["onDelete"];
+    readonly background?: PaintFieldsProps["background"];
   } = {},
 ): Promise<{
   readonly host: HTMLElement;
@@ -140,6 +143,7 @@ async function mount(
         usage={options.usage}
         onDelete={options.onDelete}
         onSettled={settled}
+        background={options.background}
         change={change}
       />,
     );
@@ -433,6 +437,7 @@ it("records a token rename as its own step, so an unrelated undo keeps it", asyn
         usage={undefined}
         onDelete={undefined}
         onSettled={() => history.save()}
+        background={undefined}
         change={(next) => {
           palette = next;
         }}
@@ -716,6 +721,41 @@ it("refuses the second press until a replacement is chosen", async () => {
   // The box starts empty rather than on "None", so there is no default token
   // to be deleted into: the author has to name one.
   expect(remove).not.toHaveBeenCalled();
+});
+
+it("deletes an unreferenced token on the first press", async () => {
+  const remove = vi.fn();
+  const { host } = await mount(PAINT_LIST_PALETTE, "background", {
+    onDelete: remove,
+    usage: () => ({}),
+  });
+
+  await click(
+    host.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")!,
+  );
+
+  // Nothing names it, so there is nothing to reassign and no question to ask.
+  expect(remove).toHaveBeenCalledWith("background", undefined);
+  expect(host.querySelector("[data-yunari-palette-replacement]")).toBeNull();
+});
+
+it("keeps the reassignment when the artboard background names the token", async () => {
+  const remove = vi.fn();
+  const { host } = await mount(PAINT_LIST_PALETTE, "background", {
+    onDelete: remove,
+    usage: () => ({}),
+    background: () => ({ color: { ref: "palette.background" } }),
+  });
+
+  await click(
+    host.querySelector<HTMLButtonElement>("[data-yunari-palette-delete]")!,
+  );
+
+  // The objects walk does not see the background's colour reference.
+  expect(remove).not.toHaveBeenCalled();
+  expect(
+    host.querySelector("[data-yunari-palette-replacement]"),
+  ).not.toBeNull();
 });
 
 it("names the objects a token is used by", async () => {

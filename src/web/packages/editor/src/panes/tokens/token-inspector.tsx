@@ -1,4 +1,5 @@
 import type {
+  Background,
   FabricGlobals,
   FabricPalette,
   TypeToken,
@@ -94,7 +95,7 @@ function runFontAction(id: string, actions: TokenInspectorActions): boolean {
 
 export interface TokenInspectorActions {
   readonly onChange: (presets: TypeTokens) => void;
-  readonly onDelete: (id: string, replacement: string) => void;
+  readonly onDelete: (id: string, replacement: string | undefined) => void;
   readonly unbindFace: (id: string) => void;
   /** Every declared face of a family, so a bound preset's weight is a list of
    *  the weights the package actually holds rather than free text that would
@@ -121,8 +122,12 @@ export interface TokenInspectorActions {
         readonly onChange: (palette: FabricPalette) => void;
         readonly onSettled?: () => void;
         readonly onDelete:
-          | ((id: string, replacement: string) => void)
+          | ((id: string, replacement: string | undefined) => void)
           | undefined;
+        /** The artboard background, whose colour is a palette reference the
+         *  objects walk does not see. Absent means a reference cannot be ruled
+         *  out, so the token is treated as referenced. */
+        readonly background?: (() => Background | undefined) | undefined;
         /** The objects each token is linked to; re-read per draw, as today. */
         readonly usage: (() => TokenUsage) | undefined;
       }
@@ -189,6 +194,7 @@ function TokenInspector(props: {
         onChange={paints.onChange}
         onSettled={paints.onSettled}
         onDelete={paints.onDelete}
+        background={paints.background}
       />
     );
   }
@@ -219,6 +225,9 @@ function TokenFields(props: {
   // The same live walk the list's figures read, so the layers named here and
   // the count beside the row are one answer about one scene.
   const uses = actions.typeUsage?.();
+  // An unknown scene is not an empty one: without the walk, a reference cannot
+  // be ruled out, so the deletion keeps its reassignment step.
+  const referenced = uses === undefined || (uses[id]?.length ?? 0) > 0;
   const put = (next: TypeToken): void => {
     actions.onChange({ ...presets, [id]: next });
   };
@@ -240,7 +249,7 @@ function TokenFields(props: {
       className="flex flex-col gap-[var(--space-8)]"
     >
       <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.typeToken}
+        {tokenName(id, value)}
       </h2>
       {/* Computed, never stored: a role reads `[Heading] Segoe UI 600`, an
           unroled token `Manrope 600`. The field is a reading, not a well. */}
@@ -305,7 +314,12 @@ function TokenFields(props: {
         </div>
       )}
       {isTypeTokenRole(id) ? null : (
-        <Deletion id={id} presets={presets} actions={actions} />
+        <Deletion
+          id={id}
+          presets={presets}
+          actions={actions}
+          referenced={referenced}
+        />
       )}
       {uses === undefined ? null : (
         <LayerUses
@@ -483,15 +497,17 @@ function ReadOnlyPair(props: {
 /**
  * The deletion row: the reassignment this token's references move to, and the
  * deletion itself. Drawn for an unroled token only — a role id is required by
- * the validator — and the reassignment opens on the press, empty, because
- * deleting the last unroled token would strand every reference to it.
+ * the validator — and a referenced token's reassignment opens on the press,
+ * empty, because deleting it would strand every reference to it. An
+ * unreferenced token has nothing to move, so it is deleted by that press.
  */
 function Deletion(props: {
   readonly id: string;
   readonly presets: TypeTokens;
   readonly actions: TokenInspectorActions;
+  readonly referenced: boolean;
 }): React.JSX.Element {
-  const { id, presets, actions } = props;
+  const { id, presets, actions, referenced } = props;
   const options = orderedTokens({ typeTokens: presets })
     .filter((candidate) => candidate.id !== id)
     .map(({ id: candidate, token }) => ({
@@ -501,6 +517,7 @@ function Deletion(props: {
   return (
     <TokenDelete
       options={options}
+      referenced={referenced}
       label={uiCopy.panels.deleteType}
       selectData={{ "data-yunari-token-replacement": "" }}
       buttonData={{ "data-yunari-token-delete": "" }}

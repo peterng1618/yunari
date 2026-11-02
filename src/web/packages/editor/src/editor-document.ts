@@ -705,6 +705,7 @@ export class EditorDocument {
       id,
       metadata: { ...(this.#envelope.metadata ?? {}), name },
     });
+    this.#renderDocumentPane();
   }
 
   /** Rewrites the theme's display name in place. The stored id, the version
@@ -1058,6 +1059,17 @@ export class EditorDocument {
     // — unlike the globals fan-out above, which every globals setter goes
     // through rather than repeating the receiver list.
     this.#pushLocale();
+    this.#renderDocumentPane();
+  }
+
+  /** The Document pane shows this envelope's metadata and artboard, and a
+   *  metadata write can come from outside the pane — the identity chip's rename
+   *  is one — so the pane is redrawn from the envelope rather than relying on
+   *  the field that committed to hand the value back. */
+  #renderDocumentPane(): void {
+    this.#consumers
+      .artboard()
+      .render(this.#envelope.artboard, this.#envelope.metadata);
   }
 
   #pushLocale(): void {
@@ -1237,8 +1249,23 @@ export class EditorDocument {
     this.#consumers.palette().render(palette);
   }
 
-  deletePalette(id: string, replacement: string): void {
-    if (id === "none" || id === replacement) return;
+  /**
+   * Drops a paint token. `replacement` is the token its references move to;
+   * `undefined` means the caller's live walk found none, so the key is dropped
+   * with no reassignment walk.
+   */
+  deletePalette(id: string, replacement: string | undefined): void {
+    if (id === "none") return;
+    if (replacement === undefined) {
+      const { [id]: _deleted, ...palette } =
+        this.#envelope.globals?.palette ?? {};
+      this.#deleteGlobalsEntry(
+        { ...this.#envelope.globals, palette },
+        { repaint: () => this.#consumers.palette().render(palette) },
+      );
+      return;
+    }
+    if (id === replacement) return;
     const { from, to, background, palette } = reassignPaletteToken(
       this.#shell.editor.canvas,
       this.#envelope.background,
@@ -1273,7 +1300,21 @@ export class EditorDocument {
     this.#shell.editor.historyManager.saveState();
   }
 
-  deleteType(id: string, replacement: string): void {
+  /**
+   * Drops a type preset. `replacement` is the preset its references move to;
+   * `undefined` means the caller's live walk found none, so the key is dropped
+   * with no reassignment walk.
+   */
+  deleteType(id: string, replacement: string | undefined): void {
+    if (replacement === undefined) {
+      const { [id]: _deleted, ...typeTokens } = (this.#envelope.globals
+        ?.typeTokens ?? {}) as TypeTokens;
+      this.#deleteGlobalsEntry(
+        { ...this.#envelope.globals, typeTokens },
+        { repaint: () => this.#consumers.types().render(typeTokens) },
+      );
+      return;
+    }
     if (id === replacement) return;
     const typeTokens = reassignTypeToken(
       this.#shell.editor.canvas,

@@ -431,6 +431,7 @@ export class EditorSession {
               id,
               replacement,
             ),
+          background: () => this.#document.envelope.background,
           usage: paletteUsage,
         },
         // The type half: the same one walk, so the users list under the preset

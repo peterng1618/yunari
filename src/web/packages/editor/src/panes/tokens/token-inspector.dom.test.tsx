@@ -72,7 +72,7 @@ function paintActions(
   return {
     palette: () => palette,
     onChange: vi.fn<(next: FabricPalette) => void>(),
-    onDelete: vi.fn<(id: string, replacement: string) => void>(),
+    onDelete: vi.fn<(id: string, replacement: string | undefined) => void>(),
     usage: options.usage,
   };
 }
@@ -83,7 +83,7 @@ function actions(
 ): TokenInspectorActions {
   return {
     onChange: vi.fn<(presets: TypeTokens) => void>(),
-    onDelete: vi.fn<(id: string, replacement: string) => void>(),
+    onDelete: vi.fn<(id: string, replacement: string | undefined) => void>(),
     unbindFace: vi.fn<(id: string) => void>(),
     ...(facesOf === undefined ? {} : { facesOf }),
     paints,
@@ -190,7 +190,11 @@ describe("token inspector", () => {
     });
 
     // The name is a reading, not a field: `[Body] Inter 600` is computed from
-    // the id and the face, so there is nothing to type over.
+    // the id and the face, so there is nothing to type over. The heading carries
+    // it too, as a paint token's heading carries that token's name.
+    expect(panel.root.querySelector("h2")?.textContent).toBe(
+      "[Body] Inter 600",
+    );
     expect(
       panel.root.querySelector("[data-yunari-token-name]")?.textContent,
     ).toBe("[Body] Inter 600");
@@ -821,6 +825,30 @@ describe("token inspector", () => {
     await chooseIn(panel.root, "[data-yunari-token-replacement]", "body");
     await click(remove);
     expect(write.onDelete).toHaveBeenCalledWith("caption", "body");
+    panel.destroy();
+  });
+
+  it("deletes an unused preset on the first press", async () => {
+    const write = actions();
+    const panel = createTokenInspectorPanel(document.body, {
+      ...write,
+      typeUsage: () => ({}),
+    });
+    panel.render({ kind: "preset", id: "caption" }, PRESETS, {
+      typeTokens: PRESETS,
+    });
+
+    await click(
+      panel.root.querySelector(
+        "[data-yunari-token-delete]",
+      ) as HTMLButtonElement,
+    );
+
+    // No layer carries it, so there is no reference to move and nothing to ask.
+    expect(write.onDelete).toHaveBeenCalledWith("caption", undefined);
+    expect(
+      panel.root.querySelector("[data-yunari-token-replacement]"),
+    ).toBeNull();
     panel.destroy();
   });
 

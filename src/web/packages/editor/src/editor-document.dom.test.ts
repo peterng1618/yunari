@@ -4,6 +4,7 @@ import type {
   FabricThemeEnvelopeInput,
   FontCut,
   FontTrioInfo,
+  ThemeMetadata,
 } from "@yunari/renderer-core";
 import { setObjectAssetReference } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
@@ -84,6 +85,12 @@ function documentWith(
     readonly onSaved?: (message?: string) => void;
     readonly onError?: (message: string) => void;
     readonly client?: ThemeLibraryClient;
+    /** The Document pane's redraw, so a test can read what a metadata write
+     *  handed it. */
+    readonly artboardRender?: (
+      artboard: Artboard,
+      metadata: ThemeMetadata | undefined,
+    ) => void;
   } = {},
 ): EditorDocument {
   return new EditorDocument({
@@ -112,6 +119,13 @@ function documentWith(
     consumers: {
       runtime: () => ({ setThemeLanguage: () => {} }),
       selection: () => ({ setLocale: () => {} }),
+      artboard: () => ({
+        render:
+          seams.artboardRender ??
+          (() => {
+            return undefined;
+          }),
+      }),
     } as never,
   });
 }
@@ -173,6 +187,37 @@ const entry = (title: string, url: string): ThemeCreditsEntry => ({
   license: "ISC",
   changes: "Imported unchanged",
   source: { url },
+});
+
+describe("EditorDocument metadata", () => {
+  it("redraws the document pane when the identity chip renames the theme", () => {
+    // The chip's rename reaches the document without passing through the
+    // Document pane's own fields. Without the redraw the pane kept the name it
+    // was last given, so the new name appeared only after a reopen.
+    const render = vi.fn();
+    const document = documentWith(undefined, { artboardRender: render });
+    render.mockClear();
+
+    document.renameTheme("Living Room");
+
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ width: expect.any(Number) }),
+      expect.objectContaining({ name: "Living Room" }),
+    );
+  });
+
+  it("redraws the document pane when Save as adopts the new theme's name", () => {
+    const render = vi.fn();
+    const document = documentWith(undefined, { artboardRender: render });
+    render.mockClear();
+
+    document.adoptIdentity("living-room", "Living Room");
+
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ width: expect.any(Number) }),
+      expect.objectContaining({ name: "Living Room" }),
+    );
+  });
 });
 
 describe("EditorDocument credits", () => {
@@ -808,6 +853,10 @@ describe("EditorDocument globals commits", () => {
         name: "Accent",
         value: { kind: "solid", color: "rgb(200 0 0)" },
       },
+      spare: {
+        name: "Spare",
+        value: { kind: "solid", color: "rgb(0 0 200)" },
+      },
     } as never);
     expect(
       saveState,
@@ -822,6 +871,12 @@ describe("EditorDocument globals commits", () => {
 
     document.deletePalette("accent", "none");
     expect(saveState).toHaveBeenCalledTimes(3);
+
+    // An unreferenced token drops without a reassignment walk, and the drop is
+    // still its own undoable commit.
+    document.deletePalette("spare", undefined);
+    expect(saveState).toHaveBeenCalledTimes(4);
+    expect(document.envelope.globals?.palette).not.toHaveProperty("spare");
     document.destroy();
   });
 });

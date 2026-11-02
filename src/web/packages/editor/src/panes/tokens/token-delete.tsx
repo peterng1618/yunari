@@ -14,12 +14,18 @@ export interface DeleteTarget {
 /**
  * Deleting a token, behind the reassignment its references need.
  *
- * **Nothing is destroyed until a target is chosen, and the box appearing is
- * the warning.** The row opens as one button; pressing it reveals the
- * reassignment list, empty, because a token's references have to move
+ * **A referenced token is not destroyed until a target is chosen, and the box
+ * appearing is the warning.** The row opens as one button; pressing it reveals
+ * the reassignment list, empty, because a token's references have to move
  * somewhere and only the author can say where. The second press deletes, and
  * it is refused until an entry is picked — so an accidental press opens a
  * question rather than removing anything.
+ *
+ * **An unreferenced token is deleted by the first press.** There is nothing to
+ * move, so asking where to move it would be a question with no answer — or no
+ * entries at all, for the last token. The caller decides `referenced` from the
+ * same live walk its users list reads, so the row cannot offer a reassignment
+ * the scene does not need.
  *
  * **The empty state is the primitive's, not a "None" entry.** An unselected
  * `ControlSelect` prints its placeholder; a synthetic option would put a
@@ -30,12 +36,14 @@ export interface DeleteTarget {
  */
 export function TokenDelete(props: {
   readonly options: readonly DeleteTarget[];
-  readonly onDelete: (replacement: string) => void;
+  readonly referenced: boolean;
+  readonly onDelete: (replacement: string | undefined) => void;
   readonly label: string;
   readonly selectData: Readonly<Record<`data-${string}`, string>>;
   readonly buttonData: Readonly<Record<`data-${string}`, string>>;
 }): React.JSX.Element {
-  const { options, onDelete, label, selectData, buttonData } = props;
+  const { options, referenced, onDelete, label, selectData, buttonData } =
+    props;
   const [revealed, setRevealed] = useState(false);
   const [picked, setPicked] = useState<string | undefined>(undefined);
   // The list can lose the entry that was picked — an undo can restore a palette
@@ -61,9 +69,13 @@ export function TokenDelete(props: {
         <ControlIconButton
           label={label}
           destructive
-          ariaDisabled={revealed && chosen === undefined}
+          ariaDisabled={referenced && revealed && chosen === undefined}
           data={buttonData}
           onClick={() => {
+            if (!referenced) {
+              onDelete(undefined);
+              return;
+            }
             if (!revealed) {
               setRevealed(true);
               return;
