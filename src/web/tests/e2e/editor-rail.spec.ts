@@ -1311,9 +1311,12 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   const header = region.locator("[data-yunari-store-header]");
   await expect(header, "the region draws no header row").toBeVisible();
 
-  // The two halves, named and opening on Local — the Segmented, which is what
-  // the region's own header row carries rather than a second mode switch.
-  const halves = header.locator("[data-yunari-store-halves] button");
+  // The two halves, named and opening on Local — the `Segmented`, which is a
+  // mode-level choice in the **shell header** beside the mode switch (`#304`),
+  // not in the region's own row.
+  const halves = page.locator(
+    ".editor-shell-header [data-yunari-store-halves] button",
+  );
   await expect(halves).toHaveCount(2);
   await expect(halves.nth(0)).toHaveText(uiCopy.store.halves.local);
   await expect(halves.nth(1)).toHaveText(uiCopy.store.halves.online);
@@ -2958,6 +2961,19 @@ test("a submitted theme states the store's status word and the control no longer
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
+  // The submission's preparation step opens the stored theme to bake its crops.
+  // The listing stub is enough for the card, but the open is a second read, and
+  // without an answer the step refuses the submission before the 401 below.
+  const plain = boundaryEnvelope({
+    id: "boundary-plain",
+    name: "Boundary plain",
+    tags: [],
+    width: 1920,
+    height: 1080,
+  });
+  await page.route("**/api/themes/boundary-plain", (route) =>
+    route.fulfill({ json: { envelope: plain, assets: {} } }),
+  );
   // The host answers the first press with no identity and the retry with the
   // store's own status and version; the session poll authorises once.
   let submits = 0;
