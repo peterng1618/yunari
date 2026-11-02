@@ -3275,6 +3275,12 @@ test("the store opens a library theme as the document, from the cell and its foo
     });
   const fromCell = themeOf("store-from-cell", CELL_NAME);
   const fromFooter = themeOf("store-from-footer", FOOTER_NAME);
+  // A third listing entry, never opened: the card layout packs it beside the two
+  // above, and its 32:9 artboard is what makes it a two-column card.
+  const wide = {
+    ...themeOf("store-wide", "Wide theme"),
+    artboard: { width: 3840, height: 1080 },
+  };
 
   // **No `updatedAt`, and that is load-bearing.** With no `?theme=` in the URL
   // the editor boots on the author's most recent save, which it picks by that
@@ -3286,7 +3292,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   await page.route("**/api/themes", (route) =>
     route.fulfill({
       json: {
-        themes: [fromCell, fromFooter].map((envelope) => ({
+        themes: [fromCell, fromFooter, wide].map((envelope) => ({
           id: envelope.id,
           name: envelope.metadata?.name,
           author: "huyng",
@@ -3364,7 +3370,79 @@ test("the store opens a library theme as the document, from the cell and its foo
   await expect(
     region.locator("[data-yunari-store-cell]"),
     "the store does not list the stubbed library",
-  ).toHaveCount(2);
+  ).toHaveCount(3);
+
+  // ── The cards pack as a masonry, at the theme's own ratio ──────────────────
+  // **The grid has no masonry in CSS, so the packing is the span each card
+  // measures itself into**: a 1px row unit, `row dense`, and a card whose
+  // `grid-row-end` is that many rows. The wide theme's 32:9 artboard takes two
+  // columns, which is the claim a fixed two-column grid cannot make: the card's
+  // own width is two tracks and their gutter, and the other two cards' is one.
+  const gallery = region.locator("[data-yunari-store-gallery]");
+  await expect(gallery, "the store draws no gallery").toHaveCount(1);
+  await expect
+    .poll(
+      () =>
+        region
+          .locator("[data-yunari-store-cell]")
+          .evaluateAll((cells) =>
+            cells.every((cell) =>
+              getComputedStyle(cell).gridRowEnd.startsWith("span "),
+            ),
+          ),
+      "a card never measured itself into the grid's row span",
+    )
+    .toBe(true);
+  const pack = await gallery.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      rowUnit: style.gridAutoRows,
+      flow: style.gridAutoFlow,
+      gap: Number.parseFloat(style.columnGap),
+      cells: Array.from(
+        node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+        (cell) => ({
+          id: cell.getAttribute("data-yunari-store-cell"),
+          wide: cell.hasAttribute("data-wide"),
+          width: cell.getBoundingClientRect().width,
+          rowEnd: getComputedStyle(cell).gridRowEnd,
+        }),
+      ),
+    };
+  });
+  const packReading = `store gallery ${JSON.stringify(pack)}`;
+  console.log(packReading);
+  testInfo.annotations.push({
+    type: "store-gallery",
+    description: packReading,
+  });
+  expect(pack.rowUnit, `the grid has no 1px row unit (${packReading})`).toBe(
+    "1px",
+  );
+  // Chrome omits the initial `row` and computes the declaration as `dense`.
+  expect(pack.flow, `the grid does not pack densely (${packReading})`).toBe(
+    "dense",
+  );
+  const wideCell = pack.cells.find((cell) => cell.wide);
+  const narrow = pack.cells.filter((cell) => !cell.wide);
+  expect(
+    wideCell?.id,
+    `the 32:9 card is not the one that takes two columns (${packReading})`,
+  ).toBe("store-wide");
+  expect(
+    narrow.map((cell) => cell.id).sort(),
+    `a card narrower than 2:1 took two columns (${packReading})`,
+  ).toEqual(["store-from-cell", "store-from-footer"]);
+  expect(
+    Math.round((wideCell?.width ?? 0) - (narrow[0]?.width ?? 0) * 2 - pack.gap),
+    `the wide card is not two tracks and a gutter wide (${packReading})`,
+  ).toBe(0);
+  for (const cell of pack.cells) {
+    expect(
+      Number.parseInt(cell.rowEnd.replace(/^span /, ""), 10),
+      `${cell.id}'s row span is not positive (${packReading})`,
+    ).toBeGreaterThan(0);
+  }
 
   const modal = page.locator("[data-yunari-store-item]");
   const cellOf = (id: string) =>
@@ -3373,13 +3451,15 @@ test("the store opens a library theme as the document, from the cell and its foo
     cellOf(id).locator("[data-yunari-store-cell-surface]");
 
   // **The cell's own bands are where the cell puts them, and this is the
-  // reading that says so** (A.7b). The surface, the byline and the facts band
-  // are three elements now where they were one padded column, so the spacing
-  // between them is arithmetic a later edit can move without anything failing:
-  // the cell's 10px inset and 6px between the bands, which the spacing scale's
-  // step table owns as `--space-10` and `--space-6`. The 26px band is the third
-  // band's own height and is read here too, because it is what the band
-  // fixes and a wrapper that padded it would squash it.
+  // reading that says so** (A.7b, and the card's recap). The picture, the name
+  // row and the facts band are three elements, so the spacing between them is
+  // arithmetic a later edit can move without anything failing: the name row's
+  // 8px above the name and 4px below it, the cell's 10px inset, which the
+  // spacing scale's step table owns as `--space-8`, `--space-4` and
+  // `--space-10`. The 26px band is the facts band's own height and is read
+  // here too, because it is what the band fixes and a wrapper that padded it
+  // would squash it. **The byline has moved into that band**, so this reading
+  // also holds it there by its vertical centre rather than by a gap of its own.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
@@ -3434,6 +3514,10 @@ test("the store opens a library theme as the document, from the cell and its foo
       nameBottom: name?.bottom ?? null,
       bylineTop: byline?.top ?? null,
       bylineBottom: byline?.bottom ?? null,
+      bylineInBand:
+        cell
+          .querySelector("[data-yunari-store-cell-byline]")
+          ?.parentElement?.hasAttribute("data-yunari-store-cell-band") ?? false,
       bandTop: band?.top ?? null,
       bandBottom: band?.bottom ?? null,
     };
@@ -3453,16 +3537,30 @@ test("the store opens a library theme as the document, from the cell and its foo
   };
   expect(
     gapOf(bands.pictureBottom, bands.nameTop, "name under the picture"),
-    `the name is not 10px under the picture (${bandReading})`,
-  ).toBe(10);
+    `the name is not 8px under the picture (${bandReading})`,
+  ).toBe(8);
   expect(
-    gapOf(bands.nameBottom, bands.bylineTop, "byline"),
-    `the byline is not 6px under the name (${bandReading})`,
-  ).toBe(6);
+    gapOf(bands.nameBottom, bands.bandTop, "facts band"),
+    `the facts band is not 4px under the name (${bandReading})`,
+  ).toBe(4);
   expect(
-    gapOf(bands.bylineBottom, bands.bandTop, "facts band"),
-    `the facts band is not 6px under the byline (${bandReading})`,
-  ).toBe(6);
+    bands.bylineInBand,
+    `the byline is not in the facts band (${bandReading})`,
+  ).toBe(true);
+  expect(
+    bands.bylineTop === null ||
+      bands.bylineBottom === null ||
+      bands.bandTop === null ||
+      bands.bandBottom === null
+      ? null
+      : Math.abs(
+          Math.round(
+            (bands.bylineTop + bands.bylineBottom) / 2 -
+              (bands.bandTop + bands.bandBottom) / 2,
+          ),
+        ),
+    `the byline is not centred in the facts band (${bandReading})`,
+  ).toBeLessThanOrEqual(1);
   expect(
     gapOf(bands.bandBottom, bands.cellInnerBottom, "band's own foot"),
     `the facts band does not sit 10px above the cell's edge (${bandReading})`,

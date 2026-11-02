@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { Fragment, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import {
   ASSIGN_ITEM_GLYPH,
@@ -60,8 +60,74 @@ const CELL_ACTION_GLYPHS: Readonly<Record<CellAction, LucideIcon>> = {
  *  this follows `uiCopy`. */
 const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
 
+/** The narrowest a card column may get; the same 272px the grid declares. */
+const MASONRY_MIN_COLUMN = 272;
+/** The grid's gutter, and the height of the row unit the spans are counted in.
+ *  A card's span covers `span * ROW + (span - 1) * GAP` pixels. */
+const MASONRY_GAP = 12;
+const MASONRY_ROW = 1;
+
+/** A horizontal theme is at least 2:1 and takes two columns; a narrower one
+ *  takes its own. The ratio is the authored canvas's, read from the facets the
+ *  listing already carries rather than from the loaded picture. */
+export function spansTwoColumns(item: StoreItem): boolean {
+  return item.facets.height > 0 && item.facets.width / item.facets.height >= 2;
+}
+
+/** How many of the grid's auto-fill columns fit, measured from the same width
+ *  CSS measures. A wide card may only span two when there are two to span. */
+function useColumnCount(ref: React.RefObject<HTMLUListElement | null>): number {
+  const [columns, setColumns] = useState(1);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (node === null) return;
+    const measure = (): void => {
+      const width = node.clientWidth;
+      setColumns(
+        width <= 0
+          ? 1
+          : Math.max(
+              1,
+              Math.floor(
+                (width + MASONRY_GAP) / (MASONRY_MIN_COLUMN + MASONRY_GAP),
+              ),
+            ),
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref]);
+  return columns;
+}
+
+/** Gives one card the row span its own height needs, so the grid packs cards
+ *  of different heights under each other rather than holding every card to its
+ *  row's tallest one. `self-start` keeps the card's measured height its
+ *  content's; without it the span would stretch the card and the measurement
+ *  would chase itself. */
+function useMasonrySpan(ref: React.RefObject<HTMLLIElement | null>): void {
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (node === null || typeof ResizeObserver === "undefined") return;
+    const measure = (): void => {
+      const height = node.getBoundingClientRect().height;
+      if (height <= 0) return;
+      node.style.gridRowEnd = `span ${Math.ceil(
+        (height + MASONRY_GAP) / (MASONRY_ROW + MASONRY_GAP),
+      )}`;
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref]);
+}
+
 /**
- * The grid of cells.
+ * The grid of cells: a masonry of cards at the themes' own heights.
  *
  * **`repeat(auto-fill, minmax(272px, 1fr))`, and the 272 is not this half's
  * number.** It is derived from the *online* half's busiest facts band — its
@@ -70,6 +136,11 @@ const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
  * section carries it as a design-language value. `auto-fill` answers the column
  * count from the width, so there is no measured count and no breakpoint to keep
  * in step with the window.
+ *
+ * The packing itself is the one-row-unit span the cards set after measuring:
+ * CSS has no masonry, so each card reserves the rows its height needs and
+ * `row dense` backfills the gaps. A horizontal card also spans two columns,
+ * which is what keeps a wide theme from towering over the portrait ones.
  *
  * The four actions travel through one `onAction`, because a cell draws four and
  * a callback per action would be four props a caller can half-wire.
@@ -88,15 +159,19 @@ export function Gallery(props: {
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
+  const list = useRef<HTMLUListElement>(null);
+  const columns = useColumnCount(list);
   return (
     <ul
+      ref={list}
       data-yunari-store-gallery=""
-      className="grid grid-cols-[repeat(auto-fill,minmax(272px,1fr))] gap-[var(--space-12)]"
+      className="grid auto-rows-[1px] grid-cols-[repeat(auto-fill,minmax(272px,1fr))] items-start gap-[var(--space-12)] [grid-auto-flow:row_dense]"
     >
       {props.items.map((item) => (
         <Cell
           key={item.id}
           item={item}
+          wide={columns > 1 && spansTwoColumns(item)}
           onAction={props.onAction}
           onOpenItem={props.onOpenItem}
           install={props.install}
@@ -108,26 +183,32 @@ export function Gallery(props: {
 }
 
 /**
- * One item: its picture, its name, its byline and its facts band.
+ * One item: its picture, its name, and one meta band with the byline and the
+ * card's controls.
  *
- * The bands are fixed exactly — the picture at `2/1` with `object-fit:
- * contain`, the name, the mono byline, and the 26px band. **The picture is
- * contained, not cropped**: a card advertises the theme's own picture, and a
- * cropped one shows a composition the author never drew. The band is the same
- * for every card, so the grid keeps its shape and the item's ratio letterboxes
- * inside it. **The band's left slot
+ * **The picture is the theme's own shape, contained, not cropped**: a card
+ * advertises the theme's own picture, and a cropped one shows a composition the
+ * author never drew. That is also what lets the library flow as a masonry of
+ * varied heights. **The band's left slot
  * has one occupant per half, and they are exclusive**: an online item draws the
  * kind badge and the download count, and a library item draws the origin pill
- * where the host holds a record of where the theme came from.
+ * where the host holds a record of where the theme came from. The byline sits
+ * before it, so the name row keeps the width and the facts share one muted
+ * line.
  */
 function Cell(props: {
   readonly item: StoreItem;
+  /** True when this card must span two columns: a horizontal theme on a grid
+   *  wide enough to have two. */
+  readonly wide: boolean;
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
   const { item, onAction, onOpenItem, install, submit } = props;
+  const ref = useRef<HTMLLIElement>(null);
+  useMasonrySpan(ref);
   const catalogue = item.catalogue;
   // The left slot branches on whether the item has catalogue facts; the action
   // slot on the install decision. They read different facts on purpose: a
@@ -160,8 +241,11 @@ function Cell(props: {
 
   return (
     <li
+      ref={ref}
       data-yunari-store-cell={item.id}
-      className="flex flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
+      data-wide={props.wide ? "" : undefined}
+      style={props.wide ? { gridColumn: "span 2" } : undefined}
+      className="flex flex-col self-start overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
       {/* **The cell's own surface is a control**. A button rather than a handler
           on the `li`, because the item's modal must be reachable without a
@@ -192,22 +276,16 @@ function Cell(props: {
             name's line**, not to the facts band, which is one occupant per half
             and nothing about the author's store row. The padding is the
             surface's own arithmetic, kept on the wrapper. */}
-        <span className="flex items-center gap-[var(--space-6)] p-[var(--space-10)] pb-[var(--space-6)]">
+        <span className="flex items-center gap-[var(--space-6)] px-[var(--space-10)] pt-[var(--space-8)] pb-[var(--space-4)]">
           <span
             data-yunari-store-cell-name=""
-            className="truncate text-sm text-text"
+            className="truncate text-sm font-medium text-text"
           >
             {item.name}
           </span>
           <StoreStatusBadge status={item.status} />
         </span>
       </button>
-      <span
-        data-yunari-store-cell-byline=""
-        className="truncate px-[var(--space-10)] pb-[var(--space-6)] font-mono text-xs text-muted"
-      >
-        {byline(item)}
-      </span>
       <div className="px-[var(--space-10)] pb-[var(--space-10)]">
         {/* The band's own hook, because **what the badge sits in is the claim**:
             the layout puts it here rather than beside the name, so a case that
@@ -215,8 +293,14 @@ function Cell(props: {
             that changed the grid. */}
         <span
           data-yunari-store-cell-band=""
-          className="flex h-[26px] items-center gap-[var(--space-6)]"
+          className="flex min-w-0 items-center gap-[var(--space-6)]"
         >
+          <span
+            data-yunari-store-cell-byline=""
+            className="min-w-0 truncate font-mono text-xs text-muted"
+          >
+            {byline(item)}
+          </span>
           {/* **The left slot has one occupant per half** — the online cell's
               kind and count, or the library cell's origin pill — because the
               two derive from facts the other half does not have and fitting
@@ -375,6 +459,12 @@ function InstallAction(props: {
 /**
  * The picture box, and the theme's own ground behind it.
  *
+ * **The box is the theme's own shape.** A card keeps the authored canvas's
+ * aspect ratio rather than cropping it to one band, which is what lets the
+ * library flow as a masonry of varied heights. `object-contain` inside the
+ * reserved box means a thumbnail whose pixels do not share the box's exact
+ * ratio is letterboxed on its ground, never cropped.
+ *
  * **A theme with no picture draws its ground, not a broken image.** The host
  * answers `404` at a theme's thumbnail address when it has stored none
  * (`server.ts`), so the address being present says nothing about the picture
@@ -406,21 +496,28 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
         };
   const [broken, setBroken] = useState<string | undefined>(undefined);
   const showPicture = picture !== undefined && picture.key !== broken;
+  // The authored canvas's ratio, which every theme declares. A record without a
+  // usable size falls back to the old 2:1 band rather than collapsing.
+  const ratio =
+    item.facets.width > 0 && item.facets.height > 0
+      ? `${item.facets.width} / ${item.facets.height}`
+      : "2 / 1";
 
   return (
     <span
       data-yunari-store-picture=""
       aria-hidden
-      className="aspect-[2/1] w-full"
-      style={
-        item.ground === undefined ? undefined : { background: item.ground }
-      }
+      className="relative block w-full overflow-hidden"
+      style={{
+        aspectRatio: ratio,
+        ...(item.ground === undefined ? {} : { background: item.ground }),
+      }}
     >
       {picture !== undefined && showPicture ? (
         <img
           src={picture.url}
           alt=""
-          className="size-full object-contain"
+          className="absolute inset-0 size-full object-contain"
           onError={() => setBroken(picture.key)}
         />
       ) : null}
