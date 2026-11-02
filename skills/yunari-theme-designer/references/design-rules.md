@@ -1,7 +1,10 @@
 # Design rules
 
 The theme is judged at its output size, on the target display. Every size below
-is in artboard pixels: a 1:1 preview maps one artboard pixel to one CSS pixel.
+is in artboard pixels. A browser preview keeps the artboard aspect with its long
+edge capped at 1600 px, so a small artboard previews 1:1 and a large one is
+downscaled; judge proportions and the real display geometry, not the CSS pixel
+size.
 
 ## Hierarchy and focal reading
 
@@ -23,7 +26,6 @@ is in artboard pixels: a 1:1 preview maps one artboard pixel to one CSS pixel.
 | Square panel (Kraken) | 320 × 320 | 1–3 | focal value plus a caption |
 | Small panel (TURZX 5") | 800 × 480 | 3–6 | landscape, one focal number |
 | Tall USB panel | 464/480 × 1920 | 4–6 | vertical stack, no wide rows |
-| 8.8" / 9.2" panel | 1920 × 480 | 4–6 | horizontal strip, one row of cards |
 
 Use `list_displays` geometry as the truth. When it is absent, the artboard the
 user chose decides.

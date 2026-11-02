@@ -151,8 +151,9 @@ function printReport(report: InstallReport, done: string): void {
  * A named URL is checked too: parsing a URL is not evidence a host answers.
  */
 async function probeHost(url?: string) {
+  let resolved: string | undefined;
   try {
-    const resolved = await resolveHostUrl({ url });
+    resolved = await resolveHostUrl({ url });
     const response = await fetch(`${resolved}/api/themes`, {
       signal: AbortSignal.timeout(1000),
     });
@@ -175,6 +176,7 @@ async function probeHost(url?: string) {
   } catch (error) {
     return {
       reachable: false,
+      ...(resolved === undefined ? {} : { url: resolved }),
       error: error instanceof Error ? error.message : String(error),
     };
   }

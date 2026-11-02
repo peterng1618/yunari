@@ -59,7 +59,7 @@ Rules:
 | `set_theme_metadata` | name, author, description, language, tags |
 | `set_artboard` | width, height, shape, contentFit |
 | `set_palette` | entries `{id, name, value}` |
-| `set_type_tokens` | heading/body/mono family, weight, size |
+| `set_type_tokens` | heading/body/mono family and weight; a text run carries its own size |
 | `set_background` | palette colour and optional media asset, bounds, fallback frame |
 | `open_theme` | an existing theme, only with `confirmExisting: true` after consent |
 | `discard_draft` | drop the in-memory draft; never touches the host |
@@ -73,14 +73,14 @@ tokens before composing so objects can reference them by id.
 | Tool | Use |
 |---|---|
 | `list_objects` | the draft's ids before updating or removing anything |
-| `add_card` | a starter unit (`cpu-card`, `gpu-card`, `ram-gauge`, `trends`, …) at left/top, optional scale |
+| `add_card` | a starter unit (`group-time-card`, `group-cpu-card`, `group-gpu-card`, `group-ram-card`, `group-vram-card`, `group-trends-card`, `group-storage-card`, `group-network-card`) at left/top, optional scale |
 | `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow |
-| `add_shape` | rect/ellipse/path, box, fill/stroke tokens, stroke width, radius |
+| `add_shape` | rect/ellipse/path, box, one palette `token`, radius, path points, stroke width |
 | `add_image` | declared asset id, box, fit |
-| `add_icon` | name from the shared icon set, box, palette token |
+| `add_icon` | `icon` from the shared icon set, box, palette token |
 | `add_chart` | family line/bar/gauge, box, binding, optional settings |
-| `add_binding` | bind an existing object to one or more semantic keys |
-| `update_object` | validated JSON merge by object id |
+| `add_binding` | replace an object's `bindings` array with one or more semantic keys |
+| `update_object` | validated JSON merge by object id, under the `patch` field |
 | `remove_object` | delete an object by id; not a saved-theme delete |
 | `group_objects` / `ungroup_objects` | group ids / group id |
 
@@ -108,8 +108,8 @@ issue before previewing. A save of an invalid draft is refused.
   Inspect the image itself. Never substitute a browser screenshot for a panel,
   and never claim a panel preview without this image.
 
-An unsaved draft that the preview path cannot read is saved first. A failed save
-returns the validator issues and no preview.
+A panel preview saves the draft into the library first. A failed save returns
+the validator issues and no preview.
 
 ## 9. Revise
 
@@ -120,14 +120,16 @@ again. Do not save a theme you have not seen at its real size.
 
 ## 10. Save
 
-`save_theme` writes the draft into the library and returns the id and base.
+`save_theme` writes the draft into the library and returns the id and base. It
+takes only the draft id; there is no overwrite flag.
 
 - Save freely a new draft (`create_theme`).
-- A draft opened from a stored theme (`open_theme`) writes over that theme. The
-  user consented before opening; ask again if the saved bytes changed since.
-- Pass the overwrite option only after explicit consent for a stored theme.
-  Without consent, a conflicting base is refused; re-read the theme and ask
-  rather than discarding the user's stored work.
+- A draft opened from a stored theme (`open_theme`) writes back to that theme
+  id. The user consented before opening; ask again if the saved bytes changed
+  since.
+- The save carries the base the draft was opened with. If the host holds a
+  newer save, it is refused; re-read the theme and ask rather than discarding
+  the user's stored work.
 - There is no delete tool. Do not offer to remove a saved theme.
 
 ## 11. Assign

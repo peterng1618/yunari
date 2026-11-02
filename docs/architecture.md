@@ -36,8 +36,9 @@ the product version lives once in `src/web/package.json`.
 The MCP server is a separate Node process speaking MCP over stdio. It is a
 client of the host's loopback HTTP API, not a second host: it reads themes,
 sensors, displays and assets through the same routes the editor uses, keeps
-drafts in its own memory, and writes only through `save_theme` and
-`assign_theme`.
+drafts in its own memory. It writes the theme library through `save_theme` and
+through the panel preview's save; `assign_theme` changes a display's assignment
+separately.
 
 ### Boundary rules
 

@@ -63,13 +63,20 @@ Found:
 - MCP TypeScript SDK v2 ships `@modelcontextprotocol/server` (Node ≥20,
   zod ^4.2) with `McpServer`, `StdioServerTransport` and mixed text/image
   content. The host's zod override is 4.6.6.
-- `add-mcp` 2.4.1 exports `upsertServer(agent, name, config, options)` and
+- `add-mcp` 2.6.1 exports `upsertServer(agent, name, config, options)` and
   `removeServer`; Claude Code's global path is `~/.claude.json`, and it
-  supports auto-approval rules.
-- Vercel `skills` 1.7.4 installs from a local directory with
-  `-g -a claude-code --copy -y`; its global canonical directory is
-  `~/.agents/skills`, and it has `remove`. It requires Node ≥22.20; the
-  workspace needs Node ≥22.22.2 for its DOM suite and CI pins 24.
+  supports auto-approval rules. `removeServer` removes the server entry only:
+  it does not undo the `mcp__<name>` rule `installClaudeCodeAutoApproval`
+  writes into `~/.claude/settings.json`, so the installer owns that removal.
+- Vercel `skills` 1.7.5 installs from a local directory with
+  `-g -a <agent> --copy -y` and has `remove`. A single-agent `--copy` install
+  writes to that agent's own directory: `-a claude-code` writes
+  `~/.claude/skills`, not `~/.agents/skills`. The CLI forces copy mode when
+  `uniqueDirs.size <= 1`, so `--copy` is explicit rather than required.
+  `~/.agents/skills` is the CLI's universal directory, selected with the
+  universal agent name `codex` (`skillsDir: ".agents/skills"`). It requires
+  Node ≥22.20; the workspace needs Node ≥22.22.2 for its DOM suite and CI
+  pins 24.
 
 Unsolved: neither library installs both an MCP server and a skill; no library
 previews a Yunari panel page.
@@ -131,10 +138,21 @@ installation together. `add-mcp` is the strongest MCP-config owner;
 Executed during implementation before the installer is written:
 
 - `node` probe of `add-mcp`'s `upsertServer`/`removeServer` against a temporary
-  home, verifying the Claude Code global entry and its removal.
-- `node` probe of the `skills` CLI against a temporary home with a local skill
-  directory, verifying the installed path is
-  `~/.agents/skills/yunari-theme-designer/SKILL.md` and that removal removes it.
+  home, verifying the Claude Code global entry and its removal, and that the
+  auto-approval rule in `~/.claude/settings.json` survives `removeServer`.
+- `skills` 1.7.5 probe against a temporary home with this repository's local
+  skill directory and `DISABLE_TELEMETRY=1`.
+  `skills add <repo>/skills/yunari-theme-designer -g -a claude-code --copy -y`
+  exited 0 and wrote only `<home>/.claude/skills/yunari-theme-designer/...`;
+  the canonical `.agents/skills` directory stayed absent.
+  `skills add <repo>/skills/yunari-theme-designer -g -a codex --copy -y`
+  exited 0 and wrote exactly
+  `<home>/.agents/skills/yunari-theme-designer/{SKILL.md,references/*}` plus
+  `<home>/.agents/.skill-lock.json`, with no `.claude` or `.codex` copy.
+  `skills remove -g -a codex -y yunari-theme-designer` exited 0 and removed the
+  canonical directory. The lock file remained, with its skill entry cleared;
+  it records the local source, `installMode: "copy"` and the folder hash, not
+  the agent name.
 - An MCP stdio handshake with the v2 server proving `initialize`, `tools/list`
   and one tool call complete without a host.
 
@@ -149,5 +167,12 @@ editor and the MCP server; build `@yunari/mcp` as a stdio client of the existing
 loopback host; extend the panel family rows with their fixed geometry and the
 panel manager with a preview capture that reuses the shared rasterizer; install
 the server with `add-mcp` and the skill with the Vercel `skills` CLI into
-`~/.agents/skills/`. Rejected alternatives either duplicated a theme, renderer
-or installer mechanism, or could not represent a panel's real output.
+`~/.agents/skills/`. The server is registered for `claude-code`; the skill is
+installed and removed with `-a codex` because that is the CLI's name for the
+universal `~/.agents/skills` directory — it selects a directory, not a second
+MCP agent, and writes no `.claude` copy. Uninstall removes the
+`mcp__yunari` auto-approval rule that `add-mcp` leaves behind. Rejected
+alternatives either duplicated a theme, renderer or installer mechanism, could
+not represent a panel's real output, or — a hand mirror into `.agents/skills` —
+left the CLI-owned `.claude` copy and lock entry behind. Rejected alternatives
+are recorded in the rungs above.
