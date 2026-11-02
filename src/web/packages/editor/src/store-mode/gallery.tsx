@@ -29,10 +29,12 @@ import type { SubmitControl } from "./use-submit.js";
  * taken from the store-themes region.
  */
 
-/** The four actions in its own order: open, assign, export, delete. */
+/** The four library actions in the card's own order: assign, edit, export,
+ *  delete. Publishing, when the item is local-only, sits between edit and
+ *  export. */
 const CELL_ACTIONS = [
-  "open",
   "assign",
+  "open",
   "export",
   "delete",
 ] as const satisfies readonly CellAction[];
@@ -133,6 +135,28 @@ function Cell(props: {
   const installState = installStateOf(item);
   const refusal =
     install.refusal?.id === item.id ? install.refusal.message : undefined;
+  /** **Only a theme the host holds no store record of can be published**, and
+   *  the press belongs to the same submission the item's own surface runs. It
+   *  is not a `CELL_ACTIONS` member because that union is the library's four;
+   *  the card draws it between Edit and Export. */
+  const publish =
+    submit !== undefined && item.origin === undefined ? (
+      <ControlIconButton
+        id={`yunari-store-cell-${item.id}-publish`}
+        label={uiCopy.store.submit.label}
+        disabled={
+          submit.inFlight ||
+          (submit.itemId === item.id && submit.state === "submitted")
+        }
+        aria-busy={
+          submit.itemId === item.id && submit.inFlight ? true : undefined
+        }
+        data={{ "data-yunari-store-cell-action": "publish" }}
+        onClick={() => submit.onSubmit(item)}
+      >
+        <Glyph icon={PUBLISH_ITEM_GLYPH} size={14} />
+      </ControlIconButton>
+    ) : null;
 
   return (
     <li
@@ -240,35 +264,12 @@ function Cell(props: {
           <span className="flex-1" />
           {installState === "none" ? (
             <>
-              {/* **Only a theme the host holds no store record of can be
-                  published**, and the press belongs to the same submission the
-                  item's own surface runs. It sits beside the four actions
-                  rather than inside `CELL_ACTIONS`, because the union is the
-                  library's four and publishing is the author's own extra. */}
-              {submit !== undefined && item.origin === undefined ? (
-                <ControlIconButton
-                  id={`yunari-store-cell-${item.id}-publish`}
-                  label={uiCopy.store.submit.label}
-                  disabled={
-                    submit.inFlight ||
-                    (submit.itemId === item.id && submit.state === "submitted")
-                  }
-                  aria-busy={
-                    submit.itemId === item.id && submit.inFlight
-                      ? true
-                      : undefined
-                  }
-                  data={{ "data-yunari-store-cell-action": "publish" }}
-                  onClick={() => submit.onSubmit(item)}
-                >
-                  <Glyph icon={PUBLISH_ITEM_GLYPH} size={14} />
-                </ControlIconButton>
-              ) : null}
               {CELL_ACTIONS.map((action) => {
                 const reason = CELL_ACTION_REASONS[action];
                 const controlId = cellActionId(item.id, action);
                 return (
                   <Fragment key={action}>
+                    {action === "export" ? publish : null}
                     <ControlIconButton
                       id={controlId}
                       label={uiCopy.store.cell.actions[action]}

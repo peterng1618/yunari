@@ -616,19 +616,19 @@ export function AssetsPane({
           type="button"
           data-yunari-asset-import=""
           onClick={() => importInput.current?.click()}
-          className="inline-flex h-[26px] flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] text-sm text-accent"
+          className="inline-flex h-[26px] min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] overflow-hidden rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] text-sm text-accent [&>svg]:shrink-0"
         >
           <Glyph icon={IMPORT_FILE_GLYPH} size={13} />
-          {uiCopy.panels.importFile}
+          <span className="truncate">{uiCopy.panels.importFile}</span>
         </button>
         <button
           type="button"
           data-yunari-find-assets=""
           onClick={() => onFindAssets?.()}
-          className="inline-flex h-[26px] flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] text-sm text-muted"
+          className="inline-flex h-[26px] min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] overflow-hidden rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] text-sm text-muted hover:border-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent active:bg-[var(--panel-2)] [&>svg]:shrink-0"
         >
           <Glyph icon={FIND_GLYPH} size={13} />
-          {uiCopy.panels.assetFinder}
+          <span className="truncate">{uiCopy.panels.assetFinder}</span>
         </button>
       </div>
       {/* A picked font has no card until the form's commit or cancel, so its

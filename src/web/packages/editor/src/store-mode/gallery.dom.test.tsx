@@ -412,14 +412,14 @@ it("draws its four actions and runs all four", async () => {
     );
   }
 
-  const actions = ["open", "assign", "export", "delete"] as const;
+  const actions = ["assign", "open", "export", "delete"] as const;
   const buttons = actions.map(actionButton);
   expect(
     buttons.map((button) => button.getAttribute("aria-label")),
     "the cell does not name its four actions in the order",
   ).toEqual([
-    uiCopy.store.cell.actions.open,
     uiCopy.store.cell.actions.assign,
+    uiCopy.store.cell.actions.open,
     uiCopy.store.cell.actions.export,
     uiCopy.store.cell.actions.delete,
   ]);
@@ -429,8 +429,8 @@ it("draws its four actions and runs all four", async () => {
   }
 
   expect(onAction.mock.calls, "the four actions did not all report").toEqual([
-    ["open", "living-room"],
     ["assign", "living-room"],
+    ["open", "living-room"],
     ["export", "living-room"],
     ["delete", "living-room"],
   ]);
@@ -472,6 +472,23 @@ it("offers publish on a local-only theme and not on one from the store", async (
     ).getAttribute("data-yunari-store-cell"),
     "publish was offered on the installed copy",
   ).toBe("made-here");
+
+  // The card's order: Assign, Edit, Publish, Export, Delete — and the
+  // installed copy draws the same four without the author's extra.
+  const order = (id: string): (string | null)[] =>
+    [
+      ...(container
+        .querySelector<HTMLElement>(`[data-yunari-store-cell="${id}"]`)
+        ?.querySelectorAll("[data-yunari-store-cell-action]") ?? []),
+    ].map((control) => control.getAttribute("data-yunari-store-cell-action"));
+  expect(order("made-here"), "publish is not between Edit and Export").toEqual([
+    "assign",
+    "open",
+    "publish",
+    "export",
+    "delete",
+  ]);
+  expect(order("installed")).toEqual(["assign", "open", "export", "delete"]);
 
   await act(async () => publish[0]?.click());
   expect(onSubmit).toHaveBeenCalledWith(

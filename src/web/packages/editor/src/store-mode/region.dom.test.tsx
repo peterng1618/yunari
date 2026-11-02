@@ -484,6 +484,19 @@ async function pressCell(id: string, action: CellAction): Promise<void> {
   await act(async () => button.click());
 }
 
+/** The confirmation's own Delete button, which is what actually removes the
+ *  theme now that the action asks first. */
+async function confirmDeletion(): Promise<void> {
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-delete-confirm]",
+      ),
+      "delete confirmation",
+    ).click(),
+  );
+}
+
 /** The cell's own surface — its picture and its name, not one of its four
  *  actions — pressed the way a person presses it. */
 async function pressCellSurface(id: string): Promise<void> {
@@ -4152,6 +4165,7 @@ it("deletes a theme through the library client and drops it from the listing", a
       "item delete",
     ).click(),
   );
+  await confirmDeletion();
   await settle();
 
   expect(removed, "the host's removal route was not called").toEqual([
@@ -4164,6 +4178,61 @@ it("deletes a theme through the library client and drops it from the listing", a
     "living-room",
   ]);
   expect(itemIsOpen(), "the deleted theme's surface stayed open").toBe(false);
+});
+
+/**
+ * **Delete asks first, and says where the theme goes** (#309). The host's trash
+ * is recoverable, but the author is told so before the one action that takes a
+ * theme out of the library runs.
+ */
+it("asks before removing a theme and names the Recycle Bin", async () => {
+  const remove = vi.fn(async () => undefined);
+  await mountClient({
+    ...clientListing([
+      fixtureEntry({
+        id: "living-room",
+        name: "Living room",
+        ground: DARK_GROUND,
+      }),
+    ]),
+    remove,
+  });
+
+  await pressCell("living-room", "delete");
+  expect(
+    remove,
+    "the theme was removed before the author confirmed",
+  ).not.toHaveBeenCalled();
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>(
+        "[data-yunari-store-delete-dialog]",
+      ),
+      "delete confirmation",
+    ).textContent,
+    "the confirmation does not say where the theme goes",
+  ).toContain(uiCopy.store.deleteConfirm.note);
+  expect(drawnIds(), "the confirmation already dropped the theme").toEqual([
+    "living-room",
+  ]);
+
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-delete-cancel]",
+      ),
+      "delete cancel",
+    ).click(),
+  );
+  // The dialog leaves on its exit pass rather than in the click's own tick, so
+  // the assertion waits for it instead of racing the suite's load.
+  await vi.waitFor(() => {
+    expect(
+      document.body.querySelector("[data-yunari-store-delete-dialog]"),
+      "cancel left the confirmation open",
+    ).toBeNull();
+  });
+  expect(remove, "cancel still removed the theme").not.toHaveBeenCalled();
 });
 
 /**
@@ -4193,6 +4262,7 @@ it("closes a display choice left open on a deleted theme", async () => {
   expect(assignIsOpen(), "the display choice did not open").toBe(true);
 
   await pressCell("porch-strip", "delete");
+  await confirmDeletion();
   await settle();
 
   expect(
@@ -4220,6 +4290,7 @@ it("states a refused deletion and keeps the theme listed", async () => {
   });
 
   await pressCell("living-room", "delete");
+  await confirmDeletion();
   await settle();
 
   expect(drawnIds(), "a refused deletion dropped the theme").toEqual([

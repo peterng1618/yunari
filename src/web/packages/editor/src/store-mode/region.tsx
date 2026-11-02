@@ -7,6 +7,7 @@ import type * as React from "react";
 import { useEffect, useState } from "react";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlWell } from "../components/ui/control-well.js";
+import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import {
   createPageSizePreference,
   type PageSize,
@@ -527,6 +528,12 @@ function StoreRegion(props: {
    *  where the failure is what the body states. */
   const [listingFailed, setListingFailed] = useState(false);
   const [listingAttempt, setListingAttempt] = useState(0);
+  /** Which item's removal is waiting for the author's confirmation. The host's
+   *  trash is recoverable, but a deletion is still the one action that takes a
+   *  theme out of the library, so it asks first. */
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | undefined>(
+    undefined,
+  );
   /** The last removal the host refused, in its own words. A removed theme is a
    *  fact the listing already answers by losing the item; a refusal is the one
    *  answer no other state can carry. */
@@ -744,9 +751,9 @@ function StoreRegion(props: {
    * reports them through this one callback. It reads the displays when it opens
    * and keeps none of them (`assign-display.tsx`).
    *
-   * **`delete` moves the stored theme to the host's recycle bin**, from the cell
-   * and the modal alike; the host's trash is recoverable, which is why the
-   * action asks nothing before it acts.
+   * **`delete` asks before it acts**, then moves the stored theme to the host's
+   * recycle bin; the host's trash is recoverable, but the confirmation is the
+   * one place the author is told that.
    */
   const onAction = (action: CellAction, id: string): void => {
     if (action === "open") {
@@ -754,7 +761,11 @@ function StoreRegion(props: {
       return;
     }
     if (action === "delete") {
-      deleteTheme(id);
+      if (client.remove === undefined) {
+        setDeleteRefusal(uiCopy.store.deleteUnavailable);
+        return;
+      }
+      setConfirmDeleteId(id);
       return;
     }
     if (action === "export") {
@@ -984,6 +995,49 @@ function StoreRegion(props: {
           onClose={() => setAssignId(undefined)}
         />
       )}
+
+      <Dialog
+        open={confirmDeleteId !== undefined}
+        onOpenChange={(next) => {
+          if (!next) setConfirmDeleteId(undefined);
+        }}
+        label={uiCopy.store.deleteConfirm.title}
+        closeLabel={uiCopy.store.deleteConfirm.cancel}
+        closeIcon
+        className="editor-shell-dialog--delete-theme"
+      >
+        <div
+          data-yunari-store-delete-dialog=""
+          className="flex w-[var(--import-dialog-width)] flex-col gap-[var(--space-12)]"
+        >
+          <p className="m-0 text-sm text-text">
+            {uiCopy.store.deleteConfirm.note}
+          </p>
+          <div className="flex flex-wrap justify-end gap-[var(--space-6)]">
+            <button
+              type="button"
+              data-yunari-store-delete-cancel=""
+              className={ACTION_BUTTON}
+              onClick={() => setConfirmDeleteId(undefined)}
+            >
+              {uiCopy.store.deleteConfirm.cancel}
+            </button>
+            <button
+              type="button"
+              data-yunari-store-delete-confirm=""
+              data-yunari-destructive=""
+              className={ACTION_BUTTON}
+              onClick={() => {
+                const id = confirmDeleteId;
+                setConfirmDeleteId(undefined);
+                if (id !== undefined) deleteTheme(id);
+              }}
+            >
+              {uiCopy.store.deleteConfirm.confirm}
+            </button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* **One live region for the whole store**, mounted empty and given its
           sentence when a refusal arrives: a region mounted holding text is the

@@ -1140,8 +1140,8 @@ export const uiCopy = {
      *  added there without a word fails to compile here rather than printing an
      *  identifier at a person. */
     colourModes: {
-      light: "Light ground",
-      dark: "Dark ground",
+      light: "Light",
+      dark: "Dark",
     } as const satisfies Record<Exclude<ColourMode, "unclassified">, string>,
     orientations: {
       landscape: "Landscape",
@@ -1329,6 +1329,14 @@ export const uiCopy = {
     /** A client that cannot delete is offered no deletion; the cell still
      *  reports the press rather than failing at the moment it is made. */
     deleteUnavailable: "This host cannot delete themes.",
+    /** The confirmation a removal asks for: the host's trash is recoverable,
+     *  and the sentence is how the author knows where the theme went. */
+    deleteConfirm: {
+      title: "Delete this theme?",
+      note: "The theme will be moved to the Recycle Bin, where you can restore it.",
+      cancel: "Cancel",
+      confirm: "Delete",
+    },
     /** An export that could not be read back or written, in the failure's own
      *  words: nothing was downloaded, so the sentence is the whole outcome. */
     exportFailed: (reason: string): string =>
