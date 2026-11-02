@@ -20,7 +20,20 @@ import type { PathCommand } from "./icons.js";
  */
 type Palette = FabricPalette;
 
-function paintOfToken(
+/**
+ * Resolve one palette token to the paint Fabric persists.
+ *
+ * A token is not always a solid colour: `storageFill`, `sparkArea` and
+ * `frostArea` are gradients, and writing `null` beside a gradient reference
+ * would leave the persisted Fabric field disagreeing with the reference the
+ * renderer reads. The box is passed because a gradient's line is measured in
+ * the object's own pixels.
+ *
+ * `Gradient.toObject()` keeps `undefined` fields; the envelope's JSON check
+ * refuses them, so they are dropped here rather than written into a scene that
+ * cannot validate.
+ */
+export function paintOfToken(
   token: string,
   width: number,
   height: number,
@@ -30,9 +43,12 @@ function paintOfToken(
   if (paint === undefined) {
     throw new Error(`"${token}" is not a paint this build can resolve.`);
   }
+  if (typeof paint === "string") return paint;
   // Authoring produces plain JSON, so a gradient is written in the serialised
   // form Fabric persists rather than as a live `Gradient` instance.
-  return typeof paint === "string" ? paint : paint.toObject();
+  return Object.fromEntries(
+    Object.entries(paint.toObject()).filter(([, value]) => value !== undefined),
+  );
 }
 
 /**

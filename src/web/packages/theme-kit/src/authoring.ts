@@ -6,13 +6,13 @@ import {
   defaultLineSettings,
   type FabricPalette,
 } from "@yunari/renderer-core";
-import { fabricArtboardPaint } from "@yunari/scene-fabric";
 import { starterPalette } from "./globals.js";
 import { type PathCommand, starterIcons } from "./icons.js";
 import {
   chart,
   label,
   type ObjectJson,
+  paintOfToken,
   path,
   type Run,
   text,
@@ -33,11 +33,9 @@ const POSITIONED = { originX: "left", originY: "top" } as const;
 /**
  * The Fabric paint a palette token resolves to at the box it will fill.
  *
- * A token is not always a solid colour: `storageFill`, `sparkArea` and
- * `frostArea` are gradients, and writing `null` beside a gradient reference
- * would leave the persisted Fabric field disagreeing with the reference the
- * renderer reads. The box is passed because a gradient's line is measured in
- * the object's own pixels.
+ * The box is passed because a gradient's line is measured in the object's own
+ * pixels. One resolver serves both this module and the scene primitives, so the
+ * gradient serialisation rule lives in one place.
  */
 function paintOf(
   token: string,
@@ -45,13 +43,7 @@ function paintOf(
   height: number,
   palette: FabricPalette = starterPalette,
 ): unknown {
-  const paint = fabricArtboardPaint(palette[token]?.value, width, height);
-  if (paint === undefined) {
-    throw new Error(`"${token}" is not a paint this build can resolve.`);
-  }
-  // Authoring produces plain JSON, so a gradient is written in the serialised
-  // form Fabric persists rather than as a live `Gradient` instance.
-  return typeof paint === "string" ? paint : paint.toObject();
+  return paintOfToken(token, width, height, palette);
 }
 
 /** A text box. Its runs decide its readings; bindings travel beside it. */

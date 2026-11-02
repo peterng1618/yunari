@@ -617,6 +617,42 @@ describe("draft authoring and verification", () => {
     expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
   });
 
+  it("paints a gradient token declared by set_palette", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    await setPalette(ctx, [
+      {
+        id: "fade",
+        name: "Fade",
+        value: {
+          kind: "gradient",
+          angle: 90,
+          stops: [
+            { offset: 0, color: "#ff0000" },
+            { offset: 1, color: "#0000ff" },
+          ],
+        },
+      },
+    ]);
+
+    await addText(ctx, {
+      box: { left: 0, top: 0, width: 100, height: 24 },
+      runs: [{ kind: "literal", text: "A", token: "fade", size: 24 }],
+    });
+    await addShape(ctx, {
+      kind: "rect",
+      box: { left: 0, top: 40, width: 40, height: 40 },
+      token: "fade",
+    });
+
+    expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
+  });
+
   it("keeps the metadata, palette, type, background and discard tools local", async () => {
     const host = await startFakeHost(hostHandler());
     hosts.push(host);
@@ -879,6 +915,27 @@ describe("grouping", () => {
       width: 300,
       height: 210,
     });
+  });
+
+  it("scales a group box by its objects' scale", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const shape = payload(
+      await addShape(ctx, {
+        kind: "rect",
+        box: { left: 10, top: 10, width: 100, height: 100 },
+      }),
+    );
+    const id = (shape.ids as string[])[0] as string;
+    await updateObject(ctx, id, { scaleX: 2, scaleY: 3 });
+
+    const grouped = payload(await groupObjects(ctx, [id]));
+    const group = sceneObjects(ctx).find(
+      (object) => object["id"] === grouped.groupId,
+    );
+    expect(group).toMatchObject({ left: 10, top: 10, width: 200, height: 300 });
   });
 
   it("adds a library card and reports the ids it created", async () => {

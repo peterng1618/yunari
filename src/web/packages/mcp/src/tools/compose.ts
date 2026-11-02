@@ -479,6 +479,15 @@ function anchorFraction(origin: unknown, axis: "x" | "y"): number {
 }
 
 /**
+ * Fabric scales an object around its anchor, so the authored anchor stays put
+ * and the drawn box grows with the scale.
+ */
+function scaleOf(object: ObjectJson, key: "scaleX" | "scaleY"): number {
+  const value = object[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+/**
  * An object's true bounding box in artboard coordinates.
  *
  * Fabric places an object by its anchor, and a chart is authored from its
@@ -493,8 +502,8 @@ function boxOf(object: ObjectJson, id: string): Box {
     }
     return value;
   };
-  const width = read("width");
-  const height = read("height");
+  const width = read("width") * scaleOf(object, "scaleX");
+  const height = read("height") * scaleOf(object, "scaleY");
   return {
     left: read("left") - width * anchorFraction(object["originX"], "x"),
     top: read("top") - height * anchorFraction(object["originY"], "y"),
