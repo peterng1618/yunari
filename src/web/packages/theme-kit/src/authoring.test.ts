@@ -86,6 +86,48 @@ describe("the compose vocabulary", () => {
     ).toThrow(/commands/);
   });
 
+  it("resolves a gradient token to its gradient paint, not null", () => {
+    const rect = addShapeObject({
+      id: "bar",
+      kind: "rect",
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 12,
+      token: "storageFill",
+    });
+    const icon = addIconObject({
+      id: "spark",
+      icon: "trends",
+      left: 0,
+      top: 0,
+      size: 24,
+      token: "sparkArea",
+    });
+    const line = addShapeObject({
+      id: "spark-line",
+      kind: "path",
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 40,
+      token: "storageFill",
+      points: [
+        ["M", 0, 0],
+        ["L", 300, 40],
+      ],
+    });
+
+    for (const [object, ref] of [
+      [rect, "palette.storageFill"],
+      [icon, "palette.sparkArea"],
+    ] as const) {
+      expect(object["fill"]).toMatchObject({ type: "linear" });
+      expect(object["yunariPaint"]).toEqual({ fill: ref });
+    }
+    expect(line["stroke"]).toMatchObject({ type: "linear" });
+  });
+
   it("names a declared asset on an image object", () => {
     expect(
       addImageObject({

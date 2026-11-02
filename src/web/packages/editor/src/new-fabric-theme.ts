@@ -18,10 +18,6 @@ export const STARTER_TEMPLATE = {
   name: "Starter — System dashboard",
 } as const;
 
-/** The id the reference theme was saved under while documents carried shared
-    literals. Documents now mint their own; this records the retired name. */
-export { STARTER_ENVELOPE_ID } from "@yunari/theme-kit";
-
 /**
  * The reference composition, kept whole so it can be reached as what it now is
  * — a template, offered by `New from template` and listed in the library as one.

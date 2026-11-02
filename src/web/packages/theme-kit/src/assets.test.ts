@@ -71,6 +71,10 @@ describe("declaring an asset", () => {
     await expect(
       declareAsset({ path: "C:\\photo.png", bytes: BYTES, license: "MIT" }),
     ).rejects.toThrow(/relative/);
+    // Drive-relative, without a separator: still not a package-relative path.
+    await expect(
+      declareAsset({ path: "C:photo.png", bytes: BYTES, license: "MIT" }),
+    ).rejects.toThrow(/relative/);
     await expect(
       declareAsset({ path: "/photo.png", bytes: BYTES, license: "MIT" }),
     ).rejects.toThrow(/relative/);
@@ -114,5 +118,8 @@ describe("the envelope's asset declarations", () => {
     expect(again.assets).toEqual([declared.reference]);
     expect(removeAsset(again, declared.reference.id).assets).toEqual([]);
     expect(again.assets).toHaveLength(1);
+    expect(() => removeAsset(again, "missing-asset")).toThrow(
+      /There is no asset "missing-asset"/,
+    );
   });
 });

@@ -31,10 +31,6 @@ import { label } from "./objects.js";
  * layer.
  */
 
-/** The id the reference theme was saved under while documents carried shared
-    literals. Documents now mint their own; this records the retired name. */
-export const STARTER_ENVELOPE_ID = "yunari-demo-dashboard";
-
 /**
  * The readings the reference composition carries, keyed by the object that
  * shows each one.

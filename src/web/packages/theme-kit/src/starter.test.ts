@@ -26,6 +26,8 @@ import { starterPalette } from "./globals.js";
 import { createBlankTheme, createStarterTheme } from "./starter.js";
 
 const STARTER_BACKDROP_PATH = "assets/starter-backdrop.jpg";
+// A fixture, not the editor's declaration: the editor's own `starterBackdrop`
+// is asserted by `packages/editor/src/new-fabric-theme.test.ts`.
 const STARTER_BACKDROP: AssetReference = {
   id: "starter-backdrop",
   kind: "image",

@@ -61,6 +61,34 @@ describe("scene mutation", () => {
     });
   });
 
+  it("refuses a binding id that is already in the document", () => {
+    const first = addSceneObject(
+      blank(),
+      { type: "YunariChart", id: "chart" },
+      [{ id: "chart-cpu", semanticKey: "cpu.load" }],
+    );
+    expect(() =>
+      addSceneObject(first.envelope, { type: "YunariChart", id: "chart" }, [
+        { id: "chart-cpu", semanticKey: "cpu.load" },
+      ]),
+    ).toThrow(/Binding id "chart-cpu"/);
+  });
+
+  it("refuses a binding id repeated inside one insertion", () => {
+    expect(() =>
+      addSceneObject(
+        blank(),
+        { type: "Group", id: "card" },
+        {
+          card: [
+            { id: "same", semanticKey: "cpu.load" },
+            { id: "same", semanticKey: "gpu.load" },
+          ],
+        },
+      ),
+    ).toThrow(/Binding id "same"/);
+  });
+
   it("shallow-merges an update at any depth and refuses an unknown id", () => {
     const added = addSceneObject(blank(), {
       type: "Group",
@@ -96,8 +124,13 @@ describe("scene mutation", () => {
 
 describe("envelope setters", () => {
   it("sets one object's bindings while other objects keep theirs", () => {
+    const base = blank();
     const original = {
-      ...blank(),
+      ...base,
+      scene: {
+        ...base.scene,
+        objects: [{ id: "a" }, { id: "b" }],
+      },
       bindings: {
         a: [{ id: "a", semanticKey: "cpu.load" }],
         b: [{ id: "b", semanticKey: "gpu.load" }],
@@ -106,6 +139,12 @@ describe("envelope setters", () => {
     const next = setBindings(original, "b", []);
     expect(next.bindings).toEqual({ a: original.bindings.a });
     expect(original.bindings.b).toHaveLength(1);
+  });
+
+  it("refuses bindings on an object this scene does not hold", () => {
+    expect(() => setBindings(blank(), "missing", [])).toThrow(
+      /There is no object "missing"/,
+    );
   });
 
   it("replaces the palette and type tokens without mutating either input", () => {

@@ -490,8 +490,10 @@ const OUTSIDE_DESIGN_LANGUAGE = [
   /^src\/web\/packages\/(renderer-core|scene-fabric)\//,
   // Editor surfaces that paint through Fabric or a 2D context, not CSS.
   /^src\/web\/packages\/editor\/src\/(snap-manager|controls-manager|crop-manager)\//,
-  // The starter theme's persisted paint is document data, not editor chrome.
-  /^src\/web\/packages\/editor\/src\/new-fabric-theme-(globals|objects)\.ts$/,
+  // The starter theme's persisted paint is document data, not editor or kit
+  // chrome. Both paths are listed because the self-test fixture still uses the
+  // editor spelling while the modules themselves now live in the kit.
+  /^src\/web\/packages\/(?:editor\/src\/new-fabric-theme-|theme-kit\/src\/)(?:globals|objects)\.ts$/,
   // Fixed ink and paper: a themed QR inverts under half the shell palettes.
   /^src\/web\/packages\/editor\/src\/editor-shell\/qr-symbol\.tsx$/,
 ];

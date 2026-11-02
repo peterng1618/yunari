@@ -76,7 +76,7 @@ const BOX = { left: 470, top: 300, size: 260 } as const;
 const RADIUS = 24;
 
 // `FROST` is the product's own frost token — a 30 % tint that transmits, whose
-// full rationale is on `new-fabric-theme-globals.ts`'s export. A local copy
+// full rationale is on `@yunari/theme-kit` `src/globals.ts`'s export. A local copy
 // would be a second owner of a value the product changes.
 
 type Kind = "Rect" | "Circle";

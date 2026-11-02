@@ -86,12 +86,19 @@ export function listSceneObjects(
 }
 
 /**
- * Appends one object subtree, minting a fresh id for every object in it.
+ * Appends one object subtree, minting a fresh id for every object that carries
+ * an authored id.
  *
  * The allocator is the same one a card copy and a paste use, so an object
  * inserted through this API cannot collide with what the canvas already holds.
+ * An object with no authored id is appended without one rather than being given
+ * an id the caller never asked for.
+ *
  * Bindings may be the root object's list or a record keyed by the authored ids;
- * either way they land under the minted ids.
+ * either way they land under the minted ids. Binding ids are written verbatim,
+ * so a caller-supplied id that is already in the envelope — or repeated inside
+ * this insertion — is refused by name rather than producing a document the
+ * validator rejects at save.
  */
 export function addSceneObject(
   envelope: FabricThemeEnvelope,
@@ -128,20 +135,37 @@ export function addSceneObject(
   };
   const added = copy(object);
 
+  const incoming: Array<readonly [string, readonly Binding[]]> = [];
+  if (Array.isArray(bindings)) {
+    const root = idOf(added);
+    if (root !== undefined && bindings.length > 0) {
+      incoming.push([root, bindings]);
+    }
+  } else if (isRecord(bindings)) {
+    for (const [authoredId, list] of Object.entries(bindings)) {
+      incoming.push([
+        minted.get(authoredId) ?? authoredId,
+        list as readonly Binding[],
+      ]);
+    }
+  }
+
+  const takenBindings = new Set(existingBindings);
+  for (const [, list] of incoming) {
+    for (const binding of list) {
+      if (takenBindings.has(binding.id)) {
+        throw new Error(
+          `Binding id "${binding.id}" is already used, so this object cannot be added.`,
+        );
+      }
+      takenBindings.add(binding.id);
+    }
+  }
+
   const merged: Record<string, readonly Binding[]> = {
     ...(next.bindings ?? {}),
   };
-  const remap = (record: Readonly<Record<string, readonly Binding[]>>) => {
-    for (const [authoredId, list] of Object.entries(record)) {
-      merged[minted.get(authoredId) ?? authoredId] = list;
-    }
-  };
-  if (Array.isArray(bindings)) {
-    const root = idOf(added);
-    if (root !== undefined && bindings.length > 0) merged[root] = bindings;
-  } else if (isRecord(bindings)) {
-    remap(bindings as Readonly<Record<string, readonly Binding[]>>);
-  }
+  for (const [targetId, list] of incoming) merged[targetId] = list;
 
   return {
     envelope: {
@@ -237,6 +261,9 @@ export function setBindings(
   bindings: readonly Binding[],
 ): FabricThemeEnvelope {
   const next = clone(envelope);
+  if (!listSceneObjects(next).some((entry) => entry.id === id)) {
+    throw new Error(`There is no object "${id}" in this scene.`);
+  }
   const merged = { ...(next.bindings ?? {}) };
   if (bindings.length === 0) delete merged[id];
   else merged[id] = bindings;

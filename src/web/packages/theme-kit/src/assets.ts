@@ -104,7 +104,7 @@ function checkPath(path: string): {
     path.startsWith("/") ||
     path.startsWith("\\") ||
     path.startsWith("~") ||
-    /^[A-Za-z]:[\\/]/.test(path) ||
+    /^[A-Za-z]:/.test(path) ||
     /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(path)
   ) {
     throw new Error(`"${path}" is not a relative asset path.`);
@@ -222,6 +222,10 @@ export function removeAsset(
   assetId: string,
 ): FabricThemeEnvelope {
   const next = structuredClone(envelope);
-  const assets = (next.assets ?? []).filter((asset) => asset.id !== assetId);
+  const existing = next.assets ?? [];
+  if (!existing.some((asset) => asset.id === assetId)) {
+    throw new Error(`There is no asset "${assetId}" in this theme.`);
+  }
+  const assets = existing.filter((asset) => asset.id !== assetId);
   return { ...next, assets };
 }

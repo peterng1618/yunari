@@ -13,7 +13,7 @@ import { withRoleTokens } from "./theme-fixture.js";
 function panelPaint(): string {
   const paint = solidOf["panel"];
   if (paint === undefined)
-    throw new Error("new-fabric-theme-globals lost its panel paint");
+    throw new Error("theme-kit globals lost its panel paint");
   return paint;
 }
 

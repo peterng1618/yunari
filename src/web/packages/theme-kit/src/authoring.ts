@@ -5,7 +5,8 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
 } from "@yunari/renderer-core";
-import { type StarterPaletteId, solidOf } from "./globals.js";
+import { fabricArtboardPaint } from "@yunari/scene-fabric";
+import { type StarterPaletteId, starterPalette } from "./globals.js";
 import { type PathCommand, starterIcons } from "./icons.js";
 import {
   chart,
@@ -27,6 +28,29 @@ import {
  */
 
 const POSITIONED = { originX: "left", originY: "top" } as const;
+
+/**
+ * The Fabric paint a palette token resolves to at the box it will fill.
+ *
+ * A token is not always a solid colour: `storageFill`, `sparkArea` and
+ * `frostArea` are gradients, and writing `null` beside a gradient reference
+ * would leave the persisted Fabric field disagreeing with the reference the
+ * renderer reads. The box is passed because a gradient's line is measured in
+ * the object's own pixels.
+ */
+function paintOf(
+  token: StarterPaletteId,
+  width: number,
+  height: number,
+): unknown {
+  const paint = fabricArtboardPaint(starterPalette[token].value, width, height);
+  if (paint === undefined) {
+    throw new Error(`"${token}" is not a paint this build can resolve.`);
+  }
+  // Authoring produces plain JSON, so a gradient is written in the serialised
+  // form Fabric persists rather than as a live `Gradient` instance.
+  return typeof paint === "string" ? paint : paint.toObject();
+}
 
 /** A text box. Its runs decide its readings; bindings travel beside it. */
 export interface AddTextObjectInput {
@@ -90,17 +114,21 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
     if (input.points === undefined) {
       throw new Error(`The path "${input.id}" needs its own commands.`);
     }
-    return path(
-      input.id,
-      input.left,
-      input.top,
-      input.points,
-      input.token ?? "rule",
-      input.strokeWidth ?? 2,
-    );
+    const token = input.token ?? "rule";
+    return {
+      ...path(
+        input.id,
+        input.left,
+        input.top,
+        input.points,
+        token,
+        input.strokeWidth ?? 2,
+      ),
+      stroke: paintOf(token, input.width, input.height),
+    };
   }
   const token = input.token ?? "panel";
-  const fill = solidOf[token] ?? null;
+  const fill = paintOf(token, input.width, input.height);
   const common = {
     id: input.id,
     name: input.id,
@@ -174,7 +202,7 @@ export function addIconObject(input: AddIconObjectInput): ObjectJson {
     left: input.left,
     top: input.top,
     path: starterIcons[input.icon](input.size),
-    fill: solidOf[token] ?? null,
+    fill: paintOf(token, input.size, input.size),
     stroke: null,
     yunariPaint: { fill: `palette.${token}` },
     ...POSITIONED,
