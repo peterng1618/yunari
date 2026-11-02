@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
+import { registerAssetTools } from "./tools/assets.js";
+import { registerComposeTools } from "./tools/compose-tools.js";
 import {
   getTheme,
   listAssetSources,
@@ -8,6 +10,8 @@ import {
   listThemes,
   yunariStatus,
 } from "./tools/discovery.js";
+import { registerDraftTools } from "./tools/draft.js";
+import { registerVerifyTools } from "./tools/verify.js";
 import type { ToolContext } from "./types.js";
 
 const SERVER_NAME = "yunari-theme-designer";
@@ -88,6 +92,11 @@ export function buildServer(context: ToolContext): McpServer {
     },
     async () => await listAssetSources(context),
   );
+
+  registerAssetTools(server, context);
+  registerDraftTools(server, context);
+  registerComposeTools(server, context);
+  registerVerifyTools(server, context);
 
   return server;
 }

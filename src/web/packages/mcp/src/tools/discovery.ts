@@ -1,35 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { ToolContext } from "../types.js";
-
-/** A successful tool answer: text JSON, never a binary payload. */
-function textResult(value: unknown): CallToolResult {
-  return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
-  };
-}
-
-/**
- * A failed tool answer. The MCP server keeps the connection open for a later
- * call, so a host refusal is relayed as a tool error rather than thrown.
- */
-function errorResult(error: unknown): CallToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: error instanceof Error ? error.message : String(error),
-      },
-    ],
-    isError: true,
-  };
-}
+import { jsonAttempt } from "./result.js";
 
 async function attempt(work: () => Promise<unknown>): Promise<CallToolResult> {
-  try {
-    return textResult(await work());
-  } catch (error) {
-    return errorResult(error);
-  }
+  return await jsonAttempt(work);
 }
 
 export async function yunariStatus(

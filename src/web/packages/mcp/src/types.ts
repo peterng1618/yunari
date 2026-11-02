@@ -151,8 +151,11 @@ export interface Draft {
   envelope: FabricThemeEnvelope;
   assets: Record<string, Uint8Array>;
   credits?: ThemeCredits;
-  readonly base?: string;
+  /** The document version the last save was based on; absent before a save. */
+  base?: string;
   readonly origin: "new" | "opened";
+  /** True once this process has written the draft to the host's library. */
+  saved?: boolean;
 }
 
 export interface CreateDraftInput {
@@ -175,10 +178,14 @@ export interface DraftStore {
   create(input: CreateDraftInput): Draft;
   open(id: string, content: OpenedThemeContent): Draft;
   read(id: string): Draft;
+  /** The only open draft; refuses when none or several are open. */
+  current(): Draft;
   discard(id: string): boolean;
   setMetadata(id: string, metadata: ThemeMetadata): Draft;
   setAsset(id: string, path: string, bytes: Uint8Array): Draft;
   setCredits(id: string, credits: ThemeCredits | undefined): Draft;
+  /** Records the base a save produced, and that this draft is now stored. */
+  markSaved(id: string, base?: string): Draft;
 }
 
 /** What every tool registration receives. */

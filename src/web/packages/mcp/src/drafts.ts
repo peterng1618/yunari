@@ -67,6 +67,21 @@ export class InMemoryDraftStore implements DraftStore {
     return draft;
   }
 
+  current(): Draft {
+    if (this.drafts.size === 0) {
+      throw new Error(
+        "No draft is open. Call create_theme or open_theme first.",
+      );
+    }
+    if (this.drafts.size > 1) {
+      const ids = [...this.drafts.keys()].join(", ");
+      throw new Error(
+        `More than one draft is open (${ids}); name the theme id.`,
+      );
+    }
+    return [...this.drafts.values()][0] as Draft;
+  }
+
   discard(id: string): boolean {
     return this.drafts.delete(id);
   }
@@ -90,6 +105,13 @@ export class InMemoryDraftStore implements DraftStore {
     } else {
       draft.credits = credits;
     }
+    return draft;
+  }
+
+  markSaved(id: string, base?: string): Draft {
+    const draft = this.read(id);
+    draft.saved = true;
+    if (base !== undefined) draft.base = base;
     return draft;
   }
 }
