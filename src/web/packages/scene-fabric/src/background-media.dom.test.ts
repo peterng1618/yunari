@@ -206,6 +206,48 @@ describe("background media", () => {
     handle.destroy();
   });
 
+  it("places a host-framed clip without re-applying its pan and zoom", () => {
+    // The host bakes the authored geometry into the clip, so the page adds
+    // none: a themed offset and scale would otherwise zoom the picture twice.
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        media: {
+          assetId: "loop",
+          bounds: "theme",
+          offsetX: 0.25,
+          scale: 2,
+        },
+      },
+      artboard: { width: 200, height: 100 },
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+      backgroundSource: { url: "/api/theme/panel-video", kind: "video" },
+    });
+    const child = host.querySelector<HTMLVideoElement>(
+      "[data-yunari-background-media] video",
+    );
+    if (child === null) throw new Error("the layer mounted no video");
+    expect(child.src).toContain("/api/theme/panel-video");
+    Object.defineProperty(child, "videoWidth", { value: 320 });
+    Object.defineProperty(child, "videoHeight", { value: 320 });
+    Object.defineProperty(child, "readyState", { value: 2 });
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 200, height: 100 },
+      display: { left: 0, top: 0, width: 200, height: 100 },
+    });
+
+    // A 320×320 clip covers the 200×100 box at 200×200; none of the authored
+    // quarter-box pan or 2× zoom is applied on top.
+    expect(child.style.left).toBe("0px");
+    expect(child.style.top).toBe("-50px");
+    expect(child.style.width).toBe("200px");
+    expect(child.style.height).toBe("200px");
+    handle.destroy();
+  });
+
   it("sizes a video from its metadata, before any frame decodes", () => {
     // `loadedmetadata` is the only intrinsic-arrived event a video has, and at
     // that moment `readyState` is HAVE_METADATA: the size is known, the frame is

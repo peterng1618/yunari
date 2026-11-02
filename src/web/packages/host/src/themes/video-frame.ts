@@ -1,6 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  BACKGROUND_MEDIA_DEFAULTS,
+  MAX_BACKGROUND_OFFSET,
+  MAX_BACKGROUND_SCALE,
+  MIN_BACKGROUND_OFFSET,
+  MIN_BACKGROUND_SCALE,
+} from "@yunari/renderer-core";
 import { readVideoFacts, type VideoFacts } from "@yunari/theme-package";
 import { bundledFfmpeg, type Run, type Verify } from "./normalize-video.js";
 
@@ -118,23 +125,34 @@ export type TranscodeResult =
   | { readonly ok: true; readonly bytes: Uint8Array }
   | { readonly ok: false; readonly message: string };
 
+/** The panel box and the authored pan and zoom the page would otherwise apply. */
+export interface PanelClipTarget {
+  readonly width: number;
+  readonly height: number;
+  readonly offsetX?: number;
+  readonly offsetY?: number;
+  readonly scale?: number;
+}
+
 /** A device-sized copy is disposable host data; anything larger is not a
  *  panel's background. */
 const MAX_TRANSCODE_BYTES = 64 * 1024 * 1024;
 
 /**
- * The clip scaled to cover a panel, or the sentence naming why it could not be.
+ * The clip painted into a panel's media box, or the sentence naming why it
+ * could not be.
  *
  * A still panel renders the theme live, so it does show the picture — but a
  * 3840-wide source decoded in the shared renderer starves every other panel.
- * The copy covers the panel's own box at the source's aspect, so the page's own
- * cover fit displays it at one encoded pixel per panel pixel; a copy that only
- * fit inside the box was magnified by the fit and looked soft (Kraken 320x320,
- * 2026-11-02). It drops audio and stays silent and progressive.
+ * The copy is the exact source rect the page's cover fit, pan and zoom would
+ * show, scaled to the box: the page then displays it 1:1. Encoding only the
+ * cover and leaving the authored zoom for the browser made a zoomed theme
+ * decode several times the panel's pixels (Kraken 320x320, 2026-11-02). It
+ * drops audio and stays silent and progressive.
  */
 export async function transcodeVideo(
   bytes: Uint8Array,
-  target: { readonly width: number; readonly height: number },
+  target: PanelClipTarget,
   options: FrameExtractOptions = {},
 ): Promise<TranscodeResult> {
   if (
@@ -152,7 +170,7 @@ export async function transcodeVideo(
   const encoder = bundledFfmpeg(options);
   if (!encoder.ok) return encoder;
 
-  const box = coverBox(facts.width, facts.height, target.width, target.height);
+  const box = cropPlan(facts.width, facts.height, target);
   const directory = await mkdtemp(path.join(os.tmpdir(), "yunari-transcode-"));
   try {
     const input = path.join(directory, "in.mp4");
@@ -166,7 +184,7 @@ export async function transcodeVideo(
       input,
       "-an",
       "-vf",
-      `scale=${box.width}:${box.height}:force_original_aspect_ratio=decrease`,
+      `crop=${box.width}:${box.height}:${box.x}:${box.y},scale=${box.outputWidth}:${box.outputHeight}:flags=lanczos`,
       "-c:v",
       "libx264",
       "-profile:v",
@@ -204,20 +222,113 @@ export async function transcodeVideo(
   }
 }
 
-/** The even box that covers the target at the source's aspect, never upscaled. */
-function coverBox(
-  width: number,
-  height: number,
-  targetWidth: number,
-  targetHeight: number,
-): { readonly width: number; readonly height: number } {
-  const factor = Math.min(
-    1,
-    Math.max(targetWidth / width, targetHeight / height),
+interface CropPlan {
+  /** The source window, in source pixels. */
+  readonly width: number;
+  readonly height: number;
+  readonly x: number;
+  readonly y: number;
+  /** The encoded size: the box, never upscaled past the source window. */
+  readonly outputWidth: number;
+  readonly outputHeight: number;
+}
+
+/**
+ * The source rect the page's placement would show, and the size to encode it.
+ *
+ * This repeats `placement`'s geometry because it is the same picture: cover the
+ * box, then pan by the authored offset and zoom by the authored scale. The
+ * page displays the result with no geometry of its own, so one encoded pixel is
+ * one panel pixel and the browser never magnifies a pre-zoom copy.
+ */
+function cropPlan(
+  sourceWidth: number,
+  sourceHeight: number,
+  target: PanelClipTarget,
+): CropPlan {
+  const offsetX = bounded(
+    target.offsetX,
+    BACKGROUND_MEDIA_DEFAULTS.offsetX,
+    MIN_BACKGROUND_OFFSET,
+    MAX_BACKGROUND_OFFSET,
   );
-  const even = (value: number): number =>
-    Math.max(2, Math.floor((value * factor) / 2) * 2);
-  return { width: even(width), height: even(height) };
+  const offsetY = bounded(
+    target.offsetY,
+    BACKGROUND_MEDIA_DEFAULTS.offsetY,
+    MIN_BACKGROUND_OFFSET,
+    MAX_BACKGROUND_OFFSET,
+  );
+  const zoom = bounded(
+    target.scale,
+    BACKGROUND_MEDIA_DEFAULTS.scale,
+    MIN_BACKGROUND_SCALE,
+    MAX_BACKGROUND_SCALE,
+  );
+  const factor =
+    Math.max(
+      target.width / sourceWidth,
+      target.height / sourceHeight,
+      (target.width * (1 + 2 * Math.abs(offsetX))) / sourceWidth,
+      (target.height * (1 + 2 * Math.abs(offsetY))) / sourceHeight,
+    ) * zoom;
+  const placedWidth = sourceWidth * factor;
+  const placedHeight = sourceHeight * factor;
+  const panX = clamp(target.width * offsetX, (placedWidth - target.width) / 2);
+  const panY = clamp(
+    target.height * offsetY,
+    (placedHeight - target.height) / 2,
+  );
+  // The source window behind the box, panned the same distance as the DOM rect.
+  const windowWidth = Math.min(sourceWidth, target.width / factor);
+  const windowHeight = Math.min(sourceHeight, target.height / factor);
+  const width = evenFloor(windowWidth);
+  const height = evenFloor(windowHeight);
+  const x = evenWithin(
+    (sourceWidth - windowWidth) / 2 - panX / factor,
+    sourceWidth - width,
+  );
+  const y = evenWithin(
+    (sourceHeight - windowHeight) / 2 - panY / factor,
+    sourceHeight - height,
+  );
+  // A panel larger than the source window is left for the page to magnify, as
+  // it would have before this route existed; encoding an upscale adds no pixels.
+  const fit = Math.min(1, width / target.width, height / target.height);
+  return {
+    width,
+    height,
+    x,
+    y,
+    outputWidth: evenFloor(target.width * fit),
+    outputHeight: evenFloor(target.height * fit),
+  };
+}
+
+function bounded(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+/** A pan stopped at the placed rect's own edge. */
+function clamp(value: number, limit: number): number {
+  const bound = Math.max(0, limit);
+  return Math.max(-bound, Math.min(bound, value));
+}
+
+/** The largest even integer at or below the value, and never zero. */
+function evenFloor(value: number): number {
+  return Math.max(2, Math.floor(value / 2) * 2);
+}
+
+/** Rounded to an even offset inside `[0, limit]`, as 4:2:0 needs. */
+function evenWithin(value: number, limit: number): number {
+  const boundedValue = Math.max(0, Math.min(limit, Math.round(value)));
+  return boundedValue - (boundedValue % 2);
 }
 
 /** An ISO base media file names its brand in `ftyp` at offset 4. */

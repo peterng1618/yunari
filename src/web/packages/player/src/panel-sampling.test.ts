@@ -30,7 +30,7 @@ describe("the panel page's background source", () => {
     });
   });
 
-  it("asks for a clip scaled to a still panel's own pixels", () => {
+  it("asks for a clip painted into this panel's box", () => {
     expect(
       panelBackgroundSource("?panel=1", "theme", { width: 464, height: 1920 }),
     ).toEqual({
@@ -39,18 +39,14 @@ describe("the panel page's background source", () => {
     });
   });
 
-  it("asks for the pixels the page's fit, pan and zoom will paint", () => {
+  it("leaves the authored pan and zoom to the host", () => {
+    // The host reads them from the envelope and bakes them into the clip; a
+    // page that asked for a pre-zoomed size would decode several times the
+    // panel's pixels.
     expect(
-      panelBackgroundSource(
-        "?panel=1",
-        "theme",
-        { width: 320, height: 320 },
-        { offsetX: 0.25, offsetY: -0.5, scale: 2 },
-      ),
-    ).toEqual({
-      url: "/api/themes/theme/panel-video?width=960&height=1280",
-      kind: "video",
-    });
+      panelBackgroundSource("?panel=1", "theme", { width: 320, height: 320 })
+        ?.url,
+    ).toBe("/api/themes/theme/panel-video?width=320&height=320");
   });
 
   it("clamps a viewport that is not a panel size", () => {

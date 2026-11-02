@@ -1,8 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type {
-  AssetReference,
-  FabricThemeEnvelope,
+import {
+  type AssetReference,
+  BACKGROUND_MEDIA_DEFAULTS,
+  computeArtboardTransform,
+  type FabricThemeEnvelope,
+  MAX_BACKGROUND_OFFSET,
+  MAX_BACKGROUND_SCALE,
+  MIN_BACKGROUND_OFFSET,
+  MIN_BACKGROUND_SCALE,
 } from "@yunari/renderer-core";
 import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
@@ -10,6 +16,7 @@ import {
   extractVideoFrame,
   type FrameExtractOptions,
   type FrameExtractResult,
+  type PanelClipTarget,
   type TranscodeResult,
   transcodeVideo,
 } from "./video-frame.js";
@@ -77,11 +84,99 @@ export function panelVideoMediaName(
   height: number,
 ): string | undefined {
   const video = backgroundVideoOf(envelope);
-  // `cover` names the derivation, so a cache written by the earlier fit-inside
-  // copy is never served for the same panel size.
-  return video === undefined
-    ? undefined
-    : mediaName(id, video, `${width}x${height}-cover.mp4`);
+  if (video === undefined) return undefined;
+  const geometry = backgroundGeometryOf(envelope);
+  // The authored pan and zoom are part of the picture, so a cache written for
+  // another offset or scale is a different clip. `o`/`s` also invalidate the
+  // earlier cover-only copies under the same pixel size.
+  const suffix = `${width}x${height}-o${number(geometry.offsetX)}_${number(
+    geometry.offsetY,
+  )}-s${number(geometry.scale)}.mp4`;
+  return mediaName(id, video, suffix);
+}
+
+/** The authored geometry the page would have applied itself. */
+export interface BackgroundGeometry {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly scale: number;
+}
+
+export function backgroundGeometryOf(
+  envelope: FabricThemeEnvelope | undefined,
+): BackgroundGeometry {
+  const media = envelope?.background?.media;
+  return {
+    offsetX: bounded(
+      media?.offsetX,
+      BACKGROUND_MEDIA_DEFAULTS.offsetX,
+      MIN_BACKGROUND_OFFSET,
+      MAX_BACKGROUND_OFFSET,
+    ),
+    offsetY: bounded(
+      media?.offsetY,
+      BACKGROUND_MEDIA_DEFAULTS.offsetY,
+      MIN_BACKGROUND_OFFSET,
+      MAX_BACKGROUND_OFFSET,
+    ),
+    scale: bounded(
+      media?.scale,
+      BACKGROUND_MEDIA_DEFAULTS.scale,
+      MIN_BACKGROUND_SCALE,
+      MAX_BACKGROUND_SCALE,
+    ),
+  };
+}
+
+/**
+ * The media layer's box on the panel, in panel pixels.
+ *
+ * A display-bounded layer is the screen. A theme-bounded one is the artboard's
+ * own screen rect, which is smaller than the panel when the theme's ratio
+ * differs; baking a viewport-sized crop for it would show the wrong rectangle.
+ */
+function panelMediaBox(
+  envelope: FabricThemeEnvelope,
+  viewport: { readonly width: number; readonly height: number },
+): { readonly width: number; readonly height: number } {
+  const size = {
+    width: Math.max(1, Math.floor(viewport.width)),
+    height: Math.max(1, Math.floor(viewport.height)),
+  };
+  if (envelope.background?.media?.bounds === "display") return size;
+  try {
+    const transform = computeArtboardTransform({
+      artboard: {
+        width: envelope.artboard.width,
+        height: envelope.artboard.height,
+      },
+      viewport: size,
+      contentFit: envelope.artboard.contentFit ?? "contain",
+      shape: "rect",
+      layoutShape: "rect",
+      themeShape: envelope.artboard.shape ?? "rect",
+    });
+    const width = Math.round(envelope.artboard.width * transform.scale);
+    const height = Math.round(envelope.artboard.height * transform.scale);
+    return width > 0 && height > 0 ? { width, height } : size;
+  } catch {
+    return size;
+  }
+}
+
+function bounded(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+/** A number written the same way every time, as part of a cache name. */
+function number(value: number): string {
+  return value === 0 ? "0" : String(value);
 }
 
 function mediaName(id: string, video: BackgroundVideo, suffix: string): string {
@@ -130,7 +225,7 @@ export interface ThemeMediaOptions {
   ) => Promise<FrameExtractResult>;
   readonly transcode?: (
     bytes: Uint8Array,
-    size: { readonly width: number; readonly height: number },
+    target: PanelClipTarget,
     options?: FrameExtractOptions,
   ) => Promise<TranscodeResult>;
   readonly onError?: (message: string) => void;
@@ -255,14 +350,20 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
       });
     },
 
-    panelVideo(id, envelope, size) {
+    panelVideo(id, envelope, viewport) {
+      const size = panelMediaBox(envelope, viewport);
+      const geometry = backgroundGeometryOf(envelope);
       const name = panelVideoMediaName(id, envelope, size.width, size.height);
       return cached(name, MAX_VIDEO_BYTES, async () => {
         const video = backgroundVideoOf(envelope);
         if (name === undefined || video === undefined) return undefined;
         const bytes = await videoBytes(id, video);
         if (bytes === undefined) return undefined;
-        const scaled = await transcode(bytes, size, undefined);
+        const scaled = await transcode(
+          bytes,
+          { ...size, ...geometry },
+          undefined,
+        );
         if (!scaled.ok) {
           report(scaled.message);
           return undefined;

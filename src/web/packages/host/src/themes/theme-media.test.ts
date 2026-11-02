@@ -85,10 +85,25 @@ describe("media names", () => {
     );
   });
 
-  it("name a panel clip by its pixel size", () => {
+  it("name a panel clip by its pixel size and baked geometry", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320-cover.mp4");
+    ).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
+  });
+
+  it("change the clip name when the authored pan or zoom changes", () => {
+    const panel = (media: unknown) =>
+      panelVideoMediaName(
+        "theme",
+        envelopeWith({
+          media: { assetId: "bg", fallbackFrame: 12, ...(media as object) },
+        }),
+        320,
+        320,
+      );
+
+    expect(panel({ offsetX: 0.25 })).not.toBe(panel({}));
+    expect(panel({ scale: 2 })).not.toBe(panel({}));
   });
 
   it("keep the suffix and stay distinct for a long asset name", () => {
@@ -206,7 +221,7 @@ describe("createThemeMedia", () => {
     expect(extract).toHaveBeenCalledTimes(1);
   });
 
-  it("generates a clip per panel size", async () => {
+  it("generates a clip per panel box", async () => {
     const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
     const service = media({ transcode });
     const envelope = envelopeWith(BACKGROUND);
@@ -215,14 +230,46 @@ describe("createThemeMedia", () => {
       width: 320,
       height: 320,
     });
+    // A square artboard on a tall viewport is the artboard's own screen rect,
+    // not the whole viewport, so the clip is square too.
     const panel = await service.panelVideo("theme", envelope, {
       width: 464,
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320-cover.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x1920-cover.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
+    expect(transcode).toHaveBeenLastCalledWith(
+      new Uint8Array([9, 9, 9]),
+      expect.objectContaining({ width: 464, height: 464 }),
+      undefined,
+    );
+  });
+
+  it("bakes the theme's authored pan and zoom into the clip", async () => {
+    const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
+    const service = media({ transcode });
+
+    await service.panelVideo(
+      "theme",
+      envelopeWith({
+        media: { assetId: "bg", offsetX: 0.25, offsetY: -0.5, scale: 2 },
+      }),
+      { width: 320, height: 320 },
+    );
+
+    expect(transcode).toHaveBeenCalledWith(
+      new Uint8Array([9, 9, 9]),
+      {
+        width: 320,
+        height: 320,
+        offsetX: 0.25,
+        offsetY: -0.5,
+        scale: 2,
+      },
+      undefined,
+    );
   });
 
   it("reports a refused generation and leaves no entry", async () => {

@@ -29,8 +29,10 @@ export interface BackgroundMediaOptions {
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
   /** What a panel's page loads instead of the declared video: the host's still
-   *  of the declared frame, or a clip scaled to the panel. Applies only to a
-   *  video background; a failed load falls back to the theme's own asset. */
+   *  of the declared frame, or a clip painted into the theme's media box. A
+   *  clip already carries the authored pan and zoom, so the page places it
+   *  without them; a still is the source frame and keeps the authored geometry.
+   *  A failed load falls back to the theme's own asset. */
   readonly backgroundSource?: {
     readonly url: string;
     readonly kind: "image" | "video";
@@ -234,6 +236,10 @@ export function mountBackgroundMedia(
   /** The page's derived source was refused; the theme's own asset is the
    *  fallback from then on. */
   let overrideFailed = false;
+  /** The mounted clip already contains the authored pan and zoom — the host
+   *  baked them into its pixels. Re-applying them would zoom the picture twice;
+   *  the clip is placed as the box itself. */
+  let framed = false;
   // Both gates are the layer's own: a panel appears or leaves, and the page is
   // shown or hidden. The frame chain is re-armed only when both allow it.
   let glassSurfaces = options.glassSurfaces ?? 1;
@@ -245,6 +251,22 @@ export function mountBackgroundMedia(
     if (wanted()) frames?.arm();
     else frames?.stop();
   };
+
+  /** The geometry `placement` applies to the picture. A host-framed clip asks
+   *  for none: its pan and zoom are already in the pixels. */
+  const geometry = (
+    media: BackgroundMedia | undefined,
+  ): Pick<PlacementInput, "offsetX" | "offsetY" | "scale"> => ({
+    offsetX: framed
+      ? BACKGROUND_MEDIA_DEFAULTS.offsetX
+      : (media?.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX),
+    offsetY: framed
+      ? BACKGROUND_MEDIA_DEFAULTS.offsetY
+      : (media?.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY),
+    scale: framed
+      ? BACKGROUND_MEDIA_DEFAULTS.scale
+      : (media?.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale),
+  });
 
   /**
    * The layer is the clip: one of the two bounds boxes. The child is placed
@@ -279,9 +301,7 @@ export function mountBackgroundMedia(
     const rect = placement({
       box: { width: box.width, height: box.height },
       source: intrinsic(child),
-      offsetX: media.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX,
-      offsetY: media.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY,
-      scale: media.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale,
+      ...geometry(media),
     });
     child.style.left = `${rect.left}px`;
     child.style.top = `${rect.top}px`;
@@ -292,6 +312,7 @@ export function mountBackgroundMedia(
   };
 
   const stop = (): void => {
+    framed = false;
     disposeSource?.();
     disposeSource = undefined;
     frames?.destroy();
@@ -330,6 +351,7 @@ export function mountBackgroundMedia(
 
   /** Resolves and mounts one media, reporting rather than dropping a refusal. */
   const mount = (media: BackgroundMedia): void => {
+    framed = false;
     const asset = assets?.find((candidate) => candidate.id === media.assetId);
     if (asset === undefined) {
       onMediaError?.(
@@ -360,6 +382,9 @@ export function mountBackgroundMedia(
       !overrideFailed
         ? options.backgroundSource
         : undefined;
+    // A derived clip has the authored pan and zoom baked into its pixels; a
+    // poster still does not, so only the clip is placed without geometry.
+    framed = override !== undefined && override.kind === "video";
     const child = (
       override === undefined
         ? asset.kind === "video"
@@ -560,9 +585,7 @@ export function mountBackgroundMedia(
           const placed = placement({
             box: { width: rect.width, height: rect.height },
             source,
-            offsetX: media?.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX,
-            offsetY: media?.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY,
-            scale: media?.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale,
+            ...geometry(media),
           });
           const scaleX = rect.width > 0 ? device.width / rect.width : 0;
           const scaleY = rect.height > 0 ? device.height / rect.height : 0;

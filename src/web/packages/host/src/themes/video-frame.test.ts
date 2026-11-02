@@ -117,11 +117,9 @@ describe("extractVideoFrame", () => {
 });
 
 describe("transcodeVideo", () => {
-  it("scales a clip to cover the panel box", async () => {
+  it("crops the painted rect and scales it to the panel box", async () => {
     const encoded = fixture("conforming.mp4");
     const run = runWriting(encoded);
-    const facts = readVideoFacts(encoded);
-    if (facts === undefined) throw new Error("fixture is not a video");
 
     const result = await transcodeVideo(
       encoded,
@@ -134,27 +132,35 @@ describe("transcodeVideo", () => {
     expect(result.bytes).toEqual(encoded);
 
     const args = run.mock.calls[0]?.[0] ?? [];
-    const scale = String(args[args.indexOf("-vf") + 1]);
-    const match =
-      /^scale=(\d+):(\d+):force_original_aspect_ratio=decrease$/u.exec(scale);
-    expect(match).not.toBeNull();
-    const [, widthText, heightText] = match ?? [];
-    const width = Number(widthText);
-    const height = Number(heightText);
-    expect(width % 2).toBe(0);
-    expect(height % 2).toBe(0);
-    // One axis is the panel's, the other reaches past it at the source's
-    // aspect: the page's cover fit then paints one encoded pixel per panel
-    // pixel instead of magnifying a copy that only fitted inside the box.
-    expect(Math.min(width, height)).toBe(160);
-    expect(Math.max(width, height)).toBeGreaterThan(160);
-    expect(width / height).toBeCloseTo(facts.width / facts.height, 1);
+    // 320×180 cover of a square box: the square source window is 180×180 at
+    // x=70, then encoded at the box's own 160×160.
+    expect(String(args[args.indexOf("-vf") + 1])).toBe(
+      "crop=180:180:70:0,scale=160:160:flags=lanczos",
+    );
   });
 
-  it("never upscales a clip smaller than the panel", async () => {
+  it("keeps the authored pan and zoom in the crop", async () => {
     const encoded = fixture("conforming.mp4");
-    const facts = readVideoFacts(encoded);
-    if (facts === undefined) throw new Error("fixture is not a video");
+    const run = runWriting(encoded);
+
+    const result = await transcodeVideo(
+      encoded,
+      { width: 160, height: 160, offsetX: 0.25, scale: 2 },
+      options(run),
+    );
+
+    expect(result.ok).toBe(true);
+    const args = run.mock.calls[0]?.[0] ?? [];
+    // The 2× zoom and quarter-box pan select a 90×90 window, moved 92 px right
+    // and 44 px up from the centred crop. The source window is smaller than the
+    // panel here, so it is left for the page to magnify.
+    expect(String(args[args.indexOf("-vf") + 1])).toBe(
+      "crop=90:90:92:44,scale=90:90:flags=lanczos",
+    );
+  });
+
+  it("never upscales a clip past the source window", async () => {
+    const encoded = fixture("conforming.mp4");
     const run = runWriting(encoded);
 
     const result = await transcodeVideo(
@@ -165,9 +171,10 @@ describe("transcodeVideo", () => {
 
     expect(result.ok).toBe(true);
     const args = run.mock.calls[0]?.[0] ?? [];
-    const scale = String(args[args.indexOf("-vf") + 1]);
-    expect(scale).toContain(
-      `scale=${facts.width % 2 === 0 ? facts.width : facts.width - 1}:`,
+    // The source window is 180×180; the page may magnify it, but the encoder
+    // adds no pixels of its own.
+    expect(String(args[args.indexOf("-vf") + 1])).toBe(
+      "crop=180:180:70:0,scale=180:180:flags=lanczos",
     );
   });
 

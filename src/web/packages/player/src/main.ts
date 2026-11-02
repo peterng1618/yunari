@@ -272,13 +272,12 @@ async function startHostedTheme(
   });
   // A hardware panel is served its own derived background — a still when its
   // device plays the clip, a panel-sized clip when it shows this page — so the
-  // browser never fetches the theme's full-size video.
-  const background = panelBackgroundSource(
-    window.location.search,
-    theme.id,
-    { width: window.innerWidth, height: window.innerHeight },
-    theme.background?.media ?? {},
-  );
+  // browser never fetches the theme's full-size video. The host bakes the
+  // authored pan and zoom into that clip; the page displays it 1:1.
+  const background = panelBackgroundSource(window.location.search, theme.id, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
   const handle = mountFabricScene({
     host,
     plan: envelopePlan(theme),
