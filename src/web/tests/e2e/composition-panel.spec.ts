@@ -1829,7 +1829,7 @@ test("gives every image it places a layer row", async ({ page }, testInfo) => {
     })
     .toBe(5);
 
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   // The scene is the source of truth for which rows must exist; asking the
   // panel for exactly those ids is what the report says it lacked.
   for (const id of await sceneImageIds(page)) {

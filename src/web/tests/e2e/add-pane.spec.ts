@@ -104,7 +104,7 @@ test("a card inserted from the Add pane arrives as a unit the tree can name", as
   // allocator mints (`card-library.ts`'s `COPY_PREFIX` prepends `card` to the
   // card's `group-time-card`). That id is the product's to choose, not the
   // spec's to restate (vg-170; the rule `composition-panel.spec.ts` states).
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   const clocks = page.locator(".yunari-layer-role", { hasText: "Clock" });
   const before = await clocks.count();
 
@@ -113,7 +113,7 @@ test("a card inserted from the Add pane arrives as a unit the tree can name", as
     .getByRole("button", { name: "Clock", exact: true })
     .click();
 
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   await expect(clocks).toHaveCount(before + 1);
 });
 

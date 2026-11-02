@@ -104,7 +104,7 @@ export const uiCopy = {
      *  slots chooses between before it reads each one. */
     label: "Editor panes",
     slots: {
-      composition: "Composition",
+      composition: "Layers",
       add: "Add",
       /** Every declared file, its import and placement, and the finder link. */
       assets: "Assets",

@@ -101,7 +101,7 @@ test("asking for a shut pane opens it, and asking again does not close it", asyn
   // click when it is shut, or "open" would be a no-op that happened to pass.
   await page
     .locator(".editor-shell-rail")
-    .getByRole("button", { name: "Composition", exact: true })
+    .getByRole("button", { name: "Layers", exact: true })
     .click();
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeHidden();
 
@@ -290,13 +290,13 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   // Close the pane the product's own way, then look at Add and come back.
   await page
     .locator(".editor-shell-rail")
-    .getByRole("button", { name: "Composition", exact: true })
+    .getByRole("button", { name: "Layers", exact: true })
     .click();
   await expect(list).toBeHidden();
 
   await openPane(page, "Add");
   await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeVisible();
 
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
@@ -343,7 +343,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Composition", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -361,7 +361,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
 
     // Away and back. The partner is whichever slot this one is not, so the
     // swap always leaves the pane it is about.
-    await openPane(page, slot === "Composition" ? "Add" : "Composition");
+    await openPane(page, slot === "Layers" ? "Add" : "Layers");
     await openPane(page, slot);
 
     const returned = await body.evaluate((node) => node.scrollTop);
@@ -487,7 +487,7 @@ test("every pane's title bar sits at the same top offset", async ({
   ).toBeVisible();
 
   const tops: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const title = page.locator(
       ".editor-shell-pane:not([hidden]) > .editor-shell-pane-title",
@@ -533,7 +533,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
   ).toBeVisible();
 
   const overflow: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot}'s body is showing`).toHaveCount(1);

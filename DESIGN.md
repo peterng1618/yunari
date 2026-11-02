@@ -219,7 +219,7 @@ already looks, and only the stage changes between the two surfaces.
 
 **Document-level and editor-level actions only.** A command that has a rightful
 home elsewhere is not repeated here — Insert lives in the Add pane, so the
-header has no Insert menu, and Edit lives in the Composition pane's footer
+header has no Insert menu, and Edit lives in the Layers pane's footer
 toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then one **toolbar** of icon
@@ -272,7 +272,7 @@ settings gear pinned to the foot. **Five slots:**
 
 | Slot | Glyph | Holds |
 |---|---|---|
-| Composition | stack | The scene tree, and the object actions that act on it |
+| Layers | stack | The scene tree, and the object actions that act on it |
 | Add | plus | Everything insertable |
 | Assets | folder | Every declared file, its import and placement, and the finder link |
 | Tokens | palette | The theme's paints and type tokens — created and edited here |
@@ -305,7 +305,7 @@ bottom edge and is not a place for global commands, and the status bar is not
 a place for tools.
 
 **A row yields its name and its key before it yields a control, and it yields
-the role last.** A Composition row that carries every control it can — the
+the role last.** A Layers row that carries every control it can — the
 twisty, the entry control on a group, the eye and the lock — and a bound key is
 wider than the pane's body, so the row clips rather than dropping a control or
 taking the leading slot below 20px. The name and key give way first; the role gives
