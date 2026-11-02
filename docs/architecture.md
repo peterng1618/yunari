@@ -25,11 +25,19 @@ the product version lives once in `src/web/package.json`.
 | `@yunari/renderer-core` | Shared semantics: sample/theme types, protocol codecs, envelope validation and migration, scene planning | none |
 | `@yunari/scene-fabric` | Renders a scene plan onto Fabric; persistence and Fabric revival | renderer-core |
 | `@yunari/theme-package` | `.yunari-theme` ZIP read/write, validation, credits | renderer-core |
+| `@yunari/theme-kit` | Pure, Node-safe theme authoring: cards, objects, tokens, starter themes; no DOM and no Fabric construction | renderer-core, scene-fabric, theme-package |
+| `@yunari/mcp` | stdio MCP server that designs themes against the loopback host; also owns `install`, `uninstall` and `status` | renderer-core, theme-kit, theme-package |
 | `@yunari/player` | Display-only bundle; live samples and theme rendering | renderer-core, scene-fabric |
 | `@yunari/editor` | Authoring shell, inspectors, panes, Fabric canvas | renderer-core, scene-fabric, theme-package; fake-source as a devDependency |
 | `@yunari/host` | CLI, HTTP/HTTPS server, providers, SSE, stores, TLS | renderer-core, scene-fabric, theme-package |
 | `@yunari/store-worker` | Cloudflare Worker: catalogue, auth, uploads, R2 delivery | renderer-core, theme-package |
 | `@yunari/fake-source` | Deterministic synthetic samples for development and tests | renderer-core |
+
+The MCP server is a separate Node process speaking MCP over stdio. It is a
+client of the host's loopback HTTP API, not a second host: it reads themes,
+sensors, displays and assets through the same routes the editor uses, keeps
+drafts in its own memory, and writes only through `save_theme` and
+`assign_theme`.
 
 ### Boundary rules
 
@@ -51,6 +59,17 @@ the product version lives once in `src/web/package.json`.
   `packages/player/scripts/check-size.mjs` enforces the gzip size budget.
 - `fake-source` is a development dependency of the editor. A shipped bundle that
   contains it is reporting fabricated telemetry.
+- `theme-kit` is the one authoring vocabulary the editor and the MCP server
+  share. It is pure: it emits object JSON and envelope data, imports no React,
+  DOM or interactive canvas, and never constructs a Fabric object. The editor
+  keeps its canvas, history, inspectors and save flow; the MCP server keeps
+  drafts in memory and persists only through the host.
+- `@yunari/mcp` talks to the host only through its loopback HTTP routes. It
+  imports no editor managers, owns no second theme store and renders no second
+  preview path: browser previews are the player's own URL, panel previews are
+  the panel manager's capture route. Agent installation is delegated to
+  `add-mcp` (server entry) and the `skills` CLI (skill directory), never
+  re-implemented as a config writer.
 
 ## USB display panels
 

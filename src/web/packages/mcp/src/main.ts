@@ -2,6 +2,13 @@ import { pathToFileURL } from "node:url";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { InMemoryDraftStore } from "./drafts.js";
 import { HttpHostClient } from "./host-client.js";
+import {
+  createPorts,
+  type InstallReport,
+  install,
+  status,
+  uninstall,
+} from "./install.js";
 import { buildServer } from "./server.js";
 import type { ToolContext } from "./types.js";
 
@@ -12,9 +19,9 @@ export const PROBE_PORTS: readonly number[] = Object.freeze(
 
 const USAGE = `Usage:
   yunari-mcp serve [--url <url>]   Start the MCP server over stdio.
-  yunari-mcp install               Install the server entry and skill (not in this build).
-  yunari-mcp uninstall             Remove the server entry and skill (not in this build).
-  yunari-mcp status                Report host, config and skill state (not in this build).
+  yunari-mcp install               Register the server and install the skill.
+  yunari-mcp uninstall             Remove the server entry and the skill.
+  yunari-mcp status                Report host, config and skill state.
 
 The host URL comes from --url or YUNARI_URL. Without either, the server probes
 http://127.0.0.1:5227 through http://127.0.0.1:5236 and stops at the first
@@ -129,7 +136,51 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   return { command, url, help };
 }
 
-/** The CLI. `serve` is the only command in this build; the installer follows. */
+/** Prints an install or uninstall outcome; a partial failure stays visible. */
+function printReport(report: InstallReport, done: string): void {
+  for (const step of report.steps) {
+    console.log(`${step.ok ? "ok" : "failed"} ${step.step}: ${step.detail}`);
+  }
+  console.log(
+    report.ok ? `${done}.` : "Incomplete: see the failed steps above.",
+  );
+}
+
+/**
+ * Resolves the host the same way `serve` does, then asks it for the library.
+ * A named URL is checked too: parsing a URL is not evidence a host answers.
+ */
+async function probeHost(url?: string) {
+  try {
+    const resolved = await resolveHostUrl({ url });
+    const response = await fetch(`${resolved}/api/themes`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    if (!response.ok) {
+      return {
+        reachable: false,
+        url: resolved,
+        error: `${resolved} answered HTTP ${response.status}`,
+      };
+    }
+    const body = (await response.json()) as { readonly themes?: unknown };
+    if (!Array.isArray(body.themes)) {
+      return {
+        reachable: false,
+        url: resolved,
+        error: `${resolved} did not answer as a Yunari host`,
+      };
+    }
+    return { reachable: true, url: resolved };
+  } catch (error) {
+    return {
+      reachable: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** The CLI. `serve` starts the server; the rest own the agent install. */
 export async function run(argv: readonly string[]): Promise<number> {
   let parsed: ParsedArgs;
 
@@ -143,6 +194,37 @@ export async function run(argv: readonly string[]): Promise<number> {
   if (parsed.help) {
     console.log(USAGE);
     return 0;
+  }
+
+  if (
+    parsed.command === "install" ||
+    parsed.command === "uninstall" ||
+    parsed.command === "status"
+  ) {
+    const ports = createPorts({ probeHost: () => probeHost(parsed.url) });
+
+    if (parsed.command === "status") {
+      const report = await status(ports);
+      console.log(
+        report.host.reachable
+          ? `host: reachable at ${report.host.url ?? "(unknown URL)"}`
+          : `host: unreachable${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
+      );
+      console.log(`server: ${report.server.detail}`);
+      console.log(
+        report.skill.present
+          ? `skill: installed at ${report.skill.path}`
+          : `skill: missing at ${report.skill.path}`,
+      );
+      return 0;
+    }
+
+    const report =
+      parsed.command === "install"
+        ? await install(ports)
+        : await uninstall(ports);
+    printReport(report, parsed.command === "install" ? "Installed" : "Removed");
+    return report.ok ? 0 : 1;
   }
 
   if (parsed.command !== "serve") {

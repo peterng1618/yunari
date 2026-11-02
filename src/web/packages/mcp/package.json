@@ -19,6 +19,8 @@
     "@yunari/renderer-core": "*",
     "@yunari/theme-kit": "*",
     "@yunari/theme-package": "*",
+    "add-mcp": "2.6.1",
+    "skills": "1.7.5",
     "zod": "4.6.6"
   },
   "devDependencies": {

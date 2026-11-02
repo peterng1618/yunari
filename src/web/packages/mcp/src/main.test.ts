@@ -116,15 +116,15 @@ describe("run", () => {
   });
 
   it("names install, uninstall and status in the usage line", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
-      await run(["status"]);
-      const printed = error.mock.calls.flat().join("\n");
+      await expect(run(["--help"])).resolves.toBe(0);
+      const printed = log.mock.calls.flat().join("\n");
       expect(printed).toContain("yunari-mcp install");
       expect(printed).toContain("yunari-mcp uninstall");
       expect(printed).toContain("yunari-mcp status");
     } finally {
-      error.mockRestore();
+      log.mockRestore();
     }
   });
 });

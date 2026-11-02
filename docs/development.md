@@ -24,6 +24,36 @@ node packages/host/bin/yunari.js
 after changing it. The host opens a browser by default; `--no-browser` keeps it
 headless.
 
+## MCP theme designer
+
+The MCP server is a separate stdio process. Build it, then run it against a
+host that is already serving:
+
+```bash
+cd src/web
+npm run build -w @yunari/mcp
+
+node packages/mcp/bin/yunari-mcp.js serve --url http://127.0.0.1:5227
+node packages/mcp/bin/yunari-mcp.js status
+```
+
+Without `--url`, `serve` probes `127.0.0.1:5227` through `:5236` for a host that
+answers `/api/themes`. `YUNARI_URL` does the same job as `--url`.
+
+`install` registers the built `dist/main.js` as `yunari` for Claude Code
+globally (`add-mcp`, all tools auto-approved) and installs the skill in
+`skills/yunari-theme-designer/` through the `skills` CLI. `uninstall` removes
+both; `status` reports the host, the config entry and the installed skill
+without writing.
+
+```bash
+node packages/mcp/bin/yunari-mcp.js install
+node packages/mcp/bin/yunari-mcp.js uninstall
+```
+
+Build the package before installing: the registered entry is the built
+`dist/main.js`, not the TypeScript source.
+
 ## Commands
 
 | Command | What it does |
