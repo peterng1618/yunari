@@ -1380,17 +1380,22 @@ describe("the column's sections", () => {
     expect(history.saveState).toHaveBeenCalledTimes(3);
   });
 
-  it("offers flips to an image and to no other kind", () => {
+  it("offers flips to an image and to every flippable kind", () => {
     expect(
       setup(
         new Rect({ left: 0, top: 0, width: 40, height: 20 }),
       ).host.querySelector("[data-yunari-flip-x]"),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       setup(
         new FabricImage("", { left: 0, top: 0, width: 40, height: 40 }),
       ).host.querySelector("[data-yunari-flip-x]"),
     ).not.toBeNull();
+    expect(
+      setup(new IText("text", { left: 0, top: 0 })).host.querySelector(
+        "[data-yunari-flip-x]",
+      ),
+    ).toBeNull();
   });
 
   it("is a plan a test can read as data, before anything renders", () => {

@@ -3,6 +3,8 @@ import {
   BACKGROUND_MEDIA_DEFAULTS,
   type Background,
   type BackgroundMedia,
+  MAX_BACKGROUND_SCALE,
+  MIN_BACKGROUND_SCALE,
 } from "@yunari/renderer-core";
 import type { BackdropMedia } from "./glass.js";
 
@@ -74,6 +76,9 @@ export interface PlacementInput {
     | undefined;
   readonly offsetX: number;
   readonly offsetY: number;
+  /** Zoom over the cover fit, from `MIN_BACKGROUND_SCALE` to
+   *  `MAX_BACKGROUND_SCALE`; absent means 1. */
+  readonly scale?: number;
 }
 
 /** Finite, non-negative. A refused reading leaves nothing to draw. */
@@ -88,10 +93,11 @@ const size = (value: number): number =>
  *
  * **An offset implies the zoom it needs**. A pan of `|o|·box` needs an
  * overhang of `|o|·box`, so that axis needs a rect of `box·(1 + 2|o|)`; the
- * factor is the largest of the cover factor and those per-axis floors. Without
- * it a picture whose aspect matches the box covers it exactly, leaves no
- * overhang, and every offset clamps to zero — the starter backdrop's case.
- * One factor for both axes, so the picture never distorts.
+ * factor is the largest of the cover factor and those per-axis floors, times
+ * the author's own `scale`. Without it a picture whose aspect matches the box
+ * covers it exactly, leaves no overhang, and every offset clamps to zero — the
+ * starter backdrop's case. One factor for both axes, so the picture never
+ * distorts.
  *
  * The pan stays bounded by the overhang, so an offset can never uncover colour
  * inside the box: the rect has at least the overhang the offset asks for.
@@ -111,12 +117,14 @@ export function placement(input: PlacementInput): MediaBox {
 
   const offsetX = Number.isFinite(input.offsetX) ? input.offsetX : 0;
   const offsetY = Number.isFinite(input.offsetY) ? input.offsetY : 0;
-  const factor = Math.max(
-    boxWidth / sourceWidth,
-    boxHeight / sourceHeight,
-    panFloor(boxWidth, sourceWidth, offsetX),
-    panFloor(boxHeight, sourceHeight, offsetY),
-  );
+  const zoom = boundedScale(input.scale);
+  const factor =
+    Math.max(
+      boxWidth / sourceWidth,
+      boxHeight / sourceHeight,
+      panFloor(boxWidth, sourceWidth, offsetX),
+      panFloor(boxHeight, sourceHeight, offsetY),
+    ) * zoom;
   const width = size(sourceWidth * factor);
   const height = size(sourceHeight * factor);
   const panX = bounded(boxWidth * offsetX, (width - boxWidth) / 2);
@@ -133,6 +141,15 @@ export function placement(input: PlacementInput): MediaBox {
  *  offset asks for is reachable instead of clamping to nothing. */
 function panFloor(box: number, source: number, offset: number): number {
   return source <= 0 ? 0 : (box * (1 + 2 * Math.abs(offset))) / source;
+}
+
+/** A stored scale outside the authored range is refused at the document
+ *  boundary; a caller that arrives with one anyway still paints in range. */
+function boundedScale(scale: number | undefined): number {
+  if (scale === undefined || !Number.isFinite(scale)) {
+    return MIN_BACKGROUND_SCALE;
+  }
+  return Math.min(MAX_BACKGROUND_SCALE, Math.max(MIN_BACKGROUND_SCALE, scale));
 }
 
 /** A requested pan, stopped where the placed rect's own edge meets the box's. */
@@ -264,6 +281,7 @@ export function mountBackgroundMedia(
       source: intrinsic(child),
       offsetX: media.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX,
       offsetY: media.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY,
+      scale: media.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale,
     });
     child.style.left = `${rect.left}px`;
     child.style.top = `${rect.top}px`;
@@ -544,6 +562,7 @@ export function mountBackgroundMedia(
             source,
             offsetX: media?.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX,
             offsetY: media?.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY,
+            scale: media?.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale,
           });
           const scaleX = rect.width > 0 ? device.width / rect.width : 0;
           const scaleY = rect.height > 0 ? device.height / rect.height : 0;

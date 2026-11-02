@@ -126,8 +126,12 @@ function fieldControl(
           data={field.data}
           value={shownNumber(field.percent, field.value)}
           onCommit={(value) => commit(committedNumber(field.percent, value))}
-          {...(field.min === undefined ? {} : { min: field.min })}
-          {...(field.max === undefined ? {} : { max: field.max })}
+          {...(field.min === undefined
+            ? {}
+            : { min: shownNumber(field.percent, field.min) })}
+          {...(field.max === undefined
+            ? {}
+            : { max: shownNumber(field.percent, field.max) })}
           {...((field.unit ?? (field.percent === true ? "%" : undefined)) ===
           undefined
             ? {}
@@ -194,9 +198,9 @@ function fieldControl(
         <ControlSlider
           label={field.label}
           data={field.data}
-          value={field.value}
-          min={field.min}
-          max={field.max}
+          value={shownNumber(field.percent, field.value)}
+          min={shownNumber(field.percent, field.min)}
+          max={shownNumber(field.percent, field.max)}
           {...(field.integer === undefined ? {} : { integer: field.integer })}
           // The gesture writes the document as it moves, so the canvas shows
           // what the author is choosing and not only the well. The preview
@@ -204,9 +208,21 @@ function fieldControl(
           // and Escape puts the value the press started from back through the
           // same writer. `field.value` is the *start* value here rather than the
           // last previewed one, because a preview does not re-publish the column.
-          onPreview={(value) => edits.preview(revision, field.id, value)}
-          onCancel={(start) => edits.cancelPreview(revision, field.id, start)}
-          onCommit={(value) => commit(value)}
+          onPreview={(value) =>
+            edits.preview(
+              revision,
+              field.id,
+              committedNumber(field.percent, value),
+            )
+          }
+          onCancel={(start) =>
+            edits.cancelPreview(
+              revision,
+              field.id,
+              committedNumber(field.percent, start),
+            )
+          }
+          onCommit={(value) => commit(committedNumber(field.percent, value))}
           {...refused}
         />
       );

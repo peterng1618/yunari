@@ -16,6 +16,8 @@ import { AssetSourcesPage } from "./pages/asset-sources-page.js";
 import { DisplaysPage } from "./pages/displays-page.js";
 import { HardwarePage } from "./pages/hardware-page.js";
 import { KeyboardPage } from "./pages/keyboard-page.js";
+import { PathPresetsPage } from "./pages/path-presets-page.js";
+import { PreviewsPage } from "./pages/previews-page.js";
 import { ReadingsPage } from "./pages/readings-page.js";
 import { UnitsPage } from "./pages/units-page.js";
 import type { SourcesClient } from "./sources-client.js";
@@ -221,6 +223,12 @@ function Settings(props: {
                       onPalette={props.onPalette}
                       onFollowing={props.onFollowing}
                     />
+                  ) : null}
+                  {page.id === "previews" ? (
+                    <PreviewsPage storage={props.storage} />
+                  ) : null}
+                  {page.id === "path-presets" ? (
+                    <PathPresetsPage storage={props.storage} />
                   ) : null}
                   {page.id === "keyboard" ? (
                     <KeyboardPage

@@ -282,15 +282,20 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Reads
       "INPUT[type=][aria-hidden]", // Unit display
       "INPUT[type=][aria-hidden]", // Zone
+      // The selected shape's two flips, the mirrors a primitive, polygon or
+      // path now shares with a picture.
+      "INPUT[type=checkbox][aria-hidden]", // Flip horizontally
+      "INPUT[type=checkbox][aria-hidden]", // Flip vertically
       // The shape's three paint selects: `ControlSelect` again.
       "INPUT[type=][aria-hidden]", // Fill
       "INPUT[type=][aria-hidden]", // Stroke
       "INPUT[type=][aria-hidden]", // Shadow
-      // The inspector's one toggle. It was three: deliberate bleed on both
-      // mounts, which went with its mark, and frosted
-      // glass on the shape alone. The text run's frost toggle is gone with its
-      // section — a `Textbox` cannot be frosted, so `vg-465` offers it no glass
-      // section at all rather than a switch that writes nothing.
+      // The inspector's three toggles: the shape's two mirrors above, and its
+      // frosted glass. Frost was three: deliberate bleed on both mounts, which
+      // went with its mark, and frosted glass on the shape alone — plus the two
+      // mirrors a text run never carried. The text run's frost toggle is gone
+      // with its section — a `Textbox` cannot be frosted, so `vg-465` offers it
+      // no glass section at all rather than a switch that writes nothing.
       "INPUT[type=checkbox][aria-hidden]", // Frosted glass, shape
       // The Assets pane's two file pickers, `[hidden]` and driven by the Import
       // and Replace controls. The declared-asset chooser that used to sit ahead

@@ -22,9 +22,8 @@ import { MetadataFields } from "./metadata-fields.js";
  * sections went with item 17 (`vg-474`), and what is left is what this file
  * returns.
  *
- * The heading is the panel's own word and a plain `<h2>`: `panel-labels.spec.ts`
- * reads every `section h2` and matches the panel's name against it, and the
- * disclosure chrome's `▾` would arrive in that text beside the title.
+ * The pane's title already says "Theme settings", so the body starts with its
+ * first section rather than repeating the pane's own word under it.
  *
  * The ordering, most likely first: what the theme is, then the board it is
  * drawn on — the size and the presets that set it. The board's paint and the
@@ -49,10 +48,7 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
   const { artboard, metadata, boxes, credits } = props;
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
-      <h2 className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-        {uiCopy.panels.themeSettings}
-      </h2>
-      <InspectorSection id="theme" title={uiCopy.panels.themeMetadata}>
+      <InspectorSection id="theme" title={uiCopy.panels.themeMetadata} first>
         <MetadataFields metadata={metadata} onCommit={props.onMetadata} />
       </InspectorSection>
       <InspectorSection id="artboard" title={uiCopy.panels.artboard}>

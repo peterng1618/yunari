@@ -5,7 +5,7 @@ import { placement } from "./background-media.js";
  * The one placement owner: the DOM layer and the glass sampler both size the
  * media through this function, so these cases pin the arithmetic they share.
  * The media is always `cover`, so the placed rect is never smaller than the box
- * on either axis; translation is the only thing the author sets.
+ * on either axis; zoom and translation are what the author sets.
  */
 
 const BOX = { width: 200, height: 100 };
@@ -35,6 +35,45 @@ describe("placement", () => {
     expect(
       placement({ box: BOX, source: SOURCE, offsetX: 0, offsetY: -1 }),
     ).toMatchObject({ top: -200 });
+  });
+
+  it("zooms the cover rect by the authored scale", () => {
+    const resting = placement({
+      box: BOX,
+      source: SOURCE,
+      offsetX: 0,
+      offsetY: 0,
+    });
+    expect(
+      placement({
+        box: BOX,
+        source: SOURCE,
+        offsetX: 0,
+        offsetY: 0,
+        scale: 2,
+      }),
+    ).toEqual({
+      left: -100,
+      top: -150,
+      width: resting.width * 2,
+      height: resting.height * 2,
+    });
+    // A value outside the authored range still paints inside it rather than
+    // letting a caller reach a rect the document would refuse.
+    for (const [scale, expected] of [
+      [0.5, resting.width],
+      [9, resting.width * 5],
+    ] as const) {
+      expect(
+        placement({
+          box: BOX,
+          source: SOURCE,
+          offsetX: 0,
+          offsetY: 0,
+          scale,
+        }).width,
+      ).toBeCloseTo(expected, 5);
+    }
   });
 
   it("pans a picture whose aspect already matches the box", () => {

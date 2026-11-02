@@ -470,6 +470,15 @@ describe("SelectionColumn", () => {
     )!;
     flipX.click();
     expect(commit).toHaveBeenCalledWith(1, "background.flipX", true);
+
+    // The zoom is a fraction shown as 100–500%; the track's range is the
+    // model's, so the author cannot drag past either end.
+    const scale = host.querySelector<HTMLInputElement>(
+      "[data-yunari-background-scale]",
+    )!;
+    expect(scale.value).toBe("100");
+    await typeInto(scale, "250");
+    expect(commit).toHaveBeenCalledWith(1, "background.scale", 2.5);
   });
 
   /**

@@ -32,6 +32,7 @@ import {
   type ShellPalette,
   shellPalettes,
 } from "../editor-shell/palette.js";
+import { PATH_PRESET_IDS } from "../new-object-defaults.js";
 import {
   readUserPathPresets,
   setActiveUserPathPresets,
@@ -40,6 +41,8 @@ import { uiCopy } from "../ui-copy.js";
 import { AboutPage } from "./pages/about-page.js";
 import { AppearancePage } from "./pages/appearance-page.js";
 import { AssetSourcesPage } from "./pages/asset-sources-page.js";
+import { PathPresetsPage } from "./pages/path-presets-page.js";
+import { PreviewsPage } from "./pages/previews-page.js";
 
 const credentials = vi.hoisted(() => ({
   listCredentials: vi.fn(),
@@ -235,7 +238,7 @@ it("returns to following the system by deleting the stored choice", async () => 
 });
 
 it("adds a ratio, removes it, and resets to the defaults", async () => {
-  const container = await mountAppearance();
+  const container = await mount(<PreviewsPage storage={localStorage} />);
   const field = must(
     container.querySelector<HTMLInputElement>(
       "[data-yunari-preview-ratio-input]",
@@ -274,7 +277,7 @@ it("adds a ratio, removes it, and resets to the defaults", async () => {
 });
 
 it("adds a custom path preset, draws its own data, and removes it", async () => {
-  const container = await mountAppearance();
+  const container = await mount(<PathPresetsPage storage={localStorage} />);
   const name = must(
     container.querySelector<HTMLInputElement>("[data-yunari-path-preset-name]"),
     "preset name field",
@@ -320,8 +323,30 @@ it("adds a custom path preset, draws its own data, and removes it", async () => 
   expect(readUserPathPresets(localStorage)).toEqual([]);
 });
 
+it("lists the shipped custom shapes and gives the add form its examples", async () => {
+  const container = await mount(<PathPresetsPage storage={localStorage} />);
+
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-yunari-path-preset-builtin]",
+      ),
+    ).map((row) => row.textContent),
+    "the shipped presets are Add-pane vocabulary, so the page lists them",
+  ).toEqual(PATH_PRESET_IDS.map((id) => uiCopy.pathPresets[id]));
+  expect(
+    container.querySelector<HTMLInputElement>("[data-yunari-path-preset-name]")
+      ?.placeholder,
+  ).toBe(uiCopy.settings.pathPresetNamePlaceholder);
+  expect(
+    container.querySelector<HTMLTextAreaElement>(
+      "[data-yunari-path-preset-data]",
+    )?.placeholder,
+  ).toBe(uiCopy.settings.pathPresetDataPlaceholder);
+});
+
 it("names what a path preset is missing rather than storing an invisible one", async () => {
-  const container = await mountAppearance();
+  const container = await mount(<PathPresetsPage storage={localStorage} />);
 
   await press(
     must(
@@ -337,7 +362,7 @@ it("names what a path preset is missing rather than storing an invisible one", a
 });
 
 it("names an equivalent ratio that is already listed", async () => {
-  const container = await mountAppearance();
+  const container = await mount(<PreviewsPage storage={localStorage} />);
   const field = must(
     container.querySelector<HTMLInputElement>(
       "[data-yunari-preview-ratio-input]",

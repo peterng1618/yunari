@@ -199,21 +199,27 @@ function selectingBridge(): EditorShellBridge {
   });
 }
 
-it("gives the stage the inspector's width when nothing is selected", async () => {
+it("keeps the inspector whatever is selected, and its handle folds it", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const body = root.querySelector<HTMLElement>(".editor-shell-body");
+  const inspector = root.querySelector<HTMLElement>(".editor-shell-inspector");
+  const toggle = root.querySelector<HTMLButtonElement>(
+    "[data-yunari-inspector-toggle]",
+  );
 
-  expect(
-    root.querySelector(".editor-shell-inspector"),
-    "nothing selected is no inspector",
-  ).toBeNull();
-  expect(body?.dataset["inspector"]).toBe("hidden");
-
-  layout.setBridge(selectingBridge(), undefined);
-  await Promise.resolve();
-  expect(root.querySelector(".editor-shell-inspector")).not.toBeNull();
+  expect(inspector, "nothing selected still has an inspector").not.toBeNull();
   expect(body?.dataset["inspector"]).toBeUndefined();
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+
+  await act(async () => toggle?.click());
+  expect(body?.dataset["inspector"]).toBe("collapsed");
+  expect(inspector?.dataset["collapsed"]).toBe("true");
+  expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+
+  await act(async () => toggle?.click());
+  expect(body?.dataset["inspector"]).toBeUndefined();
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
 
   layout.destroy();
 });

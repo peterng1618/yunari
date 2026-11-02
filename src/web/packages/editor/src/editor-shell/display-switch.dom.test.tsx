@@ -207,9 +207,12 @@ it("offers the camera's −, +, fit and fullscreen beside the readout, stepping 
   ).not.toBeNull();
 });
 
-it("asks the browser for fullscreen from the cluster and the menu", async () => {
+it("asks the browser for fullscreen on the stage, from the cluster and the menu", async () => {
   const request = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(document.documentElement, "requestFullscreen", {
+  const stage = document.createElement("main");
+  stage.className = "editor-shell-stage";
+  document.body.append(stage);
+  Object.defineProperty(stage, "requestFullscreen", {
     configurable: true,
     value: request,
   });
@@ -227,9 +230,12 @@ it("asks the browser for fullscreen from the cluster and the menu", async () => 
         )
         ?.click();
     });
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(
+      request,
+      "fullscreen is the canvas, not the editor chrome",
+    ).toHaveBeenCalledTimes(2);
   } finally {
-    Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+    stage.remove();
   }
 });
 

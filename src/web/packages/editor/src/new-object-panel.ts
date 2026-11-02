@@ -239,8 +239,14 @@ export function insertNewShape(
   // so it names the kind the button made. F1.8 gave the *display* the right
   // name and an author never sees the id, which is exactly why a circle keyed
   // `panel-…` survived: nobody reading the screen sees it.
+  //
+  // An author preset's id is `user:<uuid>`, and the colon is not in the
+  // envelope's object-id alphabet. The prefix is therefore the insertion's own
+  // safe word rather than the preset id; the preset still supplies the data and
+  // the display name.
+  const prefix = kind.startsWith("user:") ? "custom-shape" : kind;
   const inserted = createNewShape(
-    `${kind}-${crypto.randomUUID()}`,
+    `${prefix}-${crypto.randomUUID()}`,
     globals,
     kind,
     nextNewObjectPlacement(editor),

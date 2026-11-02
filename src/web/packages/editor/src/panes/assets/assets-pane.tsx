@@ -24,6 +24,7 @@ import {
 import type { FontTrioRole } from "../../type-preset-apply.js";
 import { uiCopy } from "../../ui-copy.js";
 import { AssetCard } from "./asset-card.js";
+import { ASSET_HEADER_BUTTON } from "./asset-header-button.js";
 import {
   ASSET_FILE_ACCEPT,
   GROUP_OF,
@@ -50,7 +51,6 @@ import { VideoTrimModal } from "./video-trim-modal.js";
 
 /**
  * The Assets pane's body: every declared file as a card, grouped by kind.
- *
  * **The list is the declarations, not the placed objects.** A video or a font
  * is declared only — no canvas object can carry it — so a list built from the
  * scene would lose both, and a font imported once would be unreachable and
@@ -616,7 +616,7 @@ export function AssetsPane({
           type="button"
           data-yunari-asset-import=""
           onClick={() => importInput.current?.click()}
-          className="inline-flex h-[26px] min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] overflow-hidden rounded-[var(--radius-md)] border border-accent px-[var(--space-10)] text-sm text-accent [&>svg]:shrink-0"
+          className={ASSET_HEADER_BUTTON}
         >
           <Glyph icon={IMPORT_FILE_GLYPH} size={13} />
           <span className="truncate">{uiCopy.panels.importFile}</span>
@@ -625,7 +625,7 @@ export function AssetsPane({
           type="button"
           data-yunari-find-assets=""
           onClick={() => onFindAssets?.()}
-          className="inline-flex h-[26px] min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] overflow-hidden rounded-[var(--radius-md)] border border-edge px-[var(--space-10)] text-sm text-muted hover:border-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent active:bg-[var(--panel-2)] [&>svg]:shrink-0"
+          className={ASSET_HEADER_BUTTON}
         >
           <Glyph icon={FIND_GLYPH} size={13} />
           <span className="truncate">{uiCopy.panels.assetFinder}</span>

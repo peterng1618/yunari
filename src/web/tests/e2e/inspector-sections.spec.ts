@@ -1743,6 +1743,8 @@ test.describe("the per-kind inspector column", () => {
       mimeType: "image/png",
       buffer: EDITOR_PNG,
     });
+    // Importing a picture asks where it goes before it is placed.
+    await answerDialogIfShown(page, "Place on canvas");
     await report("image");
     await expect(page.locator("[data-yunari-crop]")).toHaveCount(1);
     await expect(page.locator("[data-yunari-panel-fill]")).toHaveCount(0);

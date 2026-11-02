@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { AssetFinder } from "../asset-finder/modal.js";
 import { CARD_LIBRARY } from "../card-library.js";
+import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { hitTargetClasses } from "../components/ui/control-well.js";
 import {
   readPreviewRatioTokens,
@@ -42,6 +43,8 @@ import { HostingStore } from "./hosting-store.js";
 import {
   EDITOR_MODE_GLYPH,
   Glyph,
+  INSPECTOR_COLLAPSE_GLYPH,
+  INSPECTOR_EXPAND_GLYPH,
   type LucideIcon,
   RAIL_GLYPHS,
   SETTINGS_GLYPH,
@@ -342,6 +345,39 @@ export function createShellLayout(
   const hosting = new HostingStore();
   const getView = (): EditorViewControls | undefined => view;
 
+  /** The inspector's fold handle. It is the column's only chrome, so it draws
+   *  its own button rather than a control the panel's owner would have to
+   *  provide, and its label is its tooltip — the rail's own pairing. */
+  function InspectorToggle({
+    collapsed,
+    onToggle,
+  }: {
+    readonly collapsed: boolean;
+    readonly onToggle: () => void;
+  }): React.JSX.Element {
+    const label = collapsed
+      ? uiCopy.inspectorPanel.expand
+      : uiCopy.inspectorPanel.collapse;
+    const ref = useRef<HTMLButtonElement>(null);
+    useControlTooltip(ref, label);
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className="editor-shell-inspector-toggle"
+        aria-label={label}
+        aria-expanded={!collapsed}
+        data-yunari-inspector-toggle=""
+        onClick={onToggle}
+      >
+        <Glyph
+          icon={collapsed ? INSPECTOR_EXPAND_GLYPH : INSPECTOR_COLLAPSE_GLYPH}
+          size={14}
+        />
+      </button>
+    );
+  }
+
   function Shell({ mode, onModeChange }: ShellLayoutProps): React.JSX.Element {
     const [palette, setPalette] = useState(initial);
     /** Whether the OS is still choosing. Initialized from storage — the same
@@ -353,6 +389,10 @@ export function createShellLayout(
     );
     const [slot, setSlot] = useState<RailSlot>("composition");
     const [collapsed, setCollapsed] = useState(false);
+    /** Whether the right column is folded away. The selection no longer decides
+     *  it: the column is the author's, and a panel that vanished because nothing
+     *  was selected could not be left open while they worked on the canvas. */
+    const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
     /** The Settings page the surface shows. Local state, like the palette
      *  above: it is shell chrome, not document state, and it is never
      *  serialized. The gear keeps the last page; a surface that asks for one
@@ -391,17 +431,7 @@ export function createShellLayout(
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const {
-      releaseVersion,
-      objectCount,
-      assetCount,
-      selectedCount,
-      activeKind,
-    } = useSelection(store);
-    /** The inspector is a reading of the selection, so with nothing selected it
-     *  is not a column holding an empty sentence — it leaves the stage the
-     *  width it was taking. */
-    const inspectorShown = selectedCount > 0 || activeKind !== "none";
+    const { releaseVersion, objectCount, assetCount } = useSelection(store);
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -425,6 +455,15 @@ export function createShellLayout(
         off();
         viewport.zoomToFit();
       });
+    };
+
+    /** The inspector folds toward the right edge, so the same width the pane
+     *  hands the canvas comes back. The refit is the pane's rule: a column
+     *  changing width is the author handing the stage pixels on purpose, not a
+     *  window nudge the camera should ignore. */
+    const toggleInspector = (): void => {
+      setInspectorCollapsed((current) => !current);
+      refitOnViewportChange();
     };
 
     /** Each pane's scroll offset, kept across the swap.
@@ -569,7 +608,7 @@ export function createShellLayout(
         <div
           className="editor-shell-body"
           data-collapsed={collapsed}
-          data-inspector={inspectorShown ? undefined : "hidden"}
+          data-inspector={inspectorCollapsed ? "collapsed" : undefined}
           hidden={mode !== "editor"}
           // The document stays mounted here while another mode shows. The
           // marker is the shortcut manager's signal that the body a product
@@ -750,19 +789,27 @@ export function createShellLayout(
               }}
             />
           </main>
-          {inspectorShown ? (
-            <aside className="editor-shell-inspector editor-glass">
-              {/* One panel, so no tab strip: a strip with one tab is a control
-                  that cannot choose. The theme's own settings used to sit under
-                  this panel behind a `keepMounted` Design tab, which existed so
-                  a selection could not hide them; they are in the left column's
-                  Document pane now, which no selection can hide either, so the
-                  property is discharged by the move rather than by an attribute.
-                  A chart's own fields are still in this column — its owner is
-                  asked for them — so a chart keeps every question it has. */}
-              <Host node={hosts.selection} />
-            </aside>
-          ) : null}
+          <aside
+            className="editor-shell-inspector editor-glass"
+            data-collapsed={inspectorCollapsed ? "true" : undefined}
+          >
+            <InspectorToggle
+              collapsed={inspectorCollapsed}
+              onToggle={toggleInspector}
+            />
+            {/* One panel, so no tab strip: a strip with one tab is a control
+                that cannot choose. The theme's own settings used to sit under
+                this panel behind a `keepMounted` Design tab, which existed so
+                a selection could not hide them; they are in the left column's
+                Document pane now, which no selection can hide either, so the
+                property is discharged by the move rather than by an attribute.
+                A chart's own fields are still in this column — its owner is
+                asked for them — so a chart keeps every question it has.
+
+                The column stays mounted while folded, so its own fields keep
+                their draft and the fold is a width, not a teardown. */}
+            <Host node={hosts.selection} />
+          </aside>
         </div>
         {/* The mode's own region — the seam a non-editor surface fills. A task
             that lands one replaces this element's body and nothing around it:

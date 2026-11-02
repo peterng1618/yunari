@@ -12,6 +12,7 @@ import {
 import {
   Circle,
   Ellipse,
+  FabricImage,
   type FabricObject,
   Path,
   Polygon,
@@ -28,6 +29,7 @@ import {
   integerField,
   radiusBound,
 } from "./bounds-from-drawn-box.js";
+import { pathCornerGeometry, roundPathCorners } from "./path-corners.js";
 import type { FieldHooks, FieldOption, FieldView } from "./view.js";
 
 /**
@@ -80,6 +82,13 @@ function supportsPanelFields(object: FabricObject): boolean {
     object instanceof Polygon ||
     object instanceof Path
   );
+}
+
+/** Whether the two mirrors apply. Fabric's `flipX`/`flipY` are on every object,
+ *  but text and charts carry their own orientation, so this offers the pair on
+ *  pictures and the shapes a picture-like mirror is meaningful for. */
+export function supportsFlip(object: FabricObject): boolean {
+  return object instanceof FabricImage || supportsPanelFields(object);
 }
 
 /** The object's own stored references. Only `writeRef` writes, and it spreads
@@ -476,6 +485,18 @@ function createShapeFields(object: FabricObject): readonly FieldView[] {
   }
 
   if (object instanceof Path) {
+    const corners = pathCornerGeometry(object.get("path"));
+    if (corners !== undefined) {
+      fields.push(
+        boundedIntegerField(
+          "shape-radius",
+          uiCopy.inspectorFields.shapeRadius,
+          Math.round(corners.radius),
+          Math.floor(corners.max),
+          { "data-yunari-shape-radius": "" },
+        ),
+      );
+    }
     fields.push({
       id: "shape-path",
       control: "text",
@@ -543,6 +564,18 @@ export function writeShapeGeometryField(
     );
     // Fabric does not re-measure a points change on its own, so the object would
     // keep the old box until something else asked for it.
+    adoptGeometry(object);
+    return true;
+  }
+
+  if (fieldId === "shape-radius" && object instanceof Path) {
+    const typed = parsedGeometryNumber(value);
+    if (typed === undefined) return false;
+    const rounded = roundPathCorners(object.get("path"), typed);
+    if (rounded === undefined) return false;
+    const parsed = parsedPath(rounded);
+    if (parsed === undefined) return false;
+    object.set("path", parsed);
     adoptGeometry(object);
     return true;
   }

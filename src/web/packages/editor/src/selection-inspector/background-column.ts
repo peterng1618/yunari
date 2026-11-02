@@ -7,7 +7,9 @@ import {
   type FabricGlobals,
   type GlobalRef,
   MAX_BACKGROUND_OFFSET,
+  MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_OFFSET,
+  MIN_BACKGROUND_SCALE,
   paletteTokenOptions,
 } from "@yunari/renderer-core";
 import { uiCopy } from "../ui-copy.js";
@@ -110,8 +112,9 @@ function boundsField(media: BackgroundMedia | undefined): FieldView {
   };
 }
 
-/** The scale and fit are gone: the media always covers, and the only geometry
-    an author sets is a translation plus the two paint-time mirrors. */
+/** The scale and fit are gone: the media always covers, its zoom is the one
+    scalar the author sets, and the only other geometry is a translation plus
+    the two paint-time mirrors. */
 function flipField(
   media: BackgroundMedia | undefined,
   axis: "flipX" | "flipY",
@@ -131,6 +134,22 @@ function flipField(
         checked: media?.flipY === true,
         data: { "data-yunari-background-flip-y": "" },
       };
+}
+
+/** The zoom over the cover fit, shown as 100–500%. The stored value is the
+    fraction the renderer multiplies by, and the slider is the bound the author
+    cannot cross: the track's own range is the model's range. */
+function scaleField(media: BackgroundMedia | undefined): FieldView {
+  return {
+    id: "background.scale",
+    control: "slider",
+    label: uiCopy.panels.backgroundScale,
+    value: media?.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale,
+    min: MIN_BACKGROUND_SCALE,
+    max: MAX_BACKGROUND_SCALE,
+    percent: true,
+    data: { "data-yunari-background-scale": "" },
+  };
 }
 
 /** Both offsets on one line. The halves carry no bounds — a half has none — so
@@ -206,6 +225,7 @@ export function backgroundColumn(input: {
       : [
           sectionView("position", [
             boundsField(media),
+            scaleField(media),
             offsetField(media),
             flipField(media, "flipX"),
             flipField(media, "flipY"),
@@ -293,6 +313,23 @@ export function writeBackgroundField(
       )
         return undefined;
       return { ...current, media: { ...media, fallbackFrame: value } };
+    }
+    case "background.scale": {
+      if (
+        media === undefined ||
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value < MIN_BACKGROUND_SCALE ||
+        value > MAX_BACKGROUND_SCALE
+      )
+        return undefined;
+      // 100% is the default cover, so it is stored by omission rather than as a
+      // key a later read would have to interpret.
+      if (value === BACKGROUND_MEDIA_DEFAULTS.scale) {
+        const { scale: _scale, ...without } = media;
+        return { ...current, media: without };
+      }
+      return { ...current, media: { ...media, scale: value } };
     }
     case "background.offsetX": {
       if (

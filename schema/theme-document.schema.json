@@ -74,6 +74,7 @@
       "properties": {
         "assetId": { "$ref": "#/$defs/stableId" },
         "bounds": { "enum": ["theme", "display"] },
+        "scale": { "type": "number", "minimum": 1, "maximum": 5 },
         "offsetX": { "type": "number", "minimum": -1, "maximum": 1 },
         "offsetY": { "type": "number", "minimum": -1, "maximum": 1 },
         "flipX": { "type": "boolean" },

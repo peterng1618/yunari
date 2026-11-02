@@ -2543,8 +2543,8 @@ test.describe("Fabric editor route", () => {
     // position controls (bounds and offsets, now that media is always cover)
     // must still be offered where the background layer is selected.
     await page.goto(EDITOR);
-    // The artboard panel is a document panel, so the Document pane shows it.
-    await openPane(page, "Document");
+    // The artboard panel is a document panel, so the Theme settings pane shows it.
+    await openPane(page, "Theme settings");
     await expect(page.locator("[data-yunari-artboard-fit-mode]")).toHaveCount(
       0,
     );
@@ -2556,7 +2556,9 @@ test.describe("Fabric editor route", () => {
       0,
     );
     await expect(page.locator("[data-yunari-background-fit]")).toHaveCount(0);
-    await expect(page.locator("[data-yunari-background-scale]")).toHaveCount(0);
+    // The media's zoom over that cover is the author's, and its track is the
+    // model's own 100–500% range.
+    await expect(page.locator("[data-yunari-background-scale]")).toBeVisible();
     const settingsPanel = page.locator("section", {
       has: bounds,
     });
@@ -2564,6 +2566,11 @@ test.describe("Fabric editor route", () => {
     expect(labels).not.toContain("Preview fit");
     expect(labels).not.toContain("Media fit");
     expect(labels).toContain("Bounds");
+    // The slider is named by its row's label element rather than a `<label>`,
+    // so it is read by its accessible name instead of the label-text sweep.
+    await expect(
+      settingsPanel.getByRole("slider", { name: "Scale" }),
+    ).toBeVisible();
     expect(labels).toContain("Flip horizontally");
     // The control that does exist, still named and still choosing. Its value is
     // read off the hook the control commits through rather than `.value`: it is

@@ -8,6 +8,10 @@ interface CropRect {
   readonly top: number;
 }
 
+/** The frame's own gesture events: a drag and a handle resize both repaint the
+ *  live clip, and `modified` catches the settled value. */
+const FRAME_EVENTS = ["moving", "scaling", "modified"] as const;
+
 export interface CropManager {
   readonly active: boolean;
   /**
@@ -46,7 +50,9 @@ interface CropManagerOptions {
 
 /**
  * Fabric positions a non-absolute clipPath from the object's centre in unscaled
- * image units, the same convention `fitImage`'s cover branch uses.
+ * image units, the same convention `fitImage`'s cover branch uses. A flipped
+ * image carries a negative scale on that axis, so the centre offset follows its
+ * sign while the clip's own size is always positive.
  */
 export function cropClipRect(input: {
   readonly imageCentreX: number;
@@ -62,15 +68,55 @@ export function cropClipRect(input: {
 }): CropRect {
   const { scaleX, scaleY } = input;
   for (const value of [scaleX, scaleY]) {
-    if (!Number.isFinite(value) || value <= 0) {
-      throw new Error("A crop needs finite, positive image scales.");
+    if (!Number.isFinite(value) || value === 0) {
+      throw new Error("A crop needs finite, non-zero image scales.");
     }
   }
   return {
-    width: input.frame.width / scaleX,
-    height: input.frame.height / scaleY,
+    width: input.frame.width / Math.abs(scaleX),
+    height: input.frame.height / Math.abs(scaleY),
     left: (input.frame.centreX - input.imageCentreX) / scaleX,
     top: (input.frame.centreY - input.imageCentreY) / scaleY,
+  };
+}
+
+/**
+ * The rectangle an image currently shows: its bounds, narrowed by a crop this
+ * manager wrote earlier.
+ *
+ * A crop is a `Rect` clip centred on the image in unscaled units, so the scene
+ * rectangle it leaves is the image's centre moved by the clip's offset and sized
+ * by the clip times the image's own scale. Starting the next session from the
+ * full bounds instead would frame the discarded pixels and silently restore
+ * them on apply.
+ */
+function visibleBounds(image: FabricImage): {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+} {
+  const full = image.getBoundingRect();
+  const clip = image.clipPath;
+  if (
+    !(clip instanceof Rect) ||
+    clip.originX !== "center" ||
+    clip.originY !== "center"
+  ) {
+    return full;
+  }
+  const scaleX = image.scaleX;
+  const scaleY = image.scaleY;
+  const width = (clip.width ?? 0) * Math.abs(scaleX);
+  const height = (clip.height ?? 0) * Math.abs(scaleY);
+  if (!(width > 0) || !(height > 0)) return full;
+  const centreX = full.left + full.width / 2 + (clip.left ?? 0) * scaleX;
+  const centreY = full.top + full.height / 2 + (clip.top ?? 0) * scaleY;
+  return {
+    left: centreX - width / 2,
+    top: centreY - height / 2,
+    width,
+    height,
   };
 }
 
@@ -79,9 +125,44 @@ export function createCropManager(options: CropManagerOptions): CropManager {
   let image: FabricImage | undefined;
   let frame: Rect | undefined;
   let release: (() => void) | undefined;
+  /** The clip the image had before this session, restored by cancel. */
+  let previousClip: FabricImage["clipPath"];
+  /** The one clip this session paints; moving the frame mutates it. */
+  let preview: Rect | undefined;
+
+  /**
+   * Paints the image as the frame currently cuts it.
+   *
+   * The frame is the box the author drags, so the picture must follow it while
+   * the drag is happening. Waiting for apply left the whole picture staring back
+   * out of a shrunken box, which is what an author reads as crop doing nothing.
+   */
+  const clipToFrame = (): void => {
+    if (frame === undefined || image === undefined) return;
+    const frameBounds = frame.getBoundingRect();
+    const imageBounds = image.getBoundingRect();
+    const rect = cropClipRect({
+      imageCentreX: imageBounds.left + imageBounds.width / 2,
+      imageCentreY: imageBounds.top + imageBounds.height / 2,
+      scaleX: image.scaleX,
+      scaleY: image.scaleY,
+      frame: {
+        centreX: frameBounds.left + frameBounds.width / 2,
+        centreY: frameBounds.top + frameBounds.height / 2,
+        width: frameBounds.width,
+        height: frameBounds.height,
+      },
+    });
+    preview ??= new Rect({ originX: "center", originY: "center" });
+    preview.set(rect);
+    image.set("clipPath", preview);
+    image.set("dirty", true);
+    canvas.requestRenderAll();
+  };
 
   const end = (): void => {
     if (frame !== undefined) {
+      for (const event of FRAME_EVENTS) frame.off(event, clipToFrame);
       canvas.remove(frame);
       // A locally-constructed transient that was never a document object, so
       // disposing it is correct — and with the scene adapter no longer
@@ -91,6 +172,7 @@ export function createCropManager(options: CropManagerOptions): CropManager {
     }
     frame = undefined;
     image = undefined;
+    preview = undefined;
     release?.();
     release = undefined;
     canvas.requestRenderAll();
@@ -116,8 +198,10 @@ export function createCropManager(options: CropManagerOptions): CropManager {
         );
         return false;
       }
-      const bounds = target.getBoundingRect();
+      const bounds = visibleBounds(target);
       image = target;
+      previousClip = target.clipPath;
+      preview = undefined;
       frame = new Rect({
         // `getBoundingRect` reports a corner and a `Rect` is anchored at its
         // centre, so without these the frame drew a whole image up and to the
@@ -136,6 +220,7 @@ export function createCropManager(options: CropManagerOptions): CropManager {
         hasRotatingPoint: false,
         lockRotation: true,
       });
+      for (const event of FRAME_EVENTS) frame.on(event, clipToFrame);
       release = options.suspend();
       canvas.add(frame);
       canvas.setActiveObject(frame);
@@ -153,31 +238,14 @@ export function createCropManager(options: CropManagerOptions): CropManager {
       // Object space, not getScaledWidth: the stroke-free width is the honest base.
       frame.set({ scaleY: 1, scaleX: 1, height: frame.width / ratio });
       frame.setCoords();
-      canvas.requestRenderAll();
+      clipToFrame();
     },
 
     apply(): void {
       if (frame === undefined || image === undefined) return;
-      const frameBounds = frame.getBoundingRect();
-      const imageBounds = image.getBoundingRect();
-      const rect = cropClipRect({
-        imageCentreX: imageBounds.left + imageBounds.width / 2,
-        imageCentreY: imageBounds.top + imageBounds.height / 2,
-        scaleX: image.scaleX,
-        scaleY: image.scaleY,
-        frame: {
-          centreX: frameBounds.left + frameBounds.width / 2,
-          centreY: frameBounds.top + frameBounds.height / 2,
-          width: frameBounds.width,
-          height: frameBounds.height,
-        },
-      });
-      image.set(
-        "clipPath",
-        new Rect({ ...rect, originX: "center", originY: "center" }),
-      );
-      image.set("dirty", true);
+      clipToFrame();
       const cropped = image;
+      previousClip = undefined;
       end();
       canvas.setActiveObject(cropped);
       // Committing is the only point a crop enters undo history.
@@ -186,8 +254,14 @@ export function createCropManager(options: CropManagerOptions): CropManager {
 
     cancel(): void {
       const cancelled = image;
+      const prior = previousClip;
       end();
-      if (cancelled !== undefined) canvas.setActiveObject(cancelled);
+      if (cancelled !== undefined) {
+        cancelled.set("clipPath", prior);
+        cancelled.set("dirty", true);
+        canvas.setActiveObject(cancelled);
+        canvas.requestRenderAll();
+      }
     },
   };
 }

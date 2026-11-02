@@ -162,8 +162,12 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "the credential field commits through its own Save button and is cleared there, never on blur or Enter",
   ],
   [
-    "settings-mode/pages/appearance-page.tsx",
+    "settings-mode/pages/previews-page.tsx",
     "the preview-ratio field commits through the page's own Add button, never on blur or Enter",
+  ],
+  [
+    "settings-mode/pages/path-presets-page.tsx",
+    "the name and path fields commit through the page's own Add button, never on blur or Enter",
   ],
   [
     "settings-mode/source-form.tsx",

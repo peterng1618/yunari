@@ -56,6 +56,7 @@ import {
   Play,
   Plus,
   Radar,
+  Ratio,
   RefreshCw,
   Save,
   SaveAll,
@@ -181,6 +182,17 @@ export const UNITS_GLYPH: LucideIcon = Gauge;
 export const READINGS_GLYPH: LucideIcon = Activity;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
 export const PALETTE_GLYPH: LucideIcon = Palette;
+
+/** The Settings pages that split out of Appearance: the preview catalogue and
+ *  the author's Path presets. `Ratio` is the proportions a preview frames;
+ *  `Shapes` is the mark the Add pane's custom section wears. */
+export const PREVIEW_RATIOS_GLYPH: LucideIcon = Ratio;
+export const CUSTOM_SHAPES_GLYPH: LucideIcon = Shapes;
+
+/** The inspector's collapse handle points at the edge it gives the stage back;
+ *  the reopen handle points back into the column. */
+export const INSPECTOR_COLLAPSE_GLYPH: LucideIcon = ChevronRight;
+export const INSPECTOR_EXPAND_GLYPH: LucideIcon = ChevronLeft;
 /** The picker's eyedropper: a sample taken off the screen, not a paint pick. */
 export const PIPETTE_GLYPH: LucideIcon = Pipette;
 /** The Add slot's plus, and the camera cluster's zoom-in. */

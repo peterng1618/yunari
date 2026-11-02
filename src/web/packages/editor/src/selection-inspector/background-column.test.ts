@@ -40,10 +40,20 @@ describe("backgroundColumn", () => {
     ]);
     expect(withMedia[1]?.fields.map((field) => field.id)).toEqual([
       "background.bounds",
+      "background.scale",
       "background.offsetX-offsetY",
       "background.flipX",
       "background.flipY",
     ]);
+    expect(
+      withMedia[1]?.fields.find((field) => field.id === "background.scale"),
+    ).toMatchObject({
+      control: "slider",
+      value: 1,
+      min: 1,
+      max: 5,
+      percent: true,
+    });
     expect(
       withMedia[1]?.fields.find(
         (field) => field.id === "background.offsetX-offsetY",
@@ -60,6 +70,7 @@ describe("backgroundColumn", () => {
         media: {
           assetId: "a",
           bounds: "theme",
+          scale: 2.5,
           offsetX: 0.25,
           flipX: true,
         },
@@ -77,6 +88,13 @@ describe("backgroundColumn", () => {
     expect(flips("background.flipY")).toMatchObject({
       control: "toggle",
       checked: false,
+    });
+    expect(flips("background.scale")).toMatchObject({
+      control: "slider",
+      value: 2.5,
+      min: 1,
+      max: 5,
+      percent: true,
     });
 
     const offsets = sections[1]?.fields.find(
@@ -221,6 +239,26 @@ describe("writeBackgroundField", () => {
     expect(
       writeBackgroundField(background, "background.offsetX", 0.5),
     ).toMatchObject({ media: { offsetX: 0.5 } });
+  });
+
+  it("writes a scale in the model's 100–500% range and omits 100%", () => {
+    expect(
+      writeBackgroundField(background, "background.scale", 2.5),
+    ).toMatchObject({ media: { scale: 2.5 } });
+    // The default zoom is the absent key, so returning the track to 100% leaves
+    // a document that reads as the renderer's original cover.
+    const reset = writeBackgroundField(
+      { media: { assetId: "photo", bounds: "theme", scale: 3 } },
+      "background.scale",
+      1,
+    )?.media;
+    expect(reset).not.toHaveProperty("scale");
+    // A scale is refused outside the range, not rounded into it.
+    for (const value of [0.5, 5.01, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(
+        writeBackgroundField(background, "background.scale", value),
+      ).toBeUndefined();
+    }
   });
 
   it("writes a flip as a boolean and removes it when switched off", () => {

@@ -7,7 +7,9 @@ import {
   GLOBAL_GROUPS,
   MAX_ARTBOARD_DIMENSION,
   MAX_BACKGROUND_OFFSET,
+  MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_OFFSET,
+  MIN_BACKGROUND_SCALE,
   STABLE_ID_PATTERN,
 } from "./document.js";
 import { envelopeKeysFor, knownKeysFor, nearestKey } from "./envelope-keys.js";
@@ -421,6 +423,7 @@ function validateBackground(
   }
 
   for (const [key, minimum, maximum] of [
+    ["scale", MIN_BACKGROUND_SCALE, MAX_BACKGROUND_SCALE],
     ["offsetX", MIN_BACKGROUND_OFFSET, MAX_BACKGROUND_OFFSET],
     ["offsetY", MIN_BACKGROUND_OFFSET, MAX_BACKGROUND_OFFSET],
   ] as const) {

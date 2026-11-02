@@ -139,6 +139,16 @@ describe("the crop control", () => {
     expect(crop.active).toBe(false);
     // One committed edit per crop, §67.
     expect(saveState).toHaveBeenCalledOnce();
+
+    // A second crop frames what the image now shows, not the pixels the first
+    // one discarded.
+    inspector.render();
+    cropButton(host).click();
+    const again = canvas
+      .getObjects()
+      .find((candidate) => candidate !== image) as Rect;
+    expect(again.width).toBeCloseTo(201, 1);
+    expect(image.clipPath).toBeInstanceOf(Rect);
   });
 
   it("leaves the image exactly as it was, and records nothing, on cancel", () => {
@@ -194,6 +204,81 @@ describe("the crop control", () => {
     // Object space, not the scaled measures: the frame's 1px stroke is part of
     // those, and the session deliberately locks the stroke-free base.
     expect(frame.width / frame.height).toBeCloseTo(16 / 9, 5);
+  });
+
+  it("clips the picture while the frame is still being dragged", () => {
+    const image = imageObject();
+    const { canvas, host, inspector } = setup([image]);
+    canvas.setActiveObject(image);
+    inspector.render();
+    cropButton(host).click();
+
+    const frame = canvas
+      .getObjects()
+      .find((candidate) => candidate !== image) as Rect;
+    frame.set({ scaleX: 0.5, scaleY: 0.5 });
+    frame.setCoords();
+    frame.fire("modified");
+
+    // The frame is the box the author is dragging, so the picture follows it
+    // before apply. Waiting for apply left the whole picture visible inside a
+    // box the author had already shrunk.
+    const live = image.clipPath as Rect;
+    expect(live).toBeInstanceOf(Rect);
+    expect(live.width).toBeCloseTo(201, 1);
+    expect(live.height).toBeCloseTo(101, 1);
+  });
+
+  it("restores the previous picture, including a prior crop, on cancel", () => {
+    const image = imageObject();
+    const { canvas, host, inspector } = setup([image]);
+    canvas.setActiveObject(image);
+    inspector.render();
+    cropButton(host).click();
+
+    const frame = canvas
+      .getObjects()
+      .find((candidate) => candidate !== image) as Rect;
+    frame.set({ scaleX: 0.5, scaleY: 0.5 });
+    frame.setCoords();
+    frame.fire("modified");
+    const live = image.clipPath;
+    expect(live).toBeInstanceOf(Rect);
+
+    inspector.render();
+    host.querySelector<HTMLButtonElement>("[data-yunari-crop-cancel]")!.click();
+    expect(image.clipPath).toBeUndefined();
+
+    // A second session starts from what the image currently shows, so a crop
+    // of an already-cropped picture does not frame the discarded pixels.
+    inspector.render();
+    cropButton(host).click();
+    const second = canvas
+      .getObjects()
+      .find((candidate) => candidate !== image) as Rect;
+    expect(second.width).toBeCloseTo(400, 5);
+    expect(image.clipPath).toBeUndefined();
+  });
+
+  it("crops a flipped image instead of refusing its negative scale", () => {
+    const image = imageObject();
+    image.set({ flipX: true, scaleX: -1 });
+    const { canvas, host, inspector } = setup([image]);
+    canvas.setActiveObject(image);
+    inspector.render();
+    cropButton(host).click();
+
+    const frame = canvas
+      .getObjects()
+      .find((candidate) => candidate !== image) as Rect;
+    frame.set({ scaleX: 0.5, scaleY: 0.5 });
+    frame.setCoords();
+    inspector.render();
+    host.querySelector<HTMLButtonElement>("[data-yunari-crop-apply]")!.click();
+
+    const clip = image.clipPath as Rect;
+    expect(clip.width).toBeCloseTo(201, 1);
+    expect(clip.left).toBeLessThan(0);
   });
 
   it("keeps the crop through a save and a reopen", async () => {

@@ -28,7 +28,11 @@ import {
 } from "./appearance.js";
 import { cropView } from "./crop.js";
 import { glassFields } from "./glass.js";
-import { createShapeGeometryFields, panelMaterialFields } from "./panel.js";
+import {
+  createShapeGeometryFields,
+  panelMaterialFields,
+  supportsFlip,
+} from "./panel.js";
 import { projectRuns } from "./runs.js";
 import {
   type ColumnSectionView,
@@ -517,25 +521,25 @@ function positionBody(
 
 /** One paint-time mirror. Fabric owns the property, so the row reads and the
     writer writes the same name; a group member flips alone. */
-function flipField(image: FabricImage, axis: "flipX" | "flipY"): FieldView {
+function flipField(image: FabricObject, axis: "flipX" | "flipY"): FieldView {
   return axis === "flipX"
     ? {
         id: "flipX",
         control: "toggle",
         label: uiCopy.inspectorFields.flipX,
-        checked: image.flipX,
+        checked: (image.flipX as boolean | undefined) === true,
         data: { "data-yunari-flip-x": "" },
       }
     : {
         id: "flipY",
         control: "toggle",
         label: uiCopy.inspectorFields.flipY,
-        checked: image.flipY,
+        checked: (image.flipY as boolean | undefined) === true,
         data: { "data-yunari-flip-y": "" },
       };
 }
 
-/** How it presents: rotation, opacity, and — for a picture — its two mirrors. */
+/** How it presents: rotation, opacity, and the two mirrors where they apply. */
 function layerBody(
   target: FabricObject,
   context: ColumnContext,
@@ -546,9 +550,10 @@ function layerBody(
     rotationField(context, target),
     opacityField(target),
   ];
-  // A raster image and an SVG icon are both a `FabricImage`, so one gate covers
-  // the whole image kind; text, shape, chart and group have nothing to mirror.
-  if (target instanceof FabricImage) {
+  // One gate covers pictures and every primitive shape, icons included: an SVG
+  // icon is a `Path`, not a picture, and a mirror is as meaningful on a
+  // rectangle as on a raster. Text, charts and groups keep their orientation.
+  if (supportsFlip(target)) {
     fields.push(flipField(target, "flipX"), flipField(target, "flipY"));
   }
   return { fields };

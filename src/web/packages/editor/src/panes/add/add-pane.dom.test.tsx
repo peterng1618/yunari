@@ -263,4 +263,55 @@ describe("the Add pane's insert surface", () => {
       removeSpy.mockRestore();
     }
   });
+
+  it("inserts a user preset under an id the envelope accepts", async () => {
+    const { setActiveUserPathPresets } = await import("../../path-presets.js");
+    setActiveUserPathPresets([
+      {
+        id: "user:abc",
+        label: "Star",
+        data: "M 0 0 L 10 0 L 5 10 Z",
+        paint: "fill",
+      },
+    ]);
+    const editor = editorStub();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const globals = {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        background: {
+          name: "Background",
+          value: { kind: "solid", color: "black" },
+        },
+        panel: { name: "Panel", value: { kind: "solid", color: "black" } },
+        text: { name: "Text", value: { kind: "solid", color: "white" } },
+      },
+      typeTokens: {
+        body: { family: "Inter", weight: 500 },
+        heading: { family: "Inter", weight: 600 },
+        mono: { family: "Consolas, monospace", weight: 400 },
+      },
+    };
+    const panel = createNewObjectPanel(host, editor as never, globals as never);
+    try {
+      panel.root
+        .querySelector<HTMLButtonElement>('[data-yunari-panel-add="user:abc"]')
+        ?.click();
+      expect(editor.errorManager.warn).not.toHaveBeenCalled();
+      const inserted = editor.canvas.add.mock.calls[0]?.[0] as {
+        readonly id?: string;
+        readonly type?: string;
+        get(property: string): unknown;
+      };
+      expect(inserted.type).toBe("path");
+      expect(inserted.get("name")).toBe("Star");
+      // The id is persisted and validated by the envelope, whose alphabet has
+      // no colon: the `user:` prefix must not reach it.
+      expect(inserted.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    } finally {
+      panel.destroy();
+      setActiveUserPathPresets([]);
+    }
+  });
 });

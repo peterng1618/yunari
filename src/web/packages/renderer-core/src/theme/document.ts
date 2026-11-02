@@ -199,11 +199,18 @@ export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
 export const MIN_BACKGROUND_OFFSET = -1;
 export const MAX_BACKGROUND_OFFSET = 1;
 
+/** The media's zoom over its cover fit, as a fraction: 1 is the cover the
+ *  renderer painted before scale existed, 5 is the 500% ceiling an author sees.
+ *  Refused outside this range like an offset, never rounded into it. */
+export const MIN_BACKGROUND_SCALE = 1;
+export const MAX_BACKGROUND_SCALE = 5;
+
 /** The values that reproduce the centred cover the renderer painted before the
  *  media had geometry of its own. Flips default to false, i.e. omitted. */
 export const BACKGROUND_MEDIA_DEFAULTS = {
   offsetX: 0,
   offsetY: 0,
+  scale: 1,
 } as const;
 
 export interface BackgroundMedia {
@@ -215,6 +222,9 @@ export interface BackgroundMedia {
    *  the box. */
   readonly offsetX?: number;
   readonly offsetY?: number;
+  /** Zoom over the cover fit; absent means 1. The pan stays bounded by the
+   *  enlarged rect's overhang, so a zoom cannot uncover the box either. */
+  readonly scale?: number;
   /** A paint-time mirror about the placed rect's centre; absent means false. */
   readonly flipX?: boolean;
   readonly flipY?: boolean;

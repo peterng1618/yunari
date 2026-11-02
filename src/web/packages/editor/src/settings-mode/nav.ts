@@ -1,11 +1,13 @@
 import {
   CONNECTIONS_GLYPH,
+  CUSTOM_SHAPES_GLYPH,
   DISPLAYS_GLYPH,
   HARDWARE_GLYPH,
   INFO_GLYPH,
   KEYBOARD_GLYPH,
   type LucideIcon,
   PALETTE_GLYPH,
+  PREVIEW_RATIOS_GLYPH,
   READINGS_GLYPH,
   UNITS_GLYPH,
 } from "../editor-shell/icons.js";
@@ -19,6 +21,8 @@ export type SettingsPage =
   | "units"
   | "readings"
   | "appearance"
+  | "previews"
+  | "path-presets"
   | "keyboard"
   | "asset-sources"
   | "about";
@@ -69,6 +73,18 @@ export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
     glyph: PALETTE_GLYPH,
   },
   {
+    id: "previews",
+    group: "editor",
+    label: uiCopy.settings.pages.previews,
+    glyph: PREVIEW_RATIOS_GLYPH,
+  },
+  {
+    id: "path-presets",
+    group: "editor",
+    label: uiCopy.settings.pages.pathPresets,
+    glyph: CUSTOM_SHAPES_GLYPH,
+  },
+  {
     id: "keyboard",
     group: "editor",
     label: uiCopy.settings.pages.keyboard,
@@ -110,5 +126,9 @@ export function pageCopy(page: SettingsPage): {
 
 /** The copy keys use camel case; the page ids use the shell's kebab case. */
 function pageKey(page: SettingsPage): keyof typeof uiCopy.settings.pages {
-  return page === "asset-sources" ? "assetSources" : page;
+  return page === "asset-sources"
+    ? "assetSources"
+    : page === "path-presets"
+      ? "pathPresets"
+      : page;
 }

@@ -359,7 +359,7 @@ describe("the background layer", () => {
     background,
   });
 
-  it("accepts bounds, flips and offsets", () => {
+  it("accepts bounds, flips, scale and offsets", () => {
     expect(
       codes(
         withBackground({
@@ -369,6 +369,7 @@ describe("the background layer", () => {
             bounds: "display",
             flipX: true,
             flipY: false,
+            scale: 2.5,
             offsetX: 0.25,
             offsetY: -0.1,
           },
@@ -377,16 +378,20 @@ describe("the background layer", () => {
     ).toEqual([]);
   });
 
-  it("refuses the removed fit and scale, and an out-of-range offset", () => {
-    // `cover` is not a field any more but the whole model, and a scale is the
-    // control that could shrink the media below its box. Both are refused by
-    // the key bag (`unknown-field`), not read and ignored.
+  it("refuses the removed fit, and a scale or offset outside its range", () => {
+    // `cover` is not a field any more but the whole model; a scale is a zoom
+    // over that cover, bounded so it can neither shrink below the box nor
+    // exceed the 500% the editor offers.
+    expect(
+      codes(
+        withBackground({
+          media: { assetId: "clip", bounds: "theme", fit: "contain" },
+        }),
+      ),
+    ).toContain("unknown-field");
     for (const background of [
-      { media: { assetId: "clip", bounds: "theme", fit: "contain" } },
-      { media: { assetId: "clip", bounds: "theme", scale: 1.4 } },
-    ])
-      expect(codes(withBackground(background))).toContain("unknown-field");
-    for (const background of [
+      { media: { assetId: "clip", bounds: "theme", scale: 0.5 } },
+      { media: { assetId: "clip", bounds: "theme", scale: 5.01 } },
       { media: { assetId: "clip", bounds: "theme", offsetX: 2 } },
       { media: { assetId: "clip", bounds: "theme", offsetY: -2 } },
     ])

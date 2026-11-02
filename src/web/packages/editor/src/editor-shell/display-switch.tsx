@@ -69,12 +69,18 @@ const NEITHER = "neither";
 
 /** The browser owns what is fullscreen; React keeps no copy of it. Esc exits,
  *  which is why the control is one-way rather than a toggle whose name would
- *  have to change under it. */
+ *  have to change under it. **The stage is the element**, not the document: the
+ *  author asked for the canvas at full size, not the editor's chrome around it.
+ *  A preview rendered without a stage does nothing rather than falling back to
+ *  the whole page. */
 function viewFullscreen(): void {
-  document.documentElement.requestFullscreen?.().catch(() => {
-    // A browser policy or a refusal leaves the stage where it was; the control
-    // is a request, not a state this app can assert.
-  });
+  document
+    .querySelector<HTMLElement>(".editor-shell-stage")
+    ?.requestFullscreen?.()
+    .catch(() => {
+      // A browser policy or a refusal leaves the stage where it was; the
+      // control is a request, not a state this app can assert.
+    });
 }
 
 export function DisplaySwitch({

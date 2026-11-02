@@ -186,6 +186,10 @@ export type FieldView =
        * copy that enforces it.
        */
       readonly integer?: boolean;
+      /** The stored value is a fraction the control shows as a percentage —
+       *  the background media's scale. The control multiplies both the value
+       *  and the range on the way in and divides back on commit. */
+      readonly percent?: boolean;
     })
   | (FieldBase & {
       readonly control: "segmented";
@@ -511,6 +515,7 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   // the boundary copies that rule rather than trusting the control to have kept
   // it.
   ["shape-sides", "integer"],
+  ["shape-radius", "integer"],
   ["shape-path", "text"],
   // Paint. The four whole-number fields are `"integer"` for the same reason the
   // geometry ids are: the pre-plan `numberField` refused a typed fraction on

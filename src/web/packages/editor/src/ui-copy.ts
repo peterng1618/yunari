@@ -143,6 +143,8 @@ export const uiCopy = {
       units: "Units & time",
       readings: "Readings",
       appearance: "Appearance",
+      previews: "Preview ratios",
+      pathPresets: "Custom shape presets",
       keyboard: "Keyboard",
       assetSources: "Asset sources",
       about: "About",
@@ -159,8 +161,11 @@ export const uiCopy = {
         "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
       readings:
         "Where this PC's weather and custom readings come from, and how often they are read.",
-      appearance:
-        "The editor's own palette and the preview ratios its display menu offers.",
+      appearance: "The editor's own palette.",
+      previews:
+        "The display menu offers each ratio below, in both orientations where it has two. Fit is always there.",
+      pathPresets:
+        "The shapes the Add pane's Custom Shape section offers. A closed path is filled; an open one is stroked.",
       keyboard: "Every product action, and the chord that runs it.",
       assetSources:
         "Keys stay on this machine. Stored values are never shown again, only the last four characters.",
@@ -248,7 +253,9 @@ export const uiCopy = {
     pathPresetsHint:
       "Each entry appears in the Add pane and inserts a Path with this data. A closed path is filled; an open one is stroked.",
     pathPresetNameField: "Name",
+    pathPresetNamePlaceholder: "Star",
     pathPresetDataField: "SVG path data",
+    pathPresetDataPlaceholder: "M 0 0 L 10 0 L 5 10 Z",
     pathPresetAdd: "Add shape",
     pathPresetRemove: "Remove custom shape",
     pathPresetEmpty: "No custom shapes yet.",
@@ -302,6 +309,11 @@ export const uiCopy = {
     keyboardSessionOnly:
       "This browser is not keeping editor settings, so a new chord lasts until the editor is reloaded.",
   },
+  /** The right column's one shell control. */
+  inspectorPanel: {
+    collapse: "Collapse inspector",
+    expand: "Expand inspector",
+  },
   /** Selection inspector field labels. */
   inspectorFields: {
     selection: "Selection",
@@ -351,6 +363,9 @@ export const uiCopy = {
     /** What one shape owns and no other: its corners or its data. The general
         geometry fields above stay unchanged. */
     shapeSides: "Sides",
+    /** A closed Path's straight-line corners. Unlike `panelRadius`, this is not
+      a stored property: it is read from, and written to, the path's own data. */
+    shapeRadius: "Corner radius",
     shapePath: "Path data",
     /** The frosted-glass treatment and its one parameter. */
     glassEnabled: "Frosted glass",
@@ -2432,10 +2447,11 @@ export const uiCopy = {
     widthMark: "W",
     heightMark: "H",
     background: "Background color",
-    /** The background column's own rows: the box its media fills, the one pair
-        that moves both axes, and the two paint-time mirrors. The media always
-        covers, so there is no fit or scale to name. */
+    /** The background column's own rows: the box its media fills, the zoom over
+        its cover fit, the one pair that moves both axes, and the two paint-time
+        mirrors. */
     backgroundBounds: "Bounds",
+    backgroundScale: "Scale",
     backgroundOffset: "Offset",
     backgroundFlipX: "Flip horizontally",
     backgroundFlipY: "Flip vertically",
