@@ -8,6 +8,9 @@ import { importAsset, previewAsset, searchAssets } from "./tools/assets.js";
 import {
   addBinding,
   addCard,
+  addChart,
+  addIcon,
+  addImage,
   addShape,
   addText,
   groupObjects,
@@ -20,6 +23,7 @@ import {
   createTheme,
   discardDraft,
   openTheme,
+  setArtboard,
   setBackground,
   setPalette,
   setThemeMetadata,
@@ -53,6 +57,20 @@ function payload(result: CallToolResult): Record<string, unknown> {
     throw new Error("Expected a text content block.");
   }
   return JSON.parse(block.text) as Record<string, unknown>;
+}
+
+function refusalTextOf(result: CallToolResult): string {
+  const block = result.content[0];
+  if (block?.type !== "text") throw new Error("Expected a text content block.");
+  return block.text;
+}
+
+/** The draft's root scene objects, for assertions no tool result exposes. */
+function sceneObjects(ctx: ToolContext): Record<string, unknown>[] {
+  const scene = ctx.drafts.current().envelope.scene as unknown as {
+    objects?: Record<string, unknown>[];
+  };
+  return scene.objects ?? [];
 }
 
 const panelDisplay = {
@@ -283,6 +301,114 @@ describe("draft authoring and verification", () => {
     );
   });
 
+  it("relays a save refusal and leaves the draft unsaved", async () => {
+    const host = await startFakeHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname.startsWith("/api/themes/") && request.method === "PUT") {
+        return { status: 409, body: "Theme changed on disk." };
+      }
+      return hostHandler()(request);
+    });
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+
+    const saved = await saveTheme(ctx, themeId);
+
+    expect(saved.isError).toBe(true);
+    expect(refusalTextOf(saved)).toMatch(/409.*Theme changed on disk\./u);
+    expect(ctx.drafts.read(themeId).saved).toBeUndefined();
+    expect(
+      host.requests.filter((request) => request.method === "PUT"),
+    ).toHaveLength(1);
+  });
+
+  it("does not capture a panel preview when the save is refused", async () => {
+    const host = await startFakeHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname.startsWith("/api/themes/") && request.method === "PUT") {
+        return {
+          status: 422,
+          body: {
+            error: "Invalid theme",
+            issues: [{ code: "bad-path", path: "/a", message: "bad" }],
+          },
+        };
+      }
+      return hostHandler({ panel: true })(request);
+    });
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+
+    const result = await previewTheme(ctx, "panel-1", themeId);
+
+    expect(result.isError).toBe(true);
+    expect(result.content.map((block) => block.type)).toEqual(["text"]);
+    expect(payload(result)).toMatchObject({
+      ok: false,
+      status: 422,
+      issues: [{ code: "bad-path", path: "/a" }],
+    });
+    expect(
+      host.requests.some((request) => request.path.includes("panel-preview")),
+    ).toBe(false);
+  });
+
+  it("reports bound sensors the host did not measure in a browser preview", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    await addText(ctx, {
+      box: { left: 0, top: 0, width: 200, height: 24 },
+      runs: [
+        { kind: "value", bindingId: "cpu", size: 20 },
+        { kind: "value", bindingId: "gpu", size: 20 },
+      ],
+      bindings: [
+        { id: "cpu", semanticKey: "cpu.load" },
+        { id: "gpu", semanticKey: "gpu.load" },
+      ],
+    });
+
+    const preview = payload(await previewTheme(ctx, "this-pc", themeId));
+
+    expect(preview.boundSensors).toEqual(
+      expect.arrayContaining(["cpu.load", "gpu.load"]),
+    );
+    expect(preview.missingSensors).toEqual(["gpu.load"]);
+  });
+
+  it("names the requested theme id on open and assign refusals", async () => {
+    const host = await startFakeHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/themes/active" && request.method === "PUT") {
+        return { status: 400, body: "No such theme." };
+      }
+      return hostHandler()(request);
+    });
+    hosts.push(host);
+    const ctx = context(host);
+
+    const opened = await openTheme(ctx, "ghost", true);
+    expect(opened.isError).toBe(true);
+    expect(refusalTextOf(opened)).toContain('"ghost"');
+
+    const assigned = await assignTheme(ctx, "this-pc", "ghost");
+    expect(assigned.isError).toBe(true);
+    expect(refusalTextOf(assigned)).toContain('"ghost"');
+  });
+
   it("refuses unknown object ids by name", async () => {
     const host = await startFakeHost(hostHandler());
     hosts.push(host);
@@ -303,6 +429,192 @@ describe("draft authoring and verification", () => {
     const removed = await removeObject(ctx, "nope");
     expect(removed.isError).toBe(true);
     expect(created.themeId).toBeTypeOf("string");
+  });
+
+  it("refuses an unknown semantic key by name on every binding path", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const shape = payload(
+      await addShape(ctx, {
+        kind: "rect",
+        box: { left: 0, top: 0, width: 10, height: 10 },
+      }),
+    );
+    const objectId = (shape.ids as string[])[0] as string;
+
+    const bound = await addBinding(ctx, objectId, [
+      { id: "b", semanticKey: "cpu.lod" },
+    ]);
+    expect(bound.isError).toBe(true);
+    expect(refusalTextOf(bound)).toContain('"cpu.lod"');
+    expect(refusalTextOf(bound)).toContain("list_sensors");
+
+    const text = await addText(ctx, {
+      box: { left: 0, top: 0, width: 100, height: 20 },
+      runs: [{ kind: "value", bindingId: "b", size: 20 }],
+      bindings: [{ id: "b", semanticKey: "cpu.lod" }],
+    });
+    expect(text.isError).toBe(true);
+    expect(refusalTextOf(text)).toContain('"cpu.lod"');
+
+    const chart = await addChart(ctx, {
+      family: "line",
+      box: { left: 0, top: 0, width: 100, height: 100 },
+      binding: { id: "b", semanticKey: "cpu.lod" },
+    });
+    expect(chart.isError).toBe(true);
+    expect(refusalTextOf(chart)).toContain('"cpu.lod"');
+  });
+
+  it("builds an image, an icon, a chart and a new artboard", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    await setPalette(ctx, [
+      { id: "cpu", name: "CPU", value: "#4da3ff" },
+      { id: "sparkArea", name: "Spark area", value: "#4da3ff" },
+    ]);
+    const draft = ctx.drafts.read(themeId);
+    const bytes = new Uint8Array([1, 2, 3]);
+    draft.envelope = addAsset(
+      draft.envelope,
+      {
+        id: "photo",
+        kind: "image",
+        path: "assets/photo.png",
+        license: { name: "MIT" },
+      },
+      bytes,
+    );
+    ctx.drafts.setAsset(themeId, "assets/photo.png", bytes);
+
+    const image = payload(
+      await addImage(ctx, {
+        assetId: "photo",
+        box: { left: 0, top: 0, width: 100, height: 100 },
+      }),
+    );
+    expect(image.ids).toHaveLength(1);
+
+    const icon = payload(
+      await addIcon(ctx, {
+        icon: "cpu",
+        box: { left: 10, top: 10, width: 24, height: 24 },
+      }),
+    );
+    expect(icon.ids).toHaveLength(1);
+
+    const chart = payload(
+      await addChart(ctx, {
+        family: "line",
+        box: { left: 100, top: 100, width: 200, height: 100 },
+        binding: { id: "cpu-load", semanticKey: "cpu.load" },
+        settings: {
+          stroke: { ref: "palette.cpu" },
+          area: { ref: "palette.sparkArea" },
+        },
+      }),
+    );
+    expect(chart.ids).toHaveLength(1);
+
+    const artboard = payload(
+      await setArtboard(ctx, { width: 1000, height: 1000, shape: "circle" }),
+    );
+    expect(artboard.artboard).toEqual({
+      width: 1000,
+      height: 1000,
+      shape: "circle",
+    });
+    const validated = payload(await validateTheme(ctx, themeId));
+    expect(validated).toMatchObject({ ok: true, issues: [] });
+  });
+
+  it("keeps a type token's packaged face on a weight-only update", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    const draft = ctx.drafts.read(themeId);
+    draft.envelope = {
+      ...draft.envelope,
+      globals: {
+        ...draft.envelope.globals,
+        typeTokens: {
+          heading: { family: "Segoe UI", weight: "600" },
+          body: {
+            family: "Packaged",
+            weight: "400",
+            face: { assetId: "font-1" },
+          },
+          mono: { family: "Consolas", weight: "400" },
+        },
+      },
+    };
+
+    await setTypeTokens(ctx, { body: { weight: "500" } });
+
+    const tokens = ctx.drafts.read(themeId).envelope.globals
+      ?.typeTokens as Record<string, unknown>;
+    expect(tokens["body"]).toEqual({
+      family: "Packaged",
+      weight: "500",
+      face: { assetId: "font-1" },
+    });
+  });
+
+  it("paints a token declared by set_palette", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    await setPalette(ctx, [{ id: "accent", name: "Accent", value: "#ff0000" }]);
+
+    const text = payload(
+      await addText(ctx, {
+        box: { left: 0, top: 0, width: 100, height: 24 },
+        runs: [{ kind: "literal", text: "A", token: "accent", size: 24 }],
+      }),
+    );
+    const shape = payload(
+      await addShape(ctx, {
+        kind: "rect",
+        box: { left: 0, top: 40, width: 40, height: 40 },
+        token: "accent",
+      }),
+    );
+    const icon = payload(
+      await addIcon(ctx, {
+        icon: "cpu",
+        box: { left: 60, top: 40, width: 24, height: 24 },
+        token: "accent",
+      }),
+    );
+    const ids = new Set([
+      ...(text.ids as string[]),
+      ...(shape.ids as string[]),
+      ...(icon.ids as string[]),
+    ]);
+    const painted = sceneObjects(ctx).filter((object) =>
+      ids.has(object["id"] as string),
+    );
+    expect(painted).toHaveLength(3);
+    for (const object of painted) {
+      expect(object["fill"]).toBe("#ff0000");
+      expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
+    }
+    expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
   });
 
   it("keeps the metadata, palette, type, background and discard tools local", async () => {
@@ -412,6 +724,64 @@ describe("asset tools", () => {
     expect(saved.ok).toBe(true);
   });
 
+  it("credits a trimmed video with the trim it applied", async () => {
+    const host = await startFakeHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/assets/search") {
+        return {
+          body: {
+            pages: [
+              {
+                source: "pexels",
+                results: [
+                  {
+                    id: "pexels:clip",
+                    name: "Clip",
+                    kind: "video",
+                    preview: "https://example.test/clip.jpg",
+                    licence: "CC0",
+                    sourceUrl: "https://example.test/clip",
+                  },
+                ],
+                totalPages: 1,
+              },
+            ],
+          },
+        };
+      }
+      if (url.pathname === "/api/assets/bytes") {
+        return {
+          headers: { "x-yunari-filename": "clip.mp4" },
+          body: Buffer.from([1, 2]),
+        };
+      }
+      if (url.pathname === "/api/themes/normalize-video") {
+        return {
+          body: {
+            ok: true,
+            bytesBase64: Buffer.from([3, 4, 5]).toString("base64"),
+          },
+        };
+      }
+      return hostHandler()(request);
+    });
+    hosts.push(host);
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const found = payload(await searchAssets(ctx, "clip", ["pexels"], 1));
+    const ref = (found.results as { assetRef: string }[])[0]
+      ?.assetRef as string;
+
+    const imported = payload(
+      await importAsset(ctx, { assetRef: ref, startMs: 100, endMs: 900 }),
+    );
+
+    expect(imported.credit).toMatchObject({
+      kind: "video",
+      changes: "Trimmed to 100-900 ms.",
+    });
+  });
+
   it("refuses a local import without the user's stated licence", async () => {
     const host = await startFakeHost(hostHandler());
     hosts.push(host);
@@ -456,6 +826,59 @@ describe("grouping", () => {
     expect((payload(await listObjects(ctx)).objects as unknown[]).length).toBe(
       2,
     );
+  });
+
+  it("groups a library card without stranding its bindings", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 1672, height: 941 });
+    const card = payload(
+      await addCard(ctx, { unit: "group-cpu-card", left: 0, top: 0 }),
+    );
+
+    await groupObjects(ctx, [(card.ids as string[])[0] as string]);
+
+    const validated = payload(await validateTheme(ctx));
+    expect(validated.ok).toBe(true);
+  });
+
+  it("groups a centre-anchored chart by its true bounding box", async () => {
+    const host = await startFakeHost(hostHandler());
+    hosts.push(host);
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const chart = payload(
+      await addChart(ctx, {
+        family: "line",
+        box: { left: 400, top: 240, width: 200, height: 100 },
+        binding: { id: "cpu-load", semanticKey: "cpu.load" },
+      }),
+    );
+    const shape = payload(
+      await addShape(ctx, {
+        kind: "rect",
+        box: { left: 500, top: 300, width: 100, height: 100 },
+      }),
+    );
+
+    const grouped = payload(
+      await groupObjects(ctx, [
+        ...(chart.ids as string[]),
+        ...(shape.ids as string[]),
+      ]),
+    );
+
+    const group = sceneObjects(ctx).find(
+      (object) => object["id"] === grouped.groupId,
+    );
+    expect(group).toMatchObject({
+      type: "Group",
+      left: 300,
+      top: 190,
+      width: 300,
+      height: 210,
+    });
   });
 
   it("adds a library card and reports the ids it created", async () => {

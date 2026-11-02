@@ -1,3 +1,4 @@
+import type { FabricPalette } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   addChartObject,
@@ -181,6 +182,46 @@ describe("the compose vocabulary", () => {
     });
     expect(object).toMatchObject({ type: "YunariChart", family: "line" });
     expect(returned).toBe(bindings);
+  });
+
+  it("paints a token the theme palette declares", () => {
+    const palette: FabricPalette = {
+      accent: { name: "Accent", value: { kind: "solid", color: "#ff0000" } },
+    };
+
+    const { object: text } = addTextObject({
+      id: "load",
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 24,
+      runs: [{ kind: "literal", text: "A", token: "accent", size: 24 }],
+      palette,
+    });
+    const shape = addShapeObject({
+      id: "panel",
+      kind: "rect",
+      left: 0,
+      top: 40,
+      width: 40,
+      height: 40,
+      token: "accent",
+      palette,
+    });
+    const icon = addIconObject({
+      id: "cpu-icon",
+      icon: "cpu",
+      left: 60,
+      top: 40,
+      size: 24,
+      token: "accent",
+      palette,
+    });
+
+    for (const object of [text, shape, icon]) {
+      expect(object["fill"]).toBe("#ff0000");
+      expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
+    }
   });
 
   it("builds a one-run literal label", () => {

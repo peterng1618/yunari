@@ -1,5 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
-import type { Binding } from "@yunari/renderer-core";
+import {
+  type Binding,
+  type FabricPalette,
+  isKnownSemanticKey,
+} from "@yunari/renderer-core";
 import {
   addChartObject,
   addIconObject,
@@ -13,10 +17,8 @@ import {
   type ObjectJson,
   type Run,
   removeSceneObject,
-  type StarterPaletteId,
   setBindings,
   starterIcons,
-  starterPalette,
   updateSceneObject,
 } from "@yunari/theme-kit";
 import type { Draft, ToolContext } from "../types.js";
@@ -39,14 +41,49 @@ function sceneOf(envelope: Draft["envelope"]): {
   };
 }
 
-function tokenOf(token: string | undefined, fallback: StarterPaletteId) {
+/** Every authored id in one subtree, the root included. */
+function collectSubtreeIds(object: ObjectJson, into: Set<string>): void {
+  const id = object["id"];
+  if (typeof id === "string") into.add(id);
+  const children = object["objects"];
+  if (!Array.isArray(children)) return;
+  for (const child of children) {
+    if (typeof child === "object" && child !== null && !Array.isArray(child)) {
+      collectSubtreeIds(child as ObjectJson, into);
+    }
+  }
+}
+
+function paletteOf(draft: Draft): FabricPalette {
+  return draft.envelope.globals?.palette ?? {};
+}
+
+function tokenOf(
+  token: string | undefined,
+  fallback: string,
+  palette: FabricPalette,
+): string {
   const id = token ?? fallback;
-  if (!(id in starterPalette)) {
+  if (palette[id] === undefined) {
     throw new Error(
-      `"${id}" is not a palette token this build can paint with (${Object.keys(starterPalette).join(", ")}).`,
+      `"${id}" is not a palette token in this theme (${Object.keys(palette).join(", ")}).`,
     );
   }
-  return id as StarterPaletteId;
+  return id;
+}
+
+/** Refuses a semantic key the renderer's own vocabulary does not declare. */
+function checkSemanticKey(key: string): void {
+  if (!isKnownSemanticKey(key)) {
+    throw new Error(
+      `"${key}" is not a semantic key this build knows; call list_sensors to see the keys this host measures.`,
+    );
+  }
+}
+
+function bindingsOf(bindings: readonly BindingInput[]): readonly Binding[] {
+  for (const binding of bindings) checkSemanticKey(binding.semanticKey);
+  return bindings as readonly Binding[];
 }
 
 function bindingIdsOf(envelope: Draft["envelope"]): string[] {
@@ -151,6 +188,7 @@ export async function addText(
 ): Promise<CallToolResult> {
   return await jsonAttempt(() => {
     const draft = draftFor(context, input.themeId);
+    const palette = paletteOf(draft);
     const bindings = input.bindings ?? [];
     const bindingIds = new Set(bindings.map((binding) => binding.id));
     const runs: Run[] = input.runs.map((run) => {
@@ -167,7 +205,7 @@ export async function addText(
         kind,
         ...(run.bindingId === undefined ? {} : { bindingId: run.bindingId }),
         ...(run.text === undefined ? {} : { text: run.text }),
-        token: tokenOf(run.token, "text"),
+        token: tokenOf(run.token, "text", palette),
         size: run.size,
         ...(run.precision === undefined ? {} : { precision: run.precision }),
         ...(run.unitDisplay === undefined
@@ -184,9 +222,8 @@ export async function addText(
         ? {}
         : { verticalAlign: input.verticalAlign }),
       ...(input.overflow === undefined ? {} : { overflow: input.overflow }),
-      ...(bindings.length === 0
-        ? {}
-        : { bindings: bindings as readonly Binding[] }),
+      ...(bindings.length === 0 ? {} : { bindings: bindingsOf(bindings) }),
+      palette,
     });
     return added(draft, built.object, built.bindings);
   });
@@ -206,6 +243,7 @@ export async function addShape(
 ): Promise<CallToolResult> {
   return await jsonAttempt(() => {
     const draft = draftFor(context, input.themeId);
+    const palette = paletteOf(draft);
     if (input.kind === "path" && input.points === undefined) {
       throw new Error("A path shape needs its own commands.");
     }
@@ -221,12 +259,13 @@ export async function addShape(
       ...input.box,
       ...(input.token === undefined
         ? {}
-        : { token: tokenOf(input.token, "panel") }),
+        : { token: tokenOf(input.token, "panel", palette) }),
       ...(input.radius === undefined ? {} : { radius: input.radius }),
       ...(points === undefined ? {} : { points }),
       ...(input.strokeWidth === undefined
         ? {}
         : { strokeWidth: input.strokeWidth }),
+      palette,
     });
     return added(draft, object);
   });
@@ -289,6 +328,7 @@ export async function addIcon(
       );
     }
     const draft = draftFor(context, input.themeId);
+    const palette = paletteOf(draft);
     const object = addIconObject({
       id: "icon",
       icon: input.icon as keyof typeof starterIcons,
@@ -297,7 +337,8 @@ export async function addIcon(
       size: Math.min(input.box.width, input.box.height),
       ...(input.token === undefined
         ? {}
-        : { token: tokenOf(input.token, "text") }),
+        : { token: tokenOf(input.token, "text", palette) }),
+      palette,
     });
     return added(draft, object);
   });
@@ -327,7 +368,7 @@ export async function addChart(
       id: "chart",
       ...input.box,
       family: input.family,
-      bindings: bindings as readonly Binding[],
+      bindings: bindingsOf(bindings),
       ...(input.settings === undefined ? {} : { settings: input.settings }),
     });
     return added(draft, built.object, built.bindings);
@@ -365,7 +406,7 @@ export async function addBinding(
     draft.envelope = setBindings(
       draft.envelope,
       objectId,
-      bindings as readonly Binding[],
+      bindingsOf(bindings),
     );
     return { themeId: draft.id, objectId, bindings };
   });
@@ -425,7 +466,26 @@ export async function removeObject(
   });
 }
 
-function boxOf(object: ObjectJson, id: string) {
+/** The fraction of the box that sits left of / above the authored anchor. */
+function anchorFraction(origin: unknown, axis: "x" | "y"): number {
+  if (axis === "x") {
+    if (origin === "center") return 0.5;
+    if (origin === "right") return 1;
+  } else {
+    if (origin === "center") return 0.5;
+    if (origin === "bottom") return 1;
+  }
+  return 0;
+}
+
+/**
+ * An object's true bounding box in artboard coordinates.
+ *
+ * Fabric places an object by its anchor, and a chart is authored from its
+ * centre (`theme-kit/objects.ts`), so reading `left`/`top` as a top-left
+ * corner would omit half of every chart when grouping.
+ */
+function boxOf(object: ObjectJson, id: string): Box {
   const read = (key: "left" | "top" | "width" | "height"): number => {
     const value = object[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -433,11 +493,13 @@ function boxOf(object: ObjectJson, id: string) {
     }
     return value;
   };
+  const width = read("width");
+  const height = read("height");
   return {
-    left: read("left"),
-    top: read("top"),
-    width: read("width"),
-    height: read("height"),
+    left: read("left") - width * anchorFraction(object["originX"], "x"),
+    top: read("top") - height * anchorFraction(object["originY"], "y"),
+    width,
+    height,
   };
 }
 
@@ -492,13 +554,18 @@ export async function groupObjects(
     const keep = objects.filter(
       (object) => typeof object["id"] !== "string" || !wanted.has(object["id"]),
     );
+    // Every binding under a requested root travels with it: `addSceneObject`
+    // mints new ids for nested children, and its `minted` map only remaps an
+    // entry whose authored id is in this record.
+    const carried = new Set<string>();
+    for (const object of roots.values()) collectSubtreeIds(object, carried);
     const bindings: Record<string, readonly Binding[]> = {};
     for (const [id, list] of Object.entries(draft.envelope.bindings ?? {})) {
-      if (wanted.has(id)) bindings[id] = list;
+      if (carried.has(id)) bindings[id] = list;
     }
     const remainingBindings = Object.fromEntries(
       Object.entries(draft.envelope.bindings ?? {}).filter(
-        ([key]) => !wanted.has(key),
+        ([key]) => !carried.has(key),
       ),
     );
 

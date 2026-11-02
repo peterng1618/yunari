@@ -1,15 +1,39 @@
-import type { WidgetProvenance } from "@yunari/renderer-core";
+import type { FabricPalette, WidgetProvenance } from "@yunari/renderer-core";
+import { fabricArtboardPaint } from "@yunari/scene-fabric";
 import {
   charSpacingPx,
   frost,
   STARTER_LINE_HEIGHT,
-  type StarterPaletteId,
-  solidOf,
+  starterPalette,
   starterRoleForSize,
   starterTracking,
   starterTypeTokens,
 } from "./globals.js";
 import type { PathCommand } from "./icons.js";
+
+/**
+ * The palette a scene primitive resolves its paints against.
+ *
+ * The starter palette is the default so existing callers keep their signatures;
+ * a draft passes its own palette, which is what lets a token declared with
+ * `set_palette` paint an object.
+ */
+type Palette = FabricPalette;
+
+function paintOfToken(
+  token: string,
+  width: number,
+  height: number,
+  palette: Palette,
+): unknown {
+  const paint = fabricArtboardPaint(palette[token]?.value, width, height);
+  if (paint === undefined) {
+    throw new Error(`"${token}" is not a paint this build can resolve.`);
+  }
+  // Authoring produces plain JSON, so a gradient is written in the serialised
+  // form Fabric persists rather than as a live `Gradient` instance.
+  return typeof paint === "string" ? paint : paint.toObject();
+}
 
 /**
  * The scene primitives the starter's cards are written in.
@@ -32,7 +56,7 @@ function rect(
   fill: unknown,
   radius: number,
   interaction: ObjectJson = positioned,
-  token?: StarterPaletteId,
+  token?: string,
 ): ObjectJson {
   return {
     type: "Rect",
@@ -170,7 +194,7 @@ export interface Run {
   /** The binding this run reads; literal runs have none. */
   readonly bindingId?: string;
   readonly text?: string;
-  readonly token: StarterPaletteId;
+  readonly token: string;
   readonly size: number;
   readonly precision?: number;
   /** `"none"` when a later literal run writes the unit instead. */
@@ -219,6 +243,7 @@ export function text(
     readonly verticalAlign?: "top" | "middle" | "bottom";
     readonly overflow?: "clip" | "ellipsis" | "visible";
   },
+  palette: Palette = starterPalette,
 ): ObjectJson {
   const first = runs[0] as Run;
   const firstToken = starterTypeTokens[starterRoleForSize(first.size)];
@@ -245,7 +270,7 @@ export function text(
     // document correct before the first sample ever arrives.
     ...(options?.align === undefined ? {} : { textAlign: options.align }),
     fontWeight: firstToken.weight,
-    fill: solidOf[first.token],
+    fill: paintOfToken(first.token, width, height, palette),
     lineHeight: STARTER_LINE_HEIGHT,
     ...(spacing === undefined ? {} : { charSpacing: spacing }),
     yunariPaint: { fill: `palette.${first.token}` },
@@ -311,11 +336,19 @@ export function label(
   height: number,
   value: string,
   size: number,
-  token: StarterPaletteId,
+  token: string,
+  palette: Palette = starterPalette,
 ): ObjectJson {
-  return text(id, left, top, width, height, [
-    { kind: "literal", text: value, token, size },
-  ]);
+  return text(
+    id,
+    left,
+    top,
+    width,
+    height,
+    [{ kind: "literal", text: value, token, size }],
+    undefined,
+    palette,
+  );
 }
 
 /** A label whose whole text is one reading. */
@@ -326,12 +359,20 @@ export function valueLabel(
   width: number,
   height: number,
   size: number,
-  token: StarterPaletteId,
+  token: string,
   bindingId: string,
+  palette: Palette = starterPalette,
 ): ObjectJson {
-  return text(id, left, top, width, height, [
-    { kind: "value", bindingId, token, size },
-  ]);
+  return text(
+    id,
+    left,
+    top,
+    width,
+    height,
+    [{ kind: "value", bindingId, token, size }],
+    undefined,
+    palette,
+  );
 }
 
 export function path(
@@ -339,8 +380,9 @@ export function path(
   left: number,
   top: number,
   points: readonly PathCommand[],
-  token: StarterPaletteId,
+  token: string,
   strokeWidth: number,
+  palette: Palette = starterPalette,
 ): ObjectJson {
   return {
     type: "Path",
@@ -350,7 +392,7 @@ export function path(
     top,
     path: points,
     fill: null,
-    stroke: solidOf[token],
+    stroke: paintOfToken(token, 1, 1, palette),
     strokeWidth,
     strokeLineCap: "round",
     strokeLineJoin: "round",

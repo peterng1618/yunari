@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { HttpHostClient } from "./host-client.js";
+import { HostRefusalError, HttpHostClient } from "./host-client.js";
 import {
   type FakeHost,
   startFakeHost,
@@ -316,14 +316,33 @@ describe("HttpHostClient", () => {
     ).rejects.toThrow(/404: Theme not found\./u);
   });
 
-  it("names the host URL when the connection fails", async () => {
+  it("carries a JSON refusal's validator issues", async () => {
+    const issues = [{ code: "bad-path", path: "/a", message: "bad" }];
+    const host = await fakeHost((_request, url) =>
+      url.pathname === "/api/themes/bad"
+        ? { status: 422, body: { error: "Invalid theme", issues } }
+        : undefined,
+    );
+
+    const error = await new HttpHostClient(host.url)
+      .getTheme("bad")
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(HostRefusalError);
+    expect(error).toMatchObject({ status: 422, issues });
+  });
+
+  it("names the host URL, probed ports and YUNARI_URL when the connection fails", async () => {
     const host = await fakeHost(() => undefined);
     const url = host.url;
     await host.close();
     hosts.splice(hosts.indexOf(host), 1);
 
     await expect(new HttpHostClient(url).listThemes()).rejects.toThrow(
-      new RegExp(`Could not reach the Yunari host at ${url}`, "u"),
+      new RegExp(
+        `Could not reach the Yunari host at ${url}.*http://127\\.0\\.0\\.1:5227.*YUNARI_URL`,
+        "u",
+      ),
     );
   });
 });

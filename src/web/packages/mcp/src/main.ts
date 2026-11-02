@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { InMemoryDraftStore } from "./drafts.js";
-import { HttpHostClient } from "./host-client.js";
+import { HttpHostClient, PROBE_PORTS } from "./host-client.js";
 import {
   createPorts,
   type InstallReport,
@@ -11,11 +11,6 @@ import {
 } from "./install.js";
 import { buildServer } from "./server.js";
 import type { ToolContext } from "./types.js";
-
-/** The ports a host started without an explicit URL is probed on, in order. */
-export const PROBE_PORTS: readonly number[] = Object.freeze(
-  Array.from({ length: 10 }, (_unused, index) => 5227 + index),
-);
 
 const USAGE = `Usage:
   yunari-mcp serve [--url <url>]   Start the MCP server over stdio.
@@ -207,8 +202,7 @@ export async function run(argv: readonly string[]): Promise<number> {
 
     if (parsed.command === "status") {
       const report = await status(ports);
-      const at =
-        report.host.url === undefined ? "" : ` at ${report.host.url}`;
+      const at = report.host.url === undefined ? "" : ` at ${report.host.url}`;
       console.log(
         report.host.reachable
           ? `host: reachable${at}`

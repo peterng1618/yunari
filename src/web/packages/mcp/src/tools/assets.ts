@@ -1,8 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import {
   addAsset,
+  assetKindForPath,
   type DeclaredAsset,
   declareAsset,
   MAX_ASSET_BYTES,
@@ -248,8 +249,20 @@ export async function importAsset(
           `A local import needs the licence the user stated for "${path}".`,
         );
       }
-      bytes = new Uint8Array(await readFile(path));
+      // Refuse an unsupported extension and an over-cap file before reading:
+      // a user-named or prompt-injected path must not be loaded to find out.
       declarationPath = basename(path);
+      assetKindForPath(declarationPath);
+      const info = await stat(path);
+      if (!info.isFile()) {
+        throw new Error(`"${path}" is not a file.`);
+      }
+      if (info.size > MAX_ASSET_BYTES) {
+        throw new Error(
+          `"${declarationPath}" is larger than the ${MAX_ASSET_BYTES} byte asset cap.`,
+        );
+      }
+      bytes = new Uint8Array(await readFile(path));
       license = input.license;
       author = input.author;
     }
@@ -276,6 +289,9 @@ export async function importAsset(
       ...(author === undefined ? {} : { author }),
       license,
       ...(sourceUrl === undefined ? {} : { sourceUrl }),
+      ...(trim === undefined
+        ? {}
+        : { changes: `Trimmed to ${trim.startMs}-${trim.endMs} ms.` }),
     });
 
     draft.envelope = addAsset(draft.envelope, declared.reference, bytes);

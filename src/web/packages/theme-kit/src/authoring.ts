@@ -4,9 +4,10 @@ import {
   defaultBarSettings,
   defaultGaugeSettings,
   defaultLineSettings,
+  type FabricPalette,
 } from "@yunari/renderer-core";
 import { fabricArtboardPaint } from "@yunari/scene-fabric";
-import { type StarterPaletteId, starterPalette } from "./globals.js";
+import { starterPalette } from "./globals.js";
 import { type PathCommand, starterIcons } from "./icons.js";
 import {
   chart,
@@ -39,11 +40,12 @@ const POSITIONED = { originX: "left", originY: "top" } as const;
  * the object's own pixels.
  */
 function paintOf(
-  token: StarterPaletteId,
+  token: string,
   width: number,
   height: number,
+  palette: FabricPalette = starterPalette,
 ): unknown {
-  const paint = fabricArtboardPaint(starterPalette[token].value, width, height);
+  const paint = fabricArtboardPaint(palette[token]?.value, width, height);
   if (paint === undefined) {
     throw new Error(`"${token}" is not a paint this build can resolve.`);
   }
@@ -65,6 +67,8 @@ export interface AddTextObjectInput {
   readonly overflow?: "clip" | "ellipsis" | "visible";
   /** The semantic readings the value runs name. */
   readonly bindings?: readonly Binding[];
+  /** The theme palette runs resolve their tokens against. */
+  readonly palette?: FabricPalette;
 }
 
 export function addTextObject(input: AddTextObjectInput): {
@@ -85,6 +89,7 @@ export function addTextObject(input: AddTextObjectInput): {
         : { verticalAlign: input.verticalAlign }),
       ...(input.overflow === undefined ? {} : { overflow: input.overflow }),
     },
+    input.palette,
   );
   return {
     object,
@@ -102,11 +107,13 @@ export interface AddShapeObjectInput {
   readonly top: number;
   readonly width: number;
   readonly height: number;
-  readonly token?: StarterPaletteId;
+  readonly token?: string;
   readonly radius?: number;
   /** Required for a path, ignored by the other kinds. */
   readonly points?: readonly PathCommand[];
   readonly strokeWidth?: number;
+  /** The theme palette shapes resolve their tokens against. */
+  readonly palette?: FabricPalette;
 }
 
 export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
@@ -123,12 +130,13 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
         input.points,
         token,
         input.strokeWidth ?? 2,
+        input.palette,
       ),
-      stroke: paintOf(token, input.width, input.height),
+      stroke: paintOf(token, input.width, input.height, input.palette),
     };
   }
   const token = input.token ?? "panel";
-  const fill = paintOf(token, input.width, input.height);
+  const fill = paintOf(token, input.width, input.height, input.palette);
   const common = {
     id: input.id,
     name: input.id,
@@ -190,7 +198,9 @@ export interface AddIconObjectInput {
   readonly left: number;
   readonly top: number;
   readonly size: number;
-  readonly token?: StarterPaletteId;
+  readonly token?: string;
+  /** The theme palette the icon resolves its token against. */
+  readonly palette?: FabricPalette;
 }
 
 export function addIconObject(input: AddIconObjectInput): ObjectJson {
@@ -202,7 +212,7 @@ export function addIconObject(input: AddIconObjectInput): ObjectJson {
     left: input.left,
     top: input.top,
     path: starterIcons[input.icon](input.size),
-    fill: paintOf(token, input.size, input.size),
+    fill: paintOf(token, input.size, input.size, input.palette),
     stroke: null,
     yunariPaint: { fill: `palette.${token}` },
     ...POSITIONED,
@@ -258,7 +268,9 @@ export function addLabelObject(input: {
   readonly height: number;
   readonly text: string;
   readonly size: number;
-  readonly token?: StarterPaletteId;
+  readonly token?: string;
+  /** The theme palette the label resolves its token against. */
+  readonly palette?: FabricPalette;
 }): ObjectJson {
   return label(
     input.id,
@@ -269,5 +281,6 @@ export function addLabelObject(input: {
     input.text,
     input.size,
     input.token ?? "text",
+    input.palette,
   );
 }

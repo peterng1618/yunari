@@ -13,6 +13,11 @@ import type {
   VideoTrim,
 } from "./types.js";
 
+/** The ports a host started without an explicit URL is probed on, in order. */
+export const PROBE_PORTS: readonly number[] = Object.freeze(
+  Array.from({ length: 10 }, (_unused, index) => 5227 + index),
+);
+
 /** The host's own sentence, or a safe stand-in when it sent none. */
 async function refusalText(response: Response): Promise<string> {
   try {
@@ -23,8 +28,46 @@ async function refusalText(response: Response): Promise<string> {
   }
 }
 
+/** A refusal body that is a JSON object, or `undefined` for prose/empty. */
+function refusalJson(
+  text: string,
+): Readonly<Record<string, unknown>> | undefined {
+  if (text === "") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Readonly<Record<string, unknown>>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * A host refusal whose body carried structured validator issues.
+ *
+ * A single sentence cannot be acted on: the host's issue objects carry the JSON
+ * path and code a tool's caller needs. `errorResult` turns this class into a
+ * structured failure block, while a plain-text refusal stays one sentence.
+ */
+export class HostRefusalError extends Error {
+  constructor(
+    readonly status: number,
+    readonly issues: readonly unknown[],
+    readonly body: Readonly<Record<string, unknown>>,
+    message?: string,
+  ) {
+    super(
+      message ?? `The Yunari host answered ${status} with validator issues.`,
+    );
+    this.name = "HostRefusalError";
+  }
 }
 
 /**
@@ -47,13 +90,22 @@ export class HttpHostClient implements HostClient {
     try {
       response = await fetch(`${this.url}${path}`, init);
     } catch (error) {
+      const probes = PROBE_PORTS.map((port) => `http://127.0.0.1:${port}`).join(
+        ", ",
+      );
       throw new Error(
-        `Could not reach the Yunari host at ${this.url}: ${reasonOf(error)}`,
+        `Could not reach the Yunari host at ${this.url}: ${reasonOf(error)}. ` +
+          `Probed ${probes}. Start the host, set YUNARI_URL, or pass --url <url>.`,
       );
     }
 
     if (!response.ok) {
       const text = await refusalText(response);
+      const body = refusalJson(text);
+      const issues = body?.["issues"];
+      if (body !== undefined && Array.isArray(issues)) {
+        throw new HostRefusalError(response.status, issues, body);
+      }
       throw new Error(
         `The Yunari host answered ${response.status}${
           text === "" ? "" : `: ${text}`

@@ -9,6 +9,7 @@ import {
   imageResult,
   jsonAttempt,
   textResult,
+  withRequestedTheme,
 } from "./result.js";
 
 /** One validator-shaped issue for an asset a draft names but does not carry. */
@@ -143,6 +144,12 @@ export async function previewTheme(
       throw new Error(`There is no display "${displayId}" on this host.`);
     }
 
+    // Both preview modes report bound keys this host does not measure; an agent
+    // judging either one needs the same missing-sensor warning.
+    const bound = boundKeysOf(draft);
+    const answering = new Set((await context.host.sensors(true)).measured);
+    const missingSensors = bound.filter((key) => !answering.has(key));
+
     if (display?.kind !== "panel") {
       const url = new URL(context.host.url);
       url.pathname = "/";
@@ -156,7 +163,8 @@ export async function previewTheme(
         url: url.toString(),
         viewport: browserViewport(draft.envelope.artboard),
         shape: draft.envelope.artboard.shape ?? "rect",
-        boundSensors: boundKeysOf(draft),
+        boundSensors: bound,
+        missingSensors,
       });
     }
 
@@ -170,7 +178,6 @@ export async function previewTheme(
     }
 
     const png = await context.host.panelPreview(draft.id, display.id, true);
-    const answering = new Set((await context.host.sensors(true)).measured);
     const geometry = display.panel?.geometry ?? {
       width: draft.envelope.artboard.width,
       height: draft.envelope.artboard.height,
@@ -182,7 +189,7 @@ export async function previewTheme(
       display: { id: display.id, label: display.label },
       geometry,
       shape: display.shape,
-      missingSensors: boundKeysOf(draft).filter((key) => !answering.has(key)),
+      missingSensors,
     });
   } catch (error) {
     return errorResult(error);
@@ -202,7 +209,11 @@ export async function assignTheme(
     if (display === undefined) {
       throw new Error(`There is no display "${displayId}" on this host.`);
     }
-    await context.host.assignTheme(displayId, themeId);
+    await context.host
+      .assignTheme(displayId, themeId)
+      .catch((error: unknown) => {
+        throw withRequestedTheme(error, themeId);
+      });
     return {
       display: displayId,
       label: display.label,

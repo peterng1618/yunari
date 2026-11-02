@@ -14,7 +14,7 @@ import {
 } from "@yunari/theme-kit";
 import { z } from "zod/v4";
 import type { Draft, ThemeMetadata, ToolContext } from "../types.js";
-import { jsonAttempt } from "./result.js";
+import { jsonAttempt, withRequestedTheme } from "./result.js";
 
 /**
  * The draft a tool mutates: the named one, or the only open draft.
@@ -104,7 +104,11 @@ export async function openTheme(
         `Refusing to open "${themeId}" without confirmExisting: true. Ask the user before modifying an existing theme.`,
       );
     }
-    const content = await context.host.getTheme(themeId);
+    const content = await context.host
+      .getTheme(themeId)
+      .catch((error: unknown) => {
+        throw withRequestedTheme(error, themeId);
+      });
     const draft = context.drafts.open(themeId, content);
     return {
       themeId: draft.id,
@@ -240,6 +244,7 @@ export async function setTypeTokens(
       }
       const weight = update.weight ?? next[role]?.weight;
       next[role] = {
+        ...next[role],
         family,
         ...(weight === undefined ? {} : { weight }),
       };

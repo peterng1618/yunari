@@ -123,8 +123,19 @@ function checkPath(path: string): {
   return { ext, kind };
 }
 
-/** A readable, stable path segment from the file's own stem. */
-function slugOf(path: string): string {
+/**
+ * The kind a path's extension declares, or a refusal naming the path.
+ *
+ * Exposed so a caller that reads bytes from disk can refuse an unsupported
+ * extension before the read, instead of holding a second copy of this table.
+ */
+export function assetKindForPath(path: string): AssetKind {
+  return checkPath(path).kind;
+}
+
+/** A readable, stable path segment from the file's own stem. */ function slugOf(
+  path: string,
+): string {
   const base = path.split(/[\\/]+/).pop() ?? path;
   const stem = base.includes(".") ? base.slice(0, base.lastIndexOf(".")) : base;
   const slug = stem
