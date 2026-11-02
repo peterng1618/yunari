@@ -396,6 +396,14 @@ async function start(): Promise<void> {
         // About tab and the Document pane name one fact from one owner.
         version: extensions.envelope.metadata?.version,
       }),
+      // The shell owns the video element; the bridge projects whether there is
+      // one, whether it is playing, and the one command.
+      playback: {
+        video: () => shell.backgroundVideo(),
+        playing: () => shell.backgroundPlaying(),
+        set: (playing) => shell.setBackgroundPlaying(playing),
+        subscribe: (listener) => shell.onBackgroundPlaybackChange(listener),
+      },
       capture: () =>
         captureCanvas(
           shell.editor.canvas,

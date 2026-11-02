@@ -370,6 +370,25 @@ describe("native editor shell", () => {
     expect(shell.editor.canvas.getActiveObject()).toBe(text);
   });
 
+  it("takes only fully covered objects into a marquee selection", async () => {
+    // Fabric's collector is the owner of the geometry; the editor sets the one
+    // flag that decides whether a touched edge counts as selected. The marquee
+    // selects what the author means to act on, so a partly covered object is
+    // not swept in.
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+
+    const shell = await mount({
+      host,
+      artboard: { width: 100, height: 100 },
+    });
+
+    expect(shell.editor.canvas.selectionFullyContained).toBe(true);
+  });
+
   it("exposes the mounted editor on window for devtools/e2e access, and removes it on destroy", async () => {
     const host = document.createElement("div");
     Object.defineProperties(host, {
@@ -1387,6 +1406,122 @@ describe("editor background media", () => {
     // Once, not a loop: a still image is not a moving thing.
     image?.dispatchEvent(new Event("load"));
     expect(asked, "and it is not a loop").toBe(1);
+  });
+
+  it("waits for a pointer gesture before repainting for a video frame", async () => {
+    const callbacks: (() => void)[] = [];
+    const proto = HTMLVideoElement.prototype as unknown as {
+      requestVideoFrameCallback: (cb: () => void) => number;
+      cancelVideoFrameCallback: (handle: number) => void;
+    };
+    const had = "requestVideoFrameCallback" in proto;
+    proto.requestVideoFrameCallback = (cb) => {
+      callbacks.push(cb);
+      return callbacks.length;
+    };
+    proto.cancelVideoFrameCallback = () => {};
+
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const video = [
+      { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
+    ];
+
+    try {
+      const envelope = envelopeWith(
+        { media: { assetId: "loop", bounds: "theme" } },
+        video,
+      );
+      const shell = await mount({
+        host,
+        artboard: ARTBOARD,
+        envelope,
+        assets: video,
+        resolveAsset: () => ({ url: "blob:loop" }),
+      });
+      const canvas = shell.editor.canvas;
+      let asked = 0;
+      const original = canvas.requestRenderAll.bind(canvas);
+      canvas.requestRenderAll = (): void => {
+        asked += 1;
+        original();
+      };
+      const nextFrame = (): void => {
+        const frame = callbacks.shift();
+        expect(frame, "the video asked for a frame").toBeDefined();
+        frame?.();
+      };
+
+      nextFrame();
+      expect(asked, "a frame outside a gesture repaints").toBe(1);
+
+      canvas.fire("mouse:down" as never);
+      nextFrame();
+      expect(asked, "a frame during a gesture is held back").toBe(1);
+
+      // The window's release, as the browser delivers one that ends outside the
+      // canvas; the canvas's own event is only the start.
+      window.dispatchEvent(new MouseEvent("mouseup"));
+      expect(asked, "the gesture's end brings the backdrop current").toBe(2);
+      shell.destroy();
+      live = null;
+    } finally {
+      if (!had) {
+        delete (proto as Record<string, unknown>)["requestVideoFrameCallback"];
+        delete (proto as Record<string, unknown>)["cancelVideoFrameCallback"];
+      }
+    }
+  });
+
+  it("reads a video background's playback and leaves it out of the document", async () => {
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientWidth: { value: 400 },
+      clientHeight: { value: 300 },
+    });
+    const video = [
+      { id: "loop", kind: "video" as const, path: "assets/loop.webm" },
+    ];
+
+    const envelope = envelopeWith(
+      { media: { assetId: "loop", bounds: "theme" } },
+      video,
+    );
+    const shell = await mount({
+      host,
+      artboard: ARTBOARD,
+      envelope,
+      assets: video,
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+
+    expect(shell.backgroundVideo(), "the background is a video").toBe(true);
+    expect(shell.backgroundPlaying(), "playback defaults to playing").toBe(
+      true,
+    );
+    shell.setBackgroundPlaying(false);
+    expect(shell.backgroundPlaying(), "paused is a control state").toBe(false);
+    // The document is untouched: playback is transient, so a snapshot taken
+    // after the pause still holds the same background media.
+    expect(
+      shell.snapshot(envelope).background?.media?.assetId,
+      "pausing writes nothing",
+    ).toBe("loop");
+    shell.setBackgroundPlaying(true);
+    expect(shell.backgroundPlaying(), "play resumes").toBe(true);
+
+    shell.setBackgroundMedia(
+      [{ id: "hero", kind: "image", path: "assets/hero.png" }],
+      () => ({ url: "blob:hero" }),
+    );
+    expect(shell.backgroundVideo(), "an image has nothing to pause").toBe(
+      false,
+    );
+    shell.destroy();
+    live = null;
   });
 
   it("stops asking for a repaint once the editor is destroyed", async () => {

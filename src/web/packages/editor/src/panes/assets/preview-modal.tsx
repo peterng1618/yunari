@@ -142,6 +142,11 @@ function attributionReadings(
   add("license", asset.license?.name, false);
   add("credit-license", credit?.license, false);
   add("attribution", asset.license?.attribution, false);
+  add(
+    "credit-platform",
+    credit?.kind === "wallpaper" ? uiCopy.credits.wallpaperEngine : undefined,
+    false,
+  );
   add("credit-author", credit?.author?.name, false);
   add("source", asset.sourceUrl, true);
   add("credit-source", credit?.source?.url, true);

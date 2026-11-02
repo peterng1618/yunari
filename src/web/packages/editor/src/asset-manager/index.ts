@@ -417,6 +417,69 @@ export class AssetManager {
     return next;
   }
 
+  /**
+   * Declares a new image asset derived from one already in the document.
+   *
+   * Baking a crop must not rewrite the source asset in place: another object
+   * may still show the whole picture, and a shared asset would then lose the
+   * pixels that object needs. The derived asset carries the source's credit
+   * and origin, a fresh id/path, and PNG bytes — a cropped SVG is rasterised,
+   * so its packaged kind and extension change with it.
+   */
+  async deriveImage(
+    assetId: string,
+    bytes: Uint8Array,
+  ): Promise<LocalAssetReference> {
+    const source = this.#declarations.find((asset) => asset.id === assetId);
+    if (
+      source === undefined ||
+      (source.kind !== "image" && source.kind !== "svg")
+    ) {
+      throw new Error(`No declared image to crop: ${assetId}.`);
+    }
+    const id = this.#freeId(
+      `${assetId.replaceAll(/[^A-Za-z0-9_-]+/g, "-")}-crop`,
+    );
+    const tail = source.path.split("/").pop() ?? "image";
+    const base =
+      tail
+        .replace(/\.[^.]+$/, "")
+        .replaceAll(/[^A-Za-z0-9_-]+/g, "-")
+        .replaceAll(/^-+|-+$/g, "") || "image";
+    let suffix = 1;
+    let path = `assets/${base}-crop.png`;
+    while (this.#declarations.some((asset) => asset.path === path)) {
+      suffix += 1;
+      path = `assets/${base}-crop-${suffix}.png`;
+    }
+    const reference: LocalAssetReference = {
+      id,
+      kind: "image",
+      path,
+      sha256: await sha256(bytes),
+      ...("sourceUrl" in source && source.sourceUrl !== undefined
+        ? { sourceUrl: source.sourceUrl }
+        : {}),
+      ...("license" in source && source.license !== undefined
+        ? { license: source.license }
+        : {}),
+    };
+    this.#assets[path] = bytes;
+    this.#declarations.push(reference);
+    this.#mutated();
+    return reference;
+  }
+
+  #freeId(candidate: string): string {
+    let id = candidate;
+    let suffix = 1;
+    while (this.#declarations.some((asset) => asset.id === id)) {
+      suffix += 1;
+      id = `${candidate}-${suffix}`;
+    }
+    return id;
+  }
+
   load(
     envelope: Pick<FabricThemeEnvelope, "assets">,
     assets: Readonly<Record<string, Uint8Array>>,

@@ -636,6 +636,19 @@ export function CompositionPane({
               onClick={(event) => clickRow(event, row.id)}
               onDoubleClick={() => {
                 if (isBackground) return;
+                // A child the author cannot reach yet is one gesture from being
+                // reachable: the first double-click enters its owning group and
+                // selects the layer, and a second one, now inside, renames it.
+                // The hover control stays for discoverability, but the row
+                // itself no longer needs it.
+                const parentId = row.parentId;
+                if (parentId !== undefined && !entered.includes(parentId)) {
+                  store.mutate(() => {
+                    bridge?.enterGroup(parentId);
+                    bridge?.selectLayer(row.id);
+                  });
+                  return;
+                }
                 cancelled.current = false;
                 setEditing(row.id);
               }}

@@ -8,9 +8,14 @@
 
 Resizing the crop frame changed the selection box but left the whole picture
 painted underneath it; the clip appeared only after Apply. Cropping an image
-that already had a crop also started from the full bounds, so the discarded
+that already had a crop also started from the visible bounds, so the discarded
 pixels were offered again. Flips added in the same change make the image's
 scale negative, which the old crop math refused outright.
+
+The session also had the gesture backwards: moving the box across a still
+picture left gaps of empty canvas, and a crop could frame pixels that were
+never there. The box is the composed result, so it stays fixed and the picture
+pans underneath it, bounded by the picture's own edges.
 
 ## Rung 1 — internal owner
 
@@ -50,14 +55,22 @@ the drag and committing it on release. The shape matches Fabric's event model.
 
 `crop.dom.test.ts` fires Fabric's `modified` event and reads the live clip's
 size, then cancels and reads the restored clip. A re-crop case starts a second
-session from the visible bounds. The flipped-image case applies a crop with
+session from the whole picture. The flipped-image case applies a crop with
 `scaleX = -1` and reads a positive clip width.
 
 ## Decision
 
 The session keeps the clip before it started, writes one reusable preview `Rect`
 in image-local units as the frame moves, and keeps that clip on Apply. Cancel
-restores the prior clip. `begin` frames the visible bounds (the prior crop's
-scene rect) instead of the full image. `cropClipRect` uses the signed scale for
-the centre offset and its magnitude for size, so a flipped image crops rather
-than throwing.
+restores the prior clip and the image's original position. A drag inside the
+frame moves the picture while the frame stays fixed, and the picture's travel is
+clamped so the frame never leaves it; a frame handle is clamped to the picture
+the same way, so a crop narrows the source and cannot invent canvas. `begin`
+frames the whole picture: the already-cropped pixels are still part of the
+source until an export or publish bakes them (0089), and starting from the
+visible bounds
+would make the new box equal to the old crop with nowhere to pan. `cropClipRect`
+uses the signed scale for the centre offset and its magnitude for size, so a
+flipped image crops rather than throwing. The frame wears L-bracket and bar
+handles rather than the transform squares, and a double-click on an image opens
+the session; Enter applies, Escape discards.

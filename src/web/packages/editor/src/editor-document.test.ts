@@ -159,7 +159,7 @@ describe("EditorDocument dirty state", () => {
     // The flush is what would normally move the revision, so removing it is the
     // same task as the baseline move — the case the save has to handle itself.
     vi.spyOn(document, "announceChange").mockImplementation(() => undefined);
-    await document.save();
+    await document.downloadPackage();
 
     // The announcement is stubbed out, so this is the same task as the baseline
     // move: the revision has not changed and the memo has to have been cleared

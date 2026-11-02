@@ -436,6 +436,7 @@ export function AssetFinder({
           return false;
         }}
         label={uiCopy.assets.title}
+        heading={uiCopy.panels.assetFinder}
         closeLabel={uiCopy.assets.close}
         className="editor-shell-dialog--finder"
         tabs={categories.map((category) => ({

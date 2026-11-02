@@ -111,6 +111,9 @@ function bridge(rows: readonly LayerRow[], overrides = {}): EditorShellBridge {
     // a fixture left out, so a row that names its own treatment still has it.
     layers: () => rows.map((row) => layerRow(row)) as never,
     backgroundSelected: () => false,
+    backgroundVideo: () => false,
+    backgroundPlaying: () => false,
+    setBackgroundPlaying: vi.fn(),
     groupContext: () => [],
     selectLayers: vi.fn(),
     selectLayer: vi.fn(),
@@ -261,6 +264,51 @@ async function pressOnFocused(
     await Promise.resolve();
   });
 }
+
+it("enters a group from a child's first double-click and renames on the next", async () => {
+  const rows = [
+    layerRow({
+      id: "group",
+      name: "Group",
+      kind: "group",
+      hasChildren: true,
+    }),
+    layerRow({
+      id: "child",
+      name: "Child",
+      kind: "text",
+      depth: 1,
+      parentId: "group",
+    }),
+  ];
+  const enterGroup = vi.fn();
+  const selectLayer = vi.fn();
+  const outside = await renderPanel(rows, { enterGroup, selectLayer });
+  await act(async () =>
+    outside
+      .querySelector<HTMLElement>('[data-yunari-layer="child"]')
+      ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+
+  // The first gesture enters the owning group and selects the row; it does not
+  // open a field the author never asked for.
+  expect(enterGroup).toHaveBeenCalledWith("group");
+  expect(selectLayer).toHaveBeenCalledWith("child");
+  expect(
+    outside.querySelector<HTMLInputElement>('[aria-label="Rename Child"]'),
+  ).toBeNull();
+
+  // The next double-click, now inside the group, is rename's.
+  const inside = await renderPanel(rows, { groupContext: () => ["group"] });
+  await act(async () =>
+    inside
+      .querySelector<HTMLElement>('[data-yunari-layer="child"]')
+      ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  expect(
+    inside.querySelector<HTMLInputElement>('[aria-label="Rename Child"]'),
+  ).not.toBeNull();
+});
 
 it("commits a rename typed into the field on Enter", async () => {
   const renameLayer = vi.fn();

@@ -124,7 +124,7 @@ function fileActions(onFindAssets: () => void): readonly ThemeToolbarAction[] {
     {
       label: uiCopy.file.exportWidget,
       icon: EXPORT_WIDGET_GLYPH,
-      run: (session) => session?.exportWidget(),
+      run: (session) => void session?.exportWidget(),
     },
   ];
 }

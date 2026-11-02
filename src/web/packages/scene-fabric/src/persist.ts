@@ -22,6 +22,7 @@ import {
   isFabricAssetReference,
   YUNARI_ASSET_PROPERTY,
 } from "./object-asset.js";
+import { YUNARI_CROP_PROPERTY } from "./object-crop.js";
 import { YUNARI_PAINT_PROPERTY } from "./object-paint.js";
 
 // `fabric/es` is selective: register every baseline scene class that v2 JSON
@@ -55,6 +56,7 @@ export const SCENE_PERSISTED_PROPERTIES = [
   YUNARI_TEXT_PROPERTY,
   YUNARI_PAINT_PROPERTY,
   YUNARI_ASSET_PROPERTY,
+  YUNARI_CROP_PROPERTY,
   YUNARI_GLASS_PROPERTY,
   // The unit a card was authored as, on the starter and on a copy (§77). An
   // authored fact about the document, so it has to survive the save like every

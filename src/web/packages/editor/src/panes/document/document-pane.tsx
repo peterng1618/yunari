@@ -97,6 +97,10 @@ export function DocumentPane(props: DocumentPaneProps): React.JSX.Element {
  *  author name. */
 function byline(credit: ThemeCreditsEntry): string {
   const parts: string[] = [];
+  // A wallpaper came through Wallpaper Engine, by the WE tab or a `.mpkg`, and
+  // that is part of the attribution the reader needs: the kind is the only
+  // field that says so.
+  if (credit.kind === "wallpaper") parts.push(uiCopy.credits.wallpaperEngine);
   if (credit.author?.name !== undefined) {
     parts.push(uiCopy.credits.by(credit.author.name));
   } else if (credit.author?.steamId !== undefined) {

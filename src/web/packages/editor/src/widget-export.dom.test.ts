@@ -298,7 +298,7 @@ describe("selection widget export", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
-    documentWith(canvas, [FONT, PHOTO, UNUSED], assets()).exportWidget();
+    await documentWith(canvas, [FONT, PHOTO, UNUSED], assets()).exportWidget();
 
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
     if (blob === undefined) throw new Error("No package was downloaded.");
@@ -308,10 +308,10 @@ describe("selection widget export", () => {
     expect(sceneIds(read.document.scene.objects as never)).toEqual(["value"]);
   });
 
-  it("reports a refusal through the document's error sink", () => {
+  it("reports a refusal through the document's error sink", async () => {
     const canvas = canvasWith();
     const errors: string[] = [];
-    documentWith(canvas, [FONT, PHOTO, UNUSED], assets(), (message) =>
+    await documentWith(canvas, [FONT, PHOTO, UNUSED], assets(), (message) =>
       errors.push(message),
     ).exportWidget();
     expect(errors).toEqual([uiCopy.widgetExport.nothingSelected]);

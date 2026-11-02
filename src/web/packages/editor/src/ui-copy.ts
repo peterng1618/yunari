@@ -374,9 +374,6 @@ export const uiCopy = {
     glassSamplingDynamic: "Dynamic",
     glassSamplingStatic: "Static",
     opacity: "Opacity %",
-    /** A picture layer's two paint-time mirrors. */
-    flipX: "Flip horizontally",
-    flipY: "Flip vertically",
     /** The reading a picture draws its image from: the catalogue's own name for
         the key is the option, so the row names the question and not the answer. */
     imageSensor: "Sensor",
@@ -1277,6 +1274,11 @@ export const uiCopy = {
       /** The poll ran out or the retry still had no session: the one sentence
        *  the client composes because the host answered without one. */
       noSignIn: "The store did not confirm the sign-in; try submitting again.",
+      /** Preparing the saved theme for the store failed before the host was
+       *  asked. The library copy is unchanged, so the press can be repeated. */
+      prepareFailed:
+        "This theme's cropped pictures could not be prepared for publishing.",
+      cancelled: "Publishing was cancelled; your library is unchanged.",
       /** A browser that blocks the popup left the flow with no window to finish
        *  it in, so the author is told to act on the blocker. */
       blocked: "This browser blocked the sign-in window.",
@@ -1858,6 +1860,18 @@ export const uiCopy = {
    *  the author may send to the platform's trash in the same press. The save's
    *  own title is the one it was pressed with (`file.saveLibrary` /
    *  `file.exportTheme`), so it is not repeated here. */
+  /** The warning before an export or store submission flattens crops. It is
+   *  not a save question: the library copy is untouched either way. */
+  outputBake: {
+    title: (action: string): string => `${action}: apply crops?`,
+    body: (crops: number): string =>
+      `${crops} ${crops === 1 ? "cropped picture is" : "cropped pictures are"} ` +
+      "flattened in this copy, and source pixels outside each crop are left out. " +
+      "Source files no longer used by the theme are left out too.",
+    note: "Your library keeps the original picture and the live crop.",
+    cancel: "Cancel",
+    confirm: "Continue",
+  },
   saveCleanup: {
     heading: "Unused files",
     count: (count: number, size: string): string =>
@@ -2010,6 +2024,8 @@ export const uiCopy = {
     paste: "Paste",
     outlineText: "Convert to paths",
     replaceFile: "Replace file…",
+    flipHorizontal: "Flip horizontally",
+    flipVertical: "Flip vertically",
   },
   /** Why a text object could not be frozen into vector paths. A refusal is
    *  reported whole-object: partial geometry would silently drop a word. */
@@ -2064,6 +2080,13 @@ export const uiCopy = {
   /** The stage's own name: the region the artboard is drawn in, so a reader
    *  reaching the canvas is told which surface it is before its content. */
   stage: { label: "Editor canvas" },
+  /** The floating control over a video background: one command, whose name
+   *  states the state it produces rather than the state it shows. */
+  backgroundPlayback: {
+    label: "Background video",
+    play: "Play background video",
+    pause: "Pause background video",
+  },
   /** The shared control set's refusal copy. A control that refuses a value the
    *  author can repair says why, and those words are user-visible text, so they
    *  belong here rather than as literals inside `components/ui/` (`vg-264`).
@@ -2196,6 +2219,11 @@ export const uiCopy = {
   credits: {
     by: (name: string): string => `By ${name}`,
     steam: (id: string): string => `Steam ${id}`,
+    /** The platform a wallpaper credit came through. `.mpkg` is Wallpaper
+     *  Engine's own format and the WE tab lists that library, so the credit's
+     *  `wallpaper` kind is what says the name; neither source carries it as a
+     *  field of its own. */
+    wallpaperEngine: "Wallpaper Engine",
   },
   /** Panel copy. Panel factories own their DOM contract; this owns the words. */
   panels: {

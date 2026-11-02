@@ -423,7 +423,7 @@ describe("EditorDocument save cleanup", () => {
     const onSaved = vi.fn();
     const document = documentWith(undefined, { onSaved });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(cleanupMock).not.toHaveBeenCalled();
     expect(save).toHaveBeenCalledTimes(1);
@@ -440,7 +440,7 @@ describe("EditorDocument save cleanup", () => {
       .mockResolvedValue(undefined);
     const document = documentWith(undefined, { assetManager, onSaved });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(cleanupMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -478,7 +478,7 @@ describe("EditorDocument save cleanup", () => {
       .mockResolvedValue(undefined);
     const document = documentWith([linked], { assetManager });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(save).toHaveBeenCalledTimes(1);
     const [current, assets] = save.mock.calls[0] ?? [];
@@ -508,7 +508,7 @@ describe("EditorDocument save cleanup", () => {
       envelope: bareEnvelope(),
     });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(trashAssetsMock).toHaveBeenCalledWith([
       { name: "photo.png", bytes: new Uint8Array([1]) },
@@ -556,7 +556,7 @@ describe("EditorDocument save cleanup", () => {
       onError,
     });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(trashAssetsMock).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
@@ -596,7 +596,7 @@ describe("EditorDocument save cleanup", () => {
       onError,
     });
 
-    await document.save();
+    await document.downloadPackage();
 
     expect(onError).toHaveBeenCalledWith(
       "The Recycle Bin is not available on this machine.",

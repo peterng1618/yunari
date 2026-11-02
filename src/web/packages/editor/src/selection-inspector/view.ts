@@ -533,10 +533,6 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   ["glass-blur", "integer"],
   // The sampling is one of two names; `writeGlassField` refuses anything else.
   ["glass-sampling", "text"],
-  // A picture's paint-time mirrors. Fabric owns the property; the boundary only
-  // holds its type, so a switch cannot smuggle a number into it.
-  ["flipX", "boolean"],
-  ["flipY", "boolean"],
   // The reading an image draws from. The value is a semantic key, and `""` is
   // the cleared picker that removes the binding.
   [IMAGE_BINDING_FIELD_ID, "binding"],

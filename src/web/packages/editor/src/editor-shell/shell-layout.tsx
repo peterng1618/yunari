@@ -33,6 +33,7 @@ import { StoreHalves } from "../store-mode/halves.js";
 import type { StoreTab } from "../store-mode/region.js";
 import { StoreModeRegion } from "../store-mode/region.js";
 import { uiCopy } from "../ui-copy.js";
+import { BackgroundPlayback } from "./background-playback.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { CanvasContextMenu } from "./canvas-context-menu.js";
 import { CanvasDock } from "./canvas-dock.js";
@@ -730,6 +731,9 @@ export function createShellLayout(
             aria-label={uiCopy.stage.label}
           >
             <Host node={hosts.canvas} />
+            {/* The stage's top-centre: the one view control for a video
+                background. It draws nothing for any other background. */}
+            <BackgroundPlayback store={store} />
             {/* The two top corners in one row, which is what keeps the overflow rule's
                 "clusters cannot collide" true without either knowing the
                 other's width. The row is `pointer-events: none`; the two
@@ -841,6 +845,9 @@ export function createShellLayout(
                 );
               }}
               onThemeDeleted={(id) => store.bridge?.session.themeRemoved(id)}
+              onThemePublished={(id) =>
+                store.bridge?.session.themePublished(id)
+              }
             />
             {/* The Host mode's region, beside the store's rather than chosen
                 between here: each is handed the mode and draws itself in its

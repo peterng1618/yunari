@@ -4,10 +4,12 @@ import {
   semanticKeysByFamily,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlWell } from "../components/ui/control-well.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
+import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import {
   createPageSizePreference,
   type PageSize,
@@ -18,6 +20,7 @@ import { downloadBytes } from "../persistence-manager/index.js";
 import {
   createThemeLibraryClient,
   type ThemeLibraryClient,
+  type ThemeLibraryContent,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { AssignChoice, AssignDisplay } from "./assign-display.js";
@@ -467,6 +470,9 @@ export function StoreModeRegion(props: {
    *  deleting the open theme leaves the document's save with no stored folder
    *  to base itself on. */
   readonly onThemeDeleted?: ((id: string) => void) | undefined;
+  /** Publishing baked a crop into the stored theme, so the open document's
+   *  base describes bytes the library no longer holds. The shell resets it. */
+  readonly onThemePublished?: ((id: string) => void) | undefined;
   /** The half the shell's header chose. The shell owns it because the control
    *  moved into the header; a direct mount without one keeps its own. */
   readonly tab?: StoreTab | undefined;
@@ -482,6 +488,9 @@ export function StoreModeRegion(props: {
       {...(props.onThemeDeleted === undefined
         ? {}
         : { onThemeDeleted: props.onThemeDeleted })}
+      {...(props.onThemePublished === undefined
+        ? {}
+        : { onThemePublished: props.onThemePublished })}
       {...(props.tab === undefined ? {} : { tab: props.tab })}
       {...(props.onTab === undefined ? {} : { onTab: props.onTab })}
     />
@@ -498,6 +507,9 @@ function StoreRegion(props: {
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   readonly onThemeDeleted?: ((id: string) => void) | undefined;
+  /** Publishing baked a crop into the stored theme, so the open document's
+   *  base describes bytes the library no longer holds. */
+  readonly onThemePublished?: ((id: string) => void) | undefined;
   /** The half the shell's header chose. The shell owns it because the control
    *  moved into the header; a direct mount without one keeps its own. */
   readonly tab?: StoreTab | undefined;
@@ -558,6 +570,16 @@ function StoreRegion(props: {
   /** The online half's install: the press, its in-flight set, and the sentence
    *  its last refusal announces (`use-install.ts`). */
   const install = useInstall({ source, onListed: setItems });
+  /** The library copy replaced by a publish bake. The original is written back
+   *  once the submission ends, so publishing never edits the author's library
+   *  copy. */
+  const publishedBackup = useRef<
+    | {
+        readonly id: string;
+        readonly content: ThemeLibraryContent;
+      }
+    | undefined
+  >(undefined);
   /** The library half's submission press and its longer flow (`use-submit.ts`):
    *  the sign-in outlives the modal that started it, so its state lives beside
    *  the region rather than in the surface that pressed. */
@@ -566,6 +588,60 @@ function StoreRegion(props: {
     // the version the host just wrote. A failed re-list changes nothing: the
     // submission is the fact, and this surface keeps no version of its own.
     onSubmitted: () => void source.list().then(setItems, () => undefined),
+    beforeSubmit: async (id) => {
+      try {
+        const content = await client.open(id);
+        const baked = await bakeStoredThemeCrops({
+          envelope: content.envelope,
+          assets: content.assets,
+        });
+        if (baked.baked === 0) return undefined;
+        if (
+          !(await confirmOutputBake({
+            title: uiCopy.store.submit.label,
+            crops: baked.baked,
+          }))
+        ) {
+          return uiCopy.store.submit.cancelled;
+        }
+        await client.save(id, {
+          ...content,
+          envelope: baked.envelope,
+          assets: baked.assets,
+        });
+        publishedBackup.current = { id, content };
+        return undefined;
+      } catch {
+        return uiCopy.store.submit.prepareFailed;
+      }
+    },
+    afterSubmit: async (version) => {
+      const backup = publishedBackup.current;
+      publishedBackup.current = undefined;
+      if (backup === undefined) return;
+      const envelope =
+        version === undefined
+          ? backup.content.envelope
+          : {
+              ...backup.content.envelope,
+              metadata: { ...backup.content.envelope.metadata, version },
+            };
+      try {
+        // An overwrite, because the host advanced the base while it published
+        // the baked copy; the bytes being restored are the author's own.
+        await client.save(
+          backup.id,
+          { ...backup.content, envelope },
+          {
+            overwrite: true,
+          },
+        );
+      } catch {
+        // The submission already happened. Leaving the baked copy is bad, but
+        // retrying here would be a second write the author did not ask for.
+      }
+      props.onThemePublished?.(backup.id);
+    },
   });
   const [preference] = useState(() =>
     createPageSizePreference(browserStorage()),

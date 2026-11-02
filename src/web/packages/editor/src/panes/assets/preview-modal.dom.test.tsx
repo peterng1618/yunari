@@ -219,6 +219,23 @@ it("reads a Wallpaper Engine video's licence and source, never None recorded", a
   expect(modal.textContent).not.toContain(uiCopy.assets.preview.noneRecorded);
 });
 
+it("names Wallpaper Engine for a wallpaper credit", async () => {
+  // Both a WE-tab import and a picked `.mpkg` credit their video as a
+  // `wallpaper`; that kind is the only field that says which platform the file
+  // came through.
+  const modal = await open(VIDEO, {
+    credit: {
+      kind: "wallpaper",
+      title: "Night",
+      license: "unknown",
+      changes: "Copied unchanged",
+      assetId: "clip",
+    },
+  });
+
+  expect(modal.textContent).toContain("Wallpaper Engine");
+});
+
 it("reads the package credit's licence and author, never None recorded", async () => {
   // A finder image's declaration has no author, and its licence may be absent
   // too; the credit is the only member that knows who made it.

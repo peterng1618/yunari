@@ -1353,49 +1353,18 @@ describe("the column's sections", () => {
     expect(inSection("position", "[data-yunari-bleeds]")).toBeNull();
   });
 
-  it("offers an image both flips under Layer, one press each", async () => {
+  it("carries no flip switch: the mirrors are toolbar actions now", () => {
     const image = new FabricImage("", {
       left: 0,
       top: 0,
       width: 40,
       height: 40,
     });
-    const { host, history } = setup(image);
-    const flip = (axis: "x" | "y"): HTMLElement | null =>
-      host.querySelector<HTMLElement>(
-        `[data-yunari-section="layer"] [data-yunari-flip-${axis}]`,
-      );
-
-    expect(flip("x")?.getAttribute("aria-checked")).toBe("false");
-    expect(flip("y")?.getAttribute("aria-checked")).toBe("false");
-
-    await click(flip("x")!);
-    expect(image.flipX).toBe(true);
-    await click(flip("y")!);
-    expect(image.flipY).toBe(true);
-    await click(flip("x")!);
-    expect(image.flipX).toBe(false);
-    // Three presses, three entries: a flip is one write through the same
-    // commit funnel every other object field uses, so one undo step each.
-    expect(history.saveState).toHaveBeenCalledTimes(3);
-  });
-
-  it("offers flips to an image and to every flippable kind", () => {
-    expect(
-      setup(
-        new Rect({ left: 0, top: 0, width: 40, height: 20 }),
-      ).host.querySelector("[data-yunari-flip-x]"),
-    ).not.toBeNull();
-    expect(
-      setup(
-        new FabricImage("", { left: 0, top: 0, width: 40, height: 40 }),
-      ).host.querySelector("[data-yunari-flip-x]"),
-    ).not.toBeNull();
-    expect(
-      setup(new IText("text", { left: 0, top: 0 })).host.querySelector(
-        "[data-yunari-flip-x]",
-      ),
-    ).toBeNull();
+    const { host } = setup(image);
+    // A flip rewrites the picture's pixels or the shape's path data, so it is
+    // not an object property and has no switch to show.
+    expect(host.querySelector("[data-yunari-flip-x]")).toBeNull();
+    expect(host.querySelector("[data-yunari-flip-y]")).toBeNull();
   });
 
   it("is a plan a test can read as data, before anything renders", () => {

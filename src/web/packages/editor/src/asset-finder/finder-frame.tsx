@@ -17,6 +17,9 @@ export function FinderFrame(props: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly label: string;
+  /** The visible heading on the tab row. Absent draws none; the finder names
+   *  itself there while still announcing `label` for the dialog. */
+  readonly heading?: string;
   readonly closeLabel: string;
   readonly className?: string;
   readonly tabs: readonly {
@@ -74,6 +77,11 @@ export function FinderFrame(props: {
               can leave its last tab under the way out, and every category has
               to be reachable by a finger. */}
           <div className="flex min-h-12 flex-none flex-wrap items-center border-b border-edge px-[var(--space-16)] pr-[calc(var(--space-32)+var(--space-4))]">
+            {props.heading === undefined ? null : (
+              <h2 className="mr-[var(--space-12)] whitespace-nowrap text-sm font-medium text-text">
+                {props.heading}
+              </h2>
+            )}
             <Tabs.List className="flex flex-wrap gap-[var(--space-4)]">
               {props.tabs.map((tab) => (
                 <Tabs.Tab

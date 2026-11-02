@@ -133,7 +133,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // The picker, and nothing of the document's: an import lands in the
     // library while whatever is open stays open.
     importPackage: () => options.onImportPackage?.(),
-    downloadPackage: () => document.save(),
+    downloadPackage: () => document.downloadPackage(),
     exportTheme: () => document.release(),
     exportWidget: () => document.exportWidget(),
     activate: () => document.activateTheme(),
@@ -264,6 +264,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     openLibraryTheme: (id, onAccepted) =>
       document.openLibraryTheme(id, onAccepted),
     themeRemoved: (id) => document.noteThemeRemoved(id),
+    themePublished: (id) => document.noteThemePublished(id),
     saveLibrary: () => document.saveLibrary(),
     openRecent: () => document.openRecentLibrary(),
     saveAs: () => document.saveLibraryAs(),
@@ -301,6 +302,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
         onChanged: host.declarationsChanged,
         ...(options.onError === undefined ? {} : { onError: options.onError }),
       }),
+    flipSelection: (axis) => document.flipSelection(axis),
     arrange: (action) => applyArrange(editor, action),
     canArrange: (action) => canArrange(editor, action),
     undo: () => void editor.historyManager.undo(),

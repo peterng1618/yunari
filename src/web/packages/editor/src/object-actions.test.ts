@@ -54,6 +54,8 @@ describe("object action registry", () => {
       "ungroup",
       "outline-text",
       "replace-asset",
+      "flip-horizontal",
+      "flip-vertical",
       "delete",
     ]);
   });
@@ -66,6 +68,22 @@ describe("object action registry", () => {
     expect(replace.eligible(target({ asset: "image", locked: true }))).toBe(
       false,
     );
+  });
+
+  it("offers a flip only to one picture or path-like shape", () => {
+    const flip = objectAction("flip-horizontal");
+    expect(flip.eligible(target({ flip: "image" }))).toBe(true);
+    expect(flip.eligible(target({ flip: "path" }))).toBe(true);
+    expect(flip.eligible(target({ flip: "polygon" }))).toBe(true);
+    // A rectangle, circle or ellipse mirrors onto itself, a chart owns its
+    // orientation, and a group or multi-selection has no one subject.
+    expect(flip.eligible(target())).toBe(false);
+    expect(flip.eligible(target({ kind: "group" }))).toBe(false);
+    expect(flip.eligible(target({ kind: "chart", flip: "image" }))).toBe(false);
+    expect(flip.eligible(target({ flip: "image", locked: true }))).toBe(false);
+    expect(
+      objectAction("flip-vertical").eligible(target({ flip: "image" })),
+    ).toBe(true);
   });
 
   it("marks delete, and only delete, destructive — the registry's own fact", () => {

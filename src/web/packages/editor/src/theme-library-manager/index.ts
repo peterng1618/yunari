@@ -241,6 +241,16 @@ export class ThemeLibraryManager {
     if (this.#base?.id === id) this.#base = undefined;
   }
 
+  /** A publish temporarily wrote a baked copy, then restored this document's
+   *  content. The bytes are the author's again, but the host's base moved, so
+   *  the next save must carry every declared file rather than trusting hashes
+   *  the library may no longer hold. */
+  noteExternalSave(id: string): void {
+    if (this.#base?.id === id) {
+      this.#base = { id, hashes: new Map() };
+    }
+  }
+
   /** Saves into the library, or says in the editor's own words that it did not
    *  happen — the document is untouched either way. */
   async save(): Promise<void> {

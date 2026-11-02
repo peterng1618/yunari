@@ -33,6 +33,7 @@ import {
   setObjectAssetReference,
   YUNARI_ASSET_PROPERTY,
 } from "./object-asset.js";
+import { YUNARI_CROP_PROPERTY } from "./object-crop.js";
 import {
   applyObjectPalettePaints,
   YUNARI_PAINT_PROPERTY,
@@ -1411,6 +1412,7 @@ describe("there is exactly one owner of scene serialisation", () => {
       YUNARI_TEXT_PROPERTY,
       YUNARI_PAINT_PROPERTY,
       YUNARI_ASSET_PROPERTY,
+      YUNARI_CROP_PROPERTY,
       YUNARI_GLASS_PROPERTY,
       // The unit a card was authored as, on the starter and on a copy (§77).
       // Named literally rather than through a constant, because there is no

@@ -38,6 +38,7 @@ function frame(element: ReactElement): ReactElement {
       open
       onOpenChange={() => {}}
       label="Assets"
+      heading="Asset Finder"
       closeLabel="Close"
       tabs={[
         { id: "icon", label: "Icons" },
@@ -66,6 +67,12 @@ it("draws the four regions in order and keeps one status line", () => {
     "icon",
     "colour",
   ]);
+  // The name leads the tab row rather than sitting above it as a second bar.
+  const heading = drawn?.querySelector("h2");
+  expect(heading?.textContent).toBe("Asset Finder");
+  expect(heading?.compareDocumentPosition(tabs[0] as Node)).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
   expect(drawn?.querySelector("[data-yunari-asset-search]")).not.toBeNull();
   expect(drawn?.querySelector("[data-yunari-asset-content]")).not.toBeNull();
   expect(drawn?.querySelector("[data-yunari-asset-status]")?.textContent).toBe(

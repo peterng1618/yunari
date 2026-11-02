@@ -11,7 +11,14 @@ import {
   parentGroupOf,
   YunariChart,
 } from "@yunari/scene-fabric";
-import { ActiveSelection, type FabricObject, Group } from "fabric/es";
+import {
+  ActiveSelection,
+  FabricImage,
+  type FabricObject,
+  Group,
+  Path,
+  Polygon,
+} from "fabric/es";
 import { type ArrangeAction, applyArrange, canArrange } from "../arrange.js";
 import type { EditorInteraction } from "../editor-interaction.js";
 import { GROUP_CONTEXT_EVENT } from "../grouping-manager/index.js";
@@ -109,6 +116,14 @@ export interface EditorShellBridge {
   target(): ObjectTarget;
   can(action: ShellAction): boolean;
   canArrange(action: ArrangeAction): boolean;
+  /** Whether the document's background is a video. The playback control is
+   *  absent for an image, a gradient or no media at all. */
+  backgroundVideo(): boolean;
+  /** Whether that video is playing. `false` with no video background. */
+  backgroundPlaying(): boolean;
+  /** Pauses or resumes a video background. Transient: never written to the
+   *  document. */
+  setBackgroundPlaying(playing: boolean): void;
   /** The layer tree, projected from Fabric on demand (§172), plus the
    *  background's synthetic bottom row. */
   layers(): readonly LayerRow[];
@@ -227,6 +242,15 @@ export function createEditorShellBridge(input: {
   readonly palette?: () => FabricPalette | undefined;
   /** The product's own library capture; see `EditorShellBridge.capture`. */
   readonly capture: () => string | undefined;
+  /** The background layer's playback, pulled like `bindings`: the shell owns
+   *  the video element, the bridge only projects its two facts and the one
+   *  command. Absent reads as no video background. */
+  readonly playback?: {
+    readonly video: () => boolean;
+    readonly playing: () => boolean;
+    readonly set: (playing: boolean) => void;
+    readonly subscribe: (listener: () => void) => () => void;
+  };
 }): EditorShellBridge {
   const { canvas } = input.editor;
   const listeners = new Set<() => void>();
@@ -267,6 +291,7 @@ export function createEditorShellBridge(input: {
   // Subscribing to Fabric's events here as well made a revive's remove-then-add
   // storm repaint the rows once per object instead of once for the batch.
   const offDocumentChange = input.session.subscribeDocumentChange(notify);
+  const offPlayback = input.playback?.subscribe(notify);
   const activeObject = ():
     | (FabricObject & { readonly locked?: boolean })
     | undefined =>
@@ -318,6 +343,21 @@ export function createEditorShellBridge(input: {
       active !== undefined && !(active instanceof Group)
         ? objectAssetReference(active)
         : undefined;
+    // A rectangle, circle and ellipse are mirror-symmetric, so a flip is not
+    // offered for them. Pictures and path-like shapes are the two kinds whose
+    // mirror changes what is stored.
+    const flip =
+      active === undefined ||
+      active instanceof Group ||
+      active instanceof ActiveSelection
+        ? undefined
+        : active instanceof FabricImage
+          ? "image"
+          : active instanceof Polygon
+            ? "polygon"
+            : active instanceof Path
+              ? "path"
+              : undefined;
     return {
       // The background has no Fabric subject, so the action gate sees none and
       // every object action is refused by construction.
@@ -331,6 +371,7 @@ export function createEditorShellBridge(input: {
       // text object asks for the conversion.
       text: active !== undefined && isTextObject(active),
       ...(asset === undefined ? {} : { asset: asset.kind }),
+      ...(flip === undefined ? {} : { flip }),
     };
   };
   const canArrangeAction = (action: ArrangeAction): boolean =>
@@ -731,6 +772,9 @@ export function createEditorShellBridge(input: {
     canArrange: canArrangeAction,
     layers,
     backgroundSelected: () => backgroundSelected,
+    backgroundVideo: () => input.playback?.video() ?? false,
+    backgroundPlaying: () => input.playback?.playing() ?? false,
+    setBackgroundPlaying: (playing) => input.playback?.set(playing),
     groupContext,
     selectLayers,
     selectLayer,
@@ -814,6 +858,7 @@ export function createEditorShellBridge(input: {
         canvas.off(event as never, settleSelection);
       for (const event of events) canvas.off(event as never, notify);
       offDocumentChange();
+      offPlayback?.();
       listeners.clear();
     },
   };

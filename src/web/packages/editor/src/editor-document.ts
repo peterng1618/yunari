@@ -32,11 +32,14 @@ import {
 } from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
+import { confirmOutputBake } from "./components/output-bake-dialog.js";
 import {
   confirmSaveCleanup,
   type SaveCleanupFile,
 } from "./components/save-cleanup-dialog.js";
+import { bakeStoredThemeCrops } from "./crop-manager/bake-stored.js";
 import type { EditorShell } from "./editor-shell.js";
+import { flipSelection as mirrorSelection } from "./flip-selection.js";
 import {
   applyFontTrio as applyCatalogTrio,
   type CuratedFontFace,
@@ -440,7 +443,65 @@ export class EditorDocument {
     };
   }
 
-  async save(): Promise<void> {
+  /**
+   * Mirrors the one selected picture or path-like shape. A picture's pixels
+   * become a new declared asset and its object stops carrying a flip flag; a
+   * path or polygon has its own geometry mirrored. Multi-selections and groups
+   * have no single subject, so they are refused rather than partially flipped.
+   */
+  async flipSelection(axis: "horizontal" | "vertical"): Promise<void> {
+    try {
+      const flipped = await mirrorSelection({
+        canvas: this.#shell.editor.canvas,
+        assets: this.#assets,
+        axis,
+      });
+      if (!flipped) return;
+      this.#shell.editor.historyManager.saveState();
+      this.announceChange();
+    } catch (error) {
+      this.#source.onError?.(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Builds the copy a package ships: every authored crop is flattened into new
+   * pixels, and a source no object still shows whole is left out.
+   *
+   * **The library is not this copy.** Baking here works on the serialised
+   * envelope and the asset map, so the live document keeps its clip and the
+   * source bytes; a save or display assignment stays non-destructive. The
+   * author confirms the one-way change before a package is written.
+   */
+  async #exportCopy<
+    T extends { readonly scene: Readonly<Record<string, unknown>> },
+  >(
+    envelope: T,
+    assets: Readonly<Record<string, Uint8Array>>,
+    title: string,
+  ): Promise<
+    | {
+        readonly envelope: T;
+        readonly assets: Readonly<Record<string, Uint8Array>>;
+      }
+    | undefined
+  > {
+    const baked = await bakeStoredThemeCrops({
+      envelope,
+      assets,
+    });
+    if (
+      baked.baked > 0 &&
+      !(await confirmOutputBake({ title, crops: baked.baked }))
+    ) {
+      return undefined;
+    }
+    return baked;
+  }
+
+  async downloadPackage(): Promise<boolean> {
     const options = this.#source;
     try {
       // Asked before anything is built, so a refused trash or a cancel leaves
@@ -448,14 +509,20 @@ export class EditorDocument {
       const cleanup = await this.confirmAssetCleanup();
       if (!cleanup.proceed) {
         if (cleanup.message !== undefined) options.onError?.(cleanup.message);
-        return;
+        return false;
       }
       const current = this.snapshot();
+      const output = await this.#exportCopy(
+        current,
+        this.#assets.assets,
+        uiCopy.file.exportTheme,
+      );
+      if (output === undefined) return false;
       // The package carries the theme's picture so whoever receives the file
       // can see the look without installing anything.
       await this.#persistence.save(
-        current,
-        this.#assets.assets,
+        output.envelope,
+        output.assets,
         await this.picture(),
         this.#creditsPackage(),
       );
@@ -464,8 +531,10 @@ export class EditorDocument {
       this.#dirty = undefined;
       this.announceChange();
       options.onSaved("Theme package saved");
+      return true;
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 
@@ -478,19 +547,25 @@ export class EditorDocument {
    * a widget with a member left out would open as a different unit than the
    * author selected.
    */
-  exportWidget(): void {
-    const result = extractSelectionWidget({
-      canvas: this.#shell.editor.canvas,
-      envelope: this.snapshot(),
-      declarations: this.#assets.declarations,
-      assets: this.#assets.assets,
-    });
-    if (!result.ok) {
-      this.#source.onError?.(result.message);
-      return;
-    }
+  async exportWidget(): Promise<void> {
     try {
-      this.#persistence.exportWidget(result.document, result.assets);
+      const result = extractSelectionWidget({
+        canvas: this.#shell.editor.canvas,
+        envelope: this.snapshot(),
+        declarations: this.#assets.declarations,
+        assets: this.#assets.assets,
+      });
+      if (!result.ok) {
+        this.#source.onError?.(result.message);
+        return;
+      }
+      const output = await this.#exportCopy(
+        result.document,
+        result.assets,
+        uiCopy.file.exportWidget,
+      );
+      if (output === undefined) return;
+      this.#persistence.exportWidget(output.envelope, output.assets);
     } catch (error) {
       this.#source.onError?.(
         error instanceof Error ? error.message : String(error),
@@ -580,7 +655,7 @@ export class EditorDocument {
       // **The one archive left in this file, and it is not a round trip.**
       // Nothing is stored here: the package is built so the release refuses a
       // theme that would not export, and the archive is then downloaded by
-      // `save`. The library is a folder; the export is not.
+      // `downloadPackage`. The library is a folder; the export is not.
       const beforeRelease = serializeThemePackage(
         this.snapshot(),
         this.#assets.assets,
@@ -593,10 +668,11 @@ export class EditorDocument {
         level,
       );
       this.setMetadata({ ...this.#envelope.metadata, version });
-      await this.save();
-      // `save()` owns its own errors and a cancelled cleanup returns without
-      // writing, so the release is reported only if the document actually
-      // stopped being dirty — the same re-read the mode switch makes.
+      const saved = await this.downloadPackage();
+      if (!saved) return;
+      // `downloadPackage()` owns its own errors and a cancelled cleanup returns
+      // without writing, so the release is reported only if the document
+      // actually stopped being dirty — the same re-read the mode switch makes.
       if (this.isDirty()) return;
       options.onSaved(`Released ${version}`);
     } catch (error) {
@@ -645,6 +721,12 @@ export class EditorDocument {
    *  longer holds. */
   noteThemeRemoved(id: string): void {
     this.#library.themeRemoved(id);
+  }
+
+  /** A publish wrote and then restored this theme's library copy, so the
+   *  document's stored base no longer describes the folder's bytes. */
+  noteThemePublished(id: string): void {
+    this.#library.noteExternalSave(id);
   }
 
   /** Saves into the host's library, which is the stored document's half of a

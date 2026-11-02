@@ -50,6 +50,7 @@ import {
   Network,
   OctagonAlert,
   Palette,
+  Pause,
   Pencil,
   PencilRuler,
   Pipette,
@@ -155,6 +156,11 @@ export function Glyph(props: {
  *  three planes smudge at 13px, the layer row's size, and the glyph stacks
  *  two. */
 export const STACK_GLYPH: LucideIcon = Layers2;
+
+/** The background video's two states: the command that changes it, not the
+ *  state it is in, so a playing backdrop shows the pause glyph. */
+export const PLAY_GLYPH: LucideIcon = Play;
+export const PAUSE_GLYPH: LucideIcon = Pause;
 
 /** The background row's mark. It is the page's wallpaper rather than the image
  *  kind's picture, so a background and an image layer never wear one glyph. */

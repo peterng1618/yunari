@@ -140,15 +140,14 @@ describe("the crop control", () => {
     // One committed edit per crop, §67.
     expect(saveState).toHaveBeenCalledOnce();
 
-    // A second crop frames what the image now shows, not the pixels the first
-    // one discarded.
+    // A second crop frames the whole picture: the crop box may only narrow it,
+    // and the picture is the source the box is read against.
     inspector.render();
     cropButton(host).click();
     const again = canvas
       .getObjects()
       .find((candidate) => candidate !== image) as Rect;
-    expect(again.width).toBeCloseTo(201, 1);
-    expect(image.clipPath).toBeInstanceOf(Rect);
+    expect(again.width).toBeCloseTo(400, 1);
   });
 
   it("leaves the image exactly as it was, and records nothing, on cancel", () => {
@@ -249,15 +248,15 @@ describe("the crop control", () => {
     host.querySelector<HTMLButtonElement>("[data-yunari-crop-cancel]")!.click();
     expect(image.clipPath).toBeUndefined();
 
-    // A second session starts from what the image currently shows, so a crop
-    // of an already-cropped picture does not frame the discarded pixels.
+    // A second session frames the whole picture, so the box can be narrowed
+    // again rather than being locked to the crop it already has.
     inspector.render();
     cropButton(host).click();
     const second = canvas
       .getObjects()
       .find((candidate) => candidate !== image) as Rect;
     expect(second.width).toBeCloseTo(400, 5);
-    expect(image.clipPath).toBeUndefined();
+    expect(image.clipPath).toBeInstanceOf(Rect);
   });
 
   it("crops a flipped image instead of refusing its negative scale", () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Canvas, FabricImage, Rect } from "fabric/es";
+import { Canvas, controlsUtils, FabricImage, Rect } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createErrorManager } from "../error-manager/index.js";
 import { createCropManager, cropClipRect } from "./index.js";
@@ -230,5 +230,132 @@ describe("CropManager", () => {
       .getObjects()
       .find((object): object is Rect => object !== image) as Rect;
     expect(frame.getScaledWidth()).toBeCloseTo(frame.getScaledHeight(), 5);
+  });
+
+  it("bounds the crop box to the picture when a handle is dragged outwards", () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const image = imageObject();
+    image.set({ left: 100, top: 100 });
+    canvas.add(image);
+    canvas.setActiveObject(image);
+    const crop = manager(canvas);
+    crop.begin();
+
+    const frame = canvas
+      .getObjects()
+      .find((object): object is Rect => object !== image) as Rect;
+    // A handle dragged past the image would frame empty canvas, which is the
+    // gap the crop must never leave.
+    frame.set({ left: 40, top: 40, scaleX: 3, scaleY: 3 });
+    frame.setCoords();
+    frame.fire("scaling");
+
+    const picture = image.getBoundingRect();
+    // The frame's own 1px stroke is part of `getBoundingRect`; the clamp is
+    // about the picture and the crop, so assert the raw geometry.
+    const left = frame.left;
+    const top = frame.top;
+    const right = left + frame.width * Math.abs(frame.scaleX);
+    const bottom = top + frame.height * Math.abs(frame.scaleY);
+    expect(left).toBeGreaterThanOrEqual(picture.left);
+    expect(top).toBeGreaterThanOrEqual(picture.top);
+    expect(right).toBeLessThanOrEqual(picture.left + picture.width);
+    expect(bottom).toBeLessThanOrEqual(picture.top + picture.height);
+  });
+
+  it("moves the picture, not the box, when dragged inside the crop", () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const image = imageObject();
+    image.set({ left: 100, top: 100 });
+    canvas.add(image);
+    canvas.setActiveObject(image);
+    const crop = manager(canvas);
+    crop.begin();
+
+    const frame = canvas
+      .getObjects()
+      .find((object): object is Rect => object !== image) as Rect;
+    // Make the box smaller than the picture, so there is room to pan.
+    frame.set({ left: 200, top: 150, width: 200, height: 100 });
+    frame.setCoords();
+    frame.fire("modified");
+    const frameLeft = frame.left;
+
+    canvas.fire(
+      "mouse:down" as never,
+      {
+        target: frame,
+        transform: { action: "drag" },
+        scenePoint: { x: 0, y: 0 },
+      } as never,
+    );
+    canvas.fire(
+      "mouse:move" as never,
+      {
+        scenePoint: { x: 50, y: 20 },
+      } as never,
+    );
+
+    expect(frame.left, "the crop box stays put").toBe(frameLeft);
+    expect(image.left, "the picture follows the pointer").toBe(150);
+    expect(image.top).toBe(120);
+
+    // Past the allowed travel the picture stops where the box still covers it.
+    // `left`/`top` are the image's centre here, and the frame's right edge is
+    // 300 with the picture's left edge at 100, so the picture can travel 300
+    // before its own right edge reaches the frame.
+    canvas.fire(
+      "mouse:move" as never,
+      {
+        scenePoint: { x: 1000, y: 1000 },
+      } as never,
+    );
+    expect(image.left).toBe(400);
+    expect(image.top).toBe(250);
+    canvas.fire("mouse:up" as never, {} as never);
+  });
+
+  it("draws crop brackets rather than transform handles", () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const image = imageObject();
+    canvas.add(image);
+    canvas.setActiveObject(image);
+    const crop = manager(canvas);
+    crop.begin();
+
+    const frame = canvas
+      .getObjects()
+      .find((object): object is Rect => object !== image) as Rect;
+    expect(
+      frame.controls.mtr,
+      "a crop has no rotation control",
+    ).toBeUndefined();
+    expect(frame.controls.tl?.render).not.toBe(
+      controlsUtils.renderSquareControl,
+    );
+    expect(frame.controls.mt?.render).not.toBe(
+      controlsUtils.renderSquareControl,
+    );
+  });
+
+  it("commits with Enter and discards with Escape", () => {
+    const canvas = new Canvas(document.createElement("canvas"));
+    const image = imageObject();
+    canvas.add(image);
+    canvas.setActiveObject(image);
+    const save = vi.fn();
+    const crop = manager(canvas, save);
+    crop.begin();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(crop.active).toBe(false);
+    expect(image.clipPath).toBeInstanceOf(Rect);
+    expect(save).toHaveBeenCalledOnce();
+
+    crop.begin();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(crop.active).toBe(false);
+    expect(image.clipPath).toBeInstanceOf(Rect);
+    expect(save).toHaveBeenCalledOnce();
   });
 });

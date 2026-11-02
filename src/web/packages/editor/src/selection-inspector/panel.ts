@@ -12,7 +12,6 @@ import {
 import {
   Circle,
   Ellipse,
-  FabricImage,
   type FabricObject,
   Path,
   Polygon,
@@ -82,13 +81,6 @@ function supportsPanelFields(object: FabricObject): boolean {
     object instanceof Polygon ||
     object instanceof Path
   );
-}
-
-/** Whether the two mirrors apply. Fabric's `flipX`/`flipY` are on every object,
- *  but text and charts carry their own orientation, so this offers the pair on
- *  pictures and the shapes a picture-like mirror is meaningful for. */
-export function supportsFlip(object: FabricObject): boolean {
-  return object instanceof FabricImage || supportsPanelFields(object);
 }
 
 /** The object's own stored references. Only `writeRef` writes, and it spreads

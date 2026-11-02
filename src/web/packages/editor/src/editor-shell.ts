@@ -46,7 +46,7 @@ import {
 } from "fabric/es";
 import { createClipboardManager } from "./clipboard-manager/index.js";
 import { applyEditorControls } from "./controls-manager/index.js";
-import { createCropManager } from "./crop-manager/index.js";
+import { canCrop, createCropManager } from "./crop-manager/index.js";
 import { createDeletionManager } from "./deletion-manager/index.js";
 import { lensBox, resolveLens } from "./display-lens.js";
 import type { EditorInteraction } from "./editor-interaction.js";
@@ -110,6 +110,18 @@ export interface EditorShell {
     assets: readonly AssetReference[],
     resolveAsset: (assetId: string) => BackgroundMediaSource | undefined,
   ): void;
+  /** Whether the document's background is a video, which is the only media the
+   *  playback control has anything to pause. */
+  backgroundVideo(): boolean;
+  /** Whether a video background is currently playing. A scene with no video
+   *  background reports `false`; the control is not drawn there. */
+  backgroundPlaying(): boolean;
+  /** Pauses or resumes a video background. Transient view state: it is never
+   *  written to the document, and an image background ignores it. */
+  setBackgroundPlaying(playing: boolean): void;
+  /** Notifies when the background's kind or playback state changes, for the
+   *  control that projects both. */
+  onBackgroundPlaybackChange(listener: () => void): () => void;
   setGlobals(globals: Globals | undefined): void;
   setFitMode(): void;
   /**
@@ -355,6 +367,11 @@ function createNativeEditor(input: {
   const canvas = new Canvas(element, {
     width: Math.max(1, host.clientWidth),
     height: Math.max(1, host.clientHeight),
+    // Objects the marquee touched were swept into the selection, so a drag
+    // that clipped a card's corner selected it. Selection here is a set the
+    // author means to act on, and a partly covered object is ambiguous; only
+    // bounds fully inside the rectangle are taken.
+    selectionFullyContained: true,
     // A canvas-level `clipPath` is composited *after* `drawControls`, so a
     // handle on a partly-outside object is cut away with the rest of it. This
     // moves the controls above the clip instead — the one flag that decides
@@ -423,6 +440,12 @@ function createNativeEditor(input: {
    * interim scaled state and leave the reset to a second, near-identical undo. */
   canvas.on("object:modified", save);
   const objectLockManager = createObjectLockManager(canvas, save);
+  const crop = createCropManager({
+    canvas,
+    save,
+    suspend: () => history.suspend(),
+    errors,
+  });
 
   /** Double-click enters the group the pointer resolved to, and leaves the one
    * already entered when the pointer was outside it — the same gesture both ways,
@@ -448,6 +471,13 @@ function createNativeEditor(input: {
       return;
     }
     if (target === undefined || target === null) return;
+    // A double-click on a picture opens its crop, the gesture the selection
+    // inspector's Crop control also offers. Enter commits it and Escape
+    // discards it, so the canvas is the crop's own surface.
+    if (canCrop(target)) {
+      crop.begin(target);
+      return;
+    }
     grouping.enterGroup({
       object: target,
       ...(event.scenePoint === undefined
@@ -476,12 +506,7 @@ function createNativeEditor(input: {
     layerManager: createLayerManager(canvas, save),
     objectLockManager,
     errorManager: errors,
-    cropManager: createCropManager({
-      canvas,
-      save,
-      suspend: () => history.suspend(),
-      errors,
-    }),
+    cropManager: crop,
     deletionManager: deletion,
     clipboardManager: createClipboardManager({
       canvas,
@@ -648,24 +673,78 @@ export async function mountEditorShell({
     const reportMediaError = (message: string): void => {
       editor.errorManager.warn("background-media", message);
     };
+    // **A pointer gesture owns the canvas for its duration.** Fabric draws the
+    // marquee straight onto the context, not into the scene, so any full
+    // repaint erases it until the pointer moves again. A video background asks
+    // for one per decoded frame, which made the marquee flash and then vanish
+    // while the button was still held. The frames keep decoding; only the
+    // repaint they ask for waits for the gesture to end, and one request then
+    // brings the glass sampler current.
+    let gestureDown = false;
+    const startGesture = (): void => {
+      gestureDown = true;
+    };
+    const endGesture = (): void => {
+      if (!gestureDown) return;
+      gestureDown = false;
+      editor.canvas.requestRenderAll();
+    };
+    editor.canvas.on("mouse:down" as never, startGesture as never);
+    // The window, not the canvas, ends the gesture: a marquee released outside
+    // the stage still has to unblock the next frame.
+    window.addEventListener("mouseup", endGesture);
+    window.addEventListener("blur", endGesture);
+
+    /** Whether the document's background is a video, the only media the
+     *  playback control has anything to pause. */
+    const backgroundVideo = (): boolean => {
+      const assetId = currentBackground?.media?.assetId;
+      return (
+        assetId !== undefined &&
+        mediaAssets?.some(
+          (asset) => asset.id === assetId && asset.kind === "video",
+        ) === true
+      );
+    };
+    // Transient: the author's pause lasts for this mount, never the document.
+    let backgroundPaused = false;
+    const playbackListeners = new Set<() => void>();
+    const notifyPlayback = (): void => {
+      for (const listener of playbackListeners) listener();
+    };
+    let videoBackground = backgroundVideo();
+    /** Announces only a change the control can see. Every background tweak
+     *  moves the layer, but an offset edit does not change its kind. */
+    const syncPlaybackKind = (): void => {
+      const next = backgroundVideo();
+      if (next === videoBackground) return;
+      videoBackground = next;
+      notifyPlayback();
+    };
     // Every mount of the media layer goes through here, so the frame
     // subscription cannot be left off one of them. `setBackgroundMedia` is a
     // remount, not an update, and the session performs one during mount - the
     // layer that had the subscription was being torn down and replaced on every
     // editor start.
-    const mountMedia = (): BackgroundMediaHandle | undefined =>
-      mediaResolve === undefined
-        ? undefined
-        : mountBackgroundMedia({
-            host: container,
-            background: currentBackground,
-            artboard: currentArtboard,
-            assets: mediaAssets,
-            resolveAsset: mediaResolve,
-            onMediaError: reportMediaError,
-            // The video is a DOM sibling, so Fabric never sees a frame change.
-            onFrame: () => editor.canvas.requestRenderAll(),
-          });
+    const mountMedia = (): BackgroundMediaHandle | undefined => {
+      if (mediaResolve === undefined) return undefined;
+      const mounted = mountBackgroundMedia({
+        host: container,
+        background: currentBackground,
+        artboard: currentArtboard,
+        assets: mediaAssets,
+        resolveAsset: mediaResolve,
+        onMediaError: reportMediaError,
+        // The video is a DOM sibling, so Fabric never sees a frame change.
+        onFrame: () => {
+          if (!gestureDown) editor.canvas.requestRenderAll();
+        },
+      });
+      // A remount is still the same document: a pause the author set carries
+      // over an asset change rather than restarting the video under them.
+      if (backgroundPaused) mounted.pause();
+      return mounted;
+    };
     let media = mountMedia();
     // The media layer is a DOM sibling of the canvas rather than a Fabric
     // object, so it has to be repositioned by hand whenever the camera moves.
@@ -852,6 +931,7 @@ export async function mountEditorShell({
         paintArtboard();
         media?.setBackground(currentBackground);
         placeMedia();
+        syncPlaybackKind();
       },
       setBackgroundMedia(nextAssets, nextResolveAsset) {
         media?.destroy();
@@ -859,6 +939,20 @@ export async function mountEditorShell({
         mediaResolve = nextResolveAsset;
         media = mountMedia();
         placeMedia();
+        syncPlaybackKind();
+      },
+      backgroundVideo,
+      backgroundPlaying: () => backgroundVideo() && !backgroundPaused,
+      setBackgroundPlaying(playing) {
+        if (backgroundPaused === !playing) return;
+        backgroundPaused = !playing;
+        if (playing) media?.resume();
+        else media?.pause();
+        notifyPlayback();
+      },
+      onBackgroundPlaybackChange(listener) {
+        playbackListeners.add(listener);
+        return () => playbackListeners.delete(listener);
       },
       setGlobals(nextGlobals) {
         globals = nextGlobals;
@@ -871,6 +965,10 @@ export async function mountEditorShell({
       },
       backdrop,
       destroy() {
+        editor.canvas.off("mouse:down" as never, startGesture as never);
+        window.removeEventListener("mouseup", endGesture);
+        window.removeEventListener("blur", endGesture);
+        playbackListeners.clear();
         glass.dispose();
         media?.destroy();
         scene?.dispose();

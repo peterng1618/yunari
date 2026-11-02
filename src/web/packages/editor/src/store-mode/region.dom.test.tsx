@@ -370,7 +370,19 @@ function clientWithList(
 ): ThemeLibraryClient {
   return {
     list,
-    open: () => Promise.reject(new Error("the region lists; the shell opens")),
+    // A submission opens the stored theme before it posts. These cases are
+    // about the listing and the host's answers, so the opened theme has no
+    // crops and nothing to bake.
+    open: async (id) => ({
+      envelope: {
+        schemaVersion: "2.0.0",
+        fabricVersion: "7.0.0",
+        id,
+        artboard: { width: 1920, height: 1080 },
+        scene: { version: "7.0.0", objects: [] },
+      },
+      assets: {},
+    }),
     save: () => Promise.reject(new Error("the store does not save")),
     assign: () => Promise.reject(new Error("the store does not assign")),
     listDisplays: async () => ({ default: null, displays: [] }),

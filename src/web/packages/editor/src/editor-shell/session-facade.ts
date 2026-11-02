@@ -25,12 +25,14 @@ export interface EditorActionFacade {
    *  reaches this same writer through the document's release path. Kept as the
    *  seam for callers that need the package without a release, which the unit
    *  suites are. */
-  downloadPackage(): Promise<void>;
+  /** Whether a package was written; `false` is a cancelled cleanup or crop
+   *  warning, not a failure. */
+  downloadPackage(): Promise<boolean>;
   /** **Export theme**: asks for the release bump, then downloads the package. */
   exportTheme(): Promise<void>;
   /** **Export selection as widget**: downloads the current selection as a
    *  `yunari-widget-package`, or reports why the whole file was refused. */
-  exportWidget(): void;
+  exportWidget(): Promise<void>;
   /** **Activate**: saves the document when it is not stored or not clean, then
    *  asks the host to show it on the default display. Never reports success for
    *  a save or an assignment that did not land. */
@@ -69,6 +71,10 @@ export interface EditorActionFacade {
   /** One theme left the library. A store removal reaches the document's base
    *  through this, so a save after deleting the open theme recreates it. */
   themeRemoved(id: string): void;
+  /** A publish wrote and restored this theme's library copy. The open
+   *  document's stored base no longer describes the folder, so the next save
+   *  must carry every declared byte. */
+  themePublished(id: string): void;
   saveLibrary(): Promise<void>;
   /** File's **Open recent**: the newest stored theme that is not the document
    *  that is open. */
@@ -85,6 +91,9 @@ export interface EditorActionFacade {
    *  object at it, keeping the object's authored box and transform. The file
    *  picker is the session's because the declaration list is. */
   replaceSelectedAsset(): void;
+  /** Mirrors the selected picture or path-like shape by rewriting its pixels or
+   *  path data; no orientation flag survives in the document. */
+  flipSelection(axis: "horizontal" | "vertical"): Promise<void>;
   /** The canvas context menu's route to a primitive; the Add pane's own
       buttons call the same construction rather than a second copy of it. */
   addShape(kind: ShapeInsertion): void;

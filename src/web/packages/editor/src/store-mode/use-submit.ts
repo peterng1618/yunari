@@ -149,6 +149,16 @@ export function useSubmit(options: {
   /** How a sign-in window is made, so a test can watch the address it was given
    *  and a browser that blocks it can be answered without a real popup. */
   readonly openWindow?: (url: string) => SignInWindow | null;
+  /** Runs once per press before the host reads the theme. The store publishes
+   *  the saved library document, so a crop must be baked there first; a
+   *  sentence returned here is the refusal the modal shows. */
+  readonly beforeSubmit?:
+    | ((id: string) => Promise<string | undefined>)
+    | undefined;
+  /** Runs once when this press ends, whether it landed or was refused. The
+   *  region uses it to put the un-baked library copy back; the published
+   *  version is passed when one landed. */
+  readonly afterSubmit?: ((version?: string) => Promise<void>) | undefined;
   /** Called once when a submission lands: the region re-reads the library so
    *  the listing carries the version the host just wrote. */
   readonly onSubmitted?: () => void;
@@ -171,6 +181,9 @@ export function useSubmit(options: {
   /** The guard a second press meets before any state has committed. */
   const busy = useRef(false);
   const alive = useRef(true);
+  /** Whether this press already baked its theme. A sign-in retry re-enters
+   *  `attempt` and must not crop the same library theme twice. */
+  const prepared = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** The open sign-in window, and how many polls this flow has spent. */
   const signInWindow = useRef<SignInWindow | undefined>(undefined);
@@ -182,8 +195,10 @@ export function useSubmit(options: {
       alive.current = false;
       if (timer.current !== undefined) clearTimeout(timer.current);
       timer.current = undefined;
-      // An editor torn down mid-sign-in must not orphan the store's window.
+      // An editor torn down mid-sign-in must not orphan the store's window,
+      // and a publish that replaced the library copy must put it back.
       closeWindow();
+      void options.afterSubmit?.().catch(() => undefined);
     };
   }, []);
 
@@ -225,7 +240,9 @@ export function useSubmit(options: {
     clearTimer();
     closeWindow();
     busy.current = false;
+    prepared.current = false;
     polls.current = 0;
+    void options.afterSubmit?.().catch(() => undefined);
     setState("refused");
     setRefusal(message);
     setUrl(undefined);
@@ -310,6 +327,20 @@ export function useSubmit(options: {
     if (!alive.current) return;
     clearTimer();
     setState("submitting");
+    if (!prepared.current) {
+      prepared.current = true;
+      try {
+        const refusal = await options.beforeSubmit?.(id);
+        if (!alive.current) return;
+        if (refusal !== undefined) {
+          refuse(refusal);
+          return;
+        }
+      } catch {
+        refuse(uiCopy.store.submit.prepareFailed);
+        return;
+      }
+    }
     let answered: Response;
     try {
       answered = await post(SUBMIT_PATH, { id });
@@ -352,6 +383,8 @@ export function useSubmit(options: {
     }
     clearTimer();
     busy.current = false;
+    prepared.current = false;
+    void options.afterSubmit?.(published.to).catch(() => undefined);
     setState("submitted");
     setStatus(word);
     setVersion(published);
@@ -363,6 +396,7 @@ export function useSubmit(options: {
   const onSubmit = (item: StoreItem): void => {
     if (busy.current) return;
     busy.current = true;
+    prepared.current = false;
     clearTimer();
     // The whole outcome belongs to this item from the press onward.
     setItemId(item.id);

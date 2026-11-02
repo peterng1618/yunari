@@ -69,6 +69,11 @@ export {
   setObjectAssetReference,
   YUNARI_ASSET_PROPERTY,
 } from "./object-asset.js";
+export {
+  objectIsCropped,
+  setObjectCropped,
+  YUNARI_CROP_PROPERTY,
+} from "./object-crop.js";
 export { holderOf, parentGroupOf, targetsOf } from "./object-holder.js";
 export { isLocked } from "./object-lock.js";
 export {

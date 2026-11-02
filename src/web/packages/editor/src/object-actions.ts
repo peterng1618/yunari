@@ -14,6 +14,8 @@ import {
   ClipboardPaste,
   Copy,
   CopyPlus,
+  FlipHorizontal,
+  FlipVertical,
   Group,
   ImageUp,
   Lock,
@@ -55,6 +57,10 @@ export interface ObjectTarget {
    *  a `yunariAsset` reference. Absent on every other subject, so replace is
    *  offered only against a file the document can re-point. */
   readonly asset?: "image" | "svg";
+  /** What a mirror would rewrite: a picture's pixels or a path-like shape's
+   *  geometry. Absent on everything whose flip would be a no-op (a rectangle,
+   *  circle or ellipse) and on text, charts and groups. */
+  readonly flip?: "image" | "path" | "polygon";
 }
 
 export type ObjectActionId = ObjectCommandId | ConstructionActionId;
@@ -77,6 +83,8 @@ export type ObjectCommandId =
   | "ungroup"
   | "outline-text"
   | "replace-asset"
+  | "flip-horizontal"
+  | "flip-vertical"
   | `arrange:${ArrangeAction}`;
 
 /** A construction: it needs no subject, and the id names what it makes — the
@@ -336,6 +344,40 @@ export const OBJECT_ACTIONS: readonly ObjectAction[] = [
         );
       }
       session.replaceSelectedAsset();
+    },
+  },
+  {
+    id: "flip-horizontal",
+    label: uiCopy.actions.flipHorizontal,
+    icon: FlipHorizontal,
+    // The mirror rewrites the asset's pixels or the shape's path data, and both
+    // are the document's, so the session runs it rather than the shell.
+    // Per object: a multi-selection and a group have no one subject whose
+    // pixels or path data a mirror could rewrite.
+    eligible: (t) =>
+      t.kind === "object" && hasUnlockedSelection(t) && t.flip !== undefined,
+    run: (_editor, session) => {
+      if (session === undefined) {
+        throw new Error(
+          "Flip needs the editor session, which owns the image's declaration.",
+        );
+      }
+      void session.flipSelection("horizontal");
+    },
+  },
+  {
+    id: "flip-vertical",
+    label: uiCopy.actions.flipVertical,
+    icon: FlipVertical,
+    eligible: (t) =>
+      t.kind === "object" && hasUnlockedSelection(t) && t.flip !== undefined,
+    run: (_editor, session) => {
+      if (session === undefined) {
+        throw new Error(
+          "Flip needs the editor session, which owns the image's declaration.",
+        );
+      }
+      void session.flipSelection("vertical");
     },
   },
   {
