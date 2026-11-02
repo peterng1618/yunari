@@ -5247,8 +5247,8 @@ describe("A local monitor is specified rather than paired", () => {
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',
-                supportedFirmware: [],
-                updatedAt: "2026-10-28",
+                supportedFirmware: ["lianli92_0001_2026041401"],
+                updatedAt: "2026-10-31",
               },
             },
           ],
@@ -5285,8 +5285,8 @@ describe("A local monitor is specified rather than paired", () => {
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',
-                supportedFirmware: [],
-                updatedAt: "2026-10-28",
+                supportedFirmware: ["lianli92_0001_2026041401"],
+                updatedAt: "2026-10-31",
               },
             },
           ],

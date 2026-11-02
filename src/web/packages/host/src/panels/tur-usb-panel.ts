@@ -128,8 +128,11 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
     support: {
       maker: "Lian Li",
       hardwareRevision: '9.2"',
-      supportedFirmware: [],
-      updatedAt: "2026-10-28",
+      // The one firmware opcode 10 has reported on this panel; the 8.8" has
+      // answered with none yet, so its record stays empty rather than claiming
+      // a version nobody measured.
+      supportedFirmware: ["lianli92_0001_2026041401"],
+      updatedAt: "2026-10-31",
     },
     commands: [],
     attached: () => attachedPanels(),

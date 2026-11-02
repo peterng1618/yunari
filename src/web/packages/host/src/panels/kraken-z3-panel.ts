@@ -441,8 +441,10 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
     support: {
       maker: "NZXT",
       hardwareRevision: "Z53/Z63/Z73",
-      supportedFirmware: [],
-      updatedAt: "2026-10-30",
+      // The firmware the opcode-10 probe reported on the hardware this driver
+      // was measured against.
+      supportedFirmware: ["5.11.0"],
+      updatedAt: "2026-10-31",
     },
     commands: [],
     attached: () => Promise.resolve(attachedKrakens()),

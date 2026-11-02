@@ -39,6 +39,17 @@ describe("PANEL_FAMILIES", () => {
     ]);
   });
 
+  it("records the firmware each measured family was verified on", () => {
+    expect(familyFor(0x1cbe, 0xa092)?.support.supportedFirmware).toEqual([
+      "lianli92_0001_2026041401",
+    ]);
+    expect(familyFor(0x1e71, 0x3008)?.support.supportedFirmware).toEqual([
+      "5.11.0",
+    ]);
+    // No firmware has been observed on the 8.8", so it claims none.
+    expect(familyFor(0x1cbe, 0xa088)?.support.supportedFirmware).toEqual([]);
+  });
+
   it("keeps every family's ids unique", () => {
     const seen = new Set<string>();
 
