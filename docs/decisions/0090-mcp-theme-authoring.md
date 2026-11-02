@@ -135,7 +135,7 @@ installation together. `add-mcp` is the strongest MCP-config owner;
 
 ## Rung 6 — smallest probe
 
-Executed during implementation before the installer is written:
+Probes against the installed versions (`add-mcp` 2.6.1, `skills` 1.7.5):
 
 - `node` probe of `add-mcp`'s `upsertServer`/`removeServer` against a temporary
   home, verifying the Claude Code global entry and its removal, and that the

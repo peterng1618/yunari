@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveHostUrl, run } from "./main.js";
 import { type FakeHost, startFakeHost } from "./testing/fake-host.js";
@@ -112,6 +115,33 @@ describe("run", () => {
       expect(error).toHaveBeenCalledWith('Unknown command "compose".');
     } finally {
       error.mockRestore();
+    }
+  });
+
+  it("names the URL when a named host is unreachable", async () => {
+    const closed = await fakeHost(() => undefined);
+    const url = closed.url;
+    await closed.close();
+    hosts.splice(hosts.indexOf(closed), 1);
+
+    const home = await mkdtemp(join(tmpdir(), "yunari-status-"));
+    const previous = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await expect(run(["status", "--url", url])).resolves.toBe(0);
+      expect(log.mock.calls.flat().join("\n")).toContain(
+        `host: unreachable at ${url}`,
+      );
+    } finally {
+      log.mockRestore();
+      process.env.HOME = previous.HOME;
+      process.env.USERPROFILE = previous.USERPROFILE;
+      await rm(home, { recursive: true, force: true, maxRetries: 3 });
     }
   });
 

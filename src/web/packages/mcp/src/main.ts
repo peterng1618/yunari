@@ -207,10 +207,12 @@ export async function run(argv: readonly string[]): Promise<number> {
 
     if (parsed.command === "status") {
       const report = await status(ports);
+      const at =
+        report.host.url === undefined ? "" : ` at ${report.host.url}`;
       console.log(
         report.host.reachable
-          ? `host: reachable at ${report.host.url ?? "(unknown URL)"}`
-          : `host: unreachable${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
+          ? `host: reachable${at}`
+          : `host: unreachable${at}${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
       );
       console.log(`server: ${report.server.detail}`);
       console.log(

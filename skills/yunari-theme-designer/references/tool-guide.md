@@ -1,8 +1,8 @@
 # Tool guide
 
 Every tool answers through the MCP server. Host calls are loopback HTTP; drafts
-live in the server process. A stopped server loses drafts; `save_theme` is the
-only write into the theme library.
+live in the server process. A stopped server loses drafts; `save_theme` writes
+the theme library, and a panel `preview_theme` saves the draft first.
 
 ## 1. Discover
 
