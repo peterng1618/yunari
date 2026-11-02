@@ -1,4 +1,5 @@
 import type { ListingCategory } from "@yunari/renderer-core";
+import type { CardDiagram } from "@yunari/theme-kit";
 import {
   Activity,
   ArrowDown,
@@ -84,7 +85,6 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
-import type { CardDiagram } from "../card-library.js";
 import type { PathPresetId, ShapeKind } from "../new-object-defaults.js";
 import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";

@@ -2,11 +2,7 @@
 
 import { Path, StaticCanvas } from "fabric/es";
 import { describe, expect, it } from "vitest";
-import {
-  lucidePath,
-  type PathCommand,
-  starterIcons,
-} from "./new-fabric-theme-icons.js";
+import { lucidePath, type PathCommand, starterIcons } from "./icons.js";
 
 const GLYPHS = Object.keys(starterIcons) as ReadonlyArray<
   keyof typeof starterIcons

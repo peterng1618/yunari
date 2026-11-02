@@ -1,10 +1,10 @@
 import type { TypeToken } from "@yunari/renderer-core";
+import { newTypeToken } from "@yunari/theme-kit";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
 import type { CuratedFontFace } from "../font-catalog.js";
-import { newTypeToken } from "../new-fabric-theme-globals.js";
 import { TokenList } from "../panes/tokens/token-list.js";
 import type { TokenUsage } from "../panes/tokens/token-use.js";
 import { freePresetId } from "../type-preset-apply.js";

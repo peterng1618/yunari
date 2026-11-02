@@ -3,8 +3,8 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
 } from "@yunari/renderer-core";
-import { type StarterPaletteId } from "./new-fabric-theme-globals.js";
-import { starterIcons } from "./new-fabric-theme-icons.js";
+import { type StarterPaletteId } from "./globals.js";
+import { starterIcons } from "./icons.js";
 import {
   cardGroup,
   chart,
@@ -15,8 +15,7 @@ import {
   type Run,
   text,
   valueLabel,
-} from "./new-fabric-theme-objects.js";
-import { uiCopy } from "./ui-copy.js";
+} from "./objects.js";
 
 /**
  * The starter composition, one builder per card.
@@ -37,6 +36,23 @@ import { uiCopy } from "./ui-copy.js";
  * like any other reading, so a machine that cannot say one shows a gap instead
  * of a stand-in name, and a card's name always describes the figures beside it.
  */
+
+/**
+ * The words the cards call themselves.
+ *
+ * The editor's `uiCopy.cardLibrary` reads this table, so the Add pane's button
+ * and the card's provenance stamp cannot drift apart.
+ */
+export const CARD_LABELS = {
+  time: "Clock",
+  cpu: "CPU",
+  gpu: "GPU",
+  ram: "RAM",
+  vram: "VRAM",
+  trends: "Performance trends",
+  storage: "Storage",
+  network: "Network",
+} as const;
 
 /** `defaultLineSettings` ships an area fill, and the reference's trend lines do not. */
 const { area: _area, ...plainLine } = defaultLineSettings;
@@ -95,7 +111,7 @@ const valued = (
 export function clockCard(): ObjectJson {
   return cardGroup(
     "group-time-card",
-    uiCopy.cardLibrary.time,
+    CARD_LABELS.time,
     frostedCard("time-card", 40, 187, 367, 307),
     [
       // `hh:mm` with the meridiem on its own object: the reference sets it at a
@@ -138,7 +154,7 @@ export function clockCard(): ObjectJson {
 export function cpuCard(): ObjectJson {
   return cardGroup(
     "group-cpu-card",
-    uiCopy.cardLibrary.cpu,
+    CARD_LABELS.cpu,
     frostedCard("cpu-card", 421, 187, 280, 307),
     [
       path("cpu-card-icon", 456, 213, starterIcons.cpu(44), "cpu", 3.6),
@@ -195,7 +211,7 @@ export function cpuCard(): ObjectJson {
 export function gpuCard(): ObjectJson {
   return cardGroup(
     "group-gpu-card",
-    uiCopy.cardLibrary.gpu,
+    CARD_LABELS.gpu,
     frostedCard("gpu-card", 715, 187, 290, 307),
     [
       path("gpu-card-icon", 748, 213, starterIcons.gpu(48), "gpu", 3.9),
@@ -361,7 +377,7 @@ export function ramCard(): ObjectJson {
   return memoryCard({
     prefix: "ram",
     id: "ram-card",
-    unit: uiCopy.cardLibrary.ram,
+    unit: CARD_LABELS.ram,
     left: 1019,
     width: 299,
     ringCentreX: 1168,
@@ -376,7 +392,7 @@ export function vramCard(): ObjectJson {
   return memoryCard({
     prefix: "vram",
     id: "vram-card",
-    unit: uiCopy.cardLibrary.vram,
+    unit: CARD_LABELS.vram,
     left: 1332,
     width: 300,
     ringCentreX: 1482,
@@ -404,7 +420,7 @@ export function trendsCard(): ObjectJson {
   }
   return cardGroup(
     "group-trends-card",
-    uiCopy.cardLibrary.trends,
+    CARD_LABELS.trends,
     frostedCard("trends-card", 40, 507, 1084, 335),
     [
       path("trends-card-icon", 74, 530, starterIcons.trends(34), "cpu", 2.8),
@@ -444,7 +460,7 @@ export function trendsCard(): ObjectJson {
 export function storageCard(): ObjectJson {
   return cardGroup(
     "group-storage-card",
-    uiCopy.cardLibrary.storage,
+    CARD_LABELS.storage,
     frostedCard("storage-card", 1138, 507, 494, 165),
     [
       path(
@@ -511,7 +527,7 @@ export function storageCard(): ObjectJson {
 export function networkCard(): ObjectJson {
   return cardGroup(
     "group-network-card",
-    uiCopy.cardLibrary.network,
+    CARD_LABELS.network,
     frostedCard("network-card", 1138, 687, 494, 155),
     [
       path(

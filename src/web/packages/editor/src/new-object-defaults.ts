@@ -17,6 +17,7 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
+import { CARD_SURFACE_TOKENS, SURFACE_TOKENS } from "@yunari/theme-kit";
 import {
   Ellipse,
   type FabricObject,
@@ -662,41 +663,9 @@ export function createNewChartDefaults(
  * surface, then anything that is not the transparent fallback.
  */
 const CONTENT_TOKENS = ["text", "ink", "foreground", "primary", "accent"];
-/** `charttrack` is here because a palette that has it was naming that job: the
-    token exists to be a chart's track. Without it, a palette whose only surface
-    is `chartTrack` falls through to the first entry — which for the blank
-    theme's palette is `text` — and a new gauge arrives with its track painted
-    in the colour of its own data, so it draws nothing. The lookup lowercases
-    both sides, so the candidate is spelled in lower case. */
-const SURFACE_TOKENS = [
-  "background",
-  "scene",
-  "surface",
-  "track",
-  "charttrack",
-];
-
-/**
- * Whether a palette token id names a surface or content ink.
- *
- * Exported because two places now ask the same question — what token in *this*
- * document does this job — and a card mapped against a private copy of the
- * lists would be a second answer to a question with one right answer: a
- * surface substituted with an ink colour is a card nobody can read, and the
- * lists above are already the answer for a *new* object.
- *
- * `CARD_SURFACE_TOKENS` is the surface side rather than `SURFACE_TOKENS`,
- * because `panel` and `frost` are surfaces too and a card asks for them by
- * name. Matching is case-insensitive for the reason `surfacePalette` gives.
- */
-export function paletteTokenRole(id: string): "surface" | "ink" {
-  return CARD_SURFACE_TOKENS.includes(id.toLowerCase()) ? "surface" : "ink";
-}
-
-/** The surfaces a *card* takes, ahead of the scene's own: a shape filled with
-    the backdrop is that backdrop again, and nothing an author can select. */
-const CARD_SURFACE_TOKENS = ["panel", "frost", ...SURFACE_TOKENS];
-
+/** `charttrack` is here because a palette that has it was naming that job; the
+    token list and the role predicate live in `@yunari/theme-kit`, because the
+    card library asks the same question. */
 /**
  * A *frosted* card takes the frosted surface first, and the plain one after it.
  *

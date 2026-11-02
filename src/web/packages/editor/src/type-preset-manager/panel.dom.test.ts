@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
+
+import { newTypeToken, starterTypeTokens } from "@yunari/theme-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SelectionStore,
   TokenSelectionStore,
 } from "../editor-shell/shell-stores.js";
-import {
-  newTypeToken,
-  starterTypeTokens,
-} from "../new-fabric-theme-globals.js";
 import { uiCopy } from "../ui-copy.js";
 import { createTypeTokenPanel } from "./panel.js";
 

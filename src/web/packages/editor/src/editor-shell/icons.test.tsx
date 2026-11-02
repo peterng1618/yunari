@@ -88,7 +88,6 @@ import { Rail } from "./rail.js";
  */
 const EXEMPT_SOURCES: readonly string[] = [
   "editor-shell/icons.ts", // the vocabulary: one family, one weight, and the one place both are decided
-  "new-fabric-theme-icons.ts", // authored scene icons — lucide geometry turned into Fabric paths, not chrome
   "object-actions.ts", // the icon set: the registry owns which action wears which icon
   "panes/add/path-glyph.tsx", // a custom preset's own SVG data: no vocabulary glyph can depict an authored path
 ];

@@ -2,7 +2,7 @@ import {
   type FabricGlobals,
   isOfferedPaletteToken,
 } from "@yunari/renderer-core";
-import { paletteTokenRole } from "./new-object-defaults.js";
+import { paletteTokenRole } from "./palette-role.js";
 
 /**
  * What a card asks for, and what the document it is inserted into actually has.

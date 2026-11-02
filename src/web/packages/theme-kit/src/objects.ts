@@ -8,8 +8,8 @@ import {
   starterRoleForSize,
   starterTracking,
   starterTypeTokens,
-} from "./new-fabric-theme-globals.js";
-import type { PathCommand } from "./new-fabric-theme-icons.js";
+} from "./globals.js";
+import type { PathCommand } from "./icons.js";
 
 /**
  * The scene primitives the starter's cards are written in.

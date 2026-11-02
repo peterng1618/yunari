@@ -3,6 +3,7 @@ import {
   type PalettePaint,
   paletteTokenIds,
 } from "@yunari/renderer-core";
+import { newTokenPaint } from "@yunari/theme-kit";
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
 import { ADD_GLYPH, Glyph } from "../../editor-shell/icons.js";
@@ -10,7 +11,6 @@ import {
   type TokenSelectionStore,
   useTokenSelection,
 } from "../../editor-shell/shell-stores.js";
-import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import { uiCopy } from "../../ui-copy.js";
 import { type TokenUsage, usageFigure } from "./token-use.js";
 

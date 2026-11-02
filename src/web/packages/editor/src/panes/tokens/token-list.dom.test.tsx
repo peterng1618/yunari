@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { newTypeToken } from "@yunari/theme-kit";
 /**
  * The Tokens pane's type-token list.
  *
@@ -26,7 +27,6 @@ import {
   SelectionStore,
   TokenSelectionStore,
 } from "../../editor-shell/shell-stores.js";
-import { newTypeToken } from "../../new-fabric-theme-globals.js";
 import { freePresetId } from "../../type-preset-apply.js";
 import type { TypeTokens } from "../../type-preset-manager/panel.js";
 import { tokenName } from "../../type-token-manager/name.js";

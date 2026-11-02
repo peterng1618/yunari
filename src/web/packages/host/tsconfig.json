@@ -15,7 +15,8 @@
     // `node:` import is unresolved.
     "types": ["node"],
     "paths": {
-      "@yunari/renderer-core": ["../renderer-core/src/index.ts"]
+      "@yunari/renderer-core": ["../renderer-core/src/index.ts"],
+      "@yunari/theme-kit": ["../theme-kit/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]

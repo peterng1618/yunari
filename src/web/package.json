@@ -12,6 +12,7 @@
     "packages/scene-fabric",
     "packages/player",
     "packages/editor",
+    "packages/theme-kit",
     "packages/fake-source",
     "packages/host",
     "packages/store-worker"

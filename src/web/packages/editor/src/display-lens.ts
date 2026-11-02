@@ -2,7 +2,7 @@ import type { ArtboardShape } from "@yunari/renderer-core";
 import type {
   ArtboardOrientation,
   ArtboardPresetShape,
-} from "./artboard-presets.js";
+} from "@yunari/theme-kit";
 
 /**
  * The preview ratios an author can look through: a stored list of `W:H` tokens

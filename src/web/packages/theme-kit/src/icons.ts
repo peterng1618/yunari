@@ -1,22 +1,23 @@
-import { __iconData as chartColumns } from "lucide-react/dist/esm/icons/chart-no-axes-column.mjs";
-import { __iconData as chevron } from "lucide-react/dist/esm/icons/chevron-right.mjs";
-import { __iconData as board } from "lucide-react/dist/esm/icons/circuit-board.mjs";
-import { __iconData as chip } from "lucide-react/dist/esm/icons/cpu.mjs";
-import { __iconData as drive } from "lucide-react/dist/esm/icons/hard-drive.mjs";
-import { __iconData as stick } from "lucide-react/dist/esm/icons/memory-stick.mjs";
-import { __iconData as waves } from "lucide-react/dist/esm/icons/wifi.mjs";
+import {
+  lucideCircuitBoard as board,
+  lucideChartColumns as chartColumns,
+  lucideChevronRight as chevron,
+  lucideCpu as chip,
+  lucideHardDrive as drive,
+  lucideMemoryStick as stick,
+  lucideWifi as waves,
+} from "./lucide-icons.js";
 
 /**
  * The starter's icons, taken from the Lucide set the editor already depends on.
  *
  * The scene is Fabric JSON, so a React icon component cannot be authored into
  * it: only geometry can. Lucide keeps each glyph's node array in the per-icon
- * module as `__iconData` and exports it there — the package root re-exports the
- * React components, which carry the same data but reach it only through a
- * `forwardRef` object. Reading the modules is what keeps this a dependency
- * rather than a copy of somebody's paths.
+ * module as `__iconData`; `lucide-icons.ts` copies those arrays so this package
+ * stays React-free in Node. The arrays are the package's data, not paths this
+ * repository invented.
  *
- * Lucide is ISC-licensed; the licence travels with `lucide-react`.
+ * Lucide is ISC-licensed; the notice travels in `lucide-icons.ts`.
  */
 
 /** A Fabric `Path` command: an SVG letter and its numeric arguments. */
@@ -285,12 +286,12 @@ function circle(
  * icon-box measurements, not free choices.
  */
 export const starterIcons = {
-  cpu: (size: number): PathCommand[] => lucidePath(chip.node, size),
-  gpu: (size: number): PathCommand[] => lucidePath(board.node, size),
-  ram: (size: number): PathCommand[] => lucidePath(stick.node, size),
-  vram: (size: number): PathCommand[] => lucidePath(stick.node, size),
-  trends: (size: number): PathCommand[] => lucidePath(chartColumns.node, size),
-  storage: (size: number): PathCommand[] => lucidePath(drive.node, size),
-  network: (size: number): PathCommand[] => lucidePath(waves.node, size),
-  chevron: (size: number): PathCommand[] => lucidePath(chevron.node, size),
+  cpu: (size: number): PathCommand[] => lucidePath(chip, size),
+  gpu: (size: number): PathCommand[] => lucidePath(board, size),
+  ram: (size: number): PathCommand[] => lucidePath(stick, size),
+  vram: (size: number): PathCommand[] => lucidePath(stick, size),
+  trends: (size: number): PathCommand[] => lucidePath(chartColumns, size),
+  storage: (size: number): PathCommand[] => lucidePath(drive, size),
+  network: (size: number): PathCommand[] => lucidePath(waves, size),
+  chevron: (size: number): PathCommand[] => lucidePath(chevron, size),
 } as const;

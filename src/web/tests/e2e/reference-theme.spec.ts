@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import type { FontAssetReference } from "@yunari/renderer-core";
+import { solidOf } from "@yunari/theme-kit";
 import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
-import { solidOf } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import { chooseIn, optionsOf, typeIntoControl } from "./control-set.js";
 import {
   type ArtboardRect,

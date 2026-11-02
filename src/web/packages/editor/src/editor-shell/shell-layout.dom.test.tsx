@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+
+import { CARD_LIBRARY } from "@yunari/theme-kit";
 import { Canvas } from "fabric/es";
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import { CARD_LIBRARY } from "../card-library.js";
 import { createErrorManager } from "../error-manager/index.js";
 import {
   createNewObjectPanel,

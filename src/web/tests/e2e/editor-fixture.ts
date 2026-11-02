@@ -1,5 +1,5 @@
 import { formatColor, parseColor } from "@yunari/renderer-core";
-import { solidOf } from "../../packages/editor/src/new-fabric-theme-globals.js";
+import { solidOf } from "@yunari/theme-kit";
 
 /**
  * The paints the editor spec's fixture documents are authored with.

@@ -3,11 +3,11 @@ import type {
   FabricPaletteEntry,
   PalettePaint,
 } from "@yunari/renderer-core";
+import { newTokenPaint } from "@yunari/theme-kit";
 import { ColourPicker } from "../../components/ui/colour-picker.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import { GradientEditor } from "../../components/ui/gradient-editor.js";
-import { newTokenPaint } from "../../new-fabric-theme-globals.js";
 import { uiCopy } from "../../ui-copy.js";
 import { LayerUses } from "./layer-uses.js";
 import { TokenDelete } from "./token-delete.js";

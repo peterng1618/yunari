@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { artboardSize } from "@yunari/theme-kit";
 /**
  * A card the theme cannot express, through each surface that offers one.
  *
@@ -25,7 +26,6 @@
 import { Canvas } from "fabric/es";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { artboardSize } from "./artboard-presets.js";
 import { AssetManager } from "./asset-manager/index.js";
 import { createClipboardManager } from "./clipboard-manager/index.js";
 import { createDeletionManager } from "./deletion-manager/index.js";

@@ -11,7 +11,7 @@ import {
   artboardSize,
   DEFAULT_ARTBOARD_PRESET,
   nearestArtboardPreset,
-} from "./artboard-presets.js";
+} from "./artboard.js";
 
 /** The whole table, in full. The rule here is arithmetic, so the test is the
     rule — a derived entry is worth a line of its own rather than a loop. */

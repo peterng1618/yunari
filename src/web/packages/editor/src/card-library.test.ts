@@ -3,18 +3,18 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { reviveScene, serialiseScene } from "@yunari/scene-fabric";
-import { Canvas, type FabricObject, Group, util } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CARD_LIBRARY,
   type CardUnit,
-  insertCard,
+  cpuCard,
   instantiateCard,
-} from "./card-library.js";
+  type ObjectJson,
+  starterTypeTokens,
+} from "@yunari/theme-kit";
+import { Canvas, type FabricObject, Group, util } from "fabric/es";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { insertCard } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
-import { cpuCard } from "./new-fabric-theme-cards.js";
-import { starterTypeTokens } from "./new-fabric-theme-globals.js";
-import type { ObjectJson } from "./new-fabric-theme-objects.js";
 import { uiCopy } from "./ui-copy.js";
 
 // jsdom cannot drawImage an undecoded img, and a card carries a frosted panel,

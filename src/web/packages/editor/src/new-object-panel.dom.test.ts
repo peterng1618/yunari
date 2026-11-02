@@ -5,9 +5,9 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
+import { CARD_LIBRARY } from "@yunari/theme-kit";
 import { Ellipse, Path, Polygon, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { CARD_LIBRARY } from "./card-library.js";
 import { PATH_PRESET_IDS, SHAPE_KINDS } from "./new-object-defaults.js";
 import { createNewObjectPanel, insertNewText } from "./new-object-panel.js";
 import { uiCopy } from "./ui-copy.js";

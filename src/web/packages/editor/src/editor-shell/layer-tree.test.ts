@@ -7,6 +7,7 @@ import {
   defaultLineSettings,
 } from "@yunari/renderer-core";
 import { reviveThemeEnvelope, YunariChart } from "@yunari/scene-fabric";
+import { CARD_LIBRARY, instantiateCard } from "@yunari/theme-kit";
 import {
   Ellipse,
   FabricImage,
@@ -20,7 +21,6 @@ import {
   util,
 } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
-import { CARD_LIBRARY, instantiateCard } from "../card-library.js";
 import { createNewFabricTheme } from "../new-fabric-theme.js";
 import { uiCopy } from "../ui-copy.js";
 import {

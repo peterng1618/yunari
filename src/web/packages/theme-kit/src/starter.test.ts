@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  type AssetReference,
   isKnownSemanticKey,
   isObjectName,
   MAX_OBJECT_NAME_LENGTH,
@@ -15,24 +16,38 @@ import {
   serialiseThemeEnvelope,
   YunariChart,
 } from "@yunari/scene-fabric";
-import { readThemePackage } from "@yunari/theme-package";
+import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { type FabricObject, Group, StaticCanvas } from "fabric/es";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { CARD_LIBRARY } from "./card-library.js";
-import {
-  createBlankFabricTheme,
-  createNewFabricTheme,
-} from "./new-fabric-theme.js";
-import { cpuCard } from "./new-fabric-theme-cards.js";
-import { starterPalette } from "./new-fabric-theme-globals.js";
-import {
-  createNewChartDefaults,
-  createNewPanelDefaults,
-  newObjectPlacement,
-} from "./new-object-defaults.js";
-import { serializeThemePackage } from "./persist.js";
-import { STARTER_BACKDROP_PATH } from "./starter-backdrop.js";
+import { cpuCard } from "./cards.js";
+import { starterPalette } from "./globals.js";
+import { createBlankTheme, createStarterTheme } from "./starter.js";
+
+const STARTER_BACKDROP_PATH = "assets/starter-backdrop.jpg";
+const STARTER_BACKDROP: AssetReference = {
+  id: "starter-backdrop",
+  kind: "image",
+  path: STARTER_BACKDROP_PATH,
+  sha256: "6d4bbd987c0e6a6103eb310b2848e011e50a77be641e3e2cdd1b389d695bf59b",
+  sourceUrl:
+    "https://unsplash.com/photos/city-skyline-during-orange-sunset-NTTJsPPlQOk",
+  license: {
+    name: "Unsplash License",
+    url: "https://unsplash.com/license",
+    attribution:
+      "“city skyline during orange sunset” by Ashim D’Silva (@randomlies), via Unsplash",
+  },
+};
+
+const createNewFabricTheme = () =>
+  createStarterTheme({ backdrop: STARTER_BACKDROP });
+const createBlankFabricTheme = (artboard: {
+  width: number;
+  height: number;
+  shape?: "rect" | "circle";
+}) => createBlankTheme({ artboard });
 
 type ObjectJson = Readonly<Record<string, unknown>>;
 
@@ -212,7 +227,10 @@ describe("the new Fabric document", () => {
     const declared = createNewFabricTheme().assets?.[0];
     if (declared === undefined) throw new Error("no backdrop is declared");
     const bytes = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), "starter-backdrop.jpg"),
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../editor/src/starter-backdrop.jpg",
+      ),
     );
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(
       declared.sha256,
@@ -444,10 +462,14 @@ describe("the new Fabric document", () => {
     // are read back out of its `theme.json` — so this is the file, not a
     // revival of it.
     const bytes = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), "starter-backdrop.jpg"),
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../editor/src/starter-backdrop.jpg",
+      ),
     );
-    const pkg = serializeThemePackage(saved, {
-      [STARTER_BACKDROP_PATH]: new Uint8Array(bytes),
+    const pkg = writeThemePackage({
+      envelope: saved,
+      assets: { [STARTER_BACKDROP_PATH]: new Uint8Array(bytes) },
     });
     if (!pkg.ok) throw new Error(pkg.message);
     const themeJson = unzipSync(pkg.bytes)["theme.json"];
@@ -1172,38 +1194,6 @@ describe("the blank Fabric document", () => {
       expect(ref.startsWith("palette."), ref).toBe(true);
       expect(palette[ref.slice("palette.".length)], ref).toBeDefined();
     }
-  });
-
-  it("gives a new panel and a new chart tokens that exist and differ", () => {
-    const blank = createBlankFabricTheme({ width: 1920, height: 1080 });
-    const globals = blank.globals;
-    const palette = globals?.palette ?? {};
-    const token = (ref: string | undefined): string =>
-      (ref ?? "").replace(/^palette\./, "");
-
-    // A card filled with the page, or a gauge whose track and data are one
-    // colour, is an object the author cannot see — which is what the
-    // surface-token rules in `new-object-defaults.ts` exist to prevent, and
-    // they only hold if the blank palette names the surfaces they reach for.
-    // Only the card's fill is under test here, so it takes the first cascade
-    // slot: this is a palette assertion, not a placement one.
-    const card = createNewPanelDefaults(
-      globals,
-      newObjectPlacement(0, blank.artboard),
-    );
-    const chart = createNewChartDefaults(globals, "gauge");
-    const cardFill = token(card.yunariPaint?.fill);
-    const track = token((chart.track as { ref?: string } | undefined)?.ref);
-    const progress = token((chart.progress as { ref?: string }).ref);
-    const page = token(
-      (blank.background?.color as { ref?: string } | undefined)?.ref,
-    );
-
-    for (const id of [cardFill, track, progress]) {
-      expect(palette[id], id).toBeDefined();
-    }
-    expect(cardFill, "a card is not the page it sits on").not.toBe(page);
-    expect(track, "a gauge's track is not its data").not.toBe(progress);
   });
 });
 

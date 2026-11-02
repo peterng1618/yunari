@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
+import { frost as FROST } from "@yunari/theme-kit";
 import { writeThemePackage } from "@yunari/theme-package";
-import { frost as FROST } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import {
   type Box,
   boxOf,

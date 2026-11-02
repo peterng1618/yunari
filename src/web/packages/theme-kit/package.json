@@ -1,0 +1,27 @@
+{
+  "name": "@yunari/theme-kit",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Pure, Node-safe theme authoring vocabulary shared by the editor and the MCP server.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@yunari/renderer-core": "*",
+    "@yunari/scene-fabric": "*",
+    "@yunari/theme-package": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "fabric": "7.4.0",
+    "fflate": "0.8.3"
+  },
+  "//": "This package is consumed as source: Vite and Vitest resolve ./src/index.ts, so there is no build script. It imports no React, no DOM and no Fabric object constructor: the scene it builds is plain Fabric JSON."
+}

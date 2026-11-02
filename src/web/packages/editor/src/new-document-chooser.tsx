@@ -3,7 +3,6 @@ import {
   type ArtboardShape,
   MAX_ARTBOARD_DIMENSION,
 } from "@yunari/renderer-core";
-import { createElement, useId, useState } from "react";
 import {
   ARTBOARD_ORIENTATIONS,
   ARTBOARD_RATIOS,
@@ -15,7 +14,8 @@ import {
   artboardPresetFor,
   artboardSize,
   nearestArtboardPreset,
-} from "./artboard-presets.js";
+} from "@yunari/theme-kit";
+import { createElement, useId, useState } from "react";
 import { ControlPair } from "./components/ui/control-pair.js";
 import {
   type ControlOption,
