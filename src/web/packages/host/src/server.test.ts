@@ -8372,6 +8372,11 @@ describe("A theme's own device answers", () => {
     hosted = createHostServer({
       registry: new ProviderRegistry([echo]),
       bundles: { player: tmpDir, editor: tmpDir },
+      // **The themes directory is the case's own**, like every store above: the
+      // server's fallback is the real `~/.yunari/themes`, and a suite that seeds
+      // through the route would otherwise leave its fixtures in the author's
+      // library.
+      themeStore: createThemeStore(tmpDir),
       devices: createDeviceSettingsStore(tmpDir),
       displays,
       activeTheme,
