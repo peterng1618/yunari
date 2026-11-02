@@ -1942,12 +1942,13 @@ body,
   }
 }
 
-/* A window's way out is a mark in its own corner. The finder has no title bar
-   or footer to hold a word — the tabs, the search and the grid use every other
-   edge — and the video trim surface spends its header on the file name and its
-   foot on the two answers, so both take the corner. */
-.editor-shell-dialog--finder .editor-shell-dialog-close,
-.editor-shell-dialog--video-trim .editor-shell-dialog-close {
+/* A dialog's way out is a mark in its own top-right corner, never a bottom-row
+   action. The finder has no title bar or footer to hold a word; the video trim
+   surface spends its header on the file name and its foot on the two answers;
+   and the store's delete confirmation is a sheet like every other. One rule,
+   because a surface that has to name its own close placement is how the delete
+   dialog's × ended up in the action row. */
+.editor-shell-dialog-close {
   position: absolute;
   top: var(--space-8);
   right: var(--space-8);
@@ -1955,7 +1956,7 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  min-width: 28px;
   height: 28px;
   margin: 0;
   padding: 0;
