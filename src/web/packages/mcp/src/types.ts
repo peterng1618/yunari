@@ -119,10 +119,15 @@ export interface VideoTrim {
 export interface HostStatus {
   readonly url: string;
   readonly reachable: true;
-  readonly themeCount: number;
-  readonly displays: number;
-  readonly sensorCount: number;
-  readonly assetSources: readonly string[];
+  /** Null when the host answered, but this section could not be read. */
+  readonly themeCount: number | null;
+  readonly displays: number | null;
+  readonly sensorCount: number | null;
+  readonly assetSources: readonly string[] | null;
+  readonly unavailable: readonly {
+    readonly section: string;
+    readonly reason: string;
+  }[];
 }
 
 /** Every loopback route the server needs, one method per route. */

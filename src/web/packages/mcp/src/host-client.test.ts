@@ -67,7 +67,32 @@ describe("HttpHostClient", () => {
       displays: 1,
       sensorCount: 1,
       assetSources: ["lucide"],
+      unavailable: [],
     });
+  });
+
+  it("reports a reachable host with one section unavailable", async () => {
+    const host = await fakeHost((_request, url) => {
+      if (url.pathname === "/api/themes") return { body: { themes: [] } };
+      if (url.pathname === "/api/themes/active") {
+        return { status: 404, body: "This host keeps no active theme." };
+      }
+      if (url.pathname === "/api/sensors") return { body: { sensors: [] } };
+      if (url.pathname === "/api/assets/sources") {
+        return { body: { sources: [] } };
+      }
+      return undefined;
+    });
+
+    const status = await new HttpHostClient(host.url).status();
+
+    expect(status.reachable).toBe(true);
+    expect(status.themeCount).toBe(0);
+    expect(status.displays).toBeNull();
+    expect(status.unavailable.map((entry) => entry.section)).toEqual([
+      "displays",
+    ]);
+    expect(status.unavailable[0]?.reason).toContain("404");
   });
 
   it("maps the listing's facets to an artboard", async () => {

@@ -1,4 +1,5 @@
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { InMemoryDraftStore } from "./drafts.js";
 import { HttpHostClient, PROBE_PORTS } from "./host-client.js";
@@ -115,10 +116,17 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     if (argument === "--help" || argument === "-h") {
       help = true;
     } else if (argument === "--url") {
-      url = argv[index + 1];
+      const value = argv[index + 1];
+      if (value === undefined || value.startsWith("-")) {
+        throw new Error(`--url needs a value.\n\n${USAGE}`);
+      }
+      url = value;
       index += 1;
     } else if (argument.startsWith("--url=")) {
       url = argument.slice("--url=".length);
+      if (url === "") {
+        throw new Error(`--url needs a value.\n\n${USAGE}`);
+      }
     } else if (argument.startsWith("-")) {
       throw new Error(`Unknown option "${argument}".\n\n${USAGE}`);
     } else if (command === undefined) {
@@ -249,12 +257,27 @@ export async function run(argv: readonly string[]): Promise<number> {
   }
 }
 
-const invokedAs =
-  process.argv[1] === undefined ? "" : pathToFileURL(process.argv[1]).href;
+/**
+ * Is this module the process entry?
+ *
+ * npm exposes a POSIX bin as a symlink without the `.js` suffix, so compare
+ * resolved real paths, not the path as typed. A Windows drive letter is
+ * case-insensitive; the bin-name fallback covers a path Node cannot resolve.
+ */
+function isEntryPoint(): boolean {
+  const invoked = process.argv[1];
+  if (invoked === undefined) return false;
+  try {
+    const self = realpathSync(fileURLToPath(import.meta.url));
+    const entry = realpathSync(invoked);
+    return process.platform === "win32"
+      ? self.toLowerCase() === entry.toLowerCase()
+      : self === entry;
+  } catch {
+    return /[\\/]yunari-mcp\.js$/u.test(invoked);
+  }
+}
 
-if (
-  invokedAs !== "" &&
-  (invokedAs === import.meta.url || /\/yunari-mcp\.js$/u.test(invokedAs))
-) {
+if (isEntryPoint()) {
   process.exitCode = await run(process.argv.slice(2));
 }

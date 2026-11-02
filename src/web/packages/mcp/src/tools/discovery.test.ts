@@ -66,6 +66,7 @@ describe("discovery tools", () => {
       displays: 0,
       sensorCount: 1,
       assetSources: ["lucide"],
+      unavailable: [],
     });
   });
 

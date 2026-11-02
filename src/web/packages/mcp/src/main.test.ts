@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PROBE_PORTS } from "./host-client.js";
 import { resolveHostUrl, run } from "./main.js";
 import { type FakeHost, startFakeHost } from "./testing/fake-host.js";
 
@@ -24,6 +25,12 @@ afterEach(async () => {
 });
 
 describe("resolveHostUrl", () => {
+  it("probes 5227 through 5236 by default", () => {
+    expect(PROBE_PORTS).toEqual([
+      5227, 5228, 5229, 5230, 5231, 5232, 5233, 5234, 5235, 5236,
+    ]);
+  });
+
   it("takes the URL the user named", async () => {
     await expect(
       resolveHostUrl({ url: "http://127.0.0.1:9000/" }),
@@ -142,6 +149,18 @@ describe("run", () => {
       process.env.HOME = previous.HOME;
       process.env.USERPROFILE = previous.USERPROFILE;
       await rm(home, { recursive: true, force: true, maxRetries: 3 });
+    }
+  });
+
+  it("refuses --url without a value", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(run(["serve", "--url"])).resolves.toBe(1);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining("--url needs a value."),
+      );
+    } finally {
+      error.mockRestore();
     }
   });
 

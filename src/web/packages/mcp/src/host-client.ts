@@ -128,20 +128,37 @@ export class HttpHostClient implements HostClient {
   }
 
   async status(): Promise<HostStatus> {
-    const [themes, active, sensors, sources] = await Promise.all([
+    // A reachable host may keep no active theme or no asset sources; one
+    // section failing must not report the whole host as down.
+    const [themes, active, sensors, sources] = await Promise.allSettled([
       this.listThemes(),
       this.activeThemes(),
       this.sensors(false),
       this.listAssetSources(),
     ]);
+    const unavailable: { section: string; reason: string }[] = [];
+    const valueOf = <T>(
+      result: PromiseSettledResult<T>,
+      section: string,
+    ): T | undefined => {
+      if (result.status === "fulfilled") return result.value;
+      unavailable.push({ section, reason: reasonOf(result.reason) });
+      return undefined;
+    };
+    const themeList = valueOf(themes, "themes");
+    const displays = valueOf(active, "displays");
+    const sensorList = valueOf(sensors, "sensors");
+    const sourceList = valueOf(sources, "asset sources");
 
     return {
       url: this.url,
       reachable: true,
-      themeCount: themes.length,
-      displays: active.displays.length,
-      sensorCount: sensors.sensors.length,
-      assetSources: sources.map((source) => source.id),
+      themeCount: themeList === undefined ? null : themeList.length,
+      displays: displays === undefined ? null : displays.displays.length,
+      sensorCount: sensorList === undefined ? null : sensorList.sensors.length,
+      assetSources:
+        sourceList === undefined ? null : sourceList.map((source) => source.id),
+      unavailable,
     };
   }
 
