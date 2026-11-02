@@ -164,6 +164,8 @@ interface Fixture {
   readonly refuseAdd?: string;
   /** The sentence a removal fails with, or `undefined` for a landed removal. */
   readonly refuseRemove?: string;
+  /** Whether the OS holds the sign-in entry when the surface mounts. */
+  readonly autostartHeld?: boolean;
   /** What the sign-in registrar answers. */
   readonly autostart?: AutostartAnswer;
   /** The sentence a sign-in registration fails with, or `undefined`. */
@@ -212,8 +214,8 @@ interface Written {
   readonly added: { readonly label: string; readonly monitor: HostMonitor }[];
   /** The displays a removal was asked for. */
   readonly removed: string[];
-  /** How many sign-in registrations were asked for. */
-  autostarts: number;
+  /** The sign-in writes, in order: the state each asked for. */
+  readonly autostarts: boolean[];
 }
 
 function library(fixture: Fixture): ThemeLibraryClient {
@@ -275,7 +277,7 @@ function hostSettings(
     names: [],
     added: [],
     removed: [],
-    autostarts: 0,
+    autostarts: [],
   };
   const devices: DeviceSettings = fixture.devices ?? {
     available: { gpus: [], disks: [] },
@@ -387,8 +389,9 @@ function hostSettings(
           throw new Error(fixture.refuseRemove);
         }
       },
-      registerAutostart: async () => {
-        wrote.autostarts += 1;
+      readAutostart: async () => fixture.autostartHeld ?? false,
+      setAutostart: async (enabled) => {
+        wrote.autostarts.push(enabled);
         if (fixture.refuseAutostart !== undefined) {
           throw new Error(fixture.refuseAutostart);
         }
@@ -396,6 +399,7 @@ function hostSettings(
           fixture.autostart ?? {
             ok: true,
             message: "Yunari will start hidden at sign-in.",
+            enabled,
           }
         );
       },
@@ -1142,23 +1146,34 @@ it("removes a display after a confirmation that names it", async () => {
   ).toBeNull();
 });
 
-/** The sign-in route's caller, and its answer is the registrar's own sentence:
- *  the surface shows it rather than reporting a registration in its own words. */
-it("registers the host at sign-in and shows the registrar's message", async () => {
+/** The sign-in row is a toggle over a standing boolean: it reads the state the
+ *  OS holds, and its write's answer is the registrar's own sentence. */
+it("turns the host's sign-in entry on and shows the registrar's message", async () => {
   const message = "Registered. Windows starts Yunari at sign-in.";
   const { container, wrote } = await mountHost({
     ...TWO_DISPLAYS,
-    autostart: { ok: true, message },
+    autostart: { ok: true, message, enabled: true },
   });
 
-  await act(async () =>
-    must(
-      container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
-      "the sign-in action",
-    ).click(),
+  const signIn = must(
+    container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
+    "the sign-in toggle",
   );
+  expect(
+    signIn.getAttribute("aria-checked"),
+    "the toggle does not read the state the host reported",
+  ).toBe("false");
 
-  expect(wrote.autostarts).toBe(1);
+  await act(async () => signIn.click());
+
+  expect(
+    wrote.autostarts,
+    "the toggle did not write the state it shows",
+  ).toEqual([true]);
+  expect(
+    signIn.getAttribute("aria-checked"),
+    "the toggle did not turn on",
+  ).toBe("true");
   const result = must(
     container.querySelector<HTMLElement>(
       '[data-yunari-host-autostart-result="ok"]',
@@ -1168,19 +1183,18 @@ it("registers the host at sign-in and shows the registrar's message", async () =
   expect(result.textContent).toBe(message);
 });
 
-it("renders a refused sign-in registration in the host's words", async () => {
+it("renders a refused sign-in write in the host's words and keeps the toggle off", async () => {
   const refusal = "This host cannot register itself to start at sign-in.";
   const { container } = await mountHost({
     ...TWO_DISPLAYS,
     refuseAutostart: refusal,
   });
 
-  await act(async () =>
-    must(
-      container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
-      "the sign-in action",
-    ).click(),
+  const signIn = must(
+    container.querySelector<HTMLElement>("[data-yunari-host-autostart]"),
+    "the sign-in toggle",
   );
+  await act(async () => signIn.click());
 
   const result = must(
     container.querySelector<HTMLElement>(
@@ -1189,6 +1203,10 @@ it("renders a refused sign-in registration in the host's words", async () => {
     "the refused registration",
   );
   expect(result.textContent).toBe(refusal);
+  expect(
+    signIn.getAttribute("aria-checked"),
+    "a refused write left the toggle reading a state the host did not take",
+  ).toBe("false");
 });
 
 /** A probe that failed is not an empty monitor list, so the form is absent and

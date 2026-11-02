@@ -160,13 +160,18 @@ export interface HostServerOptions {
    *  the real USB enumeration; supplied so a case can hold a fixture rather
    *  than this machine's hardware. */
   readonly attachedPanels?: () => Promise<readonly PanelHint[]>;
-  /** Registers this host to start at sign-in, so every local monitor comes back
-   *  after a reboot. Omitted when this host cannot register itself: the route
-   *  then says so rather than reporting a registration that did not happen. */
-  readonly registerAutostart?: () => Promise<{
-    readonly ok: boolean;
-    readonly message: string;
-  }>;
+  /** The host's own start-at-sign-in entry: whether the OS holds one now, and
+   *  the write that turns it on or off. Omitted when this host cannot manage
+   *  it: the routes then say so rather than reporting a change that did not
+   *  happen. */
+  readonly autostart?: {
+    readonly state: () => boolean;
+    readonly set: (enabled: boolean) => Promise<{
+      readonly ok: boolean;
+      readonly message: string;
+      readonly enabled: boolean;
+    }>;
+  };
   /** Where a phone should point, whether it can reach this host at all, and how
    *  to move it there. Supplied rather than introspected: `server.address()` is
    *  null for a server that is not listening, which is every test, and the

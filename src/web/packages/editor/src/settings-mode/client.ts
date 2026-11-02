@@ -83,11 +83,13 @@ export interface LocalDisplayDraft {
   readonly monitor: HostMonitor;
 }
 
-/** What the sign-in registrar answered. `ok` is the outcome and `message` is the
- *  registrar's own words, which the surface shows rather than rewording. */
+/** What the sign-in registrar answered. `ok` is the outcome, `message` is the
+ *  registrar's own words, and `enabled` is what the OS holds afterwards — the
+ *  toggle reads the write's answer rather than assuming the flip landed. */
 export interface AutostartAnswer {
   readonly ok: boolean;
   readonly message: string;
+  readonly enabled: boolean;
 }
 
 export interface DisplayPreferences {
@@ -210,10 +212,13 @@ export interface HostSettingsClient {
   /** Removes one display record. Removing is also revoking: a paired display's
    *  credential goes with it, and so do its theme assignment and answers. */
   removeDisplay(id: string): Promise<void>;
-  /** Registers this host to start at sign-in, so every local display comes back
-   *  after a reboot. Answers the registrar's own message, which the surface
-   *  shows verbatim. */
-  registerAutostart(): Promise<AutostartAnswer>;
+  /** Whether the OS holds this host's start-at-sign-in entry now. A toggle has
+   *  to show its state before it is pressed. */
+  readAutostart(): Promise<boolean>;
+  /** Turns the entry on or off, so every local display comes back after a
+   *  reboot. Answers the registrar's own message and what the OS holds
+   *  afterwards, which the surface shows verbatim. */
+  setAutostart(enabled: boolean): Promise<AutostartAnswer>;
   /** The USB panels attached to this PC right now, as the hardware reports
    *  them. A panel is *found* rather than admitted, so this is a list to choose
    *  from and implies no record. */
@@ -922,21 +927,40 @@ export function createHostSettingsClient(options?: {
       }
     },
 
-    async registerAutostart(): Promise<AutostartAnswer> {
+    async readAutostart(): Promise<boolean> {
+      const response = await fetcher(`${baseUrl}/api/displays/autostart`);
+      if (!response.ok) {
+        throw await refusal(response, "Could not read the sign-in setting");
+      }
+      const body = (await response.json()) as { readonly enabled?: unknown };
+      if (typeof body?.enabled !== "boolean") {
+        throw new Error("The host did not report its sign-in setting.");
+      }
+      return body.enabled;
+    },
+
+    async setAutostart(enabled): Promise<AutostartAnswer> {
       const response = await fetcher(`${baseUrl}/api/displays/autostart`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled }),
       });
       if (!response.ok) {
-        throw await refusal(response, "Could not register at sign-in");
+        throw await refusal(response, "Could not change the sign-in setting");
       }
       const body = (await response.json()) as {
         readonly ok?: unknown;
         readonly message?: unknown;
+        readonly enabled?: unknown;
       };
-      if (typeof body?.ok !== "boolean" || typeof body.message !== "string") {
-        throw new Error("The host did not report the sign-in registration.");
+      if (
+        typeof body?.ok !== "boolean" ||
+        typeof body.message !== "string" ||
+        typeof body.enabled !== "boolean"
+      ) {
+        throw new Error("The host did not report the sign-in setting.");
       }
-      return { ok: body.ok, message: body.message };
+      return { ok: body.ok, message: body.message, enabled: body.enabled };
     },
 
     async listPanels() {

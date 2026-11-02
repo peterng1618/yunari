@@ -580,7 +580,6 @@ export const uiCopy = {
       autostart: "Start at sign-in",
       autostartHint:
         "Yunari starts hidden at sign-in, so every local display comes back after a reboot.",
-      autostartBusy: "Registering…",
     },
     panels: {
       heading: "USB panels",
