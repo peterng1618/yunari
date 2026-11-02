@@ -417,6 +417,48 @@ test("the layer row's leading slot is one glyph, flush at the root", async ({
 });
 
 /**
+ * The footer belongs to a selection and to the pane's bottom edge.
+ *
+ * With nothing selected the toolbar is absent, not a grey row. Once a layer is
+ * picked, it draws and sits at the bottom of the layer pane, with the scrolling
+ * body taking everything above it.
+ */
+test("the layer footer appears with a selection and sits at the pane's bottom", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  const pane = page.locator('[data-yunari-panel="layers"]');
+  expect(
+    await pane.locator("[data-yunari-layer-actions]").count(),
+    "a footer drawn before anything is selected",
+  ).toBe(0);
+
+  await page.locator(".yunari-layer-row").first().click();
+  const footer = pane.locator("[data-yunari-layer-actions]");
+  await expect(footer).toBeVisible();
+
+  const measured = await pane.evaluate((section) => {
+    const actions = section.querySelector("[data-yunari-layer-actions]");
+    if (actions === null) return null;
+    const paneBox = section.getBoundingClientRect();
+    const footerBox = actions.getBoundingClientRect();
+    return {
+      footerBottom: footerBox.bottom,
+      paneBottom: paneBox.bottom,
+    };
+  });
+  expect(measured, "the selected pane drew no footer").not.toBeNull();
+  expect(
+    Math.round((measured?.paneBottom ?? 0) - (measured?.footerBottom ?? 0)),
+    "the footer is not anchored to the pane's bottom",
+  ).toBe(0);
+});
+
+/**
+ * `vg-265`: the row's state slot is absolutely positioned over the row's right
  * edge and always carries its own surface, so the slot covers the last glyphs
  * of the role on a row that draws no key — the role is *covered*, not clipped,
  * which is why the case above (the role's box against the row's right edge)

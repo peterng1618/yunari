@@ -2559,6 +2559,9 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   flex: none;
 }
 .editor-shell-pane-body {
+  /* The body takes the pane's leftover height, so a footer is anchored to the
+     pane's bottom edge rather than following a short tree. */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;

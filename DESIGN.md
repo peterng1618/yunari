@@ -299,14 +299,16 @@ Width 246px by default. Structure, top to bottom:
    actions. Icon buttons at 26px, from the same registries the dock uses.
 
 **A pane footer is bounded by its pane.** The scene tree's footer holds the
-object actions; it is not a place for global commands, and the status bar is not
+object actions and is drawn only while a layer is selected; with no subject it
+is absent rather than a row of greyed commands. The footer sits at the pane's
+bottom edge and is not a place for global commands, and the status bar is not
 a place for tools.
 
 **A row yields its name and its key before it yields a control, and it yields
 the role last.** A Composition row that carries every control it can — the
 twisty, the entry control on a group, the eye and the lock — and a bound key is
 wider than the pane's body, so the row clips rather than dropping a control or
-taking the mark slot below 28px. The name and key give way first; the role gives
+taking the leading slot below 20px. The name and key give way first; the role gives
 way only once they have nothing left, and it is *clipped* rather than *covered*,
 because it is often the only statement of what a row is. A role the slot paints
 over says nothing; a role that ellipsises still says what it can. This is the
