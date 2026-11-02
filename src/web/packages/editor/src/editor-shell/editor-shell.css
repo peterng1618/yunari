@@ -2578,9 +2578,10 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  /* The gutter holds the track outside the content box, so a thin scrollbar
-     never sits on the card edge. */
-  scrollbar-gutter: stable;
+  /* The column keeps its full width while the list fits; the bar takes its
+     track only once there is something to scroll. The body's own 6px inset
+     keeps that bar off the card edge when it appears. */
+  scrollbar-gutter: auto;
   padding-inline-end: var(--space-6);
 }
 .editor-shell-pane-title {
