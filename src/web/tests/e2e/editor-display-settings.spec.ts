@@ -56,8 +56,8 @@ test.describe("the stage looks through a display", () => {
     await addRatio(page, "21:9");
     await resetRatios(page);
     expect(await ratioRows(page)).toEqual([
-      "16:9",
       "19.5:9",
+      "16:9",
       "4:3",
       "1:1",
       "Circle",
@@ -80,15 +80,16 @@ test.describe("the stage looks through a display", () => {
     expect(reset).not.toContain("21:9");
   });
 
-  test("an empty catalogue leaves Fit as the only menu entry", async ({
-    page,
-  }) => {
+  test("an empty catalogue leaves no lens to choose", async ({ page }) => {
     await openSettings(page, uiCopy.settings.previews);
     await resetRatios(page);
     for (const row of await ratioRows(page)) await removeRatio(page, row);
     await closeSettings(page);
 
-    expect(await displayMenuItems(page)).toEqual([uiCopy.display.fit]);
+    expect(
+      await displayMenuItems(page),
+      "the camera commands are not lenses, so they are not in the radio group",
+    ).toEqual([]);
     await expect(
       page.locator(SCREEN),
       "there is no screen to draw around a display nobody offers",

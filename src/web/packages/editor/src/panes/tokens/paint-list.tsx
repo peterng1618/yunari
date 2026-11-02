@@ -3,8 +3,9 @@ import {
   type PalettePaint,
   paletteTokenIds,
 } from "@yunari/renderer-core";
-import { plainButtonClasses } from "../../components/ui/control-well.js";
+import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
+import { Glyph, PLUS_GLYPH } from "../../editor-shell/icons.js";
 import {
   type TokenSelectionStore,
   useTokenSelection,
@@ -66,6 +67,18 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
   const selected =
     selectedToken?.kind === "paint" ? selectedToken.id : undefined;
 
+  /** A double press is the row's shortcut into its fields: select first, then
+   *  open the picker the inspector draws for that selection. The frame lets
+   *  the inspector mount before the click lands on it. */
+  const openFields = (id: string): void => {
+    tokenSelection?.set({ kind: "paint", id });
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>("[data-yunari-palette-picker]")
+        ?.click();
+    });
+  };
+
   const add = (): void => {
     const id = nextId(palette);
     onChange({
@@ -94,6 +107,7 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
                 data-yunari-palette-token-row={id}
                 aria-pressed={id === selected}
                 onClick={() => tokenSelection?.set({ kind: "paint", id })}
+                onDoubleClick={() => openFields(id)}
                 className="flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel-2 px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent"
               >
                 <span
@@ -113,14 +127,15 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
           );
         })}
       </ul>
-      <button
-        type="button"
-        data-yunari-palette-add=""
-        onClick={add}
-        className={plainButtonClasses}
-      >
-        {uiCopy.panels.addColour}
-      </button>
+      <div className="flex justify-end">
+        <ControlIconButton
+          label={uiCopy.panels.addColour}
+          data={{ "data-yunari-palette-add": "" }}
+          onClick={add}
+        >
+          <Glyph icon={PLUS_GLYPH} size={14} />
+        </ControlIconButton>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,6 @@ import {
   type ArtboardRatioId,
   type ArtboardResolutionId,
   type ArtboardSize,
-  artboardOrientation,
   artboardPresetFor,
   artboardSize,
   nearestArtboardPreset,
@@ -175,7 +174,7 @@ export function NewDocumentChooser({
           label={uiCopy.newDocument.display}
           data={{ "data-yunari-new-document-display": "" }}
           value={display ?? CUSTOM}
-          options={displayOptions(opening)}
+          options={displayOptions()}
           onChange={pickDisplay}
         />
         {/* The technical question, always on screen: a hidden block is out of
@@ -297,19 +296,20 @@ export function NewDocumentChooser({
   );
 }
 
-/** Fit first, then the active catalogue grouped by the display menu's own
- *  grouping — Landscape first for the artboard's own orientation, through the
- *  one predicate. No Custom entry: the technical controls are their own answer
- *  and are always on screen, so one entry cannot stand for both Fit and "not a
+/** Zoom to fit first, then the active catalogue in the display menu's own
+ *  grouping. No Custom entry: the technical controls are their own answer
+ *  and are always on screen, so one entry cannot stand for both fit and "not a
  *  preset". A lens is named by its id, the same word the menu prints. */
-function displayOptions(opening: ArtboardSize): readonly ControlOption[] {
-  const options: ControlOption[] = [{ id: CUSTOM, name: uiCopy.display.fit }];
-  for (const group of displayLensGroups(artboardOrientation(opening))) {
+function displayOptions(): readonly ControlOption[] {
+  const options: ControlOption[] = [
+    { id: CUSTOM, name: uiCopy.display.zoomToFit },
+  ];
+  for (const group of displayLensGroups()) {
     for (const lens of group.lenses) {
       options.push({
         id: lens.id,
         name: lens.id,
-        group: uiCopy.artboardOrientations[group.orientation],
+        group: uiCopy.artboardOrientations[group.kind],
       });
     }
   }

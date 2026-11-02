@@ -19,6 +19,7 @@ import {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useState } from "react";
+import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
@@ -30,7 +31,12 @@ import {
   useControlIds,
   useDraftCommit,
 } from "../components/ui/control-well.js";
-import { Glyph, PLUS_GLYPH, TWISTY_GLYPHS } from "../editor-shell/icons.js";
+import {
+  DELETE_ITEM_GLYPH,
+  Glyph,
+  PLUS_GLYPH,
+  TWISTY_GLYPHS,
+} from "../editor-shell/icons.js";
 import {
   FONT_FINDER_ID,
   fontActionOptions,
@@ -712,14 +718,16 @@ function RunRow(props: {
       ) : null}
 
       {view.removable ? (
-        <button
-          type="button"
-          data-yunari-run-remove={String(index)}
-          className="self-start text-xs text-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
-          onClick={() => onRemove(index)}
-        >
-          {uiCopy.inspectorFields.removeRun(index + 1)}
-        </button>
+        <div className="flex justify-end">
+          <ControlIconButton
+            label={uiCopy.inspectorFields.removeRun(index + 1)}
+            destructive
+            data={{ "data-yunari-run-remove": String(index) }}
+            onClick={() => onRemove(index)}
+          >
+            <Glyph icon={DELETE_ITEM_GLYPH} size={14} />
+          </ControlIconButton>
+        </div>
       ) : null}
     </div>
   );

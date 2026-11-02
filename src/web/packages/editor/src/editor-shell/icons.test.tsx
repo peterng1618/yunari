@@ -250,10 +250,7 @@ function Fleet(): React.JSX.Element {
         onChoose={() => {}}
         onOpenSettings={() => {}}
       />
-      <DisplaySwitch
-        viewport={camera()}
-        artboard={() => ({ width: 1920, height: 1080 })}
-      />
+      <DisplaySwitch viewport={camera()} />
       <Pane id="fleet" title="Fleet" icon={STACK_GLYPH}>
         <div />
       </Pane>

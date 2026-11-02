@@ -2214,7 +2214,7 @@ test.describe("the reference composition, at the sizes it is read at", () => {
     // **Reference size.** 100% is the artboard's own scale, and this fixture's
     // artboard is 640 wide, so it fits the stage whole.
     await zoom.click();
-    await page.getByRole("menuitem", { name: "100 %" }).click();
+    await page.getByRole("menuitem", { name: "Zoom to 100 %" }).click();
     await expect(zoom).toHaveText("100%");
     const atReference = await sceneFacts(page);
     // Scene geometry does not move with the camera: the same boxes, rendered

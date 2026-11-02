@@ -153,6 +153,16 @@ async function click(target: Element): Promise<void> {
   });
 }
 
+/** A double press, then the frame its inspector shortcut arms. */
+async function doubleClick(target: Element): Promise<void> {
+  await act(async () => {
+    target.dispatchEvent(
+      new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
+    );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+}
+
 /** A row's usage figure, by the token id the row carries. */
 function figure(host: HTMLElement, id: string): HTMLElement {
   const value = host.querySelector<HTMLElement>(
@@ -221,6 +231,21 @@ it("lists the roles first in heading/body/mono order, then by name", async () =>
   });
 
   expect(rows(host)).toEqual(["heading", "body", "mono", "alpha"]);
+});
+
+it("opens the family dropdown on a double press, in the inspector it selects", async () => {
+  const { host } = await mount(withWeight, {});
+  const family = document.createElement("button");
+  family.setAttribute("data-yunari-token-family", "");
+  const open = vi.fn();
+  family.addEventListener("click", open);
+  document.body.append(family);
+
+  await doubleClick(
+    host.querySelector('[data-yunari-type-preset-row="caption"]') as Element,
+  );
+
+  expect(open).toHaveBeenCalledTimes(1);
 });
 
 it("selects a token when a row is pressed, and clears the canvas selection", async () => {

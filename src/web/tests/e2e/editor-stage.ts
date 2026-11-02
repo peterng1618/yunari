@@ -304,8 +304,10 @@ export async function resetRatios(page: Page): Promise<void> {
 /** Every radio item in the display menu, by its accessible name, in order. */
 export async function displayMenuItems(page: Page): Promise<readonly string[]> {
   await page.locator("[data-yunari-zoom]").click();
+  // The camera commands are plain menu items; only lenses are radios, and an
+  // empty catalogue leaves none of them.
+  await expect(page.getByRole("menu")).toBeVisible();
   const items = page.getByRole("menuitemradio");
-  await expect(items.first()).toBeVisible();
   const labels = await items.evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("aria-label") ?? ""),
   );

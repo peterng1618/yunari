@@ -270,8 +270,10 @@ test.describe("the stage looks through a display", () => {
     await expectOnBoard("after a 40/−20 pan");
 
     await page.locator("[data-yunari-zoom]").click();
-    await page.getByRole("menuitemradio", { name: uiCopy.display.fit }).click();
-    await expect(guide, "Fit frames no display, so no guide").toBeHidden();
+    await page
+      .getByRole("menuitem", { name: uiCopy.display.actualSize })
+      .click();
+    await expect(guide, "100 % clears the lens, so no guide").toBeHidden();
     await chooseDisplay(page, "16:9");
     await expect(
       guide,

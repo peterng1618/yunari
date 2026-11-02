@@ -386,7 +386,17 @@ export function createShellLayout(
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, assetCount } = useSelection(store);
+    const {
+      releaseVersion,
+      objectCount,
+      assetCount,
+      selectedCount,
+      activeKind,
+    } = useSelection(store);
+    /** The inspector is a reading of the selection, so with nothing selected it
+     *  is not a column holding an empty sentence — it leaves the stage the
+     *  width it was taking. */
+    const inspectorShown = selectedCount > 0 || activeKind !== "none";
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -554,6 +564,7 @@ export function createShellLayout(
         <div
           className="editor-shell-body"
           data-collapsed={collapsed}
+          data-inspector={inspectorShown ? undefined : "hidden"}
           hidden={mode !== "editor"}
           // The document stays mounted here while another mode shows. The
           // marker is the shortcut manager's signal that the body a product
@@ -688,10 +699,7 @@ export function createShellLayout(
               {/* The store, not a local: a late-set bridge must reach the
                   readout the same way it reaches the inspector and menus. */}
               {store.bridge === undefined ? null : (
-                <DisplaySwitch
-                  viewport={store.bridge.editor.viewport}
-                  artboard={store.bridge.editor.artboard}
-                />
+                <DisplaySwitch viewport={store.bridge.editor.viewport} />
               )}
             </div>
             {/* The dock owns its own element and derives its own visibility;
@@ -737,17 +745,19 @@ export function createShellLayout(
               }}
             />
           </main>
-          <aside className="editor-shell-inspector editor-glass">
-            {/* One panel, so no tab strip: a strip with one tab is a control
-                that cannot choose. The theme's own settings used to sit under
-                this panel behind a `keepMounted` Design tab, which existed so
-                a selection could not hide them; they are in the left column's
-                Document pane now, which no selection can hide either, so the
-                property is discharged by the move rather than by an attribute.
-                A chart's own fields are still in this column — its owner is
-                asked for them — so a chart keeps every question it has. */}
-            <Host node={hosts.selection} />
-          </aside>
+          {inspectorShown ? (
+            <aside className="editor-shell-inspector editor-glass">
+              {/* One panel, so no tab strip: a strip with one tab is a control
+                  that cannot choose. The theme's own settings used to sit under
+                  this panel behind a `keepMounted` Design tab, which existed so
+                  a selection could not hide them; they are in the left column's
+                  Document pane now, which no selection can hide either, so the
+                  property is discharged by the move rather than by an attribute.
+                  A chart's own fields are still in this column — its owner is
+                  asked for them — so a chart keeps every question it has. */}
+              <Host node={hosts.selection} />
+            </aside>
+          ) : null}
         </div>
         {/* The mode's own region — the seam a non-editor surface fills. A task
             that lands one replaces this element's body and nothing around it:

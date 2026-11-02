@@ -5,11 +5,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import {
-  type ArtboardOrientation,
-  type ArtboardSize,
-  artboardOrientation,
-} from "../artboard-presets.js";
 import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import {
   type DisplayLens,
@@ -20,7 +15,13 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { ZOOM_STEP } from "../viewport-manager/navigation.js";
-import { FIT_GLYPH, Glyph, MINUS_GLYPH, PLUS_GLYPH } from "./icons.js";
+import {
+  FIT_GLYPH,
+  Glyph,
+  MINUS_GLYPH,
+  PLUS_GLYPH,
+  PREVIEW_GLYPH,
+} from "./icons.js";
 
 /**
  * One subscription for both camera facts, read as **primitives** so an
@@ -52,25 +53,6 @@ function useIsFitted(viewport: ViewportManager): boolean {
   return useSyncExternalStore(subscribe, () => viewport.isFitted());
 }
 
-/** Which group of previews leads — the artboard's own orientation, read
- *  through the one predicate, as a primitive for the reason the three above
- *  are: an object here would re-render the control on every camera change.
- *
- *  The camera's change event is also how a new **artboard** announces itself:
- *  `setArtboard` refits, and a refit notifies. So this is a document fact
- *  arriving on the camera's channel, which is worth knowing before someone
- *  looks for a second subscription to add. */
-function useArtboardOrientation(
-  viewport: ViewportManager,
-  artboard: () => ArtboardSize,
-): ArtboardOrientation {
-  const subscribe = useCallback(
-    (listener: () => void) => viewport.onChange(listener),
-    [viewport],
-  );
-  return useSyncExternalStore(subscribe, () => artboardOrientation(artboard()));
-}
-
 /** The catalogue is module state the settings tab writes; reading its revision
  *  subscribes this control, and the groups are then read from the same live
  *  list. A snapshot of the revision rather than the lenses keeps the identity
@@ -79,29 +61,32 @@ function usePreviewCatalogue(): void {
   useSyncExternalStore(subscribeLenses, previewCatalogueKey);
 }
 
-/** The radio value standing for Fit — the whole stage, with no display in it. */
-const NO_DISPLAY = "";
-
-/** The radio value for a camera that is neither looking through a display nor
- *  fitted. No item carries it, so the menu ticks nothing rather than ticking
- *  the nearest thing: 100 % clears the display and is not a fit, and reporting
- *  it as Fit is the control asserting a framing the camera is not in. */
+/** The radio value for a camera that is not looking through a display. No item
+ *  carries it, so the menu ticks nothing rather than ticking the nearest thing:
+ *  a fit or 100 % clears the display and is not a lens, and reporting it as one
+ *  is the control asserting a framing the camera is not in. */
 const NEITHER = "neither";
+
+/** The browser owns what is fullscreen; React keeps no copy of it. Esc exits,
+ *  which is why the control is one-way rather than a toggle whose name would
+ *  have to change under it. */
+function viewFullscreen(): void {
+  document.documentElement.requestFullscreen?.().catch(() => {
+    // A browser policy or a refusal leaves the stage where it was; the control
+    // is a request, not a state this app can assert.
+  });
+}
 
 export function DisplaySwitch({
   viewport,
-  artboard,
 }: {
   readonly viewport: ViewportManager;
-  /** The document's own size, so the group of previews that suits it leads. */
-  readonly artboard: () => ArtboardSize;
 }): React.JSX.Element {
   const zoom = useZoom(viewport);
   const display = useDisplay(viewport);
   const isFitted = useIsFitted(viewport);
-  const orientation = useArtboardOrientation(viewport, artboard);
   usePreviewCatalogue();
-  const groups = displayLensGroups(orientation);
+  const groups = displayLensGroups();
   const percent = `${Math.round(zoom * 100)}%`;
 
   return (
@@ -147,51 +132,38 @@ export function DisplaySwitch({
         <Menu.Portal keepMounted>
           <Menu.Positioner className="editor-shell-positioner">
             <Menu.Popup className="editor-shell-menu-popup">
-              {/* Fit and the catalogue's lenses are one radio group because
-                they are one fact: what the stage looks through. Split into
-                checkable and plain items, `Fit` could sit unselected while a
-                lens stayed ticked — a menu holding two answers to one question.
-
-                The tick is read off the camera, not off the display alone:
-                `display()` answers "which window", and Fit is a camera
-                position rather than a window, so a cleared lens with a manual
-                zoom is neither and says nothing. */}
+              {/* The catalogue's lenses are one radio group because they are
+                one fact: which window the stage looks through. The camera
+                commands below are not choices from it — a fit or 100 % clears
+                the lens, so they cannot sit unselected while a lens stays
+                ticked. The tick is read off the camera, not off the display
+                alone: a cleared lens with a manual zoom ticks nothing. */}
               <Menu.RadioGroup
-                value={display ?? (isFitted ? NO_DISPLAY : NEITHER)}
+                value={display ?? NEITHER}
                 onValueChange={(value: string) =>
-                  viewport.showDisplay(value === NO_DISPLAY ? undefined : value)
+                  viewport.showDisplay(value === NEITHER ? undefined : value)
                 }
               >
-                <Menu.RadioItem
-                  value={NO_DISPLAY}
-                  closeOnClick
-                  aria-label={uiCopy.display.fit}
-                >
-                  {/* `keepMounted` is what makes the gutter exist at all: the
-                    indicator defaults to unmounted when its item is not the
-                    checked one, so without it every label but the ticked one's
-                    sits a gutter-width to the left. */}
-                  <Menu.RadioItemIndicator
-                    className="editor-shell-menu-tick"
-                    keepMounted
-                  >
-                    {"•"}
-                  </Menu.RadioItemIndicator>
-                  {uiCopy.display.fit}
-                </Menu.RadioItem>
-                {/* Two labelled groups rather than six bare ratios: the author
-                  has to see which of them is the way up their theme is before
-                  they can tell any of them apart, and a portrait theme is
-                  usually not looking for a landscape preview. */}
+                {/* Three labelled groups rather than six bare ratios: the
+                  author has to see whether a preview is the way up their theme
+                  is, and a portrait theme is usually not looking for a
+                  landscape preview. Landscape leads, however the artboard is
+                  shaped, so the list does not move under a document change. */}
                 {groups.map((group) => (
-                  <Menu.Group key={group.orientation}>
+                  <Menu.Group key={group.kind}>
                     <Menu.GroupLabel className="editor-shell-menu-label">
-                      {uiCopy.artboardOrientations[group.orientation]}
+                      {uiCopy.artboardOrientations[group.kind]}
                     </Menu.GroupLabel>
                     {group.lenses.map(lensItem)}
                   </Menu.Group>
                 ))}
               </Menu.RadioGroup>
+              <Menu.Item
+                aria-label={uiCopy.display.zoomToFit}
+                onClick={() => viewport.zoomToFit()}
+              >
+                {uiCopy.display.zoomToFit}
+              </Menu.Item>
               <Menu.Item
                 aria-label={uiCopy.display.toSelection}
                 onClick={() => viewport.zoomToSelection()}
@@ -203,6 +175,12 @@ export function DisplaySwitch({
                 onClick={() => viewport.reset()}
               >
                 {uiCopy.display.actualSize}
+              </Menu.Item>
+              <Menu.Item
+                aria-label={uiCopy.display.fullscreen}
+                onClick={viewFullscreen}
+              >
+                {uiCopy.display.fullscreen}
               </Menu.Item>
             </Menu.Popup>
           </Menu.Positioner>
@@ -227,6 +205,9 @@ export function DisplaySwitch({
         onClick={() => viewport.zoomToFit()}
       >
         <Glyph icon={FIT_GLYPH} size={15} />
+      </ViewButton>
+      <ViewButton label={uiCopy.display.fullscreen} onClick={viewFullscreen}>
+        <Glyph icon={PREVIEW_GLYPH} size={15} />
       </ViewButton>
     </div>
   );

@@ -78,8 +78,19 @@ export function registerSessionShortcuts(deps: {
   });
   // Context-only, so it is registered here rather than in `PRODUCT_SHORTCUTS`:
   // no menu or tooltip displays "Escape".
+  //
+  // **Escape unselects, one layer at a time.** A group the author had entered
+  // is left first (the previous behaviour); otherwise the canvas selection and
+  // any token the inspector was editing are cleared. A text field owns its own
+  // Escape before the dispatcher sees it, so a draft is still dropped rather
+  // than turning into a document-wide unselect.
   shortcuts.register("view.exit-group", () => {
-    editor.groupingManager.exitGroup();
+    if (editor.groupingManager.exitGroup() !== undefined) return;
+    if (canvas.getActiveObjects().length > 0) {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+    options.tokenSelection?.clear();
   });
   // The `?` reference. The manager dispatches; the sheet is chrome and lives
   // in the shell, so the gesture leaves through the session's own callback.

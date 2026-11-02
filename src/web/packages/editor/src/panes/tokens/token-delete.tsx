@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
-import { plainButtonClasses } from "../../components/ui/control-well.js";
-import { destructiveMarker } from "../../object-actions.js";
+import { DELETE_ITEM_GLYPH, Glyph } from "../../editor-shell/icons.js";
 import { uiCopy } from "../../ui-copy.js";
 
 /** One token a deletion may move references to. The name is what the list
@@ -46,7 +46,7 @@ export function TokenDelete(props: {
       ? picked
       : undefined;
   return (
-    <>
+    <div className="flex flex-col gap-[var(--space-6)]">
       {revealed ? (
         <ControlSelect
           label={uiCopy.panels.reassign}
@@ -57,22 +57,23 @@ export function TokenDelete(props: {
           onChange={setPicked}
         />
       ) : null}
-      <button
-        type="button"
-        {...buttonData}
-        disabled={revealed && chosen === undefined}
-        onClick={() => {
-          if (!revealed) {
-            setRevealed(true);
-            return;
-          }
-          if (chosen !== undefined) onDelete(chosen);
-        }}
-        className={plainButtonClasses}
-        {...destructiveMarker({ destructive: true })}
-      >
-        {label}
-      </button>
-    </>
+      <div className="flex justify-end">
+        <ControlIconButton
+          label={label}
+          destructive
+          ariaDisabled={revealed && chosen === undefined}
+          data={buttonData}
+          onClick={() => {
+            if (!revealed) {
+              setRevealed(true);
+              return;
+            }
+            if (chosen !== undefined) onDelete(chosen);
+          }}
+        >
+          <Glyph icon={DELETE_ITEM_GLYPH} size={14} />
+        </ControlIconButton>
+      </div>
+    </div>
   );
 }

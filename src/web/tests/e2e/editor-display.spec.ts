@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { chooseIn } from "./control-set.js";
 import { openDisplayStage } from "./editor-display-entry.js";
 import {
@@ -248,17 +249,21 @@ test.describe("the stage looks through a display", () => {
 
     expect(await read(), "the starter is 16:9 to begin with").toEqual(STARTER);
 
-    for (const name of ["9:19.5", "16:9", "Fit"]) {
-      // Every entry is a radio: Fit is "no display" and the three lenses are
-      // displays, so they are one fact with four values, not two controls.
+    for (const name of ["9:19.5", "16:9"]) {
+      // The lenses are one radio group: each frames the same board differently.
       await page.locator("[data-yunari-zoom]").click();
       await page.getByRole("menuitemradio", { name }).click();
       // The lens frames what the author wrote; it never rewrites it (§57).
       expect(await read(), `after choosing ${name}`).toEqual(STARTER);
     }
+    await page.locator("[data-yunari-zoom]").click();
+    await page
+      .getByRole("menuitem", { name: uiCopy.display.actualSize })
+      .click();
+    expect(await read(), "after Zoom to 100 %").toEqual(STARTER);
   });
 
-  test("each display frames the board to its own shape, and Fit restores the window", async ({
+  test("each display frames the board to its own shape, and 100 % restores the window", async ({
     page,
   }) => {
     const seen: { readonly name: string; readonly aspect: number }[] = [];
@@ -285,9 +290,12 @@ test.describe("the stage looks through a display", () => {
     // Six genuinely different framings, not one zoom relabelled six times.
     expect(new Set(seen.map((row) => row.aspect.toFixed(2))).size).toBe(6);
 
+    await page.keyboard.press("Escape");
     await page.locator("[data-yunari-zoom]").click();
-    await page.getByRole("menuitemradio", { name: "Fit" }).click();
-    // Fit is one click away and is the whole window again — no screen drawn
+    await page
+      .getByRole("menuitem", { name: uiCopy.display.actualSize })
+      .click();
+    // 100 % is one click away and is the whole window again — no screen drawn
     // around a display the author did not choose.
     expect(
       await page.evaluate(() =>
@@ -295,7 +303,7 @@ test.describe("the stage looks through a display", () => {
           window as unknown as { yunariEditorBridge: Bridge }
         ).yunariEditorBridge.editor.viewport.displayScreenRect(),
       ),
-      "Fit has no screen to draw",
+      "100 % has no screen to draw",
     ).toBeUndefined();
     // The trigger reads the zoom whatever is chosen. That readout predates this
     // task and two browser specs pin it, so a display must not take it over —
@@ -306,13 +314,12 @@ test.describe("the stage looks through a display", () => {
     ).toMatch(/^\d+%$/);
   });
 
-  test("the previews are two labelled groups, and a portrait theme leads with portrait", async ({
+  test("the previews are three labelled groups in a fixed order", async ({
     page,
   }) => {
-    // The starter is landscape, so the landscape group leads — through the same
-    // predicate that decides what a new document opens at. A switch to a
-    // portrait document moves the leading group, which is the half of this
-    // that cannot be satisfied by a fixed order in the source.
+    // The order is the catalogue's, not the document's: landscape widest
+    // first, then 1:1 and Circle, then portrait near square first. A new
+    // document must not reorder a menu the author is learning.
     const headings = async () =>
       page.evaluate(() =>
         [...document.querySelectorAll(".editor-shell-menu-label")]
@@ -321,10 +328,11 @@ test.describe("the stage looks through a display", () => {
       );
 
     await openMenu(page);
-    expect(
-      await headings(),
-      "the landscape starter leads with Landscape",
-    ).toEqual(["Landscape", "Portrait"]);
+    expect(await headings(), "the three groups, in order").toEqual([
+      "Landscape",
+      "1:1",
+      "Portrait",
+    ]);
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+n");
@@ -348,8 +356,8 @@ test.describe("the stage looks through a display", () => {
     await openMenu(page);
     expect(
       await headings(),
-      "a portrait document leads with Portrait, from the one predicate",
-    ).toEqual(["Portrait", "Landscape"]);
+      "a portrait document keeps the same order",
+    ).toEqual(["Landscape", "1:1", "Portrait"]);
   });
 
   test("the menu labels do not move when the tick moves between them", async ({
@@ -364,9 +372,9 @@ test.describe("the stage looks through a display", () => {
     // travelling toward — which is the reason the gutter has to exist.
     await openMenu(page);
     const ticked = await labelOffsets(page);
-    // Fit plus the eight previews the default catalogue derives; the two group
+    // The eight previews the default catalogue derives; the two group
     // headings are not menu items and carry no label of their own.
-    expect(Object.keys(ticked), "the menu offered its labels").toHaveLength(9);
+    expect(Object.keys(ticked), "the menu offered its labels").toHaveLength(8);
 
     await page.getByRole("menuitemradio", { name: "16:9" }).click();
     await openMenu(page);
@@ -385,16 +393,18 @@ test.describe("the stage looks through a display", () => {
       page.getByRole("menuitemradio", { name: "16:9" }),
     ).toHaveAttribute("aria-checked", "true");
     await expect(
-      page.getByRole("menuitemradio", { name: "Fit" }),
+      page.getByRole("menuitemradio", { name: "4:3" }),
     ).toHaveAttribute("aria-checked", "false");
   });
 
-  test("100 % is not reported to the author as Fit", async ({ page }) => {
-    // The control asserting a camera state that is not true. `reset` clears the
-    // lens and parks the camera at 1:1, and a tick derived from the lens alone
-    // then reads that as Fit — the whole stage framed, which it is not.
+  test("100 % is not reported to the author as a lens", async ({ page }) => {
+    // The control asserting a framing that is not true. `reset` clears the lens
+    // and parks the camera at 1:1; a tick derived from the lens alone would then
+    // mark one the camera is not looking through.
     await page.locator("[data-yunari-zoom]").click();
-    await page.getByRole("menuitem", { name: "100 %" }).click();
+    await page
+      .getByRole("menuitem", { name: uiCopy.display.actualSize })
+      .click();
 
     const camera = () =>
       page.evaluate(() => {
@@ -427,20 +437,22 @@ test.describe("the stage looks through a display", () => {
     // Nothing ticked at all: the camera is at a framing this menu does not
     // offer, and the honest report of that is silence.
     await expect(
-      page.getByRole("menuitemradio", { name: "Fit" }),
-    ).toHaveAttribute("aria-checked", "false");
+      page.locator('[role="menuitemradio"][aria-checked="true"]'),
+    ).toHaveCount(0);
 
-    // And the reverse shape: Fit chosen, then zoomed off it by hand.
-    await page.getByRole("menuitemradio", { name: "Fit" }).click();
+    // And the reverse shape: a lens chosen, then cleared by 100 %.
+    await page.getByRole("menuitemradio", { name: "16:9" }).click();
     await openMenu(page);
     await expect(
-      page.getByRole("menuitemradio", { name: "Fit" }),
+      page.getByRole("menuitemradio", { name: "16:9" }),
     ).toHaveAttribute("aria-checked", "true");
-    await page.getByRole("menuitem", { name: "100 %" }).click();
+    await page
+      .getByRole("menuitem", { name: uiCopy.display.actualSize })
+      .click();
     await openMenu(page);
     await expect(
-      page.getByRole("menuitemradio", { name: "Fit" }),
-    ).toHaveAttribute("aria-checked", "false");
+      page.locator('[role="menuitemradio"][aria-checked="true"]'),
+    ).toHaveCount(0);
   });
 
   test("the zoom readout is the bare readout, and it is still the trigger", async ({
@@ -479,7 +491,7 @@ test.describe("the stage looks through a display", () => {
     // the vocabulary at all: it opens the list rather than only reporting.
     await readout.click();
     await expect(
-      page.getByRole("menuitemradio", { name: "Fit" }),
+      page.getByRole("menuitem", { name: uiCopy.display.zoomToFit }),
     ).toBeVisible();
     await page.keyboard.press("Escape");
   });

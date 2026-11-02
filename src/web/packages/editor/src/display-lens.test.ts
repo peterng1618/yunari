@@ -99,10 +99,15 @@ describe("a preview ratio is a token in a closed vocabulary", () => {
     expect(activePreviewRatioTokens()).toEqual(["16:9"]);
   });
 
-  it("sorts rect tokens widest first, Circle last and ties by text", () => {
+  it("sorts landscape widest first, then 1:1 and Circle, then portrait near square first", () => {
     expect(
       sortPreviewTokens(["Circle", "4:3", "16:9", "1:1", "9:16", "21:9"]),
-    ).toEqual(["21:9", "16:9", "9:16", "4:3", "1:1", "Circle"]);
+    ).toEqual(["21:9", "16:9", "4:3", "1:1", "Circle", "9:16"]);
+    expect(sortPreviewTokens(["9:19.5", "3:4", "19.5:9"])).toEqual([
+      "19.5:9",
+      "3:4",
+      "9:19.5",
+    ]);
   });
 
   it.each([
@@ -217,16 +222,36 @@ describe("the live catalogue is module state with a revision", () => {
     ).toBeUndefined();
   });
 
-  it("groups the lenses by orientation, leading with the given one", () => {
-    setActivePreviewRatios(["16:9", "4:3"]);
-    expect(
-      displayLensGroups("portrait").map((group) => group.orientation),
-    ).toEqual(["portrait", "landscape"]);
-    setActivePreviewRatios(["1:1"]);
-    expect(displayLensGroups("portrait")).toEqual([
+  it("groups the lenses in the fixed order, each group widest first", () => {
+    setActivePreviewRatios(["16:9", "4:3", "Circle", "1:1"]);
+    expect(displayLensGroups()).toEqual([
       {
-        orientation: "landscape",
-        lenses: [expect.objectContaining({ id: "1:1" })],
+        kind: "landscape",
+        lenses: [
+          expect.objectContaining({ id: "16:9" }),
+          expect.objectContaining({ id: "4:3" }),
+        ],
+      },
+      {
+        kind: "square",
+        lenses: [
+          expect.objectContaining({ id: "1:1" }),
+          expect.objectContaining({ id: "Circle" }),
+        ],
+      },
+      {
+        kind: "portrait",
+        lenses: [
+          expect.objectContaining({ id: "3:4" }),
+          expect.objectContaining({ id: "9:16" }),
+        ],
+      },
+    ]);
+    setActivePreviewRatios(["9:19.5"]);
+    expect(displayLensGroups()).toEqual([
+      {
+        kind: "portrait",
+        lenses: [expect.objectContaining({ id: "9:19.5" })],
       },
     ]);
   });

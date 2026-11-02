@@ -90,54 +90,40 @@ describe("the new-document chooser", () => {
 
     expect(await optionIds("display")).toEqual([
       "",
-      "16:9",
       "19.5:9",
+      "16:9",
       "4:3",
       "1:1",
       "Circle",
+      "3:4",
       "9:16",
       "9:19.5",
-      "3:4",
     ]);
-    expect(await optionName("display", ""), "Fit is the empty id").toBe("Fit");
+    expect(await optionName("display", ""), "Zoom to fit is the empty id").toBe(
+      "Zoom to fit",
+    );
     // The size no longer hides behind a Custom *entry*: the technical controls
     // are always on screen, so there is no second way to reach them.
     expect(await optionName("display", "16:9")).toBe("16:9");
   });
 
-  /** The headings the six previews are grouped under, in the order offered.
+  /** The headings the previews are grouped under, in the order offered.
    *
    *  A select cannot draw headings of its own, so a group is the only grouping
-   *  it can have — and without one, six bare ratios read as one undifferentiated
-   *  list. The order is the artboard's own orientation, read through the one
-   *  predicate, so a portrait document is not handed the landscape half first. */
-  it.each([
-    [
-      { width: 1920, height: 1080 },
-      ["Landscape", "Portrait"],
-      ["16:9", "9:16"],
-    ],
-    [
-      { width: 1080, height: 2340 },
-      ["Portrait", "Landscape"],
-      ["9:16", "16:9"],
-    ],
-    // A square is not taller than wide, so it takes landscape.
-    [
-      { width: 1000, height: 1000 },
-      ["Landscape", "Portrait"],
-      ["16:9", "9:16"],
-    ],
-  ] as const)(
-    "groups the displays by orientation for a %o artboard",
-    async (current, labels, leading) => {
-      void open(current);
-      await openControl("display");
+   *  it can have — and without one, bare ratios read as one undifferentiated
+   *  list. The order is fixed — landscape, 1:1, portrait — so the list does not
+   *  reorder itself under the document being edited. */
+  it("groups the displays landscape, 1:1, portrait, whichever the artboard", async () => {
+    void open({ width: 1080, height: 2340 });
+    await openControl("display");
 
-      expect(displayGroups(), "the two groups, in order").toEqual(labels);
-      expect(leadingPerGroup()).toEqual(leading);
-    },
-  );
+    expect(displayGroups(), "the three groups, in order").toEqual([
+      "Landscape",
+      "1:1",
+      "Portrait",
+    ]);
+    expect(leadingPerGroup()).toEqual(["19.5:9", "1:1", "3:4"]);
+  });
 
   it("opens a theme with no document on 16:9, at 1920 × 1080", async () => {
     // A product decision rather than an accident: `DEFAULT_ARTBOARD_PRESET` is
@@ -467,8 +453,8 @@ describe("the new-document chooser", () => {
     expect(await optionIds("display")).toEqual(["", "1:1", "Circle"]);
     expect(
       await optionName("display", ""),
-      "Fit is the empty id rather than a Custom size",
-    ).toBe("Fit");
+      "Zoom to fit is the empty id rather than a Custom size",
+    ).toBe("Zoom to fit");
     for (const id of await optionIds("display")) {
       expect(await optionName("display", id)).not.toBe("Custom size");
     }

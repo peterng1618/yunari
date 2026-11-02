@@ -1268,6 +1268,16 @@ body,
   grid-template-areas: "rail stage inspector";
   grid-template-columns: 46px minmax(0, 1fr) 276px;
 }
+/* Nothing selected is no inspector column at all: the stage takes the width,
+   and the pane column's own collapse still applies beside it. */
+.editor-shell-body[data-inspector="hidden"] {
+  grid-template-areas: "rail panel stage";
+  grid-template-columns: 46px 246px minmax(0, 1fr);
+}
+.editor-shell-body[data-inspector="hidden"][data-collapsed="true"] {
+  grid-template-areas: "rail stage";
+  grid-template-columns: 46px minmax(0, 1fr);
+}
 /* The rail: a 46px column of glyph slots, one per pane. It draws
    no pane content and decides nothing — the shell turns a press into open,
    swap or collapse. It owns the rail|pane hairline, carried by the spacing scale

@@ -1716,7 +1716,7 @@ test.describe("Fabric editor route", () => {
     // display switch also satisfies `:visible`, so a popup-agnostic locator
     // would let the positive control pass while measuring the wrong menu.
     await expect(
-      popup.getByRole("menuitemradio", { name: "Fit" }),
+      popup.getByRole("menuitemradio", { name: "16:9" }),
     ).toBeVisible();
     await expect.poll(() => injectedTransition(popup)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1728,7 +1728,7 @@ test.describe("Fabric editor route", () => {
     // line is its only suppression. Without this assertion, adding a transition
     // to a menu row and deleting the `*` lines leaves the suite green under
     // `reduce`.
-    const menuItem = popup.getByRole("menuitemradio", { name: "Fit" });
+    const menuItem = popup.getByRole("menuitemradio", { name: "16:9" });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await expect.poll(() => injectedTransition(menuItem)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });

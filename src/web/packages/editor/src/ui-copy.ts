@@ -2066,18 +2066,17 @@ export const uiCopy = {
    *  the stage and by the menu's tick. */
   display: {
     label: "Display and zoom",
-    /** The whole stage, with no display in it — a choice from the display menu,
-     *  not a camera command. `zoomToFit` below is the camera command, and the
-     *  two are worded apart so a reader can tell which question they answer. */
-    fit: "Fit",
     toSelection: "Zoom to selection",
-    actualSize: "100 %",
-    /** The cluster's three camera controls, beside the readout. `−`/`+` step by
+    actualSize: "Zoom to 100 %",
+    /** The cluster's camera controls, beside the readout. `−`/`+` step by
      *  the camera keys' own amount (`ZOOM_STEP`), and `zoomToFit` frames the
      *  whole stage, named to match `Zoom to selection` one line up. */
     zoomOut: "Zoom out",
     zoomIn: "Zoom in",
     zoomToFit: "Zoom to fit",
+    /** The stage in the browser's fullscreen, its own command rather than a
+     *  camera state: the camera keeps whatever framing it had. */
+    fullscreen: "View in full screen",
   },
   /** Chart family labels, shared by the Add pane, the canvas context menu and
    *  the layer row's role. */
@@ -2119,9 +2118,15 @@ export const uiCopy = {
    * Artboard preset labels, shared by the inspector's controls and the
    * new-document chooser. A ratio labels itself; an orientation and a
    * resolution are words of their own, and `2K` is not the `2k` it is stored
-   * as.
+   * as. `square` is the preview groups' 1:1 heading rather than an artboard
+   * orientation: a square artboard files as landscape, but its previews are
+   * listed as their own group.
    */
-  artboardOrientations: { landscape: "Landscape", portrait: "Portrait" },
+  artboardOrientations: {
+    landscape: "Landscape",
+    square: "1:1",
+    portrait: "Portrait",
+  },
   artboardResolutions: { "1080p": "1080p", "2k": "2K", "4k": "4K" },
   artboardRatios: {
     "16:9": "16:9",

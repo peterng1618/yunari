@@ -777,11 +777,11 @@ describe("how many runs a text object has", () => {
     // One panel at a time, so one remove action — and its number is the run's
     // own position, not a constant "run 1".
     expect(visible()).toHaveLength(1);
-    expect(visible()[0]?.textContent).toBe("Remove run 1");
+    expect(visible()[0]?.getAttribute("aria-label")).toBe("Remove run 1");
 
     await click(box.pick<HTMLElement>('[data-yunari-run-tab="3"]'));
     expect(visible()).toHaveLength(1);
-    expect(visible()[0]?.textContent).toBe("Remove run 3");
+    expect(visible()[0]?.getAttribute("aria-label")).toBe("Remove run 3");
     return box.dispose();
   });
 });

@@ -106,6 +106,16 @@ async function click(target: Element): Promise<void> {
   });
 }
 
+/** A double press, then the frame its inspector shortcut arms. */
+async function doubleClick(target: Element): Promise<void> {
+  await act(async () => {
+    target.dispatchEvent(
+      new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
+    );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+}
+
 const usageWith =
   (
     record: Readonly<
@@ -163,6 +173,22 @@ it("draws rows with a swatch, a name and a usage figure and no fields", async ()
   ]) {
     expect(host.querySelector(selector), selector).toBeNull();
   }
+});
+
+it("opens the colour picker on a double press, in the inspector it selects", async () => {
+  const { host, tokenSelection } = await mount(PAINT_LIST_PALETTE);
+  const picker = document.createElement("button");
+  picker.setAttribute("data-yunari-palette-picker", "");
+  const open = vi.fn();
+  picker.addEventListener("click", open);
+  document.body.append(picker);
+
+  await doubleClick(
+    host.querySelector('[data-yunari-palette-token-row="accent"]') as Element,
+  );
+
+  expect(tokenSelection.get()).toEqual({ kind: "paint", id: "accent" });
+  expect(open).toHaveBeenCalledTimes(1);
 });
 
 it("selects a paint token when a row is pressed, and marks it pressed", async () => {

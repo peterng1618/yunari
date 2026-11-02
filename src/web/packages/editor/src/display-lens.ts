@@ -1,8 +1,7 @@
 import type { ArtboardShape } from "@yunari/renderer-core";
-import {
-  ARTBOARD_ORIENTATIONS,
-  type ArtboardOrientation,
-  type ArtboardPresetShape,
+import type {
+  ArtboardOrientation,
+  ArtboardPresetShape,
 } from "./artboard-presets.js";
 
 /**
@@ -126,22 +125,40 @@ export function normalisePreviewRatioTokens(value: unknown): readonly string[] {
   return tokens;
 }
 
-/** The list as the tab and the display menu draw it: rect tokens widest
- *  first, ties by token text, and `Circle` last — a disc has no width to sort
- *  by, so it cannot join the rect run. */
+/** A preview ratio's place in the one fixed order: landscape, square, portrait.
+ *  A disc is square regardless of the edges `parsePreviewRatio` stores for it. */
+function ratioGroup(ratio: PreviewRatio): DisplayLensGroupKind {
+  if (ratio.shape === "circle") return "square";
+  const aspect = ratio.width / ratio.height;
+  return aspect > 1 ? "landscape" : aspect === 1 ? "square" : "portrait";
+}
+
+const GROUP_ORDER: readonly DisplayLensGroupKind[] = [
+  "landscape",
+  "square",
+  "portrait",
+];
+
+/** The list as the preview settings draw it: landscape widest first, then 1:1
+ *  and Circle, then portrait near square first. The display menu does not use
+ *  this — it groups the derived lenses itself — so the stored order, and with
+ *  it the default lens, is unaffected by a hand edit here. */
 export function sortPreviewTokens(
   tokens: readonly string[],
 ): readonly string[] {
-  const ratios = tokens.map((token) => parsePreviewRatio(token));
-  const rects = ratios
-    .filter((ratio) => ratio.shape === "rect")
-    .sort(
-      (a, b) =>
-        previewRatioKey(b) - previewRatioKey(a) ||
-        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-    );
-  const circles = ratios.filter((ratio) => ratio.shape === "circle");
-  return [...rects, ...circles].map((ratio) => ratio.id);
+  return tokens
+    .map((token) => ({ token, ratio: parsePreviewRatio(token) }))
+    .sort((a, b) => {
+      const group =
+        GROUP_ORDER.indexOf(ratioGroup(a.ratio)) -
+        GROUP_ORDER.indexOf(ratioGroup(b.ratio));
+      if (group !== 0) return group;
+      const aspect =
+        b.ratio.width / b.ratio.height - a.ratio.width / a.ratio.height;
+      if (aspect !== 0) return aspect;
+      return a.token < b.token ? -1 : a.token > b.token ? 1 : 0;
+    })
+    .map(({ token }) => token);
 }
 
 /** The stored list, or the defaults where there is none or it cannot be read.
@@ -252,9 +269,7 @@ export function previewLenses(
 }
 
 let activeTokens: readonly string[] = DEFAULT_PREVIEW_RATIO_TOKENS;
-let active: readonly DisplayLens[] = previewLenses(
-  DEFAULT_PREVIEW_RATIO_TOKENS,
-);
+let active: readonly DisplayLens[] = previewLenses(activeTokens);
 let revision = 0;
 const listeners = new Set<() => void>();
 
@@ -335,24 +350,35 @@ export function lensMatching(
   );
 }
 
+export type DisplayLensGroupKind = "landscape" | "square" | "portrait";
+
 interface DisplayLensGroup {
-  readonly orientation: ArtboardOrientation;
+  readonly kind: DisplayLensGroupKind;
   readonly lenses: readonly DisplayLens[];
 }
 
-/** The lenses by orientation, the artboard's own orientation first. A group
- *  with no lens is omitted rather than headed and empty. */
-export function displayLensGroups(
-  leading: ArtboardOrientation,
-): readonly DisplayLensGroup[] {
-  const order: readonly ArtboardOrientation[] = [
-    leading,
-    ...ARTBOARD_ORIENTATIONS.filter((orientation) => orientation !== leading),
-  ];
+/** The group a lens is listed under. A square rect and a disc share the 1:1
+ *  group: their bounding boxes differ but their aspect does not. */
+function groupOfLens(lens: DisplayLens): DisplayLensGroupKind {
+  if (lens.shape === "circle" || lens.aspect === 1) return "square";
+  return lens.aspect > 1 ? "landscape" : "portrait";
+}
+
+/** The lenses in the one fixed order — landscape widest first, then 1:1 and
+ *  Circle, then portrait near square first — rather than led by the artboard.
+ *  Within a group the widest comes first in both directions, which is what
+ *  puts `4:3` ahead of `9:16` in the portrait half. A group with no lens is
+ *  omitted rather than headed and empty. */
+export function displayLensGroups(): readonly DisplayLensGroup[] {
   const groups: DisplayLensGroup[] = [];
-  for (const orientation of order) {
-    const lenses = active.filter((lens) => lens.orientation === orientation);
-    if (lenses.length > 0) groups.push({ orientation, lenses });
+  for (const kind of GROUP_ORDER) {
+    const lenses = active
+      .filter((lens) => groupOfLens(lens) === kind)
+      .sort(
+        (a, b) =>
+          b.aspect - a.aspect || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      );
+    if (lenses.length > 0) groups.push({ kind, lenses });
   }
   return groups;
 }

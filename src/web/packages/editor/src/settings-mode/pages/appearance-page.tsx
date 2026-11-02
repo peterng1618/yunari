@@ -174,7 +174,7 @@ function PreviewsSection(props: {
   // The catalogue's revision, so a change from anywhere re-renders the list
   // from the one module state.
   useSyncExternalStore(subscribeLenses, previewCatalogueKey);
-  const tokens = activePreviewRatioTokens();
+  const tokens = sortPreviewTokens(activePreviewRatioTokens());
   const [draft, setDraft] = useState("");
   const [reason, setReason] = useState<string | undefined>(undefined);
   const [persisted, setPersisted] = useState<boolean | undefined>(undefined);
@@ -233,9 +233,10 @@ function PreviewsSection(props: {
     setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
   };
 
+  const stored = activePreviewRatioTokens();
   const atDefaults =
-    tokens.length === DEFAULT_PREVIEW_RATIO_TOKENS.length &&
-    tokens.every(
+    stored.length === DEFAULT_PREVIEW_RATIO_TOKENS.length &&
+    stored.every(
       (token, index) => token === DEFAULT_PREVIEW_RATIO_TOKENS[index],
     );
 

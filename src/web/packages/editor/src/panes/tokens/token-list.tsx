@@ -1,4 +1,5 @@
-import { plainButtonClasses } from "../../components/ui/control-well.js";
+import { ControlIconButton } from "../../components/ui/control-icon-button.js";
+import { Glyph, PLUS_GLYPH } from "../../editor-shell/icons.js";
 import {
   type TokenSelectionStore,
   useTokenSelection,
@@ -50,6 +51,18 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
   const onSelect = (id: string): void =>
     tokenSelection?.set({ kind: "preset", id });
 
+  /** A double press is the row's shortcut into its fields: select first, then
+   *  open the family dropdown the inspector draws for that selection. The
+   *  frame lets the inspector mount before the click lands on it. */
+  const openFields = (id: string): void => {
+    onSelect(id);
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>("[data-yunari-token-family]")
+        ?.click();
+    });
+  };
+
   return (
     <div
       data-yunari-type-presets=""
@@ -76,6 +89,7 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
                 selectedToken?.kind === "preset" && selectedToken.id === id
               }
               onClick={() => onSelect(id)}
+              onDoubleClick={() => openFields(id)}
               className="flex min-h-[26px] w-full items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel-2 px-[var(--space-6)] text-left text-sm text-text hover:border-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent aria-pressed:border-accent"
             >
               <span
@@ -97,14 +111,15 @@ export function TokenList(props: TokenListProps): React.JSX.Element {
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        data-yunari-type-preset-add=""
-        onClick={onAdd}
-        className={plainButtonClasses}
-      >
-        {uiCopy.panels.addType}
-      </button>
+      <div className="flex justify-end">
+        <ControlIconButton
+          label={uiCopy.panels.addType}
+          data={{ "data-yunari-type-preset-add": "" }}
+          onClick={onAdd}
+        >
+          <Glyph icon={PLUS_GLYPH} size={14} />
+        </ControlIconButton>
+      </div>
     </div>
   );
 }

@@ -183,6 +183,41 @@ function bridgeStub(
   };
 }
 
+/** A bridge with one object selected, for a test that needs the inspector
+ *  column to exist. Nothing selected is no inspector at all. */
+function selectingBridge(): EditorShellBridge {
+  return bridgeStub({
+    snapshot: () => ({
+      objectCount: 1,
+      tokenCount: 0,
+      selectedCount: 1,
+      locked: false,
+      activeKind: "object",
+      documentName: undefined,
+      selectionPresetId: undefined,
+    }),
+  });
+}
+
+it("gives the stage the inspector's width when nothing is selected", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
+
+  expect(
+    root.querySelector(".editor-shell-inspector"),
+    "nothing selected is no inspector",
+  ).toBeNull();
+  expect(body?.dataset["inspector"]).toBe("hidden");
+
+  layout.setBridge(selectingBridge(), undefined);
+  await Promise.resolve();
+  expect(root.querySelector(".editor-shell-inspector")).not.toBeNull();
+  expect(body?.dataset["inspector"]).toBeUndefined();
+
+  layout.destroy();
+});
+
 /**
  * First in the file because it is the case `vg-186` is proved by.
  *
@@ -570,6 +605,10 @@ it("switches panes without closing when the panel is already open", async () => 
 it("shows the theme's own panels in the left column, and toggles them like a pane", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
+  // The inspector is a reading of the selection now, so this test selects
+  // something before it asks the right column a question.
+  layout.setBridge(selectingBridge(), undefined);
+  await Promise.resolve();
   const panel = root.querySelector<HTMLElement>(".editor-shell-panel")!;
   const inspector = root.querySelector<HTMLElement>(".editor-shell-inspector")!;
   const slot = layout.hosts.document.parentElement;
@@ -754,9 +793,12 @@ it("re-frames when a collapsed panel is reopened by asking for a pane", async ()
   layout.destroy();
 });
 
-it("keeps panel hosts mounted outside React's control", () => {
+it("keeps panel hosts mounted outside React's control", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
+  // The inspector leaves with the selection; its host is still a host.
+  layout.setBridge(selectingBridge(), undefined);
+  await Promise.resolve();
 
   // Panel owners hold these nodes; React only positions them. The Composition
   // pane is the exception: React renders that tree, so it owns no host node.
@@ -1037,7 +1079,7 @@ it("draws no arrange action for a multi-selection either, whatever the bridge sa
 it("keeps a chart's fields in the Design column, with no Data tab to reach for", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
-  let kind: "none" | "object" | "chart" = "none";
+  let kind: "none" | "object" | "chart" = "object";
   const listeners = new Set<() => void>();
   const bridge = bridgeStub({
     snapshot: () => ({
