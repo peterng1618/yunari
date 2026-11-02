@@ -871,10 +871,11 @@ export class EditorDocument {
    *
    * Nothing unused means nothing to ask and the save runs unchanged. A
    * dismissal is a cancel, never a keep: closing the sheet is not permission to
-   * remove a file. `"remove"` proves the post-prune package buildable, and only
-   * a proof that passed moves the files to the host's trash; only a trash that
-   * succeeded prunes. A refusal stops the save with the host's or the
-   * serializer's own sentence, so nothing is removed and nothing is written.
+   * remove a file. A chosen removal proves the post-prune package buildable,
+   * and only a proof that passed moves those files to the host's trash; only a
+   * trash that succeeded prunes. A refusal stops the save with the host's or
+   * the serializer's own sentence, so nothing is removed and nothing is
+   * written.
    */
   async confirmAssetCleanup(
     title: string = uiCopy.file.exportTheme,
@@ -884,11 +885,12 @@ export class EditorDocument {
 
     const assets = this.#assets.assets;
     const files: SaveCleanupFile[] = unused.map((asset) => {
+      // A font's bytes are not a thumbnail; every other kind asks the manager
+      // for the same blob URL its Assets card draws.
       const previewUrl =
-        asset.kind === "image" || asset.kind === "svg"
-          ? this.#assets.previewUrl(asset.id)
-          : undefined;
+        asset.kind === "font" ? undefined : this.#assets.previewUrl(asset.id);
       return {
+        id: asset.id,
         name: assetFileName(asset),
         kind: asset.kind,
         // A declaration with no bytes is already broken; it contributes nothing
@@ -908,6 +910,12 @@ export class EditorDocument {
     if (answer === "cancel") return { proceed: false };
     if (answer === "keep") return { proceed: true };
 
+    const removingIds = new Set(answer.assetIds);
+    const removed = unused.filter((asset) => removingIds.has(asset.id));
+    // The ids come from this same list, but an empty or stale answer must not
+    // turn the question into a prune of files the author did not check.
+    if (removed.length === 0) return { proceed: true };
+
     // The trash move is ordered last, after the save is otherwise ready: a
     // package the writer would refuse must cost nothing but the refusal, not
     // files already in the Recycle Bin. The candidate asks the writer's own
@@ -916,8 +924,8 @@ export class EditorDocument {
     // this cannot reproduce — unreachable while `canAddCredit` and the credits
     // reader bound the list, reachable from a hand-edited package that seeds
     // `#credits` past it.
-    const unusedIds = new Set(unused.map((asset) => asset.id));
-    const unusedPaths = new Set(unused.map((asset) => asset.path));
+    const unusedIds = new Set(removed.map((asset) => asset.id));
+    const unusedPaths = new Set(removed.map((asset) => asset.path));
     const candidate = checkDeclaredAssets(
       {
         assets: this.#assets.declarations.filter(
@@ -931,13 +939,13 @@ export class EditorDocument {
     if (!candidate.ok) return { proceed: false, message: candidate.message };
 
     const outcome = await trashAssets(
-      unused.map((asset) => ({
+      removed.map((asset) => ({
         name: assetFileName(asset),
         bytes: assets[asset.path] ?? new Uint8Array(),
       })),
     );
     if (!outcome.ok) return { proceed: false, message: outcome.message };
-    this.pruneAssets(unused.map((asset) => asset.id));
+    this.pruneAssets(removed.map((asset) => asset.id));
     return { proceed: true };
   }
 

@@ -493,6 +493,7 @@ describe("EditorDocument save cleanup", () => {
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
+            id: "photo",
             name: "photo.png",
             kind: "image",
             sizeBytes: 1,
@@ -543,7 +544,7 @@ describe("EditorDocument save cleanup", () => {
       assetId: "photo",
     };
     const unlinked = entry("house", "https://lucide.dev/icons/house");
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({ ok: true });
     const save = vi
       .spyOn(PersistenceManager.prototype, "save")
@@ -570,6 +571,64 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
+  it("removes only the files the answer names", async () => {
+    const assetManager = managerWith([imageAsset("photo"), imageAsset("logo")]);
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
+    trashAssetsMock.mockResolvedValue({ ok: true });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: bareEnvelope(),
+    });
+
+    await document.downloadPackage();
+
+    expect(trashAssetsMock).toHaveBeenCalledWith([
+      { name: "photo.png", bytes: new Uint8Array([1]) },
+    ]);
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "logo",
+    ]);
+    expect(save).toHaveBeenCalledTimes(1);
+    const [current, assets] = save.mock.calls[0] ?? [];
+    expect(current?.assets?.map((asset) => asset.id)).toEqual(["logo"]);
+    expect(Object.keys(assets ?? {})).toEqual(["assets/logo.png"]);
+    document.destroy();
+  });
+
+  it("offers a video the same preview URL its Assets card draws", async () => {
+    const video: LocalAssetReference = {
+      id: "loop",
+      kind: "video",
+      path: "assets/loop.webm",
+      sha256: "0",
+    };
+    const assetManager = managerWith([video]);
+    cleanupMock.mockResolvedValue("cancel");
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: bareEnvelope(),
+    });
+
+    await document.downloadPackage();
+
+    expect(cleanupMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: [
+          expect.objectContaining({
+            id: "loop",
+            name: "loop.webm",
+            kind: "video",
+            previewUrl: expect.stringMatching(/^blob:/),
+          }),
+        ],
+      }),
+    );
+    document.destroy();
+  });
+
   it("refuses before trashing when the post-prune package would not build", async () => {
     // A package the serializer refuses must cost nothing but the refusal: the
     // trash move is ordered last, after the cleanup's own result is buildable.
@@ -589,7 +648,7 @@ describe("EditorDocument save cleanup", () => {
       { "assets/photo.png": new Uint8Array([1]) },
     );
     const onError = vi.fn();
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({ ok: true });
     const save = vi
       .spyOn(PersistenceManager.prototype, "save")
@@ -626,7 +685,7 @@ describe("EditorDocument save cleanup", () => {
     };
     const onSaved = vi.fn();
     const onError = vi.fn();
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin is not available on this machine.",
@@ -743,6 +802,7 @@ describe("EditorDocument save cleanup", () => {
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
+            id: "photo",
             name: "photo.png",
             kind: "image",
             sizeBytes: 1,
@@ -766,7 +826,7 @@ describe("EditorDocument save cleanup", () => {
     const onError = vi.fn();
     const client = libraryClient();
     replacementMock.mockResolvedValue("save");
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin refused it.",

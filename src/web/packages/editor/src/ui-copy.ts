@@ -1899,8 +1899,7 @@ export const uiCopy = {
       font: "no type token refers to it",
     } satisfies Record<LocalAssetReference["kind"], string>,
     note: "Nothing on the canvas, the background, or a type token refers to these files. Their attribution goes with them.",
-    removeAfterSave: (count: number): string =>
-      `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
+    removeAll: "Remove all unused assets",
     warning:
       "Moves them to the Recycle Bin. The theme itself is saved either way.",
     cancel: "Cancel",

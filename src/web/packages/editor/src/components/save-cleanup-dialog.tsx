@@ -6,18 +6,27 @@ import { ACTION_BUTTON, Dialog } from "./ui/dialog.js";
 import { type ModalSettle, openModal } from "./ui/modal-host.js";
 
 /** What the cleanup question can answer. A dismissal is `cancel`, so a closed
- *  dialog is never read as permission to remove a file. */
-export type SaveCleanupAnswer = "remove" | "keep" | "cancel";
+ *  dialog is never read as permission to remove a file; `keep` is every
+ *  checkbox left clear. */
+export type SaveCleanupAnswer =
+  | {
+      readonly action: "remove";
+      readonly assetIds: readonly string[];
+    }
+  | "keep"
+  | "cancel";
 
 export interface SaveCleanupFile {
+  /** The declaration's identity, which is what a removal names. */
+  readonly id: string;
   readonly name: string;
   readonly kind: LocalAssetReference["kind"];
   readonly sizeBytes: number;
   /** Why nothing holds it: "not on the canvas", "no type token refers to it",
    *  "not the background". One sentence per kind, from one owner. */
   readonly reason: string;
-  /** The manager's own blob URL, so a picture wears the same thumbnail here as
-   *  on its Assets card. */
+  /** The manager's own blob URL, so a picture or a video wears the same
+   *  thumbnail here as on its Assets card. */
   readonly previewUrl?: string;
 }
 
@@ -45,8 +54,20 @@ function SaveCleanupDialog({
 }): React.JSX.Element {
   // Off by default: a theme in progress may still want the file it has not
   // wired yet, and the dialog's caption says the theme is saved either way.
-  const [remove, setRemove] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const unusedBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const allSelected = files.every((file) => selected.has(file.id));
+
+  const toggle = (id: string, on: boolean): void => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   return (
     <Dialog
@@ -74,44 +95,50 @@ function SaveCleanupDialog({
       <ul className="flex flex-col gap-[var(--space-4)]">
         {files.map((file) => (
           <li
-            key={`${file.name}\n${file.kind}`}
-            className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2 p-[var(--space-6)]"
+            key={file.id}
+            className="rounded-[var(--radius-sm)] border border-edge-2 bg-panel-2"
           >
-            <AssetMark
-              kind={file.kind}
-              {...(file.previewUrl === undefined
-                ? {}
-                : { previewUrl: file.previewUrl })}
-            />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-xs text-text">{file.name}</span>
-              <span className="truncate font-mono text-[10px] text-muted">
-                {`${uiCopy.panels.assetCard.kind[file.kind]} · ${formatBytes(file.sizeBytes)} · ${file.reason}`}
+            <label className="flex cursor-pointer items-center gap-[var(--space-8)] p-[var(--space-6)]">
+              <input
+                type="checkbox"
+                checked={selected.has(file.id)}
+                data-yunari-save-cleanup-file={file.id}
+                onChange={(event) => toggle(file.id, event.target.checked)}
+                className="size-4 flex-none accent-accent"
+              />
+              <AssetMark
+                kind={file.kind}
+                {...(file.previewUrl === undefined
+                  ? {}
+                  : { previewUrl: file.previewUrl })}
+              />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-xs text-text">{file.name}</span>
+                <span className="truncate font-mono text-[10px] text-muted">
+                  {`${uiCopy.panels.assetCard.kind[file.kind]} · ${formatBytes(file.sizeBytes)} · ${file.reason}`}
+                </span>
               </span>
-            </span>
+            </label>
           </li>
         ))}
       </ul>
       <p className="pt-[var(--space-6)] text-[10px] text-faint">
         {uiCopy.saveCleanup.note}
       </p>
-      <label className="flex items-start gap-[var(--space-8)] pt-[var(--space-10)]">
-        <input
-          type="checkbox"
-          checked={remove}
-          data-yunari-save-cleanup-remove=""
-          onChange={(event) => setRemove(event.target.checked)}
-          className="size-4 flex-none accent-accent"
-        />
-        <span className="flex flex-col">
-          <span className="text-xs text-text">
-            {uiCopy.saveCleanup.removeAfterSave(files.length)}
-          </span>
-          <span className="text-[10px] text-warn">
-            {uiCopy.saveCleanup.warning}
-          </span>
+      <div className="flex flex-col items-start gap-[var(--space-4)] pt-[var(--space-10)]">
+        <button
+          type="button"
+          className={ACTION_BUTTON}
+          data-yunari-save-cleanup-remove-all=""
+          disabled={allSelected}
+          onClick={() => setSelected(new Set(files.map((file) => file.id)))}
+        >
+          {uiCopy.saveCleanup.removeAll}
+        </button>
+        <span className="text-[10px] text-warn">
+          {uiCopy.saveCleanup.warning}
         </span>
-      </label>
+      </div>
       <div className="mt-[var(--space-10)] flex items-center gap-[var(--space-8)] border-t border-edge pt-[var(--space-8)]">
         <span className="font-mono text-[10px] text-faint">
           {uiCopy.saveCleanup.sizes(
@@ -130,7 +157,13 @@ function SaveCleanupDialog({
         <button
           type="button"
           className={ACTION_BUTTON}
-          onClick={() => settle.close(remove ? "remove" : "keep")}
+          onClick={() =>
+            settle.close(
+              selected.size === 0
+                ? "keep"
+                : { action: "remove", assetIds: [...selected] },
+            )
+          }
         >
           {title}
         </button>
@@ -143,8 +176,9 @@ function SaveCleanupDialog({
  * Asks what an author wants done about the files nothing holds, before a save
  * writes the document they are not part of.
  *
- * The answer is the save's own vocabulary rather than the checkbox's: `keep`
- * and `cancel` both leave the files alone, and only `cancel` stops the save.
+ * The answer is the save's own vocabulary: no selection is `keep`, and `cancel`
+ * alone stops the save. A removal carries the ids the author checked, so the
+ * caller prunes exactly those files.
  * The title is the save the author pressed, so the same sheet serves both save
  * flows with the words they used to open it.
  */
