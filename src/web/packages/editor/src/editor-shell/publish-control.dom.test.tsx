@@ -229,20 +229,17 @@ function popupOpen(): boolean {
   );
 }
 
-it("prints the publish chord beside the header control, from the live table", async () => {
-  // DESIGN.md's header rule puts the publish chord before the button, and a
-  // chord is printed rather than hover-only. It is read from the live table
-  // because `publish.surface` is bound to the act the control performs.
+it("keeps the publish chord in the control's names, not beside it in the header", async () => {
+  // The header prints one word. A chord beside the button read as a detached
+  // label; the same fact stays on the trigger's title and spoken label, read
+  // from the live table because `publish.surface` is bound to the act the
+  // control performs.
   hostServing({ lan: true });
   const container = await mount();
 
   const trigger = headerControl(container);
   expect(trigger?.textContent).toBe(uiCopy.publish.assign);
-  const printed = container.querySelector("[data-yunari-publish-chord]");
-  expect(printed?.textContent).toBe(shortcutLabel("publish.surface"));
-  // The trigger's own label carries the spoken form, so the caps are not read
-  // to a screen reader twice.
-  expect(printed?.getAttribute("aria-hidden")).toBe("true");
+  expect(container.querySelector("[data-yunari-publish-chord]")).toBeNull();
   expect(trigger?.getAttribute("title")).toContain(
     shortcutLabel("publish.surface"),
   );
@@ -252,7 +249,7 @@ it("prints the publish chord beside the header control, from the live table", as
     shortcutSpokenLabel("publish.surface"),
   );
 
-  // And a rebind reaches it: the header re-reads the live table rather than
+  // And a rebind reaches it: the title re-reads the live table rather than
   // holding the chord it rendered with, which is Review Focus 3 on this surface.
   const moved: ShortcutBinding = {
     key: "j",
@@ -264,9 +261,7 @@ it("prints the publish chord beside the header control, from the live table", as
     setActiveShortcuts(resolveShortcuts({ "publish.surface": moved }));
   });
   expect(headerControl(container)?.getAttribute("title")).toContain("Ctrl+J");
-  expect(
-    container.querySelector("[data-yunari-publish-chord]")?.textContent,
-  ).toBe("Ctrl+J");
+  expect(container.querySelector("[data-yunari-publish-chord]")).toBeNull();
 });
 
 it("opens the surface without moving the host, and keeps every fact behind the press", async () => {

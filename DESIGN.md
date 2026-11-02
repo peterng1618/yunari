@@ -229,8 +229,9 @@ toolbar, so the header has no Edit menu.
   Export theme. It is a toolbar, not rows nested in a menu, and it carries no
   selection command: copy, cut, duplicate, delete, group and arrange act on
   individual elements and stay on the surfaces that own a selection.
-- Right: the publish chord, then the **primary button**. `Publish` is the only
-  filled, accent-coloured button in the editor.
+- Right: the **primary button**. `Publish` is the only filled, accent-coloured
+  button in the editor, and the bar prints no shortcut beside it — the chord
+  lives in the control's title and spoken label.
 - **The header never shows the document's identity** and never shows a
   per-document readout. Both are on the canvas.
 

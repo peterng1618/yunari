@@ -1184,14 +1184,6 @@ body,
 /* The publish chord, printed before the header's primary button. The header
    rule puts the chord first, and its `margin-left: auto` is what keeps the pair
    together at the right edge now that something sits ahead of the button. */
-.editor-shell-publish-chord {
-  margin-left: auto;
-  margin-right: 8px;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--shell-muted);
-  opacity: 0.7;
-}
 .editor-shell-primary {
   margin-left: auto;
   border: 1px solid var(--shell-primary-bg);

@@ -125,18 +125,9 @@ export function PublishControl({
 
   return (
     <Popover.Root open={surfaceOpen} onOpenChange={(next) => surface.set(next)}>
-      {/* The header rule prints the chord before the button. It is decorative to
-          a screen reader: the trigger's own label already carries the spoken
-          form, so the caps are not read twice. */}
-      {chord === "" ? null : (
-        <kbd
-          className="editor-shell-publish-chord"
-          data-yunari-publish-chord=""
-          aria-hidden="true"
-        >
-          {chord}
-        </kbd>
-      )}
+      {/* The chord is not printed in the header. The control's own title and
+          spoken label carry it, so the bar stays one word and the caps are not
+          a second, detached label beside the button. */}
       {/* One name, whatever the host is doing: the control opens a surface, and
           a bar that said `Stop publishing` would be promising to stop rather
           than to show. What the host is doing is the surface's own reading. */}
