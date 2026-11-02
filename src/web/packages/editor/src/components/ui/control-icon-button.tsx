@@ -69,6 +69,9 @@ export function ControlIconButton(
     /** A press that does nothing, without native `disabled`: the control keeps
      *  its focus and its tooltip, so the state it names stays reachable. */
     readonly ariaDisabled?: boolean;
+    /** Whether this button is a toggle, and is on. Omitted for an action, which
+     *  has no state for assistive technology to announce. */
+    readonly pressed?: boolean;
     readonly onClick: () => void;
     readonly children: React.ReactNode;
   },
@@ -79,6 +82,7 @@ export function ControlIconButton(
     disabled,
     refused,
     ariaDisabled,
+    pressed,
     describedById,
     data,
     destructive,
@@ -104,6 +108,7 @@ export function ControlIconButton(
         id={ids.control}
         type="button"
         aria-label={label}
+        aria-pressed={pressed}
         aria-disabled={
           ariaDisabled === true || refused !== undefined ? true : undefined
         }

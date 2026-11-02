@@ -1028,6 +1028,13 @@ body,
   align-items: center;
   gap: var(--space-4);
 }
+/* The readings-source toggle is the toolbar's one stateful button: selected
+   means the live source, unselected the theme's own sensors. The accent pair is
+   the rail's selected slot, so the shell keeps one selected treatment. */
+.editor-shell-toolbar button[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 /* A short rule between command groups. Height rather than padding: it should
    read as a divider at the glyph's cap height, not as a taller column that
    re-centres the row. */

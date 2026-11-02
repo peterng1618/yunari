@@ -231,13 +231,15 @@ toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then one **toolbar** of icon
   buttons in three groups, each divided by a short vertical rule:
-  - **File's functions**: New theme, New from template, Find assets, Open
-    recent, Export selection as widget.
-  - **The open document's actions**: Import theme, Open, Save, Save as,
-    Activate, Export theme.
-  - **The view setting**: one toggle whose glyph, tooltip and accessible name
-    say the source currently shown — preview or live — and whose press flips
-    it.
+  - **The document's lifecycle**: New theme, New from template, Open, Open
+    recent, Import theme — make one, open one, bring one in.
+  - **The open document's actions**: Save, Save as, Activate, Export theme,
+    Export selection as widget — keep it, then send it out.
+  - **The editor's tools**: Find assets, then one readings-source toggle. The
+    toggle keeps the `monitor-activity` glyph in both states; its selected
+    state is the live source and its unselected state the theme's sensors,
+    while its tooltip and accessible name say which source is shown. A press
+    flips it.
   Every button carries its word as the tooltip and the accessible name, so no
   visible label is repeated beside it. The buttons are not rows nested in a
   menu: a command changed while designing is one gesture away, not two. The

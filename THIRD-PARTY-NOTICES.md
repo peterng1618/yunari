@@ -35,7 +35,7 @@ are provenance, not notice rows.
 | `react` | 19.3.1 | MIT | editor shell chrome |
 | `react-dom` | 19.3.1 | MIT | editor shell chrome |
 | `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
-| `lucide-react` | 1.61.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
+| `lucide-react` | 1.66.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
 | `lineicons` | 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |
 | `systeminformation` | 5.33.19 | MIT | host hardware metrics (no dependencies of its own) |
 | `node-forge` | 1.4.2 | BSD-3-Clause OR GPL-2.0 | host: encodes and signs the local CA and leaf that give a display a secure origin; BSD-3-Clause is the one taken (no dependencies of its own) |
@@ -210,7 +210,7 @@ to label which source each result came from.
 
 ## Runtime icons
 
-`lucide-react` 1.61.0 supplies the editor's action-bar icons, imported per-icon
+`lucide-react` 1.66.0 supplies the editor's action-bar icons, imported per-icon
 by name so the bundler keeps only the ones the registry uses. Its per-icon
 geometry is also where the default theme's card icons come from: the starter reads the same
 modules and converts them to canvas path data at author time, so no second icon set

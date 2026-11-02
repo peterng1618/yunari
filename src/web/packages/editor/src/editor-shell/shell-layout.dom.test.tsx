@@ -1234,8 +1234,11 @@ it("flips the canvas's source from one toolbar toggle", async () => {
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
   );
   // A toggle, not a menu: the source is changed many times a session, so the
-  // name says which one is showing and the press flips it.
+  // name says which one is showing and the press flips it. The selected state
+  // is the real source; the theme's own sensors are unselected.
   expect(preview.getAttribute("aria-haspopup")).toBeNull();
+  expect(preview.getAttribute("aria-pressed")).toBe("false");
+  const glyph = preview.innerHTML;
   preview.click();
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenCalledWith("live");
@@ -1245,6 +1248,10 @@ it("flips the canvas's source from one toolbar toggle", async () => {
     `${uiCopy.view.dataSource}: ${uiCopy.view.live}`,
   );
   expect(live).toBe(preview);
+  expect(live.getAttribute("aria-pressed")).toBe("true");
+  // One glyph in both states: the selected state, not a second picture, says
+  // which source is showing.
+  expect(live.innerHTML).toBe(glyph);
   live.click();
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenLastCalledWith("preview");
@@ -1277,9 +1284,9 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
   // toolbar — a menu coming back is the duplication this ruling removed.
   expect(root.querySelector(".editor-shell-menubar")).toBeNull();
 
-  // File's functions, the document's own actions and the view toggle are one
-  // toolbar, in that order. The lists are their owners' own, so a new row cannot
-  // escape this read.
+  // The document's lifecycle, the document's own actions and the editor's
+  // tools are one toolbar, in that order. The lists are their owners' own, so a
+  // new row cannot escape this read.
   const toolbar = root.querySelector<HTMLElement>(
     "[data-yunari-theme-toolbar]",
   );
@@ -1290,12 +1297,16 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
     button.getAttribute("aria-label"),
   );
   expect(toolbarNames).toEqual([
+    // Make one, open one, bring one in.
     uiCopy.file.newDocument,
     uiCopy.file.newFromTemplate,
-    uiCopy.file.findAssets,
+    uiCopy.file.openLibrary,
     uiCopy.file.openRecent,
-    uiCopy.file.exportWidget,
+    uiCopy.file.importPackage,
+    // Keep it, then send it out.
     ...THEME_TOOLBAR_ACTIONS.map((row) => row.label),
+    // The editor's own tools.
+    uiCopy.file.findAssets,
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
   ]);
   // The selection's commands are not the document's: they live in the pane
@@ -1335,8 +1346,8 @@ it("reaches every toolbar button by keyboard and runs the one it presses", async
   );
   if (toolbar === null) throw new Error("No theme toolbar.");
   const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>("button")];
-  // File's five functions, the document's six actions and the view toggle.
-  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length + 6);
+  // The lifecycle's five, the document's actions, Find assets and the toggle.
+  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length + 7);
   // Buttons, not divs with handlers: the native button is the keyboard's own
   // Enter/Space target, and nothing may take it out of the tab order.
   for (const button of buttons) {
@@ -1787,8 +1798,8 @@ it("draws the editor's own header actions only in editor mode", async () => {
     publish: root.querySelector("[data-yunari-publish]") !== null,
   });
   const editorActions = {
-    // File's five functions, the document's six actions and the view toggle.
-    toolbar: THEME_TOOLBAR_ACTIONS.length + 6,
+    // The lifecycle's five, the document's actions, Find assets and the toggle.
+    toolbar: THEME_TOOLBAR_ACTIONS.length + 7,
     publish: true,
   };
 
