@@ -15,14 +15,15 @@ export const DISABLED_KEY = "yunari.asset-finder.disabled";
 /** The kind filter's own value: every source, or one preset kind. */
 export type KindFilter = "all" | PresetKind;
 
-/** The rail's fixed order (R1). A category the registry adds later that
- *  this list does not name appends alphabetically rather than disappearing. */
+/** The rail's order, alphabetical by the tab's own label. A category the
+ *  registry adds later that this list does not name appends alphabetically
+ *  rather than disappearing. */
 export const CATEGORY_ORDER: readonly ListingCategory[] = [
+  "colour",
   "font",
   "icon",
   "image",
   "video",
-  "colour",
   "local",
 ];
 

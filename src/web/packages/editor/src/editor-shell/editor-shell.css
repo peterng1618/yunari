@@ -913,12 +913,22 @@ body,
   cursor: pointer;
 }
 .editor-shell-mode-switch button[aria-pressed="true"] {
-  background: var(--stage);
-  color: var(--shell-text);
+  /* The rail slot's selected state: the accent ink over its own 14% wash,
+     rather than a second surface the chrome would have to learn. */
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 .editor-shell-mode-switch button:focus-visible {
   outline: 2px solid var(--shell-accent);
   outline-offset: 2px;
+}
+/* The finder's tab rail takes the same selected state as the shell's slots:
+   accent ink over the accent's 14% wash, with the tab's own underline left as
+   the rail's bar. In the chrome stylesheet because it is chrome's rule, not a
+   utility the component re-spells. */
+[data-yunari-asset-tab][data-active] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 /* The mode's own region, beside the editor's body rather than inside it. It
    fills what the body leaves, so a surface A.2 and A.8 land here is handed the

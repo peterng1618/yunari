@@ -71,7 +71,7 @@ export function FinderFrame(props: {
                   key={tab.id}
                   value={tab.id}
                   data-yunari-asset-tab={tab.id}
-                  className="flex h-12 items-center gap-[var(--space-6)] border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent data-[active]:bg-[var(--panel-2)] data-[active]:text-text"
+                  className="flex h-12 items-center gap-[var(--space-6)] border-b-2 border-transparent px-[var(--space-12)] text-sm text-muted hover:text-text data-[active]:border-accent"
                 >
                   {tab.icon}
                   {tab.label}
