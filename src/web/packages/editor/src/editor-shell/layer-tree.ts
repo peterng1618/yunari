@@ -179,10 +179,9 @@ export function rowNameOf(object: FabricObject, kindWord: string): string {
  * `undefined` for a shape this build cannot name.
  *
  * Read off Fabric's own `type` tag, the same way `kindOf` tells one object from
- * another — and it is Fabric's getter rather than the envelope's spelling, so
- * `scene-fabric`'s `Arc` and `Wedge` (whose classes keep the capitals a scene
- * JSON carries, because Fabric 7 ships no sweep and the tag is what keeps an arc
- * from reviving as a full disc) read here as `arc` and `wedge`.
+ * another — and it is Fabric's getter rather than the envelope's spelling.
+ * Custom shapes are `Path` objects, so every one of them answers `path` here;
+ * the preset it was inserted from is not persisted as a second identity.
  *
  * `undefined` is an answer rather than a gap — a shape tag a newer build wrote is
  * not a `rect`, and a row that guessed a neighbour would name a kind the document
@@ -199,16 +198,8 @@ function shapeKindOf(object: FabricObject): ShapeKind | undefined {
       return "ellipse";
     case "polygon":
       return "polygon";
-    case "polyline":
-      return "polyline";
-    case "line":
-      return "line";
     case "path":
       return "path";
-    case "arc":
-      return "arc";
-    case "wedge":
-      return "wedge";
     default:
       return undefined;
   }

@@ -323,12 +323,7 @@ function applyArtboardPaint(
   // A revived envelope from before the camera carried the artboard paint here;
   // left set it would cover the pasteboard again.
   editor.canvas.backgroundColor = "";
-  applyObjectPalettePaints(editor.canvas, globals, {
-    // A document may ask for paint the product will not draw — a filled arc, say.
-    // Said through the shell's own warning channel, beside the glass and media
-    // reports, so a document that opens having lost something is not silent.
-    onRefusedPaint: (message) => editor.errorManager.warn("paint", message),
-  });
+  applyObjectPalettePaints(editor.canvas, globals);
   applyObjectTypeTokens(editor.canvas, globals);
   editor.canvas.requestRenderAll();
   // The caller keeps this: it is what the glass backdrop composes the media
@@ -403,7 +398,6 @@ function createNativeEditor(input: {
         target,
         scene,
         input.resolveSceneAsset,
-        { onRefusedPaint: (message) => errors.warn("paint", message) },
         // Undo normalises a legacy display text exactly as the mount did, or an
         // edit would come back as a class the author cannot type into.
         { editableText: true },
@@ -621,18 +615,10 @@ export async function mountEditorShell({
     editor.canvas.on("editor:history-state-loaded" as never, paintArtboard);
 
     if (opened !== undefined) {
-      // The same warning channel the paint pass reports through, so a document
-      // that loses a figure at revival says so through the shell's own line —
-      // and says it once, because `refuseUndrawablePaint` leaves the
-      // reference-carrying arc to the paint pass below.
       await reviveThemeEnvelope(
         editor.canvas,
         opened,
         resolveSceneAsset,
-        {
-          onRefusedPaint: (message) =>
-            editor.errorManager.warn("paint", message),
-        },
         // The editor is the only surface that types into text; the player keeps
         // the display class it persisted.
         { editableText: true },

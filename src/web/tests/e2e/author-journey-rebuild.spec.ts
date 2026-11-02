@@ -80,7 +80,12 @@ test.describe("the reference composition, built from blank", () => {
     // today's inventory and nothing else; the groups below are the claim that
     // was actually meant, and they fail if a group disappears rather than if
     // somebody adds a button.
-    await expect(pane.getByRole("group", { name: "Shape" })).toBeVisible();
+    await expect(
+      pane.getByRole("group", { name: "Basic Shape" }),
+    ).toBeVisible();
+    await expect(
+      pane.getByRole("group", { name: "Custom Shape" }),
+    ).toBeVisible();
     await expect(pane.getByRole("group", { name: "Chart" })).toBeVisible();
     // And every group offers at least one control, so an empty group cannot
     // satisfy a visibility check.

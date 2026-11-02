@@ -8,7 +8,6 @@ import {
 import {
   Circle,
   classRegistry,
-  type FabricObject,
   version as fabricVersion,
   Group,
   Path,
@@ -23,13 +22,7 @@ import {
   isFabricAssetReference,
   YUNARI_ASSET_PROPERTY,
 } from "./object-asset.js";
-import {
-  ARC_FILL_REFUSED,
-  type PaintApplicationOptions,
-  refusalIsPaintPasses,
-  refusesFill,
-  YUNARI_PAINT_PROPERTY,
-} from "./object-paint.js";
+import { YUNARI_PAINT_PROPERTY } from "./object-paint.js";
 
 // `fabric/es` is selective: register every baseline scene class that v2 JSON
 // may revive instead of relying on another renderer import to do it first.
@@ -139,7 +132,6 @@ export async function reviveScene(
   canvas: StaticCanvas,
   scene: SerialisedScene,
   resolveAsset?: (assetId: string) => string | undefined,
-  paint: PaintApplicationOptions = {},
   options: ReviveSceneOptions = {},
 ): Promise<void> {
   disposeScene(canvas);
@@ -162,7 +154,6 @@ export async function reviveScene(
   );
   if (clipPath !== undefined) canvas.clipPath = clipPath;
   if (backgroundColor !== undefined) canvas.backgroundColor = backgroundColor;
-  refuseUndrawablePaint(canvas.getObjects(), paint);
 }
 
 export interface ReviveSceneOptions {
@@ -202,51 +193,11 @@ function editableTextObject(
   };
 }
 
-/**
- * Withholds paint the product will not draw, on **every** surface.
- *
- * Here rather than in the editor's paint pass because Fabric restores a serialised
- * fill inside `loadFromJSON`, and the player resolves no palette paints at all —
- * so a theme carrying a hand-authored filled arc reached a phone as the chord its
- * own curve is not, while the editor that authored it showed the curve. The device
- * is a lens on the document only if the two agree what the document says, and this
- * is the one function both surfaces traverse.
- *
- * The authored reference is kept, so refusing on a display does not quietly
- * rewrite the author's theme. `refusesFill` is the one answer to which kind this
- * is; nothing here restates it.
- *
- * **The half only this site can report is reported here.** An arc carrying a
- * `yunariPaint` is refused again by the editor's paint pass, which has its own
- * channel and says the same sentence — so reporting it here too would say it
- * twice on one load. An arc with no reference never reaches that pass, and was
- * previously refused in silence: the author watched a figure vanish with nothing
- * said. That case is this function's alone, so `refusalIsPaintPasses` decides it
- * and no second copy of the rule appears.
- */
-function refuseUndrawablePaint(
-  objects: readonly FabricObject[],
-  paint: PaintApplicationOptions,
-): void {
-  for (const object of objects) {
-    if (object instanceof Group) {
-      refuseUndrawablePaint(object.getObjects(), paint);
-      continue;
-    }
-    if (!refusesFill(object)) continue;
-    object.set("fill", "");
-    if (!refusalIsPaintPasses(object)) {
-      paint.onRefusedPaint?.(ARC_FILL_REFUSED);
-    }
-  }
-}
-
 /** Refuse a different Fabric runtime instead of guessing its serialization semantics. */
 export async function reviveThemeEnvelope(
   canvas: StaticCanvas,
   envelope: FabricThemeEnvelope,
   resolveAsset?: (assetId: string) => string | undefined,
-  paint: PaintApplicationOptions = {},
   options: ReviveSceneOptions = {},
 ): Promise<void> {
   assertFabricThemeEnvelopeCompatible(envelope);
@@ -254,7 +205,6 @@ export async function reviveThemeEnvelope(
     canvas,
     envelope.scene as SerialisedScene,
     resolveAsset,
-    paint,
     options,
   );
 }

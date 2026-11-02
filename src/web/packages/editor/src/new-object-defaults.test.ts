@@ -8,7 +8,7 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
-import { classRegistry, type FabricObject } from "fabric/es";
+import { classRegistry, type FabricObject, Path } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import {
   createNewChartDefaults,
@@ -17,17 +17,33 @@ import {
   createNewShape,
   createNewTextDefaults,
   frostedShapeFill,
+  isPathPreset,
   NEW_OBJECT_INSET,
   NEW_OBJECT_STEP,
   NEW_PANEL_SIZE,
   newObjectName,
   newObjectPlacement,
+  newShapeName,
   nextNewObjectPlacement,
+  PATH_PRESET_IDS,
+  PATH_PRESETS,
   SHAPE_KINDS,
-  type ShapeKind,
+  type ShapeInsertion,
 } from "./new-object-defaults.js";
 import { insertGroups } from "./new-object-panel.js";
 import { uiCopy } from "./ui-copy.js";
+
+const ALL_SHAPES: readonly ShapeInsertion[] = [
+  ...SHAPE_KINDS,
+  ...PATH_PRESET_IDS,
+];
+
+/** The word the Add pane and the layer list give a shape. */
+function labelOf(kind: ShapeInsertion): string {
+  return isPathPreset(kind)
+    ? uiCopy.pathPresets[kind as keyof typeof uiCopy.pathPresets]
+    : uiCopy.shapeKinds[kind];
+}
 
 const globals = {
   palette: {
@@ -66,34 +82,32 @@ const cardGlobals = {
 /**
  * A shape that is drawn rather than stroked: the ones an author fills.
  *
- * **Listed, not derived by exclusion.** An exclusion filter cannot be wrong in
- * one direction: a kind added to `SHAPE_KINDS` and named in neither list falls
- * into this one by default, so it would be swept as filled without anyone
- * deciding that, and no partition check would notice. Naming every member means
- * a new kind has to be classified here on purpose, and the check below fails
- * until it is. `arc` is open for the reason a polyline is: it has no interior.
+ * Basic shapes are all filled. Custom presets are classified by their own
+ * `paint`, so the open ones (a line and an arc) are stroked and the sector is
+ * filled. The two lists are named rather than filtered so a new preset has to be
+ * classified on purpose.
  */
-const CLOSED_KINDS: readonly ShapeKind[] = [
-  "rect",
-  "ellipse",
-  "polygon",
-  "path",
-  "wedge",
+const CLOSED_KINDS: readonly ShapeInsertion[] = [
+  ...SHAPE_KINDS,
+  ...PATH_PRESET_IDS.filter((preset) => PATH_PRESETS[preset].paint === "fill"),
 ];
 
 /** The other half of the same rule: an open shape is stroked, not filled. */
-const OPEN_KINDS: readonly ShapeKind[] = ["polyline", "line", "arc"];
+const OPEN_KINDS: readonly ShapeInsertion[] = PATH_PRESET_IDS.filter(
+  (preset) => PATH_PRESETS[preset].paint === "stroke",
+);
 
 /**
  * The two lists must account for every kind, and for no kind twice.
  *
- * With both spelled out, adding a kind to `SHAPE_KINDS` and to neither list
- * leaves it in no sweep at all — checked as neither filled nor stroked, which is
- * a silent gap rather than a red one. This is what turns that into a failure.
+ * With both spelled out, adding a kind to `SHAPE_KINDS` or a preset to
+ * `PATH_PRESET_IDS` and to neither list leaves it in no sweep at all — checked
+ * as neither filled nor stroked, which is a silent gap rather than a red one.
+ * This is what turns that into a failure.
  */
-it("partitions every kind into filled or stroked, with none in both", () => {
+it("partitions every shape into filled or stroked, with none in both", () => {
   expect([...CLOSED_KINDS, ...OPEN_KINDS].sort()).toEqual(
-    [...SHAPE_KINDS].sort(),
+    [...ALL_SHAPES].sort(),
   );
   // And no kind is claimed by both, which the sorted comparison alone would not
   // catch if one appeared twice and another not at all.
@@ -108,27 +122,6 @@ it("partitions every kind into filled or stroked, with none in both", () => {
  * *not* — its name, its paint, its size — so they all share one position.
  */
 const placement = newObjectPlacement(0, { width: 1920, height: 1080 });
-
-/**
- * The kinds a frosted treatment may sit on — a **different** set from
- * `CLOSED_KINDS` above, and the difference is the point. A closed path answers
- * "does an author fill this?", and `path` passes it. Frosting answers "is
- * there an interior to sample the backdrop through?", and a `Path` cannot
- * answer that: its closedness is whatever the author typed. Confusing the two
- * is how an open shape ends up with a blur under nothing.
- *
- * The two swept kinds differ from each other here for the same reason, and it
- * is the reason they are two kinds at all: a `wedge` is a region and can be
- * frosted, and an `arc` is a curve with nothing to sample through.
- */
-const GLASS_KINDS: ReadonlySet<string> = new Set([
-  "rect",
-  "circle",
-  "ellipse",
-  "triangle",
-  "polygon",
-  "wedge",
-]);
 
 /** The same palette plus the frosted surface: the pair a glass card needs. */
 const frostGlobals = {
@@ -310,15 +303,15 @@ describe("new object defaults", () => {
   it("names every insertable shape after the button that made it", () => {
     // A shape the Add pane can insert but cannot name would arrive as a bare
     // uuid, which is the exact gap F1.8 exists to close.
-    for (const kind of SHAPE_KINDS) {
-      expect(newObjectName(kind)).toBe(uiCopy.shapeKinds[kind]);
+    for (const kind of ALL_SHAPES) {
+      expect(newShapeName(kind)).toBe(labelOf(kind));
     }
   });
 
   it("gives a newly built shape the name its kind implies", () => {
-    for (const kind of SHAPE_KINDS) {
+    for (const kind of ALL_SHAPES) {
       const shape = createNewShape(`panel-1`, globals, kind, placement);
-      expect(shape.get("name")).toBe(newObjectName(kind));
+      expect(shape.get("name")).toBe(newShapeName(kind));
     }
   });
 
@@ -460,7 +453,7 @@ describe("new shape defaults", () => {
     expect(shape.fill).toBe("#081523d9");
   });
 
-  it.each(SHAPE_KINDS)(
+  it.each(ALL_SHAPES)(
     "places a new %s inset, at artboard coordinates",
     (kind) => {
       const shape = createNewShape(`shape-${kind}`, globals, kind, placement);
@@ -475,14 +468,15 @@ describe("new shape defaults", () => {
     },
   );
 
-  it.each(SHAPE_KINDS)("gives a new %s a visible size", (kind) => {
+  it.each(ALL_SHAPES)("gives a new %s a visible size", (kind) => {
     const shape = createNewShape(`shape-${kind}`, globals, kind, placement);
 
-    expect(shape.width).toBeGreaterThan(0);
-    expect(shape.height).toBeGreaterThan(0);
+    // A horizontal line is one-dimensional by nature: its box has no height,
+    // and its stroke is what makes it visible.
+    expect(Math.max(shape.width, shape.height), kind).toBeGreaterThan(0);
   });
 
-  it.each(SHAPE_KINDS)(
+  it.each(ALL_SHAPES)(
     "gives a new %s a palette reference, not a literal",
     (kind) => {
       const shape = createNewShape(`shape-${kind}`, globals, kind, placement);
@@ -499,7 +493,7 @@ describe("new shape defaults", () => {
   );
 
   it("refuses a new shape without a palette token", () => {
-    for (const kind of SHAPE_KINDS) {
+    for (const kind of ALL_SHAPES) {
       expect(() =>
         createNewShape(`shape-${kind}`, undefined, kind, placement),
       ).toThrow("palette token");
@@ -583,7 +577,7 @@ describe("the surface a shape takes once it is frosted", () => {
 });
 
 describe("a new shape through the persisted envelope", () => {
-  it.each(SHAPE_KINDS)("the validator accepts a saved %s", (kind) => {
+  it.each(ALL_SHAPES)("the validator accepts a saved %s", (kind) => {
     const result = validateFabricThemeEnvelope(
       envelopeWith(
         saved(createNewShape(`shape-${kind}`, globals, kind, placement)),
@@ -593,7 +587,7 @@ describe("a new shape through the persisted envelope", () => {
     expect(result.ok, kind).toBe(true);
   });
 
-  it.each(SHAPE_KINDS)(
+  it.each(ALL_SHAPES)(
     "a saved %s keeps its own property through revival",
     async (kind) => {
       const before = saved(
@@ -609,15 +603,17 @@ describe("a new shape through the persisted envelope", () => {
       expect(after["top"], kind).toBe(before["top"]);
       expect(after["width"], kind).toBe(before["width"]);
       expect(after["height"], kind).toBe(before["height"]);
-      expect((revived as { type?: string }).type, kind).toBe(kind);
+      expect((revived as { type?: string }).type, kind).toBe(
+        fabricTypeOf(kind),
+      );
       expect(after[ownPropertyOf(kind)], kind).toEqual(
         before[ownPropertyOf(kind)],
       );
     },
   );
 
-  it.each(SHAPE_KINDS)(
-    "the validator refuses a glass treatment on a %s",
+  it.each(ALL_SHAPES)(
+    "the validator accepts a glass treatment on a %s",
     (kind) => {
       const object = {
         ...saved(createNewShape(`shape-${kind}`, globals, kind, placement)),
@@ -626,16 +622,15 @@ describe("a new shape through the persisted envelope", () => {
 
       const result = validateFabricThemeEnvelope(envelopeWith(object));
 
-      // The rule is the geometry, not the shape list: the frosted surface needs
-      // a closed path to sample the backdrop through, and these five have one.
-      // `polyline` and `line` are open; `path` is arbitrary author data whose
-      // closedness the product cannot know, so it is refused with them rather
-      // than admitted on the hope that a particular path happens to close.
-      expect(result.ok, kind).toBe(GLASS_KINDS.has(kind));
+      // The published vocabulary admits the class. Whether a particular `Path`
+      // has an interior is decided at the scene by `hasClosedPath`, not here: a
+      // hand-authored open path with a treatment is refused by the renderer,
+      // which is where its commands are visible.
+      expect(result.ok, kind).toBe(true);
     },
   );
 
-  it.each(SHAPE_KINDS)("the validator refuses a %s with no type", (kind) => {
+  it.each(ALL_SHAPES)("the validator refuses a %s with no type", (kind) => {
     const object = saved(
       createNewShape(`shape-${kind}`, globals, kind, placement),
     );
@@ -646,90 +641,47 @@ describe("a new shape through the persisted envelope", () => {
 });
 
 /**
- * The sweep, through save and reopen.
+ * The custom presets, and how they reach the two surfaces that insert shapes.
  *
- * An angle that survives only in memory is an angle the author loses on the
- * first reload, which is the difference between a primitive and a drawing
- * tool. Every value the inspector writes is asserted here as *saved* JSON and
- * then read back through the same registry `loadFromJSON` uses, so a kind that
- * revives into something else — the failure a rectangle fallback would produce
- * — cannot pass by reviving at all.
+ * A preset is data, not a class: every one constructs Fabric's `Path`, so the
+ * persisted type is `Path` even when the tile is named "Wedge" or "Arc".
  */
-describe("a swept angle through the persisted envelope", () => {
-  // Spelled out rather than filtered from `SHAPE_KINDS`: a filter yields an
-  // empty sweep while the kinds are missing, and an `it.each` over nothing
-  // collects no cases at all — which passes for a suite that is doing its job.
-  const SWEPT = ["arc", "wedge"] as const;
-
-  const SWEEPS: readonly [number, number][] = [
-    [0, 90],
-    [45, 270],
-    [270, 360],
-  ];
-
-  it("puts both kinds in the one list every surface reads", () => {
-    // The single list is the guard against drift: the Add pane and the
-    // inspector all read `SHAPE_KINDS`, so a kind absent from it cannot
-    // be inserted anywhere and a kind present in two lists can disagree.
-    for (const kind of SWEPT) {
-      expect(SHAPE_KINDS, kind).toContain(kind);
-    }
-  });
-
-  it("offers both kinds in the groups the Add pane and the canvas context menu share", () => {
-    // The list is only half the claim; what an author can actually insert is
-    // `insertGroups`, which is what both surfaces render. Asserting against the
-    // list alone would pass with a group builder that filtered the new kinds
-    // out — and the shape would then be namable but not insertable.
-    const shapes = insertGroups()
+describe("custom shape presets", () => {
+  it("puts every preset in the groups the Add pane and canvas menu share", () => {
+    const groups = insertGroups();
+    const shapes = groups
       .flatMap((group) => group.objects)
       .filter((object) => object.kind === "shape")
       .map((object) => object.shape);
 
-    for (const kind of SWEPT) {
+    for (const kind of ALL_SHAPES) {
       expect(shapes, kind).toContain(kind);
-      // And it arrives under the name the label table gives it, or the layer
-      // list falls back to something else the moment it is inserted.
-      expect(newObjectName(kind), kind).toBe(uiCopy.shapeKinds[kind]);
+      expect(newShapeName(kind), kind).toBe(labelOf(kind));
     }
   });
 
-  it.each(SWEPT)(
-    "a %s keeps both angles across save and reopen",
-    async (kind) => {
-      for (const [start, end] of SWEEPS) {
-        const before = saved(
-          createNewShape(`shape-${kind}`, globals, kind, placement),
-        );
-        before["startAngle"] = start;
-        before["endAngle"] = end;
-
-        const revived = await revive(before);
-        const after = saved(revived);
-
-        expect(after["startAngle"], `${kind} ${start}–${end}`).toBe(start);
-        expect(after["endAngle"], `${kind} ${start}–${end}`).toBe(end);
-      }
-    },
-  );
-
-  it.each(SWEPT)(
-    "a %s arrives at the quarter-disc the vocabulary could not say",
-    (kind) => {
-      // The case: a quarter-disc used to be a hand-authored SVG
-      // path. These two are what replaced that, and the default has to be the
-      // move rather than something an author has to discover and re-angle.
+  it("draws every custom preset as a Path whose own data edits", () => {
+    for (const kind of PATH_PRESET_IDS) {
       const shape = createNewShape(`shape-${kind}`, globals, kind, placement);
 
-      expect(shape.get("startAngle")).toBe(0);
-      expect(shape.get("endAngle")).toBe(90);
-    },
-  );
+      expect(shape, kind).toBeInstanceOf(Path);
+      expect((shape as Path).path.length, kind).toBeGreaterThan(0);
+      expect(shape.get("name"), kind).toBe(uiCopy.pathPresets[kind]);
+    }
+  });
+
+  it("splits Basic Shape from Custom Shape", () => {
+    const labels = insertGroups().map((group) => group.label);
+    expect(labels).toContain(uiCopy.panels.shapes);
+    expect(labels).toContain(uiCopy.panels.customShapes);
+  });
 });
 
 /** The one property a kind owns that no other kind has. An ellipse owns none —
-    it is width and height like a rectangle — so its kind is what is checked. */
-function ownPropertyOf(kind: ShapeKind): string {
+    it is width and height like a rectangle — so its kind is what is checked.
+    Every custom preset is a `Path`, so its own data is the property. */
+function ownPropertyOf(kind: ShapeInsertion): string {
+  if (isPathPreset(kind)) return "path";
   switch (kind) {
     case "rect":
       return "rx";
@@ -738,17 +690,25 @@ function ownPropertyOf(kind: ShapeKind): string {
     case "ellipse":
       return "ry";
     case "polygon":
-    case "polyline":
       return "points";
-    case "line":
-      return "x2";
     case "path":
       return "path";
-    // Both swept kinds own their two angles, and an arc owns nothing else:
-    // it is a circle's radii with the sector's closing lines left off.
-    case "arc":
-    case "wedge":
-      return "startAngle";
+  }
+}
+
+/** The class tag Fabric's `type` getter reports, which is lowercased. A custom
+    preset is always a `Path`. */
+function fabricTypeOf(kind: ShapeInsertion): string {
+  if (isPathPreset(kind)) return "path";
+  switch (kind) {
+    case "rect":
+      return "rect";
+    case "ellipse":
+      return "ellipse";
+    case "polygon":
+      return "polygon";
+    case "path":
+      return "path";
   }
 }
 
@@ -877,7 +837,7 @@ describe("where a new object lands", () => {
  * passes whether or not the property actually holds.
  */
 describe("a new object's placement through the persisted envelope", () => {
-  it.each(SHAPE_KINDS)(
+  it.each(ALL_SHAPES)(
     "saves a cascaded %s as a plain coordinate, with no trace of the rule",
     async (kind) => {
       // Placed three steps in, as the third object inserted would be.

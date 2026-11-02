@@ -1817,7 +1817,14 @@ describe("authored glass treatment", () => {
     // The round trip the widening exists for: written on a Circle, an Ellipse,
     // a Triangle and a Polygon as well as a Rect, the envelope accepts it.
     // Refusing any of these would be a theme that saves and will not open.
-    for (const type of ["Rect", "Circle", "Ellipse", "Triangle", "Polygon"]) {
+    for (const type of [
+      "Rect",
+      "Circle",
+      "Ellipse",
+      "Triangle",
+      "Polygon",
+      "Path",
+    ]) {
       expect(
         validateFabricThemeEnvelope(
           withObjects([{ type, id: "panel", yunariGlass: { blurRadius: 24 } }]),
@@ -1828,11 +1835,10 @@ describe("authored glass treatment", () => {
   });
 
   it("refuses an open path, whose interior there is nothing to sample", () => {
-    // Polyline and Line are open; a `Path` is arbitrary author data whose
-    // closedness the product cannot know. Naming the three here is the point:
-    // the set is the geometry claim, and a silent widening of it would frost
-    // a shape with no area under the blur.
-    for (const type of ["Polyline", "Line", "Path"]) {
+    // Polyline and Line are classes with no interior. A `Path` is admitted: its
+    // closedness is a property of its commands, which the scene reads through
+    // `hasClosedPath`, so the envelope cannot decide it from the type alone.
+    for (const type of ["Polyline", "Line"]) {
       expect(
         validateFabricThemeEnvelope(
           withObjects([

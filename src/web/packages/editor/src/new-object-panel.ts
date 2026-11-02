@@ -11,11 +11,18 @@ import type { EditorInteraction } from "./editor-interaction.js";
 import {
   createNewShape,
   createNewTextDefaults,
+  isPathPreset,
   nextNewObjectPlacement,
+  PATH_PRESET_IDS,
+  PATH_PRESETS,
   SHAPE_KINDS,
-  type ShapeKind,
+  type ShapeInsertion,
 } from "./new-object-defaults.js";
 import { AddPane } from "./panes/add/add-pane.js";
+import {
+  activeUserPathPresets,
+  subscribeUserPathPresets,
+} from "./path-presets.js";
 import type { TextPlacement } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -62,7 +69,13 @@ export type InsertableObject =
   | {
       readonly kind: "shape";
       readonly label: string;
-      readonly shape: ShapeKind;
+      readonly shape: ShapeInsertion;
+      /** The drawing a custom preset wears as its tile, so the tile shows the
+       *  shape it inserts rather than a stand-in glyph. Basic kinds have none. */
+      readonly path?: {
+        readonly data: string;
+        readonly paint: "stroke" | "fill";
+      };
     }
   | {
       readonly kind: "chart";
@@ -80,14 +93,13 @@ export type InsertableObject =
 /** One heading's worth of them. A heading is what makes "Line" unambiguous. */
 export interface InsertGroup {
   /**
-   * The kind every object in the group is — a group is homogeneous by
-   * construction, because that is what merges one. **This is the group's
-   * identity, and the heading is not:** the pane scopes a group by it
-   * (`data-yunari-add-group`), and a scope derived from the heading would move
-   * the day an author's copy did, which is what the hook exists to stop
-   * (`vg-211`).
+   * The group's own identity, which is a scope rather than the heading.
+   * **The pane scopes a group by it** (`data-yunari-add-group`), and a scope
+   * derived from the heading would move the day an author's copy did, which is
+   * what the hook exists to stop (`vg-211`). Basic and custom shapes are two
+   * groups of the same object kind, so this cannot be the object's kind alone.
    */
-  readonly kind: InsertableObject["kind"];
+  readonly id: string;
   /** The heading, or undefined for an object that stands on its own. */
   readonly label: string | undefined;
   readonly objects: readonly InsertableObject[];
@@ -120,6 +132,18 @@ export function insertGroups(): readonly InsertGroup[] {
       label: uiCopy.shapeKinds[shape],
       shape,
     })),
+    ...PATH_PRESET_IDS.map((preset) => ({
+      kind: "shape" as const,
+      label: uiCopy.pathPresets[preset],
+      shape: preset,
+      path: PATH_PRESETS[preset],
+    })),
+    ...activeUserPathPresets().map((preset) => ({
+      kind: "shape" as const,
+      label: preset.label,
+      shape: preset.id,
+      path: { data: preset.data, paint: preset.paint },
+    })),
     ...CHART_FAMILIES.map((family) => ({
       kind: "chart" as const,
       label: uiCopy.chartFamilies[family],
@@ -129,27 +153,36 @@ export function insertGroups(): readonly InsertGroup[] {
 
   const groups: InsertGroup[] = [];
   for (const object of objects) {
-    const { kind } = object;
+    const id = groupIdOf(object);
     const label = groupOf(object);
     const last = groups[groups.length - 1];
-    // Merged by kind rather than by heading: the heading is copy, and two
+    // Merged by identity rather than by heading: the heading is copy, and two
     // groups drawn under one word would be one group.
-    if (last !== undefined && last.kind === kind) {
+    if (last !== undefined && last.id === id) {
       groups[groups.length - 1] = {
-        kind,
+        id,
         label,
         objects: [...last.objects, object],
       };
     } else {
-      groups.push({ kind, label, objects: [object] });
+      groups.push({ id, label, objects: [object] });
     }
   }
 
   return groups;
 }
 
+/** The scope a group is identified by. Shapes split by whether the tile inserts
+ *  a basic geometry or a custom `Path` preset. */
+function groupIdOf(object: InsertableObject): string {
+  if (object.kind === "shape") {
+    return isPathPreset(object.shape) ? "custom-shape" : "shape";
+  }
+  return object.kind;
+}
+
 /** The heading a group is drawn under, or undefined where its object stands
- *  alone. The heading is not the group's identity — `kind` is. */
+ *  alone. The heading is not the group's identity — `id` is. */
 function groupOf(object: InsertableObject): string | undefined {
   switch (object.kind) {
     case "text":
@@ -157,7 +190,9 @@ function groupOf(object: InsertableObject): string | undefined {
     case "card":
       return uiCopy.panels.cards;
     case "shape":
-      return uiCopy.panels.shapes;
+      return isPathPreset(object.shape)
+        ? uiCopy.panels.customShapes
+        : uiCopy.panels.shapes;
     case "chart":
       return uiCopy.panels.charts;
   }
@@ -198,7 +233,7 @@ export function insertNewText(
 export function insertNewShape(
   editor: EditorInteraction,
   globals: FabricGlobals | undefined,
-  kind: ShapeKind,
+  kind: ShapeInsertion,
 ): void {
   // The id is the stable key bindings, the schema path and the envelope carry,
   // so it names the kind the button made. F1.8 gave the *display* the right
@@ -334,9 +369,7 @@ export function createNewObjectPanel(
   host.append(root);
 
   const reactRoot: Root = createRoot(root);
-  // Flushed, so a caller that reads the pane straight after building it sees
-  // the tiles rather than the empty frame before React's first commit.
-  flushSync(() => {
+  const render = (): void => {
     reactRoot.render(
       createElement(AddPane, {
         groups: insertGroups(),
@@ -344,7 +377,13 @@ export function createNewObjectPanel(
           insertObject(editor, current.globals, actions, object),
       }),
     );
-  });
+  };
+  // Flushed, so a caller that reads the pane straight after building it sees
+  // the tiles rather than the empty frame before React's first commit.
+  flushSync(render);
+  // The author's custom presets live in Settings; adding or removing one there
+  // must change this pane without rebuilding the session.
+  const unsubscribe = subscribeUserPathPresets(render);
 
   return {
     root,
@@ -352,6 +391,7 @@ export function createNewObjectPanel(
       current.globals = nextGlobals;
     },
     destroy() {
+      unsubscribe();
       reactRoot.unmount();
       root.remove();
     },

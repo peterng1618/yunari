@@ -33,13 +33,16 @@ export interface GlassTreatment {
  * Object kinds that may carry the treatment, which is a property of the
  * geometry rather than a roster of class names: the frosted surface needs a
  * closed path to sample the backdrop through, and nothing else. Rounded and
- * square rectangles, the two curves, the two straight-edged primitives, and a
- * group — which Fabric gives no render boundary, so the treatment is refused
- * loudly at attach rather than composited.
+ * square rectangles, the two curves, the two straight-edged primitives, a
+ * closed `Path` and a group — which Fabric gives no render boundary, so the
+ * treatment is refused loudly at attach rather than composited.
  *
- * Polyline, Line and Path are absent, and that is geometry rather than taste:
- * an open path has no interior to sample, and a `Path` is arbitrary author data
- * whose closedness the product cannot know. Text, image and chart objects are
+ * `Path` is admitted here because the published schema cannot see its commands;
+ * whether a particular path is closed is answered at the scene, where the data
+ * is. `scene-fabric`'s `hasClosedPath` decides it for both the renderer and the
+ * editor's control, and an open path is refused there rather than clipped to a
+ * box it does not fill. Polyline, Line and the open custom shapes are absent:
+ * an open path has no interior to sample. Text, image and chart objects are
  * excluded on their own terms: they are not panels, and a blur behind a glyph
  * or a plotted series has no meaning.
  */
@@ -49,7 +52,7 @@ const GLASS_OBJECT_TYPES: ReadonlySet<string> = new Set([
   "Ellipse",
   "Triangle",
   "Polygon",
-  "Wedge",
+  "Path",
   "Group",
 ]);
 

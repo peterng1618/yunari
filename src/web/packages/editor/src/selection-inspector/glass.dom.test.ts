@@ -3,12 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultGaugeSettings, supportsGlass } from "@yunari/renderer-core";
-import {
-  Arc,
-  Wedge,
-  YUNARI_PAINT_PROPERTY,
-  YunariChart,
-} from "@yunari/scene-fabric";
+import { YUNARI_PAINT_PROPERTY, YunariChart } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Circle,
@@ -201,17 +196,14 @@ const LIVE_KIND: Readonly<Record<string, () => unknown>> = {
   Triangle: () => new Triangle({ left: 0, top: 0, width: 40, height: 40 }),
   Polygon: () =>
     new Polygon([new Point(0, -20), new Point(20, 20), new Point(-20, 20)]),
-  // A sector is a region, so the backdrop can be sampled through it exactly as
-  // through a disc. Its open counterpart, `Arc`, is deliberately absent: there
-  // is no interior to sample, which is the same reason `Polyline` is.
-  Wedge: () =>
-    new Wedge({ left: 0, top: 0, radius: 20, startAngle: 0, endAngle: 90 }),
+  // A closed path is a region, so the backdrop can be sampled through it. Its
+  // open counterpart is `PathOpen` below: there is no interior to sample, which
+  // is the same reason `Polyline` is refused.
+  Path: () => new Path("M 0 0 L 20 0 L 20 20 Z"),
   Polyline: () =>
     new Polyline([new Point(0, 0), new Point(20, 20), new Point(40, 0)]),
   Line: () => new Line([0, 0, 20, 20]),
-  Path: () => new Path("M 0 0 L 20 20 L 40 0"),
-  Arc: () =>
-    new Arc({ left: 0, top: 0, radius: 20, startAngle: 0, endAngle: 90 }),
+  PathOpen: () => new Path("M 0 0 L 20 20 L 40 0"),
   Group: () => new Group([new Rect({ width: 40, height: 40 })]),
   ActiveSelection: () => new ActiveSelection([panel(), panel()]),
   Textbox: () => new Textbox("Hi", { left: 0, top: 0, width: 40 }),
@@ -251,7 +243,7 @@ const FROSTABLE: readonly string[] = [
   "Ellipse",
   "Triangle",
   "Polygon",
-  "Wedge",
+  "Path",
 ];
 
 /**
@@ -260,9 +252,8 @@ const FROSTABLE: readonly string[] = [
  */
 const UNFROSTABLE: readonly string[] = [
   "Polyline",
-  "Path",
+  "PathOpen",
   "Line",
-  "Arc",
   "Textbox",
   "YunariChart",
 ];

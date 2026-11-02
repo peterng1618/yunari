@@ -60,6 +60,7 @@ export {
   type DeviceRect,
   type GlassHandle,
   type GlassOptions,
+  hasClosedPath,
 } from "./glass.js";
 export {
   type FabricAssetReference,
@@ -71,10 +72,8 @@ export {
 export { holderOf, parentGroupOf, targetsOf } from "./object-holder.js";
 export { isLocked } from "./object-lock.js";
 export {
-  ARC_FILL_REFUSED,
   applyObjectPalettePaints,
   type FabricPaintRefs,
-  type PaintApplicationOptions,
   paintPropertyFor,
   YUNARI_PAINT_PROPERTY,
 } from "./object-paint.js";
@@ -112,4 +111,3 @@ export type {
 } from "./scene.js";
 export { mountFabricScene } from "./scene.js";
 export { sceneObjects, visitSceneObjects } from "./scene-objects.js";
-export { Arc, Wedge } from "./sector-object.js";

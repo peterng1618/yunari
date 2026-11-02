@@ -29,6 +29,16 @@ import {
   systemShellPalette,
   writeShellChoice,
 } from "../../editor-shell/palette.js";
+import { PathGlyph } from "../../panes/add/path-glyph.js";
+import {
+  activeUserPathPresets,
+  setActiveUserPathPresets,
+  subscribeUserPathPresets,
+  type UserPathPreset,
+  userPathPresetFrom,
+  userPathPresetsKey,
+  writeUserPathPresets,
+} from "../../path-presets.js";
 import { uiCopy } from "../../ui-copy.js";
 import { Page } from "../page.js";
 import { Group } from "../section-group.js";
@@ -62,6 +72,7 @@ export function AppearancePage(props: {
         />
         <PreviewsSection storage={props.storage} />
       </div>
+      <PathPresetsSection storage={props.storage} />
     </Page>
   );
 }
@@ -324,6 +335,147 @@ function PreviewsSection(props: {
         {props.storage === undefined || persisted === false ? (
           <p className="text-sm text-muted">
             {uiCopy.settings.previewRatiosSessionOnly}
+          </p>
+        ) : null}
+      </div>
+    </Group>
+  );
+}
+
+/**
+ * The author's own custom shapes: each row is a `Path` preset the Add pane
+ * offers, and the form below it adds another.
+ *
+ * A preset is a name and SVG path data; whether it fills or strokes is read
+ * from the data itself (`hasClosedPath`), so the author does not also have to
+ * restate the geometry as a paint choice. The list is editor state, like the
+ * preview ratios: writing it does not touch the open theme.
+ */
+function PathPresetsSection(props: {
+  readonly storage: Storage | undefined;
+}): React.JSX.Element {
+  useSyncExternalStore(subscribeUserPathPresets, userPathPresetsKey);
+  const presets = activeUserPathPresets();
+  const [name, setName] = useState("");
+  const [data, setData] = useState("");
+  const [reason, setReason] = useState<string | undefined>(undefined);
+  const [persisted, setPersisted] = useState<boolean | undefined>(undefined);
+
+  /** Storage first, then the live list, as the preview catalogue writes: a
+   *  failed write still leaves the session's list changed. */
+  const commit = (next: readonly UserPathPreset[]): void => {
+    setPersisted(writeUserPathPresets(props.storage, next));
+    setActiveUserPathPresets(next);
+  };
+
+  const add = (): void => {
+    const candidate = userPathPresetFrom(name, data);
+    if ("reason" in candidate) {
+      setReason(
+        candidate.reason === "name"
+          ? uiCopy.settings.pathPresetNameRequired
+          : candidate.reason === "data"
+            ? uiCopy.settings.pathPresetDataRequired
+            : candidate.reason === "unreadable"
+              ? uiCopy.settings.pathPresetUnreadable
+              : uiCopy.settings.pathPresetDrawsNothing,
+      );
+      return;
+    }
+    setReason(undefined);
+    setName("");
+    setData("");
+    commit([...presets, candidate]);
+  };
+
+  const remove = (id: string): void => {
+    setReason(undefined);
+    commit(presets.filter((preset) => preset.id !== id));
+  };
+
+  return (
+    <Group
+      testId="path-presets"
+      name={uiCopy.settings.pathPresetsHeading}
+      hint={uiCopy.settings.pathPresetsHint}
+    >
+      <div
+        className="flex flex-col gap-[var(--space-8)]"
+        data-yunari-path-presets=""
+      >
+        {presets.length === 0 ? (
+          <p className="text-sm text-muted">
+            {uiCopy.settings.pathPresetEmpty}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-[var(--space-4)]">
+            {presets.map((preset) => (
+              <div
+                key={preset.id}
+                className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-4)]"
+                data-yunari-path-preset={preset.id}
+              >
+                <span className="flex h-5 w-5 items-center justify-center text-text">
+                  <PathGlyph data={preset.data} paint={preset.paint} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {preset.label}
+                </span>
+                <ControlIconButton
+                  label={`${uiCopy.settings.pathPresetRemove} ${preset.label}`}
+                  data={{ "data-yunari-path-preset-remove": preset.id }}
+                  onClick={() => remove(preset.id)}
+                >
+                  <Glyph icon={MINUS_GLYPH} size={14} />
+                </ControlIconButton>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap items-start gap-[var(--space-8)]">
+          <ControlWell density="dialog" widthClassName="min-w-[8rem] flex-1">
+            <input
+              type="text"
+              aria-label={uiCopy.settings.pathPresetNameField}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                setReason(undefined);
+              }}
+              data-yunari-path-preset-name=""
+              className="h-full w-full min-w-0 bg-transparent text-sm text-text outline-none"
+            />
+          </ControlWell>
+          <ControlWell density="dialog" widthClassName="min-w-[12rem] flex-[2]">
+            <textarea
+              aria-label={uiCopy.settings.pathPresetDataField}
+              value={data}
+              rows={2}
+              onChange={(event) => {
+                setData(event.target.value);
+                setReason(undefined);
+              }}
+              data-yunari-path-preset-data=""
+              className="h-full w-full min-w-0 resize-none bg-transparent font-mono text-sm text-text outline-none"
+            />
+          </ControlWell>
+          <button
+            type="button"
+            onClick={add}
+            data-yunari-path-preset-add=""
+            className={ACTION_BUTTON}
+          >
+            {uiCopy.settings.pathPresetAdd}
+          </button>
+        </div>
+        {reason === undefined ? null : (
+          <p className="text-sm" role="alert" data-yunari-path-preset-reason="">
+            {reason}
+          </p>
+        )}
+        {props.storage === undefined || persisted === false ? (
+          <p className="text-sm text-muted">
+            {uiCopy.settings.pathPresetsSessionOnly}
           </p>
         ) : null}
       </div>

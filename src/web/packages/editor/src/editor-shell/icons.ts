@@ -82,7 +82,7 @@ import {
 import type * as React from "react";
 import { createElement } from "react";
 import type { CardDiagram } from "../card-library.js";
-import type { ShapeKind } from "../new-object-defaults.js";
+import type { PathPresetId, ShapeKind } from "../new-object-defaults.js";
 import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";
 import type { RailSlot } from "./rail.js";
@@ -236,18 +236,16 @@ export const CHART_RADAR_GLYPH: LucideIcon = Radar;
 export const CHART_POLAR_BAR_GLYPH: LucideIcon = LoaderPinwheel;
 
 /**
- * One glyph per primitive the Add pane offers, keyed by `ShapeKind`, so a
- * primitive added to that list fails to compile here until it wears a mark.
+ * One glyph per shape the Add pane offers — basic kinds and custom presets
+ * alike — so a shape added to either list fails to compile here until it wears a
+ * mark.
  *
- * **Every entry is a lucide glyph, and four of them are approximations.** Lucide
- * has no `polyline`, `arc` or `wedge`. **The Add pane's tiles read this same map
- * and draw nothing of their own**, so a primitive's tile and its layer row agree
- * by construction rather than by being copied, and the two cannot drift apart
- * the way a second drawing would let them. Each of the three takes the nearest
- * glyph of the same family:
+ * **Every entry is a lucide glyph, and two of them are approximations.** Lucide
+ * has no `arc` or `wedge`. **The Add pane's tiles read this same map and draw
+ * nothing of their own**, so a preset's tile and its layer row agree by
+ * construction rather than by being copied, and the two cannot drift apart the
+ * way a second drawing would let them.
  *
- * - `polyline` is `Activity`, which draws the same open multi-segment line at the
- *   same weight — it is the one lucide glyph whose path is a bare zigzag.
  * - `arc` is `LoaderCircle`, a single open sweep. Nothing in the set names a
  *   sweep, so this is the closest *drawing*; the name is a spinner's.
  * - `wedge` is `TriangleRight`, a right triangle with one rounded corner — the
@@ -261,13 +259,14 @@ export const CHART_POLAR_BAR_GLYPH: LucideIcon = LoaderPinwheel;
  * author actually inserted — and a three-sided mark would name a kind the Add
  * pane does not offer.
  */
-export const SHAPE_GLYPHS: Readonly<Record<ShapeKind, LucideIcon>> = {
+export const SHAPE_GLYPHS: Readonly<
+  Record<ShapeKind | PathPresetId, LucideIcon>
+> = {
   rect: Square,
   ellipse: Ellipse,
   polygon: Hexagon,
-  polyline: Activity,
-  line: Minus,
   path: Spline,
+  line: Minus,
   arc: LoaderCircle,
   wedge: TriangleRight,
 };

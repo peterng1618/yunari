@@ -21,8 +21,9 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/";
 
-/** The words neither half may be described by (spec `:537`). */
-const REFUSED = ["fallback", "advanced", "basic", "simple", "expert"];
+/** The words neither half may be described by (spec `:537`). "Basic" and
+ *  "Custom" are the sections' own names, not a ranking. */
+const REFUSED = ["fallback", "advanced", "simple", "expert"];
 
 /** The pane that carries the insertable list. */
 function addPane(page: Page): Locator {
@@ -42,7 +43,7 @@ test("the Add pane offers units and primitives, neither greyed, neither a fallba
   await openPane(page, "Add");
   const pane = addPane(page);
   await expect(pane).toBeVisible();
-  for (const heading of ["Card", "Shape", "Chart"]) {
+  for (const heading of ["Card", "Basic Shape", "Custom Shape", "Chart"]) {
     await expect(pane.getByRole("group", { name: heading })).toBeVisible();
   }
 
@@ -116,7 +117,7 @@ test("a card inserted from the Add pane arrives as a unit the tree can name", as
   await expect(clocks).toHaveCount(before + 1);
 });
 
-test("the pane's two Lines are told apart by their group, not by which tile comes last", async ({
+test("a custom shape is a Path, and the chart's Line is told apart from it by its group", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -125,19 +126,17 @@ test("the pane's two Lines are told apart by their group, not by which tile come
   await page.waitForFunction(() => "yunariEditorBridge" in window);
   await openBlank(page);
 
-  // "Line" is a shape and a chart family, and both are in the pane at once. The
+  // "Horizontal line" is the Path preset and "Line" is the chart family. The
   // driver addresses a tile by the group the caller names (`vg-537`), so what
   // proves it is the inserted object's own kind. **Not the scene's count**: a
-  // count grew either way, which is how a positional guess passed for a shape
-  // insert while handing back the chart's Line.
-  await insert(page, "Line", "shape");
+  // count grew either way.
+  await insert(page, "Horizontal line", "custom-shape");
   await insert(page, "Line", "chart");
 
-  // The tags are Fabric's, and Fabric lowercases a class name — the same pair
-  // `layer-tree.ts`'s `kindOf` tells apart ("Fabric type tags are lowercase
-  // class names; the envelope keeps `YunariChart`").
+  // A preset is data, not a class: it arrives as Fabric's `Path`. The chart is
+  // still its own registered class.
   expect((await readScene(page)).map((object) => object.type)).toEqual([
-    "line",
+    "path",
     "yunarichart",
   ]);
 });

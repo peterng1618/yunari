@@ -4,21 +4,17 @@ import {
   paletteTokenOptions,
 } from "@yunari/renderer-core";
 import {
-  Arc,
   applyObjectPalettePaints,
   type FabricPaintRefs,
   paintPropertyFor,
-  Wedge,
   YUNARI_PAINT_PROPERTY,
 } from "@yunari/scene-fabric";
 import {
   Circle,
   Ellipse,
   type FabricObject,
-  Line,
   Path,
   Polygon,
-  Polyline,
   Rect,
   Shadow,
   Triangle,
@@ -74,12 +70,6 @@ const DEFAULT_PANEL_SHADOW_OFFSET = 4;
  *
  * Checked on the live class rather than the persisted `"type"` string: Fabric
  * lowercases `object.type`, and only the scene JSON spells it `Rect`.
- *
- * `Arc` and `Wedge` are named even though both extend `Circle` and are already
- * admitted by that arm. A kind listed only by its parent reads as an oversight
- * to the next reader, and the day someone drops `Circle` from this list — it
- * owns no radius field of its own — the two swept kinds lose their material
- * without anything here saying so.
  */
 function supportsPanelFields(object: FabricObject): boolean {
   return (
@@ -88,30 +78,8 @@ function supportsPanelFields(object: FabricObject): boolean {
     object instanceof Ellipse ||
     object instanceof Triangle ||
     object instanceof Polygon ||
-    object instanceof Polyline ||
-    object instanceof Line ||
-    object instanceof Path ||
-    object instanceof Arc ||
-    object instanceof Wedge
+    object instanceof Path
   );
-}
-
-/**
- * Whether this shape's own geometry includes the two ends of a sweep.
- *
- * Asked on the class, and that is the whole point: `Circle` carries
- * `startAngle`/`endAngle` of its own and defaults them to 0 and 360, so a full
- * disc and a closed-up arc are the same pair of numbers. A gate that read the
- * values would take the fields away exactly when an author had swept a shape
- * all the way round, and they would only come back on a reload — and a gate that
- * read the layer's *name* instead would take them away when an author renamed
- * the row, which is the same defect wearing a different hat.
- *
- * `Wedge` extends `Circle` and `Arc` extends it too, so both kinds are named
- * once here and neither can be added without being seen.
- */
-function hasSweep(object: FabricObject): boolean {
-  return object instanceof Arc || object instanceof Wedge;
 }
 
 /** The object's own stored references. Only `writeRef` writes, and it spreads
@@ -434,20 +402,15 @@ function writeIntoShadow(
   if (live instanceof Shadow) write(live);
 }
 
-/** The shell's own whole-canvas paint pass, with its reporter. This pass walks
-    every object, so an arc elsewhere in the scene is refused by it too and must
-    not do so in silence. */
+/** The shell's own whole-canvas paint pass. */
 function repaint(context: AppearanceContext): void {
-  applyObjectPalettePaints(context.editor.canvas, context.globals, {
-    onRefusedPaint: (message) =>
-      context.editor.errorManager.warn("paint", message),
-  });
+  applyObjectPalettePaints(context.editor.canvas, context.globals);
 }
 
 /**
  * The geometry that belongs to this one kind of shape — a polygon's sides, a
- * polyline's points, a line's endpoints, a sweep's angles, a path's data — or
- * nothing when every number the shape has is already the general W/H pair.
+ * path's data — or nothing when every number the shape has is already the
+ * general W/H pair.
  *
  * Values, not controls: React renders them and `index.ts` writes them through
  * the one funnel, which calls {@link writeShapeGeometryField} for the objects
@@ -465,28 +428,16 @@ export function createShapeGeometryFields(
 const MIN_POLYGON_SIDES = 3;
 const MAX_POLYGON_SIDES = 32;
 
-/** A polyline with fewer than two corners has no length to draw. */
-const MIN_POLYLINE_POINTS = 2;
-
-/**
- * The bounds on a sweep's ends. Fabric's own `Circle` documents `startAngle` as
- * 0–359 and `endAngle` as 1–360, and the full turn is 360 rather than 0, so the
- * two ends share one closed range rather than each having a half-open one the
- * other cannot satisfy.
- */
-const MIN_SWEEP_DEGREES = 0;
-const MAX_SWEEP_DEGREES = 360;
-
 /**
  * Adopts geometry the author just typed, and drops the scale that belonged to
  * the geometry it replaced.
  *
- * A polygon's points, a polyline's points and a path's commands are all
- * **absolute coordinates in the object's own space**, so any `scaleX`/`scaleY`
- * on the object is a scale from a different drawing. Measured: a path sized to
- * 28 × 28 and then given 14 × 14 of new data drew **1 × 3 units** — the new
- * data multiplied by the old geometry's scale, which is the order every icon in
- * a dashboard is built in (insert, size, then draw).
+ * A polygon's points and a path's commands are both **absolute coordinates in
+ * the object's own space**, so any `scaleX`/`scaleY` on the object is a scale
+ * from a different drawing. Measured: a path sized to 28 × 28 and then given
+ * 14 × 14 of new data drew **1 × 3 units** — the new data multiplied by the old
+ * geometry's scale, which is the order every icon in a dashboard is built in
+ * (insert, size, then draw).
  *
  * So the data wins and the scale goes back to 1, which leaves the object at the
  * size its own geometry measures and makes the W and H fields mean what they
@@ -494,8 +445,8 @@ const MAX_SWEEP_DEGREES = 360;
  * keeps — *"the points remain the only persisted truth"* — completed.
  */
 function adoptGeometry(object: FabricObject): void {
-  // Every caller is a `Polygon`, a `Polyline` or a `Path`; all three re-measure
-  // from their own geometry through this one method.
+  // Every caller is a `Polygon` or a `Path`; both re-measure from their own
+  // geometry through this one method.
   (object as FabricObject & { setDimensions(): void }).setDimensions();
   object.set({ scaleX: 1, scaleY: 1 });
 }
@@ -510,8 +461,7 @@ function adoptGeometry(object: FabricObject): void {
 function createShapeFields(object: FabricObject): readonly FieldView[] {
   const fields: FieldView[] = [];
 
-  // A polygon before a polyline: Fabric's `Polygon` is a closed `Polyline`, so
-  // the narrower test has to come first or a polygon would be given both.
+  // A polygon's side count is its own field; a path edits its commands below.
   if (object instanceof Polygon) {
     fields.push({
       id: "shape-sides",
@@ -523,75 +473,6 @@ function createShapeFields(object: FabricObject): readonly FieldView[] {
       integer: true,
       data: { "data-yunari-shape-sides": "" },
     });
-  } else if (object instanceof Polyline) {
-    fields.push({
-      id: "shape-points",
-      control: "text",
-      label: uiCopy.inspectorFields.shapePoints,
-      value: pointsOf(object),
-      multiline: true,
-      data: { "data-yunari-shape-points": "" },
-    });
-  }
-
-  if (object instanceof Line) {
-    const ends = (
-      rowLabel: string,
-      x: "x1" | "x2",
-      y: "y1" | "y2",
-    ): FieldView => ({
-      id: `shape-line-${x}-${y}`,
-      control: "pair",
-      label: rowLabel,
-      data: {},
-      halves: [
-        {
-          id: `shape-line-${x}`,
-          label: uiCopy.inspectorFields.x,
-          value: Math.round(object.get(x) as number),
-          integer: true,
-          data: { "data-yunari-shape-line": x },
-        },
-        {
-          id: `shape-line-${y}`,
-          label: uiCopy.inspectorFields.y,
-          value: Math.round(object.get(y) as number),
-          integer: true,
-          data: { "data-yunari-shape-line": y },
-        },
-      ],
-    });
-
-    fields.push(
-      ends(uiCopy.inspectorFields.shapeStart, "x1", "y1"),
-      ends(uiCopy.inspectorFields.shapeEnd, "x2", "y2"),
-    );
-  }
-
-  if (hasSweep(object)) {
-    // Bounded at both ends, and deliberately *not* cross-checked against each
-    // other: a start past its end is a legal full turn expressed the other way
-    // round, and Fabric draws it. Refusing it would mean a second rule about
-    // what a sweep means, held here as well as in the geometry. What is bounded
-    // is a value outside 0–360, by the field's own bounds and the write funnel.
-    // A slider, not a plain number: the pre-plan field drew one because both
-    // bounds were present, and the design's vocabulary says a bounded number is
-    // a slider.
-    for (const key of ["startAngle", "endAngle"] as const) {
-      fields.push({
-        id: `shape-angle-${key}`,
-        control: "slider",
-        label:
-          key === "startAngle"
-            ? uiCopy.inspectorFields.shapeStartAngle
-            : uiCopy.inspectorFields.shapeEndAngle,
-        value: object.get(key) as number,
-        min: MIN_SWEEP_DEGREES,
-        max: MAX_SWEEP_DEGREES,
-        integer: true,
-        data: { "data-yunari-shape-angle": key },
-      });
-    }
   }
 
   if (object instanceof Path) {
@@ -666,47 +547,12 @@ export function writeShapeGeometryField(
     return true;
   }
 
-  if (fieldId === "shape-points" && object instanceof Polyline) {
-    const parsed = parsedPoints(String(value));
-    if (parsed === undefined) return false;
-    object.set("points", parsed);
-    adoptGeometry(object);
-    return true;
-  }
-
   if (fieldId === "shape-path" && object instanceof Path) {
     const parsed = parsedPath(String(value));
     if (parsed === undefined) return false;
     object.set("path", parsed);
     adoptGeometry(object);
     return true;
-  }
-
-  if (object instanceof Line && fieldId.startsWith("shape-line-")) {
-    const key = fieldId.slice("shape-line-".length);
-    if (key === "x1" || key === "y1" || key === "x2" || key === "y2") {
-      // `vg-376`: the branch above refuses an unreadable path while this one
-      // wrote `NaN` for an unreadable number, which is an endpoint nothing can
-      // select or draw. The funnel is public, so the guard belongs here and not
-      // only in the control that happens to call it.
-      const endpoint = parsedGeometryNumber(value);
-      if (endpoint === undefined) return false;
-      object.set(key, endpoint);
-      return true;
-    }
-  }
-
-  if (hasSweep(object) && fieldId.startsWith("shape-angle-")) {
-    const key = fieldId.slice("shape-angle-".length);
-    if (key === "startAngle" || key === "endAngle") {
-      // Both angles are the object's own Fabric properties, so the write is the
-      // same one a save makes and a reopen reads — there is no second copy of
-      // the sweep for this panel to disagree with.
-      const typed = parsedGeometryNumber(value);
-      if (typed === undefined) return false;
-      object.set(key, bound(typed, MIN_SWEEP_DEGREES, MAX_SWEEP_DEGREES));
-      return true;
-    }
   }
 
   return false;
@@ -730,39 +576,6 @@ function boundsOf(points: readonly { x: number; y: number }[]): {
     width: Math.max(...xs) - minX,
     height: Math.max(...ys) - minY,
   };
-}
-
-/** A polyline's corners as one point per line, which is the format the field
-    shows and the only one it reads. */
-function pointsOf(polyline: Polyline): string {
-  return polyline.points.map(({ x, y }) => `${x}, ${y}`).join("\n");
-}
-
-/**
- * The typed points, or nothing. A line that is not exactly two finite numbers
- * refuses the whole edit: `Number("")` is 0, so a half-typed point would
- * otherwise collapse a corner onto the origin.
- */
-function parsedPoints(text: string): { x: number; y: number }[] | undefined {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
-
-  if (lines.length < MIN_POLYLINE_POINTS) return undefined;
-  const points = lines.map(parsedPoint);
-  return points.some((point) => point === undefined)
-    ? undefined
-    : (points as { x: number; y: number }[]);
-}
-
-function parsedPoint(line: string): { x: number; y: number } | undefined {
-  const [x, y, ...rest] = line.split(/[\s,]+/).filter((token) => token !== "");
-  if (x === undefined || y === undefined || rest.length > 0) return undefined;
-  const point = { x: parsedGeometryNumber(x), y: parsedGeometryNumber(y) };
-  return point.x !== undefined && point.y !== undefined
-    ? { x: point.x, y: point.y }
-    : undefined;
 }
 
 /** The stored commands as the SVG data that produced them, so the field shows

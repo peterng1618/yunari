@@ -143,7 +143,7 @@ export async function openBlank(
  *  **`"text"` is the one kind the pane draws in no group at all** — a group of
  *  one would say a region exists where there is one thing — so its scope is the
  *  pane itself and every other kind's is its own fieldset. */
-export type AddGroup = "card" | "text" | "shape" | "chart";
+export type AddGroup = "card" | "text" | "shape" | "custom-shape" | "chart";
 
 /** The button in the Add pane that makes an object, by the name it answers to,
  *  in the group the caller names.

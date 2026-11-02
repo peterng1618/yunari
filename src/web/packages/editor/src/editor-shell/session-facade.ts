@@ -8,7 +8,7 @@ import type { ArrangeAction } from "../arrange.js";
 import type { AssetPlacement, ImportOutcome } from "../asset-finder/actions.js";
 import type { FontActions } from "../asset-finder/fonts.js";
 import type { WallpaperActions } from "../asset-finder/wallpaper.js";
-import type { ShapeKind } from "../new-object-defaults.js";
+import type { ShapeInsertion } from "../new-object-defaults.js";
 import type { ThemedDisplay } from "../theme-library-client.js";
 
 /** Document-level editor actions the shell dispatches. Every method delegates to
@@ -87,7 +87,7 @@ export interface EditorActionFacade {
   replaceSelectedAsset(): void;
   /** The canvas context menu's route to a primitive; the Add pane's own
       buttons call the same construction rather than a second copy of it. */
-  addShape(kind: ShapeKind): void;
+  addShape(kind: ShapeInsertion): void;
   addChart(family: ChartFamily): void;
   /** The canvas context menu's route to the unit library, for the same reason. */
   insertCard(cardId: string): void;

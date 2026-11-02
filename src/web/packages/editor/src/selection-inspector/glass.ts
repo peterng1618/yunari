@@ -5,8 +5,8 @@ import {
   supportsGlass,
   YUNARI_GLASS_PROPERTY,
 } from "@yunari/renderer-core";
-import { applyObjectPalettePaints } from "@yunari/scene-fabric";
-import { type FabricObject, Group } from "fabric/es";
+import { applyObjectPalettePaints, hasClosedPath } from "@yunari/scene-fabric";
+import { type FabricObject, Group, Path } from "fabric/es";
 import { frostedShapeFill } from "../new-object-defaults.js";
 import { uiCopy } from "../ui-copy.js";
 import type { AppearanceContext } from "./appearance.js";
@@ -56,13 +56,15 @@ function kindOf(object: FabricObject): string {
  *
  * Kept apart from `panel.ts`'s `supportsPanelFields` on purpose. That answers
  * "may these fields write this object's material?" — a group has no own fill,
- * radius or border. This answers "may its backdrop be sampled?", and the two
- * differ on `Polyline`, `Line` and `Path`: those have material and no closed
- * area. `glass.dom.test.ts` checks this against `supportsGlass` for every kind
- * Fabric ships, so widening either set cannot reopen the gap silently.
+ * radius or border. This answers "may its backdrop be sampled?". A `Path` is
+ * admitted by its type only when its commands close every subpath; the
+ * predicate is `scene-fabric`'s own, so the control and the renderer cannot
+ * disagree about whether the frost has an interior to draw through.
  */
 export function supportsGlassControl(object: FabricObject): boolean {
-  return supportsGlass(kindOf(object)) && !(object instanceof Group);
+  if (object instanceof Group) return false;
+  if (object instanceof Path && !hasClosedPath(object)) return false;
+  return supportsGlass(kindOf(object));
 }
 
 /** The panel's authored treatment, or none. */
@@ -114,13 +116,7 @@ function frostTheSurface(
   const frost = frostedShapeFill(context.globals, paintRefs(object).fill);
   if (frost === undefined) return;
   writeRef(object, "fill", frost);
-  // The shell's own channel, for the same reason `panel.ts` passes it: this is a
-  // whole-canvas pass, so an arc elsewhere in the scene is refused by it too and
-  // must not do so in silence.
-  applyObjectPalettePaints(context.editor.canvas, context.globals, {
-    onRefusedPaint: (message) =>
-      context.editor.errorManager.warn("paint", message),
-  });
+  applyObjectPalettePaints(context.editor.canvas, context.globals);
 }
 
 /**

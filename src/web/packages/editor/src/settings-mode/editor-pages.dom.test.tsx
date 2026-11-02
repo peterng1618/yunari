@@ -32,6 +32,10 @@ import {
   type ShellPalette,
   shellPalettes,
 } from "../editor-shell/palette.js";
+import {
+  readUserPathPresets,
+  setActiveUserPathPresets,
+} from "../path-presets.js";
 import { uiCopy } from "../ui-copy.js";
 import { AboutPage } from "./pages/about-page.js";
 import { AppearancePage } from "./pages/appearance-page.js";
@@ -104,12 +108,16 @@ async function mountAppearance(
 }
 
 /** Read a controlled input's value the way a keystroke does. */
-async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
+async function typeInto(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): Promise<void> {
+  const prototype =
+    input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )?.set;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
     setter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -129,6 +137,7 @@ const rowOf = (
 beforeEach(() => {
   localStorage.clear();
   setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
+  setActiveUserPathPresets([]);
   document.documentElement.removeAttribute("data-shell-palette");
   credentials.listCredentials.mockReset();
   credentials.saveCredential.mockReset();
@@ -262,6 +271,69 @@ it("adds a ratio, removes it, and resets to the defaults", async () => {
   );
   expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
   expect(activePreviewRatioTokens()).toEqual([...DEFAULT_PREVIEW_RATIO_TOKENS]);
+});
+
+it("adds a custom path preset, draws its own data, and removes it", async () => {
+  const container = await mountAppearance();
+  const name = must(
+    container.querySelector<HTMLInputElement>("[data-yunari-path-preset-name]"),
+    "preset name field",
+  );
+  const data = must(
+    container.querySelector<HTMLTextAreaElement>(
+      "[data-yunari-path-preset-data]",
+    ),
+    "preset data field",
+  );
+  const pathData = "M 0 0 L 10 0 L 5 10 Z";
+
+  await typeInto(name, "Star");
+  await typeInto(data, pathData);
+  await press(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-path-preset-add]"),
+      "Add control",
+    ),
+  );
+
+  const row = must(
+    container.querySelector<HTMLElement>("[data-yunari-path-preset]"),
+    "preset row",
+  );
+  expect(row.textContent).toContain("Star");
+  // The tile draws the preset itself rather than a vocabulary stand-in, which
+  // is what lets an authored figure read as the shape it inserts.
+  expect(row.querySelector("path")?.getAttribute("d")).toBe(pathData);
+  expect(readUserPathPresets(localStorage)).toMatchObject([
+    { label: "Star", data: pathData, paint: "fill" },
+  ]);
+
+  await press(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-path-preset-remove]"),
+      "Remove control",
+    ),
+  );
+  expect(container.querySelectorAll("[data-yunari-path-preset]")).toHaveLength(
+    0,
+  );
+  expect(readUserPathPresets(localStorage)).toEqual([]);
+});
+
+it("names what a path preset is missing rather than storing an invisible one", async () => {
+  const container = await mountAppearance();
+
+  await press(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-path-preset-add]"),
+      "Add control",
+    ),
+  );
+
+  expect(
+    container.querySelector("[data-yunari-path-preset-reason]")?.textContent,
+  ).toBe(uiCopy.settings.pathPresetNameRequired);
+  expect(readUserPathPresets(localStorage)).toEqual([]);
 });
 
 it("names an equivalent ratio that is already listed", async () => {

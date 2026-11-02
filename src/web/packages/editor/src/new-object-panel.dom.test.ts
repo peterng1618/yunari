@@ -5,10 +5,10 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
-import { Ellipse, Line, Path, Polygon, Polyline, Rect } from "fabric/es";
+import { Ellipse, Path, Polygon, Rect } from "fabric/es";
 import { describe, expect, it, vi } from "vitest";
 import { CARD_LIBRARY } from "./card-library.js";
-import { SHAPE_KINDS } from "./new-object-defaults.js";
+import { PATH_PRESET_IDS, SHAPE_KINDS } from "./new-object-defaults.js";
 import { createNewObjectPanel, insertNewText } from "./new-object-panel.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -291,26 +291,29 @@ describe("new object panel", () => {
     ).toEqual([...SHAPE_KINDS]);
   });
 
-  it("groups the shapes so the shape Line is not the chart Line", () => {
+  it("names the chart Line apart from the custom Horizontal line", () => {
     const { root } = createNewObjectPanel(
       document.body,
       editorStub() as never,
       palette as never,
     );
 
-    // "Line" is both a chart family and a primitive. A flat chip list would put
-    // the same word on two buttons and leave the author to guess which is which.
+    // "Line" is still a chart family, but the custom preset is named
+    // "Horizontal line" and sits in Custom Shape, so no two buttons wear one
+    // word and the author is never left to guess which is which.
+    const chart = chartButton(root, uiCopy.chartFamilies.line);
     expect(
-      chartButton(root, uiCopy.chartFamilies.line).closest("fieldset"),
-    ).not.toBe(
-      root.querySelector('[data-yunari-panel-add="line"]')?.closest("fieldset"),
-    );
+      chart.closest("fieldset")?.querySelector("legend")?.textContent,
+    ).toBe(uiCopy.panels.charts);
     const shape = root.querySelector<HTMLElement>(
       '[data-yunari-panel-add="line"]',
     );
     expect(shape === null ? "" : accessibleName(shape)).toBe(
-      uiCopy.shapeKinds.line,
+      uiCopy.pathPresets.line,
     );
+    expect(
+      shape?.closest("fieldset")?.querySelector("legend")?.textContent,
+    ).toBe(uiCopy.panels.customShapes);
   });
 
   it("groups the chart families as their own list rather than strays under Shape", () => {
@@ -330,6 +333,7 @@ describe("new object panel", () => {
     ).toEqual([
       uiCopy.panels.cards,
       uiCopy.panels.shapes,
+      uiCopy.panels.customShapes,
       uiCopy.panels.charts,
     ]);
 
@@ -342,28 +346,27 @@ describe("new object panel", () => {
     }
   });
 
-  it("leaves the two Line buttons in groups a screen reader can tell apart", () => {
+  it("keeps the chart Line and the custom Horizontal line in separate groups", () => {
     const { root } = createNewObjectPanel(
       document.body,
       editorStub() as never,
       palette as never,
     );
 
-    // Neither button's own name changes — the group is the difference, and it
-    // is what an author navigating by group hears before the name.
-    const lines = [...root.querySelectorAll("button")].filter(
-      (button) => accessibleName(button) === uiCopy.shapeKinds.line,
+    // Neither button's own name collides — the chart family keeps "Line" and
+    // the preset is "Horizontal line" — and the group is the second difference
+    // an author navigating by group hears before the name.
+    const line = chartButton(root, uiCopy.chartFamilies.line);
+    expect(line.closest("fieldset")?.querySelector("legend")?.textContent).toBe(
+      uiCopy.panels.charts,
     );
-    expect(lines).toHaveLength(2);
-    const groups = new Set(
-      lines.map(
-        (button) =>
-          button.closest("fieldset")?.querySelector("legend")?.textContent,
-      ),
+    const custom = root
+      .querySelector('[data-yunari-panel-add="line"]')
+      ?.closest("fieldset");
+    expect(custom?.querySelector("legend")?.textContent).toBe(
+      uiCopy.panels.customShapes,
     );
-    expect(groups).toEqual(
-      new Set([uiCopy.panels.shapes, uiCopy.panels.charts]),
-    );
+    expect(accessibleName(line)).not.toBe(uiCopy.pathPresets.line);
   });
 
   // No circle and no triangle: both are shapes the editor no longer offers.
@@ -374,8 +377,6 @@ describe("new object panel", () => {
     ["rect", Rect],
     ["ellipse", Ellipse],
     ["polygon", Polygon],
-    ["polyline", Polyline],
-    ["line", Line],
     ["path", Path],
   ] as const)("inserts a %s as its own Fabric class", (kind, Class) => {
     const editor = editorStub();
@@ -397,7 +398,24 @@ describe("new object panel", () => {
     expect(editor.historyManager.saveState).toHaveBeenCalledTimes(1);
   });
 
-  it.each([...SHAPE_KINDS])(
+  it.each([...PATH_PRESET_IDS])("inserts the %s preset as a Path", (kind) => {
+    const editor = editorStub();
+    const { root } = createNewObjectPanel(
+      document.body,
+      editor as never,
+      palette as never,
+    );
+
+    root
+      .querySelector<HTMLButtonElement>(`[data-yunari-panel-add="${kind}"]`)!
+      .click();
+
+    const inserted = editor.canvas.add.mock.calls[0]?.[0];
+    expect(inserted).toBeInstanceOf(Path);
+    expect(editor.historyManager.saveState).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([...SHAPE_KINDS, ...PATH_PRESET_IDS])(
     "gives an inserted %s an id that names its own kind",
     (kind) => {
       const editor = editorStub();
@@ -424,7 +442,7 @@ describe("new object panel", () => {
     },
   );
 
-  it.each([...SHAPE_KINDS])(
+  it.each([...SHAPE_KINDS, ...PATH_PRESET_IDS])(
     "names the %s button for a screen reader",
     (kind) => {
       const { root } = createNewObjectPanel(
@@ -439,7 +457,11 @@ describe("new object panel", () => {
       expect(button.type).toBe("button");
       // The tile is glyph-led, so the name is the accessible one: the same
       // string a tooltip shows and a screen reader announces.
-      expect(accessibleName(button).trim()).toBe(uiCopy.shapeKinds[kind]);
+      expect(accessibleName(button).trim()).toBe(
+        kind in uiCopy.pathPresets
+          ? uiCopy.pathPresets[kind as keyof typeof uiCopy.pathPresets]
+          : uiCopy.shapeKinds[kind as keyof typeof uiCopy.shapeKinds],
+      );
     },
   );
 
@@ -651,7 +673,10 @@ describe("the chooser offers units and primitives", () => {
       .map((node) => node.textContent ?? "")
       .join(" ");
 
-    for (const word of ["fallback", "advanced", "basic", "simple", "expert"]) {
+    // "Basic" and "Custom" are the section names themselves, not a ranking:
+    // both sections are full peers. The words below would say one is the lesser
+    // path in.
+    for (const word of ["fallback", "advanced", "simple", "expert"]) {
       expect(spoken.toLowerCase(), word).not.toContain(word);
     }
   });

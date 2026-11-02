@@ -12,10 +12,8 @@ import {
   type TypeToken,
 } from "@yunari/renderer-core";
 import {
-  Arc,
   type FabricPaintRefs,
   fabricArtboardPaint,
-  Wedge,
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
@@ -23,12 +21,11 @@ import {
   Ellipse,
   type FabricObject,
   type Gradient,
-  Line,
   Path,
   Polygon,
-  Polyline,
   Rect,
 } from "fabric/es";
+import { type PathPresetPaint, userPathPreset } from "./path-presets.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** Semantic defaults for a new object; generic construction remains editor-owned. */
@@ -93,7 +90,7 @@ export const NEW_OBJECT_STEP = 80;
  * name at all.
  */
 export function newObjectName(
-  kind: "panel" | "text" | "image" | "group" | ChartFamily | ShapeKind,
+  kind: "panel" | "text" | "image" | "group" | ChartFamily | ShapeInsertion,
 ): string {
   if (kind === "text") return uiCopy.panels.text;
   if (kind === "panel") return uiCopy.panels.panel;
@@ -105,14 +102,22 @@ export function newObjectName(
   return uiCopy.shapeKinds[kind as ShapeKind];
 }
 
+/** A name for a shape insertion: `line` here is the custom preset, not the
+ *  chart family `newObjectName` resolves it to. */
+export function newShapeName(kind: ShapeInsertion): string {
+  if (isPathPreset(kind)) {
+    if (kind.startsWith("user:")) {
+      return userPathPreset(kind)?.label ?? uiCopy.shapeKinds.path;
+    }
+    return uiCopy.pathPresets[kind as PathPresetId];
+  }
+  return newObjectName(kind);
+}
+
 /** A new panel's size in whole artboard units: a card, not a full artboard. */
 export const NEW_PANEL_SIZE = { width: 360, height: 200 } as const;
 
-/**
- * A new panel's corner radius, taken from the starter theme rather than
- * chosen: its card border first appears 10px in from the top-left corner on
- * both axes.
- */
+/** A new panel's corner radius, from the starter theme's own card border. */
 const NEW_PANEL_RADIUS = 10;
 
 /** The artboard a new object has to stay inside, and nothing more. */
@@ -265,40 +270,42 @@ export function createNewPanelDefaults(
 }
 
 /**
- * The primitive shapes Fabric 7 ships, in the order the Add pane offers them.
+ * The basic geometries Fabric 7 ships, in the order the Add pane offers them.
  * One list: the pane's buttons, the geometry below and the inspector's own
  * fields all read it, so a shape is never described in two places.
  *
- * `arc` and `wedge` are the two Fabric 7 does **not** ship, and they are here
- * because a quarter-disc is a basic compositional move
- * that could only be had by hand-authoring an SVG path. Neither needs new
- * geometry for the open sweep — `Circle` already carries both angles — so what
- * each one is really for is a `type` of its own, and `Wedge` additionally draws
- * the sector, because a fill under `ctx.arc` closes with a chord and draws a
- * segment rather than a quarter-disc.
+ * Custom figures are not kinds of their own. A line, an arc and a sector are
+ * all `Path` data, so they live in `PATH_PRESETS` below and arrive as the same
+ * class a hand-authored path does.
  */
-export const SHAPE_KINDS = [
-  "rect",
-  "ellipse",
-  "polygon",
-  "polyline",
-  "line",
-  "path",
-  "arc",
-  "wedge",
-] as const;
+export const SHAPE_KINDS = ["rect", "ellipse", "polygon", "path"] as const;
 
 export type ShapeKind = (typeof SHAPE_KINDS)[number];
 
 /**
- * The sweep a new arc or wedge arrives at: a quarter turn from the top.
- *
- * The quarter-disc is the move this primitive exists for, so it is what the
- * button gives rather than something the author has to discover and re-angle —
- * and it is also the shape a reader recognises as "this is the curved thing"
- * before they have touched a field.
+ * The custom shapes the Add pane offers, in the order it offers them. Each is a
+ * preset of `Path`: a data string plus which property its paint belongs on.
  */
-const NEW_SWEEP_DEGREES = 90;
+export const PATH_PRESET_IDS = ["line", "arc", "wedge"] as const;
+
+export type PathPresetId = (typeof PATH_PRESET_IDS)[number];
+
+/** A preset the author added in Settings. Its label and data live in the
+ *  author's own list rather than in this module. */
+export type UserPathPresetId = `user:${string}`;
+
+export type CustomShapeId = PathPresetId | UserPathPresetId;
+
+/** Everything that inserts a shape — a basic kind or a custom preset. */
+export type ShapeInsertion = ShapeKind | CustomShapeId;
+
+/** Whether an id names a custom shape rather than a basic geometry. */
+export function isPathPreset(value: string): value is CustomShapeId {
+  return (
+    (PATH_PRESET_IDS as readonly string[]).includes(value) ||
+    value.startsWith("user:")
+  );
+}
 
 /**
  * A stroke wide enough to read at artboard scale, and the round caps and joins
@@ -308,18 +315,15 @@ const NEW_SWEEP_DEGREES = 90;
 const NEW_SHAPE_STROKE_WIDTH = 2;
 
 /**
- * An open shape is stroked rather than filled — a polyline and a line are what
- * they are drawn with — so it takes a content token, which is the palette's own
- * answer to "a colour visible against the surface".
+ * An open custom shape is stroked rather than filled — a horizontal line and an
+ * arc are what they are drawn with — so it takes a content token, which is the
+ * palette's own answer to "a colour visible against the surface".
  *
- * A path is not one of the two, and this sentence used to claim it was. It is
- * filled: `NEW_PATH` closes with `Z`, so a new path arrives as a closed shape
- * and takes the surface like a rect does. The rule is about a shape's *data*,
- * not its class, and a path's closedness is whatever the author types — which is
- * also why `paintPropertyFor` decides from the fill it finds rather than from
- * the kind. That function is the reason to keep the two apart: it routes an
- * *unfilled* path's paint to the stroke, so a comment claiming new paths are
- * stroked was load-bearing and wrong.
+ * A basic path is not one of them. It is filled: `NEW_PATH` closes with `Z`, so
+ * a new path arrives as a closed shape and takes the surface like a rect does.
+ * The rule is about a shape's *data*, not its class, and a path's closedness is
+ * whatever the author types — which is also why `paintPropertyFor` decides from
+ * the fill it finds rather than from the kind.
  */
 function newShapeStroke(
   globals: FabricGlobals | undefined,
@@ -385,14 +389,6 @@ export function cornersForSides(
   }));
 }
 
-/** An open line across the new-shape box, rising left to right. */
-const NEW_POLYLINE_POINTS = [
-  { x: 0, y: NEW_PANEL_SIZE.height },
-  { x: NEW_PANEL_SIZE.width / 3, y: NEW_PANEL_SIZE.height / 3 },
-  { x: (NEW_PANEL_SIZE.width * 2) / 3, y: (NEW_PANEL_SIZE.height * 2) / 3 },
-  { x: NEW_PANEL_SIZE.width, y: 0 },
-];
-
 /**
  * An arrow, as the SVG data a path is authored in. A path is arbitrary data, so
  * its default is the one shape here that no other entry draws and whose own
@@ -400,24 +396,57 @@ const NEW_POLYLINE_POINTS = [
  */
 const NEW_PATH = `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 4} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${(NEW_PANEL_SIZE.height * 3) / 4} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height} L 0 ${NEW_PANEL_SIZE.height / 2} Z`;
 
+/** The radius a custom arc and wedge are drawn at: the new-shape box's height,
+ *  so the quarter turn fits the box's shorter side. */
+const PRESET_RADIUS = NEW_PANEL_SIZE.height;
+
+export interface PathPreset {
+  /** SVG path data, the same authored field a basic path edits. */
+  readonly data: string;
+  /** Which property the preset's paint belongs on. A line and an arc are open
+   *  curves, so their token is ink; a sector encloses a region, so it takes the
+   *  card surface. */
+  readonly paint: PathPresetPaint;
+}
+
+/**
+ * The custom shapes, as data. **Nothing here is a class**: each preset
+ * constructs Fabric's `Path`, whose SVG data is the only geometry a scene
+ * stores, so a future custom shape is another entry rather than a type.
+ */
+export const PATH_PRESETS: Readonly<Record<PathPresetId, PathPreset>> = {
+  line: {
+    data: `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2}`,
+    paint: "stroke",
+  },
+  arc: {
+    data: `M ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS}`,
+    paint: "stroke",
+  },
+  wedge: {
+    data: `M 0 0 L ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS} Z`,
+    paint: "fill",
+  },
+};
+
 /**
  * Constructs one new shape.
  *
  * The class lives here rather than at the click site because Fabric takes a
- * polygon's points, a line's endpoints and a path's commands as constructor
- * arguments, not as options: eight option bags would be eight wrong calls. Where
- * the object lands and how the edit is recorded stay with the editor.
+ * polygon's points and a path's commands as constructor arguments, not as
+ * options: seven option bags would be seven wrong calls. Where the object lands
+ * and how the edit is recorded stay with the editor.
  */
 export function createNewShape(
   id: string,
   globals: FabricGlobals | undefined,
-  kind: ShapeKind,
+  kind: ShapeInsertion,
   placement: { readonly left: number; readonly top: number },
 ): FabricObject {
   const { width, height } = NEW_PANEL_SIZE;
   // Beside the id in every branch: a shape the author inserted must be as
   // nameable as a text object, and an unnamed one is listed by its uuid.
-  const name = newObjectName(kind);
+  const name = newShapeName(kind);
 
   switch (kind) {
     case "rect":
@@ -449,56 +478,46 @@ export function createNewShape(
         options,
       );
     }
-    case "polyline":
-      return new Polyline(NEW_POLYLINE_POINTS, {
-        id,
-        name,
-        ...newShapeStroke(globals, placement),
-      });
-    case "line":
-      return new Line([0, 0, width, height], {
-        id,
-        name,
-        ...newShapeStroke(globals, placement),
-      });
     case "path":
       return new Path(NEW_PATH, {
         id,
         name,
         ...newShapeSurface(globals, placement),
       });
-    case "arc": {
-      // **Stroked, like a polyline and a line.** A sweep has no interior of its
-      // own — what it encloses is the region between the curve and its chord,
-      // which is not what an author pointing at a curve means. The class draws
-      // `Circle`'s arc unchanged and exists for its own `type`: saved as a
-      // `Circle` an arc is indistinguishable from a full disc, and a disc is
-      // glassable where an arc is not.
-      //
-      // A value rather than a fresh literal, for the reason the polygon branch
-      // gives: Fabric infers its options type from one, and the inferred type
-      // has no room for the authored `id`.
-      const options = { id, name, ...newShapeStroke(globals, placement) };
-      return new Arc({
-        ...options,
-        radius: width / 2,
-        startAngle: 0,
-        endAngle: NEW_SWEEP_DEGREES,
-      });
-    }
-    case "wedge": {
-      // The same sweep with the two radii, so the sector is a region and can be
-      // filled like any other closed shape. The class is the only place the
-      // chord-vs-sector difference is settled; see `Wedge`.
-      const options = { id, name, ...newShapeSurface(globals, placement) };
-      return new Wedge({
-        ...options,
-        radius: width / 2,
-        startAngle: 0,
-        endAngle: NEW_SWEEP_DEGREES,
-      });
+    case "line":
+    case "arc":
+    case "wedge":
+      return newPresetShape(id, name, PATH_PRESETS[kind], globals, placement);
+    default: {
+      const preset = userPathPreset(kind);
+      if (preset === undefined) {
+        throw new Error(`The path preset "${kind}" is no longer available.`);
+      }
+      return newPresetShape(id, name, preset, globals, placement);
     }
   }
+}
+
+/** One custom shape, drawn as a `Path` with either the ink or the card surface. */
+function newPresetShape(
+  id: string,
+  name: string,
+  preset: PathPreset,
+  globals: FabricGlobals | undefined,
+  placement: { readonly left: number; readonly top: number },
+): Path {
+  if (preset.paint === "stroke") {
+    return new Path(preset.data, {
+      id,
+      name,
+      ...newShapeStroke(globals, placement),
+    });
+  }
+  return new Path(preset.data, {
+    id,
+    name,
+    ...newShapeSurface(globals, placement),
+  });
 }
 
 /** Supplies valid authored references without making defaults document state. */

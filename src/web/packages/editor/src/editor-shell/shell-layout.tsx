@@ -12,6 +12,10 @@ import {
   setActivePreviewRatios,
 } from "../display-lens.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
+import {
+  readUserPathPresets,
+  setActiveUserPathPresets,
+} from "../path-presets.js";
 import { confirmDocumentReplacement } from "../persistence-manager/index.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
@@ -287,6 +291,7 @@ export function createShellLayout(
   // reads: the camera opens on the author's list rather than on the defaults,
   // and nothing after this re-reads storage — the settings tab writes both.
   setActivePreviewRatios(readPreviewRatioTokens(storage));
+  setActiveUserPathPresets(readUserPathPresets(storage));
   const initial = resolveShellPalette(
     storage === undefined ? undefined : readShellChoice(storage),
     prefersDarkAppearance(),

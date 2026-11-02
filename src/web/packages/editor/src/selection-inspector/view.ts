@@ -511,13 +511,6 @@ const WRITABLE_FIELD_IDS: ReadonlyMap<string, WritableKind> = new Map([
   // the boundary copies that rule rather than trusting the control to have kept
   // it.
   ["shape-sides", "integer"],
-  ["shape-line-x1", "integer"],
-  ["shape-line-y1", "integer"],
-  ["shape-line-x2", "integer"],
-  ["shape-line-y2", "integer"],
-  ["shape-angle-startAngle", "integer"],
-  ["shape-angle-endAngle", "integer"],
-  ["shape-points", "text"],
   ["shape-path", "text"],
   // Paint. The four whole-number fields are `"integer"` for the same reason the
   // geometry ids are: the pre-plan `numberField` refused a typed fraction on

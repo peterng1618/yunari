@@ -378,7 +378,7 @@ it("routes every creation entry through the façade the way its kind says", asyn
   expect(opened.session.addText).toHaveBeenCalled();
 
   // The two the old menu could not name at all.
-  inGroup(uiCopy.panels.shapes, uiCopy.shapeKinds.line)?.click();
+  inGroup(uiCopy.panels.customShapes, uiCopy.pathPresets.line)?.click();
   expect(opened.session.addShape).toHaveBeenCalledWith("line");
   inGroup(uiCopy.panels.charts, uiCopy.chartFamilies.line)?.click();
   expect(opened.session.addChart).toHaveBeenCalledWith("line");

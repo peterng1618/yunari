@@ -28,7 +28,12 @@ import { type ArrangeAction, applyArrange } from "./arrange.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { KIND_GLYPHS, SHAPE_GLYPHS } from "./editor-shell/icons.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
-import { SHAPE_KINDS, type ShapeKind } from "./new-object-defaults.js";
+import {
+  isPathPreset,
+  PATH_PRESET_IDS,
+  SHAPE_KINDS,
+  type ShapeInsertion,
+} from "./new-object-defaults.js";
 import type { ProductShortcutId } from "./shortcut-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
 
@@ -77,7 +82,7 @@ export type ObjectCommandId =
 /** A construction: it needs no subject, and the id names what it makes — the
  *  kind rides in the id's tail exactly as an arrange verb rides in its own, so
  *  one dispatch carries the whole question. */
-export type ConstructionActionId = "new-text" | `new-shape:${ShapeKind}`;
+export type ConstructionActionId = "new-text" | `new-shape:${ShapeInsertion}`;
 
 /** What every entry carries, whichever half of the registry it is in: the word
  *  it is called, the glyph it wears, and the mark. */
@@ -393,9 +398,11 @@ export function arrangeActions(): readonly ObjectAction[] {
  */
 export const CONSTRUCTION_ACTIONS: readonly ConstructionAction[] = [
   { id: "new-text", label: uiCopy.panels.text, icon: KIND_GLYPHS.text },
-  ...SHAPE_KINDS.map((shape) => ({
+  ...[...SHAPE_KINDS, ...PATH_PRESET_IDS].map((shape) => ({
     id: `new-shape:${shape}` as const,
-    label: uiCopy.shapeKinds[shape],
+    label: isPathPreset(shape)
+      ? uiCopy.pathPresets[shape]
+      : uiCopy.shapeKinds[shape],
     icon: SHAPE_GLYPHS[shape],
   })),
 ];
@@ -412,10 +419,10 @@ export function isConstructionAction(
  *  one. This module owns that id format, so this is its one reader. */
 export function constructedShape(
   id: ConstructionActionId,
-): ShapeKind | undefined {
+): ShapeInsertion | undefined {
   return id === "new-text"
     ? undefined
-    : (id.slice("new-shape:".length) as ShapeKind);
+    : (id.slice("new-shape:".length) as ShapeInsertion);
 }
 
 /**

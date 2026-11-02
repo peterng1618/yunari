@@ -467,9 +467,8 @@ test.describe("the reference composition, authored", () => {
 
     // **The author's work.** A panel inserted and styled through the product.
     await openPane(page, "Add");
-    // The shape that replaced the old "Panel" button. Only "Line" needs the
-    // "Shape" group to tell it from the "Line" chart, so a plain name is
-    // unambiguous here and stays readable.
+    // The shape that replaced the old "Panel" button. The custom presets are a
+    // separate group, so this plain name is unambiguous here and stays readable.
     await page
       .locator('[data-yunari-add-group="shape"]')
       .getByRole("button", { name: "Rectangle", exact: true })

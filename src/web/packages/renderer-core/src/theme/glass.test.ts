@@ -86,6 +86,7 @@ describe("the glass treatment contract", () => {
       "Ellipse",
       "Triangle",
       "Polygon",
+      "Path",
       "Group",
     ])
       expect(supportsGlass(type), type).toBe(true);
@@ -94,9 +95,10 @@ describe("the glass treatment contract", () => {
   it("refuses an open path, whose interior there is nothing to sample", () => {
     // The exclusion is the geometry, so it is named here rather than left as
     // an absence someone re-adds on the theory that it "probably works".
-    // A polyline and a line are open; a `Path` is arbitrary author data whose
-    // closedness the product cannot know.
-    for (const type of ["Polyline", "Line", "Path"])
+    // A polyline and a line are classes with no interior; a `Path` is admitted
+    // here and its own commands are read at the scene, where `hasClosedPath`
+    // can see them.
+    for (const type of ["Polyline", "Line"])
       expect(supportsGlass(type), type).toBe(false);
   });
 

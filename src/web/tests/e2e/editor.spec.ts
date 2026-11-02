@@ -95,6 +95,14 @@ async function insertShape(page: Page, name: string): Promise<void> {
     .click();
 }
 
+/** Clicks one preset in the Add pane's custom shape group. */
+async function insertCustomShape(page: Page, name: string): Promise<void> {
+  await page
+    .locator('[data-yunari-add-group="custom-shape"]')
+    .getByRole("button", { name, exact: true })
+    .click();
+}
+
 const EDITOR = "http://127.0.0.1:4174/";
 
 /**
@@ -1276,18 +1284,22 @@ test.describe("Fabric editor route", () => {
     await page.goto(EDITOR);
     await openPane(page, "Add");
 
-    // Eight, which is `SHAPE_KINDS` — rect, ellipse, polygon, polyline, line,
-    // path, arc, wedge — spelled out here rather than imported, because the
-    // count is the claim being made: the pane offers every primitive and
-    // nothing else. The six this used to expect were the list before the swept
-    // pair arrived, which is the same count the list had after circle and
-    // triangle were folded into their families (vg-078).
+    // Four, which is `SHAPE_KINDS` — rect, ellipse, polygon and path — spelled
+    // out here rather than imported, because the count is the claim being made:
+    // the Basic Shape group offers every primitive and nothing else.
     // Reached through the group's own hook, not its heading: the heading is
     // copy, and the pane holds the file path's controls as well (`vg-211`).
     const shapes = page.locator('[data-yunari-add-group="shape"]');
-    await expect(shapes.getByRole("button")).toHaveCount(8);
-    // Both lists are groups, so neither is orphaned under the other's legend
-    // and the two "Line" buttons are told apart by the group they sit in.
+    await expect(shapes.getByRole("button")).toHaveCount(4);
+    // Three custom presets — a line, an arc and a wedge — all `Path` data.
+    const custom = page.locator('[data-yunari-add-group="custom-shape"]');
+    await expect(custom.getByRole("button")).toHaveCount(3);
+    // A preset's own name is distinct from the chart family's, so the two are
+    // no longer a same-word pair: "Horizontal line" is the preset, "Line" the
+    // chart.
+    await expect(
+      custom.getByRole("button", { name: "Horizontal line", exact: true }),
+    ).toHaveCount(1);
     const charts = page
       .locator('[data-yunari-panel="add"]')
       .getByRole("group", { name: "Chart" });
@@ -1296,10 +1308,8 @@ test.describe("Fabric editor route", () => {
     // below is: the count is the claim being made.
     await expect(charts.getByRole("button")).toHaveCount(6);
     await expect(
-      page
-        .locator("[data-yunari-add-group]")
-        .getByRole("button", { name: "Line", exact: true }),
-    ).toHaveCount(2);
+      charts.getByRole("button", { name: "Line", exact: true }),
+    ).toHaveCount(1);
 
     await insertShape(page, "Polygon");
 
@@ -1576,55 +1586,51 @@ test.describe("Fabric editor route", () => {
     ).toBeVisible();
 
     await openPane(page, "Add");
-    await insertShape(page, "Arc");
+    await insertCustomShape(page, "Arc");
     await openPane(page, "Add");
-    await insertShape(page, "Wedge");
+    await insertCustomShape(page, "Wedge");
 
-    // Both arrived at the quarter turn the Add pane hands over, and they are
-    // not the same shape: an open sweep has no interior to fill, so it is
-    // stroked, while the sector is a region and takes the fill. A filled arc
-    // closes with a chord and draws a circular segment — refused at revival —
-    // so this is what makes the two pictures mean different things.
+    // Both are `Path` data now, and they are not the same shape: an open sweep
+    // has no interior to fill, so it is stroked, while the sector closes with
+    // `Z` and takes the fill.
     //
     // Read from the **saved document**, not from the live objects: Fabric gives
     // every shape a runtime default `fill`, so a live read cannot tell an
-    // authored fill from the one Fabric supplied, and the first version of this
-    // assertion read `true` for an arc the Add pane never filled.
+    // authored fill from the one Fabric supplied.
     const envelope = (await saveEnvelope(page)) as {
       scene: { objects: Array<Record<string, unknown>> };
     };
-    const shapes = envelope.scene.objects
-      .filter((object) => {
-        const type = String(object["type"] ?? "").toLowerCase();
-        return type === "arc" || type === "wedge";
-      })
+    const paths = envelope.scene.objects
+      .filter((object) => String(object["type"] ?? "").toLowerCase() === "path")
       .map((object) => ({
-        type: String(object["type"] ?? "").toLowerCase(),
-        // Zero is Fabric's own default, and the serialiser writes authored
-        // deviations only — so an absent `startAngle` **is** a start of 0. The
-        // same rule that keeps an object's own `locked: false` out of a saved
-        // document.
-        startAngle: object["startAngle"] ?? 0,
-        endAngle: object["endAngle"],
-        // `null` is how Fabric spells "no fill", and the Add pane writes exactly that
-        // for an arc — so an absent key and a null one both mean unfilled.
+        data: Array.isArray(object["path"])
+          ? (object["path"] as unknown[])
+              .map((command) => String(command))
+              .join(" ")
+          : "",
+        closed: JSON.stringify(object["path"] ?? []).includes('"Z"'),
         filled: object["fill"] != null && object["fill"] !== "",
         stroked: object["stroke"] != null && object["stroke"] !== "",
       }));
 
-    const arc = shapes.find((shape) => shape.type === "arc");
-    const wedge = shapes.find((shape) => shape.type === "wedge");
-    expect(arc, "the Add pane inserted an arc").toBeDefined();
-    expect(wedge, "the Add pane inserted a wedge").toBeDefined();
-    // The quarter turn is what the primitive is for: a quarter-disc without
-    // hand-authoring an SVG path.
-    expect([arc?.startAngle, arc?.endAngle]).toEqual([0, 90]);
-    expect([wedge?.startAngle, wedge?.endAngle]).toEqual([0, 90]);
+    expect(paths, "the Add pane inserted two custom paths").toHaveLength(2);
+    const arc = paths.find((shape) => !shape.closed);
+    const wedge = paths.find((shape) => shape.closed);
+    expect(arc, "an open arc preset").toBeDefined();
+    expect(wedge, "a closed wedge preset").toBeDefined();
+    // The quarter turn is what the preset is for: a quarter-disc without
+    // hand-authoring an SVG path. Fabric normalises the `A` command to cubic
+    // curves on save, so the claim is the endpoint and the closing `Z`.
+    expect(arc?.data).toContain("0,200");
+    expect(arc?.data).not.toContain("Z");
+    expect(wedge?.data).toContain("0,200");
+    expect(wedge?.data).toContain("Z");
     expect(arc?.filled, "an arc has no interior, so it is not filled").toBe(
       false,
     );
     expect(arc?.stroked, "an arc is a curve, so it is stroked").toBe(true);
     expect(wedge?.filled, "a wedge is a region, so it is filled").toBe(true);
+    expect(wedge?.stroked, "a wedge is filled, not outlined").toBe(false);
 
     await captureVisualReview(page, testInfo, "editor-arc-and-wedge");
   });

@@ -3,10 +3,8 @@ import { YUNARI_PAINT_PROPERTY } from "@yunari/scene-fabric";
 import {
   Circle,
   Ellipse,
-  Line,
   Path,
   Polygon,
-  Polyline,
   Rect,
   Shadow,
   Textbox,
@@ -19,7 +17,7 @@ import { uiCopy } from "../ui-copy.js";
 import { supportsGlassControl } from "./glass.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector, type SelectionInspector } from "./index.js";
-import { writePanelField, writeShapeGeometryField } from "./panel.js";
+import { writePanelField } from "./panel.js";
 // The shared React drivers: a converted field is a plan-1 control, so a raw
 // `change` event no longer commits it — the picker is opened and an entry
 // clicked, and a number is typed through React's own value tracker.
@@ -168,9 +166,8 @@ const SHAPES = [
   ["ellipse", () => new Ellipse({ ...PLACED, rx: 180, ry: 100 })],
   ["triangle", () => new Triangle({ ...PLACED, width: 360, height: 200 })],
   ["polygon", () => new Polygon([...CORNERS], PLACED)],
-  ["polyline", () => new Polyline([...CORNERS], PLACED)],
-  ["line", () => new Line([0, 0, 100, 50], PLACED)],
   ["path", () => new Path("M 0 0 L 100 0 L 0 50 Z", PLACED)],
+  ["line", () => createNewShape("line", globals, "line", { left: 0, top: 0 })],
   ["arc", () => createNewShape("arc", globals, "arc", { left: 0, top: 0 })],
   [
     "wedge",
@@ -285,30 +282,6 @@ describe("panel fields in the selection inspector", () => {
     expect(rect.fill).toBe("#ecf5ff");
     expect(rect.get(YUNARI_PAINT_PROPERTY)).toEqual({ fill: "palette.text" });
     expect(history.saveState).toHaveBeenCalledTimes(1);
-  });
-
-  it("says so when an inspector edit refuses an arc elsewhere in the scene", async () => {
-    // The pass this control runs is **whole-canvas**: it walks every object, so
-    // editing a panel's fill re-refuses an arc on the far side of the scene.
-    // It used to pass no reporter at all, so an author watching a figure
-    // disappear because they had recoloured something else was told nothing.
-    const arc = createNewShape("arc", globals, "arc", { left: 0, top: 0 });
-    arc.set({ fill: "#ecf5ff" });
-    arc.set(YUNARI_PAINT_PROPERTY, { fill: "palette.text" });
-    const rect = panel();
-    const { host, editor } = setup(rect, [arc]);
-
-    // Non-vacuous: the arc is one that refuses, so a reporter wired to nothing
-    // could not satisfy this.
-    expect(arc.fill, "the arc starts filled").toBe("#ecf5ff");
-
-    await choose(host, "data-yunari-panel-fill", "Text");
-
-    expect(arc.fill, "the arc's fill is withheld").toBe("");
-    expect(
-      editor.errorManager.warn,
-      "and the author is told the shell's own way",
-    ).toHaveBeenCalledWith("paint", expect.stringMatching(/arc/i));
   });
 
   it("keeps the other references when one paint changes", async () => {
@@ -665,11 +638,11 @@ describe("shape material and a shape's own fields", () => {
 
     // One control on the paint, not two — and which property it writes is the
     // scene's own decision, from `paintPropertyFor`. An unfilled open shape
-    // (a polyline, a line, an arc) is ink rather than fill, so it offers the
-    // one labelled control; everything else offers Fill *and* Stroke, since a
-    // closed shape legitimately paints either. `ink.dom.test.ts` is what
-    // proves the unfilled case does not flood.
-    const strokeOnly = kind === "arc";
+    // (a line, an arc) is ink rather than fill, so it offers the one labelled
+    // control; everything else offers Fill *and* Stroke, since a closed shape
+    // legitimately paints either. `ink.dom.test.ts` is what proves the unfilled
+    // case does not flood.
+    const strokeOnly = kind === "line" || kind === "arc";
     expect(host.querySelector("[data-yunari-panel-fill]"), kind).not.toBeNull();
     expect(
       host.querySelector("[data-yunari-panel-stroke]") !== null,
@@ -707,10 +680,10 @@ describe("shape material and a shape's own fields", () => {
       // the guard the count never was.
       //
       // Every shape owns these, except the glass switch: a shape the treatment
-      // cannot reach — an open path, a line, a polyline, an arc — is offered no
-      // glass section at all (`vg-465`), and the same gate that decides that is
-      // asked here rather than hand-listed, so this census cannot drift into a
-      // second copy of it. `stroke` is absent on an arc — its one paint field
+      // cannot reach — an open path, a line, an arc — is offered no glass
+      // section at all (`vg-465`), and the same gate that decides that is asked
+      // here rather than hand-listed, so this census cannot drift into a second
+      // copy of it. `stroke` is absent on an open path — its one paint field
       // already writes the stroke and is labelled `Ink` — and the corner radius
       // is a `Rect`'s alone.
       const expected = [
@@ -720,7 +693,9 @@ describe("shape material and a shape's own fields", () => {
         "[data-yunari-panel-shadow-blur]",
         "[data-yunari-panel-shadow-offset]",
         ...(supportsGlassControl(shape) ? ["[data-yunari-glass-enabled]"] : []),
-        ...(kind === "arc" ? [] : ["[data-yunari-panel-stroke]"]),
+        ...(kind === "line" || kind === "arc"
+          ? []
+          : ["[data-yunari-panel-stroke]"]),
         ...(kind === "rect" ? ["[data-yunari-panel-radius]"] : []),
       ];
       for (const hook of expected) {
@@ -831,83 +806,6 @@ describe("shape material and a shape's own fields", () => {
     expect(history.saveState).toHaveBeenCalled();
   });
 
-  it("refuses a non-finite endpoint at the funnel, the one branch that wrote it unchecked", () => {
-    const line = new Line([0, 0, 100, 50], PLACED);
-
-    // Called directly, not through the field: `ControlNumber`'s own parse
-    // refuses a non-numeric draft before it ever commits, so no field can red
-    // this line — which is exactly why the guard is the funnel's, and why
-    // driving the control (the case below) measures reachability rather than
-    // the guard.
-    expect(writeShapeGeometryField(line, "shape-line-x1", "abc")).toBe(false);
-    expect(writeShapeGeometryField(line, "shape-line-y2", "Infinity")).toBe(
-      false,
-    );
-    expect(line.x1).toBe(0);
-    expect(line.y2).toBe(50);
-    expect(Number.isFinite(line.x1) && Number.isFinite(line.y2)).toBe(true);
-  });
-
-  it("refuses a non-numeric endpoint through the control, and says so in the field", async () => {
-    const line = new Line([0, 0, 100, 50], PLACED);
-    const { history, field } = setup(line);
-    const endpoint = field<HTMLInputElement>('[data-yunari-shape-line="x1"]');
-
-    await edit(endpoint, "abc");
-
-    // The write never arrives: the control holds the refusal and the object is
-    // left exactly as it was.
-    expect(line.x1).toBe(0);
-    expect(history.saveState).not.toHaveBeenCalled();
-    expect(endpoint.getAttribute("aria-invalid")).toBe("true");
-  });
-
-  it("shows a polyline's own points and writes back the ones typed", async () => {
-    const polyline = new Polyline([...CORNERS], PLACED);
-    const { history, field } = setup(polyline);
-    const points = field<HTMLTextAreaElement>("[data-yunari-shape-points]");
-
-    expect(points.value).toBe("0, 0\n100, 0\n50, 100");
-
-    await edit(points, "1, 2\n3, 4");
-
-    expect(polyline.points).toEqual([
-      { x: 1, y: 2 },
-      { x: 3, y: 4 },
-    ]);
-    expect(history.saveState).toHaveBeenCalledTimes(1);
-  });
-
-  it.each(["a, b", "1, 2, 3", "1, 2\nnot a point", "1, 2\n"])(
-    "refuses %o as a polyline's points rather than reading it as zero",
-    async (typed) => {
-      const polyline = new Polyline([...CORNERS], PLACED);
-      const before = polyline.points;
-      const { history, editor, field } = setup(polyline);
-
-      await edit(
-        field<HTMLTextAreaElement>("[data-yunari-shape-points]"),
-        typed,
-      );
-
-      expect(polyline.points).toEqual(before);
-      expect(history.saveState).not.toHaveBeenCalled();
-      expect(editor.errorManager.warn).toHaveBeenCalled();
-    },
-  );
-
-  it("moves a line from its own two endpoints", async () => {
-    const line = new Line([0, 0, 100, 50], PLACED);
-    const { history, field } = setup(line);
-
-    await edit(field<HTMLInputElement>('[data-yunari-shape-line="x2"]'), "200");
-
-    expect(line.x2).toBe(200);
-    expect(line.x1).toBe(0);
-    expect(line.width).toBe(200);
-    expect(history.saveState).toHaveBeenCalledTimes(1);
-  });
-
   it("shows a path's own data as editable path data", async () => {
     const path = new Path("M 0 0 L 100 0 L 0 50 Z", PLACED);
     const { history, field } = setup(path);
@@ -976,26 +874,6 @@ describe("a shape whose geometry the author retypes", () => {
     expect(path.width).toBeCloseTo(14, 1);
     expect(path.width * path.scaleX).toBeCloseTo(14, 1);
   });
-
-  it("does the same for a polyline's points", async () => {
-    const line = new Polyline(
-      [
-        { x: 0, y: 200 },
-        { x: 360, y: 0 },
-      ],
-      { id: "spark", left: 0, top: 0 },
-    );
-    line.set({ scaleX: 0.5, scaleY: 0.5 });
-    const { host } = setup(line);
-
-    const points = host.querySelector<HTMLTextAreaElement>(
-      "[data-yunari-shape-points]",
-    )!;
-    await edit(points, "10, 20\n30, 40");
-
-    expect(line.scaleX).toBe(1);
-    expect(line.scaleY).toBe(1);
-  });
 });
 
 /**
@@ -1004,92 +882,3 @@ describe("a shape whose geometry the author retypes", () => {
  * selectable, and simply has no fields — so these cases assert the fields are
  * *present*, and then that a typed angle reaches the object.
  */
-describe("the angles of a swept shape", () => {
-  const SWEPT = ["arc", "wedge"] as const;
-
-  /**
-   * Both angle fields share one `data-` name and are told apart by its value,
-   * the way a line's four endpoint boxes already are: they are one kind of
-   * number about one thing, so they are one selector with a key rather than two
-   * unrelated names that could drift apart.
-   */
-  const ANGLE = {
-    start: '[data-yunari-shape-angle="startAngle"]',
-    end: '[data-yunari-shape-angle="endAngle"]',
-  } as const;
-
-  /** A new shape of a swept kind, narrowed to the class that owns the angles. */
-  function swept(kind: (typeof SWEPT)[number]): Circle {
-    return createNewShape(kind, globals, kind, {
-      left: 0,
-      top: 0,
-    }) as Circle;
-  }
-
-  it.each(SWEPT)("offers a start and an end angle for a %s", (kind) => {
-    const { host } = setup(swept(kind));
-
-    expect(host.querySelector(ANGLE.start), kind).not.toBeNull();
-    expect(host.querySelector(ANGLE.end), kind).not.toBeNull();
-  });
-
-  it.each(SWEPT)("bounds each %s angle as a slider", (kind) => {
-    const { field } = setup(swept(kind));
-    const end = field<HTMLInputElement>(ANGLE.end);
-
-    // Both bounds were present pre-plan, so the field drew a slider; a bounded
-    // number is a slider, so the converted field is one too.
-    expect(end.type, kind).toBe("range");
-    expect(end.getAttribute("min"), kind).toBe("0");
-    expect(end.getAttribute("max"), kind).toBe("360");
-  });
-
-  it.each(SWEPT)("writes a stepped %s angle onto the object", async (kind) => {
-    const shape = swept(kind);
-    const { field, history } = setup(shape);
-    const start = field<HTMLInputElement>(ANGLE.start);
-    const before = Number(start.value);
-
-    await slide(start, "ArrowRight");
-
-    expect(shape.startAngle).toBe(before + 1);
-    expect(history.saveState).toHaveBeenCalled();
-  });
-
-  it("keeps offering the angles when the author sweeps a full turn", () => {
-    // The gate is the class, never the current numbers. A circle's own defaults
-    // are 0° and 360°, so a gate that asked "is this the default sweep?" would
-    // take the fields away the moment an author closed an arc back up — and an
-    // author whose controls vanish mid-edit has to reload to get them back.
-    const shape = swept("arc");
-    shape.set({ startAngle: 0, endAngle: 360 });
-    const { host } = setup(shape);
-
-    expect(host.querySelector(ANGLE.start)).not.toBeNull();
-    expect(host.querySelector(ANGLE.end)).not.toBeNull();
-  });
-
-  it("offers no angle fields to a shape that carries no sweep", () => {
-    // The converse guard. A rectangle owns no angles, and a control that wrote
-    // one would write a property nothing on that object reads.
-    const { host } = setup(
-      new Rect({ ...PLACED, width: 360, height: 200, rx: 10, ry: 10 }),
-    );
-
-    expect(host.querySelector(ANGLE.start)).toBeNull();
-    expect(host.querySelector(ANGLE.end)).toBeNull();
-  });
-
-  it("lands an angle on the bound the author sweeps to, never past it", async () => {
-    // The bound teaches itself: the slider stops at 0–360, so an angle of 450 is
-    // unreachable rather than wrapped. A wrap — 450 drawn as 90 — is a shape the
-    // author did not ask for and cannot see the difference in.
-    const shape = swept("wedge");
-    shape.set("endAngle", 90);
-    const { field } = setup(shape);
-
-    await slide(field<HTMLInputElement>(ANGLE.end), "End");
-
-    expect(shape.endAngle).toBe(360);
-  });
-});

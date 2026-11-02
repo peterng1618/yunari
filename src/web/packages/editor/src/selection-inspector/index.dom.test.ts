@@ -12,7 +12,7 @@ import {
   instantIn,
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
-import { Wedge, YunariChart } from "@yunari/scene-fabric";
+import { YunariChart } from "@yunari/scene-fabric";
 import {
   ActiveSelection,
   Canvas,
@@ -20,11 +20,9 @@ import {
   type FabricObject,
   Group,
   IText,
-  Line,
   Path,
   Point,
   Polygon,
-  Polyline,
   Rect,
   Textbox,
   util,
@@ -2099,24 +2097,17 @@ describe("the column a kind gets", () => {
   }
 
   /**
-   * One live example per kind, in the brief's own terms: a `Wedge`, a text box,
-   * a chart, an image, a group, and a selection spanning two kinds. The list is
-   * the driver — a kind added to `FABRIC_SELECTION_KINDS` arrives here without an
-   * example and fails to compile, rather than passing unnoticed. The background
-   * is not one of these: it is no Fabric object, and `background-column.test.ts`
-   * describes it.
+   * One live example per kind, in the brief's own terms: a closed `Path`, a text
+   * box, a chart, an image, a group, and a selection spanning two kinds. The list
+   * is the driver — a kind added to `FABRIC_SELECTION_KINDS` arrives here without
+   * an example and fails to compile, rather than passing unnoticed. The
+   * background is not one of these: it is no Fabric object, and
+   * `background-column.test.ts` describes it.
    */
   const EXAMPLE: Readonly<
     Record<Exclude<SelectionKind, "background">, () => FabricObject>
   > = {
-    shape: () =>
-      new Wedge({
-        left: 0,
-        top: 0,
-        radius: 20,
-        startAngle: 0,
-        endAngle: 90,
-      }),
+    shape: () => new Path("M 0 0 L 20 0 L 20 20 Z"),
     text: () => textBox(),
     chart: () => chartOf("gauge", defaultGaugeSettings),
     image: () =>
@@ -2143,7 +2134,7 @@ describe("the column a kind gets", () => {
    * it belongs to `shape`'s own row — and the reason a subject that cannot carry
    * it is given is a subject note (`glass.dom.test.ts`), not a section row.
    *
-   * `shape`'s reference is the `Wedge`, so the corner radius is absent on
+   * `shape`'s reference is a closed `Path`, so the corner radius is absent on
    * purpose and asserted separately: `rx` is a `Rect`'s property and no other
    * shape reads it.
    *
@@ -2196,15 +2187,13 @@ describe("the column a kind gets", () => {
   > = {
     shape: [
       ...EVERY_OBJECT,
-      // This kind's row alone: a `Wedge` is a region, so the treatment reaches
-      // it (`vg-465`).
+      // This kind's row alone: a closed `Path` is a region, so the treatment
+      // reaches it (`vg-465`).
       "[data-yunari-glass-enabled]",
       "[data-yunari-panel-fill]",
       "[data-yunari-panel-stroke]",
       "[data-yunari-panel-border]",
       "[data-yunari-panel-shadow]",
-      '[data-yunari-shape-angle="startAngle"]',
-      '[data-yunari-shape-angle="endAngle"]',
     ],
     text: [
       ...EVERY_OBJECT,
@@ -2302,12 +2291,6 @@ describe("the column a kind gets", () => {
         new Polygon([new Point(0, -20), new Point(20, 20), new Point(-20, 20)]),
       "[data-yunari-shape-sides]",
     ],
-    [
-      "a Polyline",
-      () => new Polyline([new Point(0, 0), new Point(20, 20)]),
-      "[data-yunari-shape-points]",
-    ],
-    ["a Line", () => new Line([0, 0, 20, 20]), "[data-yunari-shape-line]"],
     [
       "a Path",
       () => new Path("M 0 0 L 20 20 L 40 0"),

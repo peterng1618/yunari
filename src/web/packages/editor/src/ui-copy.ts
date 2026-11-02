@@ -242,6 +242,22 @@ export const uiCopy = {
       "No preview ratios left. The display menu offers Fit only until you add one.",
     previewRatiosSessionOnly:
       "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
+    /** Custom Add-pane shapes. One row per author preset, and the two fields
+     *  that define a new one. */
+    pathPresetsHeading: "Custom shapes",
+    pathPresetsHint:
+      "Each entry appears in the Add pane and inserts a Path with this data. A closed path is filled; an open one is stroked.",
+    pathPresetNameField: "Name",
+    pathPresetDataField: "SVG path data",
+    pathPresetAdd: "Add shape",
+    pathPresetRemove: "Remove custom shape",
+    pathPresetEmpty: "No custom shapes yet.",
+    pathPresetNameRequired: "A custom shape needs a name.",
+    pathPresetDataRequired: "A custom shape needs path data.",
+    pathPresetUnreadable: "That path data cannot be read.",
+    pathPresetDrawsNothing: "That path data draws nothing.",
+    pathPresetsSessionOnly:
+      "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
     /** The Keyboard tab: the reference with editing. One word for one act —
      *  the arm button's `aria-label` and its tooltip are this string. */
     keyboardRebind: "Change chord",
@@ -332,18 +348,10 @@ export const uiCopy = {
     panelShadow: "Shadow",
     panelShadowBlur: "Shadow blur",
     panelShadowOffset: "Shadow offset",
-    /** What one shape owns and no other: its corners, its points, its ends or
-        its data. The general geometry fields above stay unchanged. */
+    /** What one shape owns and no other: its corners or its data. The general
+        geometry fields above stay unchanged. */
     shapeSides: "Sides",
-    shapePoints: "Points",
-    shapeStart: "Start",
-    shapeEnd: "End",
     shapePath: "Path data",
-    /** The two ends of a swept curve, in degrees. "Angle" is what makes them
-        different from the line's own `Start`/`End` endpoints one row up: the
-        numbers are positions round a circle rather than points in the box. */
-    shapeStartAngle: "Start angle",
-    shapeEndAngle: "End angle",
     /** The frosted-glass treatment and its one parameter. */
     glassEnabled: "Frosted glass",
     glassBlur: "Glass blur",
@@ -2082,19 +2090,21 @@ export const uiCopy = {
    *  the layer row's role. */
   chartFamilies: chartFamilyLabels,
   /**
-   * One label per primitive shape. The Add pane's shape list, the defaults that
+   * One label per basic shape. The Add pane's shape list, the defaults that
    * build each kind and the inspector's own fields all read this, so a shape is
    * named in exactly one place.
    */
   shapeKinds: {
     rect: "Rectangle",
-    circle: "Circle",
     ellipse: "Ellipse",
-    triangle: "Triangle",
     polygon: "Polygon",
-    polyline: "Polyline",
-    line: "Line",
     path: "Path",
+  },
+  /** One label per custom shape. Each is a `Path` preset, so its name is a
+   *  drawing rather than a class: "Horizontal line" says what the tile inserts,
+   *  where "Line" would collide with the chart family. */
+  pathPresets: {
+    line: "Horizontal line",
     arc: "Arc",
     wedge: "Wedge",
   },
@@ -2230,7 +2240,8 @@ export const uiCopy = {
         product is for. Neither is the fallback for the other, so neither group
         says so. */
     cards: "Card",
-    shapes: "Shape",
+    shapes: "Basic Shape",
+    customShapes: "Custom Shape",
     charts: "Chart",
     /** The Assets pane's one import path. An author imports a *file* — the
         extension decides whether it becomes a layer, a face, a video or a

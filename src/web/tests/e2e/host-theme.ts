@@ -138,17 +138,16 @@ export const CHART_NODE_ID = "e2e-gauge";
  * what moved `stray-quarter` +30.61 px, and the same composition with the strip
  * gone is what `vg-572` waits on.
  *
- * **The discs are placed so part of each survives the clip.** A `Wedge` swept
- * 0°–90° occupies the bottom-right quadrant of its own centre, so a centre near
- * the artboard's edge puts half the shape on the canvas and half past it.
- * Placing the whole quadrant outside would render nothing at all and pass every
+ * **The discs are placed so part of each survives the clip.** A closed quarter
+ * disc in the bottom-right quadrant of its own centre, so a centre near the
+ * artboard's edge puts half the shape on the canvas and half past it. Placing
+ * the whole quadrant outside would render nothing at all and pass every
  * assertion while showing a reader an empty frame. Worked out rather than
- * eyeballed, because `left`/`top` are the bounding box's corner and the centre
- * is `left + radius`, `top + radius`:
+ * eyeballed, because a `Path`'s `left`/`top` are its own bounding box's corner:
  *   - bleeding-quarter: centre (560, 200), radius 140 → x 560…700, and the
  *     artboard ends at 640, so 60 units are cut and 80 are drawn.
- *   - stray-quarter: swept 90°–180° so it occupies the *left* quadrant, centre
- *     (80, 200) → x −60…80, so 60 units are cut past the left edge.
+ *   - stray-quarter: the bottom-left quadrant, centre (80, 200) → x −60…80, so
+ *     60 units are cut past the left edge.
  */
 export const HOST_OVERHANG_THEME_ID = "e2e-overhang";
 
@@ -1061,15 +1060,20 @@ const overhangEnvelope = {
     version: "7.4.0" as const,
     objects: [
       {
-        type: "Wedge" as const,
+        // A closed quarter disc: `Path` data is the one geometry the scene
+        // stores, so a preset is not its own Fabric class.
+        type: "Path" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
-        left: 420,
-        top: 60,
-        radius: 140,
-        startAngle: 0,
-        endAngle: 90,
+        left: 560,
+        top: 200,
+        path: [
+          ["M", 0, 0],
+          ["L", 140, 0],
+          ["A", 140, 140, 0, 0, 1, 0, 140],
+          ["Z"],
+        ],
         fill: "#e8ecf3",
         id: "bleeding-quarter",
         // Resolved paint is a cache; the authored owner is a palette token, and
@@ -1079,15 +1083,18 @@ const overhangEnvelope = {
         yunariPaint: { fill: "palette.ink" },
       },
       {
-        type: "Wedge" as const,
+        type: "Path" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
         left: -60,
-        top: 60,
-        radius: 140,
-        startAngle: 90,
-        endAngle: 180,
+        top: 200,
+        path: [
+          ["M", 140, 0],
+          ["L", 140, 140],
+          ["A", 140, 140, 0, 0, 1, 0, 0],
+          ["Z"],
+        ],
         fill: "#e8ecf3",
         id: "stray-quarter",
         yunariPaint: { fill: "palette.ink" },
@@ -1095,16 +1102,17 @@ const overhangEnvelope = {
       {
         // An arc is an **open sweep**: no interior, so no fill, and it draws as
         // a curve. A fill would close it with a chord and make it a circular
-        // segment, which is why the treatment is refused at revival.
-        type: "Arc" as const,
+        // segment, which is why the glass treatment is refused on it.
+        type: "Path" as const,
         version: "7.4.0" as const,
         originX: "left" as const,
         originY: "top" as const,
-        left: 100,
-        top: 100,
-        radius: 70,
-        startAngle: 0,
-        endAngle: 90,
+        left: 170,
+        top: 170,
+        path: [
+          ["M", 70, 0],
+          ["A", 70, 70, 0, 0, 1, 0, 70],
+        ],
         stroke: "#e8ecf3",
         strokeWidth: 6,
         strokeLineCap: "round" as const,

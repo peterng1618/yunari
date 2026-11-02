@@ -90,6 +90,7 @@ const EXEMPT_SOURCES: readonly string[] = [
   "editor-shell/icons.ts", // the vocabulary: one family, one weight, and the one place both are decided
   "new-fabric-theme-icons.ts", // authored scene icons — lucide geometry turned into Fabric paths, not chrome
   "object-actions.ts", // the icon set: the registry owns which action wears which icon
+  "panes/add/path-glyph.tsx", // a custom preset's own SVG data: no vocabulary glyph can depict an authored path
 ];
 
 /** Where the editor's own sources live, from this file's directory. */
@@ -197,7 +198,7 @@ const VOCABULARY: readonly Drawn[] = [
 const MARKS: readonly LayerMark[] = [
   { kind: "text" },
   { kind: "chart", family: "gauge" },
-  { kind: "shape", shape: "wedge" },
+  { kind: "shape", shape: "path" },
   { kind: "image" },
   { kind: "group" },
   { kind: "background" },
@@ -277,9 +278,12 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
-/** Every `<svg>` the fleet drew. */
+/** Every lucide `<svg>` the fleet drew. A custom preset's tile draws the
+ *  author's own path data instead, which has no size-derived weight to check. */
 function renderedGlyphs(): readonly SVGSVGElement[] {
-  return [...document.querySelectorAll("svg")];
+  return [...document.querySelectorAll("svg")].filter((svg) =>
+    (svg.getAttribute("class") ?? "").startsWith("lucide"),
+  );
 }
 
 it("draws every chrome glyph at its own size's weight, in the tiers", () => {
@@ -372,13 +376,25 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
 
   const tiles = [...host.querySelectorAll("button")];
   expect(tiles).toHaveLength(offered.length);
+  expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual(
+    offered.map((object) => object.label),
+  );
   // A card's tile is the depicted unit and a primitive's is the object it
-  // builds; what this asks is only that each one is drawn, because a kind
-  // offered with no mark is a tile an author cannot choose.
-  for (const tile of tiles) {
+  // builds; a custom preset's is its own path data. What this asks is only that
+  // each one is drawn, because a kind offered with no mark is a tile an author
+  // cannot choose.
+  for (const [index, tile] of tiles.entries()) {
+    const object = offered[index];
     const svg = tile.querySelector("svg");
-    expect(svg).not.toBeNull();
-    // **Rendered, not read off the source.** Every tile wears a vocabulary
+    expect(svg, object?.label).not.toBeNull();
+    if (object?.kind === "shape" && object.path !== undefined) {
+      // The preset's own figure, which no vocabulary glyph could depict.
+      expect(svg?.querySelector("path")?.getAttribute("d")).toBe(
+        object.path.data,
+      );
+      continue;
+    }
+    // **Rendered, not read off the source.** Every other tile wears a vocabulary
     // glyph, and a lucide glyph is the only mark that writes this class — a
     // tile drawn by hand again is caught here rather than in a reading.
     // `?? ""` so a glyph rendered with no class fails as a mismatch against the

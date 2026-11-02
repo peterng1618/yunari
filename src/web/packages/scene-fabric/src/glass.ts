@@ -4,6 +4,7 @@ import {
   Ellipse,
   type FabricObject,
   Group,
+  Path,
   Polygon,
   Rect,
   type StaticCanvas,
@@ -11,7 +12,6 @@ import {
 } from "fabric/es";
 import type { MediaBox } from "./background-media.js";
 import { visitSceneObjects } from "./scene-objects.js";
-import { Arc, sectorPath, Wedge } from "./sector-object.js";
 
 /**
  * Backdrop blur for authored glass panels. A panel samples the surface Fabric is
@@ -871,6 +871,39 @@ function sampleRegion(
 }
 
 /**
+ * Whether a path closes every subpath it draws.
+ *
+ * The frosted treatment needs an interior to sample and a boundary to clip, so
+ * a path with any open subpath is refused. Fabric normalises authored data to
+ * absolute `M`/`L`/`C`/`Q`/`Z` commands before this reads it, so "closed" is
+ * simply every `M` followed by its own `Z` — a path with one open contour does
+ * not become closed because another contour ends in `Z`.
+ *
+ * Shared by the renderer and the editor's control: one answer to whether the
+ * treatment can be offered, rather than a control that enables an edit the
+ * renderer then skips.
+ */
+export function hasClosedPath(object: FabricObject): boolean {
+  if (!(object instanceof Path)) return false;
+  const commands = object.path;
+  if (!Array.isArray(commands) || commands.length === 0) return false;
+  let open = false;
+  let sawSubpath = false;
+  for (const command of commands) {
+    const operation = command[0];
+    if (operation === "M") {
+      if (open) return false;
+      open = true;
+      sawSubpath = true;
+    } else if (operation === "Z") {
+      if (!open) return false;
+      open = false;
+    }
+  }
+  return sawSubpath && !open;
+}
+
+/**
  * The panel's own path in its own local units, origin at the centre, built
  * from the geometry its own paint uses — the clip and the fill have to be the
  * same shape, or the frosted surface reaches where the object is not.
@@ -884,29 +917,6 @@ function localPath(
   ctx: CanvasRenderingContext2D,
   object: FabricObject,
 ): boolean {
-  // Before the `Circle` branch `Wedge` extends: that branch clips to the
-  // **arc** between two angles, while a wedge paints the **sector** — the arc
-  // plus the two radii. `sectorPath` is the shape's own path rather than a
-  // second copy of it, so the clip and the fill cannot drift apart.
-  if (object instanceof Wedge) {
-    const r = positive(object, "radius");
-    if (r === undefined) return false;
-    sectorPath(
-      ctx,
-      r,
-      number(object, "startAngle") ?? 0,
-      number(object, "endAngle") ?? 360,
-      object.counterClockwise,
-    );
-    return true;
-  }
-  // An arc is refused here rather than reaching the `Circle` arm by inheritance.
-  // Clipping it to the arc would be a chord segment and clipping it to the
-  // sector would be an interior it does not paint — either way the frost would
-  // cover ground the shape does not, which is what this function refuses to do.
-  // The treatment is already refused upstream by `supportsGlass`; saying so here
-  // makes that a local fact instead of an accident of two other layers agreeing.
-  if (object instanceof Arc) return false;
   if (object instanceof Circle) {
     // The authored sweep, not a whole turn: a half-disc's blur must not reach
     // the half it does not paint. Absent angles are Fabric's own 0/360.
@@ -960,6 +970,15 @@ function localPath(
       else ctx.lineTo(point.x - offset.x, point.y - offset.y);
     }
     ctx.closePath();
+    return true;
+  }
+  if (object instanceof Path) {
+    // The path's own commands, drawn by Fabric's own renderer. A path is only
+    // admitted when every subpath closes; its bounding box is a rectangle the
+    // author did not draw, and clipping the frost to it would paint blur where
+    // the shape has no interior.
+    if (!hasClosedPath(object)) return false;
+    object._renderPathCommands(ctx);
     return true;
   }
   if (!(object instanceof Rect)) return false;

@@ -8,17 +8,18 @@ import {
 } from "../../editor-shell/icons.js";
 import type { InsertableObject, InsertGroup } from "../../new-object-panel.js";
 import { chartFamilyGlyph } from "../composition/kind-mark.js";
+import { PathGlyph } from "./path-glyph.js";
 
 /**
  * The Add pane's body: `insertGroups()`, drawn as tiles.
  *
  * **The list is not re-derived here.** The pane renders the groups it is given,
  * in the order it is given them, and the shape of the surface follows from that
- * alone: Cards, then Text (which the owner leaves ungrouped), then Shapes, then
- * Charts. A group added to the owner appears here the day it is added, and one
- * this pane invented could not be reached at all — the construction routes back
- * through the owner's own `insertObject`, which is what keeps the eligibility
- * gates and the refusals in one place.
+ * alone: Cards, then Text (which the owner leaves ungrouped), then Basic Shape,
+ * Custom Shape, then Charts. A group added to the owner appears here the day it
+ * is added, and one this pane invented could not be reached at all — the
+ * construction routes back through the owner's own `insertObject`, which is what
+ * keeps the eligibility gates and the refusals in one place.
  *
  * **Every tile wears the chrome vocabulary's own glyph** (`icons.ts`), so there
  * is no second drawing anywhere for a tile and a row to drift apart in. A card
@@ -31,9 +32,9 @@ import { chartFamilyGlyph } from "../composition/kind-mark.js";
  * `data-yunari-panel-card="<card id>"`. `data-yunari-panel="add"` is the
  * pane's, written by `Pane`, and is deliberately not written again here.
  *
- * A group is scoped by `data-yunari-add-group="<kind>"` — the group's own
+ * A group is scoped by `data-yunari-add-group="<id>"` — the group's own
  * identity, never the heading above it, which is copy an author reads and a
- * copy change moves.
+ * copy change moves. Basic and custom shapes are separate scopes.
  */
 export function AddPane({
   groups,
@@ -68,7 +69,7 @@ export function AddPane({
           <fieldset
             key={group.label}
             className="yunari-add-group"
-            data-yunari-add-group={group.kind}
+            data-yunari-add-group={group.id}
           >
             <legend className="yunari-add-eyebrow">{group.label}</legend>
             <div className="yunari-add-grid">{tiles}</div>
@@ -137,7 +138,14 @@ function tileMark(object: InsertableObject): React.JSX.Element {
     case "card":
       return <Glyph icon={CARD_UNIT_GLYPHS[object.diagram]} size={20} />;
     case "shape":
-      return <Glyph icon={SHAPE_GLYPHS[object.shape]} size={20} />;
+      return object.path === undefined ? (
+        <Glyph
+          icon={SHAPE_GLYPHS[object.shape as keyof typeof SHAPE_GLYPHS]}
+          size={20}
+        />
+      ) : (
+        <PathGlyph data={object.path.data} paint={object.path.paint} />
+      );
     case "chart":
       return <Glyph icon={chartFamilyGlyph(object.family)} size={20} />;
     case "text":

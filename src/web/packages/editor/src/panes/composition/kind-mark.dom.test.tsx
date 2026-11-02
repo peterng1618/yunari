@@ -137,13 +137,13 @@ it("gives each kind a mark that says which kind it is", () => {
   expect(armGlyph({ kind: "shape", shape: "rect" })).toBe(
     lucideClass(SHAPE_GLYPHS.rect),
   );
-  expect(armGlyph({ kind: "shape", shape: "wedge" })).toBe(
-    lucideClass(SHAPE_GLYPHS.wedge),
+  expect(armGlyph({ kind: "shape", shape: "path" })).toBe(
+    lucideClass(SHAPE_GLYPHS.path),
   );
   expect(
     armGlyph({ kind: "shape", shape: "rect" }),
     "two primitives do not wear one mark",
-  ).not.toBe(armGlyph({ kind: "shape", shape: "wedge" }));
+  ).not.toBe(armGlyph({ kind: "shape", shape: "path" }));
   // A primitive this build cannot name still draws, with the kind's generic
   // shape mark — a row that drew nothing would be a row with no kind at all.
   expect(armGlyph({ kind: "shape", shape: undefined })).toBe(

@@ -35,7 +35,6 @@ import {
 } from "./object-asset.js";
 import {
   applyObjectPalettePaints,
-  paintPropertyFor,
   YUNARI_PAINT_PROPERTY,
 } from "./object-paint.js";
 import {
@@ -52,7 +51,6 @@ import {
   serialiseScene,
   serialiseThemeEnvelope,
 } from "./persist.js";
-import { Arc, Wedge } from "./sector-object.js";
 
 /**
  * What a saved scene contains, asserted exactly.
@@ -290,7 +288,7 @@ describe("a legacy display text revives as editable only when asked", () => {
     const scene = legacyScene();
     const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
 
-    await reviveScene(revived, scene, undefined, {}, { editableText: true });
+    await reviveScene(revived, scene, undefined, { editableText: true });
 
     const object = revived.getObjects()[0]!;
     expect(object).toBeInstanceOf(IText);
@@ -333,7 +331,7 @@ describe("a legacy display text revives as editable only when asked", () => {
     };
     const revived = new StaticCanvas(undefined, { width: 400, height: 300 });
 
-    await reviveScene(revived, scene, undefined, {}, { editableText: true });
+    await reviveScene(revived, scene, undefined, { editableText: true });
 
     const [group] = revived.getObjects() as Group[];
     expect(group!.getObjects()[0]).toBeInstanceOf(IText);
@@ -1424,209 +1422,3 @@ describe("there is exactly one owner of scene serialisation", () => {
     ]);
   });
 });
-
-/**
- * The refusal, on the path a **display** takes.
- *
- * Round 2 enforced it in the editor's paint pass, which the player never runs:
- * `grep applyObjectPalettePaints packages/player` returns nothing, and the
- * adapter resolves no paint at all. Fabric restores a serialised `fill` inside
- * `loadFromJSON`, so a theme carrying a hand-authored filled arc reached a phone
- * as the 1933-pixel chord — the figure these two kinds exist to eliminate — while
- * the editor that authored it showed the curve. That inverts the plan's own
- * position: the device is a lens on the document only if both agree what the
- * document is.
- *
- * `reviveScene` is the one function both surfaces traverse, so it is the one
- * place that can settle it for both. These cases go through the player's own
- * entry, `reviveThemeEnvelope`, rather than the editor's, because an editor-side
- * assertion cannot carry this finding — the editor already had the refusal.
- */
-describe("a refusal both surfaces apply", () => {
-  /** A saved theme whose arc asks to be filled, as a hand-authored one would. */
-  const filledArcEnvelope = (): ReturnType<typeof serialiseThemeEnvelope> => {
-    const arc = new Arc({
-      left: 20,
-      top: 20,
-      radius: 100,
-      startAngle: 0,
-      endAngle: 90,
-      fill: "#4da3ff",
-      stroke: "",
-    });
-    arc.set(YUNARI_PAINT_PROPERTY, { fill: "palette.cpu" });
-    return serialiseThemeEnvelope(canvasOf(arc), {
-      id: "theme",
-      artboard: { width: 1920, height: 1080 },
-    });
-  };
-
-  it("stops a filled arc painting its chord when a display revives it", async () => {
-    // Through `reviveThemeEnvelope`, which is what `player/src/main.ts` calls.
-    // No paint pass runs here, so anything painted is what Fabric restored.
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(canvas, filledArcEnvelope());
-
-    const arc = canvas.getObjects()[0] as Arc;
-    expect(arc.fill, "the chord never reaches a display").toBe("");
-    expect(paintPropertyFor(arc)).toBe("stroke");
-  });
-
-  it("keeps the authored reference, because refusing a fill is not deleting it", async () => {
-    // The same guarantee R1 made for the editor, on the display's path: the
-    // document still says what it asked for, and still round-trips.
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(canvas, filledArcEnvelope());
-
-    const arc = canvas.getObjects()[0] as Arc;
-    expect(arc.get(YUNARI_PAINT_PROPERTY)).toEqual({ fill: "palette.cpu" });
-    expect(serialiseScene(canvas).objects[0]![YUNARI_PAINT_PROPERTY]).toEqual({
-      fill: "palette.cpu",
-    });
-  });
-
-  it("leaves a wedge's fill alone, because its sector is a region it has", async () => {
-    const wedge = new Wedge({
-      left: 20,
-      top: 20,
-      radius: 100,
-      startAngle: 0,
-      endAngle: 90,
-      fill: "#4da3ff",
-    });
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(
-      canvas,
-      serialiseThemeEnvelope(canvasOf(wedge), {
-        id: "theme",
-        artboard: { width: 1920, height: 1080 },
-      }),
-    );
-
-    expect((canvas.getObjects()[0] as Wedge).fill).toBe("#4da3ff");
-  });
-
-  it("refuses an arc nested in a group, which is where a card puts it", async () => {
-    const group = new Group([
-      new Arc({
-        left: 0,
-        top: 0,
-        radius: 40,
-        startAngle: 0,
-        endAngle: 90,
-        fill: "#4da3ff",
-      }),
-    ]);
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(
-      canvas,
-      serialiseThemeEnvelope(canvasOf(group), {
-        id: "theme",
-        artboard: { width: 1920, height: 1080 },
-      }),
-    );
-
-    const revived = canvas.getObjects()[0] as Group;
-    expect((revived.getObjects()[0] as Arc).fill).toBe("");
-  });
-});
-
-/**
- * The refusal is reported **once**, from whichever site raised it.
- *
- * Two sites refuse, and both are load-bearing for the render: revival
- * withholds what Fabric restored, and the editor's paint pass declines to
- * re-resolve the reference afterwards. Only one of them can be the one that
- * speaks for a given arc, because otherwise a single load says the same
- * sentence twice — and the half that said *nothing* was the half no test
- * reached, because every arc fixture in the suite set `YUNARI_PAINT_PROPERTY`.
- */
-describe("a refusal is spoken once, from the site that raised it", () => {
-  /** A filled arc as a hand-authored file carries it, with or without a
-   *  palette reference — the two cases that belong to different sites. */
-  const envelopeWith = (arc: Arc): ReturnType<typeof serialiseThemeEnvelope> =>
-    serialiseThemeEnvelope(canvasOf(arc), {
-      id: "theme",
-      artboard: { width: 1920, height: 1080 },
-    });
-
-  const bareArc = (): Arc =>
-    new Arc({
-      left: 20,
-      top: 20,
-      radius: 100,
-      startAngle: 0,
-      endAngle: 90,
-      fill: "#4da3ff",
-      stroke: "",
-    });
-
-  it("speaks for the arc no palette reference points at", async () => {
-    // The silent half. Revival refuses it; the paint pass never sees it, because
-    // there is no reference to walk. Before, the author watched a figure vanish
-    // from their document with nothing said at all.
-    const told: string[] = [];
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(canvas, envelopeWith(bareArc()), undefined, {
-      onRefusedPaint: (message) => told.push(message),
-    });
-
-    expect((canvas.getObjects()[0] as Arc).fill, "the fill is withheld").toBe(
-      "",
-    );
-    expect(told, "and the author is told").toHaveLength(1);
-    expect(told[0]).toMatch(/arc/i);
-  });
-
-  it("leaves the reference-carrying arc to the paint pass, so it is not said twice", async () => {
-    // Both sites refuse this one and both have a channel. Reporting it here as
-    // well would make one load two identical sentences, which is the same
-    // crying wolf the diagnostic exists to avoid.
-    const arc = bareArc();
-    arc.set(YUNARI_PAINT_PROPERTY, { fill: "palette.cpu" });
-    const told: string[] = [];
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(canvas, envelopeWith(arc), undefined, {
-      onRefusedPaint: (message) => told.push(message),
-    });
-
-    const revived = canvas.getObjects()[0] as Arc;
-    expect(revived.fill, "the render is refused either way").toBe("");
-    expect(told, "revival stays quiet about the pass's arc").toEqual([]);
-
-    // And the pass says it, exactly once.
-    const said: string[] = [];
-    applyObjectPalettePaints(canvas, globalsForRefusal, {
-      onRefusedPaint: (message) => said.push(message),
-    });
-    expect(said, "the paint pass is the one site that speaks").toHaveLength(1);
-  });
-
-  it("says nothing at all for a wedge, whose sector is a region it has", async () => {
-    const told: string[] = [];
-    const canvas = new StaticCanvas(undefined, { width: 400, height: 300 });
-    await reviveThemeEnvelope(
-      canvas,
-      envelopeWith(
-        new Wedge({
-          left: 20,
-          top: 20,
-          radius: 100,
-          startAngle: 0,
-          endAngle: 90,
-          fill: "#4da3ff",
-        }),
-      ),
-      undefined,
-      { onRefusedPaint: (message) => told.push(message) },
-    );
-
-    expect((canvas.getObjects()[0] as Wedge).fill).toBe("#4da3ff");
-    expect(told).toEqual([]);
-  });
-});
-
-/** The palette the refusal cases resolve against; no token matters but one. */
-const globalsForRefusal = {
-  palette: { cpu: { name: "CPU", value: { kind: "solid", color: "#4da3ff" } } },
-} as never;

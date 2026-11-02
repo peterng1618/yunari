@@ -98,7 +98,7 @@ describe("the Add pane's insert surface", () => {
     );
   });
 
-  it("scopes each group by its kind, and the scope is not the heading", () => {
+  it("scopes each group by its id, and the scope is not the heading", () => {
     const { pane } = mount();
 
     // The e2e locators reach a tile through this hook (`vg-211`), and the
@@ -110,15 +110,20 @@ describe("the Add pane's insert surface", () => {
     expect(scopes).toEqual(
       insertGroups()
         .filter((group) => group.label !== undefined)
-        .map((group) => group.kind),
+        .map((group) => group.id),
     );
     expect(scopes).not.toContain(uiCopy.panels.shapes);
+    expect(scopes).toContain("custom-shape");
 
     // And the shapes section — the one the row is about — is reachable by the
     // hook while still carrying its heading.
     const shapes = pane.querySelector('[data-yunari-add-group="shape"]');
     expect(shapes?.querySelector("legend")?.textContent).toBe(
       uiCopy.panels.shapes,
+    );
+    const custom = pane.querySelector('[data-yunari-add-group="custom-shape"]');
+    expect(custom?.querySelector("legend")?.textContent).toBe(
+      uiCopy.panels.customShapes,
     );
   });
 
@@ -243,13 +248,16 @@ describe("the Add pane's insert surface", () => {
       // Every grid tile carries a tooltip, and the tooltip's press-elsewhere
       // dismissal is a `document`-level `pointerdown`
       // (`editor-shell/controls/tooltip.ts:134`) removed only by its `destroy`.
-      // 8 units + 8 primitives + 6 families = 22, the Text row exempt. Asserted
-      // as added *and* removed: a count of 0 removed would pass vacuously
-      // against a pane that registered none, and a panel that removed its host
-      // node without unmounting the tree left all twenty-two behind, once per
-      // session teardown.
-      expect(added["pointerdown"]).toBe(22);
-      expect(removed["pointerdown"]).toBe(22);
+      // Derived from the owner rather than a count: every offered object but
+      // the Text row registers one. Asserted as added *and* removed: a count of
+      // 0 removed would pass vacuously against a pane that registered none, and
+      // a panel that removed its host node without unmounting the tree left the
+      // listeners behind, once per session teardown.
+      const tiles = insertGroups()
+        .flatMap((group) => group.objects)
+        .filter((object) => object.kind !== "text").length;
+      expect(added["pointerdown"]).toBe(tiles);
+      expect(removed["pointerdown"]).toBe(tiles);
     } finally {
       addSpy.mockRestore();
       removeSpy.mockRestore();

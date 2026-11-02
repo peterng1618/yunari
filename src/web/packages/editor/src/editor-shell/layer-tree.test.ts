@@ -6,13 +6,14 @@ import {
   defaultGaugeSettings,
   defaultLineSettings,
 } from "@yunari/renderer-core";
-import { Arc, reviveThemeEnvelope, YunariChart } from "@yunari/scene-fabric";
+import { reviveThemeEnvelope, YunariChart } from "@yunari/scene-fabric";
 import {
   Ellipse,
   FabricImage,
   type FabricObject,
   Group,
   Line,
+  Path,
   Rect,
   StaticCanvas,
   Textbox,
@@ -399,25 +400,14 @@ describe("the kind, read as one glyph per row", () => {
 
   it("names the primitive a shape row is, and none rather than guessing", () => {
     // Fabric's own `type` tag, which is the vocabulary the Add pane's
-    // `SHAPE_KINDS` and this union already share. The two sweeps are
-    // `scene-fabric`'s own classes — Fabric 7 ships no arc — but Fabric's
-    // instance getter lowercases whatever the class calls itself, so they read
-    // here like every built-in tag and a reader needs no special case.
+    // `SHAPE_KINDS` and this union already share. Custom shapes are `Path`
+    // objects, so a saved wedge or arc answers `path` and is not a second kind.
     const filled = new Rect({ id: "panel", width: 10, height: 10 });
     const round = new Ellipse({ id: "chip", rx: 5, ry: 5 });
+    // A removed kind still revives through Fabric's registry; the row reports
+    // that it cannot name one rather than guessing a neighbour.
     const rule = new Line([0, 0, 10, 10], { id: "rule" });
-    // A value rather than a fresh literal, for the reason the production file
-    // gives: Fabric infers its options type from one, and the inferred type has
-    // no room for the authored `id`.
-    const arcOptions = {
-      id: "sweep",
-      radius: 10,
-      startAngle: 0,
-      endAngle: 90,
-      stroke: "#f59e0b",
-      fill: null,
-    };
-    const swept = new Arc(arcOptions);
+    const swept = new Path("M 0 0 L 10 0 L 10 10 Z", { id: "sweep" });
     // A tag this build does not know is reported as none. Defaulting to a
     // neighbour would have a square stand for whatever a newer build wrote —
     // the one thing a kind mark must never do, so this is the case a theme made
@@ -436,8 +426,8 @@ describe("the kind, read as one glyph per row", () => {
     // A `Circle` is an ellipse the author has not stretched, and the editor has
     // no circle kind: both classes are the one primitive.
     expect(mark("chip")).toEqual({ kind: "shape", shape: "ellipse" });
-    expect(mark("rule")).toEqual({ kind: "shape", shape: "line" });
-    expect(mark("sweep")).toEqual({ kind: "shape", shape: "arc" });
+    expect(mark("rule")).toEqual({ kind: "shape", shape: undefined });
+    expect(mark("sweep")).toEqual({ kind: "shape", shape: "path" });
     expect(mark("future")).toEqual({ kind: "shape", shape: undefined });
   });
 

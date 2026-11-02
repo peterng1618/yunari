@@ -21,6 +21,7 @@ import {
   Circle,
   Ellipse,
   type FabricObject,
+  Path,
   Point,
   Polygon,
   Polyline,
@@ -29,7 +30,6 @@ import {
 } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import { type Stage, stage } from "./glass-test-stage.js";
-import { Arc, Wedge } from "./sector-object.js";
 
 /** A solid magenta backdrop, so the frosted region is unmistakable. */
 function magenta(): Stage {
@@ -401,83 +401,58 @@ describe("glass on the closed shapes", () => {
   });
 
   /**
-   * The probe that only a **sector** clip passes.
+   * The probe that only a shape's own clip passes.
    *
-   * A `Wedge` extends `Circle`, so the circle's clip path — `ctx.ellipse` from
-   * `startAngle` to `endAngle` — is inherited for free, and as a clip path that
-   * arc is closed by its **chord**, not by the two radii. The chord cuts the
-   * sector's own area in half: a 90° sweep of radius 30 is 707 units² as a
-   * sector and 257 as the segment that chord encloses. So the frost would cover
-   * the crescent along the arc while the triangle beside the centre — most of
-   * what a wedge paints — stayed sharp.
-   *
-   * The probe is therefore inside the sector and on the **centre side of the
-   * chord**, which is the region the inherited clip excludes. A point merely
-   * inside the sweep cannot tell the two apart: both clips cover it, which is
-   * why this one is placed and not chosen by eye.
+   * A closed `Path` now carries the treatment, and its commands are the clip.
+   * The triangle here has a box 60 × 60 at (100,100); (130,140) is inside the
+   * triangle and (105,105) is inside its bounding box but outside the figure.
+   * A clip built from the box would reach the second point; the path's own
+   * commands do not.
    */
-  it("clips a wedge to the sector, not to the chord its parent would clip", () => {
-    // radius 30 at (100,100), swept 0..90. The chord joins (130,100) to
-    // (100,130), so it is the line x + y = 230. (112,112) is 17.0 from the
-    // centre — well inside the disc — and x + y = 224, so it sits on the centre
-    // side of the chord, inside the sector and outside the segment.
+  it("clips a closed path to its commands, not to its bounding box", () => {
     const { s, without } = frosted(
       (withGlass) =>
-        new Wedge({
+        new Path("M 0 60 L 60 60 L 30 0 Z", {
           left: 100,
           top: 100,
-          radius: 30,
-          startAngle: 0,
-          endAngle: 90,
+          originX: "left",
+          originY: "top",
           fill: "transparent",
           ...(withGlass ? GLASS : {}),
         }),
     );
     expect(s.errors).toEqual([]);
-    expect(s.draws, "the wedge composites").toHaveLength(1);
+    expect(s.draws, "the closed path composites").toHaveLength(1);
 
-    // The half that fails without the sector branch: inside the wedge, so the
-    // backdrop has to reach it. The inherited chord clip leaves it clear.
-    expect(s.pixel(112, 112)[3], "inside the sector").toBe(255);
-    expect(without.pixel(112, 112)[3]).toBeLessThan(255);
+    expect(s.pixel(130, 140)[3], "inside the path").toBe(255);
+    expect(without.pixel(130, 140)[3]).toBeLessThan(255);
 
-    // And the other half, so the fix is not "clip to the whole box": (78,78) is
-    // 31.1 from the centre, outside the disc and so outside any sweep of it.
-    expect(s.pixel(78, 78)).toEqual(without.pixel(78, 78));
-    expect(without.pixel(78, 78)[3]).toBe(0);
+    // The other half, so the fix is not "clip to the whole box".
+    expect(s.pixel(105, 105)).toEqual(without.pixel(105, 105));
   });
 });
 
 /**
- * What the two surfaces do with a sweep, and what these cases can show about it.
+ * What an open path does with a treatment it cannot use.
  *
- * The sector path is one function called by the wedge's own `_render` and by the
- * frost's clip, because two copies is two chances to spell the angle conversion
- * differently and the two already differed once — `glass.ts` had a `radians()`
- * helper while the shape inlined the multiply. When they drift, the frost clips
- * to a region the shape does not paint: wrong, and silent.
- *
- * **These cases show agreement, not sharing.** A duplicated copy that happens to
- * agree would pass them, so what is pinned is that the two surfaces cover the same
- * region — which is the property that actually matters and the one a drifted copy
- * breaks. Sharing is settled by reading `sector-object.ts`, not by a test: no
- * rendered output can distinguish one call from two that agree.
+ * A hand-edited scene can still carry one; the renderer refuses it rather than
+ * clipping it to a box the author did not draw. Sharing the predicate with the
+ * editor's control is what keeps the control from offering an edit the
+ * renderer would then skip.
  */
-describe("the two surfaces of a sweep", () => {
-  it("refuses an arc rather than clipping it to a region it has no interior for", () => {
-    // An arc paints a curve, so there is nothing to sample the backdrop through.
-    // `localPath` says so itself rather than letting the `Circle` arm it extends
-    // stand in, and the composite is the observable: nothing is drawn at all.
+describe("an open path", () => {
+  it("refuses the treatment rather than clipping it to a region with no interior", () => {
     const stage = magenta();
-    const options = {
-      left: 100,
-      top: 100,
-      radius: 30,
-      startAngle: 0,
-      endAngle: 90,
-      fill: "transparent",
-    };
-    stage.canvas.add(new Arc({ ...options, ...GLASS }));
+    stage.canvas.add(
+      new Path("M 0 60 L 30 0 L 60 60", {
+        left: 100,
+        top: 100,
+        originX: "left",
+        originY: "top",
+        fill: "transparent",
+        ...GLASS,
+      }),
+    );
     stage.canvas.renderAll();
 
     expect(stage.draws, "nothing composites").toHaveLength(0);
