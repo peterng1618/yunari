@@ -34,7 +34,10 @@ import {
 } from "../editor-shell/palette.js";
 import { PATH_PRESET_IDS } from "../new-object-defaults.js";
 import {
+  activeRemovedPathPresetIds,
+  REMOVED_PATH_PRESETS_STORAGE_KEY,
   readUserPathPresets,
+  setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
 } from "../path-presets.js";
 import { uiCopy } from "../ui-copy.js";
@@ -141,6 +144,7 @@ beforeEach(() => {
   localStorage.clear();
   setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
   setActiveUserPathPresets([]);
+  setActiveRemovedPathPresetIds([]);
   document.documentElement.removeAttribute("data-shell-palette");
   credentials.listCredentials.mockReset();
   credentials.saveCredential.mockReset();
@@ -237,15 +241,25 @@ it("returns to following the system by deleting the stored choice", async () => 
   );
 });
 
-it("adds a ratio, removes it, and resets to the defaults", async () => {
+it("restores a removed ratio without dropping one the author added", async () => {
   const container = await mount(<PreviewsPage storage={localStorage} />);
+
+  await press(
+    must(
+      container.querySelector<HTMLElement>(
+        '[data-yunari-preview-ratio-remove="4:3"]',
+      ),
+      "Remove control for 4:3",
+    ),
+  );
+  expect(activePreviewRatioTokens()).not.toContain("4:3");
+
   const field = must(
     container.querySelector<HTMLInputElement>(
       "[data-yunari-preview-ratio-input]",
     ),
     "ratio field",
   );
-
   await typeInto(field, "7:3");
   await press(
     must(
@@ -254,26 +268,21 @@ it("adds a ratio, removes it, and resets to the defaults", async () => {
     ),
   );
   expect(activePreviewRatioTokens()).toContain("7:3");
-  expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toContain("7:3");
 
   await press(
     must(
       container.querySelector<HTMLElement>(
-        '[data-yunari-preview-ratio-remove="7:3"]',
+        "[data-yunari-preview-ratio-restore]",
       ),
-      "Remove control for 7:3",
+      "Restore defaults control",
     ),
   );
-  expect(activePreviewRatioTokens()).not.toContain("7:3");
-
-  await press(
-    must(
-      container.querySelector<HTMLElement>("[data-yunari-preview-ratio-reset]"),
-      "Reset control",
-    ),
-  );
-  expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toBeNull();
-  expect(activePreviewRatioTokens()).toEqual([...DEFAULT_PREVIEW_RATIO_TOKENS]);
+  // The default comes back; the author's own ratio was never the default's to
+  // remove, and clearing the key would have deleted it on the next load.
+  expect(activePreviewRatioTokens()).toContain("4:3");
+  expect(activePreviewRatioTokens()).toContain("7:3");
+  expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toContain("4:3");
+  expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toContain("7:3");
 });
 
 it("adds a custom path preset, draws its own data, and removes it", async () => {
@@ -343,6 +352,63 @@ it("lists the shipped custom shapes and gives the add form its examples", async 
       "[data-yunari-path-preset-data]",
     )?.placeholder,
   ).toBe(uiCopy.settings.pathPresetDataPlaceholder);
+});
+
+it("removes a shipped shape and restores it without touching the author's", async () => {
+  const container = await mount(<PathPresetsPage storage={localStorage} />);
+
+  await typeInto(
+    must(
+      container.querySelector<HTMLInputElement>(
+        "[data-yunari-path-preset-name]",
+      ),
+      "preset name field",
+    ),
+    "Star",
+  );
+  await typeInto(
+    must(
+      container.querySelector<HTMLTextAreaElement>(
+        "[data-yunari-path-preset-data]",
+      ),
+      "preset data field",
+    ),
+    "M 0 0 L 10 0 L 10 10 Z",
+  );
+  await press(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-path-preset-add]"),
+      "Add control",
+    ),
+  );
+
+  await press(
+    must(
+      container.querySelector<HTMLElement>(
+        '[data-yunari-path-preset-builtin-remove="arc"]',
+      ),
+      "Remove control for the arc",
+    ),
+  );
+  expect(
+    container.querySelector('[data-yunari-path-preset-builtin="arc"]'),
+  ).toBeNull();
+  expect(activeRemovedPathPresetIds()).toEqual(["arc"]);
+  expect(readUserPathPresets(localStorage)).toHaveLength(1);
+
+  await press(
+    must(
+      container.querySelector<HTMLElement>("[data-yunari-path-preset-restore]"),
+      "Restore defaults control",
+    ),
+  );
+  expect(
+    container.querySelector('[data-yunari-path-preset-builtin="arc"]'),
+  ).not.toBeNull();
+  expect(activeRemovedPathPresetIds()).toEqual([]);
+  expect(localStorage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).toBeNull();
+  // Restoring the catalogue is not a reset of the author's own shapes.
+  expect(readUserPathPresets(localStorage)).toHaveLength(1);
 });
 
 it("names what a path preset is missing rather than storing an invisible one", async () => {

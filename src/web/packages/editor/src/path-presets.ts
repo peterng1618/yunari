@@ -19,9 +19,21 @@ export interface UserPathPreset {
 /** The one storage key. Absence means the built-in presets alone. */
 export const USER_PATH_PRESETS_STORAGE_KEY = "yunari.editor.path-presets";
 
+/** The built-in preset ids the author removed. A separate key from the user
+ *  list, so restoring the defaults cannot touch what the author added. */
+export const REMOVED_PATH_PRESETS_STORAGE_KEY =
+  "yunari.editor.removed-path-presets";
+
 let active: readonly UserPathPreset[] = [];
 let revision = 0;
 const listeners = new Set<() => void>();
+
+/** The built-in ids the author has removed. Strings rather than `PathPresetId`s
+ *  because this module reads browser storage and must not import the catalogue
+ *  that imports it; a value naming no built-in changes nothing. */
+let removedActive: readonly string[] = [];
+let removedRevision = 0;
+const removedListeners = new Set<() => void>();
 
 /** The live list. The **same array reference** between changes, because
  *  `useSyncExternalStore` compares snapshots. */
@@ -47,6 +59,96 @@ export function subscribeUserPathPresets(listener: () => void): () => void {
 
 export function userPathPresetsKey(): string {
   return String(revision);
+}
+
+/** The built-in ids the Add pane withholds. The **same array reference**
+ *  between changes, because `useSyncExternalStore` compares snapshots. */
+export function activeRemovedPathPresetIds(): readonly string[] {
+  return removedActive;
+}
+
+export function setActiveRemovedPathPresetIds(ids: readonly string[]): void {
+  const next = [...new Set(ids)];
+  if (
+    next.length === removedActive.length &&
+    next.every((id, index) => id === removedActive[index])
+  ) {
+    return;
+  }
+  removedActive = next;
+  removedRevision += 1;
+  for (const listener of removedListeners) listener();
+}
+
+export function subscribeRemovedPathPresetIds(
+  listener: () => void,
+): () => void {
+  removedListeners.add(listener);
+  return () => {
+    removedListeners.delete(listener);
+  };
+}
+
+export function removedPathPresetIdsKey(): string {
+  return String(removedRevision);
+}
+
+/** The stored removals, or none where there is no store, the value cannot be
+ *  read or it is not a list. */
+export function readRemovedPathPresetIds(
+  storage: Storage | undefined,
+): readonly string[] {
+  if (storage === undefined) return [];
+  let raw: string | null;
+  try {
+    raw = storage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY);
+  } catch {
+    return [];
+  }
+  if (raw === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? [
+          ...new Set(
+            parsed.filter((id): id is string => typeof id === "string"),
+          ),
+        ]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Writes the removals, and answers whether they will survive the reload. */
+export function writeRemovedPathPresetIds(
+  storage: Storage | undefined,
+  ids: readonly string[],
+): boolean {
+  if (storage === undefined) return false;
+  try {
+    storage.setItem(
+      REMOVED_PATH_PRESETS_STORAGE_KEY,
+      JSON.stringify([...new Set(ids)]),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Removing the key is "every built-in back", the same absence-means-defaults
+ *  rule the preview catalogue uses. */
+export function clearRemovedPathPresetIds(
+  storage: Storage | undefined,
+): boolean {
+  if (storage === undefined) return false;
+  try {
+    storage.removeItem(REMOVED_PATH_PRESETS_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The preset a `user:` insertion id names, if it is still in the list. */

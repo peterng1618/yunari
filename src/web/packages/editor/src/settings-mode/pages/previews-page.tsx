@@ -4,8 +4,8 @@ import { ControlWell } from "../../components/ui/control-well.js";
 import { ACTION_BUTTON } from "../../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
-  clearPreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
+  normalisePreviewRatioTokens,
   type PreviewRatio,
   parsePreviewRatio,
   previewCatalogueKey,
@@ -102,20 +102,23 @@ function PreviewsSection(props: {
     commit(tokens.filter((token) => parsePreviewRatio(token).id !== id));
   };
 
-  const reset = (): void => {
-    // Removing the key is what returns the list to the defaults; the live list
-    // is set explicitly because the module never re-reads storage.
-    setPersisted(clearPreviewRatioTokens(props.storage));
-    setReason(undefined);
-    setActivePreviewRatios(DEFAULT_PREVIEW_RATIO_TOKENS);
-  };
-
   const stored = activePreviewRatioTokens();
   const atDefaults =
-    stored.length === DEFAULT_PREVIEW_RATIO_TOKENS.length &&
-    stored.every(
-      (token, index) => token === DEFAULT_PREVIEW_RATIO_TOKENS[index],
+    normalisePreviewRatioTokens([...stored, ...DEFAULT_PREVIEW_RATIO_TOKENS])
+      .length === stored.length;
+
+  /**
+   * Every removed default back, and **nothing the author added touched**: the
+   * stored value is the union, not the defaults alone. Clearing the key would
+   * have been shorter and would have deleted the author's own ratios on the
+   * next load.
+   */
+  const restoreDefaults = (): void => {
+    setReason(undefined);
+    commit(
+      normalisePreviewRatioTokens([...stored, ...DEFAULT_PREVIEW_RATIO_TOKENS]),
     );
+  };
 
   return (
     <div className="flex flex-col gap-[var(--space-8)]" data-yunari-previews="">
@@ -175,11 +178,11 @@ function PreviewsSection(props: {
         <button
           type="button"
           disabled={atDefaults}
-          onClick={reset}
-          data-yunari-preview-ratio-reset=""
+          onClick={restoreDefaults}
+          data-yunari-preview-ratio-restore=""
           className={ACTION_BUTTON}
         >
-          {uiCopy.settings.previewRatioReset}
+          {uiCopy.settings.restoreDefaults}
         </button>
       </div>
       {reason === undefined ? null : (

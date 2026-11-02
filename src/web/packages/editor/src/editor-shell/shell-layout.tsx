@@ -14,7 +14,9 @@ import {
 } from "../display-lens.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import {
+  readRemovedPathPresetIds,
   readUserPathPresets,
+  setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
 } from "../path-presets.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
@@ -295,6 +297,7 @@ export function createShellLayout(
   // and nothing after this re-reads storage — the settings tab writes both.
   setActivePreviewRatios(readPreviewRatioTokens(storage));
   setActiveUserPathPresets(readUserPathPresets(storage));
+  setActiveRemovedPathPresetIds(readRemovedPathPresetIds(storage));
   const initial = resolveShellPalette(
     storage === undefined ? undefined : readShellChoice(storage),
     prefersDarkAppearance(),

@@ -293,12 +293,13 @@ export async function ratioRows(page: Page): Promise<readonly string[]> {
     );
 }
 
-/** Reset is a return to the defaults, and at the defaults it is disabled: a
- *  disabled button is already the state this asks for, not a skipped step. */
-export async function resetRatios(page: Page): Promise<void> {
-  const reset = page.locator("[data-yunari-preview-ratio-reset]");
-  await expect(reset).toBeVisible();
-  if (await reset.isEnabled()) await reset.click();
+/** Restore defaults brings every removed default back and leaves the author's
+ *  own ratios alone, so it is not a reset to the default list. At the defaults
+ *  it is disabled: a disabled button is already the state this asks for. */
+export async function restoreRatios(page: Page): Promise<void> {
+  const restore = page.locator("[data-yunari-preview-ratio-restore]");
+  await expect(restore).toBeVisible();
+  if (await restore.isEnabled()) await restore.click();
 }
 
 /** Every radio item in the display menu, by its accessible name, in order. */

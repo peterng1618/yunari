@@ -234,7 +234,8 @@ export const uiCopy = {
     previewRatioField: "W:H ratio",
     previewRatioAdd: "Add",
     previewRatioRemove: "Remove preview ratio",
-    previewRatioReset: "Reset",
+    /** Brings back removed defaults and leaves author-added items alone. */
+    restoreDefaults: "Restore defaults",
     /** the refusal rule: a refusal states its reason. `duplicate` is the exact
         token; `equivalent` names both spellings of one rect shape, because the
         entered name is kept rather than reduced. */
@@ -258,6 +259,7 @@ export const uiCopy = {
     pathPresetDataPlaceholder: "M 0 0 L 10 0 L 5 10 Z",
     pathPresetAdd: "Add shape",
     pathPresetRemove: "Remove custom shape",
+    pathPresetRemoveBuiltin: "Remove built-in shape",
     pathPresetEmpty: "No custom shapes yet.",
     pathPresetNameRequired: "A custom shape needs a name.",
     pathPresetDataRequired: "A custom shape needs path data.",
