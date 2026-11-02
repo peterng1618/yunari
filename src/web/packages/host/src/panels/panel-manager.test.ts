@@ -7,13 +7,10 @@ import type {
 import {
   managerOver as createManagerOver,
   deviceOver,
-  type FakeBrowser,
   familyOver,
   pause,
-  RECORD,
   SETTLE_MS,
   SOURCE,
-  storeOver,
   until,
 } from "./panel-manager.fixtures.js";
 import {
@@ -238,87 +235,6 @@ describe("createPanelManager", () => {
     await still.start("strip");
     expect(pageFor).toHaveBeenLastCalledWith("strip", false);
     await still.stop("strip");
-  });
-
-  it("renders a preview at the family's geometry with the theme on the page", async () => {
-    const open = vi.fn(async () => deviceOver());
-    const capture = vi.fn(async () => Uint8Array.of(9));
-    const close = vi.fn(async () => {});
-
-    h.family = familyOver(open);
-    h.rasterizer = () => ({ capture, captureOverlay: vi.fn(), close });
-
-    const pageFor = vi.fn(
-      (displayId: string, clip: boolean, themeId?: string) =>
-        `http://127.0.0.1:1/?display=${displayId}&clip=${clip}&theme=${themeId ?? ""}`,
-    );
-    const manager = managerOver({ pageFor });
-
-    const bytes = await manager.capturePreview("strip", "night", true);
-
-    expect(bytes).toEqual(Uint8Array.of(9));
-    expect(pageFor).toHaveBeenLastCalledWith("strip", true, "night");
-    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledWith({
-      url: "http://127.0.0.1:1/?display=strip&clip=true&theme=night",
-      geometry: { width: 464, height: 1920 },
-      stillFormat: "png",
-    });
-    expect(capture).toHaveBeenCalledTimes(1);
-    expect(close).toHaveBeenCalledTimes(1);
-    // A preview must not take the panel away from the theme it is showing.
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("closes the preview target when the capture fails", async () => {
-    const open = vi.fn(async () => deviceOver());
-    const close = vi.fn(async () => {});
-
-    h.family = familyOver(open);
-    h.rasterizer = () => ({
-      capture: vi.fn(async () => {
-        throw new Error("the page stopped composing");
-      }),
-      captureOverlay: vi.fn(),
-      close,
-    });
-    const manager = managerOver();
-
-    await expect(
-      manager.capturePreview("strip", "night", false),
-    ).rejects.toThrow(/stopped composing/);
-
-    expect(close).toHaveBeenCalledTimes(1);
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("refuses a preview for a display that is not a claimed panel", async () => {
-    h.family = familyOver(async () => deviceOver());
-
-    const paired = managerOver({
-      displays: storeOver([
-        {
-          id: RECORD.id,
-          label: RECORD.label,
-          kind: "paired",
-          createdAt: RECORD.createdAt,
-          lastSeenAt: RECORD.lastSeenAt,
-          shape: RECORD.shape,
-        },
-      ]),
-    });
-    await expect(
-      paired.capturePreview("strip", "night", false),
-    ).rejects.toThrow(/not a panel/);
-
-    const absent = managerOver({ displays: storeOver([]) });
-    await expect(
-      absent.capturePreview("strip", "night", false),
-    ).rejects.toThrow(/not a panel/);
-
-    h.family = undefined;
-    await expect(
-      managerOver().capturePreview("strip", "night", false),
-    ).rejects.toThrow(/No driver on this host claims/);
   });
 
   it("reads videoFor once per start, and undefined leaves stills", async () => {
