@@ -548,14 +548,19 @@ export const uiCopy = {
       addName: "Name",
       addNameHint: "What this display is called. You can rename it later.",
       addMonitor: "Monitor",
-      /** One screen, as the probe describes it: the device name it reports, its
-       *  own resolution, and whether it is the main display. */
+      /** One screen, as the probe describes it: the device name it reports, the
+       *  aspect ratio its pixel count describes, that count, and whether it is
+       *  the main display. The ratio leads because two screens that read alike
+       *  report different counts — 2048×1152 is 16:9 — and a count alone does
+       *  not say whether it is the shape the author expected. */
       monitorOption: (
         name: string,
+        ratio: string | undefined,
         width: number,
         height: number,
         main: boolean,
-      ): string => `${name} - ${width}x${height}${main ? " (main)" : ""}`,
+      ): string =>
+        `${name} - ${ratio === undefined ? "" : `${ratio}, `}${width}x${height}${main ? " (main)" : ""}`,
       noMonitors:
         "The Host reported no monitor, so a local display cannot be added here.",
       add: "Add display",

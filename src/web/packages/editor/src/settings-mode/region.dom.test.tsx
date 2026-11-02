@@ -1032,8 +1032,8 @@ it("adds a local display on the monitor the form offers", async () => {
     main: false,
     positionX: 1920,
     positionY: 0,
-    currentResX: 2560,
-    currentResY: 1440,
+    currentResX: 2048,
+    currentResY: 1152,
   };
   const { container, wrote, published } = await mountHost({
     ...TWO_DISPLAYS,
@@ -1050,12 +1050,18 @@ it("adds a local display on the monitor the form offers", async () => {
   ).toContain(
     uiCopy.hostSettings.displays.monitorOption(
       MONITORS[0]!.deviceName,
+      "16:9",
       1920,
       1080,
       true,
     ),
   );
   expect(await offered(monitorRow)).toEqual(["0", "1"]);
+  // An unusual pixel count that is a standard shape says so before the count:
+  // 2048×1152 is 16:9, which a bare resolution does not explain.
+  expect(
+    document.body.querySelector('[data-yunari-option="1"]')?.textContent,
+  ).toContain("16:9, 2048x1152");
   await choose("1");
 
   const name = must(
