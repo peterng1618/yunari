@@ -44,7 +44,22 @@ export function captureCanvas(
     return undefined;
   }
 
-  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  // **The picture is the artboard, not the camera's window.** The export crop
+  // is the board's own screen rect, so the PNG carries the theme's ratio and
+  // nothing of the stage around it; a caller without an artboard keeps the
+  // whole-canvas crop.
+  const view = canvas.viewportTransform;
+  const frame =
+    artboard === undefined
+      ? { left: 0, top: 0, width, height }
+      : {
+          left: view[4],
+          top: view[5],
+          width: artboard.width * view[0],
+          height: artboard.height * view[3],
+        };
+  if (!(frame.width > 0) || !(frame.height > 0)) return undefined;
+  const scale = Math.min(1, maxEdge / Math.max(frame.width, frame.height));
   const previousClip = canvas.clipPath;
   let release: () => void = () => {};
   let scene: HTMLCanvasElement;
@@ -68,7 +83,7 @@ export function captureCanvas(
     // Only the shot is taken with the view state lifted: everything below is the
     // media the canvas cannot see, which carries no view state of its own.
     release = suspendViewState();
-    scene = canvas.toCanvasElement(scale);
+    scene = canvas.toCanvasElement(scale, frame);
   } finally {
     try {
       release();
@@ -86,7 +101,6 @@ export function captureCanvas(
   // `toCanvasElement` disables retina scaling and multiplies the viewport by
   // the export scale, so the scene plane in the picture is the live
   // transform times that scale — the same plane `glass.ts` reads.
-  const view = canvas.viewportTransform;
   if (!(view[0] > 0) || !(view[3] > 0)) return scene;
 
   const under = document.createElement("canvas");
@@ -94,12 +108,28 @@ export function captureCanvas(
   under.height = scene.height;
   const backdropContext = under.getContext("2d");
   if (backdropContext === null) return scene;
+  // The board's shape is the picture's shape: a round theme's corners are
+  // outside the theme, so the paint, the media and the scene are all clipped
+  // to the disc. Without this the paint fills the square the panel never shows.
+  backdropContext.save();
+  if (artboard?.shape === "circle") {
+    backdropContext.beginPath();
+    backdropContext.arc(
+      under.width / 2,
+      under.height / 2,
+      Math.min(under.width, under.height) / 2,
+      0,
+      Math.PI * 2,
+    );
+    backdropContext.clip();
+  }
   backdrop.paint(
     backdropContext,
     { left: 0, top: 0, width: under.width, height: under.height },
     {
-      left: view[4] * scale + backdrop.rect.left * view[0] * scale,
-      top: view[5] * scale + backdrop.rect.top * view[3] * scale,
+      left:
+        (view[4] - frame.left) * scale + backdrop.rect.left * view[0] * scale,
+      top: (view[5] - frame.top) * scale + backdrop.rect.top * view[3] * scale,
       width: backdrop.rect.width * view[0] * scale,
       height: backdrop.rect.height * view[3] * scale,
     },
@@ -109,6 +139,7 @@ export function captureCanvas(
   // Media down first, the scene over it: a media layer that is not in the
   // picture at all is the gap this closes.
   backdropContext.drawImage(scene, 0, 0);
+  backdropContext.restore();
   return under;
 }
 

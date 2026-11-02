@@ -28,6 +28,11 @@ const FIT_SCALE_EPSILON = 1e-6;
 /** Slack on the artboard's edges, in screen px, for the same reason. */
 const FIT_EDGE_EPSILON = 1e-6;
 
+/** Breathing room between a fitted artboard and the box framing it, per edge.
+ *  Fit and every lens show where the board ends; a selection or 100 % may run
+ *  to the boundary, because those ask for the content, not the composition. */
+const FIT_INSET = 10;
+
 /** A box the camera is looking into, in screen px. Named once because the fit
  * helpers all take one and a resize has to compare two of them. */
 interface Viewport {
@@ -266,7 +271,7 @@ export function createViewportManager({
    *  would show the author a composition their display never presents, which
    *  is the one thing a lens must not do; the bars where the two aspects
    *  differ are the truth about the mismatch. */
-  const fitScaleFor = (box: ScreenRect): number => {
+  const fitScaleFor = (box: ScreenRect, viewport: Viewport): number => {
     const board = artboard();
     // The refusal `computeArtboardTransform` already carries, kept here for the
     // editor's own rule rather than left to the derived scale. `box.width / 0`
@@ -282,12 +287,41 @@ export function createViewportManager({
     // distinction, shared with the renderer's layout.
     const active = lens === undefined ? undefined : resolveLens(lens);
     const shape = artboardTransformShape(board.shape, active?.shape ?? "rect");
-    const scale =
+    const fit = (width: number, height: number): number =>
       shape === "circle"
-        ? box.width / Math.hypot(board.width, board.height)
-        : Math.min(box.width / board.width, box.height / board.height);
+        ? width / Math.hypot(board.width, board.height)
+        : Math.min(width / board.width, height / board.height);
+    const scale = fit(box.width, box.height);
     if (!Number.isFinite(scale) || scale <= 0) return zoom();
-    return Math.min(Math.max(scale, MIN_ZOOM), MAX_ZOOM);
+
+    // **A gap only where the board would touch the window.** Fit and a lens
+    // show where the board ends: when the fitted board runs into the canvas on
+    // two edges, both get `FIT_INSET`. A board already flush on all four edges
+    // is the canvas's own shape — inset would shrink it for no composition
+    // reason — and a lens floating inside the canvas touches nothing.
+    const left = box.left + (box.width - board.width * scale) / 2;
+    const top = box.top + (box.height - board.height * scale) / 2;
+    const atLeft = Math.abs(left) <= FIT_EDGE_EPSILON;
+    const atTop = Math.abs(top) <= FIT_EDGE_EPSILON;
+    const atRight =
+      Math.abs(left + board.width * scale - viewport.width) <= FIT_EDGE_EPSILON;
+    const atBottom =
+      Math.abs(top + board.height * scale - viewport.height) <=
+      FIT_EDGE_EPSILON;
+    const touchCount = [atLeft, atTop, atRight, atBottom].filter(
+      Boolean,
+    ).length;
+    const innerWidth = Math.max(
+      1,
+      box.width - (touchCount === 2 && atLeft && atRight ? FIT_INSET * 2 : 0),
+    );
+    const innerHeight = Math.max(
+      1,
+      box.height - (touchCount === 2 && atTop && atBottom ? FIT_INSET * 2 : 0),
+    );
+    const inset = fit(innerWidth, innerHeight);
+    if (!Number.isFinite(inset) || inset <= 0) return zoom();
+    return Math.min(Math.max(inset, MIN_ZOOM), MAX_ZOOM);
   };
 
   /** Where a fit puts the camera in `viewport`, after the same clamp every
@@ -297,7 +331,7 @@ export function createViewportManager({
     viewport: Viewport,
   ): { scale: number; translateX: number; translateY: number } => {
     const box = framingBox(viewport);
-    const scale = fitScaleFor(box);
+    const scale = fitScaleFor(box, viewport);
     const board = artboard();
     const offset = clampPan({
       viewport,
@@ -463,7 +497,16 @@ export function createViewportManager({
       // 100 % is an alternative to a display, not a zoom inside one: a screen
       // drawn around a camera parked at 1:1 would be a frame around nothing.
       lens = undefined;
-      commit(1, 0, 0);
+      // The board keeps its own pixels, centred in the host: 100 % is a size,
+      // not a pan, so it must not park the board's top-left in the corner.
+      const viewport = viewportSize();
+      if (viewport === undefined) return;
+      const board = artboard();
+      commit(
+        1,
+        (viewport.width - board.width) / 2,
+        (viewport.height - board.height) / 2,
+      );
       notify();
     },
     panBy,

@@ -133,8 +133,9 @@ describe("viewport camera", () => {
   it("fits the whole artboard into the host", () => {
     const { camera } = setup();
     camera.zoomToFit();
-    // contain-fit of 1280x720 into 1000x800 is limited by width.
-    expect(camera.zoom()).toBeCloseTo(1000 / 1280, 5);
+    // contain-fit of 1280x720 into 1000x800, leaving the fit inset on each
+    // edge, is limited by width.
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 5);
   });
 
   it("refuses to fit a board with no frameable area, as the renderer-core transform does", () => {
@@ -226,7 +227,7 @@ describe("viewport camera", () => {
     camera.zoomToFit();
     camera.panBy(-100000, -100000);
     camera.zoomToFit();
-    expect(camera.zoom()).toBeCloseTo(1000 / 1280, 5);
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 5);
   });
 
   it("notifies subscribers until they unsubscribe", () => {
@@ -245,13 +246,12 @@ describe("viewport camera", () => {
   it("reports the artboard rect in canvas coordinates, not client ones", () => {
     const { camera } = setup();
     camera.zoomToFit();
-    // contain-fit of 1280x720 into 1000x800 is 0.78125, so the board draws
-    // 1000x562.5 centred: a 118.75px band above and below.
-    const scale = 1000 / 1280;
+    // contain-fit of 1280x720 into 1000x800 leaves the fit inset on each edge.
+    const scale = 980 / 1280;
     expect(camera.artboardScreenRect()).toEqual({
-      left: 0,
+      left: 10,
       top: (800 - 720 * scale) / 2,
-      width: 1000,
+      width: 980,
       height: 720 * scale,
     });
   });
@@ -273,20 +273,20 @@ describe("viewport camera on a host resize", () => {
   it("re-fits a camera that was showing the whole artboard", () => {
     const { camera, resizeHost } = setup();
     camera.zoomToFit();
-    // Contain-fit of 1280x720 into 1000x800 is 0.78125.
-    expect(camera.zoom()).toBeCloseTo(1000 / 1280, 5);
+    // Contain-fit of 1280x720 into 1000x800 is 0.765625 after the inset.
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 5);
 
     resizeHost(400, 800);
 
     // The board was whole in the old box, so it is whole in the new one. A
     // camera that only held its zoom would leave 1290 of the board's pixels
     // past the right edge and the badge reading a number for the wrong view.
-    const scale = 400 / 1280;
+    const scale = 380 / 1280;
     expect(camera.zoom()).toBeCloseTo(scale, 5);
     expect(camera.artboardScreenRect()).toEqual({
-      left: (400 - 1280 * scale) / 2,
+      left: 10,
       top: (800 - 720 * scale) / 2,
-      width: 400,
+      width: 380,
       height: 720 * scale,
     });
   });
@@ -296,7 +296,7 @@ describe("viewport camera on a host resize", () => {
     camera.zoomToFit();
     for (const width of [900, 700, 500, 300]) {
       resizeHost(width, 800);
-      expect(camera.zoom()).toBeCloseTo(width / 1280, 5);
+      expect(camera.zoom()).toBeCloseTo((width - 20) / 1280, 5);
     }
   });
 
@@ -305,7 +305,7 @@ describe("viewport camera on a host resize", () => {
     camera.zoomToFit();
     camera.zoomToPoint(new Point(500, 400), camera.zoom() * 2);
     const zoomed = camera.zoom();
-    expect(zoomed).toBeCloseTo((1000 / 1280) * 2, 5);
+    expect(zoomed).toBeCloseTo((980 / 1280) * 2, 5);
 
     resizeHost(400, 800);
 
@@ -352,12 +352,12 @@ describe("viewport camera on a host resize", () => {
     camera.panBy(-200, 0);
     resizeHost(400, 800);
     // Held: a pan is the author's, and the row is not about taking it back.
-    expect(camera.zoom()).toBeCloseTo(1000 / 1280, 5);
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 5);
 
     camera.zoomToFit();
     resizeHost(400, 800);
 
-    expect(camera.zoom()).toBeCloseTo(400 / 1280, 5);
+    expect(camera.zoom()).toBeCloseTo(380 / 1280, 5);
   });
 
   it("still sizes the canvas to the host", () => {
@@ -473,7 +473,7 @@ describe("the display lens", () => {
     expect(camera.display()).toBeUndefined();
     // Fit is exactly what it was before the display existed: the artboard
     // contained in the whole stage, and no screen drawn around it.
-    expect(camera.zoom()).toBeCloseTo(1000 / 1280, 5);
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 5);
     expect(camera.displayScreenRect()).toBeUndefined();
   });
 
@@ -504,6 +504,8 @@ describe("the display lens", () => {
     camera.reset();
     expect(camera.display()).toBeUndefined();
     expect(camera.isFitted(), "100 % is not a fit").toBe(false);
+    const board = camera.artboardScreenRect();
+    expect([board.left, board.top], "a size, not a corner").toEqual([-140, 40]);
 
     // And the camera the author moved off the fit, under Fit rather than 100 %.
     camera.showDisplay(undefined);
@@ -634,7 +636,7 @@ describe("the display lens", () => {
   });
 
   it("clears a lens removed from the catalogue", () => {
-    // A square board, so Fit (0.6) and the 16:9 lens (0.45) are different
+    // A square board, so Fit (0.58) and the 16:9 lens (0.45) are different
     // scales. With a 16:9 board the two coincidentally agree, and a callback
     // that cleared the lens without re-fitting would pass unnoticed.
     const camera = createCamera({
@@ -647,7 +649,7 @@ describe("the display lens", () => {
     setActivePreviewRatios(["4:3"]);
     expect(camera.display()).toBeUndefined();
     expect(camera.displayScreenRect()).toBeUndefined();
-    expect(camera.zoom(), "and it re-fitted to Fit").toBeCloseTo(0.6, 6);
+    expect(camera.zoom(), "and it re-fitted to Fit").toBeCloseTo(0.58, 6);
     resetPreviewRatios();
   });
 

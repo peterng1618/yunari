@@ -126,7 +126,6 @@ describe("the capture's view state", () => {
 describe("the capture's artboard shape", () => {
   const SIZE = 100;
   const RED = [255, 0, 0, 255];
-  const BLUE = [0, 0, 255, 255];
 
   /** A blue backdrop over the whole exported picture. */
   function blueBackdrop(): BackdropMedia {
@@ -169,7 +168,7 @@ describe("the capture's artboard shape", () => {
     return [...context.getImageData(x, y, 1, 1).data];
   }
 
-  it("keeps a circle theme's picture inside its disc", () => {
+  it("leaves a circle theme's surrounding transparent", () => {
     // A circle theme ships as the disc inscribed in its artboard, so a card
     // showing the square would advertise a picture the panel never shows.
     const canvas = mounted();
@@ -189,15 +188,13 @@ describe("the capture's artboard shape", () => {
       [SIZE - 1, SIZE - 1],
     ];
     for (const [x, y] of corners) {
-      expect(pixelAt(picture, x, y)).toEqual(BLUE);
+      expect(pixelAt(picture, x, y), "outside the disc").toEqual([0, 0, 0, 0]);
     }
   });
 
-  it("clips a circle artboard's theme-bounded media to the disc", () => {
-    // A theme-bounded picture shows only inside the disc on a panel. The
-    // composited media covers the artboard square, so without the disc the
-    // stored PNG advertises image in four corners no panel ever shows.
-    const GREEN = [0, 255, 0, 255];
+  it("clips a circle artboard's background to the disc", () => {
+    // Paint and media are both outside the theme in the corners; a PNG keeps
+    // them transparent so a card shows the disc, not the square it sits in.
     const media: BackdropMedia = {
       rect: { left: 0, top: 0, width: SIZE, height: SIZE },
       paint(context, region) {
@@ -228,19 +225,18 @@ describe("the capture's artboard shape", () => {
       [0, SIZE - 1],
       [SIZE - 1, SIZE - 1],
     ] as const) {
-      expect(pixelAt(picture, x, y), "the surround, not the media").toEqual(
-        GREEN,
-      );
+      expect(pixelAt(picture, x, y), "the surround, not the paint").toEqual([
+        0, 0, 0, 0,
+      ]);
     }
     expect(pixelAt(picture, SIZE / 2, SIZE / 2), "the media inside").toEqual(
       RED,
     );
   });
 
-  it("builds the disc from the artboard, not the host canvas", () => {
-    // The host canvas is 400x300 around a 100x100 artboard at zoom 2, so canvas
-    // pixels and artboard units coincide nowhere: a disc sized from the canvas
-    // lands off the board and the picture loses it.
+  it("crops the picture to the artboard's screen rect", () => {
+    // The host canvas is 400x300 around a 100x100 artboard at zoom 2. The PNG
+    // is the board's 200x200 screen rect, not the stage the camera sits in.
     const stage = new StaticCanvas(document.createElement("canvas"), {
       width: 400,
       height: 300,
@@ -269,12 +265,12 @@ describe("the capture's artboard shape", () => {
     if (picture === undefined)
       throw new Error("the capture produced no picture");
 
-    // The artboard's disc centre is scene (50,50), which the camera puts at
-    // export (200,150).
-    expect(pixelAt(picture, 200, 150)).toEqual(RED);
-    // Scene (145,75) is outside the artboard's disc but inside a disc sized
-    // from the 400x300 canvas (radius 150 at scene 200,150).
-    expect(pixelAt(picture, 390, 200)).toEqual(BLUE);
+    expect([picture.width, picture.height]).toEqual([200, 200]);
+    // The artboard's disc centre is scene (50,50), which lands at the crop's
+    // centre once the camera offset is taken out.
+    expect(pixelAt(picture, 100, 100)).toEqual(RED);
+    // Scene (145,75) is outside the artboard's disc.
+    expect(pixelAt(picture, 1, 1)).toEqual([0, 0, 0, 0]);
   });
 
   it("puts the live clip back when the shot is done", () => {
