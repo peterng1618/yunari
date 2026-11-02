@@ -206,8 +206,10 @@ no breakpoint is invented for it.
 the authored canvas's aspect ratio and contains the picture rather than cropping
 it, so the library's heights vary with what the author drew. The grid has a 1px
 row unit and `row dense`, and each card spans the rows its measured height
-needs. **A theme at 2:1 or wider spans two columns**; a narrower one keeps one,
-so a wide theme does not tower over the portrait cards beside it.
+needs. **The gutter is the same horizontally and vertically**: the row span
+already carries the 12px gutter, so the grid states no row-gap and the columns
+state the one gap. **A theme at 2:1 or wider spans two columns**; a narrower one
+keeps one, so a wide theme does not tower over the portrait cards beside it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a

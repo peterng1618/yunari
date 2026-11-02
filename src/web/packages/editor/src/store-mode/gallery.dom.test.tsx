@@ -596,11 +596,11 @@ it("opens the item from the cell's own surface rather than from an action", asyn
 });
 
 /**
- * The byline is the mono line: the author with the `@`, the date, and
- * *No author* where the document declares none — a fact about the theme rather
- * than a missing reading.
+ * The card's meta line keeps the updated day; the author moves to the hover
+ * chip, where it is `© name`, or the no-author word where the document
+ * declares none — a fact about the theme rather than a missing reading.
  */
-it("writes the byline the surface draws, and says so when there is no author", async () => {
+it("keeps the updated date in the band and the author in the hover chip", async () => {
   const container = await mount(
     <Gallery
       items={[
@@ -621,10 +621,12 @@ it("writes the byline the surface draws, and says so when there is no author", a
     container.querySelectorAll<HTMLElement>("[data-yunari-store-cell-byline]"),
     (byline) => byline.textContent,
   );
-  expect(bylines).toEqual([
-    "@mira-k · 2026-10-15",
-    `${uiCopy.store.cell.noAuthor} · 2026-10-15`,
-  ]);
+  expect(bylines).toEqual(["2026-10-15", "2026-10-15"]);
+  const authors = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-store-cell-author]"),
+    (chip) => chip.textContent,
+  );
+  expect(authors).toEqual(["© mira-k", uiCopy.store.cell.noAuthor]);
 });
 
 /**
