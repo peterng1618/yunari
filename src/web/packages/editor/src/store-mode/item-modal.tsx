@@ -108,8 +108,8 @@ export function ItemModal(props: {
         >
           {/* The stage: **every pixel the panel does not take**, and the box's
               own height, so the modal does not move as a person steps between
-              items. Its ground is the viewer's fixed dark rather than a second
-              dark surface with its own reason. */}
+              items. Its ground follows the shell palette, like every other
+              surface of the modal. */}
           <span
             data-yunari-store-item-stage=""
             className="relative flex min-w-0 flex-1 items-center justify-center p-[var(--space-20)] [background:var(--store-item-stage)] [container-type:size]"

@@ -713,4 +713,26 @@ describe("shell token stylesheet", () => {
       ).not.toMatch(new RegExp(`var\\(\\s*${token}\\s*[),]`));
     }
   });
+
+  it("paints every preview surface from the live palette", () => {
+    // These three were fixed dark values, so a light shell opened a dark hole
+    // behind a font specimen, an asset preview or a store item.
+    for (const token of [
+      "--asset-preview-stage",
+      "--font-specimen-backdrop",
+      "--store-item-stage",
+    ]) {
+      const declaration = new RegExp(`^\\s*${token}\\s*:([^;]*);`, "m").exec(
+        css,
+      );
+      expect(declaration?.[1], `${token} is not declared`).toBeDefined();
+      expect(declaration?.[1], `${token} must resolve a palette token`).toMatch(
+        /var\(--/,
+      );
+      expect(
+        declaration?.[1],
+        `${token} must not pin a literal colour`,
+      ).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    }
+  });
 });

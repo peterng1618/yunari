@@ -562,21 +562,22 @@ body,
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
   --finder-card-min-width: 168px;
   /* The asset preview's box and right panel: the finder's inset-24 size, a
-     270px facts column, and a fixed stage ground a picture is judged against
-     under every palette.
+     270px facts column, and the stage ground a picture is judged against. The
+     stage follows the shell palette: a light app must not open a dark hole, and
+     the picture is already judged against the surface a viewer reads it on.
      The header gutter clears the 26px close control. */
   --asset-preview-width: 1132px;
   --asset-preview-height: 852px;
   --asset-preview-panel-width: 270px;
   --asset-preview-header-gutter: 48px;
-  --asset-preview-stage: #080a0d;
+  --asset-preview-stage: var(--stage);
   /* The store item's own surface: a 960 x 760 box with a 270px facts
      column. The stage takes every pixel the panel leaves, so the box keeps
-     one height as a person steps between items, and its ground is the
-     viewer's fixed dark rather than the canvas paint. */
+     one height as a person steps between items; its ground follows the shell
+     palette with the rest of the modal. */
   --store-item-height: 760px;
   --store-item-panel-width: 270px;
-  --store-item-stage: #080a0d;
+  --store-item-stage: var(--stage);
   --dialog-min-width: 340px;
   --dialog-max-width: 560px;
   --dialog-max-height: 720px;
@@ -603,18 +604,18 @@ body,
   --view-readout-min-width: 56px;
   --compact-layer-panel-width: 246px;
   /* The finder's dimensions and the Assets card's mark are the panels' own;
-     the specimen glyph sizes are the two panels' own. The specimen backdrop is fixed on purpose: a font
-     preview has to read the same under every palette, so it cannot be a palette
-     role. */
+     the specimen glyph sizes are the two panels' own. The specimen backdrop
+     follows the palette so the preview sits on the app's own surface rather
+     than a dark tile in a light app. */
   --font-preview-width: 336px;
   --font-tile-min-height: 152px;
   --font-specimen-glyph-size: 31px;
   --font-trio-specimen-height: 214px;
   --font-specimen-backdrop: linear-gradient(
     135deg,
-    #16202b,
-    #101820 60%,
-    #0e141b
+    var(--panel-2),
+    var(--panel) 60%,
+    var(--panel-2)
   );
   --asset-thumbnail-size: 38px;
   /* Read through `theme()` by the media query below: a custom property cannot
