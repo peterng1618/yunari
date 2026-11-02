@@ -1439,6 +1439,10 @@ body,
 }
 .editor-shell-inspector[data-collapsed="true"] {
   overflow: hidden;
+  /* The folded column is reserved for the handle: 26px and its two --space-6
+     insets. The column's 12px padding would leave 14px of content and push the
+     26px handle past the body's edge, so the folded column drops it. */
+  padding: 0;
 }
 /* The column keeps its owners mounted while folded, so a draft survives. Only
    the handle stays visible and reachable. */
@@ -1554,10 +1558,20 @@ body,
    every label 6px below its control, and no utility could win against it because
    it is unlayered. A label that is not a row's own belongs to `.yunari-field`,
    which already writes its own `margin-top: 0`. */
-.editor-shell-panel section:not(.editor-shell-pane),
+.editor-shell-panel
+section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .editor-shell-inspector section {
   display: block;
   margin-top: 12px;
+}
+/* The margin above a section separates it from what came before; the first
+   section in a pane body has a title bar above it and the body's own padding
+   already spaces it. Keeping the margin here stacked it with the section's
+   own top padding, so the document pane drew a 24px gap under "Theme
+   settings" where every other pane drew 12. */
+.editor-shell-panel section[data-yunari-section]:first-child,
+.editor-shell-inspector section[data-yunari-section]:first-child {
+  margin-top: 0;
 }
 /* A pane is a section too, but it is the column's own frame rather than a
    section *inside* one, so it is excluded from the rule above and sits flush at

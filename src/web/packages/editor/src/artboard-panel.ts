@@ -70,6 +70,9 @@ export function createArtboardPanel(
   } = {},
 ): ArtboardPanel {
   const root = document.createElement("section");
+  // The pane's content root, not a section inside it: the pane's `section`
+  // margin rule would otherwise add a second gap under the title bar.
+  root.className = "editor-shell-pane-content";
   // No `data-yunari-panel` and no title here: `Pane` owns the identity and the
   // title bar, and a second element under either is a strict-mode failure for
   // every locator that browses by it.

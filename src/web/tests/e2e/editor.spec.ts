@@ -5495,6 +5495,75 @@ test.describe("Fabric editor route", () => {
   });
 });
 
+/**
+ * **The document pane's first section starts where every pane's content
+ * starts.** The pane body's content root is not a section, the first section
+ * carries no separator margin, and its own top padding is the 12px under the
+ * title bar. Before this, the root's section margin and the section's margin
+ * stacked and "Theme metadata" sat 24px under "Theme settings" while the other
+ * panes drew 12.
+ */
+test("starts Theme settings' first section at the body's own top", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(EDITOR);
+  await openPane(page, "Theme settings");
+
+  const gap = await page.evaluate(() => {
+    const pane = document.querySelector('[data-yunari-panel="document"]');
+    if (pane === null) throw new Error("the document pane did not draw");
+    const title = pane.querySelector(".editor-shell-pane-title");
+    const section = pane.querySelector("[data-yunari-section]");
+    if (title === null || section === null)
+      throw new Error("the pane drew no title or section");
+    const header = section.querySelector("button");
+    if (header === null) throw new Error("the section drew no header");
+    const bottom = title.getBoundingClientRect().bottom;
+    return {
+      section: section.getBoundingClientRect().top - bottom,
+      header: header.getBoundingClientRect().top - bottom,
+    };
+  });
+
+  expect(gap.section, "the first section starts below the body's top").toBe(0);
+  expect(gap.header, "the first eyebrow is not 12px under the title").toBe(12);
+});
+
+/**
+ * **The folded inspector's handle fits its slot.** The column reserves 26px for
+ * the handle plus two `--space-6` insets; its 12px padding used to leave 14px
+ * of content, so the expand control overflowed the body's right edge and was
+ * clipped. This reads the button's own box against its column.
+ */
+test("keeps the folded inspector's expand control inside its slot", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(EDITOR);
+  await page.locator("[data-yunari-inspector-toggle]").click();
+
+  const fold = await page.evaluate(() => {
+    const button = document.querySelector("[data-yunari-inspector-toggle]");
+    const inspector = document.querySelector(".editor-shell-inspector");
+    if (button === null || inspector === null)
+      throw new Error("the inspector drew no handle");
+    const control = button.getBoundingClientRect();
+    const column = inspector.getBoundingClientRect();
+    return {
+      label: button.getAttribute("aria-label"),
+      left: control.left - column.left,
+      right: column.right - control.right,
+      width: control.width,
+    };
+  });
+
+  expect(fold.label).toBe(uiCopy.inspectorPanel.expand);
+  expect(fold.width).toBe(26);
+  expect(fold.left, "the handle is not inset from the left").toBe(6);
+  expect(fold.right, "the handle is not inset from the right").toBe(6);
+});
+
 async function saveEnvelope(page: Page): Promise<unknown> {
   const { parsed } = await exportPackage(page);
   expect(parsed.ok).toBe(true);
