@@ -366,6 +366,41 @@ describe("createPageRasterizer", () => {
     await page.close();
   });
 
+  it("re-asserts overlay mode on every capture, so a page reload cannot leave it opaque", async () => {
+    document.body.innerHTML = "";
+    const host = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    canvas.dataset["yunari"] = "artboard";
+    host.append(canvas);
+    document.body.append(host);
+
+    const { devtools, sent } = fakeDevtools({
+      "Page.captureScreenshot": {
+        result: { data: Buffer.from("png").toString("base64") },
+      },
+    });
+
+    const page = await createPageRasterizer(devtools, options, async () => {});
+    await page.captureOverlay();
+
+    // A publish reload replaces the document, taking the injected style with
+    // it. The next capture must re-enter the mode, or it screenshots the
+    // theme's own picture and covers the clip the device is playing.
+    document.head.innerHTML = "";
+    document.body.innerHTML = "";
+    document.body.append(host.cloneNode(true));
+    await page.captureOverlay();
+
+    const entries = sent.filter((entry) => entry.method === "Runtime.evaluate");
+    // The mount check, then one overlay entry per capture.
+    expect(entries).toHaveLength(3);
+    new Function(String(entries[2]?.params["expression"]))();
+
+    expect(document.getElementById("yunari-panel-overlay")).not.toBeNull();
+
+    await page.close();
+  });
+
   it("closes its page, target and socket, leaving the browser alone", async () => {
     const { devtools, sent, closePage, push } = fakeDevtools();
     const closeTarget = vi.fn(async () => {});
