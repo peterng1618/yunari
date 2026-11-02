@@ -731,9 +731,6 @@ export function createShellLayout(
             aria-label={uiCopy.stage.label}
           >
             <Host node={hosts.canvas} />
-            {/* The stage's top-centre: the one view control for a video
-                background. It draws nothing for any other background. */}
-            <BackgroundPlayback store={store} />
             {/* The two top corners in one row, which is what keeps the overflow rule's
                 "clusters cannot collide" true without either knowing the
                 other's width. The row is `pointer-events: none`; the two
@@ -747,7 +744,10 @@ export function createShellLayout(
               {/* The store, not a local: a late-set bridge must reach the
                   readout the same way it reaches the inspector and menus. */}
               {store.bridge === undefined ? null : (
-                <DisplaySwitch viewport={store.bridge.editor.viewport} />
+                <DisplaySwitch
+                  viewport={store.bridge.editor.viewport}
+                  playback={<BackgroundPlayback store={store} />}
+                />
               )}
             </div>
             {/* The dock owns its own element and derives its own visibility;

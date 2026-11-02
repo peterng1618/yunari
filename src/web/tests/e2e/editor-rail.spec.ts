@@ -101,7 +101,7 @@ test("asking for a shut pane opens it, and asking again does not close it", asyn
   // click when it is shut, or "open" would be a no-op that happened to pass.
   await page
     .locator(".editor-shell-rail")
-    .getByRole("button", { name: "Composition", exact: true })
+    .getByRole("button", { name: "Layers", exact: true })
     .click();
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeHidden();
 
@@ -290,13 +290,13 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
   // Close the pane the product's own way, then look at Add and come back.
   await page
     .locator(".editor-shell-rail")
-    .getByRole("button", { name: "Composition", exact: true })
+    .getByRole("button", { name: "Layers", exact: true })
     .click();
   await expect(list).toBeHidden();
 
   await openPane(page, "Add");
   await expect(page.locator('[data-yunari-panel="add"]')).toBeVisible();
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   await expect(page.locator('[data-yunari-panel="layers"]')).toBeVisible();
 
   await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(offset);
@@ -343,7 +343,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Composition", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -361,7 +361,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
 
     // Away and back. The partner is whichever slot this one is not, so the
     // swap always leaves the pane it is about.
-    await openPane(page, slot === "Composition" ? "Add" : "Composition");
+    await openPane(page, slot === "Layers" ? "Add" : "Layers");
     await openPane(page, slot);
 
     const returned = await body.evaluate((node) => node.scrollTop);
@@ -487,7 +487,7 @@ test("every pane's title bar sits at the same top offset", async ({
   ).toBeVisible();
 
   const tops: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const title = page.locator(
       ".editor-shell-pane:not([hidden]) > .editor-shell-pane-title",
@@ -533,7 +533,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
   ).toBeVisible();
 
   const overflow: [string, number][] = [];
-  for (const slot of ["Composition", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot}'s body is showing`).toHaveCount(1);
@@ -1311,9 +1311,12 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   const header = region.locator("[data-yunari-store-header]");
   await expect(header, "the region draws no header row").toBeVisible();
 
-  // The two halves, named and opening on Local — the Segmented, which is what
-  // the region's own header row carries rather than a second mode switch.
-  const halves = header.locator("[data-yunari-store-halves] button");
+  // The two halves, named and opening on Local — the `Segmented`, which is a
+  // mode-level choice in the **shell header** beside the mode switch (`#304`),
+  // not in the region's own row.
+  const halves = page.locator(
+    ".editor-shell-header [data-yunari-store-halves] button",
+  );
   await expect(halves).toHaveCount(2);
   await expect(halves.nth(0)).toHaveText(uiCopy.store.halves.local);
   await expect(halves.nth(1)).toHaveText(uiCopy.store.halves.online);
@@ -2958,6 +2961,19 @@ test("a submitted theme states the store's status word and the control no longer
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
+  // The submission's preparation step opens the stored theme to bake its crops.
+  // The listing stub is enough for the card, but the open is a second read, and
+  // without an answer the step refuses the submission before the 401 below.
+  const plain = boundaryEnvelope({
+    id: "boundary-plain",
+    name: "Boundary plain",
+    tags: [],
+    width: 1920,
+    height: 1080,
+  });
+  await page.route("**/api/themes/boundary-plain", (route) =>
+    route.fulfill({ json: { envelope: plain, assets: {} } }),
+  );
   // The host answers the first press with no identity and the retry with the
   // store's own status and version; the session poll authorises once.
   let submits = 0;
@@ -3275,6 +3291,12 @@ test("the store opens a library theme as the document, from the cell and its foo
     });
   const fromCell = themeOf("store-from-cell", CELL_NAME);
   const fromFooter = themeOf("store-from-footer", FOOTER_NAME);
+  // A third listing entry, never opened: the card layout packs it beside the two
+  // above, and its 32:9 artboard is what makes it a two-column card.
+  const wide = {
+    ...themeOf("store-wide", "Wide theme"),
+    artboard: { width: 3840, height: 1080 },
+  };
 
   // **No `updatedAt`, and that is load-bearing.** With no `?theme=` in the URL
   // the editor boots on the author's most recent save, which it picks by that
@@ -3286,7 +3308,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   await page.route("**/api/themes", (route) =>
     route.fulfill({
       json: {
-        themes: [fromCell, fromFooter].map((envelope) => ({
+        themes: [fromCell, fromFooter, wide].map((envelope) => ({
           id: envelope.id,
           name: envelope.metadata?.name,
           author: "huyng",
@@ -3364,7 +3386,79 @@ test("the store opens a library theme as the document, from the cell and its foo
   await expect(
     region.locator("[data-yunari-store-cell]"),
     "the store does not list the stubbed library",
-  ).toHaveCount(2);
+  ).toHaveCount(3);
+
+  // ── The cards pack as a masonry, at the theme's own ratio ──────────────────
+  // **The grid has no masonry in CSS, so the packing is the span each card
+  // measures itself into**: a 1px row unit, `row dense`, and a card whose
+  // `grid-row-end` is that many rows. The wide theme's 32:9 artboard takes two
+  // columns, which is the claim a fixed two-column grid cannot make: the card's
+  // own width is two tracks and their gutter, and the other two cards' is one.
+  const gallery = region.locator("[data-yunari-store-gallery]");
+  await expect(gallery, "the store draws no gallery").toHaveCount(1);
+  await expect
+    .poll(
+      () =>
+        region
+          .locator("[data-yunari-store-cell]")
+          .evaluateAll((cells) =>
+            cells.every((cell) =>
+              getComputedStyle(cell).gridRowEnd.startsWith("span "),
+            ),
+          ),
+      "a card never measured itself into the grid's row span",
+    )
+    .toBe(true);
+  const pack = await gallery.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      rowUnit: style.gridAutoRows,
+      flow: style.gridAutoFlow,
+      gap: Number.parseFloat(style.columnGap),
+      cells: Array.from(
+        node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+        (cell) => ({
+          id: cell.getAttribute("data-yunari-store-cell"),
+          wide: cell.hasAttribute("data-wide"),
+          width: cell.getBoundingClientRect().width,
+          rowEnd: getComputedStyle(cell).gridRowEnd,
+        }),
+      ),
+    };
+  });
+  const packReading = `store gallery ${JSON.stringify(pack)}`;
+  console.log(packReading);
+  testInfo.annotations.push({
+    type: "store-gallery",
+    description: packReading,
+  });
+  expect(pack.rowUnit, `the grid has no 1px row unit (${packReading})`).toBe(
+    "1px",
+  );
+  // Chrome omits the initial `row` and computes the declaration as `dense`.
+  expect(pack.flow, `the grid does not pack densely (${packReading})`).toBe(
+    "dense",
+  );
+  const wideCell = pack.cells.find((cell) => cell.wide);
+  const narrow = pack.cells.filter((cell) => !cell.wide);
+  expect(
+    wideCell?.id,
+    `the 32:9 card is not the one that takes two columns (${packReading})`,
+  ).toBe("store-wide");
+  expect(
+    narrow.map((cell) => cell.id).sort(),
+    `a card narrower than 2:1 took two columns (${packReading})`,
+  ).toEqual(["store-from-cell", "store-from-footer"]);
+  expect(
+    Math.round((wideCell?.width ?? 0) - (narrow[0]?.width ?? 0) * 2 - pack.gap),
+    `the wide card is not two tracks and a gutter wide (${packReading})`,
+  ).toBe(0);
+  for (const cell of pack.cells) {
+    expect(
+      Number.parseInt(cell.rowEnd.replace(/^span /, ""), 10),
+      `${cell.id}'s row span is not positive (${packReading})`,
+    ).toBeGreaterThan(0);
+  }
 
   const modal = page.locator("[data-yunari-store-item]");
   const cellOf = (id: string) =>
@@ -3373,13 +3467,15 @@ test("the store opens a library theme as the document, from the cell and its foo
     cellOf(id).locator("[data-yunari-store-cell-surface]");
 
   // **The cell's own bands are where the cell puts them, and this is the
-  // reading that says so** (A.7b). The surface, the byline and the facts band
-  // are three elements now where they were one padded column, so the spacing
-  // between them is arithmetic a later edit can move without anything failing:
-  // the cell's 10px inset and 6px between the bands, which the spacing scale's
-  // step table owns as `--space-10` and `--space-6`. The 26px band is the third
-  // band's own height and is read here too, because it is what the band
-  // fixes and a wrapper that padded it would squash it.
+  // reading that says so** (A.7b, and the card's recap). The picture, the name
+  // row and the facts band are three elements, so the spacing between them is
+  // arithmetic a later edit can move without anything failing: the name row's
+  // 8px above the name and 4px below it, the cell's 10px inset, which the
+  // spacing scale's step table owns as `--space-8`, `--space-4` and
+  // `--space-10`. The 26px band is the facts band's own height and is read
+  // here too, because it is what the band fixes and a wrapper that padded it
+  // would squash it. **The byline has moved into that band**, so this reading
+  // also holds it there by its vertical centre rather than by a gap of its own.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
@@ -3434,6 +3530,10 @@ test("the store opens a library theme as the document, from the cell and its foo
       nameBottom: name?.bottom ?? null,
       bylineTop: byline?.top ?? null,
       bylineBottom: byline?.bottom ?? null,
+      bylineInBand:
+        cell
+          .querySelector("[data-yunari-store-cell-byline]")
+          ?.parentElement?.hasAttribute("data-yunari-store-cell-band") ?? false,
       bandTop: band?.top ?? null,
       bandBottom: band?.bottom ?? null,
     };
@@ -3453,16 +3553,30 @@ test("the store opens a library theme as the document, from the cell and its foo
   };
   expect(
     gapOf(bands.pictureBottom, bands.nameTop, "name under the picture"),
-    `the name is not 10px under the picture (${bandReading})`,
-  ).toBe(10);
+    `the name is not 8px under the picture (${bandReading})`,
+  ).toBe(8);
   expect(
-    gapOf(bands.nameBottom, bands.bylineTop, "byline"),
-    `the byline is not 6px under the name (${bandReading})`,
-  ).toBe(6);
+    gapOf(bands.nameBottom, bands.bandTop, "facts band"),
+    `the facts band is not 4px under the name (${bandReading})`,
+  ).toBe(4);
   expect(
-    gapOf(bands.bylineBottom, bands.bandTop, "facts band"),
-    `the facts band is not 6px under the byline (${bandReading})`,
-  ).toBe(6);
+    bands.bylineInBand,
+    `the byline is not in the facts band (${bandReading})`,
+  ).toBe(true);
+  expect(
+    bands.bylineTop === null ||
+      bands.bylineBottom === null ||
+      bands.bandTop === null ||
+      bands.bandBottom === null
+      ? null
+      : Math.abs(
+          Math.round(
+            (bands.bylineTop + bands.bylineBottom) / 2 -
+              (bands.bandTop + bands.bandBottom) / 2,
+          ),
+        ),
+    `the byline is not centred in the facts band (${bandReading})`,
+  ).toBeLessThanOrEqual(1);
   expect(
     gapOf(bands.bandBottom, bands.cellInnerBottom, "band's own foot"),
     `the facts band does not sit 10px above the cell's edge (${bandReading})`,

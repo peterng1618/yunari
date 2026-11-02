@@ -45,7 +45,6 @@ export function FinderPreviewModal(props: {
       }}
       label={preview?.name ?? uiCopy.assets.title}
       closeLabel={uiCopy.assets.close}
-      closeIcon
       className="editor-shell-dialog--asset-preview"
     >
       {preview === undefined ? null : (

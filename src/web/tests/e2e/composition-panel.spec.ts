@@ -365,6 +365,100 @@ test("the row's twisty paints at 20px and takes a 24×24 target", async ({
 });
 
 /**
+ * The row's leading slot is one glyph, not two.
+ *
+ * A group used to draw a twisty column and then a second kind glyph, costing a
+ * narrow pane 32px before the name. The twisty now takes the kind's slot, a leaf
+ * keeps the kind mark in the same slot, and both start at the row's own left
+ * edge. The child step is the other half: a root row is flush with the pane and
+ * each level adds 8px.
+ */
+test("the layer row's leading slot is one glyph, flush at the root", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+  await openEveryGroup(page);
+
+  const rows = await page.locator(".yunari-layer-row").evaluateAll((elements) =>
+    elements.map((row) => {
+      const first = row.firstElementChild as HTMLElement | null;
+      const rowBox = row.getBoundingClientRect();
+      const firstBox = first?.getBoundingClientRect();
+      return {
+        depth: row.style.getPropertyValue("--layer-depth"),
+        paddingLeft: getComputedStyle(row).paddingLeft,
+        leadingLeft:
+          firstBox === undefined ? null : firstBox.left - rowBox.left,
+        leading: first?.matches(".yunari-layer-mark")
+          ? "mark"
+          : first?.getAttribute("aria-expanded") === null
+            ? "other"
+            : "twisty",
+        glyphs: row.querySelectorAll(".yunari-layer-mark").length,
+      };
+    }),
+  );
+
+  expect(rows.length, "no layer rows in the tree").toBeGreaterThan(0);
+  for (const row of rows) {
+    const indent = Number(row.depth) * 8;
+    expect(row.paddingLeft, "the child step is not 8px per level").toBe(
+      `${indent}px`,
+    );
+    expect(
+      row.leadingLeft,
+      "the leading glyph does not start at the row's content edge",
+    ).toBe(indent);
+    // A group's twisty is its whole leading slot; a leaf's kind mark is its own.
+    expect(row.glyphs).toBe(row.leading === "mark" ? 1 : 0);
+    expect(row.leading).not.toBe("other");
+  }
+});
+
+/**
+ * The footer belongs to a selection and to the pane's bottom edge.
+ *
+ * With nothing selected the toolbar is absent, not a grey row. Once a layer is
+ * picked, it draws and sits at the bottom of the layer pane, with the scrolling
+ * body taking everything above it.
+ */
+test("the layer footer appears with a selection and sits at the pane's bottom", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await openStarterEditor(page);
+
+  const pane = page.locator('[data-yunari-panel="layers"]');
+  expect(
+    await pane.locator("[data-yunari-layer-actions]").count(),
+    "a footer drawn before anything is selected",
+  ).toBe(0);
+
+  await page.locator(".yunari-layer-row").first().click();
+  const footer = pane.locator("[data-yunari-layer-actions]");
+  await expect(footer).toBeVisible();
+
+  const measured = await pane.evaluate((section) => {
+    const actions = section.querySelector("[data-yunari-layer-actions]");
+    if (actions === null) return null;
+    const paneBox = section.getBoundingClientRect();
+    const footerBox = actions.getBoundingClientRect();
+    return {
+      footerBottom: footerBox.bottom,
+      paneBottom: paneBox.bottom,
+    };
+  });
+  expect(measured, "the selected pane drew no footer").not.toBeNull();
+  expect(
+    Math.round((measured?.paneBottom ?? 0) - (measured?.footerBottom ?? 0)),
+    "the footer is not anchored to the pane's bottom",
+  ).toBe(0);
+});
+
+/**
  * `vg-265`: the row's state slot is absolutely positioned over the row's right
  * edge and always carries its own surface, so the slot covers the last glyphs
  * of the role on a row that draws no key — the role is *covered*, not clipped,
@@ -1736,7 +1830,7 @@ test("gives every image it places a layer row", async ({ page }, testInfo) => {
     })
     .toBe(5);
 
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   // The scene is the source of truth for which rows must exist; asking the
   // panel for exactly those ids is what the report says it lacked.
   for (const id of await sceneImageIds(page)) {

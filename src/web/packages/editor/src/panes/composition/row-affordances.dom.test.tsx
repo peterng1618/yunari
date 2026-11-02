@@ -5,11 +5,7 @@ import { expect, it, vi } from "vitest";
 import type { EditorShellBridge } from "../../editor-shell/bridge.js";
 import { LayerActions } from "../../editor-shell/layer-panel.js";
 import type { LayerRow } from "../../editor-shell/layer-tree.js";
-import {
-  OBJECT_ACTIONS,
-  type ObjectTarget,
-  objectActionsFor,
-} from "../../object-actions.js";
+import { type ObjectTarget, objectActionsFor } from "../../object-actions.js";
 import { uiCopy } from "../../ui-copy.js";
 import { CompositionPane } from "./composition-pane.js";
 
@@ -327,27 +323,21 @@ it("draws at most three controls in the state slot, whatever the row's state", a
   host.remove();
 });
 
-it("draws the registry's commands disabled with nothing selected, and its filter's answer with one", async () => {
+it("draws the registry's filtered commands with a subject, and no footer without one", async () => {
   // The footer decides nothing: eligibility is `objectActionsFor`'s, and the
   // expected column below is that function's own answer rather than a copy of
   // its rule. A surface that re-spelled the filter would agree with it on one
   // selection and diverge on another — which is why a locked object is asked as
   // well as an unlocked one, where the delete half of the registry refuses.
   //
-  // **The no-selection case is `vg-570`'s ruling.** The footer keeps the
-  // registry's own commands and draws them disabled — not the Add pane's
-  // constructions (`vg-460`'s answer, which the user never asked for) and not an
-  // empty row. So there the expected column is the whole registry and every
-  // button in it is disabled; where a subject exists the filter has already
-  // removed what the selection cannot run, so nothing is left to grey.
+  // **Nothing selected draws no footer at all** (#345), which supersedes the
+  // older ruling that kept the registry's commands greyed: an empty action row
+  // is space the pane does not need to spend, and the footer now appears with
+  // the selection it acts on.
   const cases: readonly {
     readonly what: string;
     readonly target: ObjectTarget;
   }[] = [
-    {
-      what: "nothing selected",
-      target: { kind: "none", locked: false, memberCount: 0, isGroup: false },
-    },
     {
       what: "a locked object",
       target: { kind: "object", locked: true, memberCount: 1, isGroup: false },
@@ -396,27 +386,35 @@ it("draws the registry's commands disabled with nothing selected, and its filter
 
   for (const { what, target } of cases) {
     const { host, labels, disabled, offered, run } = await renderFooter(target);
-    const nothing = target.kind === "none";
-    const shown = nothing ? OBJECT_ACTIONS : offered;
-    const expected = shown.map((action) => action.label);
+    const expected = offered.map((action) => action.label);
     expect(labels, what).toEqual(expected);
-    // Paste's subject is the clipboard, so an empty canvas leaves it live; every
-    // command that needs a selection stays disabled.
-    expect(disabled, what).toEqual(
-      shown.map((action) => nothing && action.id !== "paste"),
-    );
+    // The filter has already removed what the selection cannot run, so nothing
+    // that reaches the footer is left to grey.
+    expect(disabled, what).toEqual(offered.map(() => false));
     // The press carries the registry's own id, so the footer is rendering the
     // registry's entries rather than a list of its own that happens to match —
     // and a disabled control carries nothing at all.
-    const first = shown[0];
+    const first = offered[0];
     if (first !== undefined) {
       await act(async () =>
         host.querySelector<HTMLButtonElement>("button")?.click(),
       );
-      expect(run.mock.calls, what).toEqual(nothing ? [] : [[first.id]]);
+      expect(run.mock.calls, what).toEqual([[first.id]]);
     }
     host.remove();
   }
+
+  const empty = await renderFooter({
+    kind: "none",
+    locked: false,
+    memberCount: 0,
+    isGroup: false,
+  });
+  expect(
+    empty.labels,
+    "an empty selection drew a footer instead of no footer",
+  ).toEqual([]);
+  empty.host.remove();
 
   // The absences the filter buys once there is a subject, said outright: a locked
   // object is offered no Delete and no Lock, and it is offered Unlock. The

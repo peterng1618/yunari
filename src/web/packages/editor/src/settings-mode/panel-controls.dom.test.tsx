@@ -154,10 +154,20 @@ function buttonNamed(pattern: RegExp): HTMLButtonElement {
   return must(found ?? null, `button matching ${String(pattern)}`);
 }
 
-async function click(button: HTMLButtonElement): Promise<void> {
-  await act(async () => {
+function click(button: HTMLButtonElement): Promise<void> {
+  return act(async () => {
     button.click();
   });
+}
+
+/** The dialog's close control. It is the shared close **mark** now, so its text
+ *  is empty and its name lives in `aria-label`; the `buttonNamed` reader below
+ *  reads visible words and cannot find it. */
+function closeButton(): HTMLButtonElement {
+  return must(
+    document.querySelector<HTMLButtonElement>(".editor-shell-dialog-close"),
+    "the dialog's close button",
+  );
 }
 
 /** Types into a controlled input the way a person does: the native setter
@@ -373,7 +383,7 @@ it("shows nothing from a previous panel after the dialog is closed", async () =>
   await click(buttonNamed(/controls/i));
   await click(buttonNamed(/query status/i));
   expect(replyText()).toBe("ok");
-  await click(buttonNamed(/^close$/i));
+  await click(closeButton());
 
   // The region keys the section by display, so selecting another one replaces
   // this tree; this renders the same position with a new panel to prove the
@@ -413,7 +423,7 @@ it("drops a reply to a command the closed dialog abandoned", async () => {
   await click(buttonNamed(/controls/i));
   await typeInto(brightnessField(), "50");
   await click(buttonNamed(/apply/i));
-  await click(buttonNamed(/^close$/i));
+  await click(closeButton());
   await click(buttonNamed(/controls/i));
   await act(async () => {
     pending.resolve("late answer");
@@ -441,7 +451,7 @@ it("returns focus to its trigger when the dialog closes", async () => {
   // whatever had it, and this is the element a person pressed.
   trigger.focus();
   await click(trigger);
-  await click(buttonNamed(/^close$/i));
+  await click(closeButton());
   // Base UI hands focus back after the popup is gone, on a timer rather than
   // in the click: a single tick is enough on an idle machine and not enough
   // under the full gate's load, so this waits for the focus to arrive with a

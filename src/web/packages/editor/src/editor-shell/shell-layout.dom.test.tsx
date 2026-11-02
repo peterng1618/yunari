@@ -339,13 +339,14 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
     uiCopy.rail.slots.composition,
   );
   // The object actions are the pane's footer toolbar — a Pane footer, so it is
-  // not a row of the tree — and there is exactly one of them.
-  expect(layers?.querySelector("[data-yunari-layer-actions]")).not.toBeNull();
+  // not a row of the tree. With nothing selected the footer is absent (#345);
+  // its drawn shape is `pane.dom.test.tsx`'s.
+  expect(layers?.querySelector("[data-yunari-layer-actions]")).toBeNull();
   expect(
     root.querySelectorAll(
       '[data-yunari-panel="layers"] [data-yunari-layer-actions]',
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
 
   layout.destroy();
 });

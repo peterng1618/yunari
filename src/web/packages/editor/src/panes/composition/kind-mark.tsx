@@ -69,8 +69,9 @@ export function chartFamilyGlyph(family: string | undefined): LucideIcon {
  * document does not hold.
  *
  * Every arm sits in one fixed-width slot, which is what lines the names up. A
- * group still takes the slot rather than collapsing it, so an eight-card
- * document has its rows in one column rather than two ragged ones.
+ * group that can open draws its twisty in that slot instead of a second glyph;
+ * an empty group, which has nothing to twist, still takes the slot with the
+ * stack mark.
  *
  * `data-yunari-layer-mark` names which arm drew, so a browser case can measure
  * the treatment rather than infer it from the icon's class.

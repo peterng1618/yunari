@@ -765,8 +765,7 @@ body,
    shadow, with no gradient, no inner sheen and no backdrop filter. The two
    clusters are separated from the chrome by elevation alone. */
 .editor-shell-dock.editor-glass,
-.editor-shell-zoom.editor-glass,
-.editor-shell-playback.editor-glass {
+.editor-shell-zoom.editor-glass {
   background: color-mix(in srgb, var(--panel) 95%, transparent);
   box-shadow: var(--elev-1);
 }
@@ -1200,8 +1199,10 @@ body,
   color: var(--shell-primary-text);
   border-radius: 8px;
   /* The button leaves a visible gap above and below inside the 42px header,
-     rather than filling the strip it sits in. */
-  padding: 6px 14px;
+     rather than filling the strip it sits in. The 18px line plus 4px of padding
+     either side is a 28px button — the header control size — so the filled
+     block clears the strip's edges by 7px rather than sitting on them. */
+  padding: 4px 14px;
   cursor: pointer;
   font-weight: 600;
 }
@@ -1992,6 +1993,13 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   color: var(--muted);
 }
 
+/* The finder's rail is also the way out's row: the mark centres in it rather
+   than sitting at the sheet's corner inset, so it lines up with the heading and
+   the tabs. 3rem is the rail's min height. */
+.editor-shell-dialog--finder .editor-shell-dialog-close {
+  top: calc((3rem - 28px) / 2);
+}
+
 /* The sheet's own type, on the shell's text tokens so it recolours with the
    palette rather than with any authored theme. The lead names the surface the
    same way the panel headings do; each group is a heading over a two-column
@@ -2091,7 +2099,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   line-height: var(--text-xs--line-height);
   color: var(--shell-muted);
 }
-.editor-shell-dialog > button {
+.editor-shell-dialog > button:not(.editor-shell-dialog-close) {
   margin-top: 16px;
   padding: 6px 12px;
   border: 1px solid var(--shell-edge);
@@ -2099,15 +2107,16 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   background: var(--yunari-control-bg);
   color: var(--shell-text);
   /* the type scale — `--text-sm` 12px, "Control text": a dialog's own button is a
-     control, and this rule reaches the two dialogs that draw one directly (the
-     settings modal's Close and the `?` sheet's) rather than letting them inherit
-     the portalled document's 13px. The three dialogs that wrap their buttons in
-     `.yunari-dialog-actions` already take `text-sm` from `ACTION_BUTTON`. */
+     control, and this rule reaches the dialogs that draw one directly rather
+     than letting them inherit the portalled document's 13px. The dialogs that
+     wrap their buttons in `.yunari-dialog-actions` already take `text-sm` from
+     `ACTION_BUTTON`. The corner close is excluded: it is the sheet's mark, and
+     this rule's margin, padding and border would move and widen it. */
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
   cursor: pointer;
 }
-.editor-shell-dialog > button:hover {
+.editor-shell-dialog > button:not(.editor-shell-dialog-close):hover {
   border-color: var(--shell-muted);
 }
 
@@ -2417,7 +2426,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-left: calc(6px + var(--layer-depth, 0) * 13px);
+  padding-left: calc(var(--layer-depth, 0) * 8px);
   padding-right: 4px;
   /* The control set's panel rhythm, and the half of `ROW_HEIGHT` in
      `composition-pane.tsx` that CSS owns: the drop-line's `top` is
@@ -2503,7 +2512,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .yunari-layer-dropline {
   position: absolute;
   top: var(--layer-dropline-top, 0);
-  left: var(--layer-dropline-left, 6px);
+  left: var(--layer-dropline-left, 0);
   right: 6px;
   height: 2px;
   border-radius: 1px;
@@ -2551,6 +2560,9 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   flex: none;
 }
 .editor-shell-pane-body {
+  /* The body takes the pane's leftover height, so a footer is anchored to the
+     pane's bottom edge rather than following a short tree. */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -2610,47 +2622,17 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .yunari-layer-row button:hover {
   border-color: var(--muted);
 }
-/* The twisty column, whether the row draws one or only reserves its place.
-   Fixed rather than left to its content: measured on canvas, a button-sized
-   twisty next to a 20px placeholder left the column ~4px narrower than the
-   button is wide, and the flexible bound column absorbed the difference — so
-   the *name* re-flowed every time a row gained or lost its twisty. */
-.yunari-layer-twisty,
-.yunari-layer-row > button:first-child {
+/* The leading column: a group's twisty or a leaf's kind mark, never both. The
+   glyph starts at the row's left edge rather than centring in the column, so a
+   root row's mark is flush with the pane and the name gets the rest. */
+.yunari-layer-row > button:first-child,
+.yunari-layer-mark {
   flex: 0 0 20px;
   width: 20px;
-  display: inline-flex;
-  justify-content: center;
-}
-/* The kind, drawn as one glyph. One slot for all six arms, so every row's
-   name starts on the same left edge — which is what makes a column of them
-   scannable at all.
-
-   28px, re-cut for the design's 246px pane. The 40px this column carried
-   was the budget a 360px pane allowed, and it stopped fitting when the pane
-   narrowed: measured on canvas at 1600×900 with every group open, the row
-   `group-trends-card` ran its role `Performance trends` 11px past its own right
-   edge, and the row clips its overflow — so the role was cut mid-word. The role
-   is `flex: none` and must never be the column that gives way; this slot is the
-   one *designed* to clip, so the 12px comes from here. That measurement was
-   taken on the text specimen this slot used to draw; what sits here now is a
-   13px glyph, so the 28px is slack rather than tight, and the width is left
-   where the ruling put it.
-
-   **Held at 28px after the 2026-10-12 ruling narrowed it to 20px, because the
-   measurement that ruling asked for shows the lever cannot do what it was ruled
-   for.** Narrowing to 20px leaves the attended row's own numbers *identical* at
-   the three-control shape it draws now — the name is 28px short and the key
-   41px short at both widths — because both columns are already at their floors
-   and the freed 8px only shortens how far the line overruns into the reserved
-   strip (the role's coverage falls 58px → 50px). The ruling that followed held
-   the column at 28px; `vg-260` carries the counts. */
-.yunari-layer-mark {
-  flex: 0 0 28px;
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
 }
 /* The name is the row's identity and it is the first column to yield, because
@@ -2911,22 +2893,16 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .editor-shell-stage-top > * {
   pointer-events: auto;
 }
-/* The stage's top-centre: the backdrop's playback. It is a view control, not a
-   corner — the corners answer what the document is and how it is shown, while
-   this answers whether the picture is moving — and it is drawn only when a
-   video background exists, so it never claims a capability an image or a
-   gradient does not have. Centred with the same 14px inset as the two corners,
-   and a single 26px control, so it clears both at every supported width. */
+/* The backdrop's playback, as the view cluster's leading group: a hairline
+   separates it from the camera controls, and the cluster's own glass is the
+   only surface. It is drawn only when a video background exists, so it never
+   claims a capability an image or a gradient does not have. */
 .editor-shell-playback {
-  position: absolute;
-  z-index: 3;
-  top: var(--space-14);
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  padding: var(--space-4);
-  border-radius: var(--radius-xl);
+  padding-right: var(--space-6);
+  margin-right: var(--space-4);
+  border-right: 1px solid var(--edge);
 }
 /* The top-left corner: the document's identity. A floating cluster at
    the `--radius-xl`, `--panel` at 95%, hairline `--edge` and elevation 1,

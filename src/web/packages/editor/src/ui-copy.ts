@@ -104,7 +104,7 @@ export const uiCopy = {
      *  slots chooses between before it reads each one. */
     label: "Editor panes",
     slots: {
-      composition: "Composition",
+      composition: "Layers",
       add: "Add",
       /** Every declared file, its import and placement, and the finder link. */
       assets: "Assets",
@@ -580,7 +580,6 @@ export const uiCopy = {
       autostart: "Start at sign-in",
       autostartHint:
         "Yunari starts hidden at sign-in, so every local display comes back after a reboot.",
-      autostartBusy: "Registering…",
     },
     panels: {
       heading: "USB panels",

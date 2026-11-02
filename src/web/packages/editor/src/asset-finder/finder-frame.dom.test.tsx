@@ -70,6 +70,8 @@ it("draws the four regions in order and keeps one status line", () => {
   // The name leads the tab row rather than sitting above it as a second bar.
   const heading = drawn?.querySelector("h2");
   expect(heading?.textContent).toBe("Asset Finder");
+  // The name carries the shell banner's brand ink, not the body's.
+  expect(heading?.classList).toContain("text-accent");
   expect(heading?.compareDocumentPosition(tabs[0] as Node)).toBe(
     Node.DOCUMENT_POSITION_FOLLOWING,
   );

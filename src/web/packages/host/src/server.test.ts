@@ -5162,11 +5162,11 @@ describe("A local monitor is specified rather than paired", () => {
 
     const autostart = await request(
       hosted.server,
-      "GET",
+      "PUT",
       "/api/displays/autostart",
     );
     expect(autostart.status).toBe(405);
-    expect(autostart.text()).toBe("This path supports POST.");
+    expect(autostart.text()).toBe("This path supports GET and POST.");
   });
 
   describe("a USB panel", () => {
@@ -6491,23 +6491,70 @@ describe("A local monitor is specified rather than paired", () => {
     }
   });
 
-  it("registers the host at sign-in, once", async () => {
+  it("reads and turns the host's sign-in entry", async () => {
     const message =
       "Registered. Windows starts Yunari at sign-in, so every local monitor " +
       "comes back with it.";
-    const register = vi.fn(async () => ({ ok: true, message }));
-    const hosting = host({ registerAutostart: register });
+    const set = vi.fn(async (enabled: boolean) => ({
+      ok: true,
+      message,
+      enabled,
+    }));
+    const hosting = host({
+      autostart: { state: () => false, set },
+    });
 
     try {
+      const read = await request(
+        hosting.server,
+        "GET",
+        "/api/displays/autostart",
+      );
+      expect(read.status).toBe(200);
+      expect(read.json()).toEqual({ enabled: false });
+
       const answer = await request(
         hosting.server,
         "POST",
         "/api/displays/autostart",
+        json({ enabled: true }),
       );
       expect(answer.status).toBe(200);
       // The registrar's own message is the answer: it is what the surface shows.
-      expect(answer.json()).toEqual({ ok: true, message });
-      expect(register).toHaveBeenCalledTimes(1);
+      expect(answer.json()).toEqual({ ok: true, message, enabled: true });
+      expect(set).toHaveBeenLastCalledWith(true);
+
+      await request(
+        hosting.server,
+        "POST",
+        "/api/displays/autostart",
+        json({ enabled: false }),
+      );
+      expect(set).toHaveBeenLastCalledWith(false);
+    } finally {
+      await hosting.close();
+    }
+  });
+
+  it("refuses a sign-in write that is not a boolean choice", async () => {
+    const set = vi.fn(async (enabled: boolean) => ({
+      ok: true,
+      message: "",
+      enabled,
+    }));
+    const hosting = host({ autostart: { state: () => false, set } });
+
+    try {
+      for (const body of ["{}", '{"enabled":"yes"}', "[]", "nope"]) {
+        const answer = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/autostart",
+          body,
+        );
+        expect(answer.status).toBe(400);
+      }
+      expect(set).not.toHaveBeenCalled();
     } finally {
       await hosting.close();
     }
@@ -8325,6 +8372,11 @@ describe("A theme's own device answers", () => {
     hosted = createHostServer({
       registry: new ProviderRegistry([echo]),
       bundles: { player: tmpDir, editor: tmpDir },
+      // **The themes directory is the case's own**, like every store above: the
+      // server's fallback is the real `~/.yunari/themes`, and a suite that seeds
+      // through the route would otherwise leave its fixtures in the author's
+      // library.
+      themeStore: createThemeStore(tmpDir),
       devices: createDeviceSettingsStore(tmpDir),
       displays,
       activeTheme,

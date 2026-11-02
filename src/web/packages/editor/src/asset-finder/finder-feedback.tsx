@@ -183,7 +183,6 @@ export function FinderPlaceholderDialog(props: {
       onOpenChange={props.onOpenChange}
       label={uiCopy.assets.title}
       closeLabel={uiCopy.assets.close}
-      closeIcon
       className="editor-shell-dialog--finder"
     >
       {props.state === "failed" ? (

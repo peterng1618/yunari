@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
 import {
   type ActionGate,
-  OBJECT_ACTIONS,
   type ObjectTarget,
   objectActionsFor,
 } from "../object-actions.js";
@@ -87,26 +86,15 @@ it("names the section and draws the title bar DESIGN.md's panes wear", () => {
   act(() => root.unmount());
 });
 
-it("draws the registry's commands disabled with nothing selected, never an empty row", () => {
-  // **This is `vg-570`'s regression case.** The user ruled on 2026-10-17 that a
-  // footer with nothing selected keeps the layer's own object commands and draws
-  // them disabled — not the Add pane's constructions (`vg-460`'s answer, which
-  // was never asked for), and not an empty row. Emptying this footer again, or
-  // putting the constructions back, reddens here: the labels are the registry's
-  // own list and every one that needs a subject is disabled. Paste's subject is
-  // the clipboard, so it alone stays live on an empty canvas.
+it("draws no footer until a layer is selected", () => {
+  // The footer used to stay visible with every command greyed (`vg-570`, ruled
+  // 2026-10-17). The user reversed that on 2026-11-02: with no subject the
+  // toolbar is not drawn at all, keeping the pixels for the tree.
   const empty = render(bridge(nothing()));
-  const emptyButtons = [
-    ...(empty.host
-      .querySelector("[data-yunari-layer-actions]")
-      ?.querySelectorAll("button") ?? []),
-  ];
   expect(
-    emptyButtons.map((button) => button.getAttribute("aria-label")),
-  ).toEqual(OBJECT_ACTIONS.map((action) => action.label));
-  expect(emptyButtons.map((button) => button.disabled)).toEqual(
-    OBJECT_ACTIONS.map((action) => action.id !== "paste"),
-  );
+    empty.host.querySelector("[data-yunari-layer-actions]"),
+    "a footer without a selection",
+  ).toBeNull();
 
   // One unlocked object: the registry's own filter answers, and what it keeps is
   // enabled — the absent-not-greyed rule is unchanged once a subject exists.

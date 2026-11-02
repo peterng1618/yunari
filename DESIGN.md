@@ -198,9 +198,16 @@ surface is, not by taste.
 
 **The store's gallery grid is 272px minimum per column.** The number is derived
 from the online half's busiest facts band — its badge, counts and four actions —
-so switching halves does not change the grid's shape. Column width is fixed at
-272px and the grid is `repeat(auto-fill, minmax(272px, 1fr))`: the column count
-follows the width, so no breakpoint is invented for it.
+so switching halves does not change the grid's shape. Column width is
+`repeat(auto-fill, minmax(272px, 1fr))`: the column count follows the width, so
+no breakpoint is invented for it.
+
+**Cards pack as a masonry at each theme's own ratio.** A card's picture box takes
+the authored canvas's aspect ratio and contains the picture rather than cropping
+it, so the library's heights vary with what the author drew. The grid has a 1px
+row unit and `row dense`, and each card spans the rows its measured height
+needs. **A theme at 2:1 or wider spans two columns**; a narrower one keeps one,
+so a wide theme does not tower over the portrait cards beside it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
@@ -219,7 +226,7 @@ already looks, and only the stage changes between the two surfaces.
 
 **Document-level and editor-level actions only.** A command that has a rightful
 home elsewhere is not repeated here — Insert lives in the Add pane, so the
-header has no Insert menu, and Edit lives in the Composition pane's footer
+header has no Insert menu, and Edit lives in the Layers pane's footer
 toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then one **toolbar** of icon
@@ -272,7 +279,7 @@ settings gear pinned to the foot. **Five slots:**
 
 | Slot | Glyph | Holds |
 |---|---|---|
-| Composition | stack | The scene tree, and the object actions that act on it |
+| Layers | stack | The scene tree, and the object actions that act on it |
 | Add | plus | Everything insertable |
 | Assets | folder | Every declared file, its import and placement, and the finder link |
 | Tokens | palette | The theme's paints and type tokens — created and edited here |
@@ -299,14 +306,16 @@ Width 246px by default. Structure, top to bottom:
    actions. Icon buttons at 26px, from the same registries the dock uses.
 
 **A pane footer is bounded by its pane.** The scene tree's footer holds the
-object actions; it is not a place for global commands, and the status bar is not
+object actions and is drawn only while a layer is selected; with no subject it
+is absent rather than a row of greyed commands. The footer sits at the pane's
+bottom edge and is not a place for global commands, and the status bar is not
 a place for tools.
 
 **A row yields its name and its key before it yields a control, and it yields
-the role last.** A Composition row that carries every control it can — the
+the role last.** A Layers row that carries every control it can — the
 twisty, the entry control on a group, the eye and the lock — and a bound key is
 wider than the pane's body, so the row clips rather than dropping a control or
-taking the mark slot below 28px. The name and key give way first; the role gives
+taking the leading slot below 20px. The name and key give way first; the role gives
 way only once they have nothing left, and it is *clipped* rather than *covered*,
 because it is often the only statement of what a row is. A role the slot paints
 over says nothing; a role that ellipsises still says what it can. This is the
@@ -359,16 +368,16 @@ rectangle, never authored artboard dimensions.
 | Corner | Question | Contents |
 |---|---|---|
 | Top-left | *What am I?* | The document's identity chip: record dot, theme name, edited state |
-| Top-centre | *Is the backdrop moving?* | Play/pause for a video background, present only when the document has one |
-| Top-right | *How am I shown?* | The display lens chips, zoom − / value / +, and fit |
-| Bottom-centre | *What can I do?* | The selection dock |
+| Top-right | *How am I shown?* | Play/pause for a video background, then the display lens chips, zoom − / value / +, and fit — one cluster |
 
 The separation is not cosmetic: **the dock acts on the selection, the corners
 act on the view.** A view control that appears only when something is selected
 teaches an author that the view is a property of the selection. The playback
 control is the one view control that depends on the document rather than the
 camera: it is absent for an image, a gradient or no media, because there is
-nothing there to pause. Its state is transient and is never written to the
+nothing there to pause. It leads the view cluster, separated by a hairline,
+because it answers the same question as the camera controls. Its state is
+transient and is never written to the
 theme.
 
 **The identity's name is edited in place.** Double-click the chip's name to
@@ -519,8 +528,9 @@ The vocabulary is closed. A control is one of these, or it is not a control.
 | **Gradient track** | A 24px-tall `--radius-sm` surface with a 1px `--edge` and the value's own gradient as its fill; 16px stop marks fill with the stop's colour, a `--text` border, and an `--edge` ring; the selected mark takes the accent border, and a press that does not travel opens its picker | It is both the preview and the manipulator |
 
 **A dialog's way out sits in its top-right corner.** The close control is a
-mark (or its one-word label) at `--space-8` from those two edges, never a
-bottom-row action: the bottom row answers the dialog, ordered cancel then
+mark at `--space-8` from those two edges, never a bottom-row action: the word
+lives in its accessible name, not on it. The bottom row answers the dialog,
+ordered cancel then
 confirm, right-aligned. A sheet that draws its own close control is the defect,
 not a variant.
 

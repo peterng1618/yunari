@@ -345,7 +345,7 @@ export async function insert(
  * so matching the row's own text is matching all of those too.
  */
 export async function selectLayer(page: Page, name: string): Promise<void> {
-  await openPane(page, "Composition");
+  await openPane(page, "Layers");
   await page
     .locator(".yunari-layer-name")
     // Anchored, because `hasText` is a substring match and `cpu-card` would

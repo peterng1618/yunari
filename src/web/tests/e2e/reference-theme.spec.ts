@@ -629,7 +629,7 @@ test.describe("the reference composition, authored", () => {
 
     // **Bind** — the starter's own sparkline, pointed at another real key
     // through the select the chart panel owns.
-    await openPane(page, "Composition");
+    await openPane(page, "Layers");
     // **A part is selectable only while its owning group is entered.**
     // `bridge.selectLayer` takes `owner ?? target`, which is right for a layer
     // tree: with the card merely *open* a click on the row hands back the card,
@@ -881,7 +881,7 @@ test.describe("the reference composition, authored", () => {
     await openThemeFromStore(page, storedThemeOfPackage(built.bytes));
     await waitForBridge(page);
 
-    await openPane(page, "Composition");
+    await openPane(page, "Layers");
     await page.locator('[data-yunari-layer="orphan"]').click();
     await expect.poll(() => activeId(page)).toBe("orphan");
     // The run editor states the problem rather than leaving a silent gap, and

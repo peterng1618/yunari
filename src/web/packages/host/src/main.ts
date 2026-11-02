@@ -419,7 +419,11 @@ export async function run(argv: readonly string[]): Promise<number> {
     // One entry at sign-in covers every local monitor, including one added
     // later. Registering writes the hidden entry, so this only ever asks; a
     // refusal is answered with the registrar's own message.
-    registerAutostart: () => autostart.enable(entry),
+    autostart: {
+      state: () => autostart.state(),
+      set: (enabled) =>
+        enabled ? autostart.enable(entry) : autostart.disable(),
+    },
     // Where a phone should point, whether one can reach this host at all, and
     // how to move it there.
     get hosting() {

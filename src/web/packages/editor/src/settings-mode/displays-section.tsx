@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import { ControlSelect } from "../components/ui/control-select.js";
+import { ControlToggle } from "../components/ui/control-toggle.js";
 import {
   ControlRow,
   ControlWell,
@@ -335,14 +336,19 @@ export function AddDisplaySection(props: {
  * The host starts at sign-in so every local display comes back after a reboot.
  * The route registers the host, not one display, which is why this sits beside
  * the add form rather than on a display's own detail.
+ *
+ * **It is a toggle, because the setting is a standing boolean**: the row reads
+ * what the OS holds on mount and the write turns that entry on or off. The
+ * toggle's answer is the registrar's own message, so a refusal says why the
+ * state did not move and the switch keeps the state the OS reports.
  */
 export function AutostartSection(props: {
-  readonly settings: Pick<HostSettingsClient, "registerAutostart">;
+  readonly settings: Pick<HostSettingsClient, "readAutostart" | "setAutostart">;
 }): React.JSX.Element {
   const copy = uiCopy.hostSettings.displays;
-  const [autostart, setAutostart] = useState<
-    AutostartAnswer | "working" | undefined
-  >(undefined);
+  const [enabled, setEnabled] = useState<boolean | undefined>(undefined);
+  const [working, setWorking] = useState(false);
+  const [answer, setAnswer] = useState<AutostartAnswer | undefined>(undefined);
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -352,38 +358,57 @@ export function AutostartSection(props: {
     };
   }, []);
 
-  const register = async (): Promise<void> => {
-    if (autostart === "working") return;
-    setAutostart("working");
+  const read = props.settings.readAutostart;
+  useEffect(() => {
+    let live = true;
+    read()
+      .then((held) => {
+        if (live) setEnabled(held);
+      })
+      .catch((error: unknown) => {
+        if (live)
+          setAnswer({ ok: false, message: reason(error), enabled: false });
+      });
+    return () => {
+      live = false;
+    };
+  }, [read]);
+
+  const write = async (next: boolean): Promise<void> => {
+    if (working || enabled === undefined) return;
+    setWorking(true);
     try {
-      const answer = await props.settings.registerAutostart();
-      if (mounted.current) setAutostart(answer);
+      const settled = await props.settings.setAutostart(next);
+      if (!mounted.current) return;
+      setEnabled(settled.enabled);
+      setAnswer(settled);
     } catch (error: unknown) {
       if (mounted.current) {
-        setAutostart({ ok: false, message: reason(error) });
+        setAnswer({ ok: false, message: reason(error), enabled });
       }
+    } finally {
+      if (mounted.current) setWorking(false);
     }
   };
 
   return (
     <Group testId="autostart" name={copy.autostartHeading}>
-      <p className="m-0 text-xs text-muted">{copy.autostartHint}</p>
-      <button
-        type="button"
-        data-yunari-host-autostart=""
-        className={plainButtonClasses}
-        disabled={autostart === "working"}
-        onClick={() => void register()}
-      >
-        {autostart === "working" ? copy.autostartBusy : copy.autostart}
-      </button>
-      {autostart === undefined || autostart === "working" ? null : (
+      <ControlToggle
+        shape="boxed"
+        label={copy.autostart}
+        hint={copy.autostartHint}
+        data={{ "data-yunari-host-autostart": "" }}
+        checked={enabled === true}
+        disabled={enabled === undefined || working}
+        onChange={(next) => void write(next)}
+      />
+      {answer === undefined ? null : (
         <p
-          role={autostart.ok ? "status" : "alert"}
-          data-yunari-host-autostart-result={autostart.ok ? "ok" : "failed"}
-          className={`m-0 text-xs ${autostart.ok ? "text-muted" : "text-warn"}`}
+          role={answer.ok ? "status" : "alert"}
+          data-yunari-host-autostart-result={answer.ok ? "ok" : "failed"}
+          className={`m-0 text-xs ${answer.ok ? "text-muted" : "text-warn"}`}
         >
-          {autostart.message}
+          {answer.message}
         </p>
       )}
     </Group>

@@ -133,15 +133,17 @@ export function createDisplayRoutes(
     }
 
     // The host, not a monitor: one entry at sign-in covers every local display
-    // including one added later. The answer is the registrar's own message,
-    // because that is what the surface has to show.
+    // including one added later. GET answers what the OS holds now, because a
+    // toggle has to show its own state; POST turns that entry on or off and
+    // answers with the registrar's own message, which is what the surface
+    // shows.
     if (
       url.pathname === "/api/displays/autostart" &&
-      request.method === "POST"
+      (request.method === "GET" || request.method === "POST")
     ) {
-      const register = options.registerAutostart;
+      const autostart = options.autostart;
 
-      if (register === undefined) {
+      if (autostart === undefined) {
         sendText(
           response,
           404,
@@ -150,9 +152,36 @@ export function createDisplayRoutes(
         return true;
       }
 
+      if (request.method === "GET") {
+        sendJson(response, 200, { enabled: autostart.state() });
+        return true;
+      }
+
+      let enabled: boolean;
+      try {
+        const parsed: unknown = JSON.parse(await readBody(request));
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed) ||
+          typeof (parsed as { readonly enabled?: unknown }).enabled !==
+            "boolean"
+        ) {
+          throw new Error("That is not a sign-in setting.");
+        }
+        enabled = (parsed as { readonly enabled: boolean }).enabled;
+      } catch (error) {
+        sendText(
+          response,
+          400,
+          error instanceof Error ? error.message : String(error),
+        );
+        return true;
+      }
+
       // A registration the OS refused is not a bad request: the outcome
       // travels with its own message either way.
-      sendJson(response, 200, await register());
+      sendJson(response, 200, await autostart.set(enabled));
       return true;
     }
 
@@ -685,7 +714,7 @@ export function createDisplayRoutes(
       url.pathname === "/api/displays/monitors"
         ? "GET"
         : url.pathname === "/api/displays/autostart"
-          ? "POST"
+          ? "GET and POST"
           : url.pathname === "/api/displays/panels"
             ? "GET and POST"
             : url.pathname === "/api/displays"

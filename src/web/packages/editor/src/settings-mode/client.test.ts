@@ -500,12 +500,27 @@ it("removes one display and answers nothing", async () => {
   expect(calls).toEqual(["DELETE /api/displays/hallway"]);
 });
 
-it("registers the host at sign-in and answers the registrar's message", async () => {
+it("reads the sign-in setting and writes the state it is asked for", async () => {
   const message = "Registered. Windows starts Yunari at sign-in.";
-  const { fetch, calls } = host(() => json({ ok: true, message }));
+  const written: unknown[] = [];
+  const { fetch, calls } = host((_url, init) => {
+    if (init?.method === "POST") {
+      written.push(JSON.parse(String(init.body)));
+      return json({ ok: true, message, enabled: true });
+    }
+    return json({ enabled: false });
+  });
 
-  expect(await createHostSettingsClient({ fetch }).registerAutostart()).toEqual(
-    { ok: true, message },
-  );
-  expect(calls).toEqual(["POST /api/displays/autostart"]);
+  const client = createHostSettingsClient({ fetch });
+  expect(await client.readAutostart()).toBe(false);
+  expect(await client.setAutostart(true)).toEqual({
+    ok: true,
+    message,
+    enabled: true,
+  });
+  expect(written).toEqual([{ enabled: true }]);
+  expect(calls).toEqual([
+    "GET /api/displays/autostart",
+    "POST /api/displays/autostart",
+  ]);
 });

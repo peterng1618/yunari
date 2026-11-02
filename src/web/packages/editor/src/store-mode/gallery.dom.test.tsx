@@ -10,11 +10,10 @@
  * with no store record, and the byline is fixed.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
- * grid's `272px` minimum and the picture's `2/1` are declarations read off the
- * class list rather than a reflow; the layout fixes them and DESIGN.md's Layout
- * section carries the minimum. Nothing mounts this gallery until A.6 wires it
- * into the region, so there is no page to inspect in a browser and no browser
- * case here.
+ * grid's `272px` minimum and the packing are declarations read off the class
+ * list rather than a reflow; the layout fixes them and DESIGN.md's Layout
+ * section carries the minimum. The browser case that measures the packing is
+ * `tests/e2e/editor-rail.spec.ts`.
  */
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
@@ -23,7 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import { Gallery } from "./gallery.js";
+import { Gallery, spansTwoColumns } from "./gallery.js";
 import type { InstallControl } from "./install-item.js";
 import { installStateOf } from "./install-state.js";
 import type { CatalogueFacts, StoreItem } from "./local-source.js";
@@ -223,6 +222,62 @@ it("contains the theme's picture in the card's band", async () => {
     img.className,
     "the picture is cropped into the band instead of contained by it",
   ).toContain("object-contain");
+});
+
+/**
+ * The box is the theme's own shape, not the old 2:1 band: that is what makes the
+ * library a masonry of varied heights rather than a grid of letterboxed strips.
+ * The ratio is declared on the box and the picture is contained inside it, so
+ * the two together keep the whole composition.
+ */
+it("reserves the picture box at the theme's own ratio", async () => {
+  const portrait = facetRecordOf({
+    ...DOCUMENT,
+    artboard: { width: 1080, height: 1920 },
+  });
+  const container = await mount(
+    <Gallery
+      items={[
+        item(),
+        item({
+          id: "workshop-bench",
+          name: "Workshop bench",
+          facets: portrait,
+        }),
+      ]}
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  const ratios = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-store-picture]"),
+    (box) => box.style.aspectRatio,
+  );
+  expect(ratios, "the picture box is not the authored canvas's ratio").toEqual([
+    "1920 / 1080",
+    "1080 / 1920",
+  ]);
+});
+
+/**
+ * **A horizontal theme at 2:1 or wider takes two columns; nothing else does.**
+ * The boundary is exact, because a theme one pixel short of 2:1 is a wide card
+ * the grid did not have room for.
+ */
+it("spans two columns only for a theme at 2:1 or wider", () => {
+  const shape = (width: number, height: number): boolean =>
+    spansTwoColumns(
+      item({ facets: { ...facetRecordOf(DOCUMENT), width, height } }),
+    );
+
+  expect(shape(3840, 1080), "wider than 2:1").toBe(true);
+  expect(shape(2160, 1080), "exactly 2:1").toBe(true);
+  expect(shape(1920, 1080), "16:9, just under 2:1").toBe(false);
+  expect(shape(1800, 1000), "1.8:1").toBe(false);
+  expect(shape(1080, 1920), "portrait").toBe(false);
+  expect(shape(0, 1080), "a record with no usable size").toBe(false);
 });
 
 /**

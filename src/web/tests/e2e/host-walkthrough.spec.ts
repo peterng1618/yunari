@@ -550,7 +550,7 @@ test.describe("the shell, reached by keyboard alone", () => {
       page.locator('[data-yunari-panel="layers"]'),
       "the Composition pane after the Tokens choice",
     ).toBeHidden();
-    await chooseRailPane(page, "Composition");
+    await chooseRailPane(page, "Layers");
 
     // 3. Select through Composition.
     const id = await selectInComposition(page, WALKTHROUGH_LAYER_NAME);

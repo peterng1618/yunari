@@ -176,9 +176,12 @@ function colourBearingMarkableControls(): readonly string[] {
  *  - `.editor-shell-rail button` — the rail's pane slots.
  *  - `.editor-shell-rail button[aria-pressed="true"]` — the selected slot.
  *  - `.editor-shell-rail button.editor-shell-rail-settings` — the settings gear.
- *  - `.editor-shell-dialog > button` — a dialog's own buttons (`?` sheet, theme
- *    dialog), which are direct children of the dialog and no registry's.
- *  - `.editor-shell-dialog > button:hover` — the same buttons on hover.
+ *  - `.editor-shell-dialog > button:not(.editor-shell-dialog-close)` — a dialog's
+ *    own buttons (`?` sheet, theme dialog), which are direct children of the
+ *    dialog and no registry's. The corner close is excluded: it is the sheet's
+ *    mark, not one of the sheet's buttons.
+ *  - `.editor-shell-dialog > button:not(.editor-shell-dialog-close):hover` — the
+ *    same buttons on hover.
  *  - `.editor-shell-mode-switch button` — the three mode segments. The
  *    switch chooses a shell surface; it renders no registry action, so no
  *    control carrying the mark is ever inside it, and a `<button>` takes its
@@ -191,8 +194,8 @@ function colourBearingMarkableControls(): readonly string[] {
  * two arrived with the mode switch.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
-  ".editor-shell-dialog > button",
-  ".editor-shell-dialog > button:hover",
+  ".editor-shell-dialog > button:not(.editor-shell-dialog-close)",
+  ".editor-shell-dialog > button:not(.editor-shell-dialog-close):hover",
   ".editor-shell-mode-switch button",
   '.editor-shell-mode-switch button[aria-pressed="true"]',
   ".editor-shell-rail button",
