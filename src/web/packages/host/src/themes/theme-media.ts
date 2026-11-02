@@ -77,9 +77,11 @@ export function panelVideoMediaName(
   height: number,
 ): string | undefined {
   const video = backgroundVideoOf(envelope);
+  // `cover` names the derivation, so a cache written by the earlier fit-inside
+  // copy is never served for the same panel size.
   return video === undefined
     ? undefined
-    : mediaName(id, video, `${width}x${height}.mp4`);
+    : mediaName(id, video, `${width}x${height}-cover.mp4`);
 }
 
 function mediaName(id: string, video: BackgroundVideo, suffix: string): string {

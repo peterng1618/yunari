@@ -39,6 +39,20 @@ describe("the panel page's background source", () => {
     });
   });
 
+  it("asks for the pixels the page's fit, pan and zoom will paint", () => {
+    expect(
+      panelBackgroundSource(
+        "?panel=1",
+        "theme",
+        { width: 320, height: 320 },
+        { offsetX: 0.25, offsetY: -0.5, scale: 2 },
+      ),
+    ).toEqual({
+      url: "/api/themes/theme/panel-video?width=960&height=1280",
+      kind: "video",
+    });
+  });
+
   it("clamps a viewport that is not a panel size", () => {
     expect(
       panelBackgroundSource("?panel=1", "theme", {

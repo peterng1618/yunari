@@ -131,15 +131,21 @@ change, not per panel start.
 
 - Cache entries are named by their inputs: a still is
   `<theme-id>~<video-asset>~f<frame>.png`; a panel-sized clip is
-  `<theme-id>~<video-asset>~<width>x<height>.mp4`. A missing name is the
+  `<theme-id>~<video-asset>~<width>x<height>-cover.mp4`. A missing name is the
   pre-flight failure, so the requesting route regenerates it. A long asset name
-  is hashed, so the suffix that names the frame or the panel size survives.
+  is hashed, so the suffix that names the frame or the panel size survives. The
+  `cover` suffix also retires clips encoded by the earlier fit-inside copy.
 - A save drops that theme's cached media only when the video background's asset
   or declared frame changed, or the save carried the video's bytes. It never
   extracts; the next panel request does.
 - Overlay panels (device plays the clip) mount the still as the background
-  picture instead of the video. Still panels mount a clip scaled to their own
-  resolution, so neither page fetches the theme's 4K source.
+  picture instead of the video. Still panels mount a clip encoded to cover the
+  rectangle the page's cover fit, pan and zoom will paint, so one encoded pixel
+  reaches one panel pixel; fitting the clip inside the panel instead made the
+  page magnify it (a 16:9 source on a 320x320 Kraken became 320x180 and looked
+  soft). Neither page fetches the theme's 4K source.
+- The page asks for that rectangle's size: the viewport grown by each axis's
+  pan overhang and the authored media scale, capped at 4096.
 - A failed cached picture falls back to the theme's declared asset, so an
   extraction failure degrades to current behaviour rather than a blank panel.
 - A theme with an image background ignores the override and uses its own

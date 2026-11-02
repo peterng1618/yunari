@@ -123,12 +123,14 @@ export type TranscodeResult =
 const MAX_TRANSCODE_BYTES = 64 * 1024 * 1024;
 
 /**
- * The clip scaled to fit a panel, or the sentence naming why it could not be.
+ * The clip scaled to cover a panel, or the sentence naming why it could not be.
  *
  * A still panel renders the theme live, so it does show the picture — but a
  * 3840-wide source decoded in the shared renderer starves every other panel.
- * The copy fits the panel's own box, keeps the source aspect (the page still
- * covers and pans it), drops audio and stays silent and progressive.
+ * The copy covers the panel's own box at the source's aspect, so the page's own
+ * cover fit displays it at one encoded pixel per panel pixel; a copy that only
+ * fit inside the box was magnified by the fit and looked soft (Kraken 320x320,
+ * 2026-11-02). It drops audio and stays silent and progressive.
  */
 export async function transcodeVideo(
   bytes: Uint8Array,
@@ -150,7 +152,7 @@ export async function transcodeVideo(
   const encoder = bundledFfmpeg(options);
   if (!encoder.ok) return encoder;
 
-  const box = fitBox(facts.width, facts.height, target.width, target.height);
+  const box = coverBox(facts.width, facts.height, target.width, target.height);
   const directory = await mkdtemp(path.join(os.tmpdir(), "yunari-transcode-"));
   try {
     const input = path.join(directory, "in.mp4");
@@ -202,14 +204,17 @@ export async function transcodeVideo(
   }
 }
 
-/** The even box that fits the source inside the target, never upscaled. */
-function fitBox(
+/** The even box that covers the target at the source's aspect, never upscaled. */
+function coverBox(
   width: number,
   height: number,
   targetWidth: number,
   targetHeight: number,
 ): { readonly width: number; readonly height: number } {
-  const factor = Math.min(1, targetWidth / width, targetHeight / height);
+  const factor = Math.min(
+    1,
+    Math.max(targetWidth / width, targetHeight / height),
+  );
   const even = (value: number): number =>
     Math.max(2, Math.floor((value * factor) / 2) * 2);
   return { width: even(width), height: even(height) };

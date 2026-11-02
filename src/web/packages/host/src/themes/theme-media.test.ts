@@ -88,7 +88,7 @@ describe("media names", () => {
   it("name a panel clip by its pixel size", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320.mp4");
+    ).toBe("theme~4K_loop~320x320-cover.mp4");
   });
 
   it("keep the suffix and stay distinct for a long asset name", () => {
@@ -220,8 +220,8 @@ describe("createThemeMedia", () => {
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x1920.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-cover.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x1920-cover.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
   });
 

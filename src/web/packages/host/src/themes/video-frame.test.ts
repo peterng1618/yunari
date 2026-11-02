@@ -117,7 +117,7 @@ describe("extractVideoFrame", () => {
 });
 
 describe("transcodeVideo", () => {
-  it("scales a clip inside the panel box without cropping it", async () => {
+  it("scales a clip to cover the panel box", async () => {
     const encoded = fixture("conforming.mp4");
     const run = runWriting(encoded);
     const facts = readVideoFacts(encoded);
@@ -125,7 +125,7 @@ describe("transcodeVideo", () => {
 
     const result = await transcodeVideo(
       encoded,
-      { width: 320, height: 320 },
+      { width: 160, height: 160 },
       options(run),
     );
 
@@ -143,9 +143,12 @@ describe("transcodeVideo", () => {
     const height = Number(heightText);
     expect(width % 2).toBe(0);
     expect(height % 2).toBe(0);
-    expect(Math.max(width, height)).toBe(320);
-    expect(width).toBeLessThanOrEqual(320);
-    expect(height).toBeLessThanOrEqual(320);
+    // One axis is the panel's, the other reaches past it at the source's
+    // aspect: the page's cover fit then paints one encoded pixel per panel
+    // pixel instead of magnifying a copy that only fitted inside the box.
+    expect(Math.min(width, height)).toBe(160);
+    expect(Math.max(width, height)).toBeGreaterThan(160);
+    expect(width / height).toBeCloseTo(facts.width / facts.height, 1);
   });
 
   it("never upscales a clip smaller than the panel", async () => {
