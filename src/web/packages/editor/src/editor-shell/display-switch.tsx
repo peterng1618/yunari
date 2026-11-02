@@ -85,8 +85,14 @@ function viewFullscreen(): void {
 
 export function DisplaySwitch({
   viewport,
+  playback,
 }: {
   readonly viewport: ViewportManager;
+  /** The backdrop's playback group, drawn as the cluster's leading control
+   *  when the document's background is a video. Passing it here rather than
+   *  floating a second cluster over the stage keeps one view bar: the author
+   *  reads and changes how the stage is shown in one place. */
+  readonly playback?: ReactNode;
 }): React.JSX.Element {
   const zoom = useZoom(viewport);
   const display = useDisplay(viewport);
@@ -102,6 +108,7 @@ export function DisplaySwitch({
     // surface the author sees. The chooser stays a portal, so the cluster holds
     // only what is drawn until it is opened.
     <div className="editor-shell-zoom editor-glass">
+      {playback}
       {/* The camera commands, in this order — − / value / +, and fit —
           as siblings of the readout rather than replacements for it: the
           readout is still the display chooser's trigger, and the three act on

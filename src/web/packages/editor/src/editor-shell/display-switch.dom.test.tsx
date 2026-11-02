@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -78,8 +78,10 @@ function setup(display: string | undefined = "19.5:9") {
     zoomToFit,
     zoomToSelection,
     reset,
-    render: () =>
-      act(async () => root.render(<DisplaySwitch viewport={viewport} />)),
+    render: (playback?: ReactNode) =>
+      act(async () =>
+        root.render(<DisplaySwitch viewport={viewport} playback={playback} />),
+      ),
     setZoom(value: number): Promise<void> {
       return act(async () => {
         zoom = value;
@@ -123,7 +125,6 @@ async function choose(label: string): Promise<void> {
 it("keeps every choice reachable, inside one view cluster", async () => {
   const { host, render, showDisplay, zoomToSelection, reset } = setup();
   await render();
-
   expect(
     host.querySelectorAll(".editor-shell-zoom").length,
     "one view cluster, not a bare readout",
@@ -440,3 +441,17 @@ function groupLabels(): string[] {
     (label) => label.textContent ?? "",
   );
 }
+
+it("leads the view cluster with the backdrop's playback group", async () => {
+  const { host, render } = setup();
+  await render(<span data-testid="playback" />);
+
+  const cluster = host.querySelector(".editor-shell-zoom");
+  const playback = cluster?.querySelector('[data-testid="playback"]');
+  expect(
+    playback,
+    "the playback group is outside the view cluster",
+  ).not.toBeNull();
+  // It leads the camera controls: no control comes before it in the cluster.
+  expect(cluster?.firstElementChild).toBe(playback);
+});

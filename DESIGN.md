@@ -361,16 +361,16 @@ rectangle, never authored artboard dimensions.
 | Corner | Question | Contents |
 |---|---|---|
 | Top-left | *What am I?* | The document's identity chip: record dot, theme name, edited state |
-| Top-centre | *Is the backdrop moving?* | Play/pause for a video background, present only when the document has one |
-| Top-right | *How am I shown?* | The display lens chips, zoom − / value / +, and fit |
-| Bottom-centre | *What can I do?* | The selection dock |
+| Top-right | *How am I shown?* | Play/pause for a video background, then the display lens chips, zoom − / value / +, and fit — one cluster |
 
 The separation is not cosmetic: **the dock acts on the selection, the corners
 act on the view.** A view control that appears only when something is selected
 teaches an author that the view is a property of the selection. The playback
 control is the one view control that depends on the document rather than the
 camera: it is absent for an image, a gradient or no media, because there is
-nothing there to pause. Its state is transient and is never written to the
+nothing there to pause. It leads the view cluster, separated by a hairline,
+because it answers the same question as the camera controls. Its state is
+transient and is never written to the
 theme.
 
 **The identity's name is edited in place.** Double-click the chip's name to

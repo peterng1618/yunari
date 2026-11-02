@@ -765,8 +765,7 @@ body,
    shadow, with no gradient, no inner sheen and no backdrop filter. The two
    clusters are separated from the chrome by elevation alone. */
 .editor-shell-dock.editor-glass,
-.editor-shell-zoom.editor-glass,
-.editor-shell-playback.editor-glass {
+.editor-shell-zoom.editor-glass {
   background: color-mix(in srgb, var(--panel) 95%, transparent);
   box-shadow: var(--elev-1);
 }
@@ -2892,22 +2891,16 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .editor-shell-stage-top > * {
   pointer-events: auto;
 }
-/* The stage's top-centre: the backdrop's playback. It is a view control, not a
-   corner — the corners answer what the document is and how it is shown, while
-   this answers whether the picture is moving — and it is drawn only when a
-   video background exists, so it never claims a capability an image or a
-   gradient does not have. Centred with the same 14px inset as the two corners,
-   and a single 26px control, so it clears both at every supported width. */
+/* The backdrop's playback, as the view cluster's leading group: a hairline
+   separates it from the camera controls, and the cluster's own glass is the
+   only surface. It is drawn only when a video background exists, so it never
+   claims a capability an image or a gradient does not have. */
 .editor-shell-playback {
-  position: absolute;
-  z-index: 3;
-  top: var(--space-14);
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  padding: var(--space-4);
-  border-radius: var(--radius-xl);
+  padding-right: var(--space-6);
+  margin-right: var(--space-4);
+  border-right: 1px solid var(--edge);
 }
 /* The top-left corner: the document's identity. A floating cluster at
    the `--radius-xl`, `--panel` at 95%, hairline `--edge` and elevation 1,
