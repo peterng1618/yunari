@@ -136,7 +136,7 @@ test.describe("the header's publish surface", () => {
     // puts the facts behind the press, and F1 puts the switch with them: a
     // press that only meant "where is the address" must not stop a session).
     const publish = page.locator("[data-yunari-publish]");
-    const facts = page.locator(".editor-shell-publish-popup");
+    const facts = page.locator(".editor-shell-publish-dialog");
     const host = facts.locator("[data-yunari-host-switch]");
     await expect(publish).toBeVisible({ timeout: 30_000 });
     // The bar itself never carries an address.
@@ -168,7 +168,7 @@ test.describe("the header's publish surface", () => {
     await page.goto(`${HOST}/editor/`);
 
     const publish = page.locator("[data-yunari-publish]");
-    const facts = page.locator(".editor-shell-publish-popup");
+    const facts = page.locator(".editor-shell-publish-dialog");
     const host = facts.locator("[data-yunari-host-switch]");
     await expect(publish).toBeVisible({ timeout: 30_000 });
 
@@ -227,12 +227,10 @@ test.describe("the header's publish surface", () => {
     const windowWidth = await page.evaluate(() => window.innerWidth);
 
     // **The compact header is a layout, not a clipped row.** Below the
-    // breakpoint the brand, the menubar and the theme toolbar stand down, so
-    // the mode switch and the publish control are the two regions the header
-    // keeps — and the control the author presses is inside the window rather
-    // than past it.
+    // breakpoint the brand and the toolbar stand down, so the mode switch and
+    // the publish control are the two regions the header keeps — and the
+    // control the author presses is inside the window rather than past it.
     await expect(page.locator(".editor-shell-header strong")).toBeHidden();
-    await expect(page.locator(".editor-shell-menubar")).toBeHidden();
     await expect(page.locator("[data-yunari-theme-toolbar]")).toBeHidden();
     await expect(page.locator(".editor-shell-mode-switch")).toBeVisible();
     await expect(publish).toBeVisible();
@@ -278,9 +276,10 @@ test.describe("the header's publish surface", () => {
     await host.click();
     await expect(facts.locator("code")).toHaveCount(0);
 
-    // And the surface shuts on a second press, leaving the bar with nothing but
-    // the one control.
-    await publish.click();
+    // The surface is a modal dialog, so it closes on its own way out rather
+    // than on a second press of the trigger behind its overlay — and the bar is
+    // left with nothing but the one control.
+    await facts.locator(".editor-shell-dialog-close").click();
     await expect(facts).toBeHidden();
     await expect(page.locator(".editor-shell-header code")).toHaveCount(0);
   });

@@ -171,7 +171,7 @@ async function start(): Promise<void> {
       },
     },
   );
-  /** Document actions come from the session once it exists; the View menu's
+  /** Document actions come from the session once it exists; the View toggle's
    * source control is owned here and only dispatches through it. */
   const viewControls: EditorViewControls = {
     sourceMode: () => mode,

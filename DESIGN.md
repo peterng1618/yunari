@@ -163,7 +163,7 @@ always carries all three.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ header     brand · File · Edit · View ·············· ⌘⇧P Publish│
+│ header   brand · modes · File│Document│View ······ ⌘⇧P Publish│
 ├────┬──────────────┬───────────────────────────┬───────────────┤
 │rail│ pane         │        stage              │  inspector    │
 │ 46 │ expanding    │  ┌ chip ─────── view ┐    │               │
@@ -222,16 +222,21 @@ home elsewhere is not repeated here — Insert lives in the Add pane, so the
 header has no Insert menu, and Edit lives in the Composition pane's footer
 toolbar, so the header has no Edit menu.
 
-- Left: brand mark, then the **mode switch**, then the `File` and `View`
-  controls as **icon buttons** — each glyph opens its menu — then the **theme
-  toolbar**. The two glyphs are the page the File rows act on and the eye View
-  reads the canvas through; each carries its word as the tooltip and the
-  accessible name, so no visible label is repeated beside it.
-- The toolbar is the open theme document's own actions, as **icon buttons**
-  from the editor's one glyph set: Import theme, Open, Save, Save as, Activate,
-  Export theme. It is a toolbar, not rows nested in a menu, and it carries no
-  selection command: copy, cut, duplicate, delete, group and arrange act on
-  individual elements and stay on the surfaces that own a selection.
+- Left: brand mark, then the **mode switch**, then one **toolbar** of icon
+  buttons in three groups, each divided by a short vertical rule:
+  - **File's functions**: New theme, New from template, Find assets, Open
+    recent, Export selection as widget.
+  - **The open document's actions**: Import theme, Open, Save, Save as,
+    Activate, Export theme.
+  - **The view setting**: one toggle whose glyph, tooltip and accessible name
+    say the source currently shown — preview or live — and whose press flips
+    it.
+  Every button carries its word as the tooltip and the accessible name, so no
+  visible label is repeated beside it. The buttons are not rows nested in a
+  menu: a command changed while designing is one gesture away, not two. The
+  toolbar carries no selection command: copy, cut, duplicate, delete, group and
+  arrange act on individual elements and stay on the surfaces that own a
+  selection.
 - Right: the **primary button**. `Publish` is the only filled, accent-coloured
   button in the editor, and the bar prints no shortcut beside it — the chord
   lives in the control's title and spoken label.
@@ -242,9 +247,9 @@ toolbar, so the header has no Edit menu.
 The shell has three modes — the editor, the theme store and Settings — and the
 switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
 and `Settings`. A strip under the header would be a second horizontal bar, so the
-header owns the choice and its **right-hand region is per-mode**: the menus, the
-theme toolbar and the publish control belong to the editor; a mode with actions
-of its own carries them there; a mode with none shows nothing beside the switch.
+header owns the choice and its **right-hand region is per-mode**: the toolbar and
+the publish control belong to the editor; a mode with actions of its own carries
+them there; a mode with none shows nothing beside the switch.
 The editor's own body is hidden, not unmounted, while another mode shows — a mode
 switch never loses an unsaved document. Editor and Settings move freely; leaving
 either for Themes asks before discarding a dirty document.
@@ -255,15 +260,10 @@ how the author works. The column is for choosing where to be; the page beside it
 spends the width on columns of sections rather than on one long vertical list.
 The mode's status line is the shell's strip, not a second bar inside the page.
 
-`View` stays in the header because its commands — preview/source — are changed
-*while* designing, many times a session. Settings is for once-in-a-while
+`View` stays in the header because its commands — preview/live source — are
+changed *while* designing, many times a session. Settings is for once-in-a-while
 choices. A frequently changed control one level deeper is a tax paid on every
-use. It is drawn as an icon control like `File`, and its menu keeps the source
-choice.
-
-`File` stays a menu behind an icon because its rows are functions with no other
-home: New, New from template, Find assets, Open recent and Export selection as
-widget. The document actions the toolbar carries are not repeated there.
+use, so the source choice is the toolbar's own toggle rather than a menu.
 
 ### The rail
 

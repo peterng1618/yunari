@@ -8,10 +8,22 @@ import { Dialog } from "../components/ui/dialog.js";
 import {
   DEFAULT_DISPLAY_KEY,
   type ThemedDisplay,
-  type ThemeLibraryClient,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import type { StoreItem } from "./local-source.js";
+
+/** What an assignment needs from the host: the display list and the write.
+ *  Narrower than `ThemeLibraryClient` because the header's session facade is a
+ *  port of these two calls, not a library client. */
+export interface AssignClient {
+  assign(display: string, id: string): Promise<void>;
+  listDisplays(): Promise<{
+    readonly default: string | null;
+    readonly displays: readonly ThemedDisplay[];
+  }>;
+}
+
+/** The value in the display list that is a route rather than a display. */
+const PAIR_DISPLAY = "pair";
 
 /** What the host answers about the displays: the list, and the theme a display
  *  holding none of its own falls to. Both are kept, because they are two things
@@ -59,13 +71,19 @@ function reason(error: unknown): string {
  * raises it and this one says nothing.
  */
 export function AssignChoice(props: {
-  readonly item: StoreItem;
-  readonly client: ThemeLibraryClient;
+  readonly themeId: string;
+  readonly client: AssignClient;
   /** What a landed assignment does next. A dialog closes; the theme's page
    *  leaves the choice where it is and reads the confirmation instead. */
   readonly onAssigned: () => void;
+  /** The route for a display that has not paired yet, at the end of the list.
+   *  Absent where the surface has no host address to send a device to. */
+  readonly pairNew?: {
+    readonly url: () => Promise<string | undefined>;
+    readonly unavailable: string;
+  };
 }): React.JSX.Element {
-  const { item, client, onAssigned } = props;
+  const { themeId, client, onAssigned, pairNew } = props;
 
   /** What the host answered, or `undefined` until an answer arrives. The choice
    *  draws no select before then rather than an empty one. */
@@ -106,22 +124,44 @@ export function AssignChoice(props: {
     // until another is chosen.
     { id: DEFAULT_DISPLAY_KEY, name: uiCopy.store.assign.default },
     ...displays.map((display) => ({ id: display.id, name: display.label })),
+    ...(pairNew === undefined
+      ? []
+      : [{ id: PAIR_DISPLAY, name: uiCopy.publish.pairNew }]),
   ];
   // A display that holds this theme of its own is the answer; the host's
   // `default` naming it is the next, because that is what a display with no
   // choice of its own is served. `""` is left for neither.
   const heldBy =
     chosen ??
-    displays.find((display) => display.theme === item.id)?.id ??
-    (answered?.default === item.id ? DEFAULT_DISPLAY_KEY : "");
+    displays.find((display) => display.theme === themeId)?.id ??
+    (answered?.default === themeId ? DEFAULT_DISPLAY_KEY : "");
 
-  /** Choosing a display is the assignment. A refusal leaves the choice where it
-   *  is, with the host's reason beside it, so another display can be tried. */
+  /** Choosing a display is the assignment; the pair row navigates instead. A
+   *  refusal leaves the choice where it is, with the host's reason beside it,
+   *  so another display can be tried. */
   const choose = (display: string): void => {
-    setChosen(display);
     setRefusal(undefined);
     setConfirmation(undefined);
-    void client.assign(display, item.id).then(
+
+    if (display === PAIR_DISPLAY) {
+      if (pairNew === undefined) return;
+      void pairNew.url().then(
+        (url) => {
+          if (url === undefined) {
+            setRefusal(pairNew.unavailable);
+            return;
+          }
+          window.open(url, "_blank", "noopener");
+        },
+        (error: unknown) => {
+          setRefusal(reason(error));
+        },
+      );
+      return;
+    }
+
+    setChosen(display);
+    void client.assign(display, themeId).then(
       () => {
         const where =
           options.find((option) => option.id === display)?.name ?? display;
@@ -178,11 +218,15 @@ export function AssignChoice(props: {
  * closing anything itself.
  */
 export function AssignDisplay(props: {
-  readonly item: StoreItem;
-  readonly client: ThemeLibraryClient;
+  readonly themeId: string;
+  readonly client: AssignClient;
+  readonly pairNew?: {
+    readonly url: () => Promise<string | undefined>;
+    readonly unavailable: string;
+  };
   readonly onClose: () => void;
 }): React.JSX.Element {
-  const { item, client, onClose } = props;
+  const { themeId, client, pairNew, onClose } = props;
 
   return (
     <Dialog
@@ -198,7 +242,12 @@ export function AssignDisplay(props: {
       <p className="editor-shell-dialog-lead">
         {uiCopy.store.cell.actions.assign}
       </p>
-      <AssignChoice item={item} client={client} onAssigned={onClose} />
+      <AssignChoice
+        themeId={themeId}
+        client={client}
+        {...(pairNew === undefined ? {} : { pairNew })}
+        onAssigned={onClose}
+      />
     </Dialog>
   );
 }

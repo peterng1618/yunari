@@ -416,7 +416,6 @@ function createNativeEditor(input: {
   const text = createTextManager(
     canvas,
     save,
-    (message) => errors.warn("controls", message),
     // The board, not the viewport: a scaled run with no authored size takes a
     // share of the frame it was authored on.
     () => input.artboard().height,

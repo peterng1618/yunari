@@ -122,7 +122,8 @@ function wallpaperActions(host: ActionFacadeHost): WallpaperActions {
 }
 
 /** The shell's header one reachability surface, built from the session's owners:
- *  the File and View menus and the theme toolbar all dispatch through it. */
+ *  File's functions, the View setting and the theme toolbar all dispatch through
+ *  it. */
 export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
   const { options, document, assets, charts } = host;
   const editor = options.shell.editor;

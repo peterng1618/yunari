@@ -1,5 +1,6 @@
 import type { Binding, TextRun } from "@yunari/renderer-core";
 import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
+import { runPlaceholder, runsFromAuthoringText } from "../run-placeholder.js";
 import {
   authoredContentOf,
   authoredRunsOf,
@@ -276,6 +277,24 @@ export function writeRunSource(
   return true;
 }
 
+/** The look of the run whose authoring display covers `offset`. */
+function lookAtOffset(
+  runs: readonly TextRun[],
+  bindings: readonly Binding[],
+  offset: number,
+): Pick<TextRun, "typeToken" | "style"> {
+  let at = 0;
+  for (const run of runs) {
+    const length =
+      run.kind === "literal"
+        ? run.text.length
+        : runPlaceholder(run, bindings).length;
+    if (offset < at + length) return lookOfRun(run);
+    at += length;
+  }
+  return lookOfRun(runs.at(-1) as TextRun);
+}
+
 /**
  * Replaces a range of typed text with a reading, the inline `@` insert's write.
  *
@@ -285,10 +304,10 @@ export function writeRunSource(
  * value run and its binding are written together, exactly as `writeRunSource`
  * does for an existing run.
  *
- * Only a text with one literal run is accepted. Fabric hands back one flat
- * string with no record of which run each character came from, which is why an
- * in-place edit of several runs is refused (`text-manager`'s `keepTypedText`);
- * splitting a range of that string would guess at the boundaries it cannot see.
+ * The typed `@query` is replaced in the flat authoring display with the chosen
+ * token, and the whole display is parsed back into runs. That is what keeps the
+ * value runs already in the text: their own tokens still match, so their
+ * bindings survive an insertion beside them.
  */
 export function insertReading(
   target: RunTarget,
@@ -300,10 +319,7 @@ export function insertReading(
   },
 ): boolean {
   const runs = authoredRunsOf(target.object);
-  if (runs.length !== 1) return false;
-
-  const base = runs[0];
-  if (base === undefined || base.kind !== "literal") return false;
+  if (runs.length === 0) return false;
 
   const { text, start, end, semanticKey } = range;
   if (
@@ -317,22 +333,42 @@ export function insertReading(
     return false;
   }
 
-  const look = lookOfRun(base);
-  const before = text.slice(0, start);
-  const after = text.slice(end);
+  const bindings = target.bindings();
+  const look = lookAtOffset(runs, bindings, start);
   const id = `binding-${crypto.randomUUID()}`;
-
-  const next: TextRun[] = [
-    ...(before === ""
-      ? []
-      : [{ kind: "literal" as const, text: before, ...look }]),
-    { kind: "value", bindingId: id, ...look },
-    ...(after === ""
-      ? []
-      : [{ kind: "literal" as const, text: after, ...look }]),
-  ];
+  const placed = { kind: "value" as const, bindingId: id, ...look };
+  const next = runsFromAuthoringText(
+    `${text.slice(0, start)}@${semanticKey}${text.slice(end)}`,
+    [...runs, placed],
+    [...bindings, { id, semanticKey }],
+  );
   replaceRuns(target, next);
-  target.setBindings([...target.bindings(), { id, semanticKey }]);
+  target.setBindings([...bindings, { id, semanticKey }]);
+  return true;
+}
+
+/**
+ * What a finished in-place edit keeps: every value token still in the typed
+ * display keeps its run and binding, and everything else becomes prose.
+ *
+ * Fabric hands back one flat string, so this is the one rule that can map it
+ * back without guessing. A token the author deleted or altered stops matching,
+ * becomes literal text, and its binding goes with it — the same shape
+ * `writeRunSource` gives a run returned to prose.
+ */
+export function writeTypedText(target: RunTarget, text: string): boolean {
+  const runs = authoredRunsOf(target.object);
+  if (runs.length === 0) return false;
+
+  const bindings = target.bindings();
+  const next = runsFromAuthoringText(text, runs, bindings);
+  replaceRuns(target, next);
+
+  const referenced = new Set(
+    next.flatMap((run) => (run.kind === "value" ? [run.bindingId] : [])),
+  );
+  const kept = bindings.filter((binding) => referenced.has(binding.id));
+  if (kept.length !== bindings.length) target.setBindings(kept);
   return true;
 }
 

@@ -71,7 +71,7 @@ export function FinderSegmented<T extends string>(props: {
         }
         props.onChange(chosen as T);
       }}
-      className="flex h-7 items-center gap-1 rounded-[var(--radius-md)] border border-edge bg-panel-2 p-1"
+      className="flex h-7 flex-none items-center gap-1 rounded-[var(--radius-md)] border border-edge bg-panel-2 p-1"
     >
       {props.options.map((option) => (
         <Toggle
@@ -79,11 +79,13 @@ export function FinderSegmented<T extends string>(props: {
           key={option.id}
           value={option.id}
           aria-label={option.ariaLabel}
-          className="inline-flex min-w-0 flex-1 items-center justify-center gap-[var(--space-4)] rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
+          className="inline-flex flex-none items-center justify-center gap-[var(--space-4)] whitespace-nowrap rounded-[var(--radius-sm)] px-[var(--space-8)] text-xs text-muted hover:text-text data-[pressed]:bg-[var(--stage)] data-[pressed]:text-text"
         >
           {option.label}
           {option.glyph === undefined ? null : (
-            <Glyph icon={option.glyph} size={12} />
+            <span className="flex-none">
+              <Glyph icon={option.glyph} size={12} />
+            </span>
           )}
         </Toggle>
       ))}

@@ -203,6 +203,10 @@ export interface ThemeLibraryClient {
      *  answer reads as "nothing to report" rather than a fabricated failure. */
     readonly unreadable?: boolean;
   }>;
+  /** The host's pairing page at the address a phone can reach, or `undefined`
+   *  while the LAN is off or the host has no port to offer. Optional because a
+   *  client built without a host route offers no pair row at all. */
+  pairingUrl?(): Promise<string | undefined>;
 }
 
 /** Chunked because `String.fromCharCode` is applied to an argument list. */
@@ -530,6 +534,31 @@ export function createThemeLibraryClient(options?: {
             )
           : [],
       };
+    },
+
+    async pairingUrl(): Promise<string | undefined> {
+      const response = await fetcher(`${baseUrl}/api/hosting`);
+      if (!response.ok) return undefined;
+      const body = (await response.json()) as {
+        readonly lan?: unknown;
+        readonly name?: unknown;
+        readonly address?: unknown;
+        readonly port?: unknown;
+      };
+      if (
+        body?.lan !== true ||
+        typeof body.port !== "number" ||
+        (typeof body.name !== "string" && typeof body.address !== "string")
+      ) {
+        return undefined;
+      }
+      // The name survives a DHCP lease; the address is the fallback for a
+      // device that cannot resolve it, exactly as the publish surface reads it.
+      const host =
+        typeof body.name === "string" && body.name !== ""
+          ? body.name
+          : (body.address as string);
+      return `https://${host}:${body.port}/pair`;
     },
   };
 }

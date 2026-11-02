@@ -117,9 +117,9 @@ test.describe("shell palettes", () => {
       ".editor-shell-inspector": "the inspector scroller",
     });
 
-    // The menubar's popup, which Base UI portals to `body`: a descendant
+    // The stage's zoom popup, which Base UI portals to `body`: a descendant
     // selector on the shell never reached it.
-    await page.locator(".editor-shell-menubar button").first().click();
+    await page.locator("[data-yunari-zoom]").click();
     await expect(
       page.locator(".editor-shell-menu-popup[data-open]"),
     ).toBeVisible();

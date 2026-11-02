@@ -54,8 +54,10 @@ export interface EditorInteraction {
      */
     setRepaint(paint: (object: IText) => void): void;
     /**
-     * Installs the readings an inline `@` may insert, and the write that adds
-     * one. The session owns the node's bindings, so the manager asks for it.
+     * Installs the readings an inline `@` may insert, and the writes that make
+     * one: inserting the chosen token, and mapping a finished edit's flat string
+     * back to authored runs. The session owns the node's bindings, so the
+     * manager asks for both.
      */
     setMentions(port: TextMentionPort): void;
   };

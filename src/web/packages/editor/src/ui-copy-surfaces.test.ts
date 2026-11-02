@@ -6,11 +6,11 @@
  * **What this half reads.** The shell is mounted whole with a bridge and a
  * selection, so the chrome it prints only then is in the tree at all; Settings is
  * read on its Appearance, Keyboard and About tabs; the colour picker is mounted
- * open; the selection column is mounted on a text object and a shape; the two
- * menus, the theme toolbar and the canvas context menu are read in turn; and the
- * `?` sheet, the publish popover and the library and new-document dialogs are
- * each mounted (`vg-418` — the header once said these four were not mounted, and
- * a header owns nothing). **The popover is read whole**: its warning is a bare
+ * open; the selection column is mounted on a text object and a shape; the header
+ * toolbar and the canvas context menu are read in turn; and the `?` sheet, the
+ * publish dialog and the library and new-document dialogs are each mounted
+ * (`vg-418` — the header once said these four were not mounted, and a header
+ * owns nothing). **The publish dialog is read whole**: its warning is a bare
  * `<span>` marked `data-yunari-copy`, and its trigger carries `aria-controls`
  * without a `data-yunari-value`, so the button rule reads the word it prints
  * instead of skipping it as a chosen value.
@@ -117,33 +117,15 @@ it("leaves the React surfaces with no copy of their own", async () => {
 
 /**
  * The surfaces `vg-335` found reachable but unread say no word the table does
- * not hold: an opened menu popup, the Settings Keyboard and About tabs, and the
- * canvas context menu. `spokenIn` read the closed chrome, so a literal written
- * into any of the four had no net at all — and each is opened here, read for
- * its own words, and asserted non-empty first, so a surface that failed to open
- * is a failure rather than a walk that agreed with nothing.
- *
- * The menu read pays no stall: `vg-135`'s 50-90 s per open is jsdom's
- * unanswerable `:modal`/`:popover-open` selectors, and `ui-copy-readers.ts`
- * patches them on import for exactly that reason.
+ * not hold: the Settings Keyboard and About tabs and the canvas context menu.
+ * `spokenIn` read the closed chrome, so a literal written into any of the
+ * three had no net at all — and each is opened here, read for its own words,
+ * and asserted non-empty first, so a surface that failed to open is a failure
+ * rather than a walk that agreed with nothing.
  */
-it("reads the opened menus, the Settings tabs and the canvas context menu", async () => {
-  const { root, destroy } = await mountLandedSurfaces();
+it("reads the Settings tabs and the canvas context menu", async () => {
+  const { destroy } = await mountLandedSurfaces();
   const owned = new Set(copy());
-
-  for (const menu of [uiCopy.menus.file, uiCopy.menus.view]) {
-    menubarEntry(root, menu).click();
-    await Promise.resolve();
-    const popup = root.querySelector<HTMLElement>(
-      ".editor-shell-menu-popup[data-open]",
-    );
-    if (popup === null) throw new Error(`the ${menu} menu opened no popup`);
-    expect(spokenIn(popup), menu).not.toEqual([]);
-    expect(
-      spokenIn(popup).filter((text) => !owned.has(text)),
-      menu,
-    ).toEqual([]);
-  }
 
   for (const page of ["keyboard", "about"] as const) {
     const tab = uiCopy.settings.pages[page];
@@ -585,20 +567,6 @@ function answeringSettle<T>(): ModalSettle<T> {
   return { close: () => undefined, dismiss: () => undefined };
 }
 
-/** The menubar trigger for a menu, found by its word — text on a word trigger,
- *  accessible name on the two glyph controls. */
-function menubarEntry(root: HTMLElement, label: string): HTMLButtonElement {
-  const entry = Array.from(
-    root.querySelectorAll<HTMLButtonElement>(".editor-shell-menubar button"),
-  ).find(
-    (button) =>
-      button.textContent === label ||
-      button.getAttribute("aria-label") === label,
-  );
-  if (entry === undefined) throw new Error(`No "${label}" menu.`);
-  return entry;
-}
-
 /** React schedules outside `act` and floating-ui's measurement never settles
  *  inside one, so a popup is flushed with macrotasks instead. */
 async function flushTasks(): Promise<void> {
@@ -610,7 +578,7 @@ async function flushTasks(): Promise<void> {
  *  mounted tree answers, so a surface dropped from `mountLandedSurfaces` is the
  *  `null` this file already fails on rather than a silent gap. */
 const LANDED_SURFACES = [
-  ".editor-shell-menubar",
+  "[data-yunari-theme-toolbar]",
   ".editor-shell-stage",
   ".editor-shell-rail",
   "[data-yunari-canvas-toolbar]",
@@ -765,7 +733,7 @@ function selectionBridge(): EditorShellBridge {
  * The React surfaces plans 1–5 landed, mounted at once.
  *
  * The shell is assembled whole (`createShellLayout`) rather than piece by piece,
- * because three of the strings this net exists to catch — the menubar's name,
+ * because three of the strings this net exists to catch — the toolbar's name,
  * the stage's name and the canvas toolbar — are the shell's own markup; the
  * Settings modal and the colour picker are mounted open, because a closed modal
  * and an unopened popover render nothing and would pass the walk by being

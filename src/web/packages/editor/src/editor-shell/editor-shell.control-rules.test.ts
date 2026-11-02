@@ -173,7 +173,6 @@ function colourBearingMarkableControls(): readonly string[] {
  * stops declaring a colour does not fail, because that is a deletion and this
  * guard is about colours arriving.
  *
- *  - `.editor-shell-menubar button` — the File/View menubar's entries.
  *  - `.editor-shell-rail button` — the rail's pane slots.
  *  - `.editor-shell-rail button[aria-pressed="true"]` — the selected slot.
  *  - `.editor-shell-rail button.editor-shell-rail-settings` — the settings gear.
@@ -187,14 +186,13 @@ function colourBearingMarkableControls(): readonly string[] {
  *  - `.editor-shell-mode-switch button[aria-pressed="true"]` — the chosen
  *    segment, whose lifted ink is the shared chosen treatment.
  *
- * The first six were measured at `d9f81f1f` by parsing every rule body in the
+ * The first five were measured at `d9f81f1f` by parsing every rule body in the
  * stylesheet, which is how that set was reproduced rather than copied; the last
  * two arrived with the mode switch.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   ".editor-shell-dialog > button",
   ".editor-shell-dialog > button:hover",
-  ".editor-shell-menubar button",
   ".editor-shell-mode-switch button",
   '.editor-shell-mode-switch button[aria-pressed="true"]',
   ".editor-shell-rail button",

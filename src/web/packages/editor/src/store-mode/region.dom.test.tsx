@@ -1263,12 +1263,29 @@ it("offers the default beside the displays rather than as one of them", async ()
   expect(
     await offeredDisplays(),
     "the choice does not offer the default first, beside the displays it was answered",
-  ).toEqual(["default", "this-pc", "kitchen-tablet"]);
+  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
 
   await chooseDisplay("default");
   expect(host.writes, "the default is not the key the route accepts").toEqual([
     { display: "default", id: "living-room" },
   ]);
+});
+
+it("ends the display list with a route to pair a new display", async () => {
+  const host = twoDisplays();
+  await mountOver(host);
+
+  await openAssign("living-room");
+  expect(
+    await offeredDisplays(),
+    "the pair route is not the last row of the list",
+  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
+
+  // The test host answers no `/api/hosting`, so the route has no address to
+  // open; the refusal names the one thing the author can do about it.
+  await chooseDisplay("pair");
+  expect(assignStatus()).toBe(uiCopy.publish.pairUnavailable);
+  expect(host.writes, "the pair route assigned a theme").toEqual([]);
 });
 
 /**
@@ -1359,7 +1376,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   await mountOver(host);
 
   await openAssign("living-room");
-  expect(await offeredDisplays()).toEqual(["default", "this-pc"]);
+  expect(await offeredDisplays()).toEqual(["default", "this-pc", "pair"]);
   await chooseDisplay("this-pc");
   expect(
     host.reads,
@@ -1393,7 +1410,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   expect(
     await offeredDisplays(),
     "the choice offered a display list it had kept rather than the host's answer",
-  ).toEqual(["default", "this-pc", "kitchen-tablet"]);
+  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
   expect(host.reads, "the second opening did not read the displays again").toBe(
     2,
   );

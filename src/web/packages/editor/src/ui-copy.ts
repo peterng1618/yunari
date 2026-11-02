@@ -367,13 +367,10 @@ export const uiCopy = {
     /** What one run says, for a run that is prose. Distinct from the Add pane's
         "Text" button, which inserts an object rather than naming a field. */
     runText: "Run text",
-    /** A run tab's accessible name: its visible label is the bare number, which
-        on its own names no question. */
+    /** A run summary's accessible name: the run concept, then what it prints,
+        which the surface appends because it is data. */
     runTab: (position: number) => `Run ${position}`,
     addRun: "Add run",
-    /** Shown when an in-place edit would have to drop the runs it cannot place. */
-    multiRunRefused:
-      "This text has more than one run, and typing over the whole object would drop the others. Edit each run's text in the run editor.",
     /** A chart's bindings are its series, which is the word the panel already
         uses for the axis. Named once so the chooser and the refusal agree. */
     runSeries: "Add a series",
@@ -440,9 +437,7 @@ export const uiCopy = {
     label: "Readings",
   },
   menus: {
-    /** The menubar's own name, so a screen reader reaching the two menus is
-     *  told what the group is before it reads each one. */
-    label: "Editor menus",
+    /** The shortcut sheet's two group names. */
     file: "File",
     view: "View",
   },
@@ -1949,7 +1944,8 @@ export const uiCopy = {
      *  than leaving the owner to restart the host when ten minutes pass. */
     newCode: "New code",
   },
-  /** The View menu. Each setting names itself and its current value; the values
+  /** The View toggle and the shortcut sheet's readings rows. Each setting names
+   *  itself and its current value; the values
    *  are listed here rather than composed from a number and a unit, so the menu
    *  cannot say `1` and leave the reader to guess FPS from the neighbour.
    *
@@ -1957,8 +1953,8 @@ export const uiCopy = {
    *  sensor the theme names, the other for what this machine reports. Neither is
    *  the fallback for the other, so neither is called a preview of the other.
    *
-   *  A row here is a menu row and a menu row is sentence case. Value runs
-   *  have no row: their token is the *editing* view and ends with the edit. */
+   *  The words are sentence case.
+   */
   view: {
     dataSource: "Readings from",
     preview: "The theme's sensors",

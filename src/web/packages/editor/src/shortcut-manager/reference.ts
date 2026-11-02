@@ -40,9 +40,9 @@ interface ShortcutReferenceGroup {
  */
 export const SHORTCUT_LABELS = {
   "file.new": uiCopy.file.newDocument,
-  // The chord the File menu prints beside its *Import theme* row, and the
-  // word is the row's own: `file.open` names the chord the action is bound to,
-  // and the row it is printed beside is what a person reads.
+  // The chord the Import theme button prints beside its glyph, and the word is
+  // the button's own: `file.open` names the chord the action is bound to, and
+  // the control it is printed beside is what a person reads.
   "file.open": uiCopy.file.importPackage,
   "file.save": uiCopy.file.saveLibrary,
   "file.findAssets": uiCopy.file.findAssets,

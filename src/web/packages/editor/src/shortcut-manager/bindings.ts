@@ -7,10 +7,10 @@
  * The live table is module-level state, written once by the shell and read by
  * everyone. That is deliberate and is the shape `applyShellPalette` already has
  * (one writer, everyone reads): the consumers are four components in three
- * subtrees — the menubar, the dock's tooltips, the `?` sheet and the settings
- * modal — plus a window-level dispatcher, and none of them is an ancestor of
- * the others, so a table passed by props would have to be threaded through
- * every one of them and would still miss the dispatcher.
+ * subtrees — the header toolbar, the dock's tooltips, the `?` sheet and the
+ * settings modal — plus a window-level dispatcher, and none of them is an
+ * ancestor of the others, so a table passed by props would have to be threaded
+ * through every one of them and would still miss the dispatcher.
  */
 import { useSyncExternalStore } from "react";
 import { bindingLabel, printableChord } from "./display.js";

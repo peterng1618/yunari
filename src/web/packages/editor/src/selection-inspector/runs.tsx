@@ -1,4 +1,4 @@
-import { Tabs } from "@base-ui/react/tabs";
+import { Accordion } from "@base-ui/react/accordion";
 import type {
   Binding,
   FabricGlobals,
@@ -30,7 +30,7 @@ import {
   useControlIds,
   useDraftCommit,
 } from "../components/ui/control-well.js";
-import { Glyph, PLUS_GLYPH } from "../editor-shell/icons.js";
+import { Glyph, PLUS_GLYPH, TWISTY_GLYPHS } from "../editor-shell/icons.js";
 import {
   FONT_FINDER_ID,
   fontActionOptions,
@@ -288,7 +288,12 @@ export function projectRuns(
       id: runIdentity(run),
       index,
       kind: run.kind,
-      label: describeRun(run),
+      // A reading is named by what it reads, so an accordion summary says
+      // `cpu.load.percent` rather than an opaque binding id. Prose says itself.
+      label:
+        run.kind === "value"
+          ? (bound?.semanticKey ?? run.bindingId)
+          : describeRun(run),
       text: run.kind === "literal" ? run.text : "",
       typeToken: run.typeToken ?? presets[0]?.id ?? "",
       colour,
@@ -710,7 +715,7 @@ function RunRow(props: {
         <button
           type="button"
           data-yunari-run-remove={String(index)}
-          className="self-start text-xs text-muted"
+          className="self-start text-xs text-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
           onClick={() => onRemove(index)}
         >
           {uiCopy.inspectorFields.removeRun(index + 1)}
@@ -794,66 +799,84 @@ export function RunEditor(props: {
           />
         </>
       ) : null}
-      <Tabs.Root
-        value={selected?.id ?? null}
-        onValueChange={(value) => {
-          if (typeof value !== "string") return;
-          setFollowLast(false);
-          setSelectedId(value);
-        }}
-        className="flex flex-col gap-[var(--space-6)]"
-      >
-        {/* The add action sits after the tablist rather than inside it: a
-            tablist owns tabs, and a reader should not meet a foreign button in
-            the middle of the strip. The row wraps, so the + follows the last
-            tab on the same line. */}
-        <div className="flex flex-wrap items-center gap-[var(--space-4)]">
-          <Tabs.List
-            activateOnFocus
-            className="flex flex-wrap items-center gap-[var(--space-4)]"
-          >
-            {view.runs.map((row, at) => (
-              <Tabs.Tab
+      <div className="flex flex-col gap-[var(--space-4)]">
+        <Accordion.Root
+          value={selected === undefined ? [] : [selected.id]}
+          onValueChange={(value) => {
+            // Always one run stays open: collapsing the last panel would leave
+            // the editor with no fields and no way to tell which run it meant.
+            const id = value.at(-1);
+            if (typeof id !== "string") return;
+            setFollowLast(false);
+            setSelectedId(id);
+          }}
+        >
+          {view.runs.map((row, at) => {
+            const open = selected?.id === row.id;
+            return (
+              <Accordion.Item
                 key={row.id}
                 value={row.id}
-                data-yunari-run-tab={String(at + 1)}
-                aria-label={uiCopy.inspectorFields.runTab(at + 1)}
-                className="rounded-t-[var(--radius-sm)] px-[var(--space-12)] py-[var(--space-8)] text-sm text-muted data-[selected]:bg-[var(--panel-2)] data-[selected]:text-text"
+                data-yunari-run-item={String(at + 1)}
+                className="overflow-hidden rounded-md border border-edge data-[open]:border-accent"
               >
-                {at + 1}
-              </Tabs.Tab>
-            ))}
-          </Tabs.List>
-          <button
-            type="button"
-            data-yunari-run-add=""
-            aria-label={uiCopy.inspectorFields.addRun}
-            className="text-xs text-muted"
-            onClick={() => {
-              if (edits.addRun()) setFollowLast(true);
-            }}
-          >
-            <Glyph icon={PLUS_GLYPH} size={12} />
-          </button>
-        </div>
-
-        {selected === undefined ? null : (
-          <Tabs.Panel
-            value={selected.id}
-            className="flex flex-col gap-[var(--space-6)]"
-          >
-            {/* Keyed by identity, so moving to another tab remounts the fields:
-                a draft belongs to the run it was typed into. */}
-            <RunRow
-              key={selected.id}
-              row={selected}
-              view={view}
-              edits={edits}
-              onRemove={remove}
-            />
-          </Tabs.Panel>
-        )}
-      </Tabs.Root>
+                <Accordion.Header className="m-0">
+                  <Accordion.Trigger
+                    data-yunari-run-tab={String(at + 1)}
+                    aria-label={`${uiCopy.inspectorFields.runTab(at + 1)}: ${row.label}`}
+                    className="flex w-full items-center gap-[var(--space-6)] bg-transparent px-[var(--space-8)] py-[var(--space-6)] text-left text-sm text-muted hover:bg-[var(--panel-2)] hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px] data-[panel-open]:bg-[var(--panel-2)] data-[panel-open]:text-text"
+                  >
+                    {/* The number says where the run sits; the summary says what
+                        it is — the prose it prints, or the key a reading names. */}
+                    <span className="flex-none font-mono text-faint tabular-nums">
+                      {at + 1}
+                    </span>
+                    <span
+                      data-yunari-run-summary=""
+                      data-yunari-value=""
+                      className="min-w-0 flex-1 truncate"
+                    >
+                      {row.label}
+                    </span>
+                    <span aria-hidden className="flex-none text-faint">
+                      <Glyph
+                        icon={
+                          open
+                            ? TWISTY_GLYPHS.expanded
+                            : TWISTY_GLYPHS.collapsed
+                        }
+                        size={12}
+                      />
+                    </span>
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Panel className="border-t border-edge p-[var(--space-8)]">
+                  {/* Keyed by identity, so moving to another run remounts the
+                      fields: a draft belongs to the run it was typed into. */}
+                  <RunRow
+                    key={row.id}
+                    row={row}
+                    view={view}
+                    edits={edits}
+                    onRemove={remove}
+                  />
+                </Accordion.Panel>
+              </Accordion.Item>
+            );
+          })}
+        </Accordion.Root>
+        <button
+          type="button"
+          data-yunari-run-add=""
+          aria-label={uiCopy.inspectorFields.addRun}
+          className="self-start text-xs text-muted hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+          onClick={() => {
+            if (edits.addRun()) setFollowLast(true);
+          }}
+        >
+          <Glyph icon={PLUS_GLYPH} size={12} />
+        </button>
+      </div>
 
       {view.notes.map((note) => (
         <p

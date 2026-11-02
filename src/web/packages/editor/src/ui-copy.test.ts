@@ -283,12 +283,12 @@ it("names a remix's parent in one sentence", () => {
 
 /**
  * The chrome's words. Read from its own owners rather than from the whole
- * table: the two menu names are `uiCopy.menus`, the File rows are
- * `uiCopy.file` (the toolbar reads the same six labels), and the View rows are
- * `uiCopy.view` less the one entry no menu prints: `previewDetail` is the
- * status line under the source control (`live-source.ts`), not a row. A row
- * added to File or View is covered by the derivation; one added to the toolbar
- * is covered by `THEME_TOOLBAR_ACTIONS`.
+ * table: the shortcut sheet's two group names are `uiCopy.menus`, the File
+ * functions are `uiCopy.file` (the toolbar reads the same labels), and the View
+ * readings are `uiCopy.view` less the one entry no control prints:
+ * `previewDetail` is the status line under the source control (`live-source.ts`),
+ * not a label. A command added to File is covered by the derivation; one added
+ * to the toolbar is covered by `THEME_TOOLBAR_ACTIONS`.
  */
 function menuRows(): string[] {
   const toolbarLabels = new Set(

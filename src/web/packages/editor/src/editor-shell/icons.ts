@@ -22,6 +22,7 @@ import {
   Eye,
   EyeOff,
   FerrisWheel,
+  FilePlus2,
   FileText,
   FolderInput,
   FolderOpen,
@@ -33,6 +34,7 @@ import {
   Info,
   Keyboard,
   Layers2,
+  LayoutTemplate,
   Link,
   LoaderCircle,
   LoaderPinwheel,
@@ -170,10 +172,6 @@ export const EDITOR_MODE_GLYPH: LucideIcon = PencilRuler;
 /** The two sort directions a listing shows on its active sort button. */
 export const ASCENDING_GLYPH: LucideIcon = ArrowUp;
 export const DESCENDING_GLYPH: LucideIcon = ArrowDown;
-/** The header's two menus, drawn as icon controls: the page the File rows act
- *  on, and the eye View reads the canvas through. */
-export const FILE_MENU_GLYPH: LucideIcon = FileText;
-export const VIEW_MENU_GLYPH: LucideIcon = Eye;
 /** Settings mode's four This PC pages: the screens, the sensors that feed
  *  them, the units readings print in, and the external readings themselves. */
 export const DISPLAYS_GLYPH: LucideIcon = Monitor;
@@ -353,6 +351,11 @@ export const SAVE_THEME_GLYPH: LucideIcon = Save;
 export const SAVE_THEME_AS_GLYPH: LucideIcon = SaveAll;
 export const ACTIVATE_THEME_GLYPH: LucideIcon = Monitor;
 export const EXPORT_THEME_GLYPH: LucideIcon = Download;
+/** The header toolbar's File commands, beside the document actions above. */
+export const NEW_THEME_GLYPH: LucideIcon = FilePlus2;
+export const TEMPLATE_THEME_GLYPH: LucideIcon = LayoutTemplate;
+export const OPEN_RECENT_GLYPH: LucideIcon = Clock;
+export const EXPORT_WIDGET_GLYPH: LucideIcon = Download;
 
 /** The online cell's *Install* control, which the copy marks with an upload
  *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`

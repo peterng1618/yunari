@@ -1,16 +1,12 @@
-import { Popover } from "@base-ui/react/popover";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import {
-  type ControlOption,
-  ControlSelect,
-} from "../components/ui/control-select.js";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Dialog } from "../components/ui/dialog.js";
 import { displayUrl } from "../hosting-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
   shortcutLabel,
   shortcutSpokenLabel,
 } from "../shortcut-manager/display.js";
-import { DEFAULT_DISPLAY_KEY } from "../theme-library-client.js";
+import { AssignChoice } from "../store-mode/assign-display.js";
 import { uiCopy } from "../ui-copy.js";
 import type { HostingStore } from "./hosting-store.js";
 import { QrCode } from "./qr-symbol.js";
@@ -21,12 +17,16 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
  * The editor's one filled accent button, and behind it everything publishing
  * has to say.
  *
- * **The button opens the surface; it is not the host switch.** the header rule gives the
- * header one primary control and the facts live behind a press — but a control
- * that turned the LAN off when an author pressed it to read the phone address
- * would lose the fact the address exists to carry, mid-presentation. So the
- * press is free of side effects, and turning the host on and off is its own
- * control inside the popover, where the §145 warning is on screen beside it.
+ * **The button opens the surface; it is not the host switch.** The header rule
+ * gives the header one primary control and the facts live behind a press — but
+ * a control that turned the LAN off when an author pressed it to read the phone
+ * address would lose the fact the address exists to carry, mid-presentation. So
+ * the press is free of side effects, and turning the host on and off is its own
+ * control inside the surface, where the §145 warning is on screen beside it.
+ *
+ * **The surface is the assign dialog, with publishing below the choice.** The
+ * display dropdown is the same choice a theme card opens, so a display can be
+ * assigned from either place and the pair-new row is at the end of both lists.
  *
  * Everything is read from the host. In the browser the editor's own URL is
  * `127.0.0.1`, so an address composed here would be an address no phone can
@@ -34,16 +34,9 @@ import type { PublishSurfaceStore } from "./shell-stores.js";
  * control only reads it, so a second reader (Task 4's status bar) sees the same
  * one.
  */
+
 /** The one control that carries the warning, so a fixed id is the whole address. */
 const WARNING_ID = "yunari-publish-warning";
-
-/** The value in the display list that is a route rather than a display: it
- *  opens the host's pairing page instead of assigning a theme. */
-const PAIR_DISPLAY = "pair";
-
-function reasonOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** What is left of the window, as mm:ss in the reader's own clock. The host
  *  answers an instant; a countdown is what a person can watch run out. An
@@ -66,7 +59,7 @@ export function PublishControl({
 }: {
   /** What the host is doing, owned by the shell so the status bar reads it too. */
   readonly hosting: HostingStore;
-  /** Whether this popover is showing. The header's chord reaches it from
+  /** Whether this surface is showing. The header's chord reaches it from
    *  outside React, so the control subscribes rather than holding the flag. */
   readonly surface: PublishSurfaceStore;
   /** The open theme's own session: the display list and the assignment are the
@@ -90,42 +83,16 @@ export function PublishControl({
   useActiveShortcuts();
   const chord = shortcutLabel("publish.surface");
   const known = state.kind === "known" ? state : undefined;
-  const open = known?.answer.lan === true;
+  const answer = known?.answer;
+  const open = answer?.lan === true;
 
-  // **A countdown only while the card is on screen and a window is live.** The
-  // host owns the deadline; this only reads the clock, so a closed surface costs
-  // no timer and a stale one catches up the moment it opens again.
+  // **A countdown only while the surface is on screen and a window is live.**
+  // The host owns the deadline; this only reads the clock, so a closed surface
+  // costs no timer and a stale one catches up the moment it opens again.
   const [clock, setClock] = useState<number>(() => Date.now());
   const [minting, setMinting] = useState(false);
-  /** The host's displays, read each time the surface opens: a list held across
-   *  opens would go stale the moment a display paired or left. */
-  const [displays, setDisplays] = useState<{
-    readonly default: string | null;
-    readonly displays: readonly {
-      readonly id: string;
-      readonly label: string;
-      readonly theme: string | null;
-    }[];
-  }>();
-  const [assignError, setAssignError] = useState<string>();
   const shownCode = known?.pairing;
   const expiresAt = shownCode?.expiresAt;
-
-  useEffect(() => {
-    if (!surfaceOpen || session?.listDisplays === undefined) return;
-    let live = true;
-    session.listDisplays().then(
-      (answer) => {
-        if (live) setDisplays(answer);
-      },
-      (error: unknown) => {
-        if (live) setAssignError(reasonOf(error));
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [surfaceOpen, session]);
 
   useEffect(() => {
     if (!surfaceOpen || expiresAt === undefined) return;
@@ -135,12 +102,6 @@ export function PublishControl({
     return () => clearInterval(timer);
   }, [surfaceOpen, expiresAt]);
 
-  // Unknown is a real state, not a blank: until the host has answered the editor
-  // has nothing to say. No host at all says the same nothing, for its own
-  // reason. Neither is drawn as "not publishing".
-  if (known === undefined) return null;
-
-  const { answer, reason, pending } = known;
   // **The address is the host's, not a credential's.** It exists only while the
   // LAN is on, so turning it off takes the URL off the screen rather than leaving
   // a stale one behind — and it is drawn whether or not a code has been read,
@@ -154,50 +115,54 @@ export function PublishControl({
   // and earlier, or one on Private DNS — is exactly the device an address is
   // for.
   const shown =
-    open && answer.address !== null && answer.port !== null
+    answer !== undefined &&
+    open &&
+    answer.address !== null &&
+    answer.port !== null
       ? {
           host: answer.name ?? answer.address,
           address: answer.address,
           port: answer.port,
         }
       : undefined;
+  const themeId = session?.publishableDocument()?.id;
+  const listDisplays = session?.listDisplays;
+  const assignThemeTo = session?.assignThemeTo;
+  // **Memoised because `AssignChoice` reads the list when its client changes.**
+  // This control re-renders once a second while its countdown runs, and a fresh
+  // client each render would re-read the host's displays every second.
+  const assignClient = useMemo(
+    () =>
+      listDisplays === undefined || assignThemeTo === undefined
+        ? undefined
+        : {
+            listDisplays: () => listDisplays(),
+            assign: (display: string) => assignThemeTo(display),
+          },
+    [listDisplays, assignThemeTo],
+  );
+  const pairNew = useMemo(() => {
+    const host = shown?.host;
+    const port = shown?.port;
+    return assignClient === undefined
+      ? undefined
+      : {
+          url: async (): Promise<string | undefined> =>
+            host === undefined || port === undefined
+              ? undefined
+              : `https://${host}:${port}/pair`,
+          unavailable: uiCopy.publish.pairUnavailable,
+        };
+  }, [assignClient, shown?.host, shown?.port]);
+
+  // Unknown is a real state, not a blank: until the host has answered the editor
+  // has nothing to say. No host at all says the same nothing, for its own
+  // reason. Neither is drawn as "not publishing".
+  if (known === undefined) return null;
+
+  const { reason, pending } = known;
   const code = known.pairing;
   const left = code === undefined ? "" : remainingOf(code.expiresAt, clock);
-  const currentTheme = session?.publishableDocument()?.id;
-  const displayOptions: readonly ControlOption[] =
-    displays === undefined
-      ? []
-      : [
-          { id: DEFAULT_DISPLAY_KEY, name: uiCopy.store.assign.default },
-          ...displays.displays.map((display) => ({
-            id: display.id,
-            name: display.label,
-          })),
-          { id: PAIR_DISPLAY, name: uiCopy.publish.pairNew },
-        ];
-  const heldBy =
-    displays?.displays.find((display) => display.theme === currentTheme)?.id ??
-    DEFAULT_DISPLAY_KEY;
-  /** A display choice is the assignment; the pair row is the one choice that
-   *  navigates instead, to the host's own pairing page. */
-  const chooseDisplay = (choice: string): void => {
-    setAssignError(undefined);
-    if (choice === PAIR_DISPLAY) {
-      if (shown === undefined) {
-        setAssignError(uiCopy.publish.pairUnavailable);
-        return;
-      }
-      window.open(
-        `https://${shown.host}:${shown.port}/pair`,
-        "_blank",
-        "noopener",
-      );
-      return;
-    }
-    void session?.assignThemeTo?.(choice).catch((error: unknown) => {
-      setAssignError(uiCopy.publish.assignFailed(reasonOf(error)));
-    });
-  };
   const label = open
     ? uiCopy.publish.stop
     : pending === true
@@ -205,17 +170,19 @@ export function PublishControl({
       : uiCopy.publish.start;
 
   return (
-    <Popover.Root open={surfaceOpen} onOpenChange={(next) => surface.set(next)}>
+    <>
       {/* The chord is not printed in the header. The control's own title and
           spoken label carry it, so the bar stays one word and the caps are not
           a second, detached label beside the button. */}
       {/* One name, whatever the host is doing: the control opens a surface, and
           a bar that said `Stop publishing` would be promising to stop rather
           than to show. What the host is doing is the surface's own reading. */}
-      <Popover.Trigger
+      <button
         type="button"
         className="editor-shell-primary"
         data-yunari-publish=""
+        aria-haspopup="dialog"
+        aria-expanded={surfaceOpen}
         title={
           chord === ""
             ? uiCopy.publish.assign
@@ -226,156 +193,115 @@ export function PublishControl({
             ? undefined
             : `${uiCopy.publish.assign} (${shortcutSpokenLabel("publish.surface")})`
         }
+        onClick={() => surface.set(true)}
       >
         {uiCopy.publish.assign}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner
-          sideOffset={6}
-          align="end"
-          // **Eight pixels of the window are never the popup's.** Base UI's
-          // default avoids collisions against the nearest clipping container,
-          // and the header's own content overflows a 390px window — so the
-          // surface was clamped to the overrun rather than to the window and
-          // ended a few pixels past it. Asking for the inset states the fact
-          // this surface owes: it is reachable inside the window it was opened
-          // in.
-          collisionPadding={8}
-          // **`side` is named even though the surface stays below the trigger.**
-          // Base UI 1.8 only turns on alignment-axis shifting when the side
-          // avoidance is `"shift"` (`crossAxisShiftEnabled` in
-          // `useAnchorPositioning`); with the default `"flip"`, `align: "shift"`
-          // alone left the popup at the trigger's own off-screen right edge —
-          // why a 390px window still measured 403px. `side: "shift"` keeps the
-          // popover under the header and still never flips it.
-          collisionAvoidance={{ side: "shift", align: "shift" }}
-          // **`sticky` is what lets the shift go all the way.** Without it
-          // Base UI adds floating-ui's `limitShift`, which stops the popup once
-          // it would stop overlapping the anchor — and a trigger that sits past
-          // the window's right edge leaves the popup parked against that edge,
-          // still outside. Sticky drops the limiter so the surface can reach the
-          // window it was opened in; the popover still tracks the trigger.
-          sticky
-          // **The viewport is the boundary, not the nearest clipping ancestor.**
-          // An empty list is floating-ui's own spelling for the viewport (Base
-          // UI passes it through); the ancestor it would otherwise pick is the
-          // document, whose box a header that overflows the window widens.
-          collisionBoundary={[]}
-          className="editor-shell-positioner"
+      </button>
+      <Dialog
+        open={surfaceOpen}
+        onOpenChange={(next) => surface.set(next)}
+        label={uiCopy.publish.assign}
+        closeLabel={uiCopy.store.assign.close}
+        className="editor-shell-publish-dialog"
+      >
+        <p className="editor-shell-dialog-lead">{uiCopy.publish.assign}</p>
+        {/* The theme's destination, above the surface's own switch: assigning
+            is why the control is pressed, and the list carries the route for a
+            display that has not paired yet. */}
+        {assignClient === undefined || themeId === undefined ? null : (
+          <AssignChoice
+            themeId={themeId}
+            client={assignClient}
+            onAssigned={() => undefined}
+            {...(pairNew === undefined ? {} : { pairNew })}
+          />
+        )}
+        {/* The choice the warning is about, so the warning is bound to the
+            control that makes it rather than to the one that opens this. */}
+        <button
+          type="button"
+          className="editor-shell-publish-toggle"
+          data-yunari-host-switch=""
+          aria-pressed={open}
+          aria-describedby={WARNING_ID}
+          disabled={pending !== undefined}
+          onClick={() => {
+            void hosting.toggle();
+          }}
         >
-          <Popover.Popup
-            className="editor-shell-publish-popup"
-            aria-label={uiCopy.publish.surface}
-          >
-            {/* The theme's destination, above the surface's own switch: assigning
-                is why the control is pressed, and the list carries the route for
-                a display that has not paired yet. */}
-            {displayOptions.length === 0 ? null : (
-              <ControlSelect
-                label={uiCopy.publish.displayLabel}
-                data={{ "data-yunari-publish-display": "" }}
-                value={heldBy}
-                options={displayOptions}
-                onChange={chooseDisplay}
-              />
-            )}
-            {assignError === undefined ? null : (
-              <span
-                className="editor-shell-publish-reason"
-                role="alert"
-                data-yunari-publish-assign-error=""
-              >
-                {assignError}
-              </span>
-            )}
-            {/* The choice the warning is about, so the warning is bound to the
-                control that makes it rather than to the one that opens this. */}
-            <button
-              type="button"
-              className="editor-shell-publish-toggle"
-              data-yunari-host-switch=""
-              aria-pressed={open}
-              aria-describedby={WARNING_ID}
-              disabled={pending !== undefined}
-              onClick={() => {
-                void hosting.toggle();
-              }}
-            >
-              {label}
-            </button>
-            <span
-              id={WARNING_ID}
-              className="editor-shell-publish-warning"
-              data-yunari-copy=""
-            >
-              {uiCopy.publish.warning}
+          {label}
+        </button>
+        <span
+          id={WARNING_ID}
+          className="editor-shell-publish-warning"
+          data-yunari-copy=""
+        >
+          {uiCopy.publish.warning}
+        </span>
+        {reason === undefined ? null : (
+          <span className="editor-shell-publish-reason" role="alert">
+            {reason}
+          </span>
+        )}
+        {shown === undefined ? null : (
+          <>
+            <span className="editor-shell-publish-label">
+              {uiCopy.publish.address}
             </span>
-            {reason === undefined ? null : (
-              <span className="editor-shell-publish-reason" role="alert">
-                {reason}
-              </span>
-            )}
-            {shown === undefined ? null : (
+            <code className="editor-shell-publish-url">{`https://${shown.host}:${shown.port}`}</code>
+            {/* https is what makes the display a secure context — the wake
+                lock and fullscreen are gated on it — so it is the address
+                printed. The plain one is what a device that has not
+                installed the root certificate can still open. */}
+            <span className="editor-shell-publish-note">
+              {uiCopy.publish.fallback(shown.address, shown.port)}
+            </span>
+            {code === undefined ? null : (
               <>
+                {/* The code in type, because the symbol beside it needs a
+                    camera: one mint, two presentations. */}
                 <span className="editor-shell-publish-label">
-                  {uiCopy.publish.address}
+                  {uiCopy.publish.code}
                 </span>
-                <code className="editor-shell-publish-url">{`https://${shown.host}:${shown.port}`}</code>
-                {/* https is what makes the display a secure context — the wake
-                    lock and fullscreen are gated on it — so it is the address
-                    printed. The plain one is what a device that has not
-                    installed the root certificate can still open. */}
-                <span className="editor-shell-publish-note">
-                  {uiCopy.publish.fallback(shown.address, shown.port)}
+                <span
+                  className="editor-shell-publish-code"
+                  data-yunari-pair-code=""
+                >
+                  {code.code}
                 </span>
-                {code === undefined ? null : (
-                  <>
-                    {/* The code in type, because the symbol beside it needs a
-                        camera: one mint, two presentations. */}
-                    <span className="editor-shell-publish-label">
-                      {uiCopy.publish.code}
-                    </span>
-                    <span
-                      className="editor-shell-publish-code"
-                      data-yunari-pair-code=""
-                    >
-                      {code.code}
-                    </span>
-                    <span className="editor-shell-publish-expiry">
-                      {left === ""
-                        ? uiCopy.publish.expired
-                        : uiCopy.publish.expiresIn(left)}
-                    </span>
-                    <button
-                      type="button"
-                      className="editor-shell-publish-mint"
-                      data-yunari-new-code=""
-                      disabled={minting}
-                      onClick={() => {
-                        setMinting(true);
-                        void hosting.renew().finally(() => setMinting(false));
-                      }}
-                    >
-                      {uiCopy.publish.newCode}
-                    </button>
-                    {/* **The symbol, which now carries the code rather than a
-                        credential.** The page it opens asks for nothing else,
-                        so a phone with a camera pairs in one scan and the
-                        credential never appears in a URL. */}
-                    <QrCode
-                      text={displayUrl(shown.host, shown.port, code.code)}
-                      modulePitch={5}
-                    />
-                  </>
-                )}
-                <span className="editor-shell-publish-note">
-                  {uiCopy.publish.reserveAddress}
+                <span className="editor-shell-publish-expiry">
+                  {left === ""
+                    ? uiCopy.publish.expired
+                    : uiCopy.publish.expiresIn(left)}
                 </span>
+                <button
+                  type="button"
+                  className="editor-shell-publish-mint"
+                  data-yunari-new-code=""
+                  disabled={minting}
+                  onClick={() => {
+                    setMinting(true);
+                    void hosting.renew().finally(() => setMinting(false));
+                  }}
+                >
+                  {uiCopy.publish.newCode}
+                </button>
+                {/* **The symbol, which now carries the code rather than a
+                    credential.** The page it opens asks for nothing else,
+                    so a phone with a camera pairs in one scan and the
+                    credential never appears in a URL. */}
+                <QrCode
+                  text={displayUrl(shown.host, shown.port, code.code)}
+                  modulePitch={5}
+                />
               </>
             )}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+            <span className="editor-shell-publish-note">
+              {uiCopy.publish.reserveAddress}
+            </span>
+          </>
+        )}
+      </Dialog>
+    </>
   );
 }

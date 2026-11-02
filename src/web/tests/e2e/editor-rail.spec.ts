@@ -1219,8 +1219,8 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toHaveAttribute("data-yunari-mode-region", "themes");
   await expect(group, "the switch left the header").toBeVisible();
   await expect(
-    header.locator(".editor-shell-menubar"),
-    "themes mode still draws the editor's menus",
+    header.locator("[data-yunari-theme-toolbar]"),
+    "themes mode still draws the editor's toolbar",
   ).toHaveCount(0);
 
   await segment(uiCopy.modes.settings).click();
@@ -1229,8 +1229,8 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "the settings mode renders no region",
   ).toHaveAttribute("data-yunari-mode-region", "settings");
   await expect(
-    header.locator(".editor-shell-menubar"),
-    "settings mode still draws the editor's menus",
+    header.locator("[data-yunari-theme-toolbar]"),
+    "settings mode still draws the editor's toolbar",
   ).toHaveCount(0);
 
   // And back: the editor is the document's surface, and the switch returns it
@@ -1243,8 +1243,8 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   await expect(page.locator(".editor-shell-body")).toBeVisible();
   await expect(page.locator("[data-yunari-mode-region]")).toHaveCount(0);
   await expect(
-    header.locator(".editor-shell-menubar"),
-    "the editor's menus did not come back",
+    header.locator("[data-yunari-theme-toolbar]"),
+    "the editor's toolbar did not come back",
   ).toHaveCount(1);
   await expect(
     identity,

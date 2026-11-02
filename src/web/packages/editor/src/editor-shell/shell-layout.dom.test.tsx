@@ -10,16 +10,8 @@ import {
   insertGroups,
 } from "../new-object-panel.js";
 import { arrangeActions } from "../object-actions.js";
-import {
-  resolveShortcuts,
-  setActiveShortcuts,
-} from "../shortcut-manager/bindings.js";
-import { shortcutLabel } from "../shortcut-manager/display.js";
-import {
-  PRODUCT_SHORTCUTS,
-  type ProductShortcutId,
-  type ShortcutBinding,
-} from "../shortcut-manager/index.js";
+import { setActiveShortcuts } from "../shortcut-manager/bindings.js";
+import { PRODUCT_SHORTCUTS } from "../shortcut-manager/index.js";
 import { DARK_GROUND, fixtureEntry } from "../store-mode/item-fixture.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
@@ -252,11 +244,14 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(6);
   // The horizontal bar is gone, not merely hidden.
   expect(root.querySelector(".editor-shell-pane-bar")).toBeNull();
+  // The header's actions are one toolbar of glyph buttons, and the menus that
+  // used to sit beside it are gone rather than hidden.
+  expect(root.querySelector(".editor-shell-menubar")).toBeNull();
   expect(
-    root
-      .querySelector(".editor-shell-menubar button")
-      ?.getAttribute("aria-label"),
-  ).toBe(uiCopy.menus.file);
+    root.querySelector(
+      `[data-yunari-theme-toolbar] button[aria-label="${uiCopy.file.newDocument}"]`,
+    ),
+  ).not.toBeNull();
   // The Arrange menu is gone: the arrange toolbar above the canvas already
   // carries all eight actions, and the menu offered two of them with nothing
   // saying the rest existed. Asserting its absence is the point — a test that
@@ -446,9 +441,9 @@ it("opens the publish surface from the shell's own door, and moves no host state
   await act(async () => layout.showPublishing());
 
   expect(trigger()).toBe("true");
-  // The surface itself, not merely the flag behind it: the popup is portalled
+  // The surface itself, not merely the flag behind it: the dialog is portalled
   // to `body`, so the mount point holds none of it.
-  expect(document.querySelector(".editor-shell-publish-popup")).not.toBeNull();
+  expect(document.querySelector(".editor-shell-publish-dialog")).not.toBeNull();
   expect(puts).toBe(0);
 
   layout.destroy();
@@ -465,17 +460,15 @@ function segment(root: HTMLElement, id: RailSlot): HTMLButtonElement {
   return found;
 }
 
-/** The menubar trigger for a menu, found by the word it carries as its
- *  accessible name — the two are glyph controls, so the word is not text. */
-function menubarEntry(root: HTMLElement, label: string): HTMLButtonElement {
+/** The header toolbar's button whose accessible name is `label`. Every header
+ *  command is a glyph control, so the word is the name rather than text. */
+function toolbarButton(root: HTMLElement, label: string): HTMLButtonElement {
   const entry = Array.from(
-    root.querySelectorAll<HTMLButtonElement>(".editor-shell-menubar button"),
-  ).find(
-    (button) =>
-      button.getAttribute("aria-label") === label ||
-      button.textContent === label,
-  );
-  if (entry === undefined) throw new Error(`No "${label}" menu.`);
+    root.querySelectorAll<HTMLButtonElement>(
+      "[data-yunari-theme-toolbar] button",
+    ),
+  ).find((button) => button.getAttribute("aria-label") === label);
+  if (entry === undefined) throw new Error(`No "${label}" toolbar button.`);
   return entry;
 }
 
@@ -504,43 +497,6 @@ function paneGroups(
       ],
     ),
   ];
-}
-
-function openPopup(): HTMLElement {
-  const popup = document.querySelector<HTMLElement>(
-    ".editor-shell-menu-popup[data-open]",
-  );
-  if (popup === null) throw new Error("No menu is open.");
-  return popup;
-}
-
-function menuItems(): readonly HTMLElement[] {
-  return Array.from(
-    openPopup().querySelectorAll<HTMLElement>("[role=menuitem]"),
-  );
-}
-
-/** Every popup an author currently has open. A submenu is a second one, so the
- *  View menu's own items are the first — its submenu opens after it. */
-function openPopups(): readonly HTMLElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>(
-      ".editor-shell-menu-popup[data-open]",
-    ),
-  );
-}
-
-/** The radio entries of the submenu that is open, as `[value, checked]` pairs —
- *  what a screen reader is actually told, rather than what the label reads. */
-function openRadioItems(
-  popup: HTMLElement,
-): readonly (readonly [string, string | null])[] {
-  return Array.from(
-    popup.querySelectorAll<HTMLElement>("[role=menuitemradio]"),
-  ).map((item) => [
-    (item.textContent ?? "").trim(),
-    item.getAttribute("aria-checked"),
-  ]);
 }
 
 it("collapses the panel when the segment for the visible pane is clicked again", async () => {
@@ -1131,111 +1087,32 @@ it("keeps a chart's fields in the Design column, with no Data tab to reach for",
   layout.destroy();
 });
 
-it("opens the View menu's one setting's choices instead of toggling on a bare click", async () => {
+it("flips the canvas's source from one toolbar toggle", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const view = viewStub();
   layout.setBridge(bridgeStub(), view);
   await Promise.resolve();
 
-  // `act` is not used, for the menus' reason: Base UI's popup store
-  // never settles under jsdom's await, and every read here is straight after
-  // the gesture that caused it.
-  menubarEntry(root, uiCopy.menus.view).click();
-  await Promise.resolve();
-
-  const triggers = menuItems().filter(
-    (item) => item.getAttribute("aria-haspopup") === "menu",
-  );
-  // The setting must say it opens something, and it must keep naming the
-  // current value: the state is legible without opening anything.
-  expect(triggers.map((item) => item.textContent)).toEqual([
+  const preview = toolbarButton(
+    root,
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
-  ]);
-  for (const trigger of triggers)
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-
-  // Read the choices as the accessibility tree does. `aria-checked` is the half
-  // no sighted reader needs and every screen reader does.
-  const source = triggers[0];
-  if (source === undefined) throw new Error("No readings setting.");
-  source.click();
-  await Promise.resolve();
-  const submenu = openPopups().find(
-    (popup) => popup.querySelector("[role=menuitemradio]") !== null,
   );
-  expect(submenu).not.toBeUndefined();
-  expect(openRadioItems(submenu!)).toEqual([
-    [uiCopy.view.preview, "true"],
-    [uiCopy.view.live, "false"],
-  ]);
-
-  // Picking is explicit: only the chosen value reaches the owner.
-  const items = Array.from(
-    submenu!.querySelectorAll<HTMLElement>("[role=menuitemradio]"),
-  );
-  items.find((item) => item.textContent?.trim() === uiCopy.view.live)?.click();
+  // A toggle, not a menu: the source is changed many times a session, so the
+  // name says which one is showing and the press flips it.
+  expect(preview.getAttribute("aria-haspopup")).toBeNull();
+  preview.click();
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenCalledWith("live");
 
-  layout.destroy();
-});
-
-/** Opens the View menu and the submenu whose trigger prints `label`, read the
- *  way the chart-refresh case does: a submenu is a second popup, found by the
- *  radios it holds rather than by position. */
-async function openViewSetting(
-  root: HTMLElement,
-  label: string,
-): Promise<HTMLElement> {
-  menubarEntry(root, uiCopy.menus.view).click();
-  await Promise.resolve();
-  const trigger = menuItems().find(
-    (item) =>
-      item.getAttribute("aria-haspopup") === "menu" &&
-      (item.textContent ?? "").startsWith(label),
+  const live = toolbarButton(
+    root,
+    `${uiCopy.view.dataSource}: ${uiCopy.view.live}`,
   );
-  if (trigger === undefined) throw new Error(`No "${label}" View setting.`);
-  trigger.click();
+  expect(live).toBe(preview);
+  live.click();
   await Promise.resolve();
-  const submenu = openPopups().find(
-    (popup) => popup.querySelector("[role=menuitemradio]") !== null,
-  );
-  if (submenu === undefined) throw new Error(`No "${label}" submenu.`);
-  return submenu;
-}
-
-/** Picks the radio whose own words are `text`, as an author does. */
-function pickRadio(submenu: HTMLElement, text: string): void {
-  const item = Array.from(
-    submenu.querySelectorAll<HTMLElement>("[role=menuitemradio]"),
-  ).find((candidate) => candidate.textContent?.trim() === text);
-  if (item === undefined) throw new Error(`No "${text}" radio.`);
-  item.click();
-}
-
-/** The two readings answer for the theme's sensors and for what this machine
- *  reports, and each is proven by picking it: the refresh case above only
- *  ever opened one setting, so `setSourceMode` reached its owner with nothing
- *  asserting it (`vg-339`). */
-it("routes the readings submenu's choice to setSourceMode", async () => {
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  const view = viewStub();
-  layout.setBridge(bridgeStub(), view);
-  await Promise.resolve();
-
-  const submenu = await openViewSetting(root, uiCopy.view.dataSource);
-  // Which reading is current is the half a screen reader hears and a sighted
-  // reader sees as a tick, so it is asserted before the pick moves it.
-  expect(openRadioItems(submenu)).toEqual([
-    [uiCopy.view.preview, "true"],
-    [uiCopy.view.live, "false"],
-  ]);
-
-  pickRadio(submenu, uiCopy.view.live);
-  await Promise.resolve();
-  expect(view.setSourceMode).toHaveBeenCalledWith("live");
+  expect(view.setSourceMode).toHaveBeenLastCalledWith("preview");
 
   layout.destroy();
 });
@@ -1260,17 +1137,14 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
   );
   await Promise.resolve();
 
-  // the header rule: Insert lives in the Add pane and Edit lives in the
-  // Composition pane's footer toolbar, so the header's two menus are File and
-  // View — a third coming back is the duplication this ruling removed.
-  expect(
-    [...root.querySelectorAll(".editor-shell-menubar button")].map((button) =>
-      button.getAttribute("aria-label"),
-    ),
-  ).toEqual([uiCopy.menus.file, uiCopy.menus.view]);
+  // The header rule: Insert lives in the Add pane and Edit lives in the
+  // Composition pane's footer toolbar, and File and View are rows of the one
+  // toolbar — a menu coming back is the duplication this ruling removed.
+  expect(root.querySelector(".editor-shell-menubar")).toBeNull();
 
-  // The document's own actions are icon buttons in one toolbar, not rows in a
-  // menu. The list is the owner's own, so a new row cannot escape this read.
+  // File's functions, the document's own actions and the view toggle are one
+  // toolbar, in that order. The lists are their owners' own, so a new row cannot
+  // escape this read.
   const toolbar = root.querySelector<HTMLElement>(
     "[data-yunari-theme-toolbar]",
   );
@@ -1280,7 +1154,15 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
   const toolbarNames = [...toolbar.querySelectorAll("button")].map((button) =>
     button.getAttribute("aria-label"),
   );
-  expect(toolbarNames).toEqual(THEME_TOOLBAR_ACTIONS.map((row) => row.label));
+  expect(toolbarNames).toEqual([
+    uiCopy.file.newDocument,
+    uiCopy.file.newFromTemplate,
+    uiCopy.file.findAssets,
+    uiCopy.file.openRecent,
+    uiCopy.file.exportWidget,
+    ...THEME_TOOLBAR_ACTIONS.map((row) => row.label),
+    `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
+  ]);
   // The selection's commands are not the document's: they live in the pane
   // that names the selection, not in the header.
   expect(toolbarNames).not.toContain(uiCopy.actions.copy);
@@ -1318,7 +1200,8 @@ it("reaches every toolbar button by keyboard and runs the one it presses", async
   );
   if (toolbar === null) throw new Error("No theme toolbar.");
   const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>("button")];
-  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length);
+  // File's five functions, the document's six actions and the view toggle.
+  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length + 6);
   // Buttons, not divs with handlers: the native button is the keyboard's own
   // Enter/Space target, and nothing may take it out of the tab order.
   for (const button of buttons) {
@@ -1332,7 +1215,7 @@ it("reaches every toolbar button by keyboard and runs the one it presses", async
   buttons[0]?.focus();
   expect(document.activeElement).toBe(buttons[0]);
   buttons[0]?.click();
-  expect(session.importPackage).toHaveBeenCalledTimes(1);
+  expect(session.newDocument).toHaveBeenCalledTimes(1);
 
   // Activate is one of them and is wired to its own owner rather than to Save.
   const activate = buttons.find(
@@ -1369,98 +1252,40 @@ function groupsOf(
   ];
 }
 
-it("prints the chord on the menu rows the shortcut table binds", async () => {
+it("runs each File function from its toolbar button", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
-  // Open it, assert, and close it — do not add a second one. Read straight
-  // after the gesture, as the View and Insert tests do, so the assertion names
-  // the menu this click opened rather than whichever poll settles first.
-  menubarEntry(root, uiCopy.menus.file).click();
+  const session = facade();
+  layout.setBridge(bridgeStub({ session }), undefined);
   await Promise.resolve();
-  // `openPopup()` reads the open menu rather than the bare class: the display
-  // switch's popup is kept mounted and closed, so the class alone is not
-  // necessarily the menu an author has open.
-  const popup = openPopup();
-  // The first `kbd` is New theme's, and the assertion is against
-  // `shortcutLabel` rather than a literal so it reads the same chord the row
-  // does.
-  expect(popup.querySelector("kbd")?.textContent).toBe(
-    shortcutLabel("file.new"),
-  );
 
-  // **And it re-reads the live table.** Review Focus 3 on this surface: a menu
-  // row that held a render-time copy would keep printing the chord the author
-  // replaced, so the mark would name a key that runs something else. The rebind
-  // is written the way the shell writes it — resolve first, then publish — and
-  // asserted on the same open menu rather than by opening a second one, which
-  // would be a second gesture for the same fact.
-  const moved: ShortcutBinding = {
-    key: "j",
-    modifier: true,
-    shift: false,
-    action: "file.new",
+  const press = async (
+    label: string,
+    reached: keyof EditorActionFacade,
+  ): Promise<void> => {
+    await act(async () => toolbarButton(root, label).click());
+    expect(session[reached], label).toHaveBeenCalledTimes(1);
   };
-  act(() => {
-    setActiveShortcuts(resolveShortcuts({ "file.new": moved }));
-  });
-  expect(openPopup().querySelector("kbd")?.textContent).toBe("Ctrl+J");
+
+  // Each row reaches its own owner rather than a neighbour's: a toolbar that
+  // wired two rows to one call would pass a count taken from only one of them.
+  await press(uiCopy.file.newDocument, "newDocument");
+  await press(uiCopy.file.newFromTemplate, "newFromStarter");
+  await press(uiCopy.file.openRecent, "openRecent");
+  await press(uiCopy.file.exportWidget, "exportWidget");
+  expect(session.importPackage, "Export reached Import").not.toHaveBeenCalled();
 
   layout.destroy();
 });
 
-it("teaches a File row exactly the chord whose id runs the call that row runs", async () => {
+/** The finder's own entry: a File function, because it is editor-level rather
+ *  than an action on one theme document. */
+it("opens the finder from its File button", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
-  menubarEntry(root, uiCopy.menus.file).click();
+  await act(async () => toolbarButton(root, uiCopy.file.findAssets).click());
   await Promise.resolve();
 
-  // Each row's own id, and the pairing is the ruled one (vg-185): a chord is
-  // taught where the `PRODUCT_SHORTCUTS` id reaches the same call the row
-  // reaches — `file.new` and `newDocument` at `#document.newDocument()`, and
-  // `file.findAssets` at the finder's own opener. The toolbar's Save and
-  // Import theme carry the other two; `newFromTemplate` and `openRecent` stay
-  // chordless because the table binds nothing for them, not because a row
-  // cannot have one. The menu does not pair a chord by eye, which is how a
-  // menu starts teaching a key that runs something else.
-  const keyed = new Map<string, ProductShortcutId | undefined>([
-    [uiCopy.file.newDocument, "file.new"],
-    [uiCopy.file.newFromTemplate, undefined],
-    [uiCopy.file.findAssets, "file.findAssets"],
-    [uiCopy.file.openRecent, undefined],
-    [uiCopy.file.exportWidget, undefined],
-  ]);
-
-  const rows = menuItems();
-  expect(rows.length, "every File row is read").toBe(keyed.size);
-  for (const row of rows) {
-    const text = row.textContent ?? "";
-    const label = [...keyed.keys()].find((candidate) =>
-      text.startsWith(candidate),
-    );
-    if (label === undefined) throw new Error(`No File row for "${text}".`);
-    const id = keyed.get(label);
-    expect(row.querySelector("kbd")?.textContent ?? undefined, label).toBe(
-      id === undefined ? undefined : shortcutLabel(id),
-    );
-  }
-
-  layout.destroy();
-});
-
-/** The finder's own entry: a File row, because it is editor-level rather than
- *  an action on one theme document. */
-it("opens the finder from the File menu", async () => {
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  await act(async () => menubarEntry(root, uiCopy.menus.file).click());
-  await Promise.resolve();
-
-  const finderRow = menuItems().find((row) =>
-    (row.textContent ?? "").startsWith(uiCopy.file.findAssets),
-  );
-  if (finderRow === undefined) throw new Error("No Find assets row.");
-
-  await act(async () => finderRow.click());
   // The finder is portalled to `body`, so the root subtree cannot answer it.
   expect(
     document.querySelector('[role="dialog"][aria-label="Assets"]'),
@@ -1508,21 +1333,15 @@ it("runs the import from the toolbar button, and nothing else", async () => {
 
 /** The two library rows the top bar owes, each its own entry rather than a
  *  modifier of Open or Save, which is the ruling (`#35`): **Open recent** is a
- *  File row, and **Save as** is a toolbar button. */
-it("runs Open recent from its File row", async () => {
+ *  File button, and **Save as** is a toolbar button. */
+it("runs Open recent from its File button", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const session = facade();
   layout.setBridge(bridgeStub({ session }), undefined);
   await Promise.resolve();
 
-  await act(async () => menubarEntry(root, uiCopy.menus.file).click());
-  await Promise.resolve();
-  const row = menuItems().find((item) =>
-    (item.textContent ?? "").startsWith(uiCopy.file.openRecent),
-  );
-  if (row === undefined) throw new Error("No Open recent row.");
-  await act(async () => row.click());
+  await act(async () => toolbarButton(root, uiCopy.file.openRecent).click());
 
   expect(session.openRecent).toHaveBeenCalledTimes(1);
   expect(session.saveAs).not.toHaveBeenCalled();
@@ -1826,17 +1645,15 @@ it("draws the editor's own header actions only in editor mode", async () => {
   );
 
   const actions = (): {
-    menus: number;
     toolbar: number;
     publish: boolean;
   } => ({
-    menus: root.querySelectorAll(".editor-shell-menubar button").length,
     toolbar: root.querySelectorAll("[data-yunari-theme-toolbar] button").length,
     publish: root.querySelector("[data-yunari-publish]") !== null,
   });
   const editorActions = {
-    menus: 2,
-    toolbar: THEME_TOOLBAR_ACTIONS.length,
+    // File's five functions, the document's six actions and the view toggle.
+    toolbar: THEME_TOOLBAR_ACTIONS.length + 6,
     publish: true,
   };
 
@@ -1846,14 +1663,12 @@ it("draws the editor's own header actions only in editor mode", async () => {
 
   await act(async () => modeSegments(root)[0]?.click());
   expect(actions(), "themes mode still draws the editor's actions").toEqual({
-    menus: 0,
     toolbar: 0,
     publish: false,
   });
 
   await act(async () => modeSegments(root)[2]?.click());
   expect(actions(), "host mode still draws the editor's actions").toEqual({
-    menus: 0,
     toolbar: 0,
     publish: false,
   });

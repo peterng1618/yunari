@@ -37,8 +37,8 @@ export function registerSessionShortcuts(deps: {
     // row, with no chord.
     void document.saveLibrary();
   });
-  // The File menu's row carries this chord, and the row reads *Import
-  // package*: the chord does what the control it is printed beside does.
+  // The File row carries this chord, and the row reads *Import package*: the
+  // chord does what the control it is printed beside does.
   shortcuts.register("file.open", () => {
     options.onImportPackage?.();
   });

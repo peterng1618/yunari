@@ -950,7 +950,7 @@ function StoreRegion(props: {
             ? {
                 assign: (
                   <AssignChoice
-                    item={openItem}
+                    themeId={openItem.id}
                     client={client}
                     // The page stays: a landed assignment is read beside the
                     // choice that made it.
@@ -966,8 +966,12 @@ function StoreRegion(props: {
 
       {assignItem === undefined || inlineAssign ? null : (
         <AssignDisplay
-          item={assignItem}
+          themeId={assignItem.id}
           client={client}
+          pairNew={{
+            url: () => client.pairingUrl?.() ?? Promise.resolve(undefined),
+            unavailable: uiCopy.publish.pairUnavailable,
+          }}
           onClose={() => setAssignId(undefined)}
         />
       )}

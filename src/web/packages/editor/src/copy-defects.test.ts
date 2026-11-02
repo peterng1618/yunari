@@ -309,11 +309,10 @@ it("states a missing reading as a gap rather than a zero or a dash", async () =>
  * `publish-indicator.dom.test.tsx`). The diagnostics pair leads its message,
  * asserted by `diagnostic-message.dom.test.tsx`.
  *
- * **One reading, proven.** The View menu carries `dataSource`, and the chart
+ * **One reading, proven.** The View toggle carries `dataSource`, and the chart
  * rate row is gone with the setting itself. `shell-layout.dom.test.tsx`
- * opens the submenu, picks the other value and asserts the owner was called, so
- * this case does not open the menu again
- * (50–90s per jsdom open, `vg-135`). The value-runs setting is gone: a value
+ * presses the toggle, asserts the owner was called and presses it back, so this
+ * case does not drive the control again. The value-runs setting is gone: a value
  * run's token is the editing view and has no standing mode.
  */
 it("maps the publish surface's capability strings to controls that can run them", async () => {

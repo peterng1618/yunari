@@ -1,6 +1,10 @@
 import type { Binding, PlanTextSegment, TextRun } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
-import { runPlaceholder, toAuthoringSegments } from "./run-placeholder.js";
+import {
+  runPlaceholder,
+  runsFromAuthoringText,
+  toAuthoringSegments,
+} from "./run-placeholder.js";
 
 const bindings: readonly Binding[] = [
   { id: "cpu", semanticKey: "cpu.load" },
@@ -88,5 +92,51 @@ describe("authoring segments", () => {
 
     expect(shown[1]?.text).toContain("@cpu.load");
     expect(shown[1]?.text).toContain("unmapped");
+  });
+});
+
+describe("runs from a typed authoring display", () => {
+  it("keeps a token and makes the text after it a new prose run", () => {
+    const runs = runsFromAuthoringText(
+      "CPU @cpu.load 12%",
+      [literal("CPU "), value("cpu")],
+      bindings,
+    );
+
+    expect(runs).toEqual([literal("CPU "), value("cpu"), literal(" 12%")]);
+  });
+
+  it("keeps two tokens apart, including one the other's key prefixes", () => {
+    const both: readonly Binding[] = [
+      { id: "cpu", semanticKey: "cpu.load" },
+      { id: "cpuMax", semanticKey: "cpu.load.max" },
+    ];
+    const runs = runsFromAuthoringText(
+      "@cpu.load.max/@cpu.load",
+      [value("cpuMax"), literal("/"), value("cpu")],
+      both,
+    );
+
+    expect(runs).toEqual([value("cpuMax"), literal("/"), value("cpu")]);
+  });
+
+  it("turns a token the author altered into prose", () => {
+    const runs = runsFromAuthoringText(
+      "CPU @cpu.lod",
+      [literal("CPU "), value("cpu")],
+      bindings,
+    );
+
+    expect(runs).toEqual([literal("CPU @cpu.lod")]);
+  });
+
+  it("eats the unmapped marker instead of writing it as prose", () => {
+    const runs = runsFromAuthoringText(
+      "CPU @cpu.load (unmapped) 12%",
+      [literal("CPU "), value("cpu")],
+      bindings,
+    );
+
+    expect(runs).toEqual([literal("CPU "), value("cpu"), literal(" 12%")]);
   });
 });

@@ -336,7 +336,7 @@ describe("EditorSession", () => {
       onSaved,
     });
 
-    // The File menu owns these now; the panel section is gone.
+    // The header toolbar owns these now; the panel section is gone.
     expect(
       document.body.querySelector("[data-yunari-file-actions]"),
     ).toBeNull();

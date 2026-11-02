@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { SemanticKeyDescriptor, TextRun } from "@yunari/renderer-core";
 import { applyAuthoredText, YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
-import { Canvas, IText, Textbox } from "fabric/es";
+import { Canvas, IText, Rect, Textbox } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveRuntime } from "../live-runtime.js";
 import {
@@ -73,6 +73,15 @@ function withAuthoringView(
     object.set("text", TOKEN);
   });
   return text;
+}
+
+/** The session's run write: it owns the node's bindings, so the manager only
+ *  hands it the flat string Fabric left behind. */
+function withSettle(
+  text: ReturnType<typeof createTextManager>,
+  settle: (object: IText, flat: string) => boolean,
+): void {
+  text.setMentions({ descriptors: () => [], insert: () => false, settle });
 }
 
 describe("TextManager", () => {
@@ -310,11 +319,30 @@ describe.each([
     text.destroy();
   });
 
-  it("writes what was typed back as the object's authored run", () => {
+  it("opens the authored box's clip while the author types", () => {
+    // The box clips overflow on the frame, but words the author has not laid
+    // out yet would vanish at the box edge. The clip belongs to the display,
+    // not to the edit.
+    const object = reading();
+    const canvas = scene(object);
+    // The clip the authored pass installs on a boxed text.
+    object.clipPath = new Rect({ width: 180, height: 72 });
+
+    const text = createTextManager(canvas, vi.fn());
+    canvas.fire("mouse:dblclick", { target: object } as never);
+
+    expect(object.isEditing).toBe(true);
+    expect(object.clipPath).toBeUndefined();
+    text.destroy();
+  });
+
+  it("hands what was typed to the session's run write and saves once", () => {
     const object = reading();
     const canvas = scene(object);
     const save = vi.fn();
+    const settle = vi.fn(() => true);
     const text = withAuthoringView(canvas, save);
+    withSettle(text, settle);
     canvas.setActiveObject(object);
     canvas.fire("mouse:dblclick", { target: object } as never);
 
@@ -323,18 +351,29 @@ describe.each([
     object.set("text", "MEM 16.0 GB");
     object.exitEditing();
 
-    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
-      runs: Readonly<Record<string, unknown>>[];
-    };
-    // The value run became what the author typed, and kept its type preset.
-    expect(authored.runs).toHaveLength(1);
-    expect(authored.runs[0]).toMatchObject({
-      kind: "literal",
-      text: "MEM 16.0 GB",
-      typeToken: "typeTokens.60-600",
-    });
+    // The manager reads Fabric's flat string; the session maps it back to runs.
+    expect(settle).toHaveBeenCalledWith(object, "MEM 16.0 GB");
     // One commit for one edit, whichever route entered editing.
     expect(save).toHaveBeenCalledOnce();
+    text.destroy();
+  });
+
+  it("still saves when the run write mapped no token", () => {
+    // Typing an `@` beside a value run leaves the authoring token in Fabric's
+    // flat string. Whether that token survives as a value run is the session's
+    // decision; the manager only has to hand it the string exactly once.
+    const object = reading();
+    const canvas = scene(object);
+    const settle = vi.fn(() => true);
+    const text = withAuthoringView(canvas, vi.fn());
+    withSettle(text, settle);
+    canvas.setActiveObject(object);
+    canvas.fire("mouse:dblclick", { target: object } as never);
+
+    object.set("text", `${TOKEN} @ram`);
+    object.exitEditing();
+
+    expect(settle).toHaveBeenCalledWith(object, `${TOKEN} @ram`);
     text.destroy();
   });
 
@@ -348,6 +387,7 @@ describe.each([
     const canvas = scene(object);
     const save = vi.fn();
     const text = withAuthoringView(canvas, save);
+    withSettle(text, () => true);
     canvas.setActiveObject(object);
     canvas.fire("mouse:dblclick", { target: object } as never);
     save.mockClear();
@@ -355,10 +395,6 @@ describe.each([
     object.set("text", "MEM 61");
     object.exitEditing();
 
-    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
-      runs: Readonly<Record<string, unknown>>[];
-    };
-    expect(authored.runs[0]).toMatchObject({ kind: "literal", text: "MEM 61" });
     expect(save).toHaveBeenCalledOnce();
     text.destroy();
   });
@@ -381,6 +417,18 @@ describe.each([
       text: "New text",
       ...(Class === Textbox ? { box: { width: 200, height: 80 } } : {}),
       yunariText: { runs: [{ kind: "literal", text: "New text" }] },
+    });
+    // The session's run write for a text that names no binding: the flat string
+    // becomes its one prose run.
+    manager.setMentions({
+      descriptors: () => [],
+      insert: () => false,
+      settle: (object, flat) => {
+        object.set(YUNARI_TEXT_PROPERTY, {
+          runs: [{ kind: "literal", text: flat }],
+        });
+        return true;
+      },
     });
     return { canvas, manager, text };
   }
@@ -544,9 +592,9 @@ describe("a width the author dragged", () => {
 
 describe("typing over an object that carries more than one run", () => {
   /**
-   * A value and its unit: the shape a card is built from, and the shape Fabric
-   * cannot edit. It hands back one flat string and no way to say which run each
-   * character came from, so the only write available would drop the siblings.
+   * A value and its unit: the shape a card is built from. Fabric hands back one
+   * flat string, so the session's run write is the only side that can decide
+   * which of those runs survived.
    */
   function twoRuns(): Textbox {
     const object = new Textbox("42%", { id: "cpu-value", left: 40, top: 30 });
@@ -559,12 +607,12 @@ describe("typing over an object that carries more than one run", () => {
     return object;
   }
 
-  it("keeps both runs and says why, rather than flattening the object", () => {
+  it("hands the whole flat string to the run write rather than flattening it", () => {
     const object = twoRuns();
     const canvas = scene(object);
-    const save = vi.fn();
-    const warn = vi.fn();
-    const text = createTextManager(canvas, save, warn);
+    const settle = vi.fn(() => true);
+    const text = createTextManager(canvas, vi.fn());
+    withSettle(text, settle);
     let repainted = 0;
     text.setRepaint(() => {
       repainted += 1;
@@ -575,14 +623,8 @@ describe("typing over an object that carries more than one run", () => {
     object.set("text", "typed over");
     object.exitEditing();
 
-    const authored = object.get(YUNARI_TEXT_PROPERTY) as {
-      runs: readonly { kind: string }[];
-    };
-    expect(authored.runs).toHaveLength(2);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("more than one run"),
-    );
-    // The canvas must not be left standing on text the document does not hold.
+    expect(settle).toHaveBeenCalledWith(object, "typed over");
+    // The repaint is still this side's: it restores the view after the edit.
     expect(repainted).toBe(1);
     text.destroy();
   });
@@ -1272,6 +1314,7 @@ describe("inline reading insert", () => {
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert,
+      settle: () => true,
     });
     const textarea = edit(text);
 
@@ -1303,6 +1346,7 @@ describe("inline reading insert", () => {
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert,
+      settle: () => true,
     });
     const textarea = edit(text);
 
@@ -1325,6 +1369,7 @@ describe("inline reading insert", () => {
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert,
+      settle: () => true,
     });
     const textarea = edit(text);
 
@@ -1342,6 +1387,7 @@ describe("inline reading insert", () => {
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert,
+      settle: () => true,
     });
     const textarea = edit(text);
 
@@ -1359,6 +1405,7 @@ describe("inline reading insert", () => {
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert: vi.fn(() => true),
+      settle: () => true,
     });
     const textarea = edit(text);
 
@@ -1369,21 +1416,17 @@ describe("inline reading insert", () => {
     expect(options()).toEqual([]);
   });
 
-  it("does not open for content a split cannot map", () => {
+  it("opens for content that already carries several runs", () => {
     const { canvas, text } = authored([PLAIN, PLAIN]);
     createTextManager(canvas, vi.fn()).setMentions({
       descriptors: () => [RAM, GPU],
       insert: vi.fn(() => true),
+      settle: () => true,
     });
     const textarea = edit(text);
 
-    createTextManager(canvas, vi.fn()).setMentions({
-      descriptors: () => [RAM, GPU],
-      insert: vi.fn(() => true),
-    });
-
     type(textarea, "Hi @");
     type(textarea, "Hi @ra");
-    expect(options()).toEqual([]);
+    expect(options().map((row) => row.textContent)).toEqual(["RAM used"]);
   });
 });

@@ -931,26 +931,17 @@ body,
   flex-direction: column;
   background: var(--panel);
 }
-/* The publish facts, in the popover the one button opens. A column, because it
-   stacks a sentence, a line of code and a code symbol — and what keeps the
-   header itself one row that never grows with the LAN. `--elev-2` is the row
-   for menus and popovers, which is the menu popup's own lift too, so the two
-   portalled surfaces float the same way. */
-.editor-shell-publish-popup {
+/* The publish facts, in the assign dialog the one button opens. A column,
+   because it stacks the display choice, a sentence, a line of code and a code
+   symbol — and what keeps the header itself one row that never grows with the
+   LAN. The dialog owns the surface and elevation; this only stacks its rows. */
+.editor-shell-publish-dialog {
   display: flex;
   flex-direction: column;
   gap: 8px;
   /* **Never wider than the window it opened in.** `34ch` is the reading width;
-     a narrow window is the harder limit, because the surface anchors to a
-     trigger the header can push past the right edge (the row does not fit
-     at 390px), and a popup wider than the window is one nobody can read. */
-  max-width: min(34ch, calc(100vw - 16px));
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--shell-edge);
-  background: var(--shell-surface);
-  color: var(--shell-text);
-  box-shadow: var(--elev-2);
+     a narrow window is the harder limit. */
+  max-width: min(34ch, calc(100vw - 32px));
 }
 .editor-shell-publish-label {
   color: var(--shell-muted);
@@ -1014,44 +1005,28 @@ body,
 /* Only the box is themed. The symbols keep the fixed ink and paper Task 2.2
    gives them, because a code drawn in the shell's own foreground inverts under
    the dark palettes and stops scanning. */
-.editor-shell-publish-popup svg {
+.editor-shell-publish-dialog svg {
   flex: none;
   border-radius: 4px;
 }
-.editor-shell-menubar {
-  display: flex;
-  gap: 4px;
-}
-/* The theme toolbar: the open document's actions as the design's 26px icon
-   buttons. It is a sibling of the menus rather than rows inside them, so a
-   press is one gesture and the glyph-only hover rule is `ControlIconButton`'s
-   own. The 4px gap is the menubar's, because the two regions read as one row. */
+/* The header toolbar: the open document's actions as the design's 26px icon
+   buttons. File's commands, the document's own actions and the view setting
+   are one row, so a press is one gesture and the glyph-only hover rule is
+   `ControlIconButton`'s own. */
 .editor-shell-toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-4);
 }
-.editor-shell-menubar button {
-  color: var(--shell-text);
-  border: 0;
-  background: transparent;
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.editor-shell-menubar button:hover,
-.editor-shell-menubar button[data-popup-open] {
-  background: color-mix(in srgb, var(--shell-text) 10%, transparent);
-}
-/* File and View are glyph controls: the 26px icon square the theme toolbar
-   beside them uses, so the row reads as one toolbar rather than two idioms. */
-.editor-shell-menubar button.editor-shell-menubar-icon {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+/* A short rule between command groups. Height rather than padding: it should
+   read as a divider at the glyph's cap height, not as a taller column that
+   re-centres the row. */
+.editor-shell-toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin-inline: var(--space-2);
+  background: var(--shell-edge);
 }
 /* Base UI portals the popup to `body` and sets `position` inline, so this rule
    contributes the stacking context the popup needs: without it the stage — a
@@ -3190,15 +3165,14 @@ body,
    `--breakpoint-compact` at build time. */
 @media (max-width: theme(--breakpoint-compact)) {
   /* **The compact header keeps the mode switch and the publish control.** The
-     brand, the menubar and the theme toolbar are the three regions that stand
-     down: together with the switch and the publish control they measure more
-     than the glass, while the switch alone plus publish fit. The menubar's and
-     toolbar's actions stay on their shortcuts, and the header is not where a
-     phone-width author edits a document's menus. The row does not wrap: the
-     publish control is the editor's one filled accent button and belongs at
+     brand and the toolbar are the two regions that stand down: together with
+     the switch and the publish control they measure more than the glass, while
+     the switch alone plus publish fit. The toolbar's actions stay on their
+     shortcuts, and the header is not where a phone-width author edits a
+     document's commands. The row does not wrap: the publish control is the
+     editor's one filled accent button and belongs at
      the right edge. */
   .editor-shell-header strong,
-  .editor-shell-menubar,
   .editor-shell-toolbar {
     display: none;
   }

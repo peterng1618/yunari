@@ -1,4 +1,5 @@
 import type { Binding, PlanTextSegment, TextRun } from "@yunari/renderer-core";
+import { lookOfRun } from "./selection-inspector/authored-text.js";
 
 /**
  * What a value run shows while an author is working, instead of a sample.
@@ -64,5 +65,104 @@ export function toAuthoringSegments(
       segment.status === undefined ? undefined : "unmapped";
 
     return { ...segment, text: runPlaceholder(run, bindings, problem) };
+  });
+}
+
+/** One run's authoring display, and the diagnostic spellings that may follow it. */
+interface TokenSource {
+  readonly run: TextRun;
+  readonly tokens: readonly string[];
+}
+
+/**
+ * The authored runs a flat authoring display stands for, which is the inverse
+ * of `toAuthoringSegments`.
+ *
+ * Fabric hands back one string and no per-character run offsets, so the run
+ * boundaries are recovered from the tokens the view painted. A value run's
+ * `@semanticKey` survives the edit and keeps its binding; text typed between
+ * tokens — including after a token and a space — becomes a literal run. A token
+ * the author deleted or altered no longer matches and becomes prose, which is
+ * what makes its binding go with it.
+ *
+ * The diagnostic suffixes the view adds (`(unmapped)`, `(id: undeclared)`) are
+ * matched as part of the token so they cannot be baked into the theme as prose.
+ * The longest match wins, so a key that is a prefix of another cannot split it.
+ */
+export function runsFromAuthoringText(
+  text: string,
+  runs: readonly TextRun[],
+  bindings: readonly Binding[],
+): TextRun[] {
+  const sources: TokenSource[] = runs.map((run) =>
+    run.kind === "value"
+      ? {
+          run,
+          tokens: [
+            runPlaceholder(run, bindings),
+            runPlaceholder(run, bindings, "unmapped"),
+          ],
+        }
+      : { run, tokens: [] },
+  );
+
+  const used = new Set<number>();
+  const parts: { readonly text: string; readonly value?: TextRun }[] = [];
+  let literalStart = 0;
+  let at = 0;
+
+  while (at < text.length) {
+    let found = -1;
+    let token = "";
+    for (let index = 0; index < sources.length; index += 1) {
+      if (used.has(index)) continue;
+      for (const candidate of sources[index]?.tokens ?? []) {
+        if (
+          candidate.length <= token.length ||
+          !text.startsWith(candidate, at)
+        ) {
+          continue;
+        }
+        found = index;
+        token = candidate;
+      }
+    }
+
+    if (found < 0) {
+      at += 1;
+      continue;
+    }
+
+    const source = sources[found];
+    if (source === undefined) {
+      at += 1;
+      continue;
+    }
+    if (at > literalStart) parts.push({ text: text.slice(literalStart, at) });
+    parts.push({ text: token, value: source.run });
+    used.add(found);
+    at += token.length;
+    literalStart = at;
+  }
+  if (literalStart < text.length)
+    parts.push({ text: text.slice(literalStart) });
+
+  return parts.map((part, index) => {
+    if (part.value !== undefined) return part.value;
+    // Prose adopts the run it was typed beside: the token before it, else the
+    // next token, else the text's own first run.
+    const neighbour =
+      parts[index - 1]?.value ??
+      parts.find(
+        (candidate, at2) => at2 > index && candidate.value !== undefined,
+      )?.value ??
+      runs[0];
+    return {
+      kind: "literal",
+      text: part.text,
+      ...(neighbour === undefined
+        ? { typeToken: "typeTokens.body" as const }
+        : lookOfRun(neighbour)),
+    };
   });
 }

@@ -157,21 +157,32 @@ export function spokenIn(element: Element): string[] {
     out.push(
       named.hasAttribute("data-yunari-zoom")
         ? name.replace(/: \d+(?:\.\d+)?%$/, "")
-        : named.hasAttribute("data-yunari-subject-name")
-          ? // The heading's label is the rename concept and then the object's
-            // own name, which is data of the same kind as a palette's. Only the
-            // concept is read, so it still has to be a word the table holds.
-            name.startsWith(`${uiCopy.panels.rename} `)
-            ? uiCopy.panels.rename
-            : name
-          : named.hasAttribute("data-yunari-qr")
-            ? // The code's label is the concept and then the address it encodes,
-              // which is a reading: the address is dropped by its own shape, and
-              // what is left is compared against the sentence the table composes
-              // around an empty value — so a rename in the table still reaches
-              // this label, and the address never has to have an owner.
-              name.replace(/\S+$/, "")
-            : name,
+        : named.hasAttribute("data-yunari-source")
+          ? // The source toggle's name is the concept and then which of the
+            // two readings is showing. The concept is a word this table owns;
+            // the value is one of two entries beside it, and both are already
+            // owned, so only the concept is read here.
+            uiCopy.view.dataSource
+          : named.hasAttribute("data-yunari-subject-name")
+            ? // The heading's label is the rename concept and then the object's
+              // own name, which is data of the same kind as a palette's. Only the
+              // concept is read, so it still has to be a word the table holds.
+              name.startsWith(`${uiCopy.panels.rename} `)
+              ? uiCopy.panels.rename
+              : name
+            : named.hasAttribute("data-yunari-run-tab")
+              ? // A run summary's name is the run concept and then what the run
+                // prints — its prose or the key it reads. The concept is a word
+                // this table owns; the summary is data, like a palette's name.
+                name.replace(/: .*$/, "")
+              : named.hasAttribute("data-yunari-qr")
+                ? // The code's label is the concept and then the address it encodes,
+                  // which is a reading: the address is dropped by its own shape, and
+                  // what is left is compared against the sentence the table composes
+                  // around an empty value — so a rename in the table still reaches
+                  // this label, and the address never has to have an owner.
+                  name.replace(/\S+$/, "")
+                : name,
     );
   }
   for (const button of element.querySelectorAll("button")) {
@@ -210,6 +221,8 @@ export function spokenIn(element: Element): string[] {
     // The readout's trigger prints the reading alone, so the button half has no
     // words of its own; the concept above is where its name is read.
     if (button.hasAttribute("data-yunari-zoom")) continue;
+    // The source toggle's own text is the value alone for the same reason.
+    if (button.hasAttribute("data-yunari-source")) continue;
     out.push(spokenText(button).trim());
   }
   // A heading and a definition term carry a surface's own words the way a

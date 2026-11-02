@@ -1065,50 +1065,6 @@ test.describe("Fabric editor route", () => {
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
   });
 
-  test("anchors a menubar menu to its trigger rather than to its centre", async ({
-    page,
-  }, testInfo) => {
-    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-    await page.goto(EDITOR);
-    await expect(page.locator("#status-message")).toHaveText("Editor ready");
-
-    const trigger = page.getByRole("button", { name: "View", exact: true });
-    await trigger.click();
-
-    // **Base UI centres a positioned popup on its trigger unless it is told
-    // otherwise**, which floated the menu over the middle of its own label.
-    // Measured on a built bundle with the anchor removed: the popup's left edge
-    // sat at 67.2 against a trigger at 162.1 — a 94.9px offset, which is the
-    // centring formula to the pixel. A menu belongs at the trigger's start
-    // edge, the idiom `components/ui/colour-picker.tsx` already uses. jsdom has
-    // no layout, so this is only assertable in the browser that paints it.
-    const triggerBox = await trigger.boundingBox();
-    const menuBox = await page
-      .locator('[role="menu"]:visible')
-      .first()
-      .boundingBox();
-    if (!triggerBox || !menuBox) throw new Error("the View menu did not open");
-    expect(Math.abs(menuBox.x - triggerBox.x)).toBeLessThanOrEqual(1);
-
-    // The View menu's settings are submenus and take the same rule: beside the
-    // item and lined up with its top, rather than centred on it.
-    const submenuTrigger = page
-      .getByRole("menuitem", { name: /Readings from: The theme's sensors/ })
-      .first();
-    await submenuTrigger.click();
-    const submenuBox = await page
-      .locator('[role="menu"]:visible')
-      .filter({
-        has: page.getByRole("menuitemradio", { name: "This machine" }),
-      })
-      .boundingBox();
-    const itemBox = await submenuTrigger.boundingBox();
-    if (!itemBox || !submenuBox)
-      throw new Error("the View submenu did not open");
-    expect(Math.abs(submenuBox.y - itemBox.y)).toBeLessThanOrEqual(1);
-  });
-
   test("creates and saves text with derived v2 references", async ({
     page,
   }, testInfo) => {
@@ -1751,16 +1707,16 @@ test.describe("Fabric editor route", () => {
     // this reads 0s either way and would pass with that selector deleted; with
     // it, only the media block can produce the 0s below.
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.getByRole("button", { name: "View", exact: true }).click();
-    // The zoom readout's popup stays mounted (`keepMounted`), so two popups are
-    // in the DOM; only the open View menu's is visible.
+    await page.locator("[data-yunari-zoom]").click();
+    // The zoom readout's popup stays mounted (`keepMounted`), so the class is
+    // not necessarily the menu an author has open; `:visible` is.
     const popup = page.locator(".editor-shell-menu-popup:visible");
     await expect(popup).toBeVisible();
-    // Anchored to the View popup's own item, not merely to "a visible popup": the
-    // zoom menu also satisfies `:visible`, so a popup-agnostic locator would let
-    // the positive control pass while measuring the wrong menu.
+    // Anchored to this popup's own item, not merely to "a visible popup": the
+    // display switch also satisfies `:visible`, so a popup-agnostic locator
+    // would let the positive control pass while measuring the wrong menu.
     await expect(
-      popup.getByRole("menuitem", { name: /Readings from/ }),
+      popup.getByRole("menuitemradio", { name: "Fit" }),
     ).toBeVisible();
     await expect.poll(() => injectedTransition(popup)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1772,7 +1728,7 @@ test.describe("Fabric editor route", () => {
     // line is its only suppression. Without this assertion, adding a transition
     // to a menu row and deleting the `*` lines leaves the suite green under
     // `reduce`.
-    const menuItem = popup.getByRole("menuitem", { name: /Readings from/ });
+    const menuItem = popup.getByRole("menuitemradio", { name: "Fit" });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await expect.poll(() => injectedTransition(menuItem)).toBe("0.2s");
     await page.emulateMedia({ reducedMotion: "reduce" });

@@ -67,7 +67,11 @@ import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
-import { insertReading } from "./selection-inspector/run-edits.js";
+import {
+  insertReading,
+  type RunTarget,
+  writeTypedText,
+} from "./selection-inspector/run-edits.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
 import {
@@ -167,8 +171,7 @@ export class EditorSession {
       );
     }
 
-    // The File menu dispatches these through `actionFacade`; the section that
-    // used to hold the buttons is gone.
+    // The header toolbar dispatches these through `actionFacade`.
     this.#snapping = createSnapManager({
       canvas: options.shell.editor.canvas,
       bounds: () => {
@@ -475,21 +478,25 @@ export class EditorSession {
     options.shell.editor.textManager.setRepaint(() => this.#runtime.refresh());
     // An inline `@` names a reading. The run write is the document's, because
     // it owns the node's bindings, and the readings offered are the catalogue's.
+    const runTarget = (object: RunTarget["object"]): RunTarget | undefined => {
+      const nodeId = object.get("id");
+      if (typeof nodeId !== "string" || nodeId === "") return undefined;
+      return {
+        object,
+        nodeId,
+        bindings: () => this.#document.envelope.bindings?.[nodeId] ?? [],
+        setBindings: (next) => this.#document.setBindings(nodeId, next),
+      };
+    };
     options.shell.editor.textManager.setMentions({
       descriptors,
       insert: (object, range) => {
-        const nodeId = object.get("id");
-        if (typeof nodeId !== "string" || nodeId === "") return false;
-
-        return insertReading(
-          {
-            object,
-            nodeId,
-            bindings: () => this.#document.envelope.bindings?.[nodeId] ?? [],
-            setBindings: (next) => this.#document.setBindings(nodeId, next),
-          },
-          range,
-        );
+        const target = runTarget(object);
+        return target === undefined ? false : insertReading(target, range);
+      },
+      settle: (object, text) => {
+        const target = runTarget(object);
+        return target === undefined ? false : writeTypedText(target, text);
       },
     });
     this.#newObjects = createNewObjectPanel(

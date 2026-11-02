@@ -69,8 +69,9 @@ async function saveStarterThroughTheHost(page: Page): Promise<string> {
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: "New from template" }).click();
+  await page
+    .getByRole("button", { name: "New from template", exact: true })
+    .click();
   await expect(page.locator("#status")).toContainText(
     "New theme from the starter",
   );

@@ -66,8 +66,7 @@ test("the dialogs and the inspector's sections paint every palette", async ({
     // Escape. It is a Base UI `Dialog` portalled to the top layer, so it is the
     // one place a shell token can be in force and still not reach the surface
     // drawn from it.
-    await page.getByRole("button", { name: "File", exact: true }).click();
-    await page.getByRole("menuitem", { name: "New theme" }).click();
+    await page.getByRole("button", { name: "New theme", exact: true }).click();
     const dialog = page.locator('[role="dialog"]', {
       hasText: "Choose an artboard size",
     });

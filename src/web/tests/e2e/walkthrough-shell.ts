@@ -141,16 +141,14 @@ export async function selectInComposition(
   return id;
 }
 
-/** Copy a spec names as literals — the File menu, the row this walk creates its
+/** Copy a spec names as literals — the toolbar row this walk creates its
  *  document with, and the name that document gives itself. A renamed row or an
  *  upgraded starter reddens here rather than quietly stopping to be about the
  *  document. `STARTER_DOCUMENT_NAME` is the starter's own metadata name, which
  *  is what tells the created document apart from the fixture (`?theme=`). */
-const FILE_MENU_NAME = "File";
 const NEW_FROM_STARTER_ROW = "New from template";
 export const STARTER_DOCUMENT_NAME = "System dashboard";
-/** Bounds for the two searches — the File menu's rows and the rail's slots —
- *  which report a count rather than hang.
+/** Bound for the rail's slot search, which reports a count rather than hangs.
  *
  *  **The rail's is the shell's whole tab order, not a handful of presses.** A
  *  walk that is already on one slot and wants one earlier in the rail crosses
@@ -160,7 +158,6 @@ export const STARTER_DOCUMENT_NAME = "System dashboard";
  *  assembled walk: from the Tokens slot to the Composition slot is 53 presses,
  *  so this takes the census's own whole-walk bound rather than a shorter one
  *  that would read a real route as a missing pane. */
-const FILE_MENU_BOUND = 12;
 const RAIL_BOUND = TAB_BOUND;
 
 /** The Composition row this task's walk selects. It is the starter's own
@@ -209,40 +206,19 @@ const WALKTHROUGH_COMMITS = "__yunariWalkthroughEditCommits";
  *  tell a live attach from one the editor has outlived. */
 const WALKTHROUGH_CANVAS = "__yunariWalkthroughCanvas";
 
-/** Opens the File menu and presses the row whose own text names `row`, with no
+/** Presses the header toolbar's button whose accessible name is `row`, with no
  *  pointer.
  *
- * The route is the menu's own keyboard model, not an invented order: Tab reaches
- * the `File` trigger (the census's own first press), `ArrowDown` opens a menu on
- * its first row the way a menu button does, `ArrowDown` moves between rows and
- * `Enter` activates the row it is on. Which row is answered by its own name, so
- * no press count is baked in, and the bound reports one rather than hanging.
- *
- * Shared by the two File-menu routes the walk makes — creating its document and
- * returning to the one it booted on — because they differ in the row they name
- * and in nothing else. */
-async function chooseFileMenuRow(page: Page, row: string): Promise<void> {
-  await tabUntil(
-    page,
-    (focus) => focus.tag === "button" && focus.name === FILE_MENU_NAME,
-  );
-  await page.keyboard.press("ArrowDown");
-  for (let press = 0; press < FILE_MENU_BOUND; press++) {
-    const onRow = await page.evaluate(
-      (wanted: string) =>
-        (document.activeElement?.textContent ?? "").includes(wanted),
-      row,
-    );
-    if (onRow) {
-      await page.keyboard.press("Enter");
-      return;
-    }
-    await page.keyboard.press("ArrowDown");
-  }
-  throw new Error(`no menu row naming ${row} in ${FILE_MENU_BOUND} presses`);
+ * The route is the toolbar's own keyboard model: focus lands on the button and
+ * Enter activates it, exactly as the native button does for a keyboard user.
+ * Which row is answered by its own name, so no press count is baked in. */
+async function pressToolbarRow(page: Page, row: string): Promise<void> {
+  const button = page.getByRole("button", { name: row, exact: true });
+  await button.focus();
+  await page.keyboard.press("Enter");
 }
 
-/** Creates a document through the shell's own File menu, with no pointer.
+/** Creates a document through the shell's own header toolbar, with no pointer.
  *
  * **"Create or open" is discharged by creating**, on the row that creates a
  * document **with content**: `New theme` is blank, and a blank document is a
@@ -252,7 +228,7 @@ async function chooseFileMenuRow(page: Page, row: string): Promise<void> {
  * before the next step: the create remounts the shell, and the identity chip can
  * only say the created name once the new shell is wired. */
 export async function openDocumentByKeyboard(page: Page): Promise<void> {
-  await chooseFileMenuRow(page, NEW_FROM_STARTER_ROW);
+  await pressToolbarRow(page, NEW_FROM_STARTER_ROW);
   await expect(
     page.locator(".editor-shell-identity-name"),
     "the created document's own name",
@@ -765,8 +741,7 @@ export async function openLayerRenameField(page: Page): Promise<void> {
  * not the trigger.
  *
  * The trigger is the stage's zoom readout (`display-switch.tsx`), and
- * `ArrowDown` is the menu button's own key for opening itself on its first row,
- * the same gesture `openDocumentByKeyboard` uses on the File menu.
+ * `ArrowDown` is the menu button's own key for opening itself on its first row.
  */
 export async function openPopup(page: Page): Promise<void> {
   await tabToMark(page, { attribute: DISPLAY_TRIGGER });

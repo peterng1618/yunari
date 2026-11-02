@@ -68,7 +68,7 @@ test("opens Settings from the URL", async ({ page }, testInfo) => {
 test("opens the publish surface from the URL", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?publish=1`);
-  await expect(page.locator(".editor-shell-publish-popup")).toBeVisible();
+  await expect(page.locator(".editor-shell-publish-dialog")).toBeVisible();
 });
 
 // Themes mode draws no publish control at all, so this proves the surface is
@@ -78,7 +78,7 @@ test("draws no publish surface in a non-editor mode", async ({
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=themes&publish=1`);
-  await expect(page.locator(".editor-shell-publish-popup")).toHaveCount(0);
+  await expect(page.locator(".editor-shell-publish-dialog")).toHaveCount(0);
 });
 
 test("ignores an unknown mode", async ({ page }, testInfo) => {

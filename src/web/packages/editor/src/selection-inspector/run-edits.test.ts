@@ -2,7 +2,7 @@ import type { Binding, TextRun } from "@yunari/renderer-core";
 import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { RunTarget } from "./run-edits.js";
-import { insertReading, writeRunStyle } from "./run-edits.js";
+import { insertReading, writeRunStyle, writeTypedText } from "./run-edits.js";
 
 /**
  * A run's own size, leading and tracking are style writes, and the boundary is
@@ -19,7 +19,10 @@ const PLAIN: TextRun = {
 };
 
 /** The smallest object a run write needs — `ObjectWithText`'s two accesses. */
-function targetWith(run: TextRun | readonly TextRun[]): {
+function targetWith(
+  run: TextRun | readonly TextRun[],
+  initialBindings: readonly Binding[] = [],
+): {
   readonly target: RunTarget;
   readonly written: () => readonly TextRun[];
   readonly bindings: () => readonly Binding[];
@@ -27,7 +30,7 @@ function targetWith(run: TextRun | readonly TextRun[]): {
   let content: Record<string, unknown> = {
     runs: Array.isArray(run) ? run : [run],
   };
-  let bindings: readonly Binding[] = [];
+  let bindings: readonly Binding[] = initialBindings;
   const object = {
     get: (name: string) =>
       name === YUNARI_TEXT_PROPERTY ? content : undefined,
@@ -191,32 +194,96 @@ describe("inserting a reading inline", () => {
     expect(written().map((run) => run.kind)).toEqual(["value"]);
   });
 
-  it("refuses content a split cannot map, and writes nothing", () => {
-    const multi = targetWith([PLAIN, PLAIN]);
-    expect(
-      insertReading(multi.target, {
-        text: "@ram",
-        start: 0,
-        end: 4,
-        semanticKey: "ram.used.percent",
-      }),
-    ).toBe(false);
-    expect(multi.written()).toHaveLength(2);
-    expect(multi.bindings()).toEqual([]);
-
-    const valued = targetWith({
+  it("keeps the value runs already in the text beside the chosen one", () => {
+    const load: TextRun = {
       kind: "value",
       bindingId: "load",
       typeToken: "typeTokens.body",
-    });
+    };
+    const { target, written, bindings } = targetWith(
+      [
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.body" },
+        load,
+        { kind: "literal", text: " ", typeToken: "typeTokens.body" },
+      ],
+      [{ id: "load", semanticKey: "cpu.load.percent" }],
+    );
+
     expect(
-      insertReading(valued.target, {
-        text: "@ram",
-        start: 0,
-        end: 4,
+      insertReading(target, {
+        text: "CPU @cpu.load.percent @ram",
+        start: 22,
+        end: 26,
         semanticKey: "ram.used.percent",
       }),
-    ).toBe(false);
+    ).toBe(true);
+
+    const next = written();
+    expect(next.map((run) => run.kind)).toEqual([
+      "literal",
+      "value",
+      "literal",
+      "value",
+    ]);
+    // The run already in the text kept its own binding; only the chosen reading
+    // added one.
+    expect(next[1]).toMatchObject({ kind: "value", bindingId: "load" });
+    expect(bindings().map((binding) => binding.semanticKey)).toEqual([
+      "cpu.load.percent",
+      "ram.used.percent",
+    ]);
+    expect(next[3]).toMatchObject({
+      kind: "value",
+      bindingId: bindings()[1]?.id,
+    });
+  });
+
+  it("keeps a surviving token and types after it as a prose run", () => {
+    const { target, written, bindings } = targetWith(
+      [
+        { kind: "literal", text: "CPU ", typeToken: "typeTokens.body" },
+        {
+          kind: "value",
+          bindingId: "load",
+          typeToken: "typeTokens.body",
+        },
+      ],
+      [{ id: "load", semanticKey: "cpu.load.percent" }],
+    );
+
+    expect(writeTypedText(target, "CPU @cpu.load.percent 16%")).toBe(true);
+
+    expect(written()).toEqual([
+      { kind: "literal", text: "CPU ", typeToken: "typeTokens.body" },
+      {
+        kind: "value",
+        bindingId: "load",
+        typeToken: "typeTokens.body",
+      },
+      { kind: "literal", text: " 16%", typeToken: "typeTokens.body" },
+    ]);
+    expect(bindings()).toEqual([
+      { id: "load", semanticKey: "cpu.load.percent" },
+    ]);
+  });
+
+  it("turns a value run into prose when its token is not in the typed text", () => {
+    const { target, written, bindings } = targetWith(
+      [
+        {
+          kind: "value",
+          bindingId: "load",
+          typeToken: "typeTokens.body",
+        },
+      ],
+      [{ id: "load", semanticKey: "cpu.load.percent" }],
+    );
+
+    expect(writeTypedText(target, "@ram")).toBe(true);
+
+    expect(written()).toHaveLength(1);
+    expect(written()[0]).toMatchObject({ kind: "literal", text: "@ram" });
+    expect(bindings()).toEqual([]);
   });
 
   it("refuses a range outside the text and an empty key", () => {

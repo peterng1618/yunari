@@ -156,7 +156,7 @@ describe("the run editor's own state", () => {
   });
 });
 
-describe("showing one run at a time behind numbered tabs", () => {
+describe("showing one run's properties at a time as an accordion", () => {
   const threeRuns: readonly TextRun[] = [
     { kind: "literal", text: "A", typeToken: "typeTokens.plain" },
     { kind: "literal", text: "B", typeToken: "typeTokens.caption" },
@@ -166,7 +166,7 @@ describe("showing one run at a time behind numbered tabs", () => {
   const tab = (box: ReturnType<typeof mountRunEditor>, position: number) =>
     box.pick<HTMLElement>(`[data-yunari-run-tab="${position}"]`);
 
-  it("numbers every run's tab and shows only the selected run's fields", () => {
+  it("numbers every run and summarises it with the text it prints", () => {
     const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
 
     const tabs = [
@@ -175,12 +175,19 @@ describe("showing one run at a time behind numbered tabs", () => {
     expect(
       tabs.map((element) => element.getAttribute("data-yunari-run-tab")),
     ).toEqual(["1", "2"]);
-    // The visible label is the bare number; the name a reader hears is the one
-    // `uiCopy` owns, because "1" alone names no question.
-    expect(tabs.map((element) => element.textContent)).toEqual(["1", "2"]);
+    expect(
+      tabs.map((element) => element.firstElementChild?.textContent),
+    ).toEqual(["1", "2"]);
+    // The summary is what the run says; the number alone names no question.
+    expect(
+      tabs.map(
+        (element) =>
+          element.querySelector("[data-yunari-run-summary]")?.textContent,
+      ),
+    ).toEqual(["CPU", "%"]);
     expect(tabs.map((element) => accessibleName(element))).toEqual([
-      uiCopy.inspectorFields.runTab(1),
-      uiCopy.inspectorFields.runTab(2),
+      `${uiCopy.inspectorFields.runTab(1)}: CPU`,
+      `${uiCopy.inspectorFields.runTab(2)}: %`,
     ]);
 
     expect(box.host.querySelectorAll("[data-yunari-run]")).toHaveLength(1);
@@ -189,13 +196,13 @@ describe("showing one run at a time behind numbered tabs", () => {
     return box.dispose();
   });
 
-  it("shows run 2's fields and hides run 1's when its tab is picked", async () => {
+  it("opens run 2's fields and closes run 1's when its summary is picked", async () => {
     const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
 
     await click(tab(box, 2));
 
-    expect(tab(box, 2).getAttribute("aria-selected")).toBe("true");
-    expect(tab(box, 1).getAttribute("aria-selected")).toBe("false");
+    expect(tab(box, 2).getAttribute("aria-expanded")).toBe("true");
+    expect(tab(box, 1).getAttribute("aria-expanded")).toBe("false");
     expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
     expect(box.pick<HTMLInputElement>('[data-yunari-run-text="1"]').value).toBe(
       "%",
@@ -203,7 +210,7 @@ describe("showing one run at a time behind numbered tabs", () => {
     return box.dispose();
   });
 
-  it("adds a run with the plus and selects the new last run", async () => {
+  it("adds a run with the plus and opens the new last run", async () => {
     const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
 
     await click(box.pick<HTMLElement>("[data-yunari-run-add]"));
@@ -212,7 +219,7 @@ describe("showing one run at a time behind numbered tabs", () => {
     expect(
       box
         .pick<HTMLElement>('[data-yunari-run-tab="3"]')
-        .getAttribute("aria-selected"),
+        .getAttribute("aria-expanded"),
     ).toBe("true");
     expect(box.host.querySelector('[data-yunari-run-text="0"]')).toBeNull();
     expect(box.host.querySelector('[data-yunari-run-text="1"]')).toBeNull();
@@ -222,7 +229,7 @@ describe("showing one run at a time behind numbered tabs", () => {
     return box.dispose();
   });
 
-  it("selects the first remaining run when the selected one is removed", async () => {
+  it("opens the first remaining run when the open one is removed", async () => {
     const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
     await click(tab(box, 2));
 
@@ -230,17 +237,17 @@ describe("showing one run at a time behind numbered tabs", () => {
 
     expect(box.runs()).toHaveLength(2);
     expect(box.host.querySelectorAll("[data-yunari-run-tab]")).toHaveLength(2);
-    expect(tab(box, 1).getAttribute("aria-selected")).toBe("true");
+    expect(tab(box, 1).getAttribute("aria-expanded")).toBe("true");
     expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
       "A",
     );
     return box.dispose();
   });
 
-  it("selects the first run when the added last run is removed", async () => {
+  it("opens the first run when the added last run is removed", async () => {
     // `+` leaves the previously selected id behind while it follows the new
     // last run. Removing that run must still land on the FIRST remaining run,
-    // not silently restore the tab that was selected before the add.
+    // not silently reopen the one that was selected before the add.
     const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
     await click(tab(box, 2));
     await click(box.pick<HTMLElement>("[data-yunari-run-add]"));
@@ -248,29 +255,22 @@ describe("showing one run at a time behind numbered tabs", () => {
     await clickHook(box.host, 'data-yunari-run-remove="3"');
 
     expect(box.runs()).toHaveLength(3);
-    expect(tab(box, 1).getAttribute("aria-selected")).toBe("true");
+    expect(tab(box, 1).getAttribute("aria-expanded")).toBe("true");
     expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
       "A",
     );
     return box.dispose();
   });
 
-  it("moves between tabs with the arrow keys", async () => {
-    const box = mountRunEditor({ runs: threeRuns, globals: RUN_GLOBALS });
-    const first = tab(box, 1);
-    await act(async () => {
-      first.focus();
-    });
+  it("keeps the open run open when its own summary is pressed", async () => {
+    const box = mountRunEditor({ runs: twoRuns, globals: RUN_GLOBALS });
+    await click(tab(box, 1));
 
-    await press(first, "ArrowRight");
-
-    expect(
-      box
-        .pick<HTMLElement>('[data-yunari-run-tab="2"]')
-        .getAttribute("aria-selected"),
-    ).toBe("true");
-    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="1"]').value).toBe(
-      "B",
+    // Collapsing the only open item would leave no fields and no statement of
+    // which run the editor is showing.
+    expect(tab(box, 1).getAttribute("aria-expanded")).toBe("true");
+    expect(box.pick<HTMLInputElement>('[data-yunari-run-text="0"]').value).toBe(
+      "CPU ",
     );
     return box.dispose();
   });
@@ -281,13 +281,6 @@ describe("showing one run at a time behind numbered tabs", () => {
     expect(accessibleName(box.pick<HTMLElement>("[data-yunari-run-add]"))).toBe(
       uiCopy.inspectorFields.addRun,
     );
-    // A tablist owns tabs. The add button is an action after the strip, so a
-    // reader does not hear it announced as a tab nor arrow past it as one.
-    expect(
-      box
-        .pick<HTMLElement>("[data-yunari-run-add]")
-        .closest('[role="tablist"]'),
-    ).toBeNull();
     return box.dispose();
   });
 });

@@ -166,7 +166,13 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
           value={mode}
           className={hitTargetClasses}
         >
-          <Glyph icon={MODE_GLYPHS[mode]} size={14} />
+          {/* The gear's ring leaves more empty corner than the other two
+              glyphs' dense silhouettes, so it reads smaller at the same
+              box. One step up makes the three optically even. */}
+          <Glyph
+            icon={MODE_GLYPHS[mode]}
+            size={mode === "settings" ? 16 : 14}
+          />
           {MODE_NAMES[mode]}
         </Toggle>
       ))}
@@ -287,8 +293,8 @@ export function createShellLayout(
   );
   applyShellPalette(initial);
   // The effective binding table is written once, here, before anything can
-  // press a key: the dispatcher, the menubar, the dock's tooltips and the
-  // header's publish chord all read this one table.
+  // press a key: the dispatcher, the header toolbar, the dock's tooltips and
+  // the header's publish chord all read this one table.
   const initialOverrides: ShortcutOverrides =
     storage === undefined ? {} : readShortcutOverrides(storage);
   setActiveShortcuts(resolveShortcuts(initialOverrides));

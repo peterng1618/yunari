@@ -978,7 +978,7 @@ test.describe("text and text box elements", () => {
     );
   });
 
-  test("three runs show three numbered tabs, one selected run's fields, and + selects the new run", async ({
+  test("three runs show three accordion summaries, one open run's fields, and + opens the new run", async ({
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -997,29 +997,30 @@ test.describe("text and text box elements", () => {
     await add.click();
 
     const tabs = page.locator("[data-yunari-run-tab]");
-    await expect(tabs, "one tab per run").toHaveCount(3);
+    await expect(tabs, "one accordion summary per run").toHaveCount(3);
     for (const position of [1, 2, 3]) {
-      const tab = page.getByRole("tab", { name: `Run ${position}` });
+      const tab = page.locator(`[data-yunari-run-tab="${position}"]`);
       await expect(tab).toBeVisible();
-      await expect(tab, "the label is the 1-based number").toHaveText(
+      await expect(tab, "the summary names the run").toContainText(
         String(position),
       );
+      await expect(tab).toHaveAccessibleName(new RegExp(`^Run ${position}: `));
     }
 
     // `+` lands the author in the run they just made.
-    await expect(page.getByRole("tab", { name: "Run 3" })).toHaveAttribute(
-      "aria-selected",
+    await expect(page.locator('[data-yunari-run-tab="3"]')).toHaveAttribute(
+      "aria-expanded",
       "true",
     );
     await expect(page.locator('[data-yunari-run-text="2"]')).toBeVisible();
 
     // One run at a time: the other runs' fields are not rendered at all.
-    await page.getByRole("tab", { name: "Run 1" }).click();
+    await page.locator('[data-yunari-run-tab="1"]').click();
     await expect(page.locator('[data-yunari-run-text="0"]')).toBeVisible();
     await expect(page.locator('[data-yunari-run-text="1"]')).toHaveCount(0);
     await expect(page.locator('[data-yunari-run-text="2"]')).toHaveCount(0);
 
-    await page.getByRole("tab", { name: "Run 2" }).click();
+    await page.locator('[data-yunari-run-tab="2"]').click();
     await expect(page.locator('[data-yunari-run-text="1"]')).toBeVisible();
     await expect(page.locator('[data-yunari-run-text="0"]')).toHaveCount(0);
   });

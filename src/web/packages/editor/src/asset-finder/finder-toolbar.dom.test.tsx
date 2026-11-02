@@ -59,6 +59,13 @@ it("shows the order on the pressed sort and toggles it on a second press", () =>
   // The active button carries the arrow and the words a screen reader needs;
   // the other two say only their field.
   expect(sortButton("name").querySelector("svg")).not.toBeNull();
+  // The arrow sits in a non-shrinking box: the sort buttons sharing the row's
+  // width used to shrink it to zero on the longer labels.
+  expect(
+    sortButton("name").querySelector("svg")?.parentElement?.classList,
+  ).toContain("flex-none");
+  // And the label does not wrap into a second line for its share of the row.
+  expect(sortButton("name").classList).toContain("whitespace-nowrap");
   expect(sortButton("name").getAttribute("aria-label")).toBe("Name, Ascending");
   expect(sortButton("size").querySelector("svg")).toBeNull();
   expect(sortButton("size").getAttribute("aria-label")).toBeNull();

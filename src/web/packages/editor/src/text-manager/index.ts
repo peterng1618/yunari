@@ -1,8 +1,4 @@
-import type {
-  SemanticKeyDescriptor,
-  TextContent,
-  TextRun,
-} from "@yunari/renderer-core";
+import type { SemanticKeyDescriptor, TextContent } from "@yunari/renderer-core";
 import {
   guardBoxWidth,
   type PlanTextObject,
@@ -99,6 +95,12 @@ export interface TextMentionPort {
       readonly semanticKey: string;
     },
   ) => boolean;
+  /**
+   * Rewrites the flat string Fabric leaves at the end of an in-place edit into
+   * the authored runs it still spells. The session owns the node's bindings, so
+   * only it can recognise a surviving `@semanticKey` token.
+   */
+  readonly settle: (object: IText, text: string) => boolean;
 }
 
 interface TextManager {
@@ -124,10 +126,11 @@ interface TextManager {
    * passed.
    */
   setAuthoringView(paint: (object: IText) => void): void;
-  /** Paints the object's authored runs over what Fabric left behind, which is
-      how a refused in-place edit puts back what it would have dropped. */
+  /** Repaints the authored runs after an in-place edit, so what is left on the
+      canvas is what the document holds. */
   setRepaint(paint: (object: IText) => void): void;
-  /** Installs the readings an inline `@` may insert, and the write that adds one. */
+  /** Installs the readings an inline `@` may insert, and the writes that make
+      one and keep what an edit leaves. */
   setMentions(port: TextMentionPort): void;
   destroy(): void;
 }
@@ -140,43 +143,6 @@ function authoredOf(object: PlanTextObject): TextContent | undefined {
     Array.isArray((authored as Record<string, unknown>)["runs"])
     ? (authored as TextContent)
     : undefined;
-}
-
-/**
- * What the author typed becomes the object's authored run.
- *
- * A value run has no text of its own, so there is nothing to keep the reading
- * *and* the words: typing over one replaces it with a literal, keeping the type
- * preset and colour it was painted with. The run editor turns it back into a
- * reading when the author wants one.
- *
- * Refused outright once the object carries more than one run. Fabric hands back
- * one flat string and no way to say which run each character came from, so the
- * only write available here drops the siblings — and an object that was "32" and
- * "%" would come back as one run of whatever was typed, with the reading gone
- * and no record that it had been. The run editor owns each run's text, and it
- * can refuse nothing: this says so rather than losing the work.
- */
-function keepTypedText(object: PlanTextObject): "written" | "refused" {
-  const authored = authoredOf(object);
-  if (authored === undefined) return "written";
-  if (authored.runs.length > 1) return "refused";
-
-  const first = authored.runs[0] as TextRun | undefined;
-  object.set(YUNARI_TEXT_PROPERTY, {
-    ...authored,
-    runs: [
-      {
-        kind: "literal",
-        text: object.text,
-        ...(first?.typeToken === undefined
-          ? {}
-          : { typeToken: first.typeToken }),
-        ...(first?.style === undefined ? {} : { style: first.style }),
-      },
-    ],
-  });
-  return "written";
 }
 
 /**
@@ -234,8 +200,6 @@ function isBoxDimension(box: {
 export function createTextManager(
   canvas: Canvas,
   save: () => void,
-  /** How a refused edit reaches the author; the shell's diagnostics own it. */
-  warn?: (message: string) => void,
   /** The authored frame's height, which is what a role default is a share of.
    *  The canvas is only a viewport onto that frame, so a harness with no board
    *  falls back to its own height. */
@@ -381,12 +345,10 @@ export function createTextManager(
   const openMentions = (target: IText): void => {
     if (mentions === undefined) return;
 
-    // The same limit the in-place edit lives under: one literal run is the only
-    // content whose typed text maps back to run offsets Fabric cannot report.
+    // A text with no authored runs has nowhere to put the binding, so an
+    // insertion there would be refused after the author chose a reading.
     const authored = authoredOf(target);
-    if (authored?.runs.length !== 1 || authored.runs[0]?.kind !== "literal") {
-      return;
-    }
+    if (authored === undefined || authored.runs.length === 0) return;
 
     if (mentionOverlay === undefined) {
       mentionOverlay = document.createElement("div");
@@ -418,8 +380,8 @@ export function createTextManager(
       semanticKey: descriptor.key,
     });
 
-    // A refusal leaves the typed `@query` as prose, which is also what the
-    // refused-edit warning below describes; nothing else is written.
+    // A refusal leaves the typed `@query` as prose; the edit then ends with the
+    // same settle an ordinary edit takes, so the query is kept as literal text.
     if (!written) return;
 
     mentionCommitted = target;
@@ -499,6 +461,17 @@ export function createTextManager(
       }
     | undefined;
 
+  /**
+   * The authored box clips overflow, which is right for the frame and wrong
+   * while the author is typing: words they have not laid out yet would vanish
+   * at the box edge. The clip is restored by the repaint every exit route runs.
+   */
+  const unclipWhileEditing = (target: IText): void => {
+    if (target.clipPath === undefined) return;
+    delete target.clipPath;
+    canvas.requestRenderAll();
+  };
+
   const onEditingEntered = (event: { target?: unknown }): void => {
     const target = event.target;
     if (!(target instanceof IText)) return;
@@ -508,6 +481,7 @@ export function createTextManager(
     // because it is the one Fabric's own modification test used.
     editing = { target, painted: target.text, entryText: target.text };
     attachMentions(target);
+    unclipWhileEditing(target);
   };
 
   const onEditingExited = (event: { target?: unknown }): void => {
@@ -518,9 +492,9 @@ export function createTextManager(
     detachMentions();
 
     // A chosen reading is not typed text to keep: the runs and the binding are
-    // already written, so the refusal below would warn about the very shape an
-    // insertion is meant to produce. The repaint is still this side's, because
-    // Fabric leaves the flat typed string standing.
+    // already written, so the settle below would parse the display a second
+    // time. The repaint is still this side's, because Fabric leaves the flat
+    // typed string standing.
     if (mentionCommitted === target) {
       mentionCommitted = undefined;
       editing = undefined;
@@ -537,12 +511,13 @@ export function createTextManager(
     // this view painted. Writing that back would turn a sensor card into prose
     // from a gesture that changed nothing.
     if (record !== undefined && target.text !== record.painted) {
-      if (keepTypedText(target) === "refused") {
-        warn?.(uiCopy.inspectorFields.multiRunRefused);
-        // Fabric has already left editing, so the object's own text is the only
-        // thing standing where the authored runs should be. Putting them back
-        // is what makes the refusal honest rather than a warning the author
-        // watches scroll away from text that was never kept.
+      // The session maps the flat string back to runs: every token still in it
+      // keeps its value run and binding, and the text between tokens becomes
+      // prose. A text with no authored runs has nothing to write to, and the
+      // repaint below puts its authored content back rather than keeping
+      // Fabric's string.
+      const kept = mentions?.settle(target, target.text) ?? false;
+      if (!kept) {
         repaint(target);
         canvas.requestRenderAll();
         return;
@@ -585,6 +560,9 @@ export function createTextManager(
     const entryText =
       editing?.target === target ? editing.entryText : target.text;
     showAuthoringView(target);
+    // The authoring pass is written with `isEditing` down so it can paint, so it
+    // re-applies the box's clip on the way through. Typing needs the box open.
+    unclipWhileEditing(target);
     // The painted token is this edit's baseline for "did the author type
     // anything"; `entryText` stays the display Fabric saw, which is what says
     // whether Fabric will report the edit at all.

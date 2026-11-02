@@ -220,20 +220,18 @@ async function openSurface(container: HTMLElement): Promise<void> {
   await vi.waitFor(() => expect(popupOpen()).toBe(true));
 }
 
-/** The popover's own text. It is portalled to `body`, so the mount point's own
- *  `textContent` holds none of it. */
+/** The assign dialog's own text. It is portalled to `body`, so the mount
+ *  point's own `textContent` holds none of it. */
 function popupText(): string {
   return (
-    document.querySelector(".editor-shell-publish-popup")?.textContent ?? ""
+    document.querySelector(".editor-shell-publish-dialog")?.textContent ?? ""
   );
 }
 
-/** Whether the popover is showing. The popup is not in the DOM at all until it
- *  is asked for, so its presence and its `data-open` are the same answer. */
+/** Whether the dialog is showing. The popup is not in the DOM at all until it
+ *  is asked for, so its presence is the answer. */
 function popupOpen(): boolean {
-  return (
-    document.querySelector(".editor-shell-publish-popup[data-open]") !== null
-  );
+  return document.querySelector(".editor-shell-publish-dialog") !== null;
 }
 
 it("keeps the publish chord in the control's names, not beside it in the header", async () => {
@@ -275,12 +273,12 @@ it("keeps the publish chord in the control's names, not beside it in the header"
 async function displayTrigger(): Promise<HTMLElement> {
   await vi.waitFor(() =>
     expect(
-      document.querySelector("[data-yunari-publish-display]"),
+      document.querySelector("[data-yunari-store-assign-display]"),
       "the surface never drew the display choice",
     ).not.toBeNull(),
   );
   return document.querySelector<HTMLElement>(
-    "[data-yunari-publish-display]",
+    "[data-yunari-store-assign-display]",
   ) as HTMLElement;
 }
 
@@ -412,7 +410,7 @@ it("opens the surface from the header's chord, and moves no host state", async (
   expect(hostSwitch()?.getAttribute("aria-pressed")).toBe("true");
 });
 
-it("closes the surface under jsdom, on a second press and on Escape", async () => {
+it("closes the surface under jsdom, on its close control and on Escape", async () => {
   // vg-215 recorded that the close half of a popover contract is browser-only,
   // because re-adding a close assertion threw inside Base UI's own path. That
   // does not reproduce, so the assertion is written here rather than left to the
@@ -421,7 +419,11 @@ it("closes the surface under jsdom, on a second press and on Escape", async () =
   const container = await mount();
 
   await openSurface(container);
-  await act(async () => headerControl(container)?.click());
+  const close = document.querySelector<HTMLElement>(
+    `.editor-shell-dialog-close[aria-label="${uiCopy.store.assign.close}"]`,
+  );
+  expect(close, "the assign dialog drew no way out").not.toBeNull();
+  await act(async () => close?.click());
   await vi.waitFor(() => expect(popupOpen()).toBe(false));
 
   await openSurface(container);
