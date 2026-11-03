@@ -1,11 +1,5 @@
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
@@ -18,27 +12,23 @@ import {
   upsertServer,
 } from "add-mcp";
 import { type InstallChoices, resolveChoices } from "./choices.js";
+import {
+  compareSkill,
+  resolveSkillSourceDir,
+  type SkillState,
+  skillFilePath,
+  skillInstallArgs,
+  skillRemoveArgs,
+} from "./skill.js";
 
 /** The agent `add-mcp` registers the server for. */
 export const AGENT_TYPE = "claude-code";
-
-/**
- * The skills CLI agent whose global directory is the shared `~/.agents/skills`.
- *
- * `codex` is only the CLI's universal-selector name for that directory
- * (`skillsDir: ".agents/skills"`); it does not add a second MCP agent. The
- * server half stays `AGENT_TYPE`.
- */
-export const SKILL_AGENT = "codex";
 
 /** The server entry name the agent shows and the skill refers to. */
 export const SERVER_NAME = "yunari";
 
 /** The one permission rule `add-mcp` adds for this server's global install. */
 export const AUTO_APPROVAL_RULE = `mcp__${SERVER_NAME}`;
-
-/** The skill folder name, which is also its installed directory name. */
-export const SKILL_NAME = "yunari-theme-designer";
 
 /** The stdio entry a registered server runs. */
 export interface ServerEntry {
@@ -142,69 +132,6 @@ export interface StatusReport {
   };
 }
 
-/** Whether the installed skill still matches the copy the package ships. */
-export type SkillState = "current" | "drifted" | "not-installed";
-
-/** The canonical installed path named in the design. */
-export function skillFilePath(home: string): string {
-  return join(home, ".agents", "skills", SKILL_NAME, "SKILL.md");
-}
-
-/**
- * The skill this package ships. A staged package carries its own copy, so an
- * installed package never reads the checkout it was built from; a repository
- * run still finds the root `skills/` folder.
- */
-export function resolveSkillSourceDir(
-  packageDir: string,
-  exists: (path: string) => boolean = existsSync,
-): string {
-  const bundled = join(packageDir, "skills", SKILL_NAME);
-  return exists(bundled)
-    ? bundled
-    : join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME);
-}
-
-/** Every file below `dir`, as relative POSIX paths. */
-function filesUnder(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true, recursive: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) =>
-      join(entry.parentPath, entry.name)
-        .slice(dir.length + 1)
-        .replaceAll("\\", "/"),
-    )
-    .sort();
-}
-
-/**
- * Compares the installed skill with the packaged copy by relative path and
- * bytes. An unreadable packaged copy is reported as drift, never as current.
- */
-export function compareSkill(
-  installedDir: string | undefined,
-  bundledDir: string,
-): SkillState {
-  if (installedDir === undefined) return "not-installed";
-  try {
-    const expected = filesUnder(bundledDir);
-    const actual = filesUnder(installedDir);
-    if (expected.length !== actual.length) return "drifted";
-    for (const file of expected) {
-      if (
-        !readFileSync(join(bundledDir, file)).equals(
-          readFileSync(join(installedDir, file)),
-        )
-      ) {
-        return "drifted";
-      }
-    }
-    return "current";
-  } catch {
-    return "drifted";
-  }
-}
-
 /** The settings file `add-mcp` writes its auto-approval rule into. A project
  *  install writes the project file instead of the global one. */
 export function claudeSettingsPath(
@@ -293,16 +220,6 @@ function describeExit(result: {
   return `the skills CLI exited ${result.code === null ? "without a status" : result.code}`;
 }
 
-/** The skill is installed globally at the shared path, copied rather than linked. */
-export function skillInstallArgs(skillSourceDir: string): readonly string[] {
-  return ["add", skillSourceDir, "-g", "-a", SKILL_AGENT, "--copy", "-y"];
-}
-
-/** Removal names the skill, not a source path. */
-export function skillRemoveArgs(): readonly string[] {
-  return ["remove", "-g", "-a", SKILL_AGENT, "-y", SKILL_NAME];
-}
-
 /** Whether `child` sits under `parent`, across Windows drive differences. */
 function inside(parent: string, child: string): boolean {
   const rel = relative(parent, child);
@@ -374,7 +291,9 @@ export async function install(
 
   if (choices.skill) {
     try {
-      const run = await ports.runSkills(skillInstallArgs(ports.skillSourceDir));
+      const run = await ports.runSkills(
+        skillInstallArgs(ports.skillSourceDir, choices.agents),
+      );
       if (run.code !== 0) {
         steps.push({
           step: "skill",

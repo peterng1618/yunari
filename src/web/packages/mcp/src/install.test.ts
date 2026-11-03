@@ -17,23 +17,25 @@ import {
   AGENT_TYPE,
   AUTO_APPROVAL_RULE,
   claudeSettingsPath,
-  compareSkill,
   createPorts,
   type InstallPorts,
   install,
   nodeCommand,
   removeAutoApprovalRule,
   resolveInterpreter,
-  resolveSkillSourceDir,
-  SKILL_AGENT,
-  SKILL_NAME,
   serverEntryFor,
-  skillFilePath,
-  skillInstallArgs,
-  skillRemoveArgs,
   status,
   uninstall,
 } from "./install.js";
+import {
+  compareSkill,
+  resolveSkillSourceDir,
+  SKILL_NAME,
+  skillAgentsFor,
+  skillFilePath,
+  skillInstallArgs,
+  skillRemoveArgs,
+} from "./skill.js";
 
 const homes: string[] = [];
 
@@ -195,6 +197,18 @@ function fakePorts(
   return { ports, calls, skillPath: canonicalPath, canonicalPath };
 }
 
+describe("skill agents", () => {
+  it("installs the skill to each chosen agent and the universal path", () => {
+    expect(skillAgentsFor(["claude-code", "vscode"])).toEqual([
+      "codex",
+      "claude-code",
+      "github-copilot",
+    ]);
+    expect(skillAgentsFor(["cursor"])).toEqual(["codex", "cursor"]);
+    expect(skillAgentsFor([])).toEqual(["codex"]);
+  });
+});
+
 describe("install", () => {
   it("writes exactly one server entry and one skill path", async () => {
     const home = temporaryHome();
@@ -205,14 +219,17 @@ describe("install", () => {
     expect(report.ok).toBe(true);
     expect(report.skillPath).toBe(skillPath);
     expect(calls.skills).toEqual([
-      skillInstallArgs(join(home, "repo-skills", "yunari-theme-designer")),
+      skillInstallArgs(join(home, "repo-skills", "yunari-theme-designer"), [
+        "claude-code",
+      ]),
     ]);
     expect(calls.skills[0]).toEqual([
       "add",
       join(home, "repo-skills", "yunari-theme-designer"),
       "-g",
       "-a",
-      SKILL_AGENT,
+      "codex",
+      "claude-code",
       "--copy",
       "-y",
     ]);
@@ -328,8 +345,6 @@ describe("uninstall", () => {
     expect([...skillRemoveArgs()]).toEqual([
       "remove",
       "-g",
-      "-a",
-      SKILL_AGENT,
       "-y",
       "yunari-theme-designer",
     ]);
