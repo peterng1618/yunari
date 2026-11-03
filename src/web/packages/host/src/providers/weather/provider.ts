@@ -20,7 +20,7 @@ import type {
 } from "../provider.js";
 import { descriptorFieldsOf, redactForBrowser } from "../provider.js";
 import { WEATHER_BACKENDS } from "./backends.js";
-import { conditionText, windCompass } from "./conditions.js";
+import { conditionText, locationText, windCompass } from "./conditions.js";
 import { weatherIconUrl } from "./icons.js";
 import { type WeatherReading, weatherKey } from "./open-meteo.js";
 
@@ -89,9 +89,6 @@ const NO_ICON_MESSAGE = "No icon is available for this condition.";
 const WAITING_MESSAGE = "Waiting for the first weather reading.";
 const STALE_MESSAGE = "The last weather reading is out of date.";
 
-/** What `weather.location` says when the place came from Windows. The
- *  coordinates themselves never enter a sample. */
-const WINDOWS_LOCATION_LABEL = "Windows location";
 /** One fix is reused for a day; a person does not move between polls. */
 const POSITION_TTL_MS = 24 * 60 * 60_000;
 
@@ -134,8 +131,6 @@ export class WeatherProvider implements SensorProvider {
   #position:
     | { readonly position: GeoPosition; readonly fetchedAtMs: number }
     | undefined;
-  /** What `weather.location` names for the place the poll resolved. */
-  #placeLabel: string | undefined;
 
   /** Last good reading, dropped when the backend or place changes. */
   #lastGood: CachedReading | undefined;
@@ -231,7 +226,6 @@ export class WeatherProvider implements SensorProvider {
     this.#lastGood = undefined;
     this.#failure = undefined;
     this.#failures = 0;
-    this.#placeLabel = undefined;
     return true;
   }
 
@@ -345,7 +339,6 @@ export class WeatherProvider implements SensorProvider {
    */
   async #placeOf(settings: WeatherSettings): Promise<GeoPosition> {
     if (settings.label !== "") {
-      this.#placeLabel = settings.label;
       return { latitude: settings.latitude, longitude: settings.longitude };
     }
 
@@ -355,13 +348,11 @@ export class WeatherProvider implements SensorProvider {
       cached !== undefined &&
       this.#now() - cached.fetchedAtMs < POSITION_TTL_MS
     ) {
-      this.#placeLabel = WINDOWS_LOCATION_LABEL;
       return cached.position;
     }
 
     const position = await this.#locate();
     this.#position = { position, fetchedAtMs: this.#now() };
-    this.#placeLabel = WINDOWS_LOCATION_LABEL;
     return position;
   }
 
@@ -464,7 +455,9 @@ export class WeatherProvider implements SensorProvider {
 
     switch (semanticKey) {
       case "weather.location":
-        return text(this.#placeLabel ?? settings.label);
+        return text(
+          settings.label === "" ? locationText(language) : settings.label,
+        );
       case "weather.temp":
         return numeric(reading.tempC);
       case "weather.feelsLike":

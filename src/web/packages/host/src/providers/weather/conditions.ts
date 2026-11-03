@@ -70,6 +70,38 @@ export const DE_CONDITIONS: Readonly<Record<number, string>> = {
   99: "Gewitter mit starkem Hagel",
 };
 
+/** The Vietnamese names for the same 28 codes. */
+export const VI_CONDITIONS: Readonly<Record<number, string>> = {
+  0: "Trời quang",
+  1: "Chủ yếu quang",
+  2: "Có mây rải rác",
+  3: "U ám",
+  45: "Sương mù",
+  48: "Sương mù đọng giá",
+  51: "Mưa phùn nhẹ",
+  53: "Mưa phùn vừa",
+  55: "Mưa phùn dày",
+  56: "Mưa phùn đóng băng nhẹ",
+  57: "Mưa phùn đóng băng dày",
+  61: "Mưa nhẹ",
+  63: "Mưa vừa",
+  65: "Mưa to",
+  66: "Mưa đóng băng nhẹ",
+  67: "Mưa đóng băng to",
+  71: "Tuyết rơi nhẹ",
+  73: "Tuyết rơi vừa",
+  75: "Tuyết rơi dày",
+  77: "Hạt tuyết",
+  80: "Mưa rào nhẹ",
+  81: "Mưa rào vừa",
+  82: "Mưa rào mạnh",
+  85: "Mưa tuyết nhẹ",
+  86: "Mưa tuyết mạnh",
+  95: "Dông",
+  96: "Dông kèm mưa đá nhẹ",
+  99: "Dông kèm mưa đá mạnh",
+};
+
 /** A closed vocabulary, not a translation platform: anything absent reads in
  *  English. */
 const CONDITION_TEXT: Readonly<
@@ -77,6 +109,15 @@ const CONDITION_TEXT: Readonly<
 > = {
   en: WMO_CONDITIONS,
   de: DE_CONDITIONS,
+  vi: VI_CONDITIONS,
+};
+
+/** The host's own words for a place it located itself; a place the author
+ *  chose is their data and is never translated. */
+const LOCATION_TEXT: Readonly<Record<string, string>> = {
+  en: "Windows location",
+  de: "Windows-Standort",
+  vi: "Vị trí Windows",
 };
 
 const UNKNOWN = "Unknown";
@@ -93,6 +134,10 @@ export function conditionText(
 ): string {
   const table = CONDITION_TEXT[primarySubtag(language)] ?? WMO_CONDITIONS;
   return table[code] ?? UNKNOWN;
+}
+
+export function locationText(language: string | undefined): string {
+  return LOCATION_TEXT[primarySubtag(language)] ?? "Windows location";
 }
 
 /** Sixteen points, beginning at north. */

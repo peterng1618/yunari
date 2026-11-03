@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   conditionText,
   DE_CONDITIONS,
+  locationText,
+  VI_CONDITIONS,
   WMO_CONDITIONS,
   windCompass,
 } from "./conditions.js";
@@ -28,12 +30,14 @@ describe("conditionText", () => {
     expect(Object.keys(WMO_CONDITIONS)).toHaveLength(28);
   });
 
-  it("keeps the German table in step with the English source", () => {
-    // A code added to one table and not the other would read `Unknown` in that
+  it("keeps every language table in step with the English source", () => {
+    // A code added to one table and not the others would read `Unknown` in that
     // language rather than fail, so the key sets are the test.
-    expect(Object.keys(DE_CONDITIONS).sort()).toEqual(
-      Object.keys(WMO_CONDITIONS).sort(),
-    );
+    for (const table of [DE_CONDITIONS, VI_CONDITIONS]) {
+      expect(Object.keys(table).sort()).toEqual(
+        Object.keys(WMO_CONDITIONS).sort(),
+      );
+    }
   });
 
   it("names every canonical code in German", () => {
@@ -78,6 +82,58 @@ describe("conditionText", () => {
     expect(conditionText(3, "de-DE")).toBe("Bedeckt");
     expect(conditionText(3, "de-AT")).toBe("Bedeckt");
     expect(conditionText(3, "DE")).toBe("Bedeckt");
+  });
+
+  it("names every canonical code in Vietnamese", () => {
+    const vietnamese: Record<number, string> = {
+      0: "Trời quang",
+      1: "Chủ yếu quang",
+      2: "Có mây rải rác",
+      3: "U ám",
+      45: "Sương mù",
+      48: "Sương mù đọng giá",
+      51: "Mưa phùn nhẹ",
+      53: "Mưa phùn vừa",
+      55: "Mưa phùn dày",
+      56: "Mưa phùn đóng băng nhẹ",
+      57: "Mưa phùn đóng băng dày",
+      61: "Mưa nhẹ",
+      63: "Mưa vừa",
+      65: "Mưa to",
+      66: "Mưa đóng băng nhẹ",
+      67: "Mưa đóng băng to",
+      71: "Tuyết rơi nhẹ",
+      73: "Tuyết rơi vừa",
+      75: "Tuyết rơi dày",
+      77: "Hạt tuyết",
+      80: "Mưa rào nhẹ",
+      81: "Mưa rào vừa",
+      82: "Mưa rào mạnh",
+      85: "Mưa tuyết nhẹ",
+      86: "Mưa tuyết mạnh",
+      95: "Dông",
+      96: "Dông kèm mưa đá nhẹ",
+      99: "Dông kèm mưa đá mạnh",
+    };
+
+    expect(Object.keys(vietnamese)).toHaveLength(28);
+    for (const [code, text] of Object.entries(vietnamese)) {
+      expect(conditionText(Number(code), "vi"), `code ${code}`).toBe(text);
+    }
+    expect(conditionText(3, "vi-VN")).toBe("U ám");
+  });
+});
+
+describe("locationText", () => {
+  it("names the host's own Windows place in the theme language", () => {
+    expect(locationText("en")).toBe("Windows location");
+    expect(locationText("de-DE")).toBe("Windows-Standort");
+    expect(locationText("vi")).toBe("Vị trí Windows");
+  });
+
+  it("falls back to English for an absent or unknown language", () => {
+    expect(locationText(undefined)).toBe("Windows location");
+    expect(locationText("fr")).toBe("Windows location");
   });
 });
 

@@ -225,6 +225,7 @@ describe("WeatherProvider", () => {
 
     const en = await provider.sample(keys, now, { language: "en" });
     const de = await provider.sample(keys, now, { language: "de" });
+    const vi = await provider.sample(keys, now, { language: "vi" });
     const sampleOf = (
       entries: readonly SampleEntry[],
       key: string,
@@ -237,12 +238,47 @@ describe("WeatherProvider", () => {
     expect(sampleOf(de, "weather.condition")).toMatchObject({
       textValue: "Bedeckt",
     });
+    expect(sampleOf(vi, "weather.condition")).toMatchObject({
+      textValue: "U ám",
+    });
     // The reading is one measurement in two languages, not two readings.
     expect(sampleOf(de, "weather.temp")).toMatchObject({
       value: 11.3,
       unit: "°C",
     });
     expect(sampleOf(de, "weather.temp")).toEqual(sampleOf(en, "weather.temp"));
+  });
+
+  it("localizes the Windows place label but leaves a chosen place as authored", async () => {
+    const now = Date.now();
+    const locate = vi.fn(async () => ({ latitude: 48.86, longitude: 2.35 }));
+    const windows = new WeatherProvider({
+      settings: settingsStore(UNPLACED),
+      fetcher: fetcherOf().fetcher,
+      locate,
+    });
+    const named = host(settingsStore(), fetcherOf().fetcher);
+
+    await sampleAt(windows, ["weather.temp"], now);
+    await sampleAt(named, ["weather.temp"], now);
+    await settle();
+
+    const [windowsPlace] = await windows.sample(["weather.location"], now, {
+      language: "vi",
+    });
+    const [namedPlace] = await named.sample(["weather.location"], now, {
+      language: "vi",
+    });
+
+    expect(windowsPlace?.sample).toMatchObject({
+      status: "ok",
+      textValue: "Vị trí Windows",
+    });
+    // The place an author chose is their own data, not a host word.
+    expect(namedPlace?.sample).toMatchObject({
+      status: "ok",
+      textValue: "Berlin, Berlin, DE",
+    });
   });
 
   it("does not fetch again when only the language changes", async () => {
