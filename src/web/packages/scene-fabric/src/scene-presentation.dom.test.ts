@@ -332,4 +332,30 @@ describe("mountFabricScene's display presentation", () => {
     scene.dispose();
     element.remove();
   });
+
+  it("reports every fit's transform, so chrome can ride the composition", () => {
+    // The player's notices ride the composition's frame, and the scene is the
+    // one owner of when that frame moves: mount, a presentation change and a
+    // resize are all fits. A reporter called only on the first would leave a
+    // strip on the frame the display had before the turn.
+    const element = host();
+    const rotations: number[] = [];
+    const scene = mountFabricScene({
+      host: element,
+      plan: plan(),
+      presentation: { shape: "rect", rotation: 0 },
+      onFit: (transform) => rotations.push(transform.rotation),
+    });
+    expect(rotations, "the mount's own fit").toEqual([0]);
+
+    scene.updatePresentation({ shape: "rect", rotation: 90 });
+    expect(rotations).toEqual([0, 90]);
+
+    resizeHost(element, 800, 600);
+    scene.resize();
+    expect(rotations, "a resize is a fit too").toHaveLength(3);
+
+    scene.dispose();
+    element.remove();
+  });
 });

@@ -4052,6 +4052,94 @@ test.describe("a paired display and the theme it is given", () => {
     ).toBeLessThan(25);
   });
 
+  test("a notice turns with the composition it belongs to", async ({
+    page,
+    request,
+  }) => {
+    test.skip(origin === "", "this machine has no LAN address");
+
+    const display = await pairDisplay(request, "Rotated notices", {
+      shape: "rect",
+      rotation: 90,
+    });
+    await page.setViewportSize({ width: 600, height: 800 });
+    // A refused transport is the strip a reader sees for a whole session, so it
+    // is the notice a turned display actually has up.
+    await page.route(/\/ws(\?|$)/, (route) => route.abort());
+    await page.goto(playerUrl(display, { theme: TWO_TONE_THEME_BOUNDS }));
+    await waitForRotation(page, 90);
+
+    const strip = page.locator("#yunari-connection");
+    await expect(strip).toBeVisible({ timeout: 30_000 });
+
+    const reading = await page.evaluate(() => {
+      const handle = (
+        window as unknown as {
+          yunari: {
+            handle: {
+              transform(): {
+                scale: number;
+                offsetX: number;
+                offsetY: number;
+                rotation: number;
+              };
+            };
+          };
+        }
+      ).yunari.handle;
+      const transform = handle.transform();
+      const host = document
+        .querySelector<HTMLElement>("#artboard")!
+        .getBoundingClientRect();
+      const element =
+        document.querySelector<HTMLElement>("#yunari-connection")!;
+      const box = element.getBoundingClientRect();
+      return {
+        transform: {
+          scale: transform.scale,
+          offsetX: transform.offsetX,
+          offsetY: transform.offsetY,
+          rotation: transform.rotation,
+        },
+        host: { left: host.left, top: host.top },
+        style: {
+          left: element.style.left,
+          top: element.style.top,
+          width: element.style.width,
+          transform: element.style.transform,
+        },
+        box: { x: box.x, y: box.y, width: box.width, height: box.height },
+      };
+    });
+
+    // **The board's own corner and angle, not the screen's edge.** The
+    // quarter-turned 640x360 board is 450 deep on its short side at this fit,
+    // and the strip spans the board's long side along its bottom edge.
+    const boardHeight = 360 * reading.transform.scale;
+    expect(reading.style.left).toBe(
+      `${reading.host.left + reading.transform.offsetX}px`,
+    );
+    expect(reading.style.top).toBe(
+      `${reading.host.top + reading.transform.offsetY}px`,
+    );
+    expect(reading.style.width).toBe(`${640 * reading.transform.scale}px`);
+    expect(reading.style.transform).toBe(
+      `rotate(90deg) translateY(${boardHeight}px) translateY(-100%)`,
+    );
+
+    // And it reads as a turned strip on screen: standing up, its outer edge on
+    // the board's bottom edge — the line the composition's bottom runs along at
+    // 90°, which is the board's own corner pushed out by its turned height.
+    expect(
+      reading.box.height,
+      "the notice is not standing up with the composition",
+    ).toBeGreaterThan(reading.box.width);
+    expect(reading.box.x).toBeCloseTo(
+      reading.host.left + reading.transform.offsetX - boardHeight,
+      0,
+    );
+  });
+
   test("a circle display puts the artboard corners on the disc at 0 and 45", async ({
     page,
     request,
