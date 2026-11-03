@@ -242,7 +242,7 @@ export async function setTypeTokens(
       if (family === undefined || family === "") {
         throw new Error(`The "${role}" type token needs a font family.`);
       }
-      const weight = update.weight ?? next[role]?.weight;
+      const weight = weightOf(update.weight) ?? next[role]?.weight;
       next[role] = {
         ...next[role],
         family,
@@ -347,6 +347,18 @@ export async function discardDraft(
     }
     return { themeId, discarded: true };
   });
+}
+
+/** A digit-only weight is the same weight a packaged face declares as a
+ *  number. It is coerced here, at the tool boundary, so a face that matches
+ *  the file validates; a named weight (`bold`) stays a string and is the
+ *  validator's to compare. */
+function weightOf(
+  weight: string | number | undefined,
+): string | number | undefined {
+  if (typeof weight !== "string") return weight;
+  const trimmed = weight.trim();
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
 }
 
 const roleUpdateSchema = z.object({
