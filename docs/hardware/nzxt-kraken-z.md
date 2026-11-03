@@ -78,8 +78,17 @@ The delete, create and begin-write replies the driver checks carry success as
 **The firmware refuses the bucket it is displaying.** Deleting or starting a
 write on the shown bucket answers status **9**, `BucketIsBeingDisplayed`, and
 nothing is stored — every write still succeeds on the wire. Status **18** means
-the device is busy. Both are treated as "this frame was not stored"; the driver
-rebuilds the table next time.
+the device is busy. A begin-write that draws **no reply at all** is reported as
+status `none`.
+
+**Only status 9 means the ring is out of step.** It means a switch was dropped,
+so the bucket `shown` names is the one the glass is *not* showing: the driver
+writes the other bucket instead, and the picture recovers without touching the
+table. The full rebuild is a last resort, for the case where neither bucket
+takes a frame. A busy device (18) or a command that drew no reply (`none`) left
+the table intact; the next tick deletes and recreates the same bucket anyway,
+so those retry without liquefying the glass. Rebuilding for them turned one
+missed command into a visible blank (2026-11-04).
 
 A bucket that already holds an image is not overwritten in place: the firmware
 keeps the first graphic stored there. So **every frame deletes and recreates its
@@ -117,7 +126,8 @@ The first frame also empties whatever CAM or a previous run left:
 
 1. `36 03` liquid mode.
 2. Switch bucket 0 to **liquid** (`38 01 02 00`) — liquid mode first, because
-   the firmware refuses to delete the bucket it plays.
+   the firmware refuses to delete the bucket it plays. The glass is on bucket 0
+   afterwards, so the ring writes bucket 1 next.
 3. Delete all 16 buckets.
 4. Then for each frame, into the bucket **not** on the glass:
    delete → create → `36 01` → header + pixels → `36 02` → **wait 10 ms** →
