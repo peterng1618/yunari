@@ -19,6 +19,9 @@ export interface StoredItem {
   readonly kind: ItemPayload["kind"];
   readonly previewUrl?: string;
   readonly filesize: number;
+  /** A video's length, read from its movie header. Absent for a scene and for a
+   *  video whose header could not be read — never zero. */
+  readonly durationMs?: number;
   /** The item directory's last write, where the host could read it. */
   readonly updatedAt?: number;
   readonly tags: readonly string[];
@@ -34,6 +37,7 @@ export function toStoredItem(
   item: LibraryItem,
   payload: ItemPayload,
   facts?: SceneFacts,
+  durationMs?: number,
 ): StoredItem {
   const attribution =
     item.authorSteamId === undefined && item.workshopUrl === undefined
@@ -57,6 +61,7 @@ export function toStoredItem(
           previewUrl: `/api/wallpaper-engine/item/${encodeURIComponent(item.workshopId)}/preview`,
         }),
     filesize: item.filesize,
+    ...(durationMs === undefined ? {} : { durationMs }),
     ...(item.updatedAt === undefined ? {} : { updatedAt: item.updatedAt }),
     tags: item.tags,
     properties: item.properties,

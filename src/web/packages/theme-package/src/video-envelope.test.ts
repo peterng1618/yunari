@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
+  type ByteRanges,
   readVideoFacts,
+  readVideoFactsFrom,
   themeVideoRefusals,
   VIDEO_LIMITS,
   videoRefusals,
@@ -293,6 +295,62 @@ describe("readVideoFacts", () => {
     new DataView(sizeZero.buffer).setUint32(0, 0);
     sizeZero.set([0x6d, 0x6f, 0x6f, 0x76], 4);
     expect(readVideoFacts(sizeZero)).toBeUndefined();
+  });
+});
+
+describe("readVideoFactsFrom", () => {
+  function rangesOf(bytes: Uint8Array): {
+    readonly ranges: ByteRanges;
+    readonly reads: readonly { offset: number; length: number }[];
+  } {
+    const reads: { offset: number; length: number }[] = [];
+    return {
+      reads,
+      ranges: {
+        size: bytes.byteLength,
+        async read(offset, length) {
+          reads.push({ offset, length });
+          return bytes.slice(offset, offset + length);
+        },
+      },
+    };
+  }
+
+  it("reads the same facts as the whole-file parser", async () => {
+    for (const bytes of [conforming, long, noFaststart, vfr]) {
+      expect(
+        (await readVideoFactsFrom(rangesOf(bytes).ranges))?.durationMs,
+      ).toBe(readVideoFacts(bytes)?.durationMs);
+    }
+  });
+
+  it("skips the payload instead of reading it", async () => {
+    // `long` carries a 26 KB moov before a small mdat; the point is that only
+    // box headers and the two boxes the parser reads are requested.
+    const { ranges, reads } = rangesOf(long);
+    await readVideoFactsFrom(ranges);
+
+    const payload = long.byteLength;
+    const requested = reads.reduce((sum, read) => sum + read.length, 0);
+    expect(requested).toBeLessThan(payload);
+    expect(reads[0]).toEqual({ offset: 0, length: 16 });
+  });
+
+  it("finds a moov that follows the payload", async () => {
+    const { ranges, reads } = rangesOf(noFaststart);
+    const facts = await readVideoFactsFrom(ranges);
+
+    expect(facts?.durationMs).toBe(readVideoFacts(noFaststart)?.durationMs);
+    // The walk stepped over mdat by its declared size; it never asked for it.
+    expect(reads.some((read) => read.length > 4_096)).toBe(false);
+  });
+
+  it("answers undefined for a file that is not an MP4", async () => {
+    const { ranges } = rangesOf(webm);
+    expect(await readVideoFactsFrom(ranges)).toBeUndefined();
+    expect(
+      await readVideoFactsFrom(rangesOf(truncated).ranges),
+    ).toBeUndefined();
   });
 });
 

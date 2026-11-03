@@ -117,6 +117,88 @@ export function readVideoFacts(bytes: Uint8Array): VideoFacts | undefined {
   return readVideo(bytes).facts;
 }
 
+/**
+ * Random access to a file's bytes, so a large clip is measured without being
+ * read. The host supplies an open file handle; tests supply an in-memory slice.
+ */
+export interface ByteRanges {
+  readonly size: number;
+  read(offset: number, length: number): Promise<Uint8Array>;
+}
+
+/** A moov larger than this is not a header worth loading; the row says the
+ *  duration is unknown rather than paying for a pathological file. */
+const MAX_MOOV_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The facts of a video file, read by its box headers alone.
+ *
+ * Only `ftyp` and `moov` carry what this parser reads, so the payload between
+ * them is skipped by seek rather than downloaded: a 299 MB wallpaper costs its
+ * movie header, not its frames. The two boxes are concatenated and handed to
+ * the same parser `readVideoFacts` uses, so there is one MP4 reading rule.
+ *
+ * `faststart` is meaningless in this view — no `mdat` is read — and is not
+ * used by a caller asking for a duration.
+ */
+export async function readVideoFactsFrom(
+  ranges: ByteRanges,
+): Promise<VideoFacts | undefined> {
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+  let seen = 0;
+
+  while (offset + 8 <= ranges.size && seen < MAX_BOXES) {
+    seen += 1;
+    const header = await ranges.read(
+      offset,
+      Math.min(16, ranges.size - offset),
+    );
+    if (header.byteLength < 8) return undefined;
+    const view = new DataView(
+      header.buffer,
+      header.byteOffset,
+      header.byteLength,
+    );
+    const size32 = view.getUint32(0);
+    const type = fourcc(view, 4);
+    const size =
+      size32 === 1
+        ? header.byteLength >= 16
+          ? Number(view.getBigUint64(8))
+          : Number.NaN
+        : size32 === 0
+          ? ranges.size - offset
+          : size32;
+
+    if (!Number.isFinite(size) || size < 8 || offset + size > ranges.size) {
+      return undefined;
+    }
+
+    if (type === "moov") {
+      if (size > MAX_MOOV_BYTES) return undefined;
+      parts.push(await ranges.read(offset, size));
+      break;
+    }
+    if (type === "ftyp") {
+      parts.push(await ranges.read(offset, size));
+    }
+
+    offset += size;
+  }
+
+  if (parts.length === 0) return undefined;
+  const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  const joined = new Uint8Array(total);
+  let at = 0;
+  for (const part of parts) {
+    joined.set(part, at);
+    at += part.byteLength;
+  }
+
+  return readVideoFacts(joined);
+}
+
 function readVideo(bytes: Uint8Array): VideoRead {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const budget: Budget = { left: MAX_BOXES, truncated: false };

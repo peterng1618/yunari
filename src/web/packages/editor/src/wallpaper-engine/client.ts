@@ -17,6 +17,9 @@ export interface WallpaperEngineItem {
   readonly kind: "video" | "scene";
   readonly previewUrl: string | undefined;
   readonly filesize: number;
+  /** A video's length. Absent for a scene, and for a video whose movie header
+   *  could not be read; never zero as a stand-in. */
+  readonly durationMs?: number;
   /** The item directory's last write, where the host could read it. */
   readonly updatedAt?: number;
   readonly tags: readonly string[];
@@ -142,6 +145,11 @@ function itemOf(value: unknown): WallpaperEngineItem | undefined {
     kind,
     previewUrl: stringAt(record, "previewUrl"),
     filesize,
+    ...(typeof record.durationMs === "number" &&
+    Number.isFinite(record.durationMs) &&
+    record.durationMs >= 0
+      ? { durationMs: record.durationMs }
+      : {}),
     ...(typeof record.updatedAt === "number" &&
     Number.isFinite(record.updatedAt)
       ? { updatedAt: record.updatedAt }
