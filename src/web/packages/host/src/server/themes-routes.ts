@@ -14,12 +14,7 @@ import {
 import { requiredDeviceGroups } from "../settings/required-devices.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
-import {
-  isValidThemeId,
-  type ThemeStore,
-  ThemeTooLargeError,
-  ThemeValidationError,
-} from "../themes/store.js";
+import { isValidThemeId, type ThemeStore } from "../themes/store.js";
 import { SHIPPED_TEMPLATES } from "../themes/templates.js";
 import type { ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
@@ -27,6 +22,7 @@ import { isPlatformError, readBody, sendJson, sendText } from "./http.js";
 import { displayFor, isLoopbackRemote, knownDisplayKey } from "./identity.js";
 import { MAX_THUMBNAIL_BYTES } from "./limits.js";
 import type { HostServerOptions } from "./options.js";
+import { servePanelPreview } from "./panel-preview-route.js";
 
 /**
  * One row of the display map `/api/themes/active` answers: a display and the
@@ -602,80 +598,15 @@ export function createThemeRoutes(
         return true;
       }
 
-      // `read` rather than `readEnvelope`: the preview must refuse a stored
-      // theme that does not validate, and only `read` tells that apart from an
-      // absent one.
-      let theme: Awaited<ReturnType<ThemeStore["read"]>>;
-      try {
-        theme = await themeStore.read(rawId);
-      } catch (error) {
-        if (error instanceof ThemeValidationError) {
-          sendJson(response, 422, {
-            error: `Theme "${rawId}" is stored but does not validate.`,
-            issues: error.issues,
-          });
-          return true;
-        }
-        if (error instanceof ThemeTooLargeError) {
-          sendText(response, 413, error.message);
-          return true;
-        }
-        throw error;
-      }
-      if (theme === undefined) {
-        sendText(response, 404, "Theme not found.");
-        return true;
-      }
-
-      const named = url.searchParams.get("display");
-      const record = named === null ? undefined : await displays?.find(named);
-      if (record === undefined) {
-        sendText(response, 404, "No such display.");
-        return true;
-      }
-      if (record.kind !== "panel") {
-        sendText(response, 409, "That display is not a panel.");
-        return true;
-      }
-      // A record whose ids no family claims, or one with no hardware half, is
-      // a display this build cannot render. The manager refuses it too; naming
-      // it here is what turns its 500 into a reason the caller can act on.
-      const hardware = record.panel;
-      if (
-        hardware === undefined ||
-        familyFor(hardware.vendorId, hardware.productId) === undefined
-      ) {
-        sendText(
-          response,
-          409,
-          "The host has no panel driver for that display.",
-        );
-        return true;
-      }
-
-      // The route is loopback-only, so the manager's own sentence is safe to
-      // relay. It names why the capture failed; the generic 500 would not.
-      let bytes: Uint8Array;
-      try {
-        bytes = await panels.capturePreview(
-          record.id,
-          rawId,
-          url.searchParams.get("clip") === "1",
-        );
-      } catch (error) {
-        sendText(
-          response,
-          500,
-          error instanceof Error ? error.message : String(error),
-        );
-        return true;
-      }
-      response.writeHead(200, {
-        "content-type": "image/png",
-        "x-content-type-options": "nosniff",
-        "cache-control": "no-store",
+      await servePanelPreview({
+        response,
+        rawId,
+        display: url.searchParams.get("display"),
+        clip: url.searchParams.get("clip") === "1",
+        themeStore,
+        displays,
+        panels,
       });
-      response.end(Buffer.from(bytes));
       return true;
     }
 

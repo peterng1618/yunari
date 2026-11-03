@@ -90,7 +90,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_shape",
     {
       description:
-        "Add a rect, ellipse or path shape with a palette token. A path supplies its own commands.",
+        "Add a rect, ellipse or path shape with a palette token. A path supplies its own commands and stroke width; a rect takes a radius. Other combinations are refused.",
       inputSchema: z.object({
         kind: z.enum(["rect", "ellipse", "path"]),
         box: boxSchema,
