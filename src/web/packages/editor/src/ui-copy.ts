@@ -1803,6 +1803,16 @@ export const uiCopy = {
         video: "Video",
         scene: "Scene",
       } satisfies Record<"video" | "scene", string>,
+      /** The container the host read from a video payload's bytes. */
+      container: {
+        mp4: "MP4",
+        webm: "WebM",
+        matroska: "Matroska",
+        unknown: "Unknown container",
+      } satisfies Record<"mp4" | "webm" | "matroska" | "unknown", string>,
+      /** The publish envelope takes only an H.264 MP4, so a clip in another
+       *  container cannot become the background and says so on its row. */
+      onlyMp4: "Only an H.264 MP4 can become the background",
       size: fileSize,
       duration: clipDuration,
       search: "Search titles",

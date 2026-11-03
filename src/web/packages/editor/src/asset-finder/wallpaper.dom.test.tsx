@@ -43,6 +43,13 @@ const video: WallpaperEngineItem = {
   stillAtRest: undefined,
   hasText: undefined,
   attribution: undefined,
+  container: "mp4",
+};
+
+const webm: WallpaperEngineItem = {
+  ...video,
+  workshopId: "206",
+  container: "webm",
 };
 
 function actions(): WallpaperActions {
@@ -102,6 +109,29 @@ it("draws no preview for an item the host served none for", () => {
   const [card] = wallpaperCards([video]);
 
   expect(card?.preview).toBeNull();
+});
+
+it("names a video's real container on its row", () => {
+  const [card] = wallpaperCards([webm]);
+
+  expect(card?.meta).toBe(
+    `${words.kind.video} · ${words.container.webm} · ${words.size(webm.filesize)}`,
+  );
+});
+
+it("refuses a clip the publish envelope cannot take before it is imported", () => {
+  const wired = actions();
+  const [action] = wallpaperActionsOf(webm, wired);
+
+  expect(action?.disabled).toBe(true);
+  expect(action?.label).toBe(words.onlyMp4);
+  expect(wired.onSetBackground).not.toHaveBeenCalled();
+});
+
+it("keeps the background action for an MP4 clip", () => {
+  const [action] = wallpaperActionsOf(video, actions());
+
+  expect(action?.disabled).toBe(false);
 });
 
 it("labels a video's action as the background and a scene's as the project", () => {

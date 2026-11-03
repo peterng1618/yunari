@@ -58,6 +58,9 @@ export function wallpaperCards(
     name: item.title,
     meta: [
       copy.kind[item.kind],
+      ...(item.kind !== "video" || item.container === undefined
+        ? []
+        : [copy.container[item.container]]),
       ...(item.durationMs === undefined
         ? []
         : [copy.duration(item.durationMs)]),
@@ -93,13 +96,18 @@ export function wallpaperActionsOf(
   const copy = words();
 
   if (item.kind === "video") {
+    // A container other than MP4 is the host's own reading of the bytes, and
+    // the envelope cannot take it. The row states the requirement instead of
+    // letting the author spend an import on a file that must refuse.
+    const unsupported =
+      item.container !== undefined && item.container !== "mp4";
     return [
       {
         id: "set-background",
-        label: copy.action.video.idle,
+        label: unsupported ? copy.onlyMp4 : copy.action.video.idle,
         busyLabel: copy.action.video.running,
         tone: "plain",
-        disabled: false,
+        disabled: unsupported,
         run: async () => {
           const outcome =
             trim === undefined

@@ -1,4 +1,5 @@
 import type { SceneFacts } from "./classify.js";
+import type { VideoContainer } from "./container.js";
 import type { LibraryItem } from "./library.js";
 import type { ItemPayload } from "./resolve.js";
 
@@ -22,6 +23,9 @@ export interface StoredItem {
   /** A video's length, read from its movie header. Absent for a scene and for a
    *  video whose header could not be read — never zero. */
   readonly durationMs?: number;
+  /** A video's real container, read from its header: the publish envelope takes
+   *  only an H.264 MP4, and the payload's name may disagree. */
+  readonly container?: VideoContainer;
   /** The item directory's last write, where the host could read it. */
   readonly updatedAt?: number;
   readonly tags: readonly string[];
@@ -38,6 +42,7 @@ export function toStoredItem(
   payload: ItemPayload,
   facts?: SceneFacts,
   durationMs?: number,
+  container?: VideoContainer,
 ): StoredItem {
   const attribution =
     item.authorSteamId === undefined && item.workshopUrl === undefined
@@ -62,6 +67,7 @@ export function toStoredItem(
         }),
     filesize: item.filesize,
     ...(durationMs === undefined ? {} : { durationMs }),
+    ...(container === undefined ? {} : { container }),
     ...(item.updatedAt === undefined ? {} : { updatedAt: item.updatedAt }),
     tags: item.tags,
     properties: item.properties,

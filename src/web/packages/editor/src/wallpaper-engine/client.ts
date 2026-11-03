@@ -11,6 +11,8 @@ import { bytesFromBase64 } from "../video-normalizer.js";
  * than an empty grid a person would read as "no wallpapers".
  */
 
+export type WallpaperContainer = "mp4" | "webm" | "matroska" | "unknown";
+
 export interface WallpaperEngineItem {
   readonly workshopId: string;
   readonly title: string;
@@ -20,6 +22,8 @@ export interface WallpaperEngineItem {
   /** A video's length. Absent for a scene, and for a video whose movie header
    *  could not be read; never zero as a stand-in. */
   readonly durationMs?: number;
+  /** A video's real container, read from its header by the host. */
+  readonly container?: WallpaperContainer;
   /** The item directory's last write, where the host could read it. */
   readonly updatedAt?: number;
   readonly tags: readonly string[];
@@ -55,6 +59,11 @@ const REASONS = [
 type Reason = (typeof REASONS)[number];
 
 const KINDS = ["video", "scene"] as const;
+const CONTAINERS = ["mp4", "webm", "matroska", "unknown"] as const;
+
+function isContainer(value: unknown): value is WallpaperContainer {
+  return CONTAINERS.includes(value as WallpaperContainer);
+}
 
 /** The payload's real extension, read from the served content type. The asset
  *  route reports no filename today, so the item's title is what names the
@@ -150,6 +159,7 @@ function itemOf(value: unknown): WallpaperEngineItem | undefined {
     record.durationMs >= 0
       ? { durationMs: record.durationMs }
       : {}),
+    ...(isContainer(record.container) ? { container: record.container } : {}),
     ...(typeof record.updatedAt === "number" &&
     Number.isFinite(record.updatedAt)
       ? { updatedAt: record.updatedAt }

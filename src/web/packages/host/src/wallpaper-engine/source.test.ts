@@ -22,6 +22,15 @@ const conformingMp4 = new Uint8Array(
 
 const encoder = new TextEncoder();
 
+/** EBML's magic, then the DocType a Matroska header names. */
+const matroskaHeader = new Uint8Array([
+  0x1a,
+  0x45,
+  0xdf,
+  0xa3,
+  ...encoder.encode("matroska"),
+]);
+
 /** The same hand-built container `classify.test.ts` uses. */
 function buildPackage(
   members: readonly (readonly [string, string])[],
@@ -174,7 +183,32 @@ describe("the Wallpaper Engine source", () => {
     expect(byId.get("202")).toMatchObject({ kind: "scene" });
     expect(byId.get("202")).not.toHaveProperty("stillAtRest");
     expect(byId.get("202")).not.toHaveProperty("hasText");
-    expect(byId.get("203")).toMatchObject({ kind: "video", durationMs: 2000 });
+    expect(byId.get("203")).toMatchObject({
+      kind: "video",
+      durationMs: 2000,
+      container: "mp4",
+    });
+  });
+
+  it("reports a payload's real container and serves its true media type", async () => {
+    await writeItem(
+      "206",
+      "project.json",
+      JSON.stringify({ type: "video", file: "clip.mp4" }),
+    );
+    // A Wallpaper Engine item whose `.mp4` name carries Matroska bytes.
+    await writeItem("206", "clip.mp4", matroskaHeader);
+
+    const source = createWallpaperEngineSource({ locate });
+    const answer = await source.listing();
+    if (!answer.available) throw new Error(answer.reason);
+
+    const row = answer.items.find((item) => item.workshopId === "206");
+    expect(row).toMatchObject({ kind: "video", container: "matroska" });
+    expect(row).not.toHaveProperty("durationMs");
+
+    const bytes = await source.bytesOf("206", "asset");
+    expect(bytes?.contentType).toBe("video/x-matroska");
   });
 
   it("reuses the persisted scan across a restart and notices library changes", async () => {

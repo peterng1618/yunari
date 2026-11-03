@@ -83,6 +83,27 @@ describe("fetchWallpaperEngine", () => {
     });
   });
 
+  it("keeps the container the host read from a clip's bytes", async () => {
+    const { fetcher } = stub(
+      () =>
+        new Response(
+          JSON.stringify({
+            available: true,
+            items: [{ ...item, container: "matroska" }],
+            skipped: 0,
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const answer = await fetchWallpaperEngine({ fetch: fetcher });
+
+    expect(answer).toMatchObject({
+      available: true,
+      items: [{ container: "matroska" }],
+    });
+  });
+
   it("skips a malformed item rather than fabricating one", async () => {
     const { fetcher } = stub(
       () =>

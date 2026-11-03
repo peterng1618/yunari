@@ -19,7 +19,7 @@ import type { StoredItem } from "./wire.js";
  */
 
 /** Bumped whenever the entry's shape or the scan's meaning changes. */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const CACHE_FILE = "listing.json";
 const SCENE_PACKAGE = "scene.pkg";
 
@@ -40,6 +40,17 @@ interface CacheFile {
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+const CONTAINERS = ["mp4", "webm", "matroska", "unknown"] as const;
+
+function isContainer(
+  value: unknown,
+): value is NonNullable<StoredItem["container"]> {
+  return (
+    typeof value === "string" &&
+    (CONTAINERS as readonly string[]).includes(value)
+  );
+}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -174,6 +185,7 @@ function storedOf(value: unknown): StoredItem | undefined {
     previewUrl,
     filesize,
     durationMs,
+    container,
     updatedAt,
     tags,
     properties,
@@ -195,6 +207,7 @@ function storedOf(value: unknown): StoredItem | undefined {
       (typeof durationMs !== "number" ||
         !Number.isFinite(durationMs) ||
         durationMs < 0)) ||
+    (container !== undefined && !isContainer(container)) ||
     (updatedAt !== undefined &&
       (typeof updatedAt !== "number" || !Number.isFinite(updatedAt))) ||
     !Array.isArray(tags) ||
@@ -219,6 +232,7 @@ function storedOf(value: unknown): StoredItem | undefined {
     tags,
     properties,
     ...(durationMs === undefined ? {} : { durationMs }),
+    ...(isContainer(container) ? { container } : {}),
     ...(previewUrl === undefined ? {} : { previewUrl }),
     ...(stillAtRest === undefined ? {} : { stillAtRest }),
     ...(hasText === undefined ? {} : { hasText }),

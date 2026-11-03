@@ -3,6 +3,11 @@ import { contentTypeFor } from "../serve/static-path.js";
 import { fetchAuthorName } from "./author.js";
 import { fingerprintOf, readListingCache, writeListingCache } from "./cache.js";
 import { readSceneFacts, type SceneFacts } from "./classify.js";
+import {
+  type VideoContainer,
+  videoContainerAt,
+  videoContentTypeOf,
+} from "./container.js";
 import { videoDurationMs } from "./duration.js";
 import { type LibraryItem, scanLibrary } from "./library.js";
 import { locateInstall, type WallpaperEngineInstall } from "./locate.js";
@@ -175,6 +180,7 @@ export function createWallpaperEngineSource(
       // read again on demand, so a large library costs the scan, not the RSS.
       let facts: SceneFacts | undefined;
       let durationMs: number | undefined;
+      let container: VideoContainer | undefined;
       if (payload.kind === "scene") {
         const bytes = await readOrUndefined(payload.path);
         if (bytes !== undefined) {
@@ -182,11 +188,13 @@ export function createWallpaperEngineSource(
         }
       } else if (payload.kind === "video") {
         // The clip's header only: a wallpaper that is hundreds of megabytes is
-        // measured without being read, so the row can answer "how long".
+        // measured without being read, so the row can answer "how long" and
+        // which container the bytes really use.
         durationMs = await videoDurationMs(payload.path);
+        container = await videoContainerAt(payload.path);
       }
 
-      stored.push(toStoredItem(item, payload, facts, durationMs));
+      stored.push(toStoredItem(item, payload, facts, durationMs, container));
       resolved.push(item);
       byId.set(item.workshopId, item);
     }
@@ -256,10 +264,16 @@ export function createWallpaperEngineSource(
     }
 
     const bytes = await readOrUndefined(payload.path);
-    const contentType =
+    let contentType =
       payload.kind === "scene"
         ? contentTypeFor(payload.path)
         : payload.contentType;
+    if (payload.kind === "video") {
+      const container = await videoContainerAt(payload.path);
+      if (container !== "unknown") {
+        contentType = videoContentTypeOf(container);
+      }
+    }
 
     return bytes === undefined ? undefined : { bytes, contentType };
   }
