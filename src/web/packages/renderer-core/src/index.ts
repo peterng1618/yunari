@@ -293,6 +293,12 @@ export {
   ASSET_EXTENSIONS,
   themeAssetContentType,
 } from "./theme/asset-media-type.js";
+export {
+  resolveBackgroundComposition,
+  type BackgroundComposition,
+  type BackgroundMask,
+  type CompositionRect,
+} from "./theme/background-composition.js";
 export type { AssetResolver, AssetResolverOptions } from "./theme/assets.js";
 export {
   createAssetResolver,
