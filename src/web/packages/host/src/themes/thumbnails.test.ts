@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -118,6 +125,72 @@ describe("thumbnails", () => {
     expect(await store.read("living-room")).toEqual(PNG);
   });
 
+  it("stores the picture's mean luminance beside it", async () => {
+    const store = createThumbnailStore(dir);
+    await store.write("living-room", pngOf(1, 1, 0, Uint8Array.from([0, 255])));
+
+    const meta = JSON.parse(
+      await readFile(path.join(dir, "living-room", "thumbnail.json"), "utf8"),
+    ) as { readonly luminance?: unknown };
+
+    expect(meta.luminance).toBeCloseTo(1);
+  });
+
+  it("answers the stored mean without decoding the picture", async () => {
+    const store = createThumbnailStore(dir);
+    await store.write("living-room", pngOf(1, 1, 0, Uint8Array.from([0, 255])));
+    // Replaced with bytes no reader can decode: only the value beside the
+    // picture can answer, which is the point of storing it.
+    await writeFile(
+      path.join(dir, "living-room", "thumbnail.png"),
+      new TextEncoder().encode("no longer a picture"),
+    );
+
+    expect(await store.luminance("living-room")).toBeCloseTo(1);
+  });
+
+  it("computes and keeps the mean for a picture stored without one", async () => {
+    await mkdir(path.join(dir, "living-room"), { recursive: true });
+    await writeFile(
+      path.join(dir, "living-room", "thumbnail.png"),
+      pngOf(1, 1, 0, Uint8Array.from([0, 255])),
+    );
+    const store = createThumbnailStore(dir);
+
+    expect(await store.luminance("living-room")).toBeCloseTo(1);
+
+    const meta = JSON.parse(
+      await readFile(path.join(dir, "living-room", "thumbnail.json"), "utf8"),
+    ) as { readonly luminance?: unknown };
+    expect(meta.luminance).toBeCloseTo(1);
+  });
+
+  it("ignores a stored value it cannot read", async () => {
+    await mkdir(path.join(dir, "living-room"), { recursive: true });
+    await writeFile(
+      path.join(dir, "living-room", "thumbnail.png"),
+      pngOf(1, 1, 0, Uint8Array.from([0, 255])),
+    );
+    await writeFile(
+      path.join(dir, "living-room", "thumbnail.json"),
+      JSON.stringify({ luminance: "bright" }),
+    );
+
+    expect(
+      await createThumbnailStore(dir).luminance("living-room"),
+    ).toBeCloseTo(1);
+  });
+
+  it("removes the mean with the picture", async () => {
+    const store = createThumbnailStore(dir);
+    await store.write("living-room", pngOf(1, 1, 0, Uint8Array.from([0, 255])));
+    await store.remove("living-room");
+
+    expect(await store.luminance("living-room")).toBeUndefined();
+    expect(await readdir(path.join(dir, "living-room"))).toEqual([]);
+    expect(await store.luminance("../escape")).toBeUndefined();
+  });
+
   it("answers whether a picture is stored, without reading it", async () => {
     const store = createThumbnailStore(dir);
     expect(await store.has("living-room")).toBe(false);
@@ -136,6 +209,7 @@ describe("thumbnails", () => {
     await store.write("living-room", PNG);
 
     expect(await readdir(path.join(dir, "living-room"))).toEqual([
+      "thumbnail.json",
       "thumbnail.png",
     ]);
     // The old shape was a shared `thumbnails/` directory beside the library;
@@ -149,6 +223,7 @@ describe("thumbnails", () => {
     await store.write("living-room", PNG);
 
     expect(await readdir(path.join(dir, "living-room"))).toEqual([
+      "thumbnail.json",
       "thumbnail.png",
     ]);
   });

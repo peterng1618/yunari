@@ -31,6 +31,10 @@ import type { ThumbnailStore } from "./thumbnails.js";
 export interface SubmissionFiles {
   readonly packageBytes: Uint8Array;
   readonly thumbnailBytes: Uint8Array;
+  /** The picture's mean relative luminance, which the Worker files the version
+   *  by; it never decodes the picture. Absent when this build cannot read the
+   *  picture's format, which leaves a media-backed theme unclassified. */
+  readonly thumbnailLuminance: number | undefined;
   /** The versioned document the Worker validates and the package carries. */
   readonly envelope: FabricThemeEnvelope;
   /** The version the Worker computed for this submission. */
@@ -98,6 +102,11 @@ export async function submissionFiles(
       message: "This theme has no picture yet; set one before submitting.",
     };
   }
+
+  // The same reading the local listing uses, kept beside the picture when it
+  // was stored. The Worker has no decoder, so this is the only place the value
+  // can come from; it describes the bytes the submission publishes.
+  const thumbnailLuminance = await options.thumbnails?.luminance(themeId);
 
   // The author's own stored version is the only prior release a submission may
   // descend from — in any state, which is what the authenticated route buys. A
@@ -192,6 +201,7 @@ export async function submissionFiles(
     files: {
       packageBytes: written.bytes,
       thumbnailBytes: thumbnail,
+      thumbnailLuminance,
       envelope: withVersion,
       version: plan.version,
       from: item?.version,

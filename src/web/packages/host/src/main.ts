@@ -62,10 +62,7 @@ import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThemeMedia } from "./themes/theme-media.js";
-import {
-  createThumbnailStore,
-  thumbnailLuminance,
-} from "./themes/thumbnails.js";
+import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
 import { openTrayAction } from "./tray/actions.js";
 import { type TrayController } from "./tray/controller.js";
@@ -376,10 +373,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // mode reads the stored picture's mean luminance, because a picture or video
   // behind the board is what a viewer sees there rather than the paint token.
   const themeStore = createThemeStore(themesDir, {
-    thumbnailLuminance: async (id) => {
-      const picture = await thumbnails.read(id);
-      return picture === undefined ? undefined : thumbnailLuminance(picture);
-    },
+    thumbnailLuminance: (id) => thumbnails.luminance(id),
   });
 
   // The tray, once it exists. The stop path closes it first, so a click on Exit

@@ -767,6 +767,8 @@ async function finalizeVersion(
   const thumbnail = decodeThumbnail(read.body["thumbnail"]);
   if (!thumbnail.ok)
     return new Response(thumbnail.message, { status: thumbnail.status });
+  const luminance = decodeLuminance(read.body["thumbnailLuminance"]);
+  if (!luminance.ok) return unprocessable(luminance.message);
 
   // Newest first: a second version request after a failed PUT mints a later
   // row, so the newest row with an object is the one the author wrote. A row
@@ -846,7 +848,9 @@ async function finalizeVersion(
       item_id: itemId,
       version,
       envelope_json: presign.envelope_json,
-      facets_json: JSON.stringify(facetRecordOf(parseEnvelope(presign))),
+      facets_json: JSON.stringify(
+        facetRecordOf(parseEnvelope(presign), luminance.value),
+      ),
       package_key: stored.key,
       thumbnail_key: thumbnailKey(itemId),
       bytes: inspected.bytes,
@@ -979,6 +983,34 @@ function decodeThumbnail(value: unknown): Thumbnail {
   )
     return { ok: false, status: 422, message: "The thumbnail is not a PNG." };
   return { ok: true, bytes };
+}
+
+type Luminance =
+  | { readonly ok: true; readonly value: number | undefined }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * The picture's mean relative luminance, as the publisher measured it.
+ *
+ * The Worker cannot decode the picture, so the number travels with the bytes
+ * it describes. Absent is allowed — a publisher that cannot read a picture's
+ * format leaves the facet to the document alone. A value that is present must
+ * be a luminance: the facet it feeds is how a viewer filters by colour, so an
+ * out-of-range number is refused rather than filed.
+ */
+function decodeLuminance(value: unknown): Luminance {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 1
+  )
+    return {
+      ok: false,
+      message: "The thumbnail luminance must be a number between 0 and 1.",
+    };
+  return { ok: true, value };
 }
 
 /** A foreign item is indistinguishable from a missing one. */

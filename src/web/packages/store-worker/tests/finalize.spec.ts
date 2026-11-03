@@ -631,6 +631,52 @@ describe("finalize", () => {
     });
   });
 
+  it("files a version by the picture's measured luminance", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    // Media behind the board: the document alone can only say `unclassified`,
+    // because the paint token is the letterbox rather than what a viewer sees.
+    const media = candidate(ITEM_ID);
+    media["background"] = { media: { assetId: "loop", bounds: "theme" } };
+    media["assets"] = [{ id: "loop", kind: "video", path: "assets/loop.webm" }];
+    const { version, key } = await reserve(headers, media);
+    await putPackage(key, PACKAGE_BYTES);
+
+    const response = await finalize(
+      headers,
+      version,
+      THUMBNAIL_PNG,
+      ITEM_ID,
+      0.9,
+    );
+    expect(response.status).toBe(200);
+
+    const facets = JSON.parse(await facetsJsonOf(version)) as {
+      readonly colourMode?: unknown;
+    };
+    // The Worker has no decoder; the number travels with the picture so this
+    // is the publisher's measurement, not a guess from the paint.
+    expect(facets.colourMode).toBe("light");
+  });
+
+  it("refuses a luminance that is not between 0 and 1", async () => {
+    const headers = await sessionHeaders();
+    await reset();
+    const { version, key } = await reserve(headers);
+    await putPackage(key, PACKAGE_BYTES);
+
+    const response = await finalize(
+      headers,
+      version,
+      THUMBNAIL_PNG,
+      ITEM_ID,
+      1.4,
+    );
+
+    expect(response.status).toBe(422);
+    expect(await versionsOf(env.DB, ITEM_ID)).toEqual([]);
+  });
+
   it("refuses a thumbnail that is not a PNG or is over 2 MiB", async () => {
     const headers = await sessionHeaders();
     await reset();
@@ -787,6 +833,16 @@ async function storedPackageKey(version: string): Promise<string | undefined> {
   return row?.package_key;
 }
 
+/** The facets the stored version was filed by. */
+async function facetsJsonOf(version: string): Promise<string> {
+  const row = await env.DB.prepare(
+    "SELECT facets_json FROM item_version WHERE item_id = ? AND version = ?",
+  )
+    .bind(ITEM_ID, version)
+    .first<{ facets_json: string }>();
+  return row?.facets_json ?? "{}";
+}
+
 /** One reservation row with no version behind it, for the batch's own case. */
 async function seedUpload(
   id: string,
@@ -911,13 +967,17 @@ async function finalize(
   version: string,
   thumbnail: string = THUMBNAIL_PNG,
   itemId: string = ITEM_ID,
+  luminance?: number,
 ): Promise<Response> {
   return SELF.fetch(
     `${BASE}/api/me/items/${itemId}/versions/${version}/finalize`,
     {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ thumbnail }),
+      body: JSON.stringify({
+        thumbnail,
+        ...(luminance === undefined ? {} : { thumbnailLuminance: luminance }),
+      }),
     },
   );
 }

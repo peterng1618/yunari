@@ -18,7 +18,11 @@ import {
   type VersionPlan,
 } from "./store-client.js";
 import { submissionFiles } from "./submission.js";
-import { createThumbnailStore, type ThumbnailStore } from "./thumbnails.js";
+import {
+  createThumbnailStore,
+  type ThumbnailStore,
+  thumbnailLuminance,
+} from "./thumbnails.js";
 
 const NOW = new Date("2026-10-22T09:30:00.000Z");
 
@@ -182,6 +186,7 @@ describe("submissionFiles", () => {
     expect(read.envelope.metadata?.name).toBe("Aurora");
     expect(read.envelope.metadata?.version).toBe("1.0.0");
     expect(files.thumbnailBytes).toEqual(PNG);
+    expect(files.thumbnailLuminance).toBeCloseTo(thumbnailLuminance(PNG)!);
     expect(read.thumbnail).toEqual(PNG);
   });
 
@@ -486,7 +491,10 @@ describe("submissionFiles", () => {
       // The version write itself succeeds; the package is what is measured.
       write: async () => ({ ok: true }),
     } as unknown as ThemeStore;
-    const picture = { read: async () => PNG } as unknown as ThumbnailStore;
+    const picture = {
+      read: async () => PNG,
+      luminance: async () => 0.5,
+    } as unknown as ThumbnailStore;
 
     const result = await submissionFiles(THEME_ID, oversized, {
       thumbnails: picture,

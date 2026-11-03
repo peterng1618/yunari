@@ -3,7 +3,11 @@ import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { relativeLuminanceOf } from "@yunari/renderer-core";
 import { readContainedFile } from "./contained-read.js";
-import { isValidThemeId, THUMBNAIL_FILE } from "./store.js";
+import {
+  isValidThemeId,
+  THUMBNAIL_FILE,
+  THUMBNAIL_META_FILE,
+} from "./store.js";
 
 /**
  * A still of a theme's artboard, stored inside that theme's own folder so the
@@ -20,6 +24,9 @@ import { isValidThemeId, THUMBNAIL_FILE } from "./store.js";
 
 /** A screenshot of a dashboard; anything larger is not one. */
 const MAX_BYTES = 2 * 1024 * 1024;
+
+/** The value beside a picture is one number; anything larger is not one. */
+const MAX_META_BYTES = 512;
 
 /** The largest declared size the library will hand a browser. A picture is
  *  drawn at gallery-cell size, so both bounds are far above anything a capture
@@ -66,6 +73,10 @@ export interface ThumbnailStore {
   /** Whether a picture is stored at all, without reading its bytes: a listing
    *  asks this so its page requests only images that exist (`vg-655`). */
   has(id: string): Promise<boolean>;
+  /** The picture's mean relative luminance, read from the value kept beside it
+   *  so a listing does not decode every picture. A picture stored before that
+   *  value existed is decoded once and the answer kept. */
+  luminance(id: string): Promise<number | undefined>;
   write(id: string, bytes: Uint8Array): Promise<void>;
   remove(id: string): Promise<void>;
 }
@@ -169,8 +180,8 @@ function unfilter(
  * **Transparency is ignored**: a captured dashboard is opaque, and a
  * transparent pixel has no colour of its own to average.
  *
- * ponytail: one full decode per listing entry. Cache the mean beside the
- * picture's mtime if library listings grow large enough for it to show.
+ * A listing never calls this per entry: {@link ThumbnailStore.write} keeps the
+ * answer beside the picture, and {@link ThumbnailStore.luminance} reads it.
  */
 export function thumbnailLuminance(bytes: Uint8Array): number | undefined {
   const dimensions = pngDimensions(bytes);
@@ -297,6 +308,59 @@ function scratchName(): string {
 }
 
 /**
+ * The mean a picture's sidecar states, or `undefined` when it is absent or not
+ * a luminance.
+ *
+ * The file sits outside the document, so it is read like every other file in a
+ * theme folder: contained and bounded. A value that fails the range is the same
+ * absence as no file, because a wrong mean is worse than one decode.
+ */
+async function storedLuminance(
+  library: string,
+  id: string,
+): Promise<number | undefined> {
+  const bytes = await readContainedFile(
+    library,
+    `${id}/${THUMBNAIL_META_FILE}`,
+    MAX_META_BYTES,
+  );
+  if (bytes === undefined) return undefined;
+  try {
+    const body = JSON.parse(new TextDecoder().decode(bytes)) as {
+      readonly luminance?: unknown;
+    };
+    const luminance = body.luminance;
+    return typeof luminance === "number" &&
+      Number.isFinite(luminance) &&
+      luminance >= 0 &&
+      luminance <= 1
+      ? luminance
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keeps the sidecar paired with its picture. A failure here costs one decode
+ *  the next time the listing asks, never the picture itself. */
+async function keepLuminance(
+  library: string,
+  id: string,
+  luminance: number | undefined,
+): Promise<void> {
+  const file = path.join(library, id, THUMBNAIL_META_FILE);
+  try {
+    if (luminance === undefined) {
+      await fs.rm(file, { force: true });
+    } else {
+      await fs.writeFile(file, JSON.stringify({ luminance }));
+    }
+  } catch {
+    // The picture is the artefact; this is the reading that saves one.
+  }
+}
+
+/**
  * @param library The theme library's root: a picture belongs to the theme it
  *   renders, so it is addressed through the same directory the theme is.
  */
@@ -304,30 +368,53 @@ export function createThumbnailStore(library: string): ThumbnailStore {
   const filePath = (id: string): string =>
     path.join(library, id, THUMBNAIL_FILE);
 
+  const readPicture = async (id: string): Promise<Uint8Array | undefined> => {
+    if (!isValidThemeId(id)) {
+      return undefined;
+    }
+
+    // Contained, like every other file this host reads out of a theme
+    // folder: a picture linked in from outside is not this theme's. Absent is
+    // ordinary — an older package, or a capture that failed — and the helper
+    // answers `undefined` for it rather than throwing. The write bound is the
+    // read bound too, refused before the file is buffered.
+    const bytes = await readContainedFile(
+      library,
+      `${id}/${THUMBNAIL_FILE}`,
+      MAX_BYTES,
+    );
+
+    // A file someone else wrote must not be served as an image — nor one
+    // whose header declares a surface the library will not draw.
+    return bytes !== undefined &&
+      isPng(bytes) &&
+      pixelRefusal(bytes) === undefined
+      ? new Uint8Array(bytes)
+      : undefined;
+  };
+
   return {
-    async read(id) {
+    read: readPicture,
+
+    async luminance(id) {
       if (!isValidThemeId(id)) {
         return undefined;
       }
 
-      // Contained, like every other file this host reads out of a theme
-      // folder: a picture linked in from outside is not this theme's. Absent is
-      // ordinary — an older package, or a capture that failed — and the helper
-      // answers `undefined` for it rather than throwing. The write bound is the
-      // read bound too, refused before the file is buffered.
-      const bytes = await readContainedFile(
-        library,
-        `${id}/${THUMBNAIL_FILE}`,
-        MAX_BYTES,
-      );
+      const kept = await storedLuminance(library, id);
+      if (kept !== undefined) {
+        return kept;
+      }
 
-      // A file someone else wrote must not be served as an image — nor one
-      // whose header declares a surface the library will not draw.
-      return bytes !== undefined &&
-        isPng(bytes) &&
-        pixelRefusal(bytes) === undefined
-        ? new Uint8Array(bytes)
-        : undefined;
+      // A picture stored before this value existed: decode it once and keep
+      // the answer beside it, so the next listing reads one number.
+      const bytes = await readPicture(id);
+      if (bytes === undefined) {
+        return undefined;
+      }
+      const luminance = thumbnailLuminance(bytes);
+      await keepLuminance(library, id, luminance);
+      return luminance;
     },
 
     async has(id) {
@@ -383,6 +470,10 @@ export function createThumbnailStore(library: string): ThumbnailStore {
         await fs.rm(staging, { force: true });
         throw error;
       }
+
+      // The value describes the picture just stored, so a listing reads a
+      // number instead of decoding it. An undecodable picture keeps no value.
+      await keepLuminance(library, id, thumbnailLuminance(bytes));
     },
 
     async remove(id) {
@@ -393,7 +484,9 @@ export function createThumbnailStore(library: string): ThumbnailStore {
       // The picture, never the theme: a theme is removed by removing its folder,
       // and the picture goes with it because it is one file in there. This
       // exists to drop a picture on its own, and the folder is the theme store's.
+      // Its value goes too — a mean for a picture that is gone is a lie.
       await fs.rm(filePath(id), { force: true });
+      await fs.rm(path.join(library, id, THUMBNAIL_META_FILE), { force: true });
     },
   };
 }

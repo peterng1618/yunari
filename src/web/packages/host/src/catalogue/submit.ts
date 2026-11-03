@@ -163,6 +163,7 @@ export async function handleSubmitRoute(
       id,
       plan.files.version,
       plan.files.thumbnailBytes,
+      plan.files.thumbnailLuminance,
     );
     return json(200, {
       ok: true,

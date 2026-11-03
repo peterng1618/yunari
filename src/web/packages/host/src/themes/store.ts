@@ -336,6 +336,10 @@ const ASSETS_DIR = "assets";
  *  own render. It is a member of the theme folder, so a save carries it
  *  forward rather than replacing the folder without it. */
 export const THUMBNAIL_FILE = "thumbnail.png";
+/** The picture's mean relative luminance, written beside it by the thumbnail
+ *  store. A listing reads this instead of decoding every picture; it is a
+ *  member of the folder for the same reason the picture is. */
+export const THUMBNAIL_META_FILE = "thumbnail.json";
 
 /** Which half of the save a scratch folder is part of. */
 type ScratchKind = "staging" | "retired";
@@ -1243,21 +1247,24 @@ export function createThemeStore(
             }
           }
 
-          // The library picture is a member of the folder, not part of the
-          // document: a save that carried no new picture keeps the one it
-          // replaces. The editor uploads its own after saving; a client that
-          // cannot draw depends on this copy, and so does the library while a
-          // fresh capture is still in flight.
-          const picture = path.join(target, THUMBNAIL_FILE);
-          if (
-            await fs
-              .stat(picture)
-              .then(() => true)
-              .catch(() => false)
-          ) {
-            await fs.cp(picture, path.join(staging, THUMBNAIL_FILE), {
-              preserveTimestamps: true,
-            });
+          // The library picture and its metadata are members of the folder,
+          // not part of the document: a save that carried no new picture keeps
+          // the one it replaces, and the value describing that picture stays
+          // paired with it. The editor uploads its own after saving; a client
+          // that cannot draw depends on this copy, and so does the library
+          // while a fresh capture is still in flight.
+          for (const name of [THUMBNAIL_FILE, THUMBNAIL_META_FILE]) {
+            const member = path.join(target, name);
+            if (
+              await fs
+                .stat(member)
+                .then(() => true)
+                .catch(() => false)
+            ) {
+              await fs.cp(member, path.join(staging, name), {
+                preserveTimestamps: true,
+              });
+            }
           }
 
           hadPrevious = await fs

@@ -72,9 +72,9 @@ describe("createStoreClient", () => {
       name: "Mine",
     });
     await client.upload(plan.uploadUrl, PACKAGE_BYTES);
-    expect(await client.finalize(ITEM_ID, "1.0.1", PNG)).toMatchObject({
-      status: "pending",
-    });
+    expect(
+      await client.finalize(ITEM_ID, "1.0.1", PNG, undefined),
+    ).toMatchObject({ status: "pending" });
     expect(seen).toContain(`${ORIGIN}/api/me/items/${ITEM_ID}/baseline`);
 
     // The token travels on every call, the upload included: it is an
@@ -85,6 +85,26 @@ describe("createStoreClient", () => {
       "Bearer t",
       "Bearer t",
     ]);
+  });
+
+  it("sends the picture's measured luminance with it, and omits an unknown one", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const client = createStoreClient({
+      origin: ORIGIN,
+      token: "t",
+      fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return json({ ok: true, status: "pending", version: "1.0.1" });
+      }) as typeof fetch,
+    });
+
+    await client.finalize(ITEM_ID, "1.0.1", PNG, 0.25);
+    await client.finalize(ITEM_ID, "1.0.1", PNG, undefined);
+
+    expect(bodies[0]).toMatchObject({ thumbnailLuminance: 0.25 });
+    // An unknown mean is absent, never 0: the Worker must not file a picture
+    // as black because its publisher could not read it.
+    expect(bodies[1]).not.toHaveProperty("thumbnailLuminance");
   });
 
   it("sends the token and the declared length with the upload", async () => {

@@ -27,7 +27,9 @@ export interface VersionRow {
   readonly version: string;
   /** The validated `theme.json`; the version ladder's baseline. */
   readonly envelope_json: string;
-  /** `facetRecordOf(envelope)`, derived once when the version is written. */
+  /** `facetRecordOf(envelope, thumbnailLuminance)`, derived once when the
+   *  version is written; the luminance is the publisher's measurement of the
+   *  picture that version carries. */
   readonly facets_json: string;
   readonly package_key: string;
   readonly thumbnail_key: string;

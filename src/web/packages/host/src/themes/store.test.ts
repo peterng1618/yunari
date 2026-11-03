@@ -2823,6 +2823,27 @@ describe("ThemeStore remove", () => {
     ).toBe("a picture");
   });
 
+  it("keeps the picture's metadata the save did not carry", async () => {
+    await store.write("living-room", save("living-room", "Living Room"));
+    await fs.writeFile(
+      path.join(tmpDir, "living-room", "thumbnail.json"),
+      JSON.stringify({ luminance: 0.42 }),
+    );
+
+    await store.write("living-room", save("living-room", "Living Room"), {
+      overwrite: true,
+    });
+
+    // The value describes the picture beside it. A copy that keeps the picture
+    // without it makes every listing decode the picture again.
+    expect(
+      await fs.readFile(
+        path.join(tmpDir, "living-room", "thumbnail.json"),
+        "utf8",
+      ),
+    ).toBe(JSON.stringify({ luminance: 0.42 }));
+  });
+
   it("refuses a folder that is not a theme, and never touches it", async () => {
     // A directory whose name a theme id could claim but which holds no theme:
     // the author left it, or a tool did. The listing does not show it, and a

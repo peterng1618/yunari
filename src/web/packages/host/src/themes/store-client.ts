@@ -62,6 +62,7 @@ export interface StoreClient {
     id: string,
     version: string,
     thumbnail: Uint8Array,
+    thumbnailLuminance: number | undefined,
   ): Promise<FinalizedVersion>;
   unpublish(id: string): Promise<Transitioned>;
   publish(id: string): Promise<Transitioned>;
@@ -183,11 +184,14 @@ export function createStoreClient(options: {
       await response.body?.cancel().catch(() => undefined);
     },
 
-    finalize(id, version, thumbnail) {
+    finalize(id, version, thumbnail, thumbnailLuminance) {
       return send(
         `${itemPath(id)}/versions/${encodeURIComponent(version)}/finalize`,
         "POST",
-        { thumbnail: Buffer.from(thumbnail).toString("base64") },
+        {
+          thumbnail: Buffer.from(thumbnail).toString("base64"),
+          ...(thumbnailLuminance === undefined ? {} : { thumbnailLuminance }),
+        },
       ).then((response) => payload<FinalizedVersion>(response));
     },
 
