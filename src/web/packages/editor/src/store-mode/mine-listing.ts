@@ -61,6 +61,9 @@ export interface MineListing extends OnlineListingShape {
 export interface MineListingOptions {
   /** Called when Mine is turned on, so the region can move to the half. */
   readonly onEnabled?: () => void;
+  /** Whether the online half is the one being drawn. The catalogue is read
+   *  only then, so the local half's first paint never waits on a remote read. */
+  readonly enabled?: boolean;
   /** Injected so a test drives the session probe without a network. */
   readonly fetch?: typeof fetch;
 }
@@ -86,7 +89,9 @@ export function useMineListing(
   local: readonly StoreItem[] | undefined,
   options: MineListingOptions = {},
 ): MineListing {
-  const catalogue = useOnlineListing(local);
+  const catalogue = useOnlineListing(local, {
+    enabled: options.enabled ?? true,
+  });
   const { fetch: doFetch, onEnabled } = options;
   const [offered, setOffered] = useState(false);
   const [on, setOn] = useState(false);

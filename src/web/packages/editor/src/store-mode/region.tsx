@@ -706,7 +706,10 @@ function StoreRegion(props: {
   }, [source, listingAttempt]);
 
   // The online half chooses its source: the catalogue, or the author's own rows.
+  // It reads the catalogue only while that half is drawn, so the local half's
+  // first paint does not wait on a remote round trip.
   const online = useMineListing(items, {
+    enabled: tab === "online",
     onEnabled: () => setTab("online"),
   });
 

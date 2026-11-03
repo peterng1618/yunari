@@ -7,6 +7,8 @@
  * **The transport is injected**, so every case here is the probe's own decisions
  * rather than a network's.
  */
+
+import { catalogueIndexUrl } from "@yunari/renderer-core";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -92,4 +94,35 @@ it("re-probes the session when the window regains focus", async () => {
 
   expect(fetcher.calls).toEqual(["/api/store/session", "/api/store/session"]);
   expect(read().offered).toBe(true);
+});
+
+it("does not read the catalogue until its half is chosen", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return String(input).endsWith("/api/store/session")
+      ? new Response(JSON.stringify({ signedIn: false }), { status: 200 })
+      : new Response(EMPTY_INDEX, { status: 200 });
+  });
+
+  function Probe(props: { readonly enabled: boolean }): null {
+    useMineListing(undefined, { enabled: props.enabled });
+    return null;
+  }
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  host = container;
+  root = createRoot(container);
+  act(() => root?.render(createElement(Probe, { enabled: false })));
+  await flush();
+
+  // The region mounts on Themes' local half, so the remote catalogue must not
+  // be on the path of that first paint.
+  expect(calls).toEqual(["/api/store/session"]);
+
+  act(() => root?.render(createElement(Probe, { enabled: true })));
+  await flush();
+
+  expect(calls).toEqual(["/api/store/session", catalogueIndexUrl()]);
 });

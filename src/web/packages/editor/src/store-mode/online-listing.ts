@@ -17,13 +17,24 @@ import { onlineThemeSource } from "./online-source.js";
  * has nothing. `failed` is the separate fact that it will not arrive unless
  * `retry` reads again: the surface states that rather than drawing an empty
  * catalogue over it, and `retry` is the same read this hook opened with.
+ *
+ * **The catalogue is read only while its half is chosen.** A cold catalogue
+ * fetch is a remote round trip, and the region mounts on Themes — where the
+ * local half is drawn first — so reading it on mount put a remote read on the
+ * path of the first paint for a listing nobody was looking at (2026-11-03).
+ * Switching halves is what starts it, and the first switch pays the fetch it
+ * would have paid anyway.
  */
-export function useOnlineListing(local: readonly StoreItem[] | undefined): {
+export function useOnlineListing(
+  local: readonly StoreItem[] | undefined,
+  options: { readonly enabled?: boolean } = {},
+): {
   readonly items: readonly StoreItem[] | undefined;
   readonly refused: readonly CatalogueRefusal[];
   readonly failed: boolean;
   readonly retry: () => void;
 } {
+  const enabled = options.enabled ?? true;
   // One source for the life of the region, as the local half's is: a source
   // rebuilt per render would reach the origin again on every keystroke.
   const [source] = useState(() => onlineThemeSource());
@@ -41,6 +52,8 @@ export function useOnlineListing(local: readonly StoreItem[] | undefined): {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return undefined;
+
     let live = true;
     setFailed(false);
     setListing(undefined);
@@ -57,7 +70,7 @@ export function useOnlineListing(local: readonly StoreItem[] | undefined): {
     return () => {
       live = false;
     };
-  }, [source, attempt]);
+  }, [source, attempt, enabled]);
 
   // The join reads the library on every render rather than being baked into the
   // state: the two reads settle in either order, and a joined copy held in state
