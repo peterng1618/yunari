@@ -6,6 +6,8 @@
  * module exporting its own rows; nothing above changes.
  */
 
+import type { PalettePaint } from "@yunari/renderer-core";
+
 /** A panel's own raster size, in the orientation the wire expects. */
 export interface PanelGeometry {
   readonly width: number;
@@ -86,6 +88,21 @@ export interface PanelControls {
 export interface PanelVideoPlacement {
   readonly offsetX: number;
   readonly offsetY: number;
+  /** Fractions of the layer's box the media is inset by. Absent covers it. */
+  readonly region?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
+  /** The media's alpha ramp at one region edge. */
+  readonly blend?: {
+    readonly shape: "linear" | "radial";
+    readonly edge?: "left" | "right" | "top" | "bottom";
+    readonly length: number;
+  };
+  /** The resolved paint behind the media inside its box. */
+  readonly fill?: PalettePaint;
 }
 
 /** A video background, the placement it was authored with, and the display it

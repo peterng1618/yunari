@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
-import type { PanelDevice } from "./panel-device.js";
+import type { PanelDevice, PanelVideoPlacement } from "./panel-device.js";
 import type { SerialTransport } from "./serial-transport.js";
 import { openTurzxPanel, type TurzxOptions } from "./turzx-panel.js";
 import { panelCrop, transcodeForPanel } from "./turzx-video.js";
@@ -287,6 +287,140 @@ describe("transcodeForPanel", () => {
         ).ok,
       ).toBe(true);
       expect(turned.calls).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The composed filter graph for one placement, or the plain `-vf` string. */
+async function filterFor(
+  placement: PanelVideoPlacement,
+  rotation = 0,
+): Promise<string> {
+  const directory = await cacheDir();
+  try {
+    const recorded = recordingRun();
+    const result = await transcodeForPanel(randomBytes(16), {
+      cacheDir: directory,
+      run: recorded.run,
+      verifyForTest: true,
+      placement,
+      rotation,
+    });
+    expect(result.ok).toBe(true);
+    const args = recorded.calls[0]!;
+    const at = args.indexOf("-filter_complex");
+    return at >= 0 ? args[at + 1]! : filterOf(args);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+describe("the composed panel clip", () => {
+  it("crops the source to the media region and composites it over a solid fill", async () => {
+    const filter = await filterFor({
+      offsetX: 0,
+      offsetY: 0,
+      region: { left: 0.35, top: 0, right: 0, bottom: 0 },
+      blend: { shape: "linear", edge: "left", length: 0.12 },
+      fill: { kind: "solid", color: "#101418" },
+    });
+
+    expect(filter).toContain("crop=");
+    expect(filter).toContain("color=c=0x101418");
+    expect(filter).toMatch(/maskedmerge|overlay/);
+    // The region starts 35% into the 800px box and is 65% wide.
+    expect(filter).toContain("scale=520:480");
+  });
+
+  it("renders a gradient fill with gradients=", async () => {
+    const filter = await filterFor({
+      offsetX: 0,
+      offsetY: 0,
+      region: { top: 0.5 },
+      fill: {
+        kind: "gradient",
+        angle: 90,
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+    });
+
+    expect(filter).toContain("gradients=");
+  });
+
+  it("renders a radial mask with geq and a linear mask with gradients", async () => {
+    const radial = await filterFor({
+      offsetX: 0,
+      offsetY: 0,
+      region: { left: 0.35 },
+      blend: { shape: "radial", length: 0.4 },
+    });
+    expect(radial).toMatch(/geq/);
+
+    const linear = await filterFor({
+      offsetX: 0,
+      offsetY: 0,
+      region: { left: 0.35 },
+      blend: { shape: "linear", edge: "left", length: 0.4 },
+    });
+    expect(linear).toMatch(/gradients=/);
+  });
+
+  it("keeps the plain -vf path when there is no composition", async () => {
+    const directory = await cacheDir();
+    try {
+      const recorded = recordingRun();
+      await transcodeForPanel(randomBytes(16), {
+        cacheDir: directory,
+        run: recorded.run,
+        verifyForTest: true,
+        placement: { offsetX: 0.25, offsetY: 0 },
+      });
+
+      const args = recorded.calls[0]!;
+      expect(args).toContain("-vf");
+      expect(args).not.toContain("-filter_complex");
+      expect(filterOf(args)).toContain("crop=");
+      expect(filterOf(args)).not.toContain("gradients=");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("encodes again when only the composition changed", async () => {
+    const bytes = randomBytes(16);
+    const directory = await cacheDir();
+
+    try {
+      const plain = recordingRun([1]);
+      await transcodeForPanel(bytes, {
+        cacheDir: directory,
+        run: plain.run,
+        verifyForTest: true,
+        placement: { offsetX: 0, offsetY: 0 },
+      });
+
+      const composed = recordingRun([2]);
+      await transcodeForPanel(bytes, {
+        cacheDir: directory,
+        run: composed.run,
+        verifyForTest: true,
+        placement: {
+          offsetX: 0,
+          offsetY: 0,
+          region: { left: 0.35 },
+          fill: { kind: "solid", color: "#101418" },
+        },
+      });
+
+      expect(plain.calls).toHaveLength(1);
+      expect(composed.calls, "the composition is part of the key").toHaveLength(
+        1,
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

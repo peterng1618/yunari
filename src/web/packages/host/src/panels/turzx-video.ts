@@ -16,6 +16,12 @@ import {
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import {
+  artboardGradientLine,
+  type BackgroundMask,
+  type PalettePaint,
+  resolveBackgroundComposition,
+} from "@yunari/renderer-core";
 import { placement } from "@yunari/scene-fabric";
 import { readVideoFacts } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
@@ -54,7 +60,7 @@ const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
 /** Moves whenever the ffmpeg arguments or filter change: an output encoded by
  *  an older transform is not this clip, so it must not be served. */
-const TRANSCODE_VERSION = "v1";
+const TRANSCODE_VERSION = "v2";
 /**
  * The cache's byte bound. Theme clips are multi-megabyte, so a count cap alone
  * could hold gigabytes; 256 MiB keeps dozens of distinct clips and evicts by
@@ -268,7 +274,7 @@ function sha256(
 ): string {
   return createHash("sha256")
     .update(bytes)
-    .update(`\0${placement.offsetX},${placement.offsetY},${turn}`)
+    .update(`\0${turn}\0${JSON.stringify(placement)}`)
     .digest("hex");
 }
 
@@ -337,15 +343,54 @@ function clamp(value: number, low: number, high: number): number {
  * on a 90° mount, then the layer itself turns about its centre and covers the
  * 800×480 glass. Turning the source before the crop would show a different part
  * of the clip, so the crop window is the turned box's and the turn comes last.
+ *
+ * A composition is one question more: where the media sits, what fills the rest
+ * and how the seam fades. That graph is built in the same turned box, so the
+ * bake and the page describe one picture.
  */
+interface EncodeFilter {
+  readonly filter: string;
+  readonly complex: boolean;
+  /** The composed graph's fill and mask never end, so the output needs the
+   *  source's own duration; the plain path takes its length from the input. */
+  readonly durationSeconds?: number;
+}
+
 function panelFilter(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
   turn: PanelVideoTurn,
-): string {
+): EncodeFilter {
   const box = turnedBox(BOX, turn);
-  const turnSuffix = turnFilter(turn);
   const facts = readVideoFacts(bytes);
+  const composed =
+    placement.region !== undefined ||
+    placement.blend !== undefined ||
+    placement.fill !== undefined;
+
+  if (!composed) {
+    return {
+      filter: plainFilter(facts, placement, box, turn),
+      complex: false,
+    };
+  }
+
+  return {
+    filter: composedFilter(facts, placement, box, turn),
+    complex: true,
+    ...(facts === undefined || !(facts.durationMs > 0)
+      ? {}
+      : { durationSeconds: facts.durationMs / 1000 }),
+  };
+}
+
+function plainFilter(
+  facts: { readonly width: number; readonly height: number } | undefined,
+  placement: PanelVideoPlacement,
+  box: { readonly width: number; readonly height: number },
+  turn: PanelVideoTurn,
+): string {
+  const turnSuffix = turnFilter(turn);
 
   if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
     return (
@@ -364,7 +409,146 @@ function panelFilter(
   return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnSuffix}`;
 }
 
-function encodeArgs(input: string, output: string, filter: string): string[] {
+/**
+ * The composed graph, in the turned box and with the turn applied last.
+ *
+ * One mask line decides every surface, so the host reads the resolver's own
+ * geometry rather than re-deriving the ramp. The fill covers the whole box; the
+ * media is cropped to the region's cover, scaled to the region, masked, and laid
+ * over the fill at the region's offset.
+ */
+function composedFilter(
+  facts: { readonly width: number; readonly height: number } | undefined,
+  placement: PanelVideoPlacement,
+  box: { readonly width: number; readonly height: number },
+  turn: PanelVideoTurn,
+): string {
+  const composition = resolveBackgroundComposition(
+    { width: box.width, height: box.height },
+    {
+      ...(placement.region ?? {}),
+      ...(placement.blend === undefined ? {} : { blend: placement.blend }),
+    },
+  );
+  const region = composition.region;
+  const width = Math.max(1, Math.round(region.width));
+  const height = Math.max(1, Math.round(region.height));
+  const x = Math.max(0, Math.round(region.left));
+  const y = Math.max(0, Math.round(region.top));
+
+  const media =
+    facts === undefined || facts.width <= 0 || facts.height <= 0
+      ? `scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${width}:${height}`
+      : (() => {
+          const crop = panelCrop(
+            { width: facts.width, height: facts.height },
+            placement.offsetX,
+            placement.offsetY,
+            { width: region.width, height: region.height },
+          );
+          return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:${height}`;
+        })();
+
+  const parts = [
+    `[0:v]${media}[media]`,
+    `${fillSource(placement.fill, box.width, box.height)}[fill]`,
+  ];
+
+  let overlayInput = "media";
+  if (composition.mask !== undefined) {
+    parts.push(
+      `${maskSource(composition.mask, x, y, width, height)}[mask]`,
+      "[media][mask]alphamerge[composed]",
+    );
+    overlayInput = "composed";
+  }
+
+  const turnStep = turnFilter(turn);
+  parts.push(
+    `[fill][${overlayInput}]overlay=x=${x}:y=${y}:shortest=1[turned]`,
+    `[turned]${turnStep === "" ? "null" : turnStep.slice(1)}[out]`,
+  );
+  return parts.join(";");
+}
+
+/** A solid or linear-gradient source covering the whole box. */
+function fillSource(
+  fill: PalettePaint | undefined,
+  width: number,
+  height: number,
+): string {
+  if (fill === undefined) return `color=c=0x000000:s=${width}x${height}`;
+  if (fill.kind === "solid")
+    return `color=c=${ffmpegColor(fill.color)}:s=${width}x${height}`;
+
+  const colors = gradientColors(fill.stops);
+  const line = artboardGradientLine(fill, width, height);
+  const stops = colors.map((color, index) => `c${index}=${color}`).join(":");
+  return (
+    `gradients=s=${width}x${height}:${stops}:nb_colors=${colors.length}` +
+    `:x0=${Math.round(line.x1)}:y0=${Math.round(line.y1)}` +
+    `:x1=${Math.round(line.x2)}:y1=${Math.round(line.y2)}`
+  );
+}
+
+/**
+ * ffmpeg's `gradients` spaces its colours evenly and holds at most eight. A
+ * longer authored ramp is sampled at eight even positions; a palette gradient
+ * with more stops than that is rare and the shape is kept.
+ */
+function gradientColors(
+  stops: readonly { readonly offset: number; readonly color: string }[],
+): readonly string[] {
+  const ordered = [...stops].sort((a, b) => a.offset - b.offset);
+  if (ordered.length <= 8)
+    return ordered.map((stop) => ffmpegColor(stop.color));
+  return Array.from({ length: 8 }, (_, index) =>
+    ffmpegColor(ordered[Math.round((index * (ordered.length - 1)) / 7)]!.color),
+  );
+}
+
+function ffmpegColor(color: string): string {
+  return color.startsWith("#") ? `0x${color.slice(1)}` : color;
+}
+
+/**
+ * The alpha mask, sized to the region and shifted by the region's own offset.
+ * The resolver's line is in box pixels; the mask source is region pixels.
+ */
+function maskSource(
+  mask: BackgroundMask,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): string {
+  if (mask.kind === "linear") {
+    return (
+      `gradients=s=${width}x${height}:c0=black:c1=white` +
+      `:x0=${Math.round(mask.x1 - x)}:y0=${Math.round(mask.y1 - y)}` +
+      `:x1=${Math.round(mask.x2 - x)}:y1=${Math.round(mask.y2 - y)}`
+    );
+  }
+
+  const cx = (mask.cx - x).toFixed(2);
+  const cy = (mask.cy - y).toFixed(2);
+  const rx = Math.max(1, mask.rx);
+  const ry = Math.max(1, mask.ry);
+  const ramp = Math.max(0.0001, 1 - mask.opaqueFraction);
+  // `1 - d` is opaque inside the ellipse and 0 at its boundary; the ramp
+  // starts `opaqueFraction` of the way out and reaches the edge at 1.
+  const expression = `255*min(1,max(0,(1-hypot((X-${cx})/${rx},(Y-${cy})/${ry}))/${ramp}))`;
+  return (
+    `color=c=black:s=${width}x${height},` +
+    `geq=lum='${expression}':cb='128':cr='128'`
+  );
+}
+
+function encodeArgs(
+  input: string,
+  output: string,
+  filter: EncodeFilter,
+): string[] {
   return [
     "-hide_banner",
     "-nostdin",
@@ -374,8 +558,12 @@ function encodeArgs(input: string, output: string, filter: string): string[] {
     "-i",
     input,
     "-an",
-    "-vf",
-    filter,
+    ...(filter.complex
+      ? ["-filter_complex", filter.filter, "-map", "[out]"]
+      : ["-vf", filter.filter]),
+    ...(filter.durationSeconds === undefined
+      ? []
+      : ["-t", String(filter.durationSeconds)]),
     "-r",
     "30",
     "-c:v",
