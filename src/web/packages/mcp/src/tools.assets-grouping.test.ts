@@ -189,6 +189,70 @@ describe("asset tools", () => {
     }
   });
 
+  it("imports a ref whose licence key was copied with the US spelling", async () => {
+    const svg = Buffer.from("<svg/>");
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/assets/bytes") {
+        return {
+          headers: { "x-yunari-filename": "yor.svg" },
+          body: svg,
+        };
+      }
+      return hostHandler()(request);
+    });
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+
+    // A ref that was decoded, edited and re-encoded by hand can carry the US
+    // spelling. The ref is opaque, so the label is the only thing affected.
+    const assetRef = Buffer.from(
+      JSON.stringify({
+        source: "wallpaper-engine",
+        id: "wallpaper-engine:3165911129",
+        name: "Yor-Forger-Anime-Desktop",
+        kind: "svg",
+        preview: "http://127.0.0.1/preview",
+        license: "Unknown",
+        sourceUrl: "steam://url/CommunityFilePage/3165911129",
+      }),
+      "utf8",
+    ).toString("base64");
+
+    const imported = payload(await importAsset(ctx, { assetRef }));
+
+    expect(imported.credit).toMatchObject({
+      title: "Yor-Forger-Anime-Desktop",
+      license: "Unknown",
+    });
+  });
+
+  it("names the keys a ref actually carries when its licence is absent", async () => {
+    const host = await startHost(hostHandler());
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+
+    const assetRef = Buffer.from(
+      JSON.stringify({
+        source: "lucide",
+        id: "lucide:cpu",
+        name: "CPU",
+        kind: "svg",
+        preview: "",
+        sourceUrl: "",
+        legacy: "x",
+      }),
+      "utf8",
+    ).toString("base64");
+
+    const result = await importAsset(ctx, { assetRef });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/no "licence"/u);
+    expect(text).toMatch(/legacy/u);
+  });
+
   it("refuses a local import without the user's stated licence", async () => {
     const host = await startHost(hostHandler());
     const ctx = context(host);

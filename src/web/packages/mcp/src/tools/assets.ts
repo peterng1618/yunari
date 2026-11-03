@@ -53,13 +53,20 @@ function decodeRef(value: string): AssetRef {
     }
     return field;
   };
+  // The ref is opaque and carried by hand, so a copy can arrive with the US
+  // spelling of this one label. Accepting it keeps a recoverable ref usable.
+  const licence = record["licence"] ?? record["license"];
+  if (typeof licence !== "string") {
+    const keys = Object.keys(record).sort().join(", ") || "(none)";
+    throw new Error(`That assetRef has no "licence". Its keys are ${keys}.`);
+  }
   return {
     source: text("source"),
     id: text("id"),
     name: text("name"),
     kind: text("kind"),
     preview: text("preview"),
-    licence: text("licence"),
+    licence,
     sourceUrl: text("sourceUrl"),
   };
 }
