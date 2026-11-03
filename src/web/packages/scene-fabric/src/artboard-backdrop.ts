@@ -3,6 +3,7 @@ import type {
   BackgroundMask,
   CompositionRect,
   DisplayShape,
+  GlassSampling,
 } from "@yunari/renderer-core";
 import { fillArtboardPaint } from "./artboard-paint.js";
 import type { MediaBox } from "./background-media.js";
@@ -11,7 +12,6 @@ import type {
   BackdropMedia,
   BackdropPlate,
   DeviceRect,
-  GlassSampling,
 } from "./glass.js";
 
 /** The display's own surface: the host rect for a rect display, the disc for a

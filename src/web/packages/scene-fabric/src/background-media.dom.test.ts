@@ -1102,9 +1102,13 @@ describe("background media as a glass backdrop", () => {
     });
 
     const layer = host.querySelector("[data-yunari-background-media]");
-    const fill = layer?.querySelector("[data-yunari-background-fill]");
-    const region = layer?.querySelector("[data-yunari-background-region]");
-    const media = region?.querySelector("video, img");
+    const fill = layer?.querySelector<HTMLElement>(
+      "[data-yunari-background-fill]",
+    );
+    const region = layer?.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const media = region?.querySelector<HTMLElement>("video, img");
 
     expect(layer?.contains(fill as Node)).toBe(true);
     expect(fill?.style.background).toContain("linear-gradient");
