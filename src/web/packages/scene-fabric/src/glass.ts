@@ -1,4 +1,9 @@
-import { type GlassSampling, glassTreatment } from "@yunari/renderer-core";
+import {
+  type BackgroundMask,
+  type CompositionRect,
+  type GlassSampling,
+  glassTreatment,
+} from "@yunari/renderer-core";
 import {
   Circle,
   Ellipse,
@@ -83,6 +88,14 @@ export interface BackdropMedia {
   /** The display's own surface, painted under the media. Absent when the media
    *  is the whole backdrop, as in the glass tests' stubs. */
   readonly plate?: BackdropPlate;
+  /** The resolved paint behind the media inside its bounds box. Absent paints
+   *  nothing; present only with an authored region. */
+  readonly fill?: unknown;
+  /** Where the media sits inside the layer's box, in the same artboard units as
+   *  `rect`. Absent means the media covers the whole box. */
+  readonly region?: CompositionRect;
+  /** The resolved alpha ramp at the region's edge. Absent is a hard edge. */
+  readonly mask?: BackgroundMask;
   /** Paints the media over `region` of `ctx`, with `device` its rect in `ctx`'s
    *  own pixels, standing on the picture `sampling` names. False when that
    *  picture has no pixels yet — a static panel with no declared still paints

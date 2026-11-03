@@ -626,10 +626,26 @@ export function mountBackgroundMedia(
       // pixels, while `rect` stays in artboard units for the placement.
       const angle =
         display === undefined ? bounds?.artboard.angle : display.angle;
+      // The authored region is expressed in the box the layer paints, so it is
+      // resolved against the same rect the glass maps and the DOM places in.
+      const authored = background?.media?.region;
+      const composition = resolveBackgroundComposition(
+        { width: rect.width, height: rect.height },
+        authored,
+      );
       return {
         rect,
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
+        ...(authored === undefined
+          ? {}
+          : {
+              fill: options.fill,
+              region: composition.region,
+              ...(composition.mask === undefined
+                ? {}
+                : { mask: composition.mask }),
+            }),
         paint(ctx, region, device, sampling) {
           // A static panel stands on the video's declared frame — or its first
           // frame when it declares none. An image is already a still, so it is
@@ -648,16 +664,26 @@ export function mountBackgroundMedia(
           const media = background?.media;
           // The child is placed inside this rect, the layer's box in artboard
           // units; the glass maps that box onto the device rect it samples, so
-          // the sampler and the element cannot show different crops.
+          // the sampler and the element cannot show different crops. A region
+          // narrows the placement to the same box the DOM wrapper uses.
           const placed = placement({
-            box: { width: rect.width, height: rect.height },
+            box: {
+              width: composition.region.width,
+              height: composition.region.height,
+            },
             source,
             ...geometry(media),
           });
           const scaleX = rect.width > 0 ? device.width / rect.width : 0;
           const scaleY = rect.height > 0 ? device.height / rect.height : 0;
-          const left = device.left - region.left + placed.left * scaleX;
-          const top = device.top - region.top + placed.top * scaleY;
+          const left =
+            device.left -
+            region.left +
+            (composition.region.left + placed.left) * scaleX;
+          const top =
+            device.top -
+            region.top +
+            (composition.region.top + placed.top) * scaleY;
           const width = placed.width * scaleX;
           const height = placed.height * scaleY;
           // Five arguments: the whole source, placed. A source window is the
