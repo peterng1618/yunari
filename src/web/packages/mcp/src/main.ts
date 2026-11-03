@@ -210,7 +210,7 @@ function terminalIo(): WizardIo {
 
 /** Everything the installer asks, resolved from flags, `--yes` or the wizard. */
 async function runInstaller(
-  command: "install" | "uninstall",
+  command: "install" | "uninstall" | "status",
   argv: readonly string[],
   options: RunOptions,
 ): Promise<number> {
@@ -245,6 +245,10 @@ async function runInstaller(
             return undefined;
           }
         });
+        if (wizard === undefined) {
+          console.log("Cancelled.");
+          return 0;
+        }
         const { cwd: wizardCwd, ...answers } = wizard;
         choices = resolveChoices({ ...answers, ...parsed.choices }, wizardCwd);
       } finally {
@@ -256,6 +260,28 @@ async function runInstaller(
   }
 
   const ports = createPorts({ probeHost: () => probeHost(choices.url) });
+
+  if (command === "status") {
+    const report = await status(ports, choices);
+    if (parsed.json) {
+      console.log(JSON.stringify(report));
+      return 0;
+    }
+    const at = report.host.url === undefined ? "" : ` at ${report.host.url}`;
+    console.log(
+      report.host.reachable
+        ? `host: reachable${at}`
+        : `host: unreachable${at}${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
+    );
+    console.log(`server: ${report.server.detail}`);
+    console.log(
+      report.skill.present
+        ? `skill: installed at ${report.skill.path} (${report.skill.state})`
+        : `skill: missing at ${report.skill.path}`,
+    );
+    return 0;
+  }
+
   const report =
     command === "install"
       ? await install(ports, choices)
@@ -298,11 +324,15 @@ export async function run(
 
   // The installer owns its own flag grammar, so it is routed before the
   // `serve` parser sees `--yes`, `--agent` or `--json`.
-  if (command === "install" || command === "uninstall") {
+  if (
+    command === "install" ||
+    command === "uninstall" ||
+    command === "status"
+  ) {
     return runInstaller(command, argv, options);
   }
   if (command === undefined) {
-    if (options.isTTY !== true) {
+    if ((options.isTTY ?? process.stdin.isTTY === true) !== true) {
       console.error(USAGE);
       return 1;
     }
@@ -320,24 +350,6 @@ export async function run(
 
   if (parsed.help) {
     console.log(USAGE);
-    return 0;
-  }
-
-  if (parsed.command === "status") {
-    const ports = createPorts({ probeHost: () => probeHost(parsed.url) });
-    const report = await status(ports);
-    const at = report.host.url === undefined ? "" : ` at ${report.host.url}`;
-    console.log(
-      report.host.reachable
-        ? `host: reachable${at}`
-        : `host: unreachable${at}${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
-    );
-    console.log(`server: ${report.server.detail}`);
-    console.log(
-      report.skill.present
-        ? `skill: installed at ${report.skill.path} (${report.skill.state})`
-        : `skill: missing at ${report.skill.path}`,
-    );
     return 0;
   }
 

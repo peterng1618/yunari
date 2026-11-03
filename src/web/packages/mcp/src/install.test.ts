@@ -53,6 +53,8 @@ interface Calls {
   upserts: { agent: string; config: unknown; options: unknown }[];
   removes: { agent: string; options: unknown }[];
   approvals: number;
+  approvalOptions: { local: boolean; cwd?: string }[];
+  checkAgents: string[][];
   probes: number;
   checks: number;
 }
@@ -73,6 +75,7 @@ interface Behaviour {
     readonly command?: string;
     readonly args: readonly string[];
   };
+  readonly remainingAgents?: readonly string[];
 }
 
 /**
@@ -94,6 +97,8 @@ function fakePorts(
     upserts: [],
     removes: [],
     approvals: 0,
+    approvalOptions: [],
+    checkAgents: [],
     probes: 0,
     checks: 0,
   };
@@ -148,8 +153,9 @@ function fakePorts(
           }
         : { success: true, path: "/agent/config.json", removed: true };
     },
-    removeAutoApproval: () => {
+    removeAutoApproval: (options: { local: boolean; cwd?: string }) => {
       calls.approvals += 1;
+      calls.approvalOptions.push(options);
       return behaviour.approvalFails === true
         ? {
             ok: false,
@@ -163,8 +169,9 @@ function fakePorts(
             path: "/agent/settings.json",
           };
     },
-    isServerInstalled: async () => {
+    isServerInstalled: async (agents) => {
       calls.checks += 1;
+      calls.checkAgents.push([...agents]);
       return behaviour.serverInstalled ?? true;
     },
     installedServer: async () =>
@@ -172,6 +179,7 @@ function fakePorts(
       (behaviour.serverInstalled === false
         ? undefined
         : { command: process.execPath, args: [serverEntry, "serve"] }),
+    registeredAgents: async () => behaviour.remainingAgents ?? [],
     fileExists: (path) => {
       if (path === process.execPath) return true;
       if (path === serverEntry) return behaviour.serverEntryMissing !== true;
@@ -658,5 +666,67 @@ describe("install choices", () => {
       "cursor",
     ]);
     expect(calls.skills).toHaveLength(0);
+  });
+});
+
+describe("selected agents and shared resources", () => {
+  const choices = (
+    overrides: Partial<InstallChoices> = {},
+  ): InstallChoices => ({
+    agents: ["claude-code"],
+    scope: "global",
+    skill: true,
+    autoApprove: true,
+    cwd: "/work",
+    ...overrides,
+  });
+
+  it("status checks the selected agents and scope", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await status(ports, choices({ agents: ["cursor"], scope: "local" }));
+    expect(calls.checkAgents).toEqual([["cursor"]]);
+  });
+
+  it("keeps the shared skill while another agent still uses it", async () => {
+    const { ports, calls } = fakePorts(temporaryHome(), {
+      remainingAgents: ["claude-code"],
+    });
+    const report = await uninstall(ports, choices({ agents: ["cursor"] }));
+    expect(calls.skills).toHaveLength(0);
+    expect(
+      report.steps.find((step) => step.step === "skill")?.detail,
+    ).toContain("still used by claude-code");
+  });
+
+  it("touches the approval rule only for a claude-code uninstall", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await uninstall(ports, choices({ agents: ["cursor"] }));
+    expect(calls.approvals).toBe(0);
+  });
+
+  it("removes the project approval file for a local install", async () => {
+    const home = temporaryHome();
+    const cwd = mkdtempSync(join(tmpdir(), "yunari-project-"));
+    homes.push(cwd);
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    writeFileSync(
+      join(cwd, ".claude", "settings.local.json"),
+      `${JSON.stringify({ permissions: { allow: [AUTO_APPROVAL_RULE] } })}\n`,
+    );
+
+    const result = removeAutoApprovalRule(home, { local: true, cwd });
+
+    expect(result.removed).toBe(true);
+    expect(
+      JSON.parse(
+        readFileSync(join(cwd, ".claude", "settings.local.json"), "utf8"),
+      ).permissions.allow,
+    ).toEqual([]);
+  });
+
+  it("passes the project scope to the approval cleanup", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await uninstall(ports, choices({ scope: "local", cwd: "/project" }));
+    expect(calls.approvalOptions).toEqual([{ local: true, cwd: "/project" }]);
   });
 });

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { runMcpCommand } from "./mcp.js";
+import { mcpConsoleLaunch, runMcpCommand } from "./mcp.js";
 
 const roots: string[] = [];
 
@@ -54,4 +54,20 @@ it("fails plainly when this package has no MCP files", () => {
   } finally {
     error.mockRestore();
   }
+});
+
+it("opens a console for the tray on Windows", () => {
+  const launch = mcpConsoleLaunch("C:/pkg/yunari-mcp.js", "win32");
+  expect(launch.command).toBe("cmd.exe");
+  expect(launch.args).toEqual([
+    "/c",
+    "start",
+    "",
+    process.execPath,
+    "C:/pkg/yunari-mcp.js",
+  ]);
+  expect(mcpConsoleLaunch("/pkg/yunari-mcp.js", "linux")).toEqual({
+    command: process.execPath,
+    args: ["/pkg/yunari-mcp.js"],
+  });
 });

@@ -30,7 +30,7 @@ export type ParsedInstallArgs =
   | { readonly kind: "error"; readonly message: string };
 
 function isCommand(token: string): boolean {
-  return token === "install" || token === "uninstall";
+  return token === "install" || token === "uninstall" || token === "status";
 }
 
 /**

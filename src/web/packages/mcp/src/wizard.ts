@@ -54,7 +54,7 @@ export async function runWizard(
   cwd: string,
   detected: readonly string[],
   probe: () => Promise<string | undefined>,
-): Promise<InstallChoices> {
+): Promise<InstallChoices | undefined> {
   io.write(
     `Agents: ${COMMON_AGENTS.map(
       (agent, index) =>
@@ -88,6 +88,20 @@ export async function runWizard(
       : answer.toLowerCase() === "none"
         ? undefined
         : answer;
+
+  // The summary names everything a person is about to change; nothing is
+  // written before this one answer.
+  io.write(
+    [
+      `Server "yunari": ${agents.join(", ")} (${scope})`,
+      `Theme-designer skill: ${skill ? "install" : "skip"}`,
+      `Auto-approve: ${approve ? "all tools" : "none"}`,
+      `Host: ${url ?? "probe at each session"}`,
+      "",
+    ].join("\n"),
+  );
+  const confirmed = !/^n/i.test((await io.ask("Apply? [Y/n]: ")).trim());
+  if (!confirmed) return undefined;
 
   return {
     agents,

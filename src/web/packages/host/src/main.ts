@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
-import { mcpBinPath, runMcpCommand } from "./cli/mcp.js";
+import { mcpBinPath, mcpConsoleLaunch, runMcpCommand } from "./cli/mcp.js";
 import {
   lanAddress,
   listenWithFallback,
@@ -922,10 +922,11 @@ export async function run(argv: readonly string[]): Promise<number> {
               }
               // A console window is the menu's only surface: the editor and
               // settings pages are in-process, but the installer is a CLI.
-              const child = spawn(process.execPath, [bin], {
+              const launch = mcpConsoleLaunch(bin);
+              const child = spawn(launch.command, launch.args, {
                 detached: true,
                 stdio: "ignore",
-                windowsHide: false,
+                windowsHide: true,
               });
               child.unref();
               return { ok: true, message: "Opened the agent tools." };

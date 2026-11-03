@@ -77,18 +77,27 @@ export interface InstallPorts {
     agent: string,
     options: { readonly local: boolean; readonly cwd?: string },
   ) => RemoveServerResult;
-  readonly removeAutoApproval: () => AutoApprovalRemoval;
+  readonly removeAutoApproval: (options: {
+    readonly local: boolean;
+    readonly cwd?: string;
+  }) => AutoApprovalRemoval;
   readonly isServerInstalled: (
-    agents?: readonly string[],
-    scope?: "global" | "local",
-    cwd?: string,
+    agents: readonly string[],
+    scope: "global" | "local",
+    cwd: string,
   ) => Promise<boolean>;
-  /** The entry the agent config holds, or undefined when it is not registered. */
   readonly installedServer: (
     agents: readonly string[],
+    scope: "global" | "local",
+    cwd: string,
   ) => Promise<
     { readonly command?: string; readonly args: readonly string[] } | undefined
   >;
+  /** Every agent that still has the server registered, for shared removals. */
+  readonly registeredAgents: (
+    scope: "global" | "local",
+    cwd: string,
+  ) => Promise<readonly string[]>;
   readonly fileExists: (path: string) => boolean;
   readonly probeHost: () => Promise<HostProbe>;
 }
@@ -196,9 +205,15 @@ export function compareSkill(
   }
 }
 
-/** The settings file `add-mcp` writes its auto-approval rule into. */
-export function claudeSettingsPath(home: string): string {
-  return join(home, ".claude", "settings.json");
+/** The settings file `add-mcp` writes its auto-approval rule into. A project
+ *  install writes the project file instead of the global one. */
+export function claudeSettingsPath(
+  home: string,
+  options: { readonly local?: boolean; readonly cwd?: string } = {},
+): string {
+  return options.local === true
+    ? join(options.cwd ?? process.cwd(), ".claude", "settings.local.json")
+    : join(home, ".claude", "settings.json");
 }
 
 /**
@@ -207,8 +222,11 @@ export function claudeSettingsPath(home: string): string {
  * `removeServer` does not undo `installClaudeCodeAutoApproval`, so uninstall
  * does it here through the same file it wrote.
  */
-export function removeAutoApprovalRule(home: string): AutoApprovalRemoval {
-  const path = claudeSettingsPath(home);
+export function removeAutoApprovalRule(
+  home: string,
+  options: { readonly local?: boolean; readonly cwd?: string } = {},
+): AutoApprovalRemoval {
+  const path = claudeSettingsPath(home, options);
   if (!existsSync(path)) return { ok: true, removed: false, path };
 
   let settings: unknown;
@@ -469,62 +487,84 @@ export async function uninstall(
     }
   }
 
+  let remaining: readonly string[] = [];
   try {
-    const approval = ports.removeAutoApproval();
-    if (!approval.ok) {
-      steps.push({
-        step: "approval",
-        ok: false,
-        detail: `could not remove "${AUTO_APPROVAL_RULE}" from ${approval.path}: ${approval.error ?? "unknown error"}`,
-      });
-    } else {
-      steps.push({
-        step: "approval",
-        ok: true,
-        detail: approval.removed
-          ? `removed "${AUTO_APPROVAL_RULE}" from ${approval.path}`
-          : `no "${AUTO_APPROVAL_RULE}" rule in ${approval.path}`,
-      });
-    }
-  } catch (error) {
-    steps.push({
-      step: "approval",
-      ok: false,
-      detail: `could not remove "${AUTO_APPROVAL_RULE}": ${messageOf(error)}`,
-    });
+    remaining = await ports.registeredAgents(choices.scope, choices.cwd);
+  } catch {
+    // An unreadable registry is treated as "may still be used", below.
+    remaining = choices.agents;
   }
 
-  if (choices.skill) {
+  // The rule belongs to the Claude Code config `add-mcp` wrote it into; another
+  // agent's uninstall must not strip it from a surviving install.
+  if (choices.agents.includes("claude-code")) {
     try {
-      const run = await ports.runSkills(skillRemoveArgs());
-      if (run.code !== 0) {
+      const approval = ports.removeAutoApproval(options);
+      if (!approval.ok) {
         steps.push({
-          step: "skill",
+          step: "approval",
           ok: false,
-          detail: `could not remove the skill: ${describeExit(run)}`,
+          detail: `could not remove "${AUTO_APPROVAL_RULE}" from ${approval.path}: ${approval.error ?? "unknown error"}`,
         });
       } else {
-        const leftover = installedSkillPath(ports);
-        if (leftover !== undefined) {
-          steps.push({
-            step: "skill",
-            ok: false,
-            detail: `the skills CLI succeeded but ${leftover} is still present`,
-          });
-        } else {
-          steps.push({
-            step: "skill",
-            ok: true,
-            detail: `removed ${skillPath}`,
-          });
-        }
+        steps.push({
+          step: "approval",
+          ok: true,
+          detail: approval.removed
+            ? `removed "${AUTO_APPROVAL_RULE}" from ${approval.path}`
+            : `no "${AUTO_APPROVAL_RULE}" rule in ${approval.path}`,
+        });
       }
     } catch (error) {
       steps.push({
-        step: "skill",
+        step: "approval",
         ok: false,
-        detail: `could not remove the skill: ${messageOf(error)}`,
+        detail: `could not remove "${AUTO_APPROVAL_RULE}": ${messageOf(error)}`,
       });
+    }
+  }
+
+  if (choices.skill) {
+    if (remaining.length > 0) {
+      // One global copy serves every client: removing it under a surviving
+      // install would break the agents the user kept.
+      steps.push({
+        step: "skill",
+        ok: true,
+        detail: `kept ${skillPath}; still used by ${remaining.join(", ")}`,
+      });
+    } else {
+      try {
+        const run = await ports.runSkills(skillRemoveArgs());
+        if (run.code !== 0) {
+          steps.push({
+            step: "skill",
+            ok: false,
+            detail: `could not remove the skill: ${describeExit(run)}`,
+          });
+        } else {
+          const leftover = installedSkillPath(ports);
+          if (leftover !== undefined) {
+            steps.push({
+              step: "skill",
+              ok: false,
+              detail: `the skills CLI succeeded but ${leftover} is still present`,
+            });
+          } else {
+            steps.push({
+              step: "skill",
+              ok: true,
+              detail: `removed ${skillPath}`,
+            });
+          }
+        }
+      } catch (error) {
+        steps.push({
+          step: "skill",
+          ok: false,
+          detail: `could not remove the skill: ${messageOf(error)}`,
+        });
+      }
     }
   }
 
@@ -536,7 +576,11 @@ export async function uninstall(
 }
 
 /** Reads the three states the user needs; every port here is read-only. */
-export async function status(ports: InstallPorts): Promise<StatusReport> {
+export async function status(
+  ports: InstallPorts,
+  choices: InstallChoices = resolveChoices({}, process.cwd()),
+): Promise<StatusReport> {
+  const names = choices.agents.join(", ");
   let host: HostProbe;
   try {
     host = await ports.probeHost();
@@ -546,14 +590,22 @@ export async function status(ports: InstallPorts): Promise<StatusReport> {
 
   let server: StatusReport["server"];
   try {
-    const present = await ports.isServerInstalled();
+    const present = await ports.isServerInstalled(
+      choices.agents,
+      choices.scope,
+      choices.cwd,
+    );
     if (!present) {
       server = {
         present: false,
-        detail: `"${SERVER_NAME}" is not registered for ${AGENT_TYPE}`,
+        detail: `"${SERVER_NAME}" is not registered for ${names} (${choices.scope})`,
       };
     } else {
-      const entry = await ports.installedServer([AGENT_TYPE]);
+      const entry = await ports.installedServer(
+        choices.agents,
+        choices.scope,
+        choices.cwd,
+      );
       const missing = [entry?.command, entry?.args[0]].filter(
         (path): path is string => path !== undefined && !ports.fileExists(path),
       );
@@ -561,7 +613,7 @@ export async function status(ports: InstallPorts): Promise<StatusReport> {
         missing.length === 0
           ? {
               present: true,
-              detail: `"${SERVER_NAME}" is registered for ${AGENT_TYPE}`,
+              detail: `"${SERVER_NAME}" is registered for ${names} (${choices.scope})`,
             }
           : {
               present: false,
@@ -618,26 +670,48 @@ function runSkillsCli(
 
 /** Reads the agent config through add-mcp's own reader, never a hand-rolled one. */
 async function serverIsInstalled(
-  agents: readonly string[] = [AGENT_TYPE],
+  agents: readonly string[],
+  scope: "global" | "local",
+  cwd: string,
 ): Promise<boolean> {
   const listings = await listInstalledServers({
-    global: true,
+    global: scope === "global",
     agents: agents as never,
+    cwd,
   });
   return listings.some((listing) =>
     listing.servers.some((server) => server.serverName === SERVER_NAME),
   );
 }
 
+/** Every agent whose config still holds the server. */
+async function registeredAgents(
+  scope: "global" | "local",
+  cwd: string,
+): Promise<readonly string[]> {
+  const listings = await listInstalledServers({
+    global: scope === "global",
+    cwd,
+  });
+  return listings
+    .filter((listing) =>
+      listing.servers.some((server) => server.serverName === SERVER_NAME),
+    )
+    .map((listing) => listing.agentType);
+}
+
 /** The registered entry's `command` and `args`, as add-mcp read them back. */
 async function installedServerEntry(
   agents: readonly string[],
+  scope: "global" | "local",
+  cwd: string,
 ): Promise<
   { readonly command?: string; readonly args: readonly string[] } | undefined
 > {
   const listings = await listInstalledServers({
-    global: true,
+    global: scope === "global",
     agents: agents as never,
+    cwd,
   });
   for (const listing of listings) {
     for (const server of listing.servers) {
@@ -687,9 +761,10 @@ export function createPorts(
       upsertServer(agent as never, SERVER_NAME, config, upsertOptions),
     remove: (agent, removeOptions) =>
       removeServer(agent as never, SERVER_NAME, removeOptions),
-    removeAutoApproval: () => removeAutoApprovalRule(home),
+    removeAutoApproval: (options) => removeAutoApprovalRule(home, options),
     isServerInstalled: serverIsInstalled,
     installedServer: installedServerEntry,
+    registeredAgents,
     fileExists: existsSync,
     probeHost: options.probeHost,
   };

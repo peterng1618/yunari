@@ -280,3 +280,25 @@ describe("installer CLI", () => {
     expect(written.join("")).toContain("Install");
   });
 });
+
+it("opens the menu from a terminal without an injected option", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  Object.defineProperty(process.stdin, "isTTY", {
+    value: true,
+    configurable: true,
+  });
+  const written: string[] = [];
+  try {
+    const code = await run([], {
+      io: { ask: async () => "0", write: (text) => written.push(text) },
+    });
+    expect(code).toBe(0);
+    expect(written.join("")).toContain("Status");
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(process.stdin, "isTTY");
+    } else {
+      Object.defineProperty(process.stdin, "isTTY", descriptor);
+    }
+  }
+});
