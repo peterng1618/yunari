@@ -42,11 +42,11 @@ describe("the panel page URL", () => {
 });
 
 describe("the theme page URL", () => {
-  it("names only the theme, escaped", () => {
+  it("names only the theme, escaped, in panel mode", () => {
     const url = new URL(themePageUrl(5227, "night sky/2"));
     expect(url.origin).toBe("http://127.0.0.1:5227");
     expect(url.searchParams.get("theme")).toBe("night sky/2");
     expect(url.searchParams.has("display")).toBe(false);
-    expect(url.searchParams.has("panel")).toBe(false);
+    expect(url.searchParams.get("panel")).toBe("1");
   });
 });

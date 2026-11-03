@@ -98,6 +98,12 @@ export class InMemoryDraftStore implements DraftStore {
     return draft;
   }
 
+  deleteAsset(id: string, path: string): Draft {
+    const draft = this.read(id);
+    delete draft.assets[path];
+    return draft;
+  }
+
   setCredits(id: string, credits: ThemeCredits | undefined): Draft {
     const draft = this.read(id);
     if (credits === undefined) {

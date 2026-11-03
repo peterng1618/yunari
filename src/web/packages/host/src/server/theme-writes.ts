@@ -22,7 +22,7 @@ import {
 import { backgroundVideoOf, type ThemeMedia } from "../themes/theme-media.js";
 import {
   type ThumbnailStore,
-  thumbnailGeometry,
+  thumbnailCaptureSize,
 } from "../themes/thumbnails.js";
 import { TrashRefusal } from "../themes/trash.js";
 import {
@@ -463,7 +463,7 @@ export function createThemeWrites(
             try {
               const picture = await options.panels.captureTheme(
                 rawId,
-                thumbnailGeometry(decoded.content.envelope.artboard),
+                thumbnailCaptureSize(decoded.content.envelope.artboard),
               );
               await thumbnails.write(rawId, picture);
             } catch (error) {

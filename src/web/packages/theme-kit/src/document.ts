@@ -217,6 +217,64 @@ export function updateSceneObject(
   return { ...next, scene: { ...scene, objects: write } };
 }
 
+/** Where one object moves within its own sibling list. A grouped object moves
+ *  among its group's children, never out of that group. */
+export type SceneStackMove = "front" | "forward" | "backward" | "back";
+
+/**
+ * Restacks one object among its siblings, wherever it lives.
+ *
+ * The scene's array order is the paint order, so this is the whole operation:
+ * no coordinate or binding changes. `moved` is false when the object is already
+ * at the end it was sent to, which is an answer rather than a refusal.
+ */
+export function moveSceneObject(
+  envelope: FabricThemeEnvelope,
+  id: string,
+  move: SceneStackMove,
+): { readonly envelope: FabricThemeEnvelope; readonly moved: boolean } {
+  const next = clone(envelope);
+  const { scene, objects } = sceneOf(next);
+  let found = false;
+  let moved = false;
+
+  const restack = (list: readonly ObjectJson[]): readonly ObjectJson[] => {
+    const index = list.findIndex((object) => idOf(object) === id);
+    if (index >= 0) {
+      found = true;
+      const target =
+        move === "front"
+          ? list.length - 1
+          : move === "back"
+            ? 0
+            : move === "forward"
+              ? Math.min(list.length - 1, index + 1)
+              : Math.max(0, index - 1);
+      if (target === index) return list;
+
+      moved = true;
+      const copy = [...list];
+      const [entry] = copy.splice(index, 1);
+      if (entry !== undefined) copy.splice(target, 0, entry);
+      return copy;
+    }
+
+    return list.map((object) => {
+      const children = childrenOf(object);
+      if (children.length === 0) return object;
+      const stacked = restack(children);
+      return stacked === children ? object : { ...object, objects: stacked };
+    });
+  };
+
+  const write = restack(objects);
+  if (!found) throw new Error(`There is no object "${id}" in this scene.`);
+  return {
+    envelope: { ...next, scene: { ...scene, objects: write } },
+    moved,
+  };
+}
+
 /** Removes the object with `id`, and every binding it carried. */
 export function removeSceneObject(
   envelope: FabricThemeEnvelope,

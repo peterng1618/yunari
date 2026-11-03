@@ -5,6 +5,7 @@ import type {
   FontAssetFormat,
   FontAssetReference,
 } from "@yunari/renderer-core";
+import { YUNARI_ASSET_PROPERTY } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 
 /**
@@ -306,4 +307,55 @@ export function removeAsset(
   }
   const assets = existing.filter((asset) => asset.id !== assetId);
   return { ...next, assets };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * What holds an asset, in the author's terms, or `undefined` when nothing does.
+ *
+ * Removing a referenced asset would leave a scene object or a font face naming
+ * bytes the package no longer carries, which the validator refuses. The answer
+ * names one owner so a refusal can say what to change first.
+ */
+export function assetOwner(
+  envelope: FabricThemeEnvelope,
+  assetId: string,
+): string | undefined {
+  if (envelope.background?.media?.assetId === assetId) return "the background";
+
+  for (const [id, token] of Object.entries(
+    envelope.globals?.typeTokens ?? {},
+  )) {
+    if (token.face?.assetId === assetId) return `type token "${id}"`;
+  }
+
+  const walk = (
+    object: Readonly<Record<string, unknown>>,
+  ): string | undefined => {
+    const reference = object[YUNARI_ASSET_PROPERTY];
+    if (isRecord(reference) && reference["assetId"] === assetId) {
+      return `object "${String(object["id"])}"`;
+    }
+    const children = object["objects"];
+    if (!Array.isArray(children)) return undefined;
+    for (const child of children) {
+      if (isRecord(child)) {
+        const owner = walk(child);
+        if (owner !== undefined) return owner;
+      }
+    }
+    return undefined;
+  };
+
+  const scene = isRecord(envelope.scene) ? envelope.scene : {};
+  const objects = Array.isArray(scene["objects"]) ? scene["objects"] : [];
+  for (const object of objects) {
+    if (!isRecord(object)) continue;
+    const owner = walk(object);
+    if (owner !== undefined) return owner;
+  }
+  return undefined;
 }

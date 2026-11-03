@@ -22,13 +22,36 @@ import type { HostServerOptions } from "./options.js";
 /** The committed Meteocons bytes. A request names a file here only when that
  *  exact slug is in the provider's allow-list; no request path reaches the
  *  filesystem. */
-const WEATHER_ICON_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "vendor",
-  "weather-icons",
-);
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+/** The vendor folder sits one level above the bundle and two above the source
+ *  module: `dist/main.js` is the built host, `src/server/media-routes.ts` the
+ *  unbundled one. Both are tried, because the directory of `import.meta.url`
+ *  moves when the build flattens `server/` into `main.js`. */
+export function weatherIconDirectories(moduleDir: string): readonly string[] {
+  return [
+    path.resolve(moduleDir, "..", "..", "vendor", "weather-icons"),
+    path.resolve(moduleDir, "..", "vendor", "weather-icons"),
+  ];
+}
+
+const WEATHER_ICON_DIRS = weatherIconDirectories(MODULE_DIR);
+let weatherIconDir: string | undefined;
+
+async function weatherIconDirectory(): Promise<string | undefined> {
+  if (weatherIconDir !== undefined) return weatherIconDir;
+  for (const candidate of WEATHER_ICON_DIRS) {
+    try {
+      await fs.access(candidate);
+      weatherIconDir = candidate;
+      return candidate;
+    } catch {
+      // The other layout is the answer; a missing one is an installation fault
+      // the request turns into a 404, never a 500.
+    }
+  }
+  return undefined;
+}
 
 export interface MediaRouteDeps {
   readonly options: HostServerOptions;
@@ -84,7 +107,9 @@ export function createMediaRoutes(
       let bytes: Buffer;
 
       try {
-        bytes = await fs.readFile(path.join(WEATHER_ICON_DIR, `${slug}.svg`));
+        const directory = await weatherIconDirectory();
+        if (directory === undefined) throw new Error("No vendored icons.");
+        bytes = await fs.readFile(path.join(directory, `${slug}.svg`));
       } catch {
         // A vendored name whose bytes are missing is an installation fault, but
         // the answer is still an absence rather than a 500 on a display.

@@ -18,6 +18,7 @@ import {
 import {
   type StarterPaletteId,
   starterPalette,
+  starterTracking,
   starterTypeTokens,
 } from "./globals.js";
 import { label } from "./objects.js";
@@ -199,8 +200,34 @@ export function createStarterTheme(
         // survives into the text the author edits and the reading a screen
         // reader gets. Neither is a card, and making everything a group would
         // be the cage this document is written to avoid.
-        label("wordmark", 118, 56, 460, 40.68, "YUNARI", 36, "text"),
-        label("strapline", 120, 100, 460, 19.21, "SYSTEM INSIGHTS", 17, "dim"),
+        label(
+          "wordmark",
+          118,
+          56,
+          460,
+          40.68,
+          "YUNARI",
+          36,
+          "text",
+          starterPalette,
+          {
+            letterSpacing: starterTracking[36],
+          },
+        ),
+        label(
+          "strapline",
+          120,
+          100,
+          460,
+          19.21,
+          "SYSTEM INSIGHTS",
+          17,
+          "dim",
+          starterPalette,
+          {
+            letterSpacing: starterTracking[17],
+          },
+        ),
         clockCard(),
         cpuCard(),
         gpuCard(),
@@ -270,7 +297,9 @@ export function createBlankTheme(input: {
     id: crypto.randomUUID(),
     metadata: {
       name: input.name ?? "New theme",
-      author: input.author ?? "Yunari",
+      // An author nobody named stays absent: filling in the product's name is
+      // an attribution the author never made.
+      ...(input.author === undefined ? {} : { author: input.author }),
       description: "",
       themeLanguage: input.themeLanguage ?? "en",
     },

@@ -39,6 +39,8 @@ export interface TargetHandle {
 export interface RasterBrowser {
   /** Opens one panel's page in its own window; the caller owns the result. */
   create(options: RasterPageOptions): Promise<Rasterizer>;
+  /** Opens one page, captures it once and closes its target. */
+  capturePage(options: RasterPageOptions): Promise<Uint8Array>;
   /** Stops the child and removes the profile. Idempotent. */
   stop(): Promise<void>;
   readonly closed: boolean;
@@ -332,6 +334,14 @@ export function createRasterBrowser(
 
   return {
     create,
+    async capturePage(page: RasterPageOptions): Promise<Uint8Array> {
+      const rasterizer = await create({ ...page, oneShot: true });
+      try {
+        return await rasterizer.capture();
+      } finally {
+        await rasterizer.close();
+      }
+    },
     stop,
     get closed() {
       return closed;

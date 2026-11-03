@@ -366,6 +366,35 @@ describe("createPageRasterizer", () => {
     await page.close();
   });
 
+  it("photographs a one-shot page after the live signal instead of screencasting", async () => {
+    const { devtools, sent } = fakeDevtools({
+      "Page.captureScreenshot": {
+        result: { data: Buffer.from("png").toString("base64") },
+      },
+    });
+
+    const page = await createPageRasterizer(
+      devtools,
+      { ...options, oneShot: true, stillFormat: "png" },
+      async () => {},
+    );
+    const bytes = await page.capture();
+
+    expect(Buffer.from(bytes).toString()).toBe("png");
+    expect(sent.some((entry) => entry.method === "Page.startScreencast")).toBe(
+      false,
+    );
+    expect(
+      sent.some(
+        (entry) =>
+          entry.method === "Runtime.evaluate" &&
+          String(entry.params["expression"]).includes("yunariLive"),
+      ),
+    ).toBe(true);
+
+    await page.close();
+  });
+
   it("re-asserts overlay mode on every capture, so a page reload cannot leave it opaque", async () => {
     document.body.innerHTML = "";
     const host = document.createElement("div");

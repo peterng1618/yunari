@@ -132,6 +132,41 @@ describe("discovery tools", () => {
     });
   });
 
+  it("names a semantic key once even when providers repeat it", async () => {
+    const host = await startFakeHost((_request, url) => {
+      if (url.pathname !== "/api/sensors") return undefined;
+      return {
+        body: {
+          sensors: [
+            { semanticKey: "cpu.load", label: "CPU load", family: "cpu" },
+            { semanticKey: "cpu.load", label: "CPU load", family: "cpu" },
+            { semanticKey: "gpu.temp", label: "GPU", unit: "°C" },
+          ],
+          measured: ["cpu.load"],
+        },
+      };
+    });
+
+    expect(payload(await listSensors(context(host)))).toEqual({
+      sensors: [
+        {
+          key: "cpu.load",
+          family: "cpu",
+          label: "CPU load",
+          measured: true,
+        },
+        {
+          key: "gpu.temp",
+          label: "GPU",
+          unit: "°C",
+          measured: false,
+        },
+      ],
+      families: [{ family: "cpu", keys: 1, measured: 1, contextual: false }],
+      measured: true,
+    });
+  });
+
   it("marks a sensor measured only when the host answered its key", async () => {
     const host = await startFakeHost((_request, url) => {
       if (url.pathname !== "/api/sensors") return undefined;

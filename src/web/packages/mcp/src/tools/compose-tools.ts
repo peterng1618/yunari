@@ -12,6 +12,7 @@ import {
   groupObjects,
   listObjects,
   removeObject,
+  reorderObject,
   ungroupObjects,
   updateObject,
 } from "./compose.js";
@@ -60,7 +61,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_text",
     {
       description:
-        "Add a text object with literal and value runs. A value run names a binding supplied in bindings.",
+        "Add a text object with literal and value runs. A value run names a binding supplied in bindings. A run may name a type token (heading, body or mono); its size is the fallback role.",
       inputSchema: z.object({
         box: boxSchema,
         runs: z
@@ -71,6 +72,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
               text: z.string().optional(),
               token: z.string().min(1).optional(),
               size: z.number().positive(),
+              typeToken: z.enum(["heading", "body", "mono"]).optional(),
               precision: z.number().int().optional(),
               unitDisplay: z.enum(["none", "short", "long"]).optional(),
             }),
@@ -90,7 +92,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_shape",
     {
       description:
-        "Add a rect, ellipse or path shape with a palette token. A path supplies its own commands and stroke width; a rect takes a radius. Other combinations are refused.",
+        "Add a rect, ellipse or path shape with a palette token. A path supplies its own commands and stroke width; a rect takes a radius. Path points are artboard units relative to the box's top-left, and the stroke width is in artboard units. Other combinations are refused.",
       inputSchema: z.object({
         kind: z.enum(["rect", "ellipse", "path"]),
         box: boxSchema,
@@ -137,7 +139,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_chart",
     {
       description:
-        "Add a line, bar or gauge chart reading one or more bindings.",
+        "Add a line, bar or gauge chart reading one or more bindings. The box is its top-left, like every other compose tool; omitted settings use the theme's palette.",
       inputSchema: z.object({
         family: z.enum(["line", "bar", "gauge"]),
         box: boxSchema,
@@ -201,6 +203,21 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     },
     async ({ objectId, themeId }) =>
       await removeObject(context, objectId, themeId),
+  );
+
+  server.registerTool(
+    "reorder_object",
+    {
+      description:
+        "Restack one scene object among its siblings: front paints last, back paints first, forward and backward move one place. A grouped object moves within its group.",
+      inputSchema: z.object({
+        objectId: z.string().min(1),
+        move: z.enum(["front", "forward", "backward", "back"]),
+        themeId: themeIdSchema,
+      }),
+    },
+    async ({ objectId, move, themeId }) =>
+      await reorderObject(context, objectId, move, themeId),
   );
 
   server.registerTool(

@@ -1,13 +1,15 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import { createPageCapture } from "./panel-capture.js";
 import type {
   PanelConnectionStatus,
   PanelControlCommand,
   PanelDevice,
+  PanelGeometry,
   PanelVideoSource,
 } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
-import type { Devtools, Rasterizer } from "./panel-raster.js";
+import type { Rasterizer } from "./panel-raster.js";
 import {
   createRasterBrowser,
   type RasterBrowser,
@@ -40,10 +42,9 @@ export interface PanelManagerOptions {
     clip: boolean,
     themeId?: string,
   ) => string;
-  /** The player page for a stored theme, rendered for a library picture.
-   *  Absent when this host has no port to name yet; the manager then has no
-   *  thumbnail renderer. */
-  readonly themePageFor?: (themeId: string) => string;
+  /** The player page for a theme no display is assigned, used to photograph a
+   *  thumbnail for an authoring client that has no canvas. */
+  readonly pageForTheme: (themeId: string) => string;
   /** The clip the display's theme plays itself, or undefined for a still theme.
    *  Read once per start: a changed assignment is a restart, not a re-read. */
   readonly videoFor?: (
@@ -124,14 +125,10 @@ export interface PanelManager {
     themeId: string,
     clip: boolean,
   ): Promise<Uint8Array>;
-  /**
-   * Renders a stored theme's player page at `geometry`, for the library's
-   * picture. No display or device is involved.
-   */
-  captureTheme?(
-    themeId: string,
-    geometry: { readonly width: number; readonly height: number },
-  ): Promise<Uint8Array>;
+  /** Photographs a theme's player page at `geometry`, with no display record
+   *  and no device opened. The shared browser and the player renderer are the
+   *  same ones a panel uses. */
+  captureTheme(themeId: string, geometry: PanelGeometry): Promise<Uint8Array>;
   /** Stops and starts one display now: the manual retake. */
   reconnect(displayId: string): Promise<void>;
   /** Stops the panel and suppresses its automatic reopen until this process
@@ -163,58 +160,6 @@ interface Entry {
  * hold the process open: the OS closes the handle when the process exits.
  */
 const SHUTDOWN_GRACE_MS = 10_000;
-
-/**
- * How long a theme picture waits for the player to leave its connecting state.
- * A picture of "Connecting to the host" is worse than a layout with dashes, and
- * a host with no live source would otherwise never be ready.
- */
-const PICTURE_READY_TIMEOUT_MS = 3_000;
-
-const PICTURE_STATE = `(() => {
-  if (document.querySelector("[data-yunari-load-failure]") !== null) return "failed";
-  if (document.querySelector("#yunari-connection") === null) return "ready";
-  return "waiting";
-})()`;
-
-/** Hides the player's chrome so the captured surface is the artboard alone,
- *  then waits two frames for the layout that expands into the freed space. */
-const PICTURE_ONLY = `(() => {
-  for (const band of document.querySelectorAll("[data-yunari-chrome]")) {
-    band.style.display = "none";
-  }
-  return new Promise((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))),
-  );
-})()`;
-
-async function prepareThemePicture(devtools: Devtools): Promise<void> {
-  // The player raises its connecting strip right after the first draw. One
-  // tick first keeps a poll that lands between the two from reading "ready".
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  const deadline = Date.now() + PICTURE_READY_TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    const reply = await devtools.send("Runtime.evaluate", {
-      expression: PICTURE_STATE,
-      returnByValue: true,
-    });
-    const result = reply.result?.["result"] as { value?: unknown } | undefined;
-
-    if (result?.value === "failed") {
-      throw new Error("The theme's player page failed to load.");
-    }
-    if (result?.value === "ready") break;
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  await devtools.send("Runtime.evaluate", {
-    expression: PICTURE_ONLY,
-    awaitPromise: true,
-    returnByValue: true,
-  });
-}
 
 export function createPanelManager(options: PanelManagerOptions): PanelManager {
   const entries = new Map<string, Entry>();
@@ -291,37 +236,13 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     return rasterBrowser;
   };
 
-  /** Renders one page at exact geometry through the shared browser; the target
-   *  closes on both paths. */
-  const renderPage = async (
-    url: string,
-    geometry: { readonly width: number; readonly height: number },
-    prepare?: (devtools: Devtools) => Promise<void>,
-  ): Promise<Uint8Array> => {
-    if (stopping) throw new Error("The host is shutting down.");
+  const capturePageNow = createPageCapture({
+    browserFor: rasterBrowserFor,
+    browser: options.browser,
+    isStopping: () => stopping,
+  });
 
-    const executable = options.browser ?? findBrowser();
-    if (executable === undefined) {
-      throw new Error(
-        "No Chromium-family browser was found, and a preview needs one to render.",
-      );
-    }
-
-    const rasterizer = await rasterBrowserFor(executable).create({
-      url,
-      geometry,
-      stillFormat: "png",
-      ...(prepare === undefined ? {} : { prepare }),
-    });
-
-    try {
-      return await rasterizer.capture();
-    } finally {
-      await rasterizer.close();
-    }
-  };
-
-  /** Renders one display's page at its family's size; no device is opened. */
+  /** Renders one display's page at its family's size. */
   const captureNow = async (
     displayId: string,
     themeId: string,
@@ -344,22 +265,10 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    return await renderPage(
+    return await capturePageNow(
       options.pageFor(displayId, clip, themeId),
       family.geometry,
     );
-  };
-
-  const captureThemeNow = async (
-    themeId: string,
-    geometry: { readonly width: number; readonly height: number },
-  ): Promise<Uint8Array> => {
-    const page = options.themePageFor;
-    if (page === undefined) {
-      throw new Error("This host has no player page to render a theme with.");
-    }
-
-    return await renderPage(page(themeId), geometry, prepareThemePicture);
   };
 
   const startNow = async (displayId: string): Promise<void> => {
@@ -765,14 +674,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     capturePreview: (displayId, themeId, clip) =>
       enqueue(displayId, () => captureNow(displayId, themeId, clip)),
 
-    ...(options.themePageFor === undefined
-      ? {}
-      : {
-          captureTheme: (
-            themeId: string,
-            geometry: { readonly width: number; readonly height: number },
-          ) => captureThemeNow(themeId, geometry),
-        }),
+    captureTheme: (themeId, geometry) =>
+      capturePageNow(options.pageForTheme(themeId), geometry),
 
     reconnect: (displayId) => {
       disconnected.delete(displayId);

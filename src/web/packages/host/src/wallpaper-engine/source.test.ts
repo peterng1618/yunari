@@ -1,9 +1,24 @@
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WallpaperEngineInstall } from "./locate.js";
 import { createWallpaperEngineSource } from "./source.js";
+
+/** A real two-second MP4, so a video row's duration is read from a header the
+ *  parser is known to understand rather than from invented bytes. */
+const conformingMp4 = new Uint8Array(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../theme-package/test-fixtures/conforming.mp4",
+        import.meta.url,
+      ),
+    ),
+  ),
+);
 
 const encoder = new TextEncoder();
 
@@ -127,7 +142,7 @@ describe("the Wallpaper Engine source", () => {
       "project.json",
       JSON.stringify({ type: "video", file: "clip.mp4" }),
     );
-    await writeItem("203", "clip.mp4", "mp4");
+    await writeItem("203", "clip.mp4", conformingMp4);
 
     await writeItem("204", "project.json", "{ not json");
   }
@@ -159,7 +174,7 @@ describe("the Wallpaper Engine source", () => {
     expect(byId.get("202")).toMatchObject({ kind: "scene" });
     expect(byId.get("202")).not.toHaveProperty("stillAtRest");
     expect(byId.get("202")).not.toHaveProperty("hasText");
-    expect(byId.get("203")).toMatchObject({ kind: "video" });
+    expect(byId.get("203")).toMatchObject({ kind: "video", durationMs: 2000 });
   });
 
   it("reuses the persisted scan across a restart and notices library changes", async () => {
@@ -182,6 +197,11 @@ describe("the Wallpaper Engine source", () => {
       original.items.map((item) => item.workshopId).sort(),
     );
     expect(cached.skipped).toBe(original.skipped);
+    // The length read during the scan survives the cache, or a restart would
+    // drop it from the row while the video is unchanged.
+    expect(
+      cached.items.find((item) => item.workshopId === "203"),
+    ).toMatchObject({ durationMs: 2000 });
 
     // A subscription appears as a new directory, which changes the
     // fingerprint and earns a scan.
@@ -248,7 +268,7 @@ describe("the Wallpaper Engine source", () => {
 
     const video = await source.bytesOf("203", "asset");
     expect(video?.contentType).toBe("video/mp4");
-    expect(Buffer.from(video?.bytes ?? []).toString()).toBe("mp4");
+    expect(Buffer.from(video?.bytes ?? [])).toEqual(Buffer.from(conformingMp4));
 
     expect(await source.bytesOf("999", "asset")).toBeUndefined();
     expect(await source.bytesOf("../../secret", "preview")).toBeUndefined();

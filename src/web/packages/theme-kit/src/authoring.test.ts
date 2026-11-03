@@ -1,4 +1,7 @@
-import type { FabricPalette } from "@yunari/renderer-core";
+import {
+  type FabricPalette,
+  validateFabricThemeEnvelope,
+} from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   addChartObject,
@@ -8,6 +11,23 @@ import {
   addShapeObject,
   addTextObject,
 } from "./authoring.js";
+import { createBlankTheme } from "./starter.js";
+
+type AuthoredRun = Readonly<Record<string, unknown>>;
+
+const authoredRuns = (object: Readonly<Record<string, unknown>>) =>
+  (
+    object["yunariText"] as
+      | { readonly runs?: readonly AuthoredRun[] }
+      | undefined
+  )?.runs ?? [];
+
+const letterSpacingOf = (run: AuthoredRun | undefined): unknown =>
+  (
+    run?.["style"] as
+      | { readonly letterSpacing?: { readonly value?: unknown } }
+      | undefined
+  )?.letterSpacing?.value;
 
 describe("the compose vocabulary", () => {
   it("builds a text box whose value run names its binding", () => {
@@ -119,12 +139,10 @@ describe("the compose vocabulary", () => {
       ],
     });
 
-    for (const [object, ref] of [
-      [rect, "palette.storageFill"],
-      [icon, "palette.sparkArea"],
-    ] as const) {
+    for (const [object, ref] of [[rect, "palette.storageFill"]] as const) {
       expect(object["yunariPaint"]).toEqual({ fill: ref });
     }
+    expect(icon["yunariPaint"]).toEqual({ stroke: "palette.sparkArea" });
     // The exact JSON Fabric's `Gradient.toObject()` persists. A live instance
     // would put Fabric in this Node-only package; the shape is what matters.
     expect(rect["fill"]).toEqual({
@@ -138,7 +156,7 @@ describe("the compose vocabulary", () => {
       offsetY: 0,
       gradientUnits: "pixels",
     });
-    expect(icon["fill"]).toMatchObject({ type: "linear" });
+    expect(icon["stroke"]).toMatchObject({ type: "linear" });
     expect(line["stroke"]).toMatchObject({ type: "linear" });
   });
 
@@ -161,7 +179,7 @@ describe("the compose vocabulary", () => {
     });
   });
 
-  it("draws an icon as a filled path inside its box", () => {
+  it("draws an icon as a stroked path inside its box", () => {
     const icon = addIconObject({
       id: "cpu-icon",
       icon: "cpu",
@@ -172,9 +190,10 @@ describe("the compose vocabulary", () => {
     });
     expect(icon).toMatchObject({
       type: "Path",
-      fill: "#4da3ff",
-      stroke: null,
-      yunariPaint: { fill: "palette.cpu" },
+      fill: null,
+      stroke: "#4da3ff",
+      strokeWidth: (44 * 2) / 24,
+      yunariPaint: { stroke: "palette.cpu" },
     });
     expect((icon["path"] as readonly unknown[]).length).toBeGreaterThan(2);
   });
@@ -231,10 +250,12 @@ describe("the compose vocabulary", () => {
       palette,
     });
 
-    for (const object of [text, shape, icon]) {
+    for (const object of [text, shape]) {
       expect(object["fill"]).toBe("#ff0000");
       expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
     }
+    expect(icon["stroke"]).toBe("#ff0000");
+    expect(icon["yunariPaint"]).toEqual({ stroke: "palette.accent" });
   });
 
   it("builds a one-run literal label", () => {
@@ -249,5 +270,121 @@ describe("the compose vocabulary", () => {
         size: 24,
       }),
     ).toMatchObject({ type: "Textbox", id: "title" });
+  });
+
+  it("adds no decorative tracking an author did not ask for", () => {
+    const { object } = addTextObject({
+      id: "caption",
+      left: 0,
+      top: 0,
+      width: 200,
+      height: 24,
+      runs: [{ kind: "literal", text: "CPU LOAD", token: "text", size: 17 }],
+    });
+
+    expect(letterSpacingOf(authoredRuns(object)[0])).toBeUndefined();
+    expect(object["charSpacing"]).toBeUndefined();
+  });
+
+  it("accepts a run's own tracking and type token", () => {
+    const { object } = addTextObject({
+      id: "overline",
+      left: 0,
+      top: 0,
+      width: 200,
+      height: 24,
+      runs: [
+        {
+          kind: "literal",
+          text: "SYSTEM",
+          token: "text",
+          size: 17,
+          letterSpacing: 6,
+          typeToken: "mono",
+        },
+      ],
+    });
+
+    expect(letterSpacingOf(authoredRuns(object)[0])).toBe(6);
+    expect(authoredRuns(object)[0]?.["typeToken"]).toBe("typeTokens.mono");
+    expect(object["fontFamily"]).toBe("Consolas, monospace");
+  });
+
+  it("paints new charts with palette references the validator accepts", () => {
+    const palette: FabricPalette = {
+      ink: { name: "Ink", value: { kind: "solid", color: "#ff0000" } },
+      track: { name: "Track", value: { kind: "solid", color: "#101010" } },
+    };
+    const settingsOf = (family: "line" | "bar" | "gauge") =>
+      addChartObject({
+        id: family,
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 200,
+        family,
+        bindings: [{ id: `${family}-load`, semanticKey: "cpu.load" }],
+        palette,
+      }).object["settings"] as Record<string, unknown>;
+
+    const line = settingsOf("line");
+    expect(line["stroke"]).toEqual({ ref: "palette.ink" });
+    expect(line["palette"]).toEqual([{ ref: "palette.ink" }]);
+    expect(line["area"]).toBeUndefined();
+
+    expect(settingsOf("bar")).toMatchObject({
+      fill: { ref: "palette.ink" },
+      track: { ref: "palette.track" },
+    });
+    expect(settingsOf("gauge")).toMatchObject({
+      progress: { ref: "palette.ink" },
+      track: { ref: "palette.track" },
+    });
+  });
+
+  it("places a chart from its top-left like every other compose tool", () => {
+    const { object } = addChartObject({
+      id: "trend",
+      left: 40,
+      top: 50,
+      width: 400,
+      height: 200,
+      family: "line",
+      bindings: [{ id: "cpu", semanticKey: "cpu.load" }],
+    });
+    expect(object).toMatchObject({
+      left: 40,
+      top: 50,
+      originX: "left",
+      originY: "top",
+    });
+  });
+
+  it("omits an author the caller did not supply", () => {
+    const theme = createBlankTheme({ artboard: { width: 800, height: 480 } });
+    expect(theme.metadata).not.toHaveProperty("author");
+    expect(theme.metadata?.name).toBe("New theme");
+  });
+
+  it("keeps a blank chart theme valid end to end", () => {
+    const theme = createBlankTheme({ artboard: { width: 800, height: 480 } });
+    const { object } = addChartObject({
+      id: "trend",
+      left: 10,
+      top: 10,
+      width: 400,
+      height: 200,
+      family: "line",
+      bindings: [{ id: "cpu", semanticKey: "cpu.load" }],
+      ...(theme.globals?.palette === undefined
+        ? {}
+        : { palette: theme.globals.palette }),
+    });
+    const withChart = {
+      ...theme,
+      scene: { ...theme.scene, objects: [object] },
+      bindings: { trend: [{ id: "cpu", semanticKey: "cpu.load" }] },
+    };
+    expect(validateFabricThemeEnvelope(withChart).ok).toBe(true);
   });
 });

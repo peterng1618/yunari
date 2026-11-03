@@ -14,9 +14,11 @@ import {
   CARD_LIBRARY,
   instantiateCard,
   listSceneObjects,
+  moveSceneObject,
   type ObjectJson,
   type Run,
   removeSceneObject,
+  type SceneStackMove,
   setBindings,
   starterIcons,
   updateSceneObject,
@@ -176,6 +178,7 @@ export async function addText(
       readonly text?: string | undefined;
       readonly token?: string | undefined;
       readonly size: number;
+      readonly typeToken?: "heading" | "body" | "mono" | undefined;
       readonly precision?: number | undefined;
       readonly unitDisplay?: "none" | "short" | "long" | undefined;
     }[];
@@ -201,12 +204,23 @@ export async function addText(
           );
         }
       }
+      if (
+        run.typeToken !== undefined &&
+        draft.envelope.globals?.typeTokens?.[run.typeToken] === undefined
+      ) {
+        throw new Error(
+          `This theme has no "${run.typeToken}" type token (${Object.keys(
+            draft.envelope.globals?.typeTokens ?? {},
+          ).join(", ")}).`,
+        );
+      }
       return {
         kind,
         ...(run.bindingId === undefined ? {} : { bindingId: run.bindingId }),
         ...(run.text === undefined ? {} : { text: run.text }),
         token: tokenOf(run.token, "text", palette),
         size: run.size,
+        ...(run.typeToken === undefined ? {} : { typeToken: run.typeToken }),
         ...(run.precision === undefined ? {} : { precision: run.precision }),
         ...(run.unitDisplay === undefined
           ? {}
@@ -269,6 +283,14 @@ export async function addShape(
       }
       return command as readonly [string, ...number[]];
     });
+    // A stroke is authored in artboard units, so a bare 2-unit line is a third
+    // of a pixel on a 320 px display and reads as absent. The default scales
+    // with the artboard's width; an explicit width, however thin, is kept.
+    const strokeWidth =
+      input.kind === "path"
+        ? (input.strokeWidth ??
+          Math.max(2, Math.round(draft.envelope.artboard.width / 240)))
+        : undefined;
     const object = addShapeObject({
       id: "shape",
       kind: input.kind,
@@ -278,9 +300,7 @@ export async function addShape(
         : { token: tokenOf(input.token, "panel", palette) }),
       ...(input.radius === undefined ? {} : { radius: input.radius }),
       ...(points === undefined ? {} : { points }),
-      ...(input.strokeWidth === undefined
-        ? {}
-        : { strokeWidth: input.strokeWidth }),
+      ...(strokeWidth === undefined ? {} : { strokeWidth }),
       palette,
     });
     return added(draft, object);
@@ -306,8 +326,12 @@ export async function addImage(
         `There is no asset "${input.assetId}" in this theme; import_asset it first.`,
       );
     }
-    if (asset.kind === "font") {
-      throw new Error(`"${asset.id}" is a font, not an image.`);
+    // A video is the background's media. Placing it as an Image object leaves a
+    // black box: FabricImage has no frame to paint from that reference.
+    if (asset.kind !== "image" && asset.kind !== "svg") {
+      throw new Error(
+        `"${asset.id}" is a ${asset.kind}, not a picture the scene can place. Set a video as the background instead.`,
+      );
     }
     const object = addImageObject({
       id: "image",
@@ -385,6 +409,7 @@ export async function addChart(
       ...input.box,
       family: input.family,
       bindings: bindingsOf(bindings),
+      palette: paletteOf(draft),
       ...(input.settings === undefined ? {} : { settings: input.settings }),
     });
     return added(draft, built.object, built.bindings);
@@ -482,6 +507,20 @@ export async function removeObject(
   });
 }
 
+export async function reorderObject(
+  context: ToolContext,
+  objectId: string,
+  move: SceneStackMove,
+  themeId?: string,
+): Promise<CallToolResult> {
+  return await jsonAttempt(() => {
+    const draft = draftFor(context, themeId);
+    const result = moveSceneObject(draft.envelope, objectId, move);
+    draft.envelope = result.envelope;
+    return { themeId: draft.id, objectId, moved: result.moved };
+  });
+}
+
 /** The fraction of the box that sits left of / above the authored anchor. */
 function anchorFraction(origin: unknown, axis: "x" | "y"): number {
   if (axis === "x") {
@@ -506,9 +545,8 @@ function scaleOf(object: ObjectJson, key: "scaleX" | "scaleY"): number {
 /**
  * An object's true bounding box in artboard coordinates.
  *
- * Fabric places an object by its anchor, and a chart is authored from its
- * centre (`theme-kit/objects.ts`), so reading `left`/`top` as a top-left
- * corner would omit half of every chart when grouping.
+ * Fabric places an object by its anchor, so a group must read the authored
+ * origin rather than assuming every box starts at `left`/`top`.
  */
 function boxOf(object: ObjectJson, id: string): Box {
   const read = (key: "left" | "top" | "width" | "height"): number => {

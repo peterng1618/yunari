@@ -5,9 +5,11 @@ import type { FontAssetFormat } from "@yunari/renderer-core";
 import {
   addAsset,
   assetKindForPath,
+  assetOwner,
   type DeclaredAsset,
   declareAsset,
   MAX_ASSET_BYTES,
+  removeAsset,
 } from "@yunari/theme-kit";
 import { z } from "zod/v4";
 import type { ThemeCredits, ToolContext, VideoTrim } from "../types.js";
@@ -324,34 +326,85 @@ export async function searchAssets(
   });
 }
 
+/** Results whose own bytes are the picture. Everything else — a video, a
+ *  scene, a font — answers with the row's preview instead. */
+const IMAGE_KINDS = new Set(["image", "svg", "gif"]);
+
+const PREVIEW_TIMEOUT_MS = 10_000;
+
+/** The row's poster still, or nothing when the source published none or the
+ *  fetch cannot answer with an image. A relative preview resolves against the
+ *  host, so the host's own Wallpaper Engine stills work alongside remote ones. */
+async function previewStill(
+  ref: AssetRef,
+  baseUrl: string,
+): Promise<
+  { readonly bytes: Uint8Array; readonly mimeType: string } | undefined
+> {
+  if (ref.preview === "") return undefined;
+  let url: URL;
+  try {
+    url = new URL(ref.preview, baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+    });
+    if (!response.ok) return undefined;
+    const mimeType = (response.headers.get("content-type") ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    if (mimeType === undefined || !mimeType.startsWith("image/")) {
+      return undefined;
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength > MAX_ASSET_BYTES ? undefined : { bytes, mimeType };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function previewAsset(
   context: ToolContext,
   assetRef: string,
 ): Promise<CallToolResult> {
   try {
     const ref = decodeRef(assetRef);
-    const fetched =
-      ref.source === "wallpaper-engine"
-        ? await context.host.wallpaperBytes(ref.id, "preview")
-        : {
-            ...(await context.host.assetBytes(ref.source, ref.id)),
-            contentType: "",
-          };
-    const mimeType =
-      fetched.contentType !== ""
-        ? fetched.contentType
-        : mimeOf(fetched.filename === "" ? ref.id : fetched.filename);
+    if (!IMAGE_KINDS.has(ref.kind)) {
+      const still = await previewStill(ref, context.host.url);
+      if (still !== undefined) {
+        return imageResult(still.bytes, still.mimeType, {
+          name: ref.name,
+          kind: ref.kind,
+          licence: ref.licence,
+          sourceUrl: ref.sourceUrl,
+          bytes: still.bytes.byteLength,
+        });
+      }
+      throw new Error(
+        `"${ref.name}" is a ${ref.kind}, not an image this tool can preview.`,
+      );
+    }
+    const { bytes, filename } = await context.host.assetBytes(
+      ref.source,
+      ref.id,
+    );
+    const mimeType = mimeOf(filename === "" ? ref.id : filename);
     if (!mimeType.startsWith("image/")) {
       throw new Error(
         `"${ref.name}" is a ${ref.kind}, not an image this tool can preview.`,
       );
     }
-    return imageResult(fetched.bytes, mimeType, {
+    return imageResult(bytes, mimeType, {
       name: ref.name,
       kind: ref.kind,
       licence: ref.licence,
       sourceUrl: ref.sourceUrl,
-      bytes: fetched.bytes.byteLength,
+      bytes: bytes.byteLength,
     });
   } catch (error) {
     return errorResult(error);
@@ -517,6 +570,46 @@ const assetRefSchema = z
   .min(1)
   .describe("The opaque assetRef a search_assets row returned.");
 
+/**
+ * Drops a declared asset the draft no longer uses.
+ *
+ * Replacing a media asset used to leave the old declaration, its bytes and its
+ * credit in the package. A referenced asset is refused rather than silently
+ * breaking the object that names it.
+ */
+export async function removeDraftAsset(
+  context: ToolContext,
+  assetId: string,
+  themeId?: string,
+): Promise<CallToolResult> {
+  return await jsonAttempt(() => {
+    const draft = draftFor(context, themeId);
+    const asset = (draft.envelope.assets ?? []).find(
+      (candidate) => candidate.id === assetId,
+    );
+    if (asset === undefined) {
+      throw new Error(`There is no asset "${assetId}" in this theme.`);
+    }
+    const owner = assetOwner(draft.envelope, assetId);
+    if (owner !== undefined) {
+      throw new Error(
+        `"${assetId}" is still used by ${owner}; remove that reference first.`,
+      );
+    }
+    draft.envelope = removeAsset(draft.envelope, assetId);
+    context.drafts.deleteAsset(draft.id, asset.path);
+    if (draft.credits !== undefined) {
+      context.drafts.setCredits(draft.id, {
+        ...draft.credits,
+        entries: draft.credits.entries.filter(
+          (entry) => entry.assetId !== assetId,
+        ),
+      });
+    }
+    return { themeId: draft.id, removed: assetId, path: asset.path };
+  });
+}
+
 /** Registers the three asset tools on the server. */
 export function registerAssetTools(server: McpServer, context: ToolContext) {
   server.registerTool(
@@ -568,5 +661,19 @@ export function registerAssetTools(server: McpServer, context: ToolContext) {
       }),
     },
     async (input) => await importAsset(context, input),
+  );
+
+  server.registerTool(
+    "remove_asset",
+    {
+      description:
+        "Remove a declared asset the draft no longer uses, with its bytes and credit. Refuses an asset an object, the background or a font face still references.",
+      inputSchema: z.object({
+        assetId: z.string().min(1),
+        themeId: z.string().min(1).optional(),
+      }),
+    },
+    async ({ assetId, themeId }) =>
+      await removeDraftAsset(context, assetId, themeId),
   );
 }

@@ -10,6 +10,7 @@ import { createThemeStore } from "./store.js";
 import {
   createThumbnailStore,
   pngDimensions,
+  thumbnailCaptureSize,
   thumbnailLuminance,
 } from "./thumbnails.js";
 
@@ -362,5 +363,30 @@ describe("thumbnails", () => {
     expect(
       thumbnailLuminance(pngOf(1, 1, 0, Uint8Array.from([9, 0]))),
     ).toBeUndefined();
+  });
+});
+
+describe("the size a host-side capture asks for", () => {
+  it("keeps the artboard's aspect at the capture edge", () => {
+    expect(thumbnailCaptureSize({ width: 1920, height: 1080 })).toEqual({
+      width: 640,
+      height: 360,
+    });
+    expect(thumbnailCaptureSize({ width: 800, height: 480 })).toEqual({
+      width: 640,
+      height: 384,
+    });
+    // A board smaller than the edge is not enlarged: the capture is the theme,
+    // not an upscaled copy of it.
+    expect(thumbnailCaptureSize({ width: 320, height: 180 })).toEqual({
+      width: 320,
+      height: 180,
+    });
+  });
+
+  it("makes a circle's picture square, because the disc is inscribed", () => {
+    expect(
+      thumbnailCaptureSize({ width: 1080, height: 1080, shape: "circle" }),
+    ).toEqual({ width: 640, height: 640 });
   });
 });

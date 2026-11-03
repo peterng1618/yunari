@@ -5,6 +5,7 @@ import {
   type Sample,
   type SensorStatus,
 } from "../types.js";
+import type { LinearGradientColor } from "./fill.js";
 import {
   approximateGradient,
   buildGaugeOption,
@@ -504,25 +505,19 @@ describe("the progress arc colour", () => {
     expect(option.series[0].progress.itemStyle.color).toBe("#00b8d9");
   });
 
-  it("follows the arc for a gradient fill instead of a cartesian gradient", () => {
-    // ECharts applies gauge `progress` colour across the swept arc, so arc
-    // segments make the gradient follow the ring. A cartesian `to-right`
-    // gradient did not — that was the §85 gauge gap.
-    const color = progressColor({ kind: "gradient", stops: bands }, 50);
+  it("emits an engine gradient object, not axisLine's segment array", () => {
+    // `progress.itemStyle.color` accepts a colour or gradient; the
+    // `[proportion, color]` array only works on `axisLine.lineStyle.color`,
+    // and an array here paints no arc at all (#380).
+    const color = progressColor(
+      { kind: "gradient", stops: bands },
+      50,
+    ) as LinearGradientColor;
 
-    expect(Array.isArray(color)).toBe(true);
-    const segments = color as [number, string][];
-    // Ascending proportions covering the full ring.
-    expect(segments.at(-1)?.[0]).toBe(1);
-    expect(segments[0]?.[0]).toBeLessThan(segments.at(-1)![0]);
-    expect(
-      segments.every(([proportion]) => proportion > 0 && proportion <= 1),
-    ).toBe(true);
-    // Colours step along the sweep rather than repeating one value: the
-    // midpoint sampling interpolates between stops, so several distinct
-    // colours prove a real gradient along the arc.
-    expect(new Set(segments.map(([, c]) => c)).size).toBeGreaterThan(3);
-    expect(segments.every(([, hex]) => /^#[0-9a-f]{6}$/i.test(hex))).toBe(true);
+    expect(Array.isArray(color)).toBe(false);
+    expect(color.type).toBe("linear");
+    expect(color).toMatchObject({ x: 0, y: 0, x2: 1, y2: 0 });
+    expect(color.colorStops).toEqual(bands);
   });
 
   it("keeps the track fill independent of the progress fill", () => {

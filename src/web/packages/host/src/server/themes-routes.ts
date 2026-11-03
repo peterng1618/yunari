@@ -23,6 +23,7 @@ import { displayFor, isLoopbackRemote, knownDisplayKey } from "./identity.js";
 import { MAX_THUMBNAIL_BYTES } from "./limits.js";
 import type { HostServerOptions } from "./options.js";
 import { servePanelPreview } from "./panel-preview-route.js";
+import { serveThumbnailCapture } from "./thumbnail-capture-route.js";
 
 /**
  * One row of the display map `/api/themes/active` answers: a display and the
@@ -610,6 +611,31 @@ export function createThemeRoutes(
         themeStore,
         displays,
         panels,
+      });
+      return true;
+    }
+
+    // An authoring client with no canvas asks the host to photograph the theme
+    // through the player's own renderer.
+    const thumbCaptureMatch = url.pathname.match(
+      /^\/api\/themes\/([^/]+)\/thumbnail\/capture$/,
+    );
+    if (thumbCaptureMatch) {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Theme modification is loopback only.");
+        return true;
+      }
+
+      await serveThumbnailCapture({
+        response,
+        rawId: decodeURIComponent(thumbCaptureMatch[1] ?? ""),
+        themeStore,
+        thumbnails,
+        panels: options.panels,
       });
       return true;
     }

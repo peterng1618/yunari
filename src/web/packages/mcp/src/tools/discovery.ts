@@ -81,9 +81,14 @@ function familiesOf(
     string,
     { family: string; keys: number; measured: number; contextual: boolean }
   >();
+  const seen = new Set<string>();
 
   for (const sensor of sensors) {
     if (sensor.family === undefined || sensor.family === "") continue;
+    // Several providers may catalogue the same key: the listing names it once,
+    // so a family's counts describe the same unique set.
+    if (seen.has(sensor.semanticKey)) continue;
+    seen.add(sensor.semanticKey);
     const row = byFamily.get(sensor.family) ?? {
       family: sensor.family,
       keys: 0,
@@ -105,8 +110,23 @@ export async function listSensors(
   return await attempt(async () => {
     const listing = await context.host.sensors(measured);
     const answering = new Set(listing.measured);
-    return {
-      sensors: listing.sensors.map((sensor) => ({
+    // Several providers may catalogue the same semantic key. A key is the
+    // identifier a binding uses, so the listing names it once; the first row's
+    // label and family describe it.
+    const seen = new Set<string>();
+    const sensors: {
+      key: string;
+      family: string | undefined;
+      label: string;
+      unit: string | undefined;
+      valueKind: string | undefined;
+      mediaKind: string | undefined;
+      measured: boolean;
+    }[] = [];
+    for (const sensor of listing.sensors) {
+      if (seen.has(sensor.semanticKey)) continue;
+      seen.add(sensor.semanticKey);
+      sensors.push({
         key: sensor.semanticKey,
         family: sensor.family,
         label: sensor.label,
@@ -114,7 +134,10 @@ export async function listSensors(
         valueKind: sensor.valueKind,
         mediaKind: sensor.mediaKind,
         measured: answering.has(sensor.semanticKey),
-      })),
+      });
+    }
+    return {
+      sensors,
       families: familiesOf(listing.sensors, answering),
       measured,
     };

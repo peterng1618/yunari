@@ -265,8 +265,14 @@ async function startHostedTheme(
   }
   const liveHandle = createLiveSource({
     url: session.streamUrl(SAMPLE_STREAM_PATH, streamParameters),
-    onStatus: (status, detail) =>
-      showConnectionState(status, keys.length, detail),
+    onStatus: (status, detail) => {
+      showConnectionState(status, keys.length, detail);
+      // `live` is set only after a batch has been ingested, so the values are
+      // painted. A preview can wait for this marker rather than guess how long
+      // a placeholder lasts.
+      document.documentElement.dataset["yunariLive"] =
+        status === "live" ? "true" : "false";
+    },
   });
   const resolveAsset = createAssetResolver(theme.assets, {
     baseUrl: `/api/themes/${encodeURIComponent(theme.id)}/`,

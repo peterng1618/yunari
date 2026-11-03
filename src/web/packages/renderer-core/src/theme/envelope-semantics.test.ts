@@ -392,8 +392,8 @@ describe("the background layer", () => {
     for (const background of [
       { media: { assetId: "clip", bounds: "theme", scale: 0.5 } },
       { media: { assetId: "clip", bounds: "theme", scale: 5.01 } },
-      { media: { assetId: "clip", bounds: "theme", offsetX: 2 } },
-      { media: { assetId: "clip", bounds: "theme", offsetY: -2 } },
+      { media: { assetId: "clip", bounds: "theme", offsetX: 6 } },
+      { media: { assetId: "clip", bounds: "theme", offsetY: -6 } },
     ])
       expect(codes(withBackground(background))).toContain("out-of-range");
   });

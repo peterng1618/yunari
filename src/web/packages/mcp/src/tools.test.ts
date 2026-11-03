@@ -69,6 +69,16 @@ describe("draft authoring and verification", () => {
 
     const saved = payload(await saveTheme(ctx, themeId));
     expect(saved).toMatchObject({ ok: true, base: "base-1", saved: true });
+    // The save asked the host to photograph a missing picture, so the library
+    // has one without the editor being opened (#381).
+    expect(saved.thumbnail).toBe(true);
+    expect(
+      host.requests.some(
+        (request) =>
+          request.method === "POST" &&
+          request.path === `/api/themes/${themeId}/thumbnail/capture`,
+      ),
+    ).toBe(true);
 
     const assigned = payload(await assignTheme(ctx, "this-pc", themeId));
     expect(assigned).toMatchObject({ display: "this-pc", theme: themeId });
@@ -78,6 +88,31 @@ describe("draft authoring and verification", () => {
           request.method === "PUT" && request.path === "/api/themes/active",
       ),
     ).toBe(true);
+  });
+
+  it("keeps a save whose thumbnail the host could not capture", async () => {
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname.endsWith("/thumbnail/capture")) {
+        return { status: 503, body: "This host drives no panels." };
+      }
+      return hostHandler()(request);
+    });
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+
+    const saved = payload(await saveTheme(ctx, created.themeId as string));
+
+    // The document is stored; the absence is reported rather than invented.
+    expect(saved).toMatchObject({
+      ok: true,
+      saved: true,
+      thumbnail: false,
+      thumbnailReason:
+        "The Yunari host answered 503: This host drives no panels.",
+    });
   });
 
   it("refuses to open a stored theme without confirmExisting, then opens with it", async () => {
@@ -602,7 +637,7 @@ describe("draft authoring and verification", () => {
       ?.typeTokens as Record<string, unknown>;
     expect(tokens["body"]).toEqual({
       family: "Packaged",
-      weight: "500",
+      weight: 500,
       face: { assetId: "font-1" },
     });
   });
@@ -646,8 +681,11 @@ describe("draft authoring and verification", () => {
     );
     expect(painted).toHaveLength(3);
     for (const object of painted) {
-      expect(object["fill"]).toBe("#ff0000");
-      expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
+      const glyph = object["type"] === "Path";
+      expect(object[glyph ? "stroke" : "fill"]).toBe("#ff0000");
+      expect(object["yunariPaint"]).toEqual({
+        [glyph ? "stroke" : "fill"]: "palette.accent",
+      });
     }
     expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
   });

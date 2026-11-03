@@ -129,6 +129,17 @@ function urlOf(cutId: string): string {
   return `${CDN}/${cutId.slice("cut:".length)}.woff2`;
 }
 
+/** Whether the published file is the cut those three keys name. */
+function publishesPairing(
+  url: string,
+  subset: string,
+  weight: number,
+  style: "normal" | "italic",
+): boolean {
+  const file = url.split("/").pop() ?? "";
+  return file === `${subset}-${weight}-${style}.woff2`;
+}
+
 /** The detail's own `variants`: a pairing listed there is a published file,
  *  which the weight × subset cartesian product cannot promise. URLs are
  *  rebuilt from the validated keys and pinned, so an upstream `@latest` (or a
@@ -153,6 +164,11 @@ function cutsOf(font: RegistryFont): FontCut[] {
       if (!isObject(face)) continue;
       const url = isObject(face.url) ? face.url.woff2 : undefined;
       if (typeof url !== "string" || url === "") continue;
+      // The row's id advertises subset/weight/style, and `bytesOf` fetches the
+      // path those keys name. A published path that disagrees would serve a
+      // file whose real cut is not the one the row declares, so the pairing is
+      // not offered at all.
+      if (!publishesPairing(url, subset, weight, "normal")) continue;
 
       const id = cutIdOf(font, subset, weight, "normal");
       const pinned = urlOf(id);

@@ -153,7 +153,7 @@ function scaleField(media: BackgroundMedia | undefined): FieldView {
 }
 
 /** Both offsets on one line. The halves carry no bounds — a half has none — so
-    the `-1..1` refusal stays at the write boundary. */
+    the range refusal stays at the write boundary. */
 function offsetField(media: BackgroundMedia | undefined): FieldView {
   const halves: readonly PairHalfView[] = [
     {

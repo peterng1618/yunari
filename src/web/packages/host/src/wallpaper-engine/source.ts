@@ -3,6 +3,7 @@ import { contentTypeFor } from "../serve/static-path.js";
 import { fetchAuthorName } from "./author.js";
 import { fingerprintOf, readListingCache, writeListingCache } from "./cache.js";
 import { readSceneFacts, type SceneFacts } from "./classify.js";
+import { videoDurationMs } from "./duration.js";
 import { type LibraryItem, scanLibrary } from "./library.js";
 import { locateInstall, type WallpaperEngineInstall } from "./locate.js";
 import { insideOf, resolvePayload } from "./resolve.js";
@@ -173,14 +174,19 @@ export function createWallpaperEngineSource(
       // The package is read once here; only its facts are kept. The bytes are
       // read again on demand, so a large library costs the scan, not the RSS.
       let facts: SceneFacts | undefined;
+      let durationMs: number | undefined;
       if (payload.kind === "scene") {
         const bytes = await readOrUndefined(payload.path);
         if (bytes !== undefined) {
           facts = classify(bytes);
         }
+      } else if (payload.kind === "video") {
+        // The clip's header only: a wallpaper that is hundreds of megabytes is
+        // measured without being read, so the row can answer "how long".
+        durationMs = await videoDurationMs(payload.path);
       }
 
-      stored.push(toStoredItem(item, payload, facts));
+      stored.push(toStoredItem(item, payload, facts, durationMs));
       resolved.push(item);
       byId.set(item.workshopId, item);
     }

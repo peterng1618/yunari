@@ -66,7 +66,7 @@ describe("panel manager preview", () => {
 
     expect(bytes).toEqual(Uint8Array.of(9));
     expect(pageFor).toHaveBeenLastCalledWith("strip", true, "night");
-    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledWith({
+    expect((h.browsers[0] as FakeBrowser).capturePage).toHaveBeenCalledWith({
       url: "http://127.0.0.1:1/?display=strip&clip=true&theme=night",
       geometry: { width: 464, height: 1920 },
       stillFormat: "png",
@@ -77,30 +77,34 @@ describe("panel manager preview", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it("renders a theme page at a requested size for a library picture", async () => {
+  it("photographs a theme-only page at the requested geometry", async () => {
+    const open = vi.fn(async () => deviceOver());
     const capture = vi.fn(async () => Uint8Array.of(7));
     const close = vi.fn(async () => {});
+
+    h.family = familyOver(open);
     h.rasterizer = () => ({ capture, captureOverlay: vi.fn(), close });
 
-    const themePageFor = vi.fn(
-      (themeId: string) => `http://127.0.0.1:1/?theme=${themeId}`,
+    const pageForTheme = vi.fn(
+      (themeId: string) => `http://127.0.0.1:1/?theme=${themeId}&panel=1`,
     );
-    const manager = managerOver({ themePageFor });
+    const manager = managerOver({ pageForTheme });
 
-    const bytes = await manager.captureTheme?.("night", {
+    const bytes = await manager.captureTheme("night", {
       width: 640,
       height: 360,
     });
 
     expect(bytes).toEqual(Uint8Array.of(7));
-    expect(themePageFor).toHaveBeenLastCalledWith("night");
-    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledWith({
-      url: "http://127.0.0.1:1/?theme=night",
+    expect(pageForTheme).toHaveBeenLastCalledWith("night");
+    expect((h.browsers[0] as FakeBrowser).capturePage).toHaveBeenCalledWith({
+      url: "http://127.0.0.1:1/?theme=night&panel=1",
       geometry: { width: 640, height: 360 },
       stillFormat: "png",
-      prepare: expect.any(Function),
     });
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("closes the target when the capture fails", async () => {

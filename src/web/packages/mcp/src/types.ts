@@ -160,6 +160,11 @@ export interface HostClient {
   listThemes(): Promise<readonly ThemeSummary[]>;
   getTheme(id: string): Promise<ThemeContent>;
   saveTheme(id: string, input: SaveThemeInput): Promise<SaveResult>;
+  /** Asks the host to photograph the theme for the library. `captured` is false
+   *  when a picture already existed and the host left it alone. */
+  captureThumbnail(
+    id: string,
+  ): Promise<{ readonly captured: boolean; readonly reason?: string }>;
   sensors(measured: boolean): Promise<SensorListing>;
   activeThemes(): Promise<ActiveThemeMap>;
   assignTheme(display: string, id: string): Promise<void>;
@@ -220,6 +225,8 @@ export interface DraftStore {
   discard(id: string): boolean;
   setMetadata(id: string, metadata: ThemeMetadata): Draft;
   setAsset(id: string, path: string, bytes: Uint8Array): Draft;
+  /** Drops bytes the draft no longer declares. */
+  deleteAsset(id: string, path: string): Draft;
   setCredits(id: string, credits: ThemeCredits | undefined): Draft;
   /** Records the base a save produced, and that this draft is now stored. */
   markSaved(id: string, base?: string): Draft;

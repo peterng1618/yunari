@@ -25,12 +25,10 @@ export function panelPageUrl(
 }
 
 /**
- * The player page a library picture is rendered from.
- *
- * A theme id is the whole request: the picture is the artboard, not a display's
- * presentation, and the host's own player is the renderer the theme will be
- * shown in.
+ * The player page for a theme no display is assigned, with `panel=1` so the
+ * page keeps none of its browser chrome: a thumbnail is the theme, and an
+ * authoring client that has no canvas asks the host to photograph this page.
  */
 export function themePageUrl(port: number, themeId: string): string {
-  return `http://127.0.0.1:${port}/?theme=${encodeURIComponent(themeId)}`;
+  return `http://127.0.0.1:${port}/?theme=${encodeURIComponent(themeId)}&panel=1`;
 }
