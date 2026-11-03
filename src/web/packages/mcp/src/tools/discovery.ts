@@ -49,16 +49,29 @@ export async function listSensors(
   return await attempt(async () => {
     const listing = await context.host.sensors(measured);
     const answering = new Set(listing.measured);
-    return {
-      sensors: listing.sensors.map((sensor) => ({
+    // Several providers may catalogue the same semantic key. A key is the
+    // identifier a binding uses, so the listing names it once; the first row's
+    // label and family describe it.
+    const seen = new Set<string>();
+    const sensors: {
+      key: string;
+      family: string | undefined;
+      label: string;
+      unit: string | undefined;
+      measured: boolean;
+    }[] = [];
+    for (const sensor of listing.sensors) {
+      if (seen.has(sensor.semanticKey)) continue;
+      seen.add(sensor.semanticKey);
+      sensors.push({
         key: sensor.semanticKey,
         family: sensor.family,
         label: sensor.label,
         unit: sensor.unit,
         measured: answering.has(sensor.semanticKey),
-      })),
-      measured,
-    };
+      });
+    }
+    return { sensors, measured };
   });
 }
 

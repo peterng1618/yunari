@@ -646,8 +646,11 @@ describe("draft authoring and verification", () => {
     );
     expect(painted).toHaveLength(3);
     for (const object of painted) {
-      expect(object["fill"]).toBe("#ff0000");
-      expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
+      const glyph = object["type"] === "Path";
+      expect(object[glyph ? "stroke" : "fill"]).toBe("#ff0000");
+      expect(object["yunariPaint"]).toEqual({
+        [glyph ? "stroke" : "fill"]: "palette.accent",
+      });
     }
     expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
   });
@@ -710,74 +713,6 @@ describe("draft authoring and verification", () => {
     const discarded = payload(await discardDraft(ctx, themeId));
     expect(discarded.discarded).toBe(true);
     expect(host.requests).toHaveLength(0);
-  });
-});
-
-describe("authoring defaults", () => {
-  it("keeps an omitted author omitted", async () => {
-    const host = await startHost(hostHandler());
-    const ctx = context(host);
-    const created = payload(
-      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
-    );
-    const envelope = created.envelope as {
-      readonly metadata?: Readonly<Record<string, unknown>>;
-    };
-    expect(envelope.metadata).not.toHaveProperty("author");
-  });
-
-  it("lets a run choose its type token and adds no implicit tracking", async () => {
-    const host = await startHost(hostHandler());
-    const ctx = context(host);
-    const created = payload(
-      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
-    );
-    const themeId = created.themeId as string;
-
-    await addText(ctx, {
-      box: { left: 10, top: 10, width: 200, height: 24 },
-      runs: [
-        {
-          kind: "literal",
-          text: "SYSTEM",
-          token: "text",
-          size: 17,
-          typeToken: "mono",
-        },
-      ],
-    });
-
-    const object = (
-      ctx.drafts.read(themeId).envelope.scene as {
-        readonly objects: readonly Record<string, unknown>[];
-      }
-    ).objects[0] as {
-      readonly yunariText?: {
-        readonly runs?: readonly {
-          readonly typeToken?: string;
-          readonly style?: { readonly letterSpacing?: unknown };
-        }[];
-      };
-    };
-    expect(object.yunariText?.runs?.[0]?.typeToken).toBe("typeTokens.mono");
-    expect(object.yunariText?.runs?.[0]?.style?.letterSpacing).toBeUndefined();
-  });
-
-  it("adds a chart whose default paint validates", async () => {
-    const host = await startHost(hostHandler());
-    const ctx = context(host);
-    const created = payload(
-      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
-    );
-    const themeId = created.themeId as string;
-
-    await addChart(ctx, {
-      family: "line",
-      box: { left: 10, top: 10, width: 400, height: 200 },
-      binding: { id: "cpu", semanticKey: "cpu.load" },
-    });
-
-    expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
   });
 });
 

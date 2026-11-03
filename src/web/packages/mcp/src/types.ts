@@ -190,6 +190,8 @@ export interface DraftStore {
   discard(id: string): boolean;
   setMetadata(id: string, metadata: ThemeMetadata): Draft;
   setAsset(id: string, path: string, bytes: Uint8Array): Draft;
+  /** Drops bytes the draft no longer declares. */
+  deleteAsset(id: string, path: string): Draft;
   setCredits(id: string, credits: ThemeCredits | undefined): Draft;
   /** Records the base a save produced, and that this draft is now stored. */
   markSaved(id: string, base?: string): Draft;

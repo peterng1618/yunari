@@ -202,6 +202,11 @@ export interface AddIconObjectInput {
 
 export function addIconObject(input: AddIconObjectInput): ObjectJson {
   const token = input.token ?? "text";
+  // Lucide draws on a 24-unit square with a 2-unit stroke. The commands are
+  // already scaled to the box, so the stroke scales with them; a filled glyph
+  // would flood the enclosed counter of a chip and leave a stroke-only glyph
+  // (the trends bars) with no area to paint at all.
+  const strokeWidth = (input.size * 2) / 24;
   return {
     type: "Path",
     id: input.id,
@@ -209,9 +214,12 @@ export function addIconObject(input: AddIconObjectInput): ObjectJson {
     left: input.left,
     top: input.top,
     path: starterIcons[input.icon](input.size),
-    fill: paintOf(token, input.size, input.size, input.palette),
-    stroke: null,
-    yunariPaint: { fill: `palette.${token}` },
+    fill: null,
+    stroke: paintOf(token, input.size, input.size, input.palette),
+    strokeWidth,
+    strokeLineCap: "round",
+    strokeLineJoin: "round",
+    yunariPaint: { stroke: `palette.${token}` },
     ...POSITIONED,
   };
 }
