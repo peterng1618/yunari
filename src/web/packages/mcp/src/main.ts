@@ -264,20 +264,27 @@ export async function run(argv: readonly string[]): Promise<number> {
  * resolved real paths, not the path as typed. A Windows drive letter is
  * case-insensitive; the bin-name fallback covers a path Node cannot resolve.
  */
-function isEntryPoint(): boolean {
-  const invoked = process.argv[1];
+export function isEntryPoint(
+  argv: readonly string[],
+  selfUrl: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const invoked = argv[1];
   if (invoked === undefined) return false;
   try {
-    const self = realpathSync(fileURLToPath(import.meta.url));
+    const self = realpathSync(fileURLToPath(selfUrl));
     const entry = realpathSync(invoked);
-    return process.platform === "win32"
-      ? self.toLowerCase() === entry.toLowerCase()
-      : self === entry;
+    const same =
+      platform === "win32"
+        ? self.toLowerCase() === entry.toLowerCase()
+        : self === entry;
+    if (same) return true;
   } catch {
-    return /[\\/]yunari-mcp\.js$/u.test(invoked);
+    // A path Node cannot resolve still gets the bin-name check below.
   }
+  return /[\\/]yunari-mcp\.js$/u.test(invoked);
 }
 
-if (isEntryPoint()) {
+if (isEntryPoint(process.argv, import.meta.url)) {
   process.exitCode = await run(process.argv.slice(2));
 }

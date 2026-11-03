@@ -1,9 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROBE_PORTS } from "./host-client.js";
-import { resolveHostUrl, run } from "./main.js";
+import { isEntryPoint, resolveHostUrl, run } from "./main.js";
 import { type FakeHost, startFakeHost } from "./testing/fake-host.js";
 
 const hosts: FakeHost[] = [];
@@ -22,6 +23,35 @@ function portOf(url: string): number {
 
 afterEach(async () => {
   await Promise.all(hosts.splice(0).map((host) => host.close()));
+});
+
+describe("isEntryPoint", () => {
+  it("runs when the bin file imports the built server", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "yunari-entry-"));
+    const main = join(dir, "dist", "main.js");
+    const bin = join(dir, "bin", "yunari-mcp.js");
+    try {
+      await mkdir(join(dir, "dist"));
+      await mkdir(join(dir, "bin"));
+      await writeFile(main, "");
+      await writeFile(bin, "");
+
+      expect(
+        isEntryPoint([process.execPath, main], pathToFileURL(main).href),
+      ).toBe(true);
+      expect(
+        isEntryPoint([process.execPath, bin], pathToFileURL(main).href),
+      ).toBe(true);
+      expect(
+        isEntryPoint(
+          [process.execPath, join(dir, "other.js")],
+          pathToFileURL(main).href,
+        ),
+      ).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  });
 });
 
 describe("resolveHostUrl", () => {

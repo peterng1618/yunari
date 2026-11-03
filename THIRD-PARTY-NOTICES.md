@@ -52,7 +52,7 @@ are provenance, not notice rows.
 | `@modelcontextprotocol/server` | 2.4.0 | Apache-2.0 | MCP stdio server for the theme-designer tools |
 | `add-mcp` | 2.6.1 | Apache-2.0 | installer: registers the MCP server entry in the agent's config |
 | `skills` | 1.7.5 | MIT | installer: installs the theme-designer skill globally |
-| `zod` | 4.6.6 | MIT | MCP tool input schemas |
+| `zod` | 4.6.7 | MIT | MCP tool input schemas |
 
 Preserve applicable Apache-2.0 and MIT licence/NOTICE obligations.
 
