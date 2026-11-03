@@ -60,7 +60,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_text",
     {
       description:
-        "Add a text object with literal and value runs. A value run names a binding supplied in bindings.",
+        "Add a text object with literal and value runs. A value run names a binding supplied in bindings. A run may name a type token (heading, body or mono); its size is the fallback role.",
       inputSchema: z.object({
         box: boxSchema,
         runs: z
@@ -71,6 +71,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
               text: z.string().optional(),
               token: z.string().min(1).optional(),
               size: z.number().positive(),
+              typeToken: z.enum(["heading", "body", "mono"]).optional(),
               precision: z.number().int().optional(),
               unitDisplay: z.enum(["none", "short", "long"]).optional(),
             }),
@@ -137,7 +138,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_chart",
     {
       description:
-        "Add a line, bar or gauge chart reading one or more bindings.",
+        "Add a line, bar or gauge chart reading one or more bindings. The box is its top-left, like every other compose tool; omitted settings use the theme's palette.",
       inputSchema: z.object({
         family: z.enum(["line", "bar", "gauge"]),
         box: boxSchema,

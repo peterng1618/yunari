@@ -17,6 +17,11 @@ import {
   type Run,
   text,
 } from "./objects.js";
+import {
+  contentPaletteToken,
+  SURFACE_TOKENS,
+  surfacePaletteToken,
+} from "./palette-role.js";
 
 /**
  * The compose vocabulary an agent, or any non-canvas author, builds a theme
@@ -221,9 +226,43 @@ export interface AddChartObjectInput {
   readonly width: number;
   readonly height: number;
   readonly family: AuthoringChartFamily;
-  /** Family settings; the renderer's defaults when omitted. */
+  /** Family settings; palette-backed defaults when omitted. */
   readonly settings?: unknown;
   readonly bindings: readonly Binding[];
+  /** The theme palette a default chart resolves its paint against. */
+  readonly palette?: FabricPalette;
+}
+
+/**
+ * A new chart's settings, painted with the theme's own tokens.
+ *
+ * The renderer's defaults carry literal hex colours, and the envelope validator
+ * refuses a persisted chart paint that is not a palette reference. A caller who
+ * composes a chart and validates must not inherit that refusal, so the default
+ * is built from the document's palette the same way the editor's new-chart
+ * defaults are.
+ */
+function defaultChartSettings(
+  family: AuthoringChartFamily,
+  palette: FabricPalette = starterPalette,
+): unknown {
+  const ink = contentPaletteToken(palette)?.[0];
+  const surface = surfacePaletteToken(palette, SURFACE_TOKENS)?.[0];
+  if (ink === undefined || surface === undefined) {
+    throw new Error(
+      "A chart needs a palette token to paint its value and its track.",
+    );
+  }
+  const inkRef = { ref: `palette.${ink}` } as const;
+  const surfaceRef = { ref: `palette.${surface}` } as const;
+  if (family === "line") {
+    const { area: _area, ...settings } = defaultLineSettings;
+    return { ...settings, stroke: inkRef, palette: [inkRef] };
+  }
+  if (family === "bar") {
+    return { ...defaultBarSettings, fill: inkRef, track: surfaceRef };
+  }
+  return { ...defaultGaugeSettings, track: surfaceRef, progress: inkRef };
 }
 
 export function addChartObject(input: AddChartObjectInput): {
@@ -231,12 +270,7 @@ export function addChartObject(input: AddChartObjectInput): {
   readonly bindings: readonly Binding[];
 } {
   const settings =
-    input.settings ??
-    (input.family === "line"
-      ? defaultLineSettings
-      : input.family === "bar"
-        ? defaultBarSettings
-        : defaultGaugeSettings);
+    input.settings ?? defaultChartSettings(input.family, input.palette);
   return {
     object: chart(
       input.id,

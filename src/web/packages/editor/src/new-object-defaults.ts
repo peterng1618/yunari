@@ -8,7 +8,6 @@ import {
   defaultPolarBarSettings,
   defaultRadarSettings,
   type FabricGlobals,
-  isOfferedPaletteToken,
   type TypeToken,
 } from "@yunari/renderer-core";
 import {
@@ -17,7 +16,12 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
-import { CARD_SURFACE_TOKENS, SURFACE_TOKENS } from "@yunari/theme-kit";
+import {
+  CARD_SURFACE_TOKENS,
+  contentPaletteToken,
+  SURFACE_TOKENS,
+  surfacePaletteToken,
+} from "@yunari/theme-kit";
 import {
   Ellipse,
   type FabricObject,
@@ -654,19 +658,6 @@ export function createNewChartDefaults(
 }
 
 /**
- * The token a new object is painted with. Not simply the first entry: a palette
- * conventionally starts with its background and letterbox colours, so taking
- * the first one paints new content in the canvas colour — invisible, and
- * therefore impossible to select or edit.
- *
- * A token named for content is preferred, then one that is not a known
- * surface, then anything that is not the transparent fallback.
- */
-const CONTENT_TOKENS = ["text", "ink", "foreground", "primary", "accent"];
-/** `charttrack` is here because a palette that has it was naming that job; the
-    token list and the role predicate live in `@yunari/theme-kit`, because the
-    card library asks the same question. */
-/**
  * A *frosted* card takes the frosted surface first, and the plain one after it.
  *
  * The two are not one surface at two strengths. `panel` is 85 % opaque, so a
@@ -716,30 +707,13 @@ function surfacePalette(
 ):
   | readonly [string, NonNullable<FabricGlobals["palette"]>[string]]
   | undefined {
-  const entries = Object.entries(globals?.palette ?? {}).filter(([id]) =>
-    isOfferedPaletteToken(id),
-  );
-  return (
-    candidates
-      .map((name) => entries.find(([id]) => id.toLowerCase() === name))
-      .find((entry) => entry !== undefined) ?? entries[0]
-  );
+  return surfacePaletteToken(globals?.palette, candidates);
 }
 
 function firstPalette(
   globals: FabricGlobals | undefined,
 ): readonly [string, NonNullable<FabricGlobals["palette"]>[string]] {
-  const entries = Object.entries(globals?.palette ?? {}).filter(([id]) =>
-    isOfferedPaletteToken(id),
-  );
-
-  const selected =
-    CONTENT_TOKENS.map((name) =>
-      entries.find(([id]) => id.toLowerCase() === name),
-    ).find((entry) => entry !== undefined) ??
-    entries.find(([id]) => !SURFACE_TOKENS.includes(id.toLowerCase())) ??
-    entries[0];
-
+  const selected = contentPaletteToken(globals?.palette);
   if (selected === undefined)
     throw new Error("New objects require a palette token.");
   return selected;

@@ -176,6 +176,7 @@ export async function addText(
       readonly text?: string | undefined;
       readonly token?: string | undefined;
       readonly size: number;
+      readonly typeToken?: "heading" | "body" | "mono" | undefined;
       readonly precision?: number | undefined;
       readonly unitDisplay?: "none" | "short" | "long" | undefined;
     }[];
@@ -201,12 +202,23 @@ export async function addText(
           );
         }
       }
+      if (
+        run.typeToken !== undefined &&
+        draft.envelope.globals?.typeTokens?.[run.typeToken] === undefined
+      ) {
+        throw new Error(
+          `This theme has no "${run.typeToken}" type token (${Object.keys(
+            draft.envelope.globals?.typeTokens ?? {},
+          ).join(", ")}).`,
+        );
+      }
       return {
         kind,
         ...(run.bindingId === undefined ? {} : { bindingId: run.bindingId }),
         ...(run.text === undefined ? {} : { text: run.text }),
         token: tokenOf(run.token, "text", palette),
         size: run.size,
+        ...(run.typeToken === undefined ? {} : { typeToken: run.typeToken }),
         ...(run.precision === undefined ? {} : { precision: run.precision }),
         ...(run.unitDisplay === undefined
           ? {}
@@ -385,6 +397,7 @@ export async function addChart(
       ...input.box,
       family: input.family,
       bindings: bindingsOf(bindings),
+      palette: paletteOf(draft),
       ...(input.settings === undefined ? {} : { settings: input.settings }),
     });
     return added(draft, built.object, built.bindings);
@@ -506,9 +519,8 @@ function scaleOf(object: ObjectJson, key: "scaleX" | "scaleY"): number {
 /**
  * An object's true bounding box in artboard coordinates.
  *
- * Fabric places an object by its anchor, and a chart is authored from its
- * centre (`theme-kit/objects.ts`), so reading `left`/`top` as a top-left
- * corner would omit half of every chart when grouping.
+ * Fabric places an object by its anchor, so a group must read the authored
+ * origin rather than assuming every box starts at `left`/`top`.
  */
 function boxOf(object: ObjectJson, id: string): Box {
   const read = (key: "left" | "top" | "width" | "height"): number => {

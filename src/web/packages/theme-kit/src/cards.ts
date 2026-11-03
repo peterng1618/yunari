@@ -190,7 +190,7 @@ export function cpuCard(): ObjectJson {
       ]),
       // `chart` is the one helper that takes Fabric's centre origin, so these
       // are the box's middle, not its corner.
-      chart("cpu-card-sparkline", 571, 414, 230, 56, "line", {
+      chart("cpu-card-sparkline", 456, 386, 230, 56, "line", {
         ...sparkSettings,
         area: { ref: "palette.frostArea" },
         stroke: { ref: "palette.frostInk" },
@@ -234,7 +234,7 @@ export function gpuCard(): ObjectJson {
           size: 20,
         },
       ]),
-      chart("gpu-card-sparkline", 870, 414, 240, 56, "line", {
+      chart("gpu-card-sparkline", 750, 386, 240, 56, "line", {
         ...sparkSettings,
         area: { ref: "palette.frostArea" },
         stroke: { ref: "palette.frostInk" },
@@ -307,13 +307,21 @@ function memoryCard(options: {
         24,
         "text",
       ),
-      chart(`${prefix}-gauge`, options.ringCentreX, 375, 218, 218, "gauge", {
-        ...ringSettings,
-        // A full ring is a settings value on one family, not a second family:
-        // the default 225 -> -45 is the 270-degree arc, and 0 -> 360 closes it.
-        ...(options.fullRing ? { startAngle: 0, endAngle: 360 } : {}),
-        progress: { ref: `palette.${prefix}` },
-      }),
+      chart(
+        `${prefix}-gauge`,
+        options.ringCentreX - 109,
+        266,
+        218,
+        218,
+        "gauge",
+        {
+          ...ringSettings,
+          // A full ring is a settings value on one family, not a second family:
+          // the default 225 -> -45 is the 270-degree arc, and 0 -> 360 closes it.
+          ...(options.fullRing ? { startAngle: 0, endAngle: 360 } : {}),
+          progress: { ref: `palette.${prefix}` },
+        },
+      ),
       // The value and the capacity are ordinary text objects:
       // `buildGaugeOption` hides `detail` and `axisLabel` outright, so there is
       // no chart-internal value text to suppress and no choice to make.
@@ -437,7 +445,7 @@ export function trendsCard(): ObjectJson {
       // The legend is a text object, not a chart setting: `LineSettings` has no
       // legend property and the settings panel exposes no legend field.
       text("trends-legend", 680, 528, 390, 22.6, legend, { align: "center" }),
-      chart("trends-chart", 616, 695, 963, 215, "line", {
+      chart("trends-chart", 134.5, 587.5, 963, 215, "line", {
         ...plainLine,
         // Area fill is first-series only, so three filled series are not
         // expressible; the reference's three strokes are what this keeps.
@@ -490,7 +498,7 @@ export function storageCard(): ObjectJson {
         ],
         { align: "center" },
       ),
-      chart("storage-bar", 1385, 603, 430, 26, "bar", {
+      chart("storage-bar", 1170, 590, 430, 26, "bar", {
         ...defaultBarSettings,
         // A track is what makes a bar a progress bar rather than a column.
         min: 0,
@@ -562,7 +570,7 @@ export function networkCard(): ObjectJson {
           precision: 1,
         },
       ]),
-      chart("network-chart", 1385, 783, 430, 70, "line", {
+      chart("network-chart", 1170, 748, 430, 70, "line", {
         ...plainLine,
         palette: [{ ref: "palette.down" }, { ref: "palette.gpu" }],
         stroke: { ref: "palette.down" },

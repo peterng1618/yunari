@@ -209,10 +209,10 @@ export function starterRoleForSize(size: number): StarterTypeRole {
  * and "YUNARI" 28px at 36px. Only those two sizes track; a numeral's advance is
  * a grid cell, so readings and the clock stay untracked.
  */
-export const starterTracking: Readonly<Record<number, number>> = {
+export const starterTracking = {
   17: 6,
   36: 28,
-};
+} as const;
 
 /** Fabric's `charSpacing` in 1/1000 em, from a run's own px tracking. */
 export function charSpacingPx(
