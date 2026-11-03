@@ -139,6 +139,11 @@ export interface HostClient {
   listThemes(): Promise<readonly ThemeSummary[]>;
   getTheme(id: string): Promise<ThemeContent>;
   saveTheme(id: string, input: SaveThemeInput): Promise<SaveResult>;
+  /** Asks the host to photograph the theme for the library. `captured` is false
+   *  when a picture already existed and the host left it alone. */
+  captureThumbnail(
+    id: string,
+  ): Promise<{ readonly captured: boolean; readonly reason?: string }>;
   sensors(measured: boolean): Promise<SensorListing>;
   activeThemes(): Promise<ActiveThemeMap>;
   assignTheme(display: string, id: string): Promise<void>;

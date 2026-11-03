@@ -245,6 +245,22 @@ export class HttpHostClient implements HostClient {
     );
   }
 
+  async captureThumbnail(
+    id: string,
+  ): Promise<{ readonly captured: boolean; readonly reason?: string }> {
+    const body = await this.json<{
+      readonly captured?: boolean;
+      readonly reason?: string;
+    }>(`/api/themes/${encodeURIComponent(id)}/thumbnail/capture`, {
+      method: "POST",
+    });
+
+    return {
+      captured: body.captured === true,
+      ...(body.reason === undefined ? {} : { reason: body.reason }),
+    };
+  }
+
   async sensors(measured: boolean): Promise<SensorListing> {
     const body = await this.json<{
       readonly sensors?: readonly SensorListing["sensors"][number][];
@@ -392,6 +408,12 @@ export class LazyHostClient implements HostClient {
 
   async saveTheme(id: string, input: SaveThemeInput): Promise<SaveResult> {
     return await (await this.client()).saveTheme(id, input);
+  }
+
+  async captureThumbnail(
+    id: string,
+  ): Promise<{ readonly captured: boolean; readonly reason?: string }> {
+    return await (await this.client()).captureThumbnail(id);
   }
 
   async sensors(measured: boolean): Promise<SensorListing> {

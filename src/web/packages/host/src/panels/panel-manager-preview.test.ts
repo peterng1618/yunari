@@ -66,7 +66,7 @@ describe("panel manager preview", () => {
 
     expect(bytes).toEqual(Uint8Array.of(9));
     expect(pageFor).toHaveBeenLastCalledWith("strip", true, "night");
-    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledWith({
+    expect((h.browsers[0] as FakeBrowser).capturePage).toHaveBeenCalledWith({
       url: "http://127.0.0.1:1/?display=strip&clip=true&theme=night",
       geometry: { width: 464, height: 1920 },
       stillFormat: "png",
@@ -74,6 +74,36 @@ describe("panel manager preview", () => {
     expect(capture).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
     // A preview must not take the panel away from the theme it is showing.
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("photographs a theme-only page at the requested geometry", async () => {
+    const open = vi.fn(async () => deviceOver());
+    const capture = vi.fn(async () => Uint8Array.of(7));
+    const close = vi.fn(async () => {});
+
+    h.family = familyOver(open);
+    h.rasterizer = () => ({ capture, captureOverlay: vi.fn(), close });
+
+    const pageForTheme = vi.fn(
+      (themeId: string) => `http://127.0.0.1:1/?theme=${themeId}&panel=1`,
+    );
+    const manager = managerOver({ pageForTheme });
+
+    const bytes = await manager.captureTheme("night", {
+      width: 640,
+      height: 360,
+    });
+
+    expect(bytes).toEqual(Uint8Array.of(7));
+    expect(pageForTheme).toHaveBeenLastCalledWith("night");
+    expect((h.browsers[0] as FakeBrowser).capturePage).toHaveBeenCalledWith({
+      url: "http://127.0.0.1:1/?theme=night&panel=1",
+      geometry: { width: 640, height: 360 },
+      stillFormat: "png",
+    });
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
     expect(open).not.toHaveBeenCalled();
   });
 

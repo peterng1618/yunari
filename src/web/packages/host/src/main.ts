@@ -16,7 +16,7 @@ import {
   createPanelManager,
   type PanelManager,
 } from "./panels/panel-manager.js";
-import { panelPageUrl } from "./panels/panel-page.js";
+import { panelPageUrl, themePageUrl } from "./panels/panel-page.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -565,6 +565,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     displays,
     pageFor: (displayId, clip, themeId) =>
       panelPageUrl(bound, displayId, clip, themeId),
+    // A thumbnail's page belongs to no display: it is the theme alone, in the
+    // player's own panel mode, photographed at the library's size.
+    pageForTheme: (themeId) => themePageUrl(bound, themeId),
     // A panel's encoded clip is disposable host data, kept beside the other
     // caches so a restart reuses the transcode instead of paying for it again.
     videoCacheDir: path.join(path.dirname(settingsDir), "cache", "panel-video"),
