@@ -153,8 +153,13 @@ Probes against the installed versions (`add-mcp` 2.6.1, `skills` 1.7.5):
   canonical directory. The lock file remained, with its skill entry cleared;
   it records the local source, `installMode: "copy"` and the folder hash, not
   the agent name.
-- An MCP stdio handshake with the v2 server proving `initialize`, `tools/list`
-  and one tool call complete without a host.
+- An MCP stdio handshake with the v2 server proving `initialize` and
+  `tools/list` answer without a host; all 33 tools are registered.
+- The built `yunari-mcp install` against a temporary home wrote the skill only
+  to `<home>/.agents/skills/yunari-theme-designer`, registered the server entry
+  and the `mcp__yunari` permission rule. `status --url` named the unreachable
+  URL. `uninstall` removed the server entry, the permission rule and the
+  canonical skill directory.
 
 If a probe fails, the design falls back to the library's documented API only
 after recording the failure here; no second hand-rolled installer is added

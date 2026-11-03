@@ -157,8 +157,8 @@ entry and the installed skill path without changing anything.
 |---|---|---|
 | `yunari_status` | none | host URL, reachable, theme count, displays, asset sources, sensor count |
 | `list_displays` | none | id, label, kind, shape, rotation, active theme; panel geometry/status/commands |
-| `list_sensors` | `measured?: boolean` | semantic key, family, label, unit, value when measured |
-| `list_themes` | none | id, name, artboard, description, thumbnail flag |
+| `list_sensors` | `measured?: boolean` | semantic key, family, label, unit, and whether this host currently answers that key |
+| `list_themes` | none | id, name, author, updatedAt and origin from the host's listing; artboard, description, credits and sensors come from `get_theme` |
 | `get_theme` | `themeId` | envelope, asset references and credit summary; never asset bytes |
 | `list_asset_sources` | none | source id, label, category, credential requirement |
 
@@ -186,7 +186,7 @@ the user's stated licence instead of inventing one.
 | `set_theme_metadata` | name, author, description, language, tags |
 | `set_artboard` | width, height, shape, contentFit |
 | `set_palette` | entries `{id, name, value}` |
-| `set_type_tokens` | heading/body/mono family, weight, size |
+| `set_type_tokens` | heading/body/mono family and weight; sizes belong to individual text runs |
 | `set_background` | colour reference and optional media asset, bounds, fallback frame |
 | `discard_draft` | theme id |
 
@@ -203,17 +203,18 @@ theme is not modified without explicit approval.
 | `add_card` | unit id, left, top, optional scale |
 | `add_text` | box, runs (literal/value with binding id, palette token, size), align, overflow |
 | `add_shape` | rect/ellipse/path, box, fill/stroke tokens, stroke width, radius |
-| `add_image` | declared asset id, box, fit |
+| `add_image` | declared asset id, box |
 | `add_icon` | icon name from the shared icon set, box, palette token |
 | `add_chart` | family (line/bar/gauge), box, binding, optional settings |
-| `add_binding` | object id, binding array |
+| `add_binding` | object id, bindings array |
 | `list_objects` | theme id |
-| `update_object` | object id, validated JSON merge |
+| `update_object` | object id, validated JSON merge in `patch` |
 | `remove_object` | object id |
 | `group_objects` / `ungroup_objects` | object ids / group id |
 
 Every compose tool returns the ids it created and any issue the kit reported.
-A tool never writes to the host; it mutates the draft.
+A tool never writes to the host; it mutates the draft. `ungroup_objects`
+refuses a group carrying a scale or rotation rather than baking transforms.
 
 ### Verify and deploy
 
