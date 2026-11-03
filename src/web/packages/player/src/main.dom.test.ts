@@ -939,6 +939,68 @@ describe("the units a display paints with", () => {
     ).toBe(3800);
   });
 
+  it("marks the document live only after a batch is ingested", async () => {
+    delete document.documentElement.dataset["yunariLive"];
+    skeleton();
+    history.replaceState({}, "", "/?theme=units");
+    vi.stubGlobal("EventSource", RecordingEventSource);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/document")) return json(unitsEnvelope());
+        if (url === "/api/display") return json({ settings: {}, zones: [] });
+        return json({});
+      }),
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await import("./main.js");
+    await vi.waitFor(() =>
+      expect(streams.length, "the stream opened").toBeGreaterThan(0),
+    );
+    expect(
+      document.documentElement.dataset["yunariLive"],
+      "an open stream is not a reading",
+    ).not.toBe("true");
+
+    streams[0]!.emit(
+      "samples",
+      JSON.stringify({
+        version: 1,
+        sentAt: new Date().toISOString(),
+        samples: [
+          {
+            semanticKey: "cpu.clock",
+            sample: {
+              sensorId: "cpu.clock",
+              timestamp: new Date().toISOString(),
+              status: "ok",
+              value: 3800,
+              unit: "MHz",
+            },
+          },
+        ],
+      }),
+    );
+
+    await vi.waitFor(() =>
+      expect(
+        document.documentElement.dataset["yunariLive"],
+        "the first batch settles the display",
+      ).toBe("true"),
+    );
+  });
+
   /** The mounted text object's rendered string. */
   function readoutText(): string | undefined {
     const diagnostics = window as unknown as {

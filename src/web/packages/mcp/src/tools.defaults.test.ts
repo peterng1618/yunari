@@ -9,7 +9,7 @@ import {
   startHost,
 } from "./testing/tool-fixtures.js";
 import { removeDraftAsset } from "./tools/assets.js";
-import { addChart, addImage, addText } from "./tools/compose.js";
+import { addChart, addImage, addShape, addText } from "./tools/compose.js";
 import { createTheme } from "./tools/draft.js";
 import { validateTheme } from "./tools/verify.js";
 
@@ -80,6 +80,35 @@ describe("authoring defaults", () => {
     });
 
     expect(payload(await validateTheme(ctx, themeId)).ok).toBe(true);
+  });
+
+  it("scales a path's default stroke to the artboard and keeps an explicit one", async () => {
+    const host = await startHost(hostHandler());
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 1920, height: 1080 }),
+    );
+    const themeId = created.themeId as string;
+    const line = {
+      kind: "path" as const,
+      box: { left: 100, top: 500, width: 800, height: 0 },
+      points: [
+        ["M", 0, 0],
+        ["L", 800, 0],
+      ],
+    };
+
+    await addShape(ctx, line);
+    await addShape(ctx, { ...line, strokeWidth: 2 });
+
+    const objects = (
+      ctx.drafts.read(themeId).envelope.scene as {
+        readonly objects: readonly { readonly strokeWidth?: number }[];
+      }
+    ).objects;
+    // 1920 / 240 = 8 units: about a pixel on a 320 px display.
+    expect(objects[0]?.strokeWidth).toBe(8);
+    expect(objects[1]?.strokeWidth).toBe(2);
   });
 
   it("drops an unused declared asset and refuses one a scene still uses", async () => {

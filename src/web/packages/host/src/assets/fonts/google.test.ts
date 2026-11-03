@@ -272,6 +272,35 @@ describe("googleFontSource", () => {
     ]);
   });
 
+  it("does not offer a cut whose published file names another pairing", async () => {
+    const detail = {
+      ...MANROPE_DETAIL,
+      variants: {
+        "400": {
+          normal: {
+            latin: {
+              url: { woff2: `${CDN}manrope@latest/latin-400-normal.woff2` },
+            },
+          },
+        },
+        "700": {
+          normal: {
+            latin: {
+              url: { woff2: `${CDN}manrope@latest/latin-400-normal.woff2` },
+            },
+          },
+        },
+      },
+    };
+    const { fetcher } = stubFetch({ details: { manrope: detail } });
+    const page = await googleFontSource.search("manrope", 1, context(fetcher));
+
+    const cuts = page.results[0]?.font?.cuts ?? [];
+    expect(cuts.map((cut) => `${cut.subset}-${cut.weight}`)).toEqual([
+      "latin-400",
+    ]);
+  });
+
   it("serves a woff2 for a cut through the injected fetch", async () => {
     const { fetcher, calls } = stubFetch();
     const page = await googleFontSource.search("manrope", 1, context(fetcher));

@@ -281,6 +281,14 @@ export async function addShape(
       }
       return command as readonly [string, ...number[]];
     });
+    // A stroke is authored in artboard units, so a bare 2-unit line is a third
+    // of a pixel on a 320 px display and reads as absent. The default scales
+    // with the artboard's width; an explicit width, however thin, is kept.
+    const strokeWidth =
+      input.kind === "path"
+        ? (input.strokeWidth ??
+          Math.max(2, Math.round(draft.envelope.artboard.width / 240)))
+        : undefined;
     const object = addShapeObject({
       id: "shape",
       kind: input.kind,
@@ -290,9 +298,7 @@ export async function addShape(
         : { token: tokenOf(input.token, "panel", palette) }),
       ...(input.radius === undefined ? {} : { radius: input.radius }),
       ...(points === undefined ? {} : { points }),
-      ...(input.strokeWidth === undefined
-        ? {}
-        : { strokeWidth: input.strokeWidth }),
+      ...(strokeWidth === undefined ? {} : { strokeWidth }),
       palette,
     });
     return added(draft, object);

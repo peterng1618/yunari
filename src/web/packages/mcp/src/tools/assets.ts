@@ -151,12 +151,69 @@ export async function searchAssets(
   });
 }
 
+/** Results whose own bytes are the picture. Everything else — a video, a
+ *  scene, a font — answers with the row's preview instead. */
+const IMAGE_KINDS = new Set(["image", "svg", "gif"]);
+
+const PREVIEW_TIMEOUT_MS = 10_000;
+
+/** The row's poster still, or nothing when the source published none or the
+ *  fetch cannot answer with an image. A relative preview resolves against the
+ *  host, so the host's own Wallpaper Engine stills work alongside remote ones. */
+async function previewStill(
+  ref: AssetRef,
+  baseUrl: string,
+): Promise<
+  { readonly bytes: Uint8Array; readonly mimeType: string } | undefined
+> {
+  if (ref.preview === "") return undefined;
+  let url: URL;
+  try {
+    url = new URL(ref.preview, baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+    });
+    if (!response.ok) return undefined;
+    const mimeType = (response.headers.get("content-type") ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    if (mimeType === undefined || !mimeType.startsWith("image/")) {
+      return undefined;
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength > MAX_ASSET_BYTES ? undefined : { bytes, mimeType };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function previewAsset(
   context: ToolContext,
   assetRef: string,
 ): Promise<CallToolResult> {
   try {
     const ref = decodeRef(assetRef);
+    if (!IMAGE_KINDS.has(ref.kind)) {
+      const still = await previewStill(ref, context.host.url);
+      if (still !== undefined) {
+        return imageResult(still.bytes, still.mimeType, {
+          name: ref.name,
+          kind: ref.kind,
+          licence: ref.licence,
+          sourceUrl: ref.sourceUrl,
+          bytes: still.bytes.byteLength,
+        });
+      }
+      throw new Error(
+        `"${ref.name}" is a ${ref.kind}, not an image this tool can preview.`,
+      );
+    }
     const { bytes, filename } = await context.host.assetBytes(
       ref.source,
       ref.id,

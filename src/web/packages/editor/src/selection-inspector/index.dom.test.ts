@@ -307,7 +307,7 @@ describe("the selection inspector", () => {
       expect(history.saveState).not.toHaveBeenCalled();
     });
 
-    it("refuses an offset outside -1..1 at the write boundary", async () => {
+    it("refuses an offset outside -5..5 at the write boundary", async () => {
       // A paired half carries no bounds (`PairHalfView` has none), so the only
       // guard for this value is the one behind the commit.
       const { host, editor, onBackgroundChange } = backgroundSelected();
@@ -316,7 +316,7 @@ describe("the selection inspector", () => {
       )!;
       expect(offsetX.value).toBe("0");
 
-      await edit(offsetX, "150");
+      await edit(offsetX, "600");
 
       expect(onBackgroundChange).not.toHaveBeenCalled();
       expect(editor.errorManager.warn).toHaveBeenCalled();
