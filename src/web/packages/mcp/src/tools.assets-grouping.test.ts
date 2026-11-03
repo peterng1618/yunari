@@ -200,7 +200,7 @@ describe("grouping", () => {
     expect(validated.ok).toBe(true);
   });
 
-  it("groups a centre-anchored chart by its true bounding box", async () => {
+  it("groups objects from their top-left boxes", async () => {
     const host = await startHost(hostHandler());
     const ctx = context(host);
     await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
@@ -230,10 +230,10 @@ describe("grouping", () => {
     );
     expect(group).toMatchObject({
       type: "Group",
-      left: 300,
-      top: 190,
-      width: 300,
-      height: 210,
+      left: 400,
+      top: 240,
+      width: 200,
+      height: 160,
     });
   });
 

@@ -9,9 +9,9 @@ import {
   charSpacingPx,
   frost,
   STARTER_LINE_HEIGHT,
+  type StarterTypeRole,
   starterPalette,
   starterRoleForSize,
-  starterTracking,
   starterTypeTokens,
 } from "./globals.js";
 import type { PathCommand } from "./icons.js";
@@ -216,7 +216,7 @@ function toGroupPlane(
   };
 }
 
-/** One run's palette token and size; the size picks the role token. */
+/** One run's palette token and size; the type token defaults from its size. */
 export interface Run {
   readonly kind: "literal" | "value";
   /** The binding this run reads; literal runs have none. */
@@ -224,17 +224,29 @@ export interface Run {
   readonly text?: string;
   readonly token: string;
   readonly size: number;
+  /** The role token this run names; sized inference is only the fallback. */
+  readonly typeToken?: StarterTypeRole;
+  /**
+   * The run's own tracking, in px. Decorative spacing belongs to the label that
+   * asked for it, so an arbitrary text at a starter label's size stays untracked.
+   */
+  readonly letterSpacing?: number;
   readonly precision?: number;
   /** `"none"` when a later literal run writes the unit instead. */
   readonly unitDisplay?: "none" | "short" | "long";
 }
 
+/** The type token a run names, or the starter role its size belonged to. */
+function roleOf(run: Run): StarterTypeRole {
+  return run.typeToken ?? starterRoleForSize(run.size);
+}
+
 /**
- * How a run is worn: size, leading and the measured tracking, authored on the
- * run rather than on the token it names.
+ * How a run is worn: size, leading and its own measured tracking, authored on
+ * the run rather than on the token it names.
  */
 function runStyle(run: Run): Record<string, unknown> {
-  const letterSpacing = starterTracking[run.size];
+  const letterSpacing = run.letterSpacing;
   return {
     color: { ref: `palette.${run.token}` },
     fontSize: { value: run.size },
@@ -274,8 +286,8 @@ export function text(
   palette: Palette = starterPalette,
 ): ObjectJson {
   const first = runs[0] as Run;
-  const firstToken = starterTypeTokens[starterRoleForSize(first.size)];
-  const spacing = charSpacingPx(starterTracking[first.size], first.size);
+  const firstToken = starterTypeTokens[roleOf(first)];
+  const spacing = charSpacingPx(first.letterSpacing, first.size);
   // A reading that outgrows its box is truncated rather than clipped to
   // nothing, so an author can see that it did not fit. A prose label has no
   // reading to truncate and keeps the default clip.
@@ -323,7 +335,7 @@ export function text(
           ? {
               kind: "literal",
               text: run.text ?? "",
-              typeToken: `typeTokens.${starterRoleForSize(run.size)}`,
+              typeToken: `typeTokens.${roleOf(run)}`,
               style: runStyle(run),
             }
           : {
@@ -335,7 +347,7 @@ export function text(
               ...(run.unitDisplay === undefined
                 ? {}
                 : { unitDisplay: run.unitDisplay }),
-              typeToken: `typeTokens.${starterRoleForSize(run.size)}`,
+              typeToken: `typeTokens.${roleOf(run)}`,
               style: runStyle(run),
             },
       ),
@@ -366,6 +378,10 @@ export function label(
   size: number,
   token: string,
   palette: Palette = starterPalette,
+  run?: {
+    readonly letterSpacing?: number;
+    readonly typeToken?: StarterTypeRole;
+  },
 ): ObjectJson {
   return text(
     id,
@@ -373,7 +389,18 @@ export function label(
     top,
     width,
     height,
-    [{ kind: "literal", text: value, token, size }],
+    [
+      {
+        kind: "literal",
+        text: value,
+        token,
+        size,
+        ...(run?.letterSpacing === undefined
+          ? {}
+          : { letterSpacing: run.letterSpacing }),
+        ...(run?.typeToken === undefined ? {} : { typeToken: run.typeToken }),
+      },
+    ],
     undefined,
     palette,
   );
@@ -448,7 +475,8 @@ export function chart(
     height,
     family,
     settings,
-    originX: "center",
-    originY: "center",
+    // Every compose tool places its box from the top-left; a chart is no
+    // exception, so its `left`/`top` mean the same corner as a text or shape.
+    ...positioned,
   };
 }

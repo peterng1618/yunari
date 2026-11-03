@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "echarts": "6.1.0",
+    "fontkit": "2.0.4",
     "lucide-react": "1.66.0",
     "qr": "^0.7.2",
     "react": "^19.3.0",
