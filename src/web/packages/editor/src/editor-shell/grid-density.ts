@@ -1,56 +1,86 @@
 /**
- * How many columns the store's gallery draws, and the viewer's say in it.
+ * How dense the store's gallery is, and the viewer's say in it.
  *
- * **The default is responsive, the choice is not.** With nothing stored, the
- * count follows the region's width at the same 272px minimum the grid used
- * before, so a 1080p region opens on six columns, a 1352px one on four, and 4K
- * at the maximum. A viewer who picks a density keeps that number across
- * resizes: the control exists to override the width, so re-deriving the choice
- * from the window would take the choice back.
+ * **The choice is a level, the count is derived.** The header's slider offers
+ * four named densities; the columns are then the width's answer for that level,
+ * recomputed on every resize. A stored count would stop following the window the
+ * moment it was chosen, which is what the earlier numeric well did.
  *
- * The bounds cover the same screens the default does. Two columns is the
- * narrowest pane that still reads as a gallery; eight is the densest a 4K
- * region should get.
+ * The level is a view preference, never authored state: it is written to the
+ * browser's storage and never into a theme.
  */
 
-/** The narrowest a card column may get; the same 272px the grid declares. */
-const MIN_COLUMN = 272;
-/** The grid's gutter, which the column count has to leave room for between
- *  each pair of tracks. */
+/** The four densities, smallest cards first. */
+export const GRID_DENSITY_LEVELS = [
+  "compact",
+  "comfortable",
+  "roomy",
+  "spacious",
+] as const;
+
+export type GridDensityLevel = (typeof GRID_DENSITY_LEVELS)[number];
+
+export const DEFAULT_GRID_DENSITY: GridDensityLevel = "comfortable";
+
+/**
+ * The card width each level targets, before the width's own count is derived.
+ * `comfortable` is the 272px the gallery was designed around; the others step
+ * down to a phone-like size and up to one image at a time.
+ */
+const TARGET_CARD_WIDTH: Readonly<Record<GridDensityLevel, number>> = {
+  compact: 200,
+  comfortable: 272,
+  roomy: 360,
+  spacious: 480,
+};
+
+/** The gutter between cards, which the count has to leave room for. */
 const COLUMN_GAP = 12;
 
 export const GRID_COLUMNS_MIN = 2;
-export const GRID_COLUMNS_MAX = 8;
+export const GRID_COLUMNS_MAX = 10;
 
-/** The store's own storage key. Namespaced like the shell's palette choice:
- *  never serialized into a theme, never authored state. */
-const storageKey = "yunari.editor.store-grid-columns";
+/** The card width `level` aims at. The count is derived from the pane's width;
+ *  this is the one input the level itself fixes, and the unmeasured first frame
+ *  reserves a card at it. */
+export function targetCardWidth(level: GridDensityLevel): number {
+  return TARGET_CARD_WIDTH[level];
+}
 
-/** How many 272px columns `width` holds, clamped to the offered range. */
-export function autoColumnsForWidth(width: number): number {
-  const fit = Math.floor((width + COLUMN_GAP) / (MIN_COLUMN + COLUMN_GAP));
+/** How many cards across `width` holds at `level`, clamped to the offered range. */
+export function columnsForWidth(
+  width: number,
+  level: GridDensityLevel,
+): number {
+  const unit = TARGET_CARD_WIDTH[level];
+  const fit = Math.floor((width + COLUMN_GAP) / (unit + COLUMN_GAP));
   return Math.min(GRID_COLUMNS_MAX, Math.max(GRID_COLUMNS_MIN, fit));
 }
 
+/** The card width the derived count actually gives `width`. */
+export function cardWidthFor(width: number, columns: number): number {
+  const tracks = Math.max(1, columns);
+  return Math.max(0, (width - COLUMN_GAP * (tracks - 1)) / tracks);
+}
+
+/** The store's own storage key. Namespaced like the shell's palette choice. */
+const storageKey = "yunari.editor.store-density";
+
 /** One viewer's density, or no choice yet. */
 export interface GridDensityPreference {
-  /** The chosen count, or `undefined` where the viewer has not chosen and
-   *  a stored value this build cannot read is the same as no value. */
-  read(): number | undefined;
-  write(columns: number): void;
+  /** The chosen level, or `undefined` where the viewer has not chosen and a
+   *  stored value this build cannot read is the same as no value. */
+  read(): GridDensityLevel | undefined;
+  write(level: GridDensityLevel): void;
   clear(): void;
 }
 
-/** A stored value as a count, or nothing: an out-of-range or malformed entry is
- *  refused rather than clamped, because clamping would silently accept a value
- *  no control offered. */
-function storedColumns(raw: string | null): number | undefined {
-  if (raw === null) return undefined;
-  const columns = Number(raw);
-  return Number.isInteger(columns) &&
-    columns >= GRID_COLUMNS_MIN &&
-    columns <= GRID_COLUMNS_MAX
-    ? columns
+/** A stored value as a level, or nothing: an unknown word is refused rather
+ *  than mapped onto a level no control offered. */
+function storedLevel(raw: string | null): GridDensityLevel | undefined {
+  return raw !== null &&
+    (GRID_DENSITY_LEVELS as readonly string[]).includes(raw)
+    ? (raw as GridDensityLevel)
     : undefined;
 }
 
@@ -68,14 +98,14 @@ export function createGridDensityPreference(
   return {
     read: () => {
       try {
-        return storedColumns(storage?.getItem(storageKey) ?? null);
+        return storedLevel(storage?.getItem(storageKey) ?? null);
       } catch {
         return undefined;
       }
     },
-    write: (columns) => {
+    write: (level) => {
       try {
-        storage?.setItem(storageKey, String(columns));
+        storage?.setItem(storageKey, level);
       } catch {
         // A storage that refuses is a preference that does not persist.
       }

@@ -210,25 +210,29 @@ Row rhythm: a control row is **26px** tall in a panel, **30px** in a dialog,
 **32px** in the settings surface. Density varies by which of those three a
 surface is, not by taste.
 
-**The store's gallery grid targets 272px per column.** The number is derived
-from the online half's busiest facts band — its badge, counts and four actions —
-so switching halves does not change the grid's shape. Column width is
-`repeat(n, minmax(0, 1fr))`, where `n` is the density.
+**The store's gallery is justified rows, not a masonry.** Cards are collected
+until their natural widths at the level's target height pass the pane; the row is
+then scaled as a whole so its cards and 12px gutters together equal the pane's
+width — flush at both edges. Each card's height is the row's, and its width is
+that height times the theme's own ratio, contained rather than cropped. A 4:1
+Lian Li theme therefore takes the width it needs to stay legible, and a square
+theme takes a normal slot instead of reserving a square's area out of every row.
+A final row whose cards fit keeps the target height and stays short on the right.
 
-**The density is chosen, and its default follows the width.** The header's
-Columns well offers 2–8, and that choice is a view preference: it persists, so
-the next session opens on the same count. Before a choice, `n` is the scroller's
-own count — `floor((width + 12) / (272 + 12))` clamped to 2–8 — so 1080p, 4K and
-an ultrawide each open on a count that fits them rather than on one fixed
-breakpoint.
+**The density is a named level, and the column count follows the pane.** The
+header's slider, at the bar's far end, offers four levels — Compact, Comfortable,
+Roomy, Spacious — targeting 200, 272, 360 and 480px cards. The level is the view
+preference that persists; the count is recomputed on every resize as
+`floor((width + 12) / (target + 12))` clamped to 2–10. Four named levels rather
+than a numeric well, because a stored count stops following the window the
+moment it is chosen. The track is 120px and its reading column 84px, the width
+that holds the longest level's word without moving the header.
 
-**Cards pack as a masonry at each theme's own ratio.** A card's picture box takes
-the authored canvas's aspect ratio and contains the picture rather than cropping
-it, so the library's heights vary with what the author drew. The grid has a 1px
-row unit and `row dense`, and each card spans the rows its measured height
-needs. **Each card occupies exactly one column**, whatever its aspect ratio: the
-gutter is the same horizontally and vertically, and a wide theme grows taller
-rather than spanning its neighbour's column.
+**A card's foot is one row.** The name is semibold at the left; the updated day
+sits at the right of the same row. Attending the card fades the day out and fades
+the card's controls in over the same space, so the row never grows and the card
+never repeats a line beneath itself. A facts band exists only for facts the name
+row cannot carry: an online item's kind and download count, or an origin pill.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
@@ -610,8 +614,9 @@ one is sized to 180px and holds that width while the facet row beside it wraps
 to a second line.
 
 **The grid loads another batch as the scroller nears its end**, so the header
-holds no page arithmetic and no pager row. The density well beside the sort is
-where the reader chooses how many columns the grid draws.
+holds no page arithmetic and no pager row. The density slider beside the sort is
+where the reader chooses how compact the grid feels; the columns follow the
+pane's width.
 
 **The slider row's well is 40px and not 36, and the arithmetic is what fixes
 it.** The well carries an editable field, so the 24×24 target below binds it: the

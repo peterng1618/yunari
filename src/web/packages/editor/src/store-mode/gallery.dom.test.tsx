@@ -10,16 +10,17 @@
  * with no store record, and the byline is fixed.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
- * one-column grid, the column count and the packing are declarations read off
- * the class and style lists rather than a reflow; the layout fixes them and
- * DESIGN.md's Layout section carries the rule. The browser case that measures
- * the packing is `tests/e2e/editor-rail.spec.ts`.
+ * row's flush edges and the density's effect on card size are declarations read
+ * off the style lists rather than a reflow; the layout fixes them and DESIGN.md's
+ * Layout section carries the rule. The browser case that measures the packing is
+ * `tests/e2e/editor-rail.spec.ts`.
  */
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { targetCardWidth } from "../editor-shell/grid-density.js";
 import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { Gallery } from "./gallery.js";
@@ -199,6 +200,31 @@ function pictureBox(container: HTMLElement): HTMLElement {
   );
 }
 
+/** jsdom lays nothing out and reports every `clientWidth` as 0, so a case that
+ *  reads the gallery's measurement supplies one for the mount. */
+async function withClientWidth<T>(
+  width: number,
+  run: () => Promise<T>,
+): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientWidth",
+  );
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get: () => width,
+  });
+  try {
+    return await run();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+    } else {
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", descriptor);
+    }
+  }
+}
+
 /**
  * The card contains the theme's picture rather than cropping it. A theme whose
  * ratio is not the band's must show whole: a card is the advertisement of a
@@ -210,7 +236,7 @@ it("contains the theme's picture in the card's band", async () => {
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -226,12 +252,16 @@ it("contains the theme's picture in the card's band", async () => {
 });
 
 /**
- * The box is the theme's own shape, not the old 2:1 band: that is what makes the
- * library a masonry of varied heights rather than a grid of letterboxed strips.
- * The ratio is declared on the box and the picture is contained inside it, so
- * the two together keep the whole composition.
+ * **A card is the row's height and its own ratio's width.** The row gives every
+ * card one height; each card takes the width that keeps its picture whole, so a
+ * portrait theme is a narrow card beside a landscape one instead of a square
+ * that reserves as much area as any other card.
+ *
+ * jsdom measures nothing, so the pane reports no width and the packing falls
+ * back to one card per row at the density's target height. The widths below are
+ * that fallback's arithmetic, and the equal heights are the row's own rule.
  */
-it("reserves the picture box at the theme's own ratio", async () => {
+it("lays each card at the row's height and its ratio's width", async () => {
   const portrait = facetRecordOf({
     ...DOCUMENT,
     artboard: { width: 1080, height: 1920 },
@@ -248,43 +278,61 @@ it("reserves the picture box at the theme's own ratio", async () => {
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
 
-  const ratios = Array.from(
+  const heights = Array.from(
     container.querySelectorAll<HTMLElement>("[data-yunari-store-picture]"),
-    (box) => box.style.aspectRatio,
+    (box) => Number.parseFloat(box.style.height),
   );
-  expect(ratios, "the picture box is not the authored canvas's ratio").toEqual([
-    "1920 / 1080",
-    "1080 / 1920",
+  const target = targetCardWidth("comfortable");
+  expect(heights, "the row did not give both cards one height").toEqual([
+    target,
+    target,
+  ]);
+  const widths = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+    (cell) => Number.parseFloat(cell.style.width),
+  );
+  expect(widths, "a card is not its own ratio's width").toEqual([
+    Math.round(target * (16 / 9)),
+    Math.round(target * (9 / 16)),
   ]);
 });
 
 /**
- * **Every card takes one column, whatever its ratio.** A wide theme shows a
- * short card in the column the density chose rather than a double-width card
- * that would break the grid's rhythm and make the count a lie.
+ * **A row is flushed at both edges, and every card keeps its own ratio.** A wide
+ * theme takes the width it needs to stay legible instead of being squeezed into
+ * one column's strip; the portrait theme beside it takes a narrow slot. The two
+ * cards and their gutter together are exactly the pane's width, which is what
+ * "justified" means — the row is not merely wrapped.
+ *
+ * jsdom reports no width, so this case supplies the pane's measurement for the
+ * mount. The packing's own arithmetic is proved in `justified-rows.test.ts`;
+ * what this case adds is that the measured width reaches it.
  */
-it("keeps every card in one column at the chosen density", async () => {
-  const container = await mount(
-    <Gallery
-      items={[
-        item({
-          facets: { ...facetRecordOf(DOCUMENT), width: 3840, height: 1080 },
-        }),
-        item({
-          id: "portrait",
-          facets: { ...facetRecordOf(DOCUMENT), width: 1080, height: 1920 },
-        }),
-      ]}
-      columns={6}
-      onAction={() => undefined}
-      onOpenItem={() => undefined}
-      install={NO_INSTALL}
-    />,
+it("packs wide and portrait cards into one row flush at both edges", async () => {
+  const PANE = 1352;
+  const container = await withClientWidth(PANE, () =>
+    mount(
+      <Gallery
+        items={[
+          item({
+            facets: { ...facetRecordOf(DOCUMENT), width: 3840, height: 1080 },
+          }),
+          item({
+            id: "portrait",
+            facets: { ...facetRecordOf(DOCUMENT), width: 1080, height: 1920 },
+          }),
+        ]}
+        density="comfortable"
+        onAction={() => undefined}
+        onOpenItem={() => undefined}
+        install={NO_INSTALL}
+      />,
+    ),
   );
 
   const grid = must(
@@ -293,19 +341,34 @@ it("keeps every card in one column at the chosen density", async () => {
   );
   expect(
     grid.style.gridTemplateColumns,
-    "the grid did not spell the density's column count",
-  ).toBe("repeat(6, minmax(0, 1fr))");
-  for (const cell of container.querySelectorAll<HTMLElement>(
-    "[data-yunari-store-cell]",
-  )) {
-    expect(cell.style.gridColumn, "a card claimed more than one column").toBe(
-      "",
-    );
-    expect(
-      cell.hasAttribute("data-wide"),
-      "a card still carries the two-column marker",
-    ).toBe(false);
-  }
+    "the gallery is still a CSS grid rather than justified rows",
+  ).toBe("");
+  const cells = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+  );
+  expect(cells, "the two cards did not pack into one row").toHaveLength(2);
+  const widths = cells.map((cell) => Number.parseFloat(cell.style.width));
+  expect(
+    widths[0],
+    "the wide theme was squeezed into a column's strip",
+  ).toBeGreaterThan(900);
+  expect(
+    widths[1],
+    "the portrait theme did not take a narrow slot",
+  ).toBeLessThan(300);
+  expect(
+    (widths[0] ?? 0) + (widths[1] ?? 0) + 12,
+    "the row is not flush at both edges",
+  ).toBe(PANE);
+  expect(
+    new Set(
+      Array.from(
+        container.querySelectorAll<HTMLElement>("[data-yunari-store-picture]"),
+        (box) => box.style.height,
+      ),
+    ).size,
+    "the cards in one row do not share a height",
+  ).toBe(1);
 });
 
 /**
@@ -317,7 +380,7 @@ it("loads each card's picture lazily", async () => {
   const container = await mount(
     <Gallery
       items={[item()]}
-      columns={4}
+      density="comfortable"
       onAction={() => undefined}
       onOpenItem={() => undefined}
       install={NO_INSTALL}
@@ -344,7 +407,7 @@ it("draws the theme's own ground when it has no thumbnail", async () => {
       items={[item({ thumbnailUrl: undefined })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -371,7 +434,7 @@ it("drops the picture a theme does not have, leaving its ground", async () => {
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -400,7 +463,7 @@ it("draws a picture again when the address changes after a failure", async () =>
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -416,7 +479,7 @@ it("draws a picture again when the address changes after a failure", async () =>
       items={[item({ thumbnailUrl: "/api/themes/living-room/thumbnail-2" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -439,7 +502,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -457,7 +520,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item({ name: "Living room (renamed)" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -478,7 +541,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item({ updatedAt: "2026-10-16T11:02:00.000Z" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -511,7 +574,7 @@ it("draws its four actions and runs all four", async () => {
       items={[item()]}
       onAction={onAction}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -567,7 +630,7 @@ it("offers publish on a local-only theme and not on one from the store", async (
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
       submit={{ ...NO_SUBMIT, onSubmit }}
     />,
@@ -628,7 +691,7 @@ it("opens the item from the cell's own surface rather than from an action", asyn
       items={[item()]}
       onAction={onAction}
       onOpenItem={onOpenItem}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -657,11 +720,11 @@ it("opens the item from the cell's own surface rather than from an action", asyn
 });
 
 /**
- * The card's meta line keeps the updated day; the author moves to the hover
- * chip, where it is `© name`, or the no-author word where the document
+ * The card's name row keeps the updated day at its right; the author moves to
+ * the hover chip, where it is `© name`, or the no-author word where the document
  * declares none — a fact about the theme rather than a missing reading.
  */
-it("keeps the updated date in the band and the author in the hover chip", async () => {
+it("keeps the updated date in the name row and the author in the hover chip", async () => {
   const container = await mount(
     <Gallery
       items={[
@@ -674,7 +737,7 @@ it("keeps the updated date in the band and the author in the hover chip", async 
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -716,35 +779,31 @@ it("badges the cell whose theme came from the store, and leaves the other unbadg
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
 
-  /** One cell's facts band, which is where the surface puts the badge. */
-  function band(id: string): HTMLElement {
+  /** One cell, by the id it draws. */
+  function cellOf(id: string): HTMLElement {
     return must(
-      container.querySelector<HTMLElement>(
-        `[data-yunari-store-cell="${id}"] [data-yunari-store-cell-band]`,
-      ),
-      `${id}'s facts band`,
-    );
-  }
-
-  /** One cell's badge, or the `null` that says it drew none. */
-  function badge(id: string): HTMLElement | null {
-    return band(id).querySelector<HTMLElement>(
-      "[data-yunari-store-cell-origin]",
+      container.querySelector<HTMLElement>(`[data-yunari-store-cell="${id}"]`),
+      `${id}'s cell`,
     );
   }
 
   expect(
-    must(badge("living-room"), "origin badge").textContent,
+    must(
+      cellOf("living-room").querySelector<HTMLElement>(
+        "[data-yunari-store-cell-band] [data-yunari-store-cell-origin]",
+      ),
+      "origin badge in the facts band",
+    ).textContent,
     "the badge is not the copy table's word for where a theme came from",
   ).toBe(uiCopy.store.fromStore);
   expect(
-    badge("workshop-bench"),
-    "the cell badged a theme the host has no origin for",
+    cellOf("workshop-bench").querySelector("[data-yunari-store-cell-band]"),
+    "a theme with no fact beyond its name drew a facts band anyway",
   ).toBeNull();
 });
 
@@ -771,7 +830,7 @@ it("draws the kind badge and the download count for an online item, and neither 
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -824,13 +883,23 @@ it("draws the kind badge and the download count for an online item, and neither 
     "the online cell drew the local half's origin pill as well",
   ).toBeNull();
 
+  const library = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-store-cell="workshop-bench"]',
+    ),
+    "the library cell",
+  );
   expect(
-    band("workshop-bench").querySelector("[data-yunari-store-cell-kind]"),
+    library.querySelector("[data-yunari-store-cell-kind]"),
     "the library cell drew a catalogue kind",
   ).toBeNull();
   expect(
-    band("workshop-bench").querySelector("[data-yunari-store-cell-downloads]"),
+    library.querySelector("[data-yunari-store-cell-downloads]"),
     "the library cell drew a catalogue count",
+  ).toBeNull();
+  expect(
+    library.querySelector("[data-yunari-store-cell-band]"),
+    "a library theme with no fact beyond its name drew a facts band",
   ).toBeNull();
 });
 
@@ -851,7 +920,7 @@ it("prints the identifier of a kind this build does not know", async () => {
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -952,7 +1021,7 @@ it("marks an installed online item without drawing a control", async () => {
       items={[item({ catalogue: catalogue({ installedVersion: "1.4.0" }) })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -1014,7 +1083,7 @@ it("reports a press on Install and Update, and draws no control for an installed
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={{ ...NO_INSTALL, onInstall }}
     />,
   );
@@ -1071,7 +1140,7 @@ it("badges a Mine cell's state after its name without changing its actions", asy
       items={[item({ catalogue: catalogue(), status: "pending" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
@@ -1090,8 +1159,10 @@ it("badges a Mine cell's state after its name without changing its actions", asy
   ).toBe(uiCopy.store.status.pending);
   expect(
     must(
-      container.querySelector<HTMLElement>("[data-yunari-store-cell-name]"),
-      "cell name",
+      container.querySelector<HTMLElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "the cell's name press",
     ).nextElementSibling,
     "the badge is not the element after the name",
   ).toBe(badge);
@@ -1118,7 +1189,7 @@ it("draws no badge for a published item", async () => {
       items={[item({ catalogue: catalogue(), status: "published" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
-      columns={4}
+      density="comfortable"
       install={NO_INSTALL}
     />,
   );
