@@ -293,18 +293,18 @@ export {
   ASSET_EXTENSIONS,
   themeAssetContentType,
 } from "./theme/asset-media-type.js";
-export {
-  resolveBackgroundComposition,
-  type BackgroundComposition,
-  type BackgroundMask,
-  type CompositionRect,
-} from "./theme/background-composition.js";
 export type { AssetResolver, AssetResolverOptions } from "./theme/assets.js";
 export {
   createAssetResolver,
   isSafeAssetPath,
   noAssets,
 } from "./theme/assets.js";
+export {
+  type BackgroundComposition,
+  type BackgroundMask,
+  type CompositionRect,
+  resolveBackgroundComposition,
+} from "./theme/background-composition.js";
 export type { CapabilityGroup } from "./theme/capabilities.js";
 export {
   allowsStyleProperty,
