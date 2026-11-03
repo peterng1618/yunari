@@ -1,5 +1,4 @@
-import type { FabricThemeEnvelope, FacetRecord } from "@yunari/renderer-core";
-import { facetRecordOf } from "@yunari/renderer-core";
+import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import {
   classifyThemeChange,
   type VersionLevel,
@@ -25,7 +24,6 @@ export function planVersion(input: {
       readonly ok: true;
       readonly version: string;
       readonly level: VersionLevel;
-      readonly facets: FacetRecord;
     }
   | { readonly ok: false; readonly message: string } {
   const change = classifyThemeChange(input.previous?.envelope, input.candidate);
@@ -67,6 +65,5 @@ export function planVersion(input: {
     ok: true,
     version: expected,
     level: change.level,
-    facets: facetRecordOf(input.candidate),
   };
 }

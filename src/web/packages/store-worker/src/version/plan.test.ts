@@ -1,4 +1,4 @@
-import { type FabricThemeEnvelope, facetRecordOf } from "@yunari/renderer-core";
+import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { planVersion } from "./plan.js";
 
@@ -58,7 +58,6 @@ describe("planVersion", () => {
     const candidate = claimed(baseEnvelope(), "1.0.0");
     const planned = planVersion({ previous: undefined, candidate, now: NOW });
     expect(planned).toMatchObject({ ok: true, version: "1.0.0" });
-    if (planned.ok) expect(planned.facets).toEqual(facetRecordOf(candidate));
   });
 
   it("refuses an unchanged theme and an absent declared version", () => {

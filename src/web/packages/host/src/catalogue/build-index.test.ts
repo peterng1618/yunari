@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 import {
   type FabricThemeEnvelope,
   facetRecordOf,
@@ -73,11 +74,13 @@ async function catalogueOf(
     /** Bytes to write instead of a package built from `theme`; `null` writes
      *  no package at all. */
     readonly packageBytes?: Uint8Array | null;
+    /** The picture the package carries, when it carries one. */
+    readonly thumbnail?: Uint8Array;
   }[],
 ): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "yunari-catalogue-"));
   temporary.push(root);
-  for (const { id, item, theme, packageBytes } of entries) {
+  for (const { id, item, theme, packageBytes, thumbnail } of entries) {
     const directory = path.join(root, id);
     await mkdir(directory, { recursive: true });
     await writeFile(
@@ -87,19 +90,57 @@ async function catalogueOf(
     if (packageBytes === null) continue;
     await writeFile(
       path.join(directory, `${id}.zip`),
-      packageBytes ?? writtenPackage(id, theme),
+      packageBytes ?? writtenPackage(id, theme, thumbnail),
     );
   }
   return root;
 }
 
-function writtenPackage(id: string, theme?: FabricThemeEnvelope): Uint8Array {
+function writtenPackage(
+  id: string,
+  theme?: FabricThemeEnvelope,
+  thumbnail?: Uint8Array,
+): Uint8Array {
   const written = writeThemePackage({
     envelope: theme ?? themeFor(id, `Theme ${id}`),
     assets: {},
+    ...(thumbnail === undefined ? {} : { thumbnail }),
   });
   if (!written.ok) throw new Error(written.message);
   return written.bytes;
+}
+
+/** A 1×1 white PNG: 8-bit greyscale, one filter byte and one sample. */
+function whitePng(): Uint8Array {
+  const chunk = (type: string, data: Uint8Array): Uint8Array => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    for (let index = 0; index < 4; index += 1) {
+      out[4 + index] = type.charCodeAt(index);
+    }
+    out.set(data, 8);
+    return out;
+  };
+  const header = new Uint8Array(13);
+  new DataView(header.buffer).setUint32(0, 1);
+  new DataView(header.buffer).setUint32(4, 1);
+  header[8] = 8;
+  header[9] = 0;
+  const parts = [
+    Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", new Uint8Array(deflateSync(Uint8Array.from([0, 255])))),
+    chunk("IEND", new Uint8Array()),
+  ];
+  const out = new Uint8Array(
+    parts.reduce((total, part) => total + part.length, 0),
+  );
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 afterEach(async () => {
@@ -122,6 +163,17 @@ describe("catalogueIndexOf", () => {
     expect(index.generatedAt).toBe(GENERATED_AT);
     expect(index.entries.map((entry) => entry.id)).toEqual(["aurora", "beta"]);
     expect(index.entries[0]?.facets).toEqual(facetRecordOf(valid));
+  });
+
+  it("files an item by the picture's mean when it has one", () => {
+    const index = catalogueIndexOf(
+      [{ ...item("aurora"), thumbnailLuminance: 0.9 }],
+      GENERATED_AT,
+    );
+
+    // The same reading the library uses for a stored picture, so the two
+    // halves cannot disagree about what "light" means.
+    expect(index.entries[0]?.facets.colourMode).toBe("light");
   });
 
   it("carries remixOf into the credited entry and no key into the plain one", () => {
@@ -246,6 +298,31 @@ describe("buildCatalogueIndexCommand", () => {
 
     expect(await buildCatalogueIndexCommand(argv)).toBe(0);
     expect(await readFile(out, "utf8")).toBe(bytes);
+  });
+
+  it("files a package by the picture it carries", async () => {
+    const catalogue = await catalogueOf([
+      { id: "alpha", thumbnail: whitePng() },
+    ]);
+    const out = path.join(catalogue, "index.json");
+
+    expect(
+      await buildCatalogueIndexCommand([
+        "--build-catalogue-index",
+        catalogue,
+        "--out",
+        out,
+        "--generated-at",
+        GENERATED_AT,
+      ]),
+    ).toBe(0);
+
+    const parsed = parseCatalogueIndex(
+      JSON.parse(await readFile(out, "utf8")),
+      ["dashboard-theme"],
+    );
+    // `themeFor` declares no ground, so the document alone cannot classify it.
+    expect(parsed.entries[0]?.facets.colourMode).toBe("light");
   });
 
   it("writes remixOf only for the item that carries it", async () => {

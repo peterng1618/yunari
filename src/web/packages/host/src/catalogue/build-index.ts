@@ -10,6 +10,7 @@ import {
   readFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import { readThemePackage } from "@yunari/theme-package";
+import { thumbnailLuminance } from "../themes/thumbnails.js";
 
 /**
  * The catalogue listing's generator, run as a host command.
@@ -24,6 +25,9 @@ export interface CatalogueItem {
   readonly id: string;
   readonly item: unknown;
   readonly theme: unknown;
+  /** The package picture's mean, measured the same way the library measures a
+   *  stored picture, so both halves file a theme by the same reading. */
+  readonly thumbnailLuminance?: number;
 }
 
 /** `YYYY-MM-DDTHH:MM:SS`, an optional fraction, then `Z` or `±HH:MM`. Presence
@@ -59,13 +63,18 @@ function entryOf({
   id,
   item,
   theme,
+  thumbnailLuminance,
 }: CatalogueItem): CatalogueEntry | undefined {
   const file = parseCatalogueItemFile(item);
   if (!file.ok) return undefined;
   const validated = readFabricThemeEnvelope(theme);
   if (!validated.ok) return undefined;
 
-  return { id, ...file.file, facets: facetRecordOf(validated.envelope) };
+  return {
+    id,
+    ...file.file,
+    facets: facetRecordOf(validated.envelope, thumbnailLuminance),
+  };
 }
 
 /**
@@ -136,7 +145,18 @@ export async function buildCatalogueIndexCommand(
         console.error(`Refused catalogue/${name}: ${read.message}`);
         continue;
       }
-      items.push({ id: name, item, theme: read.envelope });
+      // A package without a picture leaves the facet to the document, exactly
+      // as a library theme without a capture does.
+      const luminance =
+        read.thumbnail === undefined
+          ? undefined
+          : thumbnailLuminance(read.thumbnail);
+      items.push({
+        id: name,
+        item,
+        theme: read.envelope,
+        ...(luminance === undefined ? {} : { thumbnailLuminance: luminance }),
+      });
     } catch (error) {
       console.error(`Refused catalogue/${name}: ${messageOf(error)}`);
     }

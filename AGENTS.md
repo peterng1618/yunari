@@ -82,6 +82,14 @@ presence, not evidence quality. Do not create a second decision register.
 
 ## Architecture guardrails
 
+- **One rule, every surface.** A definition, criterion, default or behaviour
+  belongs to its owner and applies to every consumer of that concept in the same
+  change: offline library and online store, host and Worker, editor and player,
+  saved and published. A report naming one surface never scopes the work — find
+  the owner, change it there, and make every other surface read that owner. Two
+  derivations of the same rule (dark/light, classification, validation,
+  formatting, ordering) are a defect: delete the losing one. A surface that
+  cannot use the owner is a defect to fix, not a precedent to copy.
 - **One owner per concept.** Before adding a type, key, default, action, route,
   helper, schema value, registry or persistence path, find its existing owner
   and consumers. The owner decides membership and invariants; consumers import

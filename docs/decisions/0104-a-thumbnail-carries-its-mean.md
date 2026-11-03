@@ -7,8 +7,10 @@
   `src/web/packages/host/src/themes/submission.ts`,
   `src/web/packages/host/src/themes/store-client.ts`,
   `src/web/packages/host/src/catalogue/submit.ts`,
+  `src/web/packages/host/src/catalogue/build-index.ts`,
   `src/web/packages/host/src/main.ts`,
-  `src/web/packages/store-worker/src/routes/me.ts`
+  `src/web/packages/store-worker/src/routes/me.ts`,
+  `src/web/packages/store-worker/src/version/plan.ts`
 
 ## Problem
 
@@ -104,3 +106,13 @@ passes it to `facetRecordOf`, so a published media theme is classified by the
 picture a viewer sees. Absent is sent as absent, never zero — a publisher that
 cannot read the picture leaves the facet to the document rather than inventing
 a colour.
+
+The bundled catalogue index measures the picture its package carries with the
+same `thumbnailLuminance` helper, so the online index and the local library
+cannot disagree. `planVersion` no longer derives facets at all: a version
+request has no picture, so it cannot answer the colour mode; `finalizeVersion`
+is the one write that does.
+
+Already-published versions keep the `facets_json` written before this change
+until their next publish. The value is derived from a picture the Worker cannot
+read, and inventing a second decoder there would defeat the single-owner rule.
