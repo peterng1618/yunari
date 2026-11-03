@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { BackgroundBlend } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   type MediaBounds,
@@ -94,7 +95,7 @@ describe("background media", () => {
     expect(host.querySelector("video[data-yunari-frame-probe]")).not.toBeNull();
     expect(
       host.querySelector(
-        "[data-yunari-background-media] > video:not([data-yunari-frame-probe])",
+        "[data-yunari-background-media] > [data-yunari-background-region] > video:not([data-yunari-frame-probe])",
       ),
       "the mounted video is not the probe",
     ).not.toBeNull();
@@ -1068,5 +1069,133 @@ describe("background media as a glass backdrop", () => {
         delete (proto as Record<string, unknown>)["cancelVideoFrameCallback"];
       }
     }
+  });
+
+  it("paints a fill behind a region and masks the media at its edge", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        media: {
+          assetId: "hero",
+          bounds: "theme",
+          region: {
+            left: 0.25,
+            blend: { shape: "linear", edge: "left", length: 0.1 },
+          },
+        },
+      },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+      fill: {
+        kind: "gradient",
+        angle: 0,
+        stops: [
+          { offset: 0, color: "#101418" },
+          { offset: 1, color: "#000000" },
+        ],
+      },
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+
+    const layer = host.querySelector("[data-yunari-background-media]");
+    const fill = layer?.querySelector("[data-yunari-background-fill]");
+    const region = layer?.querySelector("[data-yunari-background-region]");
+    const media = region?.querySelector("video, img");
+
+    expect(layer?.contains(fill as Node)).toBe(true);
+    expect(fill?.style.background).toContain("linear-gradient");
+    // 400×200 box: a quarter inset leaves 100px at the left and 300px of region.
+    expect(region?.style.left).toBe("100px");
+    expect(region?.style.top).toBe("0px");
+    expect(region?.style.width).toBe("300px");
+    expect(region?.style.height).toBe("200px");
+    // A 10% ramp of the box's width runs 40px in from the region's left edge.
+    expect(region?.style.maskImage).toBe(
+      "linear-gradient(90deg, transparent 0%, black 100%)",
+    );
+    expect(region?.style.maskSize).toBe("100% 100%");
+    expect(region?.style.webkitMaskImage).toBe(region?.style.maskImage);
+    expect(media?.parentElement).toBe(region);
+    // The child's placement is relative to the region, not the bounds box.
+    expect(media?.style.left).toBe("0px");
+    expect(media?.style.width).toBe("300px");
+
+    handle.destroy();
+  });
+
+  it("places the media over the whole box when there is no region", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "theme" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const media = region?.querySelector("video, img");
+    expect(region?.style.left).toBe("0px");
+    expect(region?.style.width).toBe("400px");
+    expect(region?.style.maskImage).toBe("");
+    expect(region?.style.webkitMaskImage).toBe("");
+    expect(media?.parentElement).toBe(region);
+
+    handle.destroy();
+  });
+
+  it("points each linear ramp at its active edge", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "theme" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+
+    const masks = (blend: BackgroundBlend) => {
+      handle.setBackground({
+        media: {
+          assetId: "hero",
+          bounds: "theme",
+          region: { left: 0.25, blend },
+        },
+      });
+      return region?.style.maskImage;
+    };
+
+    expect(masks({ shape: "linear", edge: "left", length: 0.1 })).toBe(
+      "linear-gradient(90deg, transparent 0%, black 100%)",
+    );
+    expect(masks({ shape: "linear", edge: "right", length: 0.1 })).toBe(
+      "linear-gradient(270deg, transparent 0%, black 100%)",
+    );
+    expect(masks({ shape: "linear", edge: "top", length: 0.1 })).toBe(
+      "linear-gradient(180deg, transparent 0%, black 100%)",
+    );
+    expect(masks({ shape: "linear", edge: "bottom", length: 0.1 })).toBe(
+      "linear-gradient(0deg, transparent 0%, black 100%)",
+    );
+    expect(masks({ shape: "radial", length: 0.4 })).toBe(
+      "radial-gradient(black 60%, transparent 100%)",
+    );
+
+    handle.destroy();
   });
 });

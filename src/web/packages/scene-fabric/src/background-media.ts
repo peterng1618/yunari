@@ -2,9 +2,12 @@ import {
   type AssetReference,
   BACKGROUND_MEDIA_DEFAULTS,
   type Background,
+  type BackgroundMask,
   type BackgroundMedia,
+  cssArtboardPaint,
   MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_SCALE,
+  resolveBackgroundComposition,
 } from "@yunari/renderer-core";
 import type { BackdropMedia } from "./glass.js";
 
@@ -28,6 +31,10 @@ export interface BackgroundMediaOptions {
    *  following frames by omitting it. Nothing subscribes unless a video is the
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
+  /** The background's fill, already resolved from its `StyleValue`: the paint
+   *  behind the media inside its bounds box, revealed by a region or a blend.
+   *  Absent paints nothing. */
+  readonly fill?: unknown;
   /** What a panel's page loads instead of the declared video: the host's still
    *  of the declared frame, or a clip painted into the theme's media box. A
    *  clip already carries the authored pan and zoom, so the page places it
@@ -169,6 +176,25 @@ function flipTransform(media: BackgroundMedia | undefined): string {
   return scales.join(" ");
 }
 
+/**
+ * The DOM form of the one resolved mask.
+ *
+ * The linear branch turns the mask line back into a CSS angle with the artboard
+ * paint's convention: the stored direction is `(cos, -sin)`, so 0 points right
+ * and 90 points up. The gradient is transparent at the line's start and opaque
+ * at its end, which is the media's authored fade.
+ */
+function maskCss(mask: BackgroundMask | undefined): string {
+  if (mask === undefined) return "";
+  if (mask.kind === "radial") {
+    const opaque = Number((mask.opaqueFraction * 100).toFixed(4));
+    return `radial-gradient(ellipse at center, black ${opaque}%, transparent 100%)`;
+  }
+  const radians = Math.atan2(-(mask.y2 - mask.y1), mask.x2 - mask.x1);
+  const degrees = Number((90 - (radians * 180) / Math.PI).toFixed(4));
+  return `linear-gradient(${degrees}deg, transparent 0%, black 100%)`;
+}
+
 export interface BackgroundMediaHandle {
   /** Reconfigures the layer. Same asset re-places the mounted element; a
    *  different asset (or none) tears it down and mounts afresh, because a
@@ -209,6 +235,15 @@ export function mountBackgroundMedia(
   layer.style.cssText =
     "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
   options.host.prepend(layer);
+  // The whole composition lives inside the one media layer: a TURZX overlay
+  // capture hides `[data-yunari-background-media]`, and a fill outside it would
+  // paint over the device's baked clip.
+  const fillLayer = document.createElement("div");
+  fillLayer.dataset["yunariBackgroundFill"] = "";
+  const regionLayer = document.createElement("div");
+  regionLayer.dataset["yunariBackgroundRegion"] = "";
+  regionLayer.style.cssText = "position:absolute;overflow:hidden;";
+  layer.append(fillLayer, regionLayer);
   const { assets, resolveAsset, onMediaError, onFrame } = options;
   let background = options.background;
   let artboardSize = {
@@ -296,10 +331,26 @@ export function mountBackgroundMedia(
         : "0 0"
       : "";
     layer.style.transform = turned ? `rotate(${box.angle}deg)` : "";
+    const composition = resolveBackgroundComposition(
+      { width: box.width, height: box.height },
+      media?.region,
+    );
+    fillLayer.style.cssText = "position:absolute;inset:0;";
+    fillLayer.style.background =
+      cssArtboardPaint(options.fill) ?? "transparent";
+    const region = composition.region;
+    regionLayer.style.left = `${region.left}px`;
+    regionLayer.style.top = `${region.top}px`;
+    regionLayer.style.width = `${region.width}px`;
+    regionLayer.style.height = `${region.height}px`;
+    const mask = maskCss(composition.mask);
+    regionLayer.style.maskImage = mask;
+    regionLayer.style.webkitMaskImage = mask;
+    regionLayer.style.maskSize = mask === "" ? "" : "100% 100%";
     const child = element;
     if (child === undefined || media === undefined) return;
     const rect = placement({
-      box: { width: box.width, height: box.height },
+      box: { width: region.width, height: region.height },
       source: intrinsic(child),
       ...geometry(media),
     });
@@ -417,7 +468,7 @@ export function mountBackgroundMedia(
     disposeSource = source.dispose;
     element = child;
     mountedAssetId = asset.id;
-    layer.append(child);
+    regionLayer.append(child);
 
     if (override !== undefined) {
       child.addEventListener(
@@ -430,7 +481,7 @@ export function mountBackgroundMedia(
           // own asset, rather than a blank panel.
           overrideFailed = true;
           stop();
-          layer.replaceChildren();
+          regionLayer.replaceChildren();
           element = undefined;
           mount(media);
         },
@@ -496,7 +547,7 @@ export function mountBackgroundMedia(
 
     if (changed) {
       stop();
-      layer.replaceChildren();
+      regionLayer.replaceChildren();
       element = undefined;
       mountedAssetId = undefined;
       if (media !== undefined) mount(media);
