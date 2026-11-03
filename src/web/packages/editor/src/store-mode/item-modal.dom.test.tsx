@@ -737,6 +737,49 @@ it("reports its own close rather than closing itself", async () => {
   expect(closed, "the close control does not report a close").toHaveLength(1);
 });
 
+it("closes when the scrim outside it is pressed", async () => {
+  const closed: number[] = [];
+  await mount(
+    <ItemModal
+      item={fixtureItem(LANDSCAPE)}
+      vocabulary={[]}
+      onClose={() => closed.push(1)}
+      onAction={() => {}}
+      install={NO_INSTALL}
+      submit={NO_SUBMIT}
+    />,
+  );
+
+  const scrim = must(
+    document.body.querySelector<HTMLElement>(".editor-shell-dialog-overlay"),
+    "scrim",
+  );
+  await act(async () => {
+    scrim.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerType: "mouse",
+      }),
+    );
+    // Base UI's "intentional" outside press settles on the click, not the
+    // pointerdown, so both are what a real press sends.
+    scrim.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        detail: 1,
+      }),
+    );
+  });
+
+  // A modal's outside press is a dismissal. The scrim is the element a click
+  // outside the box lands on, so it is what the press is reported to.
+  expect(closed, "an outside press does not close the modal").toHaveLength(1);
+});
+
 /**
  * **The catalogue's counts are facts about the item rather than about a facet**,
  * so they join the caption's right-hand end — the `1.4.0 · 2026-10-14`

@@ -104,7 +104,7 @@ export function ItemModal(props: {
         <DialogPrimitive.Popup
           data-yunari-store-item=""
           aria-label={item.name}
-          className="fixed top-1/2 left-1/2 z-[71] flex h-[var(--store-item-height)] max-h-[90vh] w-[960px] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--radius-lg)] border border-edge bg-panel text-sm text-text shadow-[var(--elev-3)]"
+          className="editor-shell-dialog-layer fixed top-1/2 left-1/2 flex h-[var(--store-item-height)] max-h-[90vh] w-[960px] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--radius-lg)] border border-edge bg-panel text-sm text-text shadow-[var(--elev-3)]"
         >
           {/* The stage: **every pixel the panel does not take**, and the box's
               own height, so the modal does not move as a person steps between

@@ -44,11 +44,24 @@ function cardRow(page: Page, fileName: string): Locator {
 
 /** Imports `logo.png`, chooses its card and leaves the pane showing. **The pane
  *  is opened first, because an author opens it first** — a control behind a
- *  closed pane is not one a person can press. */
+ *  closed pane is not one a person can press.
+ *
+ *  **The import asks where the picture goes**, and this spec claims the pane's
+ *  own card rather than a destination, so the question is dismissed. The file is
+ *  declared before the question is asked, so dismissing leaves it in the pane. */
 async function importLogo(page: Page): Promise<void> {
   await page.goto(EDITOR);
   await openPane(page, "Assets");
   await chooseAssetFile(page, "import", LOGO);
+  const destination = page.getByRole("dialog", {
+    name: uiCopy.panels.placeImage.title,
+  });
+  await expect(
+    destination,
+    "the import did not ask where the picture goes",
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(destination).toBeHidden();
   await chooseAssetCard(page, "logo.png");
 }
 
@@ -168,6 +181,53 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
   await page.locator(".editor-shell-dialog-close").click();
   await expect(modal).toBeHidden();
   await expect(page.locator('[data-yunari-panel="assets"]')).toBeVisible();
+});
+
+test("closes the Add image choice on a press outside it", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(EDITOR);
+  await openPane(page, "Assets");
+  await chooseAssetFile(page, "import", LOGO);
+
+  const modal = page.getByRole("dialog", {
+    name: uiCopy.panels.placeImage.title,
+  });
+  await expect(
+    modal,
+    "the import did not ask where the picture goes",
+  ).toBeVisible();
+
+  await page.mouse.click(10, 10);
+
+  await expect(
+    modal,
+    "a press outside the Add image dialog did not dismiss it",
+  ).toBeHidden();
+});
+
+test("closes on a press outside its box", async ({ page }, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await importLogo(page);
+  await cardRow(page, "logo.png")
+    .getByRole("button", {
+      name: uiCopy.panels.assetCard.preview,
+      exact: true,
+    })
+    .click();
+
+  const modal = page.locator(MODAL);
+  await expect(modal).toBeVisible();
+
+  // The box is 1132 wide in a 1280 viewport, so this point is the scrim beside
+  // it. A press that reached the pane instead would be a press on the grid.
+  await page.mouse.click(10, 10);
+
+  await expect(
+    modal,
+    "an outside press did not close the preview",
+  ).toBeHidden();
 });
 
 test("disables Remove once the canvas holds the file", async ({
