@@ -256,6 +256,33 @@ test("Unpublish action in the item modal", async ({ page }, testInfo) => {
   ).toBe(2);
 });
 
+test("an outside press closes the modal instead of reaching the gallery", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await routeStoreHost(page, { status: "published" });
+
+  const region = await openMine(page);
+  await region
+    .locator(
+      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-cell-surface]`,
+    )
+    .click();
+
+  const modal = page.locator("[data-yunari-store-item]");
+  await expect(modal, "the cell did not open the item").toBeVisible();
+
+  // The box is 960 wide in a 1280 viewport, so this point is the scrim beside
+  // it rather than the popup. If the press reaches the gallery instead, the
+  // cell beneath opens the modal again and the count stays at one.
+  await page.mouse.click(40, 360);
+
+  await expect(
+    modal,
+    "an outside press neither closed the modal nor was swallowed by it",
+  ).toHaveCount(0);
+});
+
 test("Republish action restores the item", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   const host = await routeStoreHost(page, { status: "unpublished" });

@@ -1926,17 +1926,28 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 
 /* The `?` reference is a Base UI dialog, portalled to `body` like the menu popup
    and the tooltip, so its classes are named here rather than reached by a
-   descendant selector. The scrim sits above the menu positioner's `60`, both of
-   which are `body` siblings — and *below* the select positioner's `80`, because
-   a `ControlSelect` opened inside a dialog is a sibling of this scrim rather
-   than a descendant of the popup above it, and faces the wrong way round the
-   list is unclickable. The tooltip is `90`: a control inside a dialog mounts
-   one as a `body` sibling too, and at `50` its label sat behind the popup it
-   belonged to. */
+   descendant selector. The scrim sits above the menu positioner's `60` and
+   below the select positioner's `80`, because a `ControlSelect` opened inside a
+   dialog is a sibling of this scrim rather than a descendant of the popup
+   above it, and faces the wrong way round the list is unclickable. The tooltip
+   is `90`: a control inside a dialog mounts one as a `body` sibling too, and at
+   `50` its label sat behind the popup it belonged to.
+
+   **Every dialog layer shares one index, and DOM order does the nesting.** A
+   popup is its scrim's later sibling, so it paints above it. A dialog opened
+   from inside a dialog gets a later portal, so its scrim covers the popup
+   underneath — which is the whole point of the scrim. A popup at a higher index
+   than its own scrim (`71` over `70`) put a nested dialog's scrim *below* the
+   dialog it was opened over, and the press fell through to that dialog's
+   content. */
+.editor-shell-dialog-overlay,
+.editor-shell-dialog,
+.editor-shell-dialog-layer {
+  z-index: 70;
+}
 .editor-shell-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 70;
   /* The modal scrim, through the token rather than the `#0009` literal that
      stood here: fifteen points darker than the design's value, and a hex value
      in a surface, which the design forbids. Both dialogs render this one rule. */
@@ -1946,7 +1957,6 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: 71;
   transform: translate(-50%, -50%);
   /* The scroll cap the sheet rides on: sized so the whole table clears a 720px
      viewport without scrolling — the reference's last row lands inside it
@@ -3233,8 +3243,8 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   padding: 12px;
 }
 .editor-shell-tooltip {
-  /* Above every dialog and select: a control inside a modal mounts its tooltip
-     as a `body` sibling, so the dialog's `71` would otherwise cover it. */
+  /* Above every dialog scrim and select: a control inside a modal mounts its
+     tooltip as a `body` sibling, so the dialog's `70` would otherwise cover it. */
   z-index: 90;
   /* A tooltip is a reading, not a control: it must never take a pointer event
      from the thing it describes. On the rail's vertical stack a slot's popup

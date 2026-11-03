@@ -676,6 +676,62 @@ test("double-clicking a photo opens the preview and Escape returns to the grid",
   await expect(page.locator("[data-yunari-asset-preview-modal]")).toBeVisible();
 });
 
+test("a press outside the preview closes it and reaches no card beneath", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  await stubAssets(page, {
+    sources: [unsplash],
+    answer: () => ({
+      pages: [
+        answered(
+          "unsplash",
+          Array.from({ length: 12 }, (_, index) => ({
+            ...result(`unsplash:photo-${String(index + 1)}`),
+            kind: "image",
+            name: `A photo ${String(index + 1)}`,
+            preview: `https://images.example/${String(index + 1)}.jpg`,
+            subtitle: "A Photographer",
+            licence: "Unsplash License",
+            sourceUrl: `https://unsplash.com/p/${String(index + 1)}`,
+          })),
+          12,
+        ),
+      ],
+    }),
+  });
+  const dialog = await openFinder(page);
+  await dialog.locator('[data-yunari-asset-tab="image"]').click();
+  const card = page.locator('[data-yunari-finder-card="unsplash:photo-1"]');
+  await expect(card).toBeVisible();
+
+  await card.dblclick();
+  const preview = page.locator("[data-yunari-asset-preview-modal]");
+  await expect(preview).toBeVisible();
+
+  // **The point is on the scrim, over the grid's first column.** The preview's
+  // 1132 box is centred inside the finder's own 1232, so 50px from the window's
+  // edge is beside the preview and above a card. A press that reached that card
+  // would select it, and the preview would stay open over the new selection.
+  await page.mouse.click(50, 360);
+
+  await expect(
+    preview,
+    "a press outside the preview did not close it",
+  ).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  const selected = await page
+    .locator('[data-yunari-finder-card][aria-selected="true"]')
+    .evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("data-yunari-finder-card")),
+    );
+  expect(
+    selected,
+    "the press beneath the preview moved the grid's selection",
+  ).toEqual(["unsplash:photo-1"]);
+});
+
 test("the Images tab says a key is missing instead of drawing an empty grid", async ({
   page,
 }, testInfo) => {
