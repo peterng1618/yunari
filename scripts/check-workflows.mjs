@@ -87,8 +87,16 @@ const STEP_KEYS = new Set([
   "shell",
 ]);
 
-/** The three staging variables `install` is allowed to set for its steps. */
-const INSTALL_ENV_KEYS = ["STAGE", "ASSETS", "SMOKE"];
+/** The staging variables `install` is allowed to set for its steps: one tree,
+ *  asset folder and smoke directory for the bundle, and the same for the
+ *  standalone MCP package. */
+const INSTALL_ENV_KEYS = [
+  "STAGE",
+  "MCP_STAGE",
+  "ASSETS",
+  "SMOKE",
+  "MCP_SMOKE",
+];
 
 /** The checkout before the guard must set exactly these, with these values. */
 const CHECKOUT_WITH = new Map([

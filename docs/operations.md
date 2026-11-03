@@ -63,16 +63,23 @@ revoke it.
 - `release-please` runs on `main` and updates `src/web/package.json`, the
   manifest and the changelog. That package is the only place the product version
   is written.
-- `publish.yml` is tag-driven. It gates, builds, stages a standalone package,
-  packs it, installs the tarball in a clean directory, boots the host and checks
-  `/api/health`, `/editor`, `/` and a weather icon before publishing.
+- `publish.yml` is tag-driven. It gates, builds, stages two packages from the one
+  build — `yunari`, which carries the host, player, editor, schema and the MCP
+  server plus skill, and the standalone `yunari-mcp` — packs both, installs each
+  tarball in its own clean directory, boots the host and checks `/api/health`,
+  `/editor`, `/`, a weather icon, and that both MCP bins answer `--help`. Both
+  tarballs publish at the same dist-tag.
 - A manual dispatch is a **dry run unless `dry_run: false` is passed
   explicitly**. A real manual run requires the GitHub Release for the tag and a
   `vX.Y.Z` ref.
 - **The first npm publish is manual and owner-run.** Trusted publishing cannot
-  be configured before the package exists. After that, the repository/workflow
-  binding applies from the second publish. Prereleases use the `next` dist-tag;
-  stable releases use `latest`.
+  be configured before the package exists, and that applies to `yunari-mcp`
+  separately. After that, the repository/workflow binding applies from the
+  second publish. Prereleases use the `next` dist-tag; stable releases use
+  `latest`.
+- Reinstalling is the update path for the MCP server and the skill: neither has
+  a version of its own, and `yunari mcp status` reports whether the installed
+  copy still matches the packaged one.
 - Release assets are the `.tgz` and a staged-tree `.zip` attached to the GitHub
   Release.
 - **Licence closure ships with each release.** Before publishing, enumerate the

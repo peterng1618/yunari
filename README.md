@@ -156,7 +156,24 @@ npm i -g yunari@latest
 yunari
 ```
 
-Both commands are the release path, not something that works today.
+The bundle also carries the agent tools. Installing them is opt-in:
+
+```bash
+yunari mcp install
+```
+
+That registers the `yunari` MCP server with the agents you choose, installs the
+`yunari-theme-designer` skill, and can pin the host URL. `yunari mcp status`
+reports the host, the registered entry and whether the installed skill still
+matches the packaged copy. People who want the tools without the dashboard can
+install the standalone package instead:
+
+```bash
+npm i -g yunari-mcp
+yunari-mcp install
+```
+
+All commands above are the release path, not something that works today.
 Prereleases are published under the `next` dist-tag and are not reached by
 `@latest`. winget is **not supported**; it is deferred until a packaged Windows
 executable exists.

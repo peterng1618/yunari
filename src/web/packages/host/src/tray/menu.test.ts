@@ -87,3 +87,10 @@ it("caps the tooltip at Windows' 63 characters", () => {
   expect(text).toHaveLength(63);
   expect(text.endsWith("…")).toBe(true);
 });
+
+it("offers agent tools only when the package ships the MCP files", () => {
+  const titles = (mcp: boolean) =>
+    buildTrayMenu({ ...base, mcp }).map((item) => item.title);
+  expect(titles(true)).toContain("Agent tools (MCP)…");
+  expect(titles(false)).not.toContain("Agent tools (MCP)…");
+});
