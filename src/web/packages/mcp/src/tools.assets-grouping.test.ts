@@ -320,13 +320,13 @@ describe("asset tools", () => {
     // spelling. The ref is opaque, so the label is the only thing affected.
     const assetRef = Buffer.from(
       JSON.stringify({
-        source: "wallpaper-engine",
-        id: "wallpaper-engine:3165911129",
+        source: "lucide",
+        id: "lucide:yor",
         name: "Yor-Forger-Anime-Desktop",
         kind: "svg",
         preview: "http://127.0.0.1/preview",
         license: "Unknown",
-        sourceUrl: "steam://url/CommunityFilePage/3165911129",
+        sourceUrl: "https://example.test/yor",
       }),
       "utf8",
     ).toString("base64");

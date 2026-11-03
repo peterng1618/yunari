@@ -28,7 +28,7 @@ import { isDesktopSurface } from "./surface.js";
  * after a save is exactly the defect this phase exists to catch.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
 const HOST_EDITOR = `${HOST}/editor/`;
 /** `openBlank`'s default: 16:9 at 1080p. Scene points are in these units. */

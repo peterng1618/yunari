@@ -23,7 +23,7 @@ import {
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 /** The suite's decodable video: the host normalizes a picked video before it
  * declares one, so a placeholder buffer would be refused rather than imported. */
 const CONFORMING_MP4 = readFileSync(

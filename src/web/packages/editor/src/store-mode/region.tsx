@@ -4,16 +4,18 @@ import {
   semanticKeysByFamily,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlWell } from "../components/ui/control-well.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import {
-  createPageSizePreference,
-  type PageSize,
-} from "../editor-shell/page-size.js";
+  autoColumnsForWidth,
+  createGridDensityPreference,
+  GRID_COLUMNS_MAX,
+  GRID_COLUMNS_MIN,
+} from "../editor-shell/grid-density.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
 import { fileNameFor, serializeThemePackage } from "../persist.js";
 import { downloadBytes } from "../persistence-manager/index.js";
@@ -43,7 +45,6 @@ import {
   settledTags,
 } from "./local-source.js";
 import { useMineListing } from "./mine-listing.js";
-import { Pager } from "./pager.js";
 import { DEFAULT_SORT, SORT_KEYS, SORT_ORDERS } from "./sort-orders.js";
 import { useInstall } from "./use-install.js";
 import { useSubmit } from "./use-submit.js";
@@ -63,6 +64,25 @@ export type StoreTab = "local" | "online";
 /** The sort well's id, named rather than minted: the row has one sort and the
  *  browser case reaches for it by name. */
 const SORT_ID = "yunari-store-sort";
+
+/** The density well's id, named for the same reason `SORT_ID` is. */
+const DENSITY_ID = "yunari-store-density";
+
+/** How many more cells arrive each time the sentinel reaches the scroller's
+ *  lower half. Two rows of a 1080p grid's four columns, so the reader reaches the
+ *  new rows before the old ones end without the region mounting the library in
+ *  one pass. */
+const LOAD_BATCH = 24;
+
+/** The density well's list, 2 to 8: the bounds are the module's, so the control
+ *  cannot offer a count the grid refuses. */
+const DENSITY_OPTIONS = Array.from(
+  { length: GRID_COLUMNS_MAX - GRID_COLUMNS_MIN + 1 },
+  (_unused, index) => {
+    const columns = GRID_COLUMNS_MIN + index;
+    return { id: String(columns), name: String(columns) };
+  },
+);
 
 /**
  * The browser's own storage, or nothing where the accessor itself refuses — a
@@ -344,25 +364,6 @@ function storeFacets(items: readonly StoreItem[]): readonly Facet[] {
   ];
 }
 
-/** How many pages a listing of `count` items is at `size` — one page when the
- *  size is `all`, and **none when there is nothing to page**, so an empty result
- *  never claims a page one. */
-function pageCount(count: number, size: PageSize): number {
-  if (count === 0) return 0;
-  return size === "all" ? 1 : Math.ceil(count / size);
-}
-
-/** The items one page holds. `size` is a whole number of items or everything. */
-function pageItems(
-  items: readonly StoreItem[],
-  page: number,
-  size: PageSize,
-): readonly StoreItem[] {
-  if (size === "all") return items;
-  const from = (page - 1) * size;
-  return items.slice(from, from + size);
-}
-
 /**
  * What the region's body draws: the items, one of the three empties, or nothing.
  *
@@ -500,8 +501,8 @@ export function StoreModeRegion(props: {
 /** The region's own state, in its own component so a mode that is not Themes
  *  holds none of it: the half, the search, the sort and the facet selection are
  *  the surface's, and none of them is persisted — leaving the mode and coming
- *  back opens on the same row a fresh mount does. The **page size** is the one
- *  exception, because it is a view preference rather than a query. */
+ *  back opens on the same row a fresh mount does. The **grid density** is the
+ *  one exception, because it is a view preference rather than a query. */
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
@@ -523,7 +524,23 @@ function StoreRegion(props: {
     ...DEFAULT_SORT,
   });
   const [chosen, setChosen] = useState<FacetSelection>({});
-  const [page, setPage] = useState(1);
+  /** The viewer's density choice, or `undefined` until they make one. The
+   *  default is responsive: the scroller's width answers the count, so 1080p,
+   *  4K and an ultrawide each open on a column count that fits them. */
+  const [density] = useState(() =>
+    createGridDensityPreference(browserStorage()),
+  );
+  const [chosenColumns, setChosenColumns] = useState<number | undefined>(() =>
+    density.read(),
+  );
+  /** The width's own count, kept in state so a resize redraws the grid. */
+  const [autoColumns, setAutoColumns] = useState(GRID_COLUMNS_MIN);
+  /** How many cells the scroller has reached. A filter, a sort or a half change
+   *  puts the list back to its first batch, which is the old "first page" rule
+   *  expressed for a list with no pages. */
+  const [visible, setVisible] = useState(LOAD_BATCH);
+  const scroller = useRef<HTMLDivElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
   /** Which item's own surface is open, by id rather than by item: the listing is
    *  the one owner of what an item is, so a re-listing cannot leave the modal
    *  showing a copy of something that changed underneath it. */
@@ -643,10 +660,28 @@ function StoreRegion(props: {
       props.onThemePublished?.(backup.id);
     },
   });
-  const [preference] = useState(() =>
-    createPageSizePreference(browserStorage()),
-  );
-  const [size, setSize] = useState<PageSize>(() => preference.read());
+  // The scroller is the width CSS lays the grid across, so it is the one
+  // element the responsive default measures. `useLayoutEffect` keeps the first
+  // paint from showing the fallback count before the measurement lands.
+  useLayoutEffect(() => {
+    const node = scroller.current;
+    if (node === null) return undefined;
+    const measure = (): void => {
+      const width = node.clientWidth;
+      if (width > 0) setAutoColumns(autoColumnsForWidth(width));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  // A half is a different listing, so it starts at the first batch rather than
+  // at whatever depth the previous half had reached.
+  useEffect(() => {
+    setVisible(LOAD_BATCH);
+  }, [tab]);
 
   useEffect(() => {
     let live = true;
@@ -685,8 +720,10 @@ function StoreRegion(props: {
   // **The half's own key**, not the library's: the two halves share no key, so
   // the order read is the one the drawn half declared.
   const sorted = [...matching].sort(SORT_ORDERS[sort[tab]] ?? (() => 0));
-  const total = pageCount(sorted.length, size);
-  const current = Math.min(Math.max(page, 1), Math.max(total, 1));
+  /** What the scroller has reached. The rest is the region's, not the grid's:
+   *  the sentinel below asks for another batch as the reader nears the end. */
+  const shown = sorted.slice(0, visible);
+  const columns = chosenColumns ?? autoColumns;
 
   // Which half's read is being drawn, and how to ask that half again. The
   // online half chooses its own source, so its retry follows the same choice.
@@ -711,7 +748,33 @@ function StoreRegion(props: {
             : { kind: "empty-catalogue" }
         : sorted.length === 0
           ? { kind: "empty-filter" }
-          : { kind: "items", items: pageItems(sorted, current, size) };
+          : { kind: "items", items: shown };
+
+  /** Whether another batch is waiting behind the drawn cells. */
+  const more = body.kind === "items" && visible < sorted.length;
+  // The scroller is the observer's root, not the viewport: the region's body is
+  // the only thing that scrolls, so a viewport root would never fire. Half a
+  // screen early, so the next batch lands before the reader reaches the end.
+  // `visible` is a dependency so a batch that still leaves the sentinel in view
+  // — a window taller than the cards just loaded — asks for the next one; the
+  // observer's first delivery is the reading, not a scroll the reader must make.
+  useEffect(() => {
+    if (!more) return undefined;
+    const node = sentinel.current;
+    if (node === null || typeof IntersectionObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible((count) => count + LOAD_BATCH);
+        }
+      },
+      { root: scroller.current, rootMargin: "0px 0px 50% 0px", threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [more, visible]);
 
   const openItem =
     openId === undefined
@@ -877,11 +940,11 @@ function StoreRegion(props: {
     }
   };
 
-  /** **A changed filter returns to page one** (R123). A narrower result would
-   *  otherwise leave the viewer on a page that no longer exists, which reads as
-   *  an empty store — and it is the filter's rule rather than the pager's, so
-   *  the pager is never asked to reset itself. */
-  const toFirstPage = (): void => setPage(1);
+  /** **A changed filter returns to the first batch.** A narrower result would
+   *  otherwise leave the viewer deep in a list that no longer reaches that far,
+   *  which reads as an empty store — and it is the filter's rule rather than the
+   *  scroller's, so the sentinel is never asked to reset itself. */
+  const showFromTop = (): void => setVisible(LOAD_BATCH);
 
   return (
     <div data-yunari-store-region="" className="flex min-h-0 flex-1 flex-col">
@@ -906,7 +969,7 @@ function StoreRegion(props: {
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              toFirstPage();
+              showFromTop();
             }}
             className="h-full w-full bg-transparent text-sm text-text outline-none"
           />
@@ -916,7 +979,7 @@ function StoreRegion(props: {
           chosen={chosen}
           onToggle={(facetId, optionId) => {
             setChosen((current) => toggleFacet(current, facetId, optionId));
-            toFirstPage();
+            showFromTop();
           }}
         />
         {/* The author's own listing, beside the filters it is still narrowed by.
@@ -932,9 +995,9 @@ function StoreRegion(props: {
             {uiCopy.store.mine.label}
           </Toggle>
         ) : null}
-        {/* The select, which is a **labelled row** and stays one here: the set
-            has one select and this is it, and a bare well with a chevron would
-            be a second copy of its popup, its keyboard model and its `readOnly`
+        {/* The select, which is a **labelled row** and stays one here: the row
+            is the surface's shape, and a bare well with a chevron would be a
+            second copy of its popup, its keyboard model and its `readOnly`
             refusal to keep in step. The label is the row's own rather
             than a name only a screen reader hears, which an unlabelled well would
             leave it with. */}
@@ -950,15 +1013,40 @@ function StoreRegion(props: {
             // nothing reads.
             if (!SORT_KEYS[tab].some((key) => key.id === id)) return;
             setSort((current) => ({ ...current, [tab]: id }));
+            showFromTop();
+          }}
+        />
+        {/* The density well. Its value is the count the grid draws — the
+            viewer's choice once made, the width's own count before that — so the
+            control reads the default a person is looking at rather than a
+            hidden zero. A choice is a view preference, never authored state. */}
+        <ControlSelect
+          id={DENSITY_ID}
+          label={uiCopy.store.density.label}
+          data={{ "data-yunari-store-density": "" }}
+          value={String(columns)}
+          options={DENSITY_OPTIONS}
+          onChange={(id) => {
+            const next = Number(id);
+            if (
+              !Number.isInteger(next) ||
+              next < GRID_COLUMNS_MIN ||
+              next > GRID_COLUMNS_MAX
+            ) {
+              return;
+            }
+            setChosenColumns(next);
+            density.write(next);
           }}
         />
       </div>
 
-      {/* The gallery's own scroller, so the header and the pager stay still
-          while the grid moves — the pane body's model. The bar is the shell's:
-          this element inherits the themed pair from `.editor-shell`, and the
-          hook exists so a browser check can read the computed value. */}
+      {/* The gallery's own scroller, so the header stays still while the grid
+          moves — the pane body's model. The bar is the shell's: this element
+          inherits the themed pair from `.editor-shell`, and the hook exists so a
+          browser check can read the computed value. */}
       <div
+        ref={scroller}
         data-yunari-store-scroller=""
         className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[var(--space-16)]"
       >
@@ -987,11 +1075,18 @@ function StoreRegion(props: {
         {body.kind === "items" ? (
           <Gallery
             items={body.items}
+            columns={columns}
             onAction={onAction}
             onOpenItem={setOpenId}
             install={install.control}
             submit={submit.control}
           />
+        ) : null}
+        {/* The sentinel asks for the next batch, and exists only while one is
+            waiting: an empty anchor after the last card would keep observing a
+            list nothing can extend. */}
+        {more ? (
+          <div ref={sentinel} data-yunari-store-more="" aria-hidden="true" />
         ) : null}
       </div>
 
@@ -1035,17 +1130,6 @@ function StoreRegion(props: {
           ))}
         </ul>
       ) : null}
-
-      <Pager
-        current={current}
-        total={total}
-        size={size}
-        onPage={setPage}
-        onSize={(next) => {
-          setSize(next);
-          preference.write(next);
-        }}
-      />
 
       {openItem === undefined ? null : (
         <ItemModal

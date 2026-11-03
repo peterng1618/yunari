@@ -105,7 +105,7 @@ function packageFor(): Uint8Array {
   return written.bytes;
 }
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 test.describe("a panel's blur follows its own scale", () => {
   test.setTimeout(240_000);

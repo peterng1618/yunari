@@ -22,7 +22,7 @@ import { isDesktopSurface } from "./surface.js";
  * would fail here rather than quietly costing the drag its budget.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** A starter card that begins well inside the 1672 × 941 board, so the drag has
  *  a real crossing to make rather than starting already cropped. */

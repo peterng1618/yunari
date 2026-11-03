@@ -752,6 +752,9 @@ async function mountLandedSurfaces(): Promise<{
 }> {
   const shellRoot = document.createElement("div");
   document.body.append(shellRoot);
+  // The walks mount the editor, which is no longer the URL-less default: a
+  // session opens on Themes. The store case switches to its own mode.
+  window.history.replaceState({}, "", "/?mode=editor");
   const layout = createShellLayout(shellRoot);
   layout.setBridge(selectionBridge(), undefined);
 

@@ -4,7 +4,7 @@ import { GLASS_ENVELOPE, glassStripesPng } from "./glass-fixture.js";
 import { assertBlur, assertMediaOffset, readGlass } from "./glass-probe.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * Frosted glass in the real editor: the interactive `Canvas` mount, through the

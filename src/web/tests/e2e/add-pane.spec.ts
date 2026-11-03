@@ -19,7 +19,7 @@ import { isDesktopSurface } from "./surface.js";
  * opened where it now lives.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The words neither half may be described by (spec `:537`). "Basic" and
  *  "Custom" are the sections' own names, not a ranking. */

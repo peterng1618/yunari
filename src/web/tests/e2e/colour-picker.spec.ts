@@ -18,7 +18,7 @@ import { isDesktopSurface } from "./surface.js";
  * as real renders.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The colours and gradients the editor's own library holds. */
 type PaletteEntry = {

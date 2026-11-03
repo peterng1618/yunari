@@ -15,7 +15,7 @@ import { isDesktopSurface } from "./surface.js";
 
 /** The editor URL, declared here rather than imported: every spec in this
  *  directory declares its own and no spec exports one (`editor.spec.ts:37`). */
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 test("the Keyboard tab arms a row inside the Settings surface, on a ring that clears contrast on every palette", async ({
   page,

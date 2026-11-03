@@ -77,7 +77,7 @@ function panelPaint(): string {
  * rather than a fixture, so it survives the removal of whatever once answered
  * it. The preview port is the repo's own, and the config starts it.
  */
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 const ARTBOARD = { width: 900, height: 600 } as const;
 

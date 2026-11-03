@@ -45,6 +45,9 @@ Element.prototype.getAnimations ??= (): never[] => [];
 // Real browsers answer both. The sibling `publish-control.dom.test.tsx` carries
 // the same patch.
 beforeAll(() => {
+  // These cases read the editor, which is no longer the URL-less default: a
+  // session opens on Themes. Name the surface they mount.
+  window.history.replaceState({}, "", "/?mode=editor");
   const matches = Element.prototype.matches;
   Element.prototype.matches = Object.assign(function (
     this: Element,

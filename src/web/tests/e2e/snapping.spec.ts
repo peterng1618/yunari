@@ -14,7 +14,7 @@ import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 
 // Built editor E2E host, started by Playwright config.
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 const ARTBOARD_WIDTH = 800;
 /** Wider than `ARTBOARD_WIDTH`, because the part-level fixture puts two cards
  *  side by side with a third object between them. */

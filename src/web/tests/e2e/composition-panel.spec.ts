@@ -53,7 +53,7 @@ import { withRoleTokens } from "./theme-fixture.js";
  * 4173, the player — is never the right address here.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The layer row's third `:has` arm — the one that reserves room for three
  *  controls, which is the most a row can draw — read from the stylesheet so the

@@ -4,7 +4,7 @@ import { GLASS_ENVELOPE, glassStripesPng } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { withRoleTokens } from "./theme-fixture.js";
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * The artboard Task 1 set its budget on: **1672x941, the same one**, at the

@@ -16,7 +16,7 @@ import { isDesktopSurface } from "./surface.js";
  * behaviour; that belongs to the deployed store.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 const ITEM_ID = "5d41402a-bc4b-4c8a-9d0e-2f1a3b4c5d6e";
 const ITEM_NAME = "Withdrawn theme";

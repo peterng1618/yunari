@@ -19,7 +19,7 @@ import { expect, type Page, test } from "@playwright/test";
  * off-canvas and would have passed with the clip deleted.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The starter document's artboard width, as the scene reports it. */
 const STARTER_BOARD_WIDTH = 1672;

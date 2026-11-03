@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /** The editor, served by the preview projects. */
-export const EDITOR = "http://127.0.0.1:4174/";
+export const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The rail's gear: the only route to the shell palette since the shell layout moved it out of
  *  the header. Named by the class only that control carries. */

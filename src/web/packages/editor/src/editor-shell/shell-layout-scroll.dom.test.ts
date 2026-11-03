@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
 import { act } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { RailSlot } from "./rail.js";
 import { createShellLayout, type ShellLayout } from "./shell-layout.js";
+
+// The rail cases read the editor, which is no longer the URL-less default: a
+// session opens on Themes. Name the surface they mount.
+beforeAll(() => {
+  window.history.replaceState({}, "", "/?mode=editor");
+});
 
 /** A rail slot, found by the id it carries: a slot draws a glyph, so there is
  *  no label a reader could match on. */

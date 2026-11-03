@@ -15,7 +15,7 @@ import { withRoleTokens } from "./theme-fixture.js";
  * glass. The 240s/300s budgets were never too small; the page was never the
  * editor. A relative URL here names the config, and the config names the player.
  */
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * Task F's re-measure: what a frosted **Circle, Ellipse, Triangle and Polygon**

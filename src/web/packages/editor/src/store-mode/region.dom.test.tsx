@@ -19,6 +19,7 @@
 import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { GRID_COLUMNS_MIN } from "../editor-shell/grid-density.js";
 import {
   createThemeLibraryClient,
   type ThemedDisplay,
@@ -48,6 +49,34 @@ globalThis.ResizeObserver ??= class {
   unobserve(): void {}
   disconnect(): void {}
 } as never;
+/** A controllable IntersectionObserver: the region observes a sentinel only
+ *  while another batch is waiting, and a case fires the callback itself so no
+ *  layout or scroll is needed. */
+class ManualIntersectionObserver {
+  static instances: ManualIntersectionObserver[] = [];
+  readonly observed = new Set<Element>();
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    ManualIntersectionObserver.instances.push(this);
+  }
+  observe(node: Element): void {
+    this.observed.add(node);
+  }
+  unobserve(node: Element): void {
+    this.observed.delete(node);
+  }
+  disconnect(): void {
+    this.observed.clear();
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+  fire(): void {
+    this.callback(
+      [{ isIntersecting: true } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+}
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
 
@@ -84,6 +113,7 @@ async function unmount(): Promise<void> {
 
 afterEach(async () => {
   await unmount();
+  ManualIntersectionObserver.instances = [];
   // A case that drives the sign-in's poll installs fake timers; a timer left
   // faked would stop the next file's `settle` from ever running.
   vi.useRealTimers();
@@ -91,9 +121,9 @@ afterEach(async () => {
 });
 
 beforeEach(() => {
-  // The page size is the one thing this surface persists (`page-size.ts`), and
-  // jsdom's storage outlives a test: without this, a case that chooses 48
-  // changes how many pages the next one has.
+  // The grid density is the one thing this surface persists
+  // (`grid-density.ts`), and jsdom's storage outlives a test: without this, a
+  // case that chooses two columns changes the next one's grid.
   window.localStorage.clear();
   // The region reads the catalogue when it mounts, and a case whose subject is
   // the library must not reach the network for it: the default is a failed
@@ -262,6 +292,38 @@ it("draws the search well and the sort well, and the sort follows the half", asy
     header.querySelector<HTMLElement>("[data-yunari-store-sort]")?.textContent,
     "the sort kept the local half's key on the online half",
   ).toContain(uiCopy.store.sort.online.updated);
+});
+
+/**
+ * **The density well prints the count the grid draws and writes the viewer's
+ * choice.** jsdom reports no width, so the measured default is the range's
+ * minimum; choosing six puts six columns on the grid and stores the choice for
+ * the next mount.
+ */
+it("starts from the width's density and applies a chosen one", async () => {
+  await mountStore(listing(2));
+
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>("[data-yunari-store-density]"),
+      "density well",
+    ).textContent,
+    "the density well does not print the count the grid draws",
+  ).toContain(String(GRID_COLUMNS_MIN));
+
+  await chooseDensity(6);
+
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>("[data-yunari-store-gallery]"),
+      "gallery",
+    ).style.gridTemplateColumns,
+    "a chosen density did not reach the grid",
+  ).toBe("repeat(6, minmax(0, 1fr))");
+  expect(
+    window.localStorage.getItem("yunari.editor.store-grid-columns"),
+    "the chosen density was not remembered",
+  ).toBe("6");
 });
 
 /**
@@ -445,13 +507,17 @@ function drawnIds(): readonly (string | null)[] {
   return cells().map((cell) => cell.getAttribute("data-yunari-store-cell"));
 }
 
-/** One entry of the sort well chosen, the way a person chooses it: Base UI
+/** One entry of a header well chosen, the way a person chooses it: Base UI
  *  commits a list item only when the press that precedes the click started on
  *  it, and the popup opens on a queue `act` does not drain by itself. */
-async function chooseSort(id: string): Promise<void> {
+async function chooseWell(
+  attribute: string,
+  id: string,
+  what: string,
+): Promise<void> {
   const trigger = must(
-    document.body.querySelector<HTMLElement>("[data-yunari-store-sort]"),
-    "sort well",
+    document.body.querySelector<HTMLElement>(`[${attribute}]`),
+    `${what} well`,
   );
   await act(async () => {
     trigger.dispatchEvent(
@@ -465,7 +531,7 @@ async function chooseSort(id: string): Promise<void> {
   }
   const option = must(
     document.body.querySelector<HTMLElement>(`[data-yunari-option="${id}"]`),
-    `${id} sort option`,
+    `${id} ${what} option`,
   );
   await act(async () => {
     option.dispatchEvent(
@@ -484,6 +550,12 @@ async function chooseSort(id: string): Promise<void> {
   });
   await act(async () => {});
 }
+
+const chooseSort = (id: string): Promise<void> =>
+  chooseWell("data-yunari-store-sort", id, "sort");
+
+const chooseDensity = (columns: number): Promise<void> =>
+  chooseWell("data-yunari-store-density", String(columns), "density");
 
 /** One cell's action button, pressed the way a person presses it. */
 async function pressCell(id: string, action: CellAction): Promise<void> {
@@ -536,16 +608,6 @@ async function closeItem(): Promise<void> {
       "close control",
     ).click(),
   );
-}
-
-/** The page the pager says is in force, or `undefined` when it draws none. */
-function currentPage(): number | undefined {
-  const shown = document.body.querySelector<HTMLElement>(
-    "[data-yunari-store-page][aria-current]",
-  );
-  return shown === null
-    ? undefined
-    : Number(shown.getAttribute("data-yunari-store-page"));
 }
 
 /** One run of a facet popover: the heading it is drawn under, or `undefined`
@@ -784,63 +846,80 @@ it("offers the two different empty states, and not the same one twice", async ()
 });
 
 /**
- * **A changed filter returns to page one** (R123), and it is the filter's rule
- * rather than the pager's: a narrower result would otherwise leave the viewer on
- * a page they were not looking for, which reads as a store that moved under them.
- *
- * **The filter leaves two pages standing**, which is what makes this the rule's
- * own case rather than the clamp's: twenty-four of the thirty carry the word the
- * query names, so page two still exists and still holds items when the query
- * lands, and nothing but `toFirstPage()` can answer page one.
+ * **The gallery loads another batch as the sentinel reaches the scroller, and
+ * keeps the rest for the next intersection**: a library of sixty mounts its
+ * first batch, not all sixty.
  */
-it("returns to page one when a filter changes", async () => {
+it("loads another batch when the sentinel reaches the scroller", async () => {
+  vi.stubGlobal("IntersectionObserver", ManualIntersectionObserver as never);
+  await mountStore(listing(60));
+
+  expect(cells().length, "the gallery did not open on its first batch").toBe(
+    24,
+  );
+  expect(
+    ManualIntersectionObserver.instances.length,
+    "the region did not observe a sentinel",
+  ).toBe(1);
+
+  await act(async () => ManualIntersectionObserver.instances[0]?.fire());
+  expect(cells().length, "the sentinel did not add a batch").toBe(48);
+
+  await act(async () => ManualIntersectionObserver.instances[0]?.fire());
+  expect(cells().length, "the sentinel did not add the last batch").toBe(60);
+  expect(
+    document.body.querySelector("[data-yunari-store-more]"),
+    "the sentinel outlived the last batch",
+  ).toBeNull();
+});
+
+/**
+ * **A changed filter returns to the first batch**, which is the old "first
+ * page" rule for a list with no pages: a narrower result would otherwise leave
+ * the viewer deep in a list that no longer reaches that far, which reads as a
+ * store that moved under them.
+ *
+ * **The filter leaves more than one batch standing**: forty of the sixty carry
+ * the word the query names, so the second batch still exists when the query
+ * lands, and nothing but the reset can answer twenty-four cells.
+ */
+it("returns to the first batch when a filter changes", async () => {
+  vi.stubGlobal("IntersectionObserver", ManualIntersectionObserver as never);
   await mountStore(
-    Array.from({ length: 30 }, (_unused, at) =>
+    Array.from({ length: 60 }, (_unused, at) =>
       fixtureEntry({
         id: `theme-${at + 1}`,
-        name: `${at < 24 ? "Themed" : "Plain"} ${String(at + 1).padStart(2, "0")}`,
+        name: `${at < 40 ? "Themed" : "Plain"} ${String(at + 1).padStart(2, "0")}`,
         ground: DARK_GROUND,
       }),
     ),
   );
 
-  const second = must(
-    document.body.querySelector<HTMLButtonElement>(
-      "[data-yunari-store-page='2']",
-    ),
-    "second page numeral",
-  );
-  await act(async () => second.click());
-  expect(currentPage(), "the pager did not move to page two").toBe(2);
+  await act(async () => ManualIntersectionObserver.instances[0]?.fire());
+  await act(async () => ManualIntersectionObserver.instances[0]?.fire());
+  expect(cells().length, "the case did not reach the whole listing").toBe(60);
 
   await type("Themed");
 
   expect(
-    document.body.querySelector("[data-yunari-store-page='2']"),
-    "the filter left fewer pages than this case is about",
-  ).not.toBeNull();
-  expect(
-    currentPage(),
-    "a changed query left the viewer on the page they were on",
-  ).toBe(1);
+    cells().length,
+    "a changed query kept the depth the unfiltered list had reached",
+  ).toBe(24);
 });
 
 /**
- * **Opening the item does not disturb what is underneath it**: the page, the
- * query and the sort are where they were when the modal closes, so a person
- * comes back to the list they left.
+ * **Opening the item does not disturb what is underneath it**: how far the list
+ * had loaded, the query and the sort are where they were when the modal closes,
+ * so a person comes back to the list they left.
  */
-it("closes back onto the same page, filter and sort", async () => {
+it("closes back onto the same list, filter and sort", async () => {
+  vi.stubGlobal("IntersectionObserver", ManualIntersectionObserver as never);
   await mountStore(listing(30));
   await type("Theme");
-
-  const second = must(
-    document.body.querySelector<HTMLButtonElement>(
-      "[data-yunari-store-page='2']",
-    ),
-    "second page numeral",
+  await chooseSort("updatedAt");
+  expect(cells().length, "the filter and sort did not start at one batch").toBe(
+    24,
   );
-  await act(async () => second.click());
 
   const opened = String(cells()[0]?.getAttribute("data-yunari-store-cell"));
   await pressCellSurface(opened);
@@ -850,7 +929,7 @@ it("closes back onto the same page, filter and sort", async () => {
     document.body.querySelector("[data-yunari-store-item]"),
     "the item's own surface did not close",
   ).toBeNull();
-  expect(currentPage(), "closing the item lost the page").toBe(2);
+  expect(cells().length, "closing the item lost the loaded depth").toBe(24);
   expect(
     must(
       document.body.querySelector<HTMLInputElement>(
@@ -860,6 +939,13 @@ it("closes back onto the same page, filter and sort", async () => {
     ).value,
     "closing the item lost the query",
   ).toBe("Theme");
+  expect(
+    must(
+      document.body.querySelector<HTMLElement>("[data-yunari-store-sort]"),
+      "sort well",
+    ).textContent,
+    "closing the item lost the sort",
+  ).toContain(uiCopy.store.sort.local.updatedAt);
 });
 
 /**
@@ -2079,7 +2165,7 @@ it("draws only the refusal line when every catalogue entry was refused", async (
  * **The skipped-kind line names the identifier the catalogue used**, never a
  * display word: this build has no vocabulary for `widget-preset`, and inventing
  * one would be the word for something nothing declared. The line sits below the
- * grid and above the pager, where the surface puts it.
+ * scroller, where the surface puts it.
  */
 it("names the identifier of a kind the store skipped", async () => {
   vi.stubGlobal(
@@ -2122,10 +2208,13 @@ it("names the identifier of a kind the store skipped", async () => {
   ).toBe(true);
   expect(
     follows(
+      must(
+        document.body.querySelector("[data-yunari-store-scroller]"),
+        "scroller",
+      ),
       line,
-      must(document.body.querySelector("[data-yunari-store-pager]"), "pager"),
     ),
-    "the refusal line is not above the pager",
+    "the refusal line is not below the scroller",
   ).toBe(true);
 });
 

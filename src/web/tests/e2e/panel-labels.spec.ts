@@ -20,7 +20,7 @@ import { isDesktopSurface } from "./surface.js";
  * finding rather than a red run.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 const PANELS = ["Theme settings", "Paint tokens", "Type tokens"];
 

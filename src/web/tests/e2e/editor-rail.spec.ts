@@ -26,7 +26,7 @@ import { withRoleTokens } from "./theme-fixture.js";
  * open, and asking for a pane that is shut is still open.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /** The design's rail accent bar, in px. A bare number rather than a `px`
  *  string so the one value is written once and the assertion's message spells
@@ -1403,10 +1403,10 @@ test("the themes mode draws the store's own header row, and no width drops a fac
 /**
  * A stubbed library of thirty themes, as the host would answer `/api/themes`.
  *
- * **Thirty is what makes the pager real**: twelve to a page is three of them, so
- * this case can move to a page that is neither the first nor the last. One of
- * them is portrait and on page one, so a landscape item can be held against it
- * in the same surface, and a second portrait item sits on the last page.
+ * **Thirty is what makes the endless scroll real**: the first batch of 24
+ * leaves six for the sentinel, so the case can load a second batch. One of them
+ * is portrait and in the first batch, so a landscape item can be held against it
+ * in the same surface, and a second portrait item sits in the last batch.
  *
  * The record is `facetRecordOf`'s own derivation of an envelope rather than a
  * hand-written one, which is the trap A.4a's review found: a descriptor written
@@ -1450,23 +1450,23 @@ const STORE_ITEM_STAGE = "[data-yunari-store-item-stage]";
 const STORE_ITEM_PICTURE = "[data-yunari-store-item-picture]";
 
 /**
- * The store's body, as a rendered surface: the gallery, the pager and an item's
- * own surface, against a stubbed library.
+ * The store's body, as a rendered surface: the gallery, the endless scroll and
+ * an item's own surface, against a stubbed library.
  *
  * **Nothing mounted any of these before A.6** — the region's body was empty — so
  * what this case proves is the wiring rather than any one part: a listing the
  * host answers reaches cells, a cell opens the item's own surface, and closing
- * it comes back to the page, filter and sort it was opened from.
+ * it comes back to the list, filter and sort it was opened from.
  *
  * **The stage's one height is measured here because jsdom cannot measure it.**
  * The dom case reads the declarations that make it true; this reads the two
  * boxes, one landscape and one portrait, and the theme's own ratio inside them.
  *
- * **The pager bar's reading is here** because it is a measurement and not a
- * claim: `pager.tsx` says where the `Per page` label falls, and only a browser
- * can say whether the bar reads as a labelled row or as a break.
+ * **The density well's reading is here** because it is a measurement and not a
+ * claim: the header's chosen count and the grid's own tracks have to agree, and
+ * only a browser can say what the grid actually drew.
  */
-test("the store lists a library, opens an item, and comes back to the same page", async ({
+test("the store lists a library, opens an item, and comes back to the same list", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1481,10 +1481,11 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  // A page size another case left behind would make this case read that case's
-  // pages rather than the shell's own default.
+  // A density another case left behind would make this case read that case's
+  // columns rather than the width's own count. The scroll position starts at
+  // the top because the sentinel is what loads the rest.
   await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-page-size"),
+    window.localStorage.removeItem("yunari.editor.store-grid-columns"),
   );
   await page
     .locator(".editor-shell-mode-switch")
@@ -1495,22 +1496,26 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await expect(region, "the themes mode renders no region").toBeVisible();
 
   const cells = region.locator("[data-yunari-store-cell]");
-  const pager = region.locator("[data-yunari-store-pager]");
+  const scroller = region.locator("[data-yunari-store-scroller]");
   const search = region.locator("[data-yunari-store-search]");
-  /** The page in force, read off the numeral the pager marks as current. */
-  const currentPage = async (): Promise<string | null> =>
-    region
-      .locator("[data-yunari-store-page][aria-current='page']")
-      .getAttribute("data-yunari-store-page");
 
-  // **The gallery, which nothing mounted before A.6**: one page of a thirty-item
-  // library, and the pager says which page.
+  // **The gallery, which nothing mounted before A.6**: the first batch of a
+  // thirty-item library, and the density well states the count the grid draws.
   await expect(
     cells,
-    "the region does not list the library's first page",
-  ).toHaveCount(12);
-  await expect(pager, "the store draws no pager").toBeVisible();
-  expect(await currentPage(), "the pager does not open on page one").toBe("1");
+    "the region does not list the library's first batch",
+  ).toHaveCount(24);
+  const gallery = region.locator("[data-yunari-store-gallery]");
+  const density = region.locator("[data-yunari-store-density]");
+  await expect(density, "the store draws no density well").toBeVisible();
+  const drawnColumns = await gallery.evaluate(
+    (node) => getComputedStyle(node).gridTemplateColumns.split(" ").length,
+  );
+  const densityText = await density.evaluate((node) => node.textContent ?? "");
+  expect(
+    Number.parseInt(densityText.match(/\d+/)?.[0] ?? "", 10),
+    `the density well does not state the grid's column count (${densityText})`,
+  ).toBe(drawnColumns);
 
   /**
    * The stage's height, the modal box and the caption's stamp for one item,
@@ -1623,27 +1628,26 @@ test("the store lists a library, opens an item, and comes back to the same page"
     `the picture is not contained in the stage's height (${itemReading})`,
   ).toBeLessThan(portrait.stage);
 
-  // **A page that is neither the first nor the last**, and an item opened from
-  // it: closing the surface comes back to the page it was opened from.
-  await region.locator("[data-yunari-store-page='3']").click();
+  // **An item past the first batch**, and an item opened from it: closing the
+  // surface comes back to the list it was opened from. The sentinel is what
+  // loads the last six, so this scrolls it into the observer's half-screen.
+  await scroller.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
   await expect(
     cells,
-    "the last page is not the six items left over",
-  ).toHaveCount(6);
+    "the sentinel does not load the rest of the library",
+  ).toHaveCount(30);
   await drawn("store-25");
-  expect(
-    await currentPage(),
-    "closing an item moved the page it was opened from",
-  ).toBe("3");
+  await expect(
+    cells,
+    "closing an item changed the list it was opened from",
+  ).toHaveCount(30);
 
-  // **A changed filter returns to page one** (R123): a narrower result would
-  // otherwise leave the viewer on a page that no longer exists.
+  // **A changed filter returns to the first batch**: a narrower result would
+  // otherwise leave the viewer deep in a list that no longer reaches that far.
   await search.fill("Store theme 2");
   await expect(cells, "the search does not narrow the listing").toHaveCount(10);
-  expect(
-    await currentPage(),
-    "a changed filter left the viewer on the page it was on",
-  ).toBe("1");
 
   // **The filter's empty state is its own sentence**, not the first-run one: a
   // person with thirty themes is told that their filter matched nothing.
@@ -1657,69 +1661,7 @@ test("the store lists a library, opens an item, and comes back to the same page"
   await expect(
     cells,
     "clearing the search does not restore the listing",
-  ).toHaveCount(12);
-
-  // **The pager bar's own reading**, which is the item A.5 carried.
-  const bar = await pager.evaluate((node) => {
-    const label = node.querySelector("label")?.getBoundingClientRect();
-    const well = node
-      .querySelector("[data-yunari-store-page-size]")
-      ?.getBoundingClientRect();
-    const row = node
-      .querySelector("[data-yunari-store-page-row]")
-      ?.getBoundingClientRect();
-    return {
-      barHeight: node.getBoundingClientRect().height,
-      rowWidth: row?.width ?? null,
-      label:
-        label === undefined
-          ? null
-          : {
-              top: label.top,
-              bottom: label.bottom,
-              left: label.left,
-              width: label.width,
-            },
-      well:
-        well === undefined
-          ? null
-          : {
-              top: well.top,
-              bottom: well.bottom,
-              left: well.left,
-              width: well.width,
-            },
-    };
-  });
-  const barReading = `store-pager bar ${bar.barHeight}px row ${bar.rowWidth}px label ${JSON.stringify(bar.label)} well ${JSON.stringify(bar.well)}`;
-  console.log(barReading);
-  testInfo.annotations.push({ type: "store-pager", description: barReading });
-  if (bar.label === null || bar.well === null) {
-    throw new Error(`the pager draws no labelled size well (${barReading})`);
-  }
-  expect(
-    bar.rowWidth,
-    `the per-page row is not the 158px its label and well need (${barReading})`,
-  ).toBe(158);
-  // **The label and the well are one line**, which is what the row draws and
-  // what the row's own width buys: a row given only the well's 76px wraps the
-  // well to a second line, and the bar grows from the row's 43px to 61. The
-  // two boxes are read against each other rather than against a `top`, because
-  // one line means the label's own middle falls inside the well's box — the well
-  // is 27px tall and the label 14, so their tops differ by 6 with nothing wrong.
-  const labelMiddle = (bar.label.top + bar.label.bottom) / 2;
-  expect(
-    labelMiddle,
-    `the Per page label is not on the well's own line (${barReading})`,
-  ).toBeGreaterThan(bar.well.top);
-  expect(
-    labelMiddle,
-    `the Per page label is not on the well's own line (${barReading})`,
-  ).toBeLessThan(bar.well.bottom);
-  expect(
-    bar.well.left,
-    `the well overlaps the label it belongs to (${barReading})`,
-  ).toBeGreaterThanOrEqual(bar.label.left + bar.label.width);
+  ).toHaveCount(24);
 
   // **An ungrouped popover's rows are spaced, which no class assertion can
   // show** (A.6's fix round 2, G1): F5 gave the grouped branch the gap and left
@@ -1841,8 +1783,9 @@ test("the store lists a library, opens an item, and comes back to the same page"
  *    seed, so the listing half of the vocabulary is what the case turns on.
  *
  * **The library is its own fixture, and `STORE_LIBRARY` is untouched.**
- * Thirty is load-bearing for the pager case's three pages, so these four are a
- * second fixture: envelopes through `facetRecordOf`, which is the host's own
+ * Thirty is load-bearing for the endless-scroll case's two batches, so these
+ * four are a second fixture: envelopes through `facetRecordOf`, which is the
+ * host's own
  * derivation rather than a hand-written record — the trap A.4a's review found.
  */
 function boundaryEnvelope(input: {
@@ -1962,10 +1905,6 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  // A page size another case left behind would page this listing differently.
-  await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-page-size"),
-  );
   await page
     .locator(".editor-shell-mode-switch")
     .getByRole("button", { name: uiCopy.modes.themes, exact: true })
@@ -2492,10 +2431,6 @@ async function showOnlineStore(
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  // A page size another case left behind would page this listing differently.
-  await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-page-size"),
-  );
   await page
     .locator(".editor-shell-mode-switch")
     .getByRole("button", { name: uiCopy.modes.themes, exact: true })
@@ -2862,10 +2797,6 @@ async function openLibraryItem(page: Page, id: string): Promise<Locator> {
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
-  // A page size another case left behind would page this listing differently.
-  await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-page-size"),
-  );
   await page
     .locator(".editor-shell-mode-switch")
     .getByRole("button", { name: uiCopy.modes.themes, exact: true })
@@ -3369,9 +3300,9 @@ test("the store opens a library theme as the document, from the cell and its foo
   // ── The cards pack as a masonry, at the theme's own ratio ──────────────────
   // **The grid has no masonry in CSS, so the packing is the span each card
   // measures itself into**: a 1px row unit, `row dense`, and a card whose
-  // `grid-row-end` is that many rows. The wide theme's 32:9 artboard takes two
-  // columns, which is the claim a fixed two-column grid cannot make: the card's
-  // own width is two tracks and their gutter, and the other two cards' is one.
+  // `grid-row-end` is that many rows. **Every card takes exactly one column**,
+  // so the 32:9 theme grows taller rather than spanning its neighbour's track;
+  // all three cards are one track wide.
   const gallery = region.locator("[data-yunari-store-gallery]");
   await expect(gallery, "the store draws no gallery").toHaveCount(1);
   await expect
@@ -3394,11 +3325,12 @@ test("the store opens a library theme as the document, from the cell and its foo
       flow: style.gridAutoFlow,
       gap: Number.parseFloat(style.columnGap),
       rowGap: style.rowGap,
+      template: style.gridTemplateColumns,
       cells: Array.from(
         node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
         (cell) => ({
           id: cell.getAttribute("data-yunari-store-cell"),
-          wide: cell.hasAttribute("data-wide"),
+          column: getComputedStyle(cell).gridColumnStart,
           width: cell.getBoundingClientRect().width,
           rowEnd: getComputedStyle(cell).gridRowEnd,
         }),
@@ -3425,21 +3357,17 @@ test("the store opens a library theme as the document, from the cell and its foo
     pack.rowGap,
     `the grid adds a row-gap beside the span's gutter (${packReading})`,
   ).toBe("normal");
-  const wideCell = pack.cells.find((cell) => cell.wide);
-  const narrow = pack.cells.filter((cell) => !cell.wide);
+  const tracks = pack.template.trim().split(/\s+/);
   expect(
-    wideCell?.id,
-    `the 32:9 card is not the one that takes two columns (${packReading})`,
-  ).toBe("store-wide");
-  expect(
-    narrow.map((cell) => cell.id).sort(),
-    `a card narrower than 2:1 took two columns (${packReading})`,
-  ).toEqual(["store-from-cell", "store-from-footer"]);
-  expect(
-    Math.round((wideCell?.width ?? 0) - (narrow[0]?.width ?? 0) * 2 - pack.gap),
-    `the wide card is not two tracks and a gutter wide (${packReading})`,
-  ).toBe(0);
+    tracks.length,
+    `the grid does not state its columns (${packReading})`,
+  ).toBeGreaterThan(0);
   for (const cell of pack.cells) {
+    expect(
+      Math.round(cell.width) ===
+        Math.round(Number.parseFloat(tracks[0] ?? "0")),
+      `${cell.id} is not one column wide (${packReading})`,
+    ).toBe(true);
     expect(
       Number.parseInt(cell.rowEnd.replace(/^span /, ""), 10),
       `${cell.id}'s row span is not positive (${packReading})`,

@@ -18,7 +18,7 @@ import { isDesktopSurface } from "./surface.js";
  * point is found and clicked through the product's own right-click.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * The menu is 470px, so it cannot fit this window however it is placed.

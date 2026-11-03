@@ -103,7 +103,7 @@ async function insertCustomShape(page: Page, name: string): Promise<void> {
     .click();
 }
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * The one real face the suite keeps on disk, cached by the host fixture before

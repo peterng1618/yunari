@@ -871,8 +871,11 @@ function groundOf(envelope: FabricThemeEnvelope): string | undefined {
   return cssArtboardPaint(backgroundPaintOf(envelope));
 }
 
-/** One library line: what the document says, and when the folder changed.
+/** One library line: what the document says, and when the document changed.
  *
+ *  The date is `theme.json`'s mtime, **not the folder's**: a save rewrites the
+ *  document, and a content write leaves the containing folder's mtime alone, so
+ *  a folder's clock answered a date the "Updated" order could not tell apart.
  *  `thumbnailLuminance` is read before the facets are built, because the colour
  *  mode is what the picture shows rather than what the paint token says. A
  *  picture read that fails is the same absence as no picture: the paint is
@@ -884,7 +887,7 @@ async function entryFor(
   thumbnailLuminance?: (id: string) => Promise<number | undefined>,
 ): Promise<ThemeStoreEntry | undefined> {
   try {
-    const stat = await fs.stat(path.join(library, id));
+    const stat = await fs.stat(path.join(library, id, THEME_FILE));
     const author = envelope.metadata?.author;
     const version = envelope.metadata?.version;
     const remixOf = envelope.metadata?.remixOf;

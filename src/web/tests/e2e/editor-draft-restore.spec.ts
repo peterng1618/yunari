@@ -4,7 +4,7 @@ import { openPane } from "./editor-rail.js";
 import { isDesktopSurface } from "./surface.js";
 
 /** The editor preview, the same address every editor spec uses. */
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * A draft this build cannot open, driven through the boot that has to report it.

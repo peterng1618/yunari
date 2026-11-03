@@ -22,7 +22,7 @@ import { openPane } from "./editor-rail.js";
 /** The port is overridable so a second worktree's preview can be measured
  *  without taking the shared one. */
 export const EDITOR =
-  process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/";
+  process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/?mode=editor";
 
 /** The starter's artboard, as the theme declares it. */
 export const STARTER = { width: 1672, height: 941 } as const;

@@ -1,6 +1,6 @@
 {
   "remainderCeiling": 2,
-  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 158, 246, 270, 272, 276, 760, 960],
+  "designLanguagePx": [2, 3, 11, 14, 26, 28, 30, 32, 36, 40, 46, 74, 158, 246, 270, 276, 760, 960],
   "gated": [
     "src/web/packages/editor/src/asset-finder/font-preview-panel.tsx",
     "src/web/packages/editor/src/asset-finder/fonts.tsx",
@@ -86,7 +86,6 @@
     "src/web/packages/editor/src/editor-shell/editor-shell.css",
     "src/web/packages/editor/src/store-mode/region.tsx",
     "src/web/packages/editor/src/store-mode/gallery.tsx",
-    "src/web/packages/editor/src/store-mode/pager.tsx",
     "src/web/packages/editor/src/store-mode/item-modal.tsx"
   ]
 }

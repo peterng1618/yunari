@@ -10,10 +10,10 @@
  * with no store record, and the byline is fixed.
  *
  * **What it deliberately does not measure.** jsdom lays nothing out, so the
- * grid's `272px` minimum and the packing are declarations read off the class
- * list rather than a reflow; the layout fixes them and DESIGN.md's Layout
- * section carries the minimum. The browser case that measures the packing is
- * `tests/e2e/editor-rail.spec.ts`.
+ * one-column grid, the column count and the packing are declarations read off
+ * the class and style lists rather than a reflow; the layout fixes them and
+ * DESIGN.md's Layout section carries the rule. The browser case that measures
+ * the packing is `tests/e2e/editor-rail.spec.ts`.
  */
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
@@ -22,7 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import { Gallery, spansTwoColumns } from "./gallery.js";
+import { Gallery } from "./gallery.js";
 import type { InstallControl } from "./install-item.js";
 import { installStateOf } from "./install-state.js";
 import type { CatalogueFacts, StoreItem } from "./local-source.js";
@@ -210,6 +210,7 @@ it("contains the theme's picture in the card's band", async () => {
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -247,6 +248,7 @@ it("reserves the picture box at the theme's own ratio", async () => {
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -262,22 +264,71 @@ it("reserves the picture box at the theme's own ratio", async () => {
 });
 
 /**
- * **A horizontal theme at 2:1 or wider takes two columns; nothing else does.**
- * The boundary is exact, because a theme one pixel short of 2:1 is a wide card
- * the grid did not have room for.
+ * **Every card takes one column, whatever its ratio.** A wide theme shows a
+ * short card in the column the density chose rather than a double-width card
+ * that would break the grid's rhythm and make the count a lie.
  */
-it("spans two columns only for a theme at 2:1 or wider", () => {
-  const shape = (width: number, height: number): boolean =>
-    spansTwoColumns(
-      item({ facets: { ...facetRecordOf(DOCUMENT), width, height } }),
-    );
+it("keeps every card in one column at the chosen density", async () => {
+  const container = await mount(
+    <Gallery
+      items={[
+        item({
+          facets: { ...facetRecordOf(DOCUMENT), width: 3840, height: 1080 },
+        }),
+        item({
+          id: "portrait",
+          facets: { ...facetRecordOf(DOCUMENT), width: 1080, height: 1920 },
+        }),
+      ]}
+      columns={6}
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
 
-  expect(shape(3840, 1080), "wider than 2:1").toBe(true);
-  expect(shape(2160, 1080), "exactly 2:1").toBe(true);
-  expect(shape(1920, 1080), "16:9, just under 2:1").toBe(false);
-  expect(shape(1800, 1000), "1.8:1").toBe(false);
-  expect(shape(1080, 1920), "portrait").toBe(false);
-  expect(shape(0, 1080), "a record with no usable size").toBe(false);
+  const grid = must(
+    container.querySelector<HTMLElement>("[data-yunari-store-gallery]"),
+    "gallery",
+  );
+  expect(
+    grid.style.gridTemplateColumns,
+    "the grid did not spell the density's column count",
+  ).toBe("repeat(6, minmax(0, 1fr))");
+  for (const cell of container.querySelectorAll<HTMLElement>(
+    "[data-yunari-store-cell]",
+  )) {
+    expect(cell.style.gridColumn, "a card claimed more than one column").toBe(
+      "",
+    );
+    expect(
+      cell.hasAttribute("data-wide"),
+      "a card still carries the two-column marker",
+    ).toBe(false);
+  }
+});
+
+/**
+ * **A picture is fetched as it enters the scroller.** The grid mounts a whole
+ * batch at once, and a `loading="lazy"` image lets the browser hold the ones
+ * below the fold until the reader reaches them.
+ */
+it("loads each card's picture lazily", async () => {
+  const container = await mount(
+    <Gallery
+      items={[item()]}
+      columns={4}
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  expect(
+    must(pictureBox(container).querySelector("img"), "picture").getAttribute(
+      "loading",
+    ),
+  ).toBe("lazy");
 });
 
 /**
@@ -293,6 +344,7 @@ it("draws the theme's own ground when it has no thumbnail", async () => {
       items={[item({ thumbnailUrl: undefined })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -319,6 +371,7 @@ it("drops the picture a theme does not have, leaving its ground", async () => {
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -347,6 +400,7 @@ it("draws a picture again when the address changes after a failure", async () =>
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -362,6 +416,7 @@ it("draws a picture again when the address changes after a failure", async () =>
       items={[item({ thumbnailUrl: "/api/themes/living-room/thumbnail-2" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -384,6 +439,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item()]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -401,6 +457,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item({ name: "Living room (renamed)" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -421,6 +478,7 @@ it("asks for the picture again only when the theme itself changed", async () => 
       items={[item({ updatedAt: "2026-10-16T11:02:00.000Z" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -453,6 +511,7 @@ it("draws its four actions and runs all four", async () => {
       items={[item()]}
       onAction={onAction}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -508,6 +567,7 @@ it("offers publish on a local-only theme and not on one from the store", async (
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
       submit={{ ...NO_SUBMIT, onSubmit }}
     />,
@@ -568,6 +628,7 @@ it("opens the item from the cell's own surface rather than from an action", asyn
       items={[item()]}
       onAction={onAction}
       onOpenItem={onOpenItem}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -613,6 +674,7 @@ it("keeps the updated date in the band and the author in the hover chip", async 
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -654,6 +716,7 @@ it("badges the cell whose theme came from the store, and leaves the other unbadg
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -708,6 +771,7 @@ it("draws the kind badge and the download count for an online item, and neither 
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -787,6 +851,7 @@ it("prints the identifier of a kind this build does not know", async () => {
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -887,6 +952,7 @@ it("marks an installed online item without drawing a control", async () => {
       items={[item({ catalogue: catalogue({ installedVersion: "1.4.0" }) })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -948,6 +1014,7 @@ it("reports a press on Install and Update, and draws no control for an installed
       ]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={{ ...NO_INSTALL, onInstall }}
     />,
   );
@@ -1004,6 +1071,7 @@ it("badges a Mine cell's state after its name without changing its actions", asy
       items={[item({ catalogue: catalogue(), status: "pending" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );
@@ -1050,6 +1118,7 @@ it("draws no badge for a published item", async () => {
       items={[item({ catalogue: catalogue(), status: "published" })]}
       onAction={() => undefined}
       onOpenItem={() => undefined}
+      columns={4}
       install={NO_INSTALL}
     />,
   );

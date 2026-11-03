@@ -1465,19 +1465,10 @@ export const uiCopy = {
        *  a bare "done" (`assign-display.tsx`). */
       assigned: (where: string): string => `Assigned to ${where}`,
     },
-    /** The pager: the per-page well, the two steps and the numerals' names.
-     *
-     *  **A numeral's name composes the concept around it**, the way
-     *  `statusBar.objects` composes a count: a bare `6` is announced as a
-     *  number and says nothing about what pressing it does. The sizes
-     *  themselves are numbers and stay data — `all` is the one entry in the
-     *  well that is a word, and its own word for it. */
-    pager: {
-      perPage: "Per page",
-      all: "All",
-      previous: "Previous page",
-      next: "Next page",
-      page: (page: number): string => `Page ${page}`,
+    /** The grid's density well. Its options are the count itself — a number is
+     *  the reading, not a word — so the control needs only its own name. */
+    density: {
+      label: "Columns",
     },
   },
   /** The library chooser. Its two groups say which kind of thing a row is: a

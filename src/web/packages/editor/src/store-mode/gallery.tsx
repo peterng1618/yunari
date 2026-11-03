@@ -60,8 +60,6 @@ const CELL_ACTION_GLYPHS: Readonly<Record<CellAction, LucideIcon>> = {
  *  this follows `uiCopy`. */
 const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
 
-/** The narrowest a card column may get; the same 272px the grid declares. */
-const MASONRY_MIN_COLUMN = 272;
 /** The grid's gutter, and the height of the row unit the spans are counted in.
  *  **The gutter rides the row span, not `row-gap`.** A row-gap and a
  *  `ceil`-rounded span each add their own air, so the vertical gap varied by
@@ -70,42 +68,6 @@ const MASONRY_MIN_COLUMN = 272;
  *  use. */
 const MASONRY_GAP = 12;
 const MASONRY_ROW = 1;
-
-/** A horizontal theme is at least 2:1 and takes two columns; a narrower one
- *  takes its own. The ratio is the authored canvas's, read from the facets the
- *  listing already carries rather than from the loaded picture. */
-export function spansTwoColumns(item: StoreItem): boolean {
-  return item.facets.height > 0 && item.facets.width / item.facets.height >= 2;
-}
-
-/** How many of the grid's auto-fill columns fit, measured from the same width
- *  CSS measures. A wide card may only span two when there are two to span. */
-function useColumnCount(ref: React.RefObject<HTMLUListElement | null>): number {
-  const [columns, setColumns] = useState(1);
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (node === null) return;
-    const measure = (): void => {
-      const width = node.clientWidth;
-      setColumns(
-        width <= 0
-          ? 1
-          : Math.max(
-              1,
-              Math.floor(
-                (width + MASONRY_GAP) / (MASONRY_MIN_COLUMN + MASONRY_GAP),
-              ),
-            ),
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref]);
-  return columns;
-}
 
 /** Gives one card the row span its own height needs, so the grid packs cards
  *  of different heights under each other rather than holding every card to its
@@ -133,24 +95,23 @@ function useMasonrySpan(ref: React.RefObject<HTMLLIElement | null>): void {
 /**
  * The grid of cells: a masonry of cards at the themes' own heights.
  *
- * **`repeat(auto-fill, minmax(272px, 1fr))`, and the 272 is not this half's
- * number.** It is derived from the *online* half's busiest facts band — its
- * badge, its counts and its actions — so a person switching halves does not
- * watch the grid change shape; the layout states it and DESIGN.md's Layout
- * section carries it as a design-language value. `auto-fill` answers the column
- * count from the width, so there is no measured count and no breakpoint to keep
- * in step with the window.
+ * **Every card takes one column**, whatever its own ratio: a wide theme shows a
+ * short card rather than a double-width one, so the columns stay the density
+ * the viewer chose. The count is the region's — a stored choice, or the width's
+ * own count where the viewer has made none — and the grid only spells it.
  *
  * The packing itself is the one-row-unit span the cards set after measuring:
  * CSS has no masonry, so each card reserves the rows its height needs and
- * `row dense` backfills the gaps. A horizontal card also spans two columns,
- * which is what keeps a wide theme from towering over the portrait ones.
+ * `row dense` backfills the gaps.
  *
  * The four actions travel through one `onAction`, because a cell draws four and
  * a callback per action would be four props a caller can half-wire.
  */
 export function Gallery(props: {
   readonly items: readonly StoreItem[];
+  /** How many columns the grid draws. The region owns the number so the density
+   *  control and the grid cannot disagree. */
+  readonly columns: number;
   readonly onAction: (action: CellAction, id: string) => void;
   /** Opens one item's own surface — the modal — which is the cell's own
    *  gesture rather than one of its four actions. */
@@ -163,19 +124,18 @@ export function Gallery(props: {
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
-  const list = useRef<HTMLUListElement>(null);
-  const columns = useColumnCount(list);
   return (
     <ul
-      ref={list}
       data-yunari-store-gallery=""
-      className="grid auto-rows-[1px] grid-cols-[repeat(auto-fill,minmax(272px,1fr))] items-start gap-x-[var(--space-12)] [grid-auto-flow:row_dense]"
+      style={{
+        gridTemplateColumns: `repeat(${props.columns}, minmax(0, 1fr))`,
+      }}
+      className="grid auto-rows-[1px] items-start gap-x-[var(--space-12)] [grid-auto-flow:row_dense]"
     >
       {props.items.map((item) => (
         <Cell
           key={item.id}
           item={item}
-          wide={columns > 1 && spansTwoColumns(item)}
           onAction={props.onAction}
           onOpenItem={props.onOpenItem}
           install={props.install}
@@ -201,9 +161,6 @@ export function Gallery(props: {
  */
 function Cell(props: {
   readonly item: StoreItem;
-  /** True when this card must span two columns: a horizontal theme on a grid
-   *  wide enough to have two. */
-  readonly wide: boolean;
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
@@ -246,8 +203,6 @@ function Cell(props: {
     <li
       ref={ref}
       data-yunari-store-cell={item.id}
-      data-wide={props.wide ? "" : undefined}
-      style={props.wide ? { gridColumn: "span 2" } : undefined}
       className="group relative flex flex-col self-start overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
       {/* **The author is a hover chip, not a line.** The name row belongs to
@@ -529,6 +484,8 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
         <img
           src={picture.url}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 size-full object-contain"
           onError={() => setBroken(picture.key)}
         />

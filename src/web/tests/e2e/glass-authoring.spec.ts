@@ -13,7 +13,7 @@ import {
 import { assertBlur, readGlass } from "./glass-probe.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * The glass control, driven in the real editor over a real backdrop.

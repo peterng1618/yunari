@@ -7,8 +7,8 @@ import { isDesktopSurface } from "./surface.js";
  * The host's tray opens the editor's existing surfaces by opening a URL, so the
  * query has to reach the shell at mount. `shell-entry.test.ts` pins the parse;
  * this pins that the parsed answer is what the shell actually opens on — the
- * mode region, the publish popup, and the editor body when the URL names
- * nothing or something unknown.
+ * mode region, the publish popup, and **Themes when the URL names nothing or
+ * something unknown**.
  */
 
 const EDITOR = "http://127.0.0.1:4174/";
@@ -44,6 +44,15 @@ test.beforeEach(async ({ page }) => {
     route.fulfill({
       json: { lan: false, address: null, port: null, refusal: null },
     }),
+  );
+});
+
+test("opens Themes when the URL names no mode", async ({ page }, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await page.goto(EDITOR);
+  await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
+    "data-yunari-mode-region",
+    "themes",
   );
 });
 
@@ -102,9 +111,11 @@ test("draws no publish surface in a non-editor mode", async ({
   await expect(page.locator(".editor-shell-publish-dialog")).toHaveCount(0);
 });
 
-test("ignores an unknown mode", async ({ page }, testInfo) => {
+test("opens Themes when the mode is unknown", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=bogus`);
-  await expect(page.locator("[data-yunari-mode-region]")).toHaveCount(0);
-  await expect(page.locator(".editor-shell-body")).toBeVisible();
+  await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
+    "data-yunari-mode-region",
+    "themes",
+  );
 });

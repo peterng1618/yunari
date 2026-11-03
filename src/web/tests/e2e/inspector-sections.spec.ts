@@ -42,7 +42,7 @@ import { isDesktopSurface } from "./surface.js";
  * assertions; the screenshots are for a human.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
  * The column element a capture photographs.

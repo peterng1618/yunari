@@ -27,7 +27,8 @@ import { isDesktopSurface } from "./surface.js";
 
 // A worktree whose preview server another session already owns on 4174 cannot
 // rebuild it, so a run can point at its own bundle instead.
-const EDITOR = process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/";
+const EDITOR =
+  process.env["YUNARI_EDITOR_URL"] ?? "http://127.0.0.1:4174/?mode=editor";
 
 const lucide: AssetSourceListing = {
   id: "lucide",

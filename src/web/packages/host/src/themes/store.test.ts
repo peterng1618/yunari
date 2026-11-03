@@ -857,10 +857,15 @@ describe("ThemeStore", () => {
       envelope: envelopeFor("theme-a", "Theme Alpha"),
       assets: {},
     });
-    // One instant, written after both saves so neither folder is the newer one.
+    // One instant, written after both saves so neither document is the newer
+    // one. The listing reads the document's mtime, not the folder's.
     const sameMillisecond = new Date("2026-10-12T01:16:55.827Z");
     for (const id of ["theme-a", "theme-b"]) {
-      await fs.utimes(path.join(tmpDir, id), sameMillisecond, sameMillisecond);
+      await fs.utimes(
+        path.join(tmpDir, id, "theme.json"),
+        sameMillisecond,
+        sameMillisecond,
+      );
     }
 
     const outcome = await bootTheme("", {
@@ -882,6 +887,31 @@ describe("ThemeStore", () => {
       throw new Error(`expected an opened theme, got "${outcome.kind}"`);
     }
     expect(outcome.content.envelope.id).toBe("theme-a");
+  });
+
+  /**
+   * **The listing's date is the document's, not the folder's.** Rewriting
+   * `theme.json` is what a save does, and a content write leaves the containing
+   * folder's own mtime where it was. A listing that stat'ed the folder answered a
+   * date that barely moved, so the store's "Updated" order looked like a no-op.
+   */
+  it("dates a theme by its document rather than its folder", async () => {
+    const store = createThemeStore(tmpDir);
+    await store.write("kitchen", {
+      envelope: envelopeFor("kitchen", "Kitchen"),
+      assets: {},
+    });
+    const folder = path.join(tmpDir, "kitchen");
+    const document = path.join(folder, "theme.json");
+    const pinned = new Date("2020-01-01T00:00:00.000Z");
+    await fs.utimes(folder, pinned, pinned);
+
+    const listed = (await store.list()).find((entry) => entry.id === "kitchen");
+
+    expect(
+      listed?.updatedAt,
+      "the listing read the folder's mtime, which a save does not move",
+    ).toBe((await fs.stat(document)).mtime.toISOString());
   });
 
   it("ignores an archive left in the library, as ruled: there is no migration", async () => {

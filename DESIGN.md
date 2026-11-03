@@ -210,20 +210,25 @@ Row rhythm: a control row is **26px** tall in a panel, **30px** in a dialog,
 **32px** in the settings surface. Density varies by which of those three a
 surface is, not by taste.
 
-**The store's gallery grid is 272px minimum per column.** The number is derived
+**The store's gallery grid targets 272px per column.** The number is derived
 from the online half's busiest facts band — its badge, counts and four actions —
 so switching halves does not change the grid's shape. Column width is
-`repeat(auto-fill, minmax(272px, 1fr))`: the column count follows the width, so
-no breakpoint is invented for it.
+`repeat(n, minmax(0, 1fr))`, where `n` is the density.
+
+**The density is chosen, and its default follows the width.** The header's
+Columns well offers 2–8, and that choice is a view preference: it persists, so
+the next session opens on the same count. Before a choice, `n` is the scroller's
+own count — `floor((width + 12) / (272 + 12))` clamped to 2–8 — so 1080p, 4K and
+an ultrawide each open on a count that fits them rather than on one fixed
+breakpoint.
 
 **Cards pack as a masonry at each theme's own ratio.** A card's picture box takes
 the authored canvas's aspect ratio and contains the picture rather than cropping
 it, so the library's heights vary with what the author drew. The grid has a 1px
 row unit and `row dense`, and each card spans the rows its measured height
-needs. **The gutter is the same horizontally and vertically**: the row span
-already carries the 12px gutter, so the grid states no row-gap and the columns
-state the one gap. **A theme at 2:1 or wider spans two columns**; a narrower one
-keeps one, so a wide theme does not tower over the portrait cards beside it.
+needs. **Each card occupies exactly one column**, whatever its aspect ratio: the
+gutter is the same horizontally and vertically, and a wide theme grows taller
+rather than spanning its neighbour's column.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
@@ -604,15 +609,9 @@ value cell, and the store's header row is a bar rather than a field row, so this
 one is sized to 180px and holds that width while the facet row beside it wraps
 to a second line.
 
-**The store's page-size well is 76px**, for the same reason: the pager is a bar
-rather than a field row, so the per-page choice takes a fixed width instead
-of a field row's value cell.
-
-**The store's pager row is 158px wide, and the arithmetic is what fixes it.**
-The per-page label sits *beside* its well, not above it, so the row
-is the 74px label column, the 8px gap and the 76px well — 74 + 8 + 76 — and the
-label and the well share the bar's one line. A row given only the well's 76px
-wraps the well to a second line and makes the bar 61px (`pager.tsx`).
+**The grid loads another batch as the scroller nears its end**, so the header
+holds no page arithmetic and no pager row. The density well beside the sort is
+where the reader chooses how many columns the grid draws.
 
 **The slider row's well is 40px and not 36, and the arithmetic is what fixes
 it.** The well carries an editable field, so the 24×24 target below binds it: the

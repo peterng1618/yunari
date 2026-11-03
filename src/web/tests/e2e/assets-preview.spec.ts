@@ -19,7 +19,8 @@ import { isDesktopSurface } from "./surface.js";
  * image has no `naturalWidth` to caption.
  */
 
-const EDITOR = process.env.YUNARI_EDITOR_URL ?? "http://127.0.0.1:4174/";
+const EDITOR =
+  process.env.YUNARI_EDITOR_URL ?? "http://127.0.0.1:4174/?mode=editor";
 
 const LOGO = {
   name: "logo.png",

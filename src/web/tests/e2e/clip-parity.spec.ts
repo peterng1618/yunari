@@ -66,7 +66,7 @@ import { isDesktopSurface } from "./surface.js";
  * edge.
  */
 
-const EDITOR = "http://127.0.0.1:4174/";
+const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
 /** One id, published through the host's own route; no other spec owns it. */
 const THEME_ID = "e2e-clip-parity";
