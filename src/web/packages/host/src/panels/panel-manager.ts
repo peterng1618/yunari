@@ -228,15 +228,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     return rasterBrowser;
   };
 
-  /**
-   * Renders one display's page at its family's declared size and answers the
-   * PNG, without opening the device.
-   *
-   * The preview shares the runtime every panel renders in, so a preview taken
-   * while a panel runs costs one target rather than a second browser; the
-   * target is closed on both paths. Geometry comes from the family row because
-   * a preview must not open hardware to learn a panel's size.
-   */
+  /** Renders one display's page at its family's size; no device is opened, the
+   *  runtime is shared, and the target closes on both paths. */
   const captureNow = async (
     displayId: string,
     themeId: string,
