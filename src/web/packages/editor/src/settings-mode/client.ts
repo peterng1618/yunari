@@ -554,7 +554,10 @@ const DEFAULT_WEATHER: WeatherSettings = {
   label: "",
   latitude: 0,
   longitude: 0,
-  useWindowsLocation: false,
+  // The host's own default (`DEFAULT_WEATHER_SETTINGS`): the editor is a
+  // browser bundle and cannot import the Node host, so this fallback is the
+  // one copy, and it must say what the owner says.
+  useWindowsLocation: true,
   pollIntervalMs: 600_000,
 };
 
@@ -584,7 +587,10 @@ function readWeatherSettings(input: unknown): WeatherSettings {
     label: typeof record["label"] === "string" ? record["label"] : "",
     latitude: numberInRange(record["latitude"], 0, -90, 90),
     longitude: numberInRange(record["longitude"], 0, -180, 180),
-    useWindowsLocation: record["useWindowsLocation"] === true,
+    useWindowsLocation:
+      typeof record["useWindowsLocation"] === "boolean"
+        ? record["useWindowsLocation"]
+        : DEFAULT_WEATHER.useWindowsLocation,
     pollIntervalMs: numberInRange(
       record["pollIntervalMs"],
       DEFAULT_WEATHER.pollIntervalMs,

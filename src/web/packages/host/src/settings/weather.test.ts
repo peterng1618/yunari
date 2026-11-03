@@ -123,7 +123,9 @@ describe("weather settings", () => {
       label: "Berlin",
       latitude: -90,
       longitude: 180,
-      useWindowsLocation: false,
+      // Weather works out of the box: nobody has to find the place field
+      // before an element bound to a weather key can report.
+      useWindowsLocation: true,
       pollIntervalMs: 86400000,
     });
   });
