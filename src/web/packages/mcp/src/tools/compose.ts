@@ -324,8 +324,12 @@ export async function addImage(
         `There is no asset "${input.assetId}" in this theme; import_asset it first.`,
       );
     }
-    if (asset.kind === "font") {
-      throw new Error(`"${asset.id}" is a font, not an image.`);
+    // A video is the background's media. Placing it as an Image object leaves a
+    // black box: FabricImage has no frame to paint from that reference.
+    if (asset.kind !== "image" && asset.kind !== "svg") {
+      throw new Error(
+        `"${asset.id}" is a ${asset.kind}, not a picture the scene can place. Set a video as the background instead.`,
+      );
     }
     const object = addImageObject({
       id: "image",

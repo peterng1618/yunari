@@ -184,6 +184,48 @@ describe("Fabric theme envelope validation", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("accepts a scene image reference to a declared picture and refuses a video", () => {
+    const still = [{ id: "still", kind: "image", path: "assets/still.png" }];
+    const sceneWith = (kind: string) => ({
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Image",
+          id: "art",
+          yunariAsset: { assetId: "still", kind },
+        },
+      ],
+    });
+
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: still,
+        bindings: {},
+        scene: sceneWith("image"),
+      }),
+    ).toMatchObject({ ok: true });
+
+    // The declaration says image; a reference claiming otherwise resolves to
+    // nothing a FabricImage can paint.
+    expect(
+      validateFabricThemeEnvelope({
+        ...envelope(),
+        assets: still,
+        bindings: {},
+        scene: sceneWith("video"),
+      }),
+    ).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: "/scene/objects/0/yunariAsset/kind",
+          code: "invalid-enum",
+        }),
+      ]),
+    });
+  });
+
   it("accepts a whole frame on a video and refuses it anywhere else", () => {
     const clip = [{ id: "clip", kind: "video", path: "assets/clip.mp4" }];
     expect(
