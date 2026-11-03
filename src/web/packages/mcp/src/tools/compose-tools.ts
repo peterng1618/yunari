@@ -12,6 +12,7 @@ import {
   groupObjects,
   listObjects,
   removeObject,
+  reorderObject,
   ungroupObjects,
   updateObject,
 } from "./compose.js";
@@ -202,6 +203,21 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     },
     async ({ objectId, themeId }) =>
       await removeObject(context, objectId, themeId),
+  );
+
+  server.registerTool(
+    "reorder_object",
+    {
+      description:
+        "Restack one scene object among its siblings: front paints last, back paints first, forward and backward move one place. A grouped object moves within its group.",
+      inputSchema: z.object({
+        objectId: z.string().min(1),
+        move: z.enum(["front", "forward", "backward", "back"]),
+        themeId: themeIdSchema,
+      }),
+    },
+    async ({ objectId, move, themeId }) =>
+      await reorderObject(context, objectId, move, themeId),
   );
 
   server.registerTool(

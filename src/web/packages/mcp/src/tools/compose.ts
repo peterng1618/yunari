@@ -14,9 +14,11 @@ import {
   CARD_LIBRARY,
   instantiateCard,
   listSceneObjects,
+  moveSceneObject,
   type ObjectJson,
   type Run,
   removeSceneObject,
+  type SceneStackMove,
   setBindings,
   starterIcons,
   updateSceneObject,
@@ -502,6 +504,20 @@ export async function removeObject(
     const draft = draftFor(context, themeId);
     draft.envelope = removeSceneObject(draft.envelope, objectId);
     return { themeId: draft.id, removed: objectId };
+  });
+}
+
+export async function reorderObject(
+  context: ToolContext,
+  objectId: string,
+  move: SceneStackMove,
+  themeId?: string,
+): Promise<CallToolResult> {
+  return await jsonAttempt(() => {
+    const draft = draftFor(context, themeId);
+    const result = moveSceneObject(draft.envelope, objectId, move);
+    draft.envelope = result.envelope;
+    return { themeId: draft.id, objectId, moved: result.moved };
   });
 }
 

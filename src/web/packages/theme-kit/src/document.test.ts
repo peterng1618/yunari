@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSceneObject,
   listSceneObjects,
+  moveSceneObject,
   removeSceneObject,
   setArtboard,
   setBackground,
@@ -38,6 +39,58 @@ describe("scene mutation", () => {
       "object-card",
       "object-panel",
     ]);
+  });
+
+  it("restacks one object among its siblings", () => {
+    const a = addSceneObject(blank(), { type: "Rect", id: "a" });
+    const b = addSceneObject(a.envelope, { type: "Rect", id: "b" });
+    const c = addSceneObject(b.envelope, { type: "Rect", id: "c" });
+    const idsOf = (envelope: ReturnType<typeof blank>): readonly unknown[] =>
+      (envelope.scene["objects"] as readonly { readonly id?: string }[]).map(
+        (object) => object.id,
+      );
+
+    const front = moveSceneObject(c.envelope, "object-a", "front");
+    expect(front.moved).toBe(true);
+    expect(idsOf(front.envelope)).toEqual(["object-b", "object-c", "object-a"]);
+
+    const back = moveSceneObject(front.envelope, "object-a", "back");
+    expect(back.moved).toBe(true);
+    expect(idsOf(back.envelope)).toEqual(["object-a", "object-b", "object-c"]);
+
+    // Already at the end it was sent to: an answer, not a refusal.
+    const still = moveSceneObject(back.envelope, "object-a", "back");
+    expect(still.moved).toBe(false);
+    expect(idsOf(still.envelope)).toEqual(idsOf(back.envelope));
+  });
+
+  it("restacks a grouped child within its group, never into the root", () => {
+    const { envelope } = addSceneObject(blank(), {
+      type: "Group",
+      id: "card",
+      objects: [
+        { type: "Rect", id: "one" },
+        { type: "Rect", id: "two" },
+      ],
+    });
+
+    const moved = moveSceneObject(envelope, "object-one", "front");
+    expect(moved.moved).toBe(true);
+    const [group] = moved.envelope.scene["objects"] as readonly {
+      readonly id?: string;
+      readonly objects?: readonly { readonly id?: string }[];
+    }[];
+    expect(group?.id).toBe("object-card");
+    expect(group?.objects?.map((object) => object.id)).toEqual([
+      "object-two",
+      "object-one",
+    ]);
+  });
+
+  it("refuses to restack an object the scene does not hold", () => {
+    expect(() => moveSceneObject(blank(), "absent", "front")).toThrow(
+      'There is no object "absent" in this scene.',
+    );
   });
 
   it("mints past an id the scene already holds", () => {
