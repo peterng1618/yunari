@@ -945,6 +945,8 @@ describe("Host theme routes", () => {
       running: () => [],
       status: () => "connected",
       reconnect: () => Promise.resolve(),
+      disconnect: () => Promise.resolve(),
+      stopped: () => false,
       stopAll: () => Promise.resolve(),
       capturePreview: (displayId, themeId, clip) => {
         captured.push({ displayId, themeId, clip });
@@ -1087,6 +1089,8 @@ describe("Host theme routes", () => {
       running: () => [],
       status: () => "connected",
       reconnect: () => Promise.resolve(),
+      disconnect: () => Promise.resolve(),
+      stopped: () => false,
       stopAll: () => Promise.resolve(),
       capturePreview: () =>
         Promise.reject(new Error("The preview browser is not running.")),
