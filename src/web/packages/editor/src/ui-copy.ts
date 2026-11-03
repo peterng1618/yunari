@@ -93,6 +93,12 @@ const fileSize = (bytes: number): string =>
     ? KILOBYTE.format(bytes / 1024)
     : MEGABYTE.format(bytes / (1024 * 1024));
 
+/** A clip length as a person reads it: whole minutes and zero-padded seconds. */
+const clipDuration = (milliseconds: number): string => {
+  const total = Math.max(0, Math.round(milliseconds / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
+
 export const uiCopy = {
   brand: "Yunari",
   /** The rail's five slots. A slot's word is both its tooltip and its
@@ -1798,6 +1804,7 @@ export const uiCopy = {
         scene: "Scene",
       } satisfies Record<"video" | "scene", string>,
       size: fileSize,
+      duration: clipDuration,
       search: "Search titles",
       filterKind: "Kind",
       filterAll: "All",

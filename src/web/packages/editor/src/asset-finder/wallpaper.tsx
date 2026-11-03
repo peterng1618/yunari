@@ -56,7 +56,13 @@ export function wallpaperCards(
   return items.map((item) => ({
     id: item.workshopId,
     name: item.title,
-    meta: `${copy.kind[item.kind]} · ${copy.size(item.filesize)}`,
+    meta: [
+      copy.kind[item.kind],
+      ...(item.durationMs === undefined
+        ? []
+        : [copy.duration(item.durationMs)]),
+      copy.size(item.filesize),
+    ].join(" · "),
     licence: undefined,
     sourceId: "wallpaper-engine",
     sourceLabel: "Steam",

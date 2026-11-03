@@ -19,7 +19,7 @@ import type { StoredItem } from "./wire.js";
  */
 
 /** Bumped whenever the entry's shape or the scan's meaning changes. */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const CACHE_FILE = "listing.json";
 const SCENE_PACKAGE = "scene.pkg";
 
@@ -173,6 +173,7 @@ function storedOf(value: unknown): StoredItem | undefined {
     kind,
     previewUrl,
     filesize,
+    durationMs,
     updatedAt,
     tags,
     properties,
@@ -190,6 +191,10 @@ function storedOf(value: unknown): StoredItem | undefined {
     typeof filesize !== "number" ||
     !Number.isFinite(filesize) ||
     filesize < 0 ||
+    (durationMs !== undefined &&
+      (typeof durationMs !== "number" ||
+        !Number.isFinite(durationMs) ||
+        durationMs < 0)) ||
     (updatedAt !== undefined &&
       (typeof updatedAt !== "number" || !Number.isFinite(updatedAt))) ||
     !Array.isArray(tags) ||
@@ -213,6 +218,7 @@ function storedOf(value: unknown): StoredItem | undefined {
     filesize,
     tags,
     properties,
+    ...(durationMs === undefined ? {} : { durationMs }),
     ...(previewUrl === undefined ? {} : { previewUrl }),
     ...(stillAtRest === undefined ? {} : { stillAtRest }),
     ...(hasText === undefined ? {} : { hasText }),
