@@ -34,8 +34,13 @@ export interface PanelManagerOptions {
   readonly displays: DisplayStore;
   /** The player page a display is shown at, including its credential. */
   /** The page for a panel. `clip` says the device plays the theme's clip
-   *  itself, so the page stands on one poster frame instead. */
-  readonly pageFor: (displayId: string, clip: boolean) => string;
+   *  itself, so the page stands on one poster frame instead. `themeId` renders
+   *  a theme the display is not assigned, for a preview. */
+  readonly pageFor: (
+    displayId: string,
+    clip: boolean,
+    themeId?: string,
+  ) => string;
   /** The clip the display's theme plays itself, or undefined for a still theme.
    *  Read once per start: a changed assignment is a restart, not a re-read. */
   readonly videoFor?: (
@@ -107,6 +112,15 @@ export interface PanelManager {
   reconcile(): Promise<void>;
   /** What this display's device is doing, for a surface that reports it. */
   status(displayId: string): PanelConnectionStatus;
+  /**
+   * Renders one display's page with a theme, at its family's declared
+   * geometry, and answers the PNG. The device is never opened.
+   */
+  capturePreview(
+    displayId: string,
+    themeId: string,
+    clip: boolean,
+  ): Promise<Uint8Array>;
   /** Stops and starts one display now: the manual retake. */
   reconnect(displayId: string): Promise<void>;
   /** Stops the panel and suppresses its automatic reopen until this process
@@ -212,6 +226,59 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
         : { onError: options.onBrowserError }),
     });
     return rasterBrowser;
+  };
+
+  /**
+   * Renders one display's page at its family's declared size and answers the
+   * PNG, without opening the device.
+   *
+   * The preview shares the runtime every panel renders in, so a preview taken
+   * while a panel runs costs one target rather than a second browser; the
+   * target is closed on both paths. Geometry comes from the family row because
+   * a preview must not open hardware to learn a panel's size.
+   */
+  const captureNow = async (
+    displayId: string,
+    themeId: string,
+    clip: boolean,
+  ): Promise<Uint8Array> => {
+    if (stopping) throw new Error("The host is shutting down.");
+
+    const record = await options.displays.find(displayId);
+    if (record === undefined || record.kind !== "panel") {
+      throw new Error(`Display ${displayId} is not a panel.`);
+    }
+
+    const hardware = record.panel;
+    if (hardware === undefined) {
+      throw new Error("The panel record names no device.");
+    }
+
+    const family = familyFor(hardware.vendorId, hardware.productId);
+    if (family === undefined) {
+      throw new Error(
+        `No driver on this host claims ${hex(hardware.vendorId)}:${hex(hardware.productId)}.`,
+      );
+    }
+
+    const executable = options.browser ?? findBrowser();
+    if (executable === undefined) {
+      throw new Error(
+        "No Chromium-family browser was found, and a preview needs one to render.",
+      );
+    }
+
+    const rasterizer = await rasterBrowserFor(executable).create({
+      url: options.pageFor(displayId, clip, themeId),
+      geometry: family.geometry,
+      stillFormat: "png",
+    });
+
+    try {
+      return await rasterizer.capture();
+    } finally {
+      await rasterizer.close();
+    }
   };
 
   const startNow = async (displayId: string): Promise<void> => {
@@ -613,6 +680,9 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     reconcile: reconcileNow,
 
     status: statusNow,
+
+    capturePreview: (displayId, themeId, clip) =>
+      enqueue(displayId, () => captureNow(displayId, themeId, clip)),
 
     reconnect: (displayId) => {
       disconnected.delete(displayId);

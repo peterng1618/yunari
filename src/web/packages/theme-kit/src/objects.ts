@@ -1,15 +1,67 @@
-import type { WidgetProvenance } from "@yunari/renderer-core";
+import {
+  artboardGradientLine,
+  artboardSolidColor,
+  type FabricPalette,
+  isArtboardGradient,
+  type WidgetProvenance,
+} from "@yunari/renderer-core";
 import {
   charSpacingPx,
   frost,
   STARTER_LINE_HEIGHT,
-  type StarterPaletteId,
-  solidOf,
+  starterPalette,
   starterRoleForSize,
   starterTracking,
   starterTypeTokens,
-} from "./new-fabric-theme-globals.js";
-import type { PathCommand } from "./new-fabric-theme-icons.js";
+} from "./globals.js";
+import type { PathCommand } from "./icons.js";
+
+/**
+ * The palette a scene primitive resolves its paints against.
+ *
+ * The starter palette is the default so existing callers keep their signatures;
+ * a draft passes its own palette, which is what lets a token declared with
+ * `set_palette` paint an object.
+ */
+type Palette = FabricPalette;
+
+/**
+ * Resolve one palette token to the paint Fabric persists.
+ *
+ * A token is not always a solid colour: `storageFill`, `sparkArea` and
+ * `frostArea` are gradients, and writing `null` beside a gradient reference
+ * would leave the persisted Fabric field disagreeing with the reference the
+ * renderer reads. The box is passed because a gradient's line is measured in
+ * the object's own pixels.
+ *
+ * The gradient is written as the JSON Fabric's `Gradient.toObject()` persists,
+ * built from renderer-core's pure geometry. Constructing a live `Gradient`
+ * here would put Fabric in this Node-only package and in the MCP bundle.
+ */
+export function paintOfToken(
+  token: string,
+  width: number,
+  height: number,
+  palette: Palette,
+): unknown {
+  const value = palette[token]?.value;
+  const solid = artboardSolidColor(value);
+  if (solid !== undefined) return solid;
+  if (!isArtboardGradient(value)) {
+    throw new Error(`"${token}" is not a paint this build can resolve.`);
+  }
+  return {
+    type: "linear",
+    coords: artboardGradientLine(value, width, height),
+    colorStops: value.stops.map((stop) => ({
+      offset: stop.offset,
+      color: stop.color,
+    })),
+    offsetX: 0,
+    offsetY: 0,
+    gradientUnits: "pixels",
+  };
+}
 
 /**
  * The scene primitives the starter's cards are written in.
@@ -32,7 +84,7 @@ function rect(
   fill: unknown,
   radius: number,
   interaction: ObjectJson = positioned,
-  token?: StarterPaletteId,
+  token?: string,
 ): ObjectJson {
   return {
     type: "Rect",
@@ -98,7 +150,8 @@ export function frostedCard(
  * drifting apart.
  *
  * The card's own identity is stamped on the group and nowhere else: the unit's
- * word arrives as a parameter so its one owner stays `uiCopy.cardLibrary`, and
+ * word arrives as a parameter so its one owner stays `CARD_LABELS` in
+ * `cards.ts` (which the editor's `uiCopy.cardLibrary` aliases), and
  * `provenance` is the document's own authored key for it — the same pair a copy
  * carries (`card-library.ts` `instantiateCard`), written where the card's other
  * authored state is written.
@@ -169,7 +222,7 @@ export interface Run {
   /** The binding this run reads; literal runs have none. */
   readonly bindingId?: string;
   readonly text?: string;
-  readonly token: StarterPaletteId;
+  readonly token: string;
   readonly size: number;
   readonly precision?: number;
   /** `"none"` when a later literal run writes the unit instead. */
@@ -218,6 +271,7 @@ export function text(
     readonly verticalAlign?: "top" | "middle" | "bottom";
     readonly overflow?: "clip" | "ellipsis" | "visible";
   },
+  palette: Palette = starterPalette,
 ): ObjectJson {
   const first = runs[0] as Run;
   const firstToken = starterTypeTokens[starterRoleForSize(first.size)];
@@ -244,7 +298,7 @@ export function text(
     // document correct before the first sample ever arrives.
     ...(options?.align === undefined ? {} : { textAlign: options.align }),
     fontWeight: firstToken.weight,
-    fill: solidOf[first.token],
+    fill: paintOfToken(first.token, width, height, palette),
     lineHeight: STARTER_LINE_HEIGHT,
     ...(spacing === undefined ? {} : { charSpacing: spacing }),
     yunariPaint: { fill: `palette.${first.token}` },
@@ -310,11 +364,19 @@ export function label(
   height: number,
   value: string,
   size: number,
-  token: StarterPaletteId,
+  token: string,
+  palette: Palette = starterPalette,
 ): ObjectJson {
-  return text(id, left, top, width, height, [
-    { kind: "literal", text: value, token, size },
-  ]);
+  return text(
+    id,
+    left,
+    top,
+    width,
+    height,
+    [{ kind: "literal", text: value, token, size }],
+    undefined,
+    palette,
+  );
 }
 
 /** A label whose whole text is one reading. */
@@ -325,12 +387,20 @@ export function valueLabel(
   width: number,
   height: number,
   size: number,
-  token: StarterPaletteId,
+  token: string,
   bindingId: string,
+  palette: Palette = starterPalette,
 ): ObjectJson {
-  return text(id, left, top, width, height, [
-    { kind: "value", bindingId, token, size },
-  ]);
+  return text(
+    id,
+    left,
+    top,
+    width,
+    height,
+    [{ kind: "value", bindingId, token, size }],
+    undefined,
+    palette,
+  );
 }
 
 export function path(
@@ -338,8 +408,9 @@ export function path(
   left: number,
   top: number,
   points: readonly PathCommand[],
-  token: StarterPaletteId,
+  token: string,
   strokeWidth: number,
+  palette: Palette = starterPalette,
 ): ObjectJson {
   return {
     type: "Path",
@@ -349,7 +420,7 @@ export function path(
     top,
     path: points,
     fill: null,
-    stroke: solidOf[token],
+    stroke: paintOfToken(token, 1, 1, palette),
     strokeWidth,
     strokeLineCap: "round",
     strokeLineJoin: "round",

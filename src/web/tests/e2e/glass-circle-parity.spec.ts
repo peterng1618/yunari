@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
+import { frost as FROST } from "@yunari/theme-kit";
 import { writeThemePackage } from "@yunari/theme-package";
-import { frost as FROST } from "../../packages/editor/src/new-fabric-theme-globals.js";
 import {
   type Box,
   boxOf,
@@ -76,7 +76,7 @@ const BOX = { left: 470, top: 300, size: 260 } as const;
 const RADIUS = 24;
 
 // `FROST` is the product's own frost token — a 30 % tint that transmits, whose
-// full rationale is on `new-fabric-theme-globals.ts`'s export. A local copy
+// full rationale is on `@yunari/theme-kit` `src/globals.ts`'s export. A local copy
 // would be a second owner of a value the product changes.
 
 type Kind = "Rect" | "Circle";

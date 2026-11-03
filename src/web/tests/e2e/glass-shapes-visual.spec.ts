@@ -1,11 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
+import { frost, solidOf } from "@yunari/theme-kit";
 import { writeThemePackage } from "@yunari/theme-package";
-import {
-  frost,
-  solidOf,
-} from "../../packages/editor/src/new-fabric-theme-globals.js";
 import { decode, luma as sharedLuma } from "./frame-diff.js";
 import { GLASS_BAR } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
@@ -16,7 +13,7 @@ import { withRoleTokens } from "./theme-fixture.js";
 function panelPaint(): string {
   const paint = solidOf["panel"];
   if (paint === undefined)
-    throw new Error("new-fabric-theme-globals lost its panel paint");
+    throw new Error("theme-kit globals lost its panel paint");
   return paint;
 }
 

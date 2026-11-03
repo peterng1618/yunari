@@ -28,4 +28,15 @@ describe("the panel page URL", () => {
     const url = new URL(panelPageUrl(5227, "panel one/2"));
     expect(url.searchParams.get("display")).toBe("panel one/2");
   });
+
+  it("names the theme a preview renders, escaped", () => {
+    const url = new URL(panelPageUrl(5227, "turzx-1", true, "night sky/2"));
+    expect(url.searchParams.get("theme")).toBe("night sky/2");
+    expect(url.searchParams.get("clip")).toBe("1");
+  });
+
+  it("leaves the theme off a page that renders the display's own choice", () => {
+    const url = new URL(panelPageUrl(5227, "turzx-1", false));
+    expect(url.searchParams.get("theme")).toBeNull();
+  });
 });

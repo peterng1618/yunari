@@ -26,6 +26,9 @@ export default defineConfig({
       "@yunari/theme-package": fileURLToPath(
         new URL("../theme-package/src/index.ts", import.meta.url),
       ),
+      "@yunari/theme-kit": fileURLToPath(
+        new URL("../theme-kit/src/index.ts", import.meta.url),
+      ),
       // SCAFFOLD: the fixture themes and the synthetic sample source. The
       // editor will open real documents (Gate 4) and preview live data through
       // the transport (Gate 3) instead.

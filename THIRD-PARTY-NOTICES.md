@@ -49,6 +49,10 @@ are provenance, not notice rows.
 | `tailwind-merge` | 3.7.0 | MIT | editor class-name overrides |
 | `better-auth` | 1.7.12 | MIT | store worker: OAuth sign-in, sessions and its own `user`/`session`/`account` tables |
 | `culori` | 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own) |
+| `@modelcontextprotocol/server` | 2.4.0 | Apache-2.0 | MCP stdio server for the theme-designer tools |
+| `add-mcp` | 2.6.1 | Apache-2.0 | installer: registers the MCP server entry in the agent's config |
+| `skills` | 1.7.5 | MIT | installer: installs the theme-designer skill globally |
+| `zod` | 4.6.7 | MIT | MCP tool input schemas |
 
 Preserve applicable Apache-2.0 and MIT licence/NOTICE obligations.
 

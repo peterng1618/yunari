@@ -17,6 +17,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./packages/editor/src", import.meta.url)),
+      "@yunari/theme-kit": fileURLToPath(
+        new URL("./packages/theme-kit/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

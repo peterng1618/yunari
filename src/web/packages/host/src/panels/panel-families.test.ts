@@ -27,6 +27,25 @@ describe("PANEL_FAMILIES", () => {
     expect(familyFor(0x1e71, 0x3008)?.commands).toEqual([]);
   });
 
+  it("declares each family's raster geometry", () => {
+    expect(familyFor(0x1d6b, 0x0106)?.geometry).toEqual({
+      width: 800,
+      height: 480,
+    });
+    expect(familyFor(0x1e71, 0x3008)?.geometry).toEqual({
+      width: 320,
+      height: 320,
+    });
+    expect(familyFor(0x1cbe, 0xa092)?.geometry).toEqual({
+      width: 464,
+      height: 1920,
+    });
+    expect(familyFor(0x1cbe, 0xa088)?.geometry).toEqual({
+      width: 480,
+      height: 1920,
+    });
+  });
+
   it("answers nothing for a device no driver claims", () => {
     expect(familyFor(0x1c8e, 0xa092)).toBeUndefined();
     expect(familyFor(0, 0)).toBeUndefined();

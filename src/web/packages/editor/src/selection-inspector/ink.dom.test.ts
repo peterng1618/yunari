@@ -16,9 +16,9 @@
  * which is rendered y = 13.
  */
 
+import { starterIcons } from "@yunari/theme-kit";
 import { Path, StaticCanvas } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { starterIcons } from "../new-fabric-theme-icons.js";
 import { createNewShape } from "../new-object-defaults.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector, type SelectionInspector } from "./index.js";

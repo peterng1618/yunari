@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // renderer-core and theme-kit are consumed as source, so the program spans
+    // three workspace packages and rootDir has to cover them or TS6059 fires
+    // for every shared file. Same arrangement as the host.
+    "rootDir": "../..",
+    // This package runs in Node, not a browser. DOM stays in `lib` from the
+    // base config and is harmless — but `types` must include node, or every
+    // `node:` import is unresolved.
+    "types": ["node"],
+    "paths": {
+      "@yunari/renderer-core": ["../renderer-core/src/index.ts"],
+      "@yunari/theme-kit": ["../theme-kit/src/index.ts"],
+      "@yunari/theme-package": ["../theme-package/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

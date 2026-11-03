@@ -2,6 +2,7 @@ import { usb } from "usb";
 import type {
   PanelDevice,
   PanelFamily,
+  PanelGeometry,
   PanelHint,
   PanelVideo,
   PanelVideoPlacement,
@@ -118,6 +119,13 @@ export function panelModelFor(
   );
 }
 
+/** The declared size of one listed model, for a family row. */
+function modelGeometry(id: string): PanelGeometry {
+  const model = PANEL_MODELS.find((entry) => entry.id === id);
+  if (model === undefined) throw new Error(`No "${id}" model is listed.`);
+  return { width: model.width, height: model.height };
+}
+
 /** The Lian Li screens: one bulk endpoint, one JPEG per frame. */
 export const TUR_FAMILIES: readonly PanelFamily[] = [
   {
@@ -135,6 +143,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       updatedAt: "2026-10-31",
     },
     commands: [],
+    geometry: modelGeometry("lianli-9-2"),
     attached: () => attachedPanels(),
     open: () => {
       const model = panelModelFor(0x1cbe, 0xa092);
@@ -154,6 +163,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       updatedAt: "2026-10-28",
     },
     commands: [],
+    geometry: modelGeometry("lianli-8-8"),
     attached: () => attachedPanels(),
     open: () => {
       const model = panelModelFor(0x1cbe, 0xa088);

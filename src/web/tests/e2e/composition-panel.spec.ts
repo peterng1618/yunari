@@ -1036,8 +1036,8 @@ test("carries the document's binding, and selecting a card and entering it are s
     expect(text.trim().length).toBeGreaterThan(0);
   }
   // **The key is the document's, not one this spec typed beside the object.**
-  // `new-fabric-theme.ts` declares `cpu-card-sparkline` reads `cpu.load`, and
-  // the row the panel draws for that object has to say so.
+  // `theme-kit/src/starter.ts` `STARTER_BINDINGS` declares `cpu-card-sparkline`
+  // reads `cpu.load`, and the row the panel draws for that object has to say so.
   await expect(
     page.locator(
       '[data-yunari-layer="cpu-card-sparkline"] .yunari-layer-bound',

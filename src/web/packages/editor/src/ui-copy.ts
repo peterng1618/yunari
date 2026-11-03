@@ -15,6 +15,7 @@ import {
   type Orientation,
   type SemanticFamily,
 } from "@yunari/renderer-core";
+import { CARD_LABELS } from "@yunari/theme-kit";
 import type { VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
@@ -2175,16 +2176,7 @@ export const uiCopy = {
    * where the card sits: two CPU cards are two CPU cards, and the id beside the
    * name is what tells them apart.
    */
-  cardLibrary: {
-    time: "Clock",
-    cpu: "CPU",
-    gpu: "GPU",
-    ram: "RAM",
-    vram: "VRAM",
-    trends: "Performance trends",
-    storage: "Storage",
-    network: "Network",
-  },
+  cardLibrary: CARD_LABELS,
   /**
    * Artboard preset labels, shared by the inspector's controls and the
    * new-document chooser. A ratio labels itself; an orientation and a

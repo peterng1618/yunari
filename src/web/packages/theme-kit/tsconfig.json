@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "rootDir": "../..",
+    "paths": {
+      "@yunari/renderer-core": ["../renderer-core/src/index.ts"],
+      "@yunari/scene-fabric": ["../scene-fabric/src/index.ts"],
+      "@yunari/theme-package": ["../theme-package/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

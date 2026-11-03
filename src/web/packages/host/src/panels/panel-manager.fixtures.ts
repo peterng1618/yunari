@@ -87,6 +87,7 @@ export function familyOver(open: PanelFamily["open"]): PanelFamily {
       updatedAt: "2026-10-29",
     },
     commands: [],
+    geometry: { width: 464, height: 1920 },
     attached: async () => [],
     open,
   };

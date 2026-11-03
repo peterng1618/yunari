@@ -22,6 +22,7 @@ import { isPlatformError, readBody, sendJson, sendText } from "./http.js";
 import { displayFor, isLoopbackRemote, knownDisplayKey } from "./identity.js";
 import { MAX_THUMBNAIL_BYTES } from "./limits.js";
 import type { HostServerOptions } from "./options.js";
+import { servePanelPreview } from "./panel-preview-route.js";
 
 /**
  * One row of the display map `/api/themes/active` answers: a display and the
@@ -44,6 +45,9 @@ interface ActiveDisplay {
   readonly panel?: {
     readonly status: "connected" | "connecting" | "disconnected";
     readonly commands: readonly string[];
+    /** The raster size the family declares, so a consumer can size a preview
+     *  without opening the device. Absent when no driver claims the ids. */
+    readonly geometry?: { readonly width: number; readonly height: number };
   };
 }
 
@@ -154,6 +158,9 @@ export function createThemeRoutes(
                     // than promising the retry loop will bring it back.
                     stopped: options.panels.stopped(record.id),
                     commands: family?.commands ?? [],
+                    ...(family === undefined
+                      ? {}
+                      : { geometry: family.geometry }),
                   },
                 }),
           };
@@ -561,6 +568,49 @@ export function createThemeRoutes(
         "cache-control": "no-store",
       });
       response.end(Buffer.from(media.bytes));
+      return true;
+    }
+
+    // A panel-sized PNG of a theme, for an authoring tool that has to see the
+    // glass before deploying. It renders through the panels' own browser and
+    // never opens the device: a preview must not take a panel away from the
+    // theme it is showing.
+    const previewMatch = url.pathname.match(
+      /^\/api\/themes\/([^/]+)\/panel-preview$/,
+    );
+    if (previewMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "Panel previews are available on this PC only.",
+        );
+        return true;
+      }
+      const rawId = decodeURIComponent(previewMatch[1] ?? "");
+      if (!isValidThemeId(rawId)) {
+        sendText(response, 400, "Invalid theme id.");
+        return true;
+      }
+      const panels = options.panels;
+      if (panels === undefined) {
+        sendText(response, 503, "This host drives no panels.");
+        return true;
+      }
+
+      await servePanelPreview({
+        response,
+        rawId,
+        display: url.searchParams.get("display"),
+        clip: url.searchParams.get("clip") === "1",
+        themeStore,
+        displays,
+        panels,
+      });
       return true;
     }
 

@@ -1961,7 +1961,7 @@ function glyphCoverage(
  *
  * `panelBand` above addresses a panel through `calcTransformMatrix` and
  * ±width/2, which is a **centre** origin. Every starter card is authored
- * top-left (`rect()` in `new-fabric-theme-objects.ts`), so that arithmetic
+ * top-left (`rect()` in `@yunari/theme-kit` `src/objects.ts`), so that arithmetic
  * would read a region half a card away. `getBoundingRect` carries the origin
  * with it, which is why this is a second helper rather than a call to the
  * first.

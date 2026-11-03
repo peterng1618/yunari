@@ -1,4 +1,5 @@
 import type { ListingCategory } from "@yunari/renderer-core";
+import type { CardDiagram } from "@yunari/theme-kit";
 import {
   Activity,
   ArrowDown,
@@ -85,7 +86,6 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
-import type { CardDiagram } from "../card-library.js";
 import type { PathPresetId, ShapeKind } from "../new-object-defaults.js";
 import type { PanelConnectionStatus } from "../theme-library-client.js";
 import type { LayerKind } from "./layer-tree.js";
@@ -109,7 +109,7 @@ export type { LucideIcon };
  * keep their shape and draw their members from here, so the vocabulary stays
  * one and the meaning of each set stays with the surface that has it.
  *
- * Authored scene icon generation (`new-fabric-theme-icons.ts`) is deliberately
+ * Authored scene icon generation (`@yunari/theme-kit` `src/icons.ts`) is deliberately
  * outside this: it converts lucide geometry into path commands for the Fabric
  * scene, which is data rather than chrome, and it reads the per-icon modules
  * rather than the React components.

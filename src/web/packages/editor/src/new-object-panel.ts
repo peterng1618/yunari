@@ -3,10 +3,10 @@ import {
   type ChartFamily,
   type FabricGlobals,
 } from "@yunari/renderer-core";
+import { CARD_LIBRARY, type CardDiagram } from "@yunari/theme-kit";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { CARD_LIBRARY, type CardDiagram } from "./card-library.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import {
   createNewShape,

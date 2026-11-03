@@ -13,6 +13,7 @@ import {
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
 import { YunariChart } from "@yunari/scene-fabric";
+import { CARD_LIBRARY } from "@yunari/theme-kit";
 import {
   ActiveSelection,
   Canvas,
@@ -29,7 +30,6 @@ import {
 } from "fabric/es";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CARD_LIBRARY } from "../card-library.js";
 import {
   type ChartFieldTarget,
   chartContentView,

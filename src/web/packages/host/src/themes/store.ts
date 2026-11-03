@@ -17,6 +17,7 @@ import {
   type ValidationIssue,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
+import { MAX_ASSET_BYTES } from "@yunari/theme-kit";
 import {
   CREDITS,
   MAX_THEME_BYTES,
@@ -342,9 +343,14 @@ const MAX_THEME_FILE_BYTES = 32 * 1024 * 1024;
 /** The attribution member's own ceiling. The reader caps the list at 256
  *  entries; this bounds the bytes a hostile folder can make the host buffer. */
 const MAX_CREDITS_FILE_BYTES = 1024 * 1024;
+
 /** One asset's ceiling, and the trash route's own per-file cap: the bytes an
- *  editor sends it are the bytes this store would have accepted. */
-export const MAX_ASSET_BYTES = 80 * 1024 * 1024;
+ *  editor sends it are the bytes this store would have accepted. The value is
+ *  owned by `@yunari/theme-kit`, which refuses the same cap before declaring an
+ *  asset, and re-exported here because the store's callers already import it
+ *  from this module. */
+export { MAX_ASSET_BYTES };
+
 const MAX_ASSET_COUNT = 128;
 /** The theme's whole allowance, from the format's own owner. The store writes
  *  only declared assets, so it measures them alone against a bound that also

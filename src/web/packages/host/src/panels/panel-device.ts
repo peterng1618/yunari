@@ -188,6 +188,9 @@ export interface PanelFamily {
   readonly productId: number;
   readonly support: PanelSupport;
   readonly commands: readonly PanelControlCommand["kind"][];
+  /** The raster size every device of this family has. Declared here so a
+   *  preview never opens hardware to learn it. */
+  readonly geometry: PanelGeometry;
   /** Panels of this family attached right now, as record hints. */
   readonly attached: () => Promise<readonly PanelHint[]>;
   readonly open: (options?: PanelOpenOptions) => Promise<PanelDevice>;

@@ -12,6 +12,7 @@
       "lucide-react/dist/esm/icons/*": ["./src/lucide-icon-node.d.ts"],
       "@yunari/renderer-core": ["../renderer-core/src/index.ts"],
       "@yunari/scene-fabric": ["../scene-fabric/src/index.ts"],
+      "@yunari/theme-kit": ["../theme-kit/src/index.ts"],
       "@yunari/fake-source": ["../fake-source/src/index.ts"]
     }
   },

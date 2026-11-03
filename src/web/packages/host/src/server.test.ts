@@ -906,6 +906,212 @@ describe("Host theme routes", () => {
     expect(list.themes.map((entry) => entry.id)).not.toContain("broken");
   });
 
+  it("serves a panel preview, and refuses every reason it cannot", async () => {
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(validEmptyAssetTheme),
+    );
+    expect(saved.status).toBe(200);
+
+    const displays = createDisplayStore(tmpDir);
+    const strip = await displays.createPanel("Strip", {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+    });
+    const tablet = await displays.create("Tablet", "token");
+    // A record whose ids this build no longer claims: an existing record from
+    // an older build, or a hand-edited store. The host cannot render it.
+    const mystery = await displays.createPanel("Mystery", {
+      vendorId: 0x1c8e,
+      productId: 0xa092,
+      model: "gone",
+    });
+
+    const captured: {
+      displayId: string;
+      themeId: string;
+      clip: boolean;
+    }[] = [];
+    const panels: PanelManager = {
+      start: () => Promise.resolve(),
+      command: () => Promise.resolve(""),
+      stop: () => Promise.resolve(),
+      refresh: () => Promise.resolve(),
+      refreshVideo: () => Promise.resolve(),
+      reconcile: () => Promise.resolve(),
+      running: () => [],
+      status: () => "connected",
+      reconnect: () => Promise.resolve(),
+      stopAll: () => Promise.resolve(),
+      capturePreview: (displayId, themeId, clip) => {
+        captured.push({ displayId, themeId, clip });
+        return Promise.resolve(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]));
+      },
+    };
+    const previewing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      displays,
+      panels,
+    });
+
+    try {
+      const preview = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(preview.status).toBe(200);
+      expect(preview.headers["content-type"]).toBe("image/png");
+      expect(preview.headers["cache-control"]).toBe("no-store");
+      expect(preview.headers["x-content-type-options"]).toBe("nosniff");
+      expect(preview.body).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      expect(captured).toEqual([
+        { displayId: "strip", themeId: "living-room", clip: false },
+      ]);
+
+      await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}&clip=1`,
+      );
+      expect(captured.at(-1)?.clip).toBe(true);
+
+      const offLoopback = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+        undefined,
+        { remoteAddress: "192.168.1.50" },
+      );
+      expect(offLoopback.status).toBe(403);
+
+      const noTheme = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/absent/panel-preview?display=${strip.id}`,
+      );
+      expect(noTheme.status).toBe(404);
+
+      const noDisplay = await request(
+        previewing.server,
+        "GET",
+        "/api/themes/living-room/panel-preview?display=nobody",
+      );
+      expect(noDisplay.status).toBe(404);
+
+      const notAPanel = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${tablet.id}`,
+      );
+      expect(notAPanel.status).toBe(409);
+
+      const noDriver = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${mystery.id}`,
+      );
+      expect(noDriver.status).toBe(409);
+      expect(noDriver.text()).toBe(
+        "The host has no panel driver for that display.",
+      );
+
+      // A route that answers any method would answer a write it cannot perform.
+      const written = await request(
+        previewing.server,
+        "POST",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(written.status).toBe(405);
+
+      const badId = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/bad%20id/panel-preview?display=${strip.id}`,
+      );
+      expect(badId.status).toBe(400);
+
+      // A stored theme the renderer cannot read is understood but invalid,
+      // which is the 422 the editor's own open answers.
+      await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
+      await fs.writeFile(
+        path.join(tmpDir, "broken", "theme.json"),
+        JSON.stringify({ id: "broken" }),
+      );
+      const invalid = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/broken/panel-preview?display=${strip.id}`,
+      );
+      expect(invalid.status).toBe(422);
+
+      // A host that drives no panels cannot render one.
+      const noPanels = await request(
+        hosted.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(noPanels.status).toBe(503);
+    } finally {
+      await previewing.close();
+    }
+  });
+
+  it("relays a thrown panel capture as 500 with the manager's own sentence", async () => {
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(validEmptyAssetTheme),
+    );
+    expect(saved.status).toBe(200);
+
+    const displays = createDisplayStore(tmpDir);
+    const strip = await displays.createPanel("Strip", {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+    });
+    const panels: PanelManager = {
+      start: () => Promise.resolve(),
+      command: () => Promise.resolve(""),
+      stop: () => Promise.resolve(),
+      refresh: () => Promise.resolve(),
+      refreshVideo: () => Promise.resolve(),
+      reconcile: () => Promise.resolve(),
+      running: () => [],
+      status: () => "connected",
+      reconnect: () => Promise.resolve(),
+      stopAll: () => Promise.resolve(),
+      capturePreview: () =>
+        Promise.reject(new Error("The preview browser is not running.")),
+    };
+    const previewing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      displays,
+      panels,
+    });
+
+    try {
+      const answer = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(answer.status).toBe(500);
+      expect(answer.text()).toBe("The preview browser is not running.");
+    } finally {
+      await previewing.close();
+    }
+  });
+
   it("answers a stored theme past the size bound with 413, and keeps 404 for an absent one", async () => {
     // vg-409: an over-large `theme.json` was answered as absence, so the author
     // was told a theme they can see on disk does not exist and the editor
@@ -5210,6 +5416,7 @@ describe("A local monitor is specified rather than paired", () => {
         reconcile: () => Promise.resolve(),
         running: () => running,
         status: () => "connected",
+        capturePreview: () => Promise.resolve(Uint8Array.of()),
         reconnect: () => Promise.resolve(),
         disconnect: () => Promise.resolve(),
         stopped: () => false,
@@ -6305,6 +6512,7 @@ describe("A local monitor is specified rather than paired", () => {
                 status: string;
                 stopped: boolean;
                 commands: readonly string[];
+                geometry: { width: number; height: number };
               };
             }[];
           }
@@ -6322,6 +6530,11 @@ describe("A local monitor is specified rather than paired", () => {
         expect(
           rows.find((row) => row.id === "strip")?.panel?.commands,
         ).toBeInstanceOf(Array);
+        // The family states the size, so a consumer can size a preview without
+        // opening the panel.
+        expect(rows.find((row) => row.id === "strip")?.panel?.geometry).toEqual(
+          { width: 464, height: 1920 },
+        );
         // The Host is not host-driven, so it carries no panel key at all.
         expect(rows.find((row) => row.id === "this-pc")).not.toHaveProperty(
           "panel",

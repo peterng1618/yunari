@@ -4,7 +4,6 @@ import {
   MAX_ARTBOARD_DIMENSION,
 } from "@yunari/renderer-core";
 import { outsideCount, type SceneBox } from "@yunari/scene-fabric";
-import { useId } from "react";
 import {
   ARTBOARD_ORIENTATIONS,
   ARTBOARD_RATIOS,
@@ -12,7 +11,8 @@ import {
   artboardPresetFor,
   artboardSize,
   nearestArtboardPreset,
-} from "../../artboard-presets.js";
+} from "@yunari/theme-kit";
+import { useId } from "react";
 import { ControlPair } from "../../components/ui/control-pair.js";
 import {
   type ControlOption,

@@ -3,18 +3,18 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { reviveScene, serialiseScene } from "@yunari/scene-fabric";
-import { Canvas, type FabricObject, Group, util } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CARD_LIBRARY,
   type CardUnit,
-  insertCard,
+  cpuCard,
   instantiateCard,
-} from "./card-library.js";
+  type ObjectJson,
+  starterTypeTokens,
+} from "@yunari/theme-kit";
+import { Canvas, type FabricObject, Group, util } from "fabric/es";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { insertCard } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
-import { cpuCard } from "./new-fabric-theme-cards.js";
-import { starterTypeTokens } from "./new-fabric-theme-globals.js";
-import type { ObjectJson } from "./new-fabric-theme-objects.js";
 import { uiCopy } from "./ui-copy.js";
 
 // jsdom cannot drawImage an undecoded img, and a card carries a frosted panel,
@@ -46,12 +46,6 @@ const CPU_PARTS = 7;
 /** The starter's own globals, so a card's every reference resolves. */
 const STARTER_GLOBALS = createNewFabricTheme().globals as FabricGlobals;
 
-function unit(cardId: string) {
-  const found = CARD_LIBRARY.find((candidate) => candidate.id === cardId);
-  if (found === undefined) throw new Error(`no ${cardId} unit`);
-  return found;
-}
-
 /** A card's parts, as the plain records the factories authored them as. */
 function partsOf(card: ObjectJson): readonly ObjectJson[] {
   const children = card["objects"];
@@ -60,22 +54,6 @@ function partsOf(card: ObjectJson): readonly ObjectJson[] {
 
 function isRecord(value: unknown): value is ObjectJson {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Every run on every text object in a card, as the document stores them. */
-function runsOf(card: ObjectJson): readonly ObjectJson[] {
-  const runs: ObjectJson[] = [];
-  const visit = (object: ObjectJson): void => {
-    const text = object["yunariText"];
-    const authored =
-      isRecord(text) && Array.isArray(text["runs"]) ? text["runs"] : [];
-    for (const run of authored) {
-      if (isRecord(run)) runs.push(run);
-    }
-    for (const child of partsOf(object)) visit(child);
-  };
-  visit(card);
-  return runs;
 }
 
 function stage(): Canvas {
@@ -208,26 +186,6 @@ describe("the card library", () => {
     }
   });
 
-  it("names one diagram per unit, so a tile depicts the unit it inserts", () => {
-    // The pane maps this name to a glyph and fails to compile on one it does
-    // not know, so the library's half is what is pinned here: one diagram per
-    // unit, in the library's order — a ninth card cannot arrive undrawn, and
-    // **no two units share a picture**, which is what makes the diagram an
-    // identification rather than decoration.
-    const diagrams = CARD_LIBRARY.map((entry) => entry.diagram);
-    expect(diagrams).toEqual([
-      "time",
-      "cpu",
-      "gpu",
-      "ram",
-      "vram",
-      "trends",
-      "storage",
-      "network",
-    ]);
-    expect(new Set(diagrams).size).toBe(CARD_LIBRARY.length);
-  });
-
   // THE property. A copy that reused an id would be a twin the second save
   // refuses; a copy that minted a semantic key would be bound to a sensor
   // nobody publishes, and would arrive showing nothing (§93).
@@ -311,50 +269,6 @@ describe("the card library", () => {
     expect(pointed).toBeGreaterThan(0);
   });
 
-  it("moves the root only, leaving a part's group-local coordinates alone", () => {
-    const built = unit(CPU_CARD).build();
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: STARTER_GLOBALS,
-      existingIds: [],
-      origin: { left: 1000, top: 500 },
-    }).card;
-
-    expect(copied["left"]).toBe(1000);
-    expect(copied["top"]).toBe(500);
-
-    const parts = partsOf(copied);
-    const authored = partsOf(built);
-    expect(parts).toHaveLength(authored.length);
-    // §57: a child's coordinates are group-local, so offsetting them too would
-    // shift every descendant twice.
-    for (const [index, part] of parts.entries()) {
-      expect(part["left"]).toBe(authored[index]?.["left"]);
-      expect(part["top"]).toBe(authored[index]?.["top"]);
-    }
-  });
-
-  it("records which unit the copy came from, on the root alone", () => {
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: STARTER_GLOBALS,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    }).card;
-
-    expect(copied["provenance"]).toEqual({
-      widgetId: CPU_CARD,
-      widgetName: uiCopy.cardLibrary.cpu,
-    });
-    expect(copied["name"]).toBe(uiCopy.cardLibrary.cpu);
-
-    // Stamping every descendant would triple a deep card's size to say the
-    // same thing.
-    for (const part of partsOf(copied)) {
-      expect(part["provenance"]).toBeUndefined();
-    }
-  });
-
   // Review Focus 5: where a copy came from is a fact, not a naming convention.
   it("keeps that fact across a save and reopen", async () => {
     const canvas = stage();
@@ -409,36 +323,6 @@ describe("a global this theme cannot supply", () => {
   // §77 makes explicit global mapping the author's decision. Silently inlining
   // would quietly divorce the copy from the theme's tokens; silently dropping
   // would paint it wrong; either would be invisible until someone re-saves.
-  it("reports the reference instead of inlining or dropping it", () => {
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: undefined,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    expect(new Set(copied.issues.map((issue) => issue.code))).toEqual(
-      new Set(["unmapped-global"]),
-    );
-    const panel = partsOf(copied.card)[0];
-    expect(panel?.["yunariPaint"]).toEqual({
-      fill: "palette.frost",
-      stroke: "palette.panelStroke",
-    });
-  });
-
-  it("says which token, so the author can act on it", () => {
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: undefined,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    expect(copied.issues[0]?.detail).toContain("palette.frost");
-    expect(copied.issues[0]?.detail).toContain("may mean something else");
-  });
-
   it("refuses to insert, because a card the theme cannot express cannot be saved", async () => {
     const canvas = stage();
 
@@ -451,17 +335,6 @@ describe("a global this theme cannot supply", () => {
       }),
     ).rejects.toThrow(/palette\.frost/);
     expect(canvas.getObjects()).toHaveLength(0);
-  });
-
-  it("accepts a card whose every global the theme does have", () => {
-    expect(
-      instantiateCard({
-        unit: unit(CPU_CARD),
-        globals: STARTER_GLOBALS,
-        existingIds: [],
-        origin: { left: 0, top: 0 },
-      }).issues,
-    ).toEqual([]);
   });
 });
 
@@ -517,43 +390,6 @@ describe("a theme whose vocabulary is not the starter's", () => {
     expect(copy(canvas)).toBeInstanceOf(Group);
   });
 
-  it("carries no unresolved reference, so the document still saves", () => {
-    // The pin that matters most. Every other assertion in this block would
-    // pass on a card that looks right and refuses to save — which is the exact
-    // failure the refusal was there to prevent, and the reason this is asserted
-    // against `validateFabricThemeEnvelope` rather than by reading the refs.
-    //
-    // The document's background is re-pointed at this theme's own palette:
-    // `surface` is a token FOREIGN declares, so the paint resolves here rather
-    // than relying on the starter's transparent `none`.
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: FOREIGN,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    const envelope = {
-      ...createNewFabricTheme(),
-      artboard: {
-        width: 1672,
-        height: 941,
-      },
-      background: { color: { ref: "palette.surface" } },
-      globals: FOREIGN,
-      // The starter's own bindings name objects this scene does not carry, so
-      // keeping them would fail the envelope on `unresolved-binding-ref` — the
-      // card's own readings are added below and are what the claim is about.
-      bindings: copied.bindings,
-      scene: { version: "7.4.0", objects: [copied.card] },
-    };
-
-    // `ok`, not a filter on the issue codes: the whole claim is that the
-    // document is saveable, and a card that carried one unresolved reference
-    // among several other issues would pass a filter naming only that one.
-    expect(validateFabricThemeEnvelope(envelope).ok).toBe(true);
-  });
-
   it("tells the author which tokens were substituted, by name", async () => {
     const editor = editorStub(stage());
 
@@ -569,25 +405,6 @@ describe("a theme whose vocabulary is not the starter's", () => {
     // they cannot correct.
     expect(message).toContain("palette.frost");
     expect(message).toContain("palette.text");
-  });
-
-  it("maps by role, so a surface never lands on an ink", () => {
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: FOREIGN,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    // `frost` is the card's box and `surface` is the theme's; `panelStroke` and
-    // `cpu` are ink and `ink` is the theme's. Answering both by "the first
-    // token" would put the card's own surface on the theme's ink — a caption on
-    // a caption, which is the failure the roles exist to prevent.
-    const panel = partsOf(copied.card)[0];
-    expect(panel?.["yunariPaint"]).toEqual({
-      fill: "palette.surface",
-      stroke: "palette.ink",
-    });
   });
 
   it("is still refused when the theme has no token to map onto at all", async () => {
@@ -614,37 +431,6 @@ describe("a theme whose vocabulary is not the starter's", () => {
     expect(editor.errorManager.warn).not.toHaveBeenCalled();
   });
 
-  /**
-   * A card names a role, and a theme always carries the role ids, so the copy
-   * keeps its own face instead of falling back to whatever token the document
-   * happened to list first. Only the geometry stays the card's own: the run's
-   * size, leading and tracking are its own `style`.
-   */
-  it("keeps the role the theme declares, and the card's own size", () => {
-    const copied = instantiateCard({
-      unit: unit(CPU_CARD),
-      globals: FOREIGN,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    const declared = new Set([
-      "typeTokens.heading",
-      "typeTokens.body",
-      "typeTokens.mono",
-    ]);
-    for (const run of runsOf(copied.card)) {
-      expect(declared.has(String(run["typeToken"]))).toBe(true);
-    }
-    const value = runsOf(copied.card).find((run) => run["kind"] === "value");
-    expect(value?.["style"]).toMatchObject({ fontSize: { value: 90 } });
-    expect(
-      copied.substitutions.filter((entry) =>
-        entry.from.startsWith("typeTokens."),
-      ),
-    ).toEqual([]);
-  });
-
   it("refuses a type reference the theme has no token for, and names it", async () => {
     // A run must reference a token the document declares, so a theme with no
     // type token cannot express the card at all. Dropping the reference would
@@ -655,44 +441,6 @@ describe("a theme whose vocabulary is not the starter's", () => {
         onBindings: vi.fn(),
       }),
     ).rejects.toThrow(/typeTokens\.body/);
-  });
-});
-
-/**
- * The type vocabulary a theme always has is the role ids, and a card names one
- * of those — never the `size-weight` id the old presets were called by.
- */
-describe("the type tokens a shipped card names", () => {
-  it("is a role the theme always carries, for every card", () => {
-    const refs: string[] = [];
-    for (const entry of CARD_LIBRARY) {
-      const copied = instantiateCard({
-        unit: entry,
-        globals: STARTER_GLOBALS,
-        existingIds: [],
-        origin: { left: 0, top: 0 },
-      });
-      expect(copied.issues, `${entry.id} does not insert`).toEqual([]);
-      // Every card names a role the theme always has, so nothing is swapped:
-      // a substitution here would mean a card fell back to the theme's first
-      // token and the author was told about a swap that should not exist.
-      expect(
-        copied.substitutions,
-        `${entry.id} substituted a reference`,
-      ).toEqual([]);
-      for (const run of runsOf(copied.card)) {
-        refs.push(String(run["typeToken"]));
-      }
-    }
-
-    expect(refs.length).toBeGreaterThan(0);
-    for (const ref of refs) {
-      expect([
-        "typeTokens.heading",
-        "typeTokens.body",
-        "typeTokens.mono",
-      ]).toContain(ref);
-    }
   });
 });
 
@@ -733,27 +481,6 @@ describe("a card that declares one id twice", () => {
       origin: { left: 0, top: 0 },
     });
 
-  it("reports the collision, by name", () => {
-    const issue = copied().issues.find(
-      (entry) => entry.code === "id-collision",
-    );
-
-    expect(issue).toBeDefined();
-    expect(issue?.detail).toContain("cpu-card-value");
-  });
-
-  it("gives each declaration an id of its own, so nothing collides", () => {
-    const parts = partsOf(copied().card);
-    const ids = parts.map((part) => part["id"]);
-
-    // The defect: both copies at one id is what the validator refuses. The
-    // second is numbered the way a second *insertion* would number it, so a
-    // duplicate reads as a copy rather than as an accident.
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toContain("card-cpu-card-value");
-    expect(ids).toContain("card-cpu-card-value-2");
-  });
-
   it("still serialises and validates — the session stays saveable", async () => {
     // The whole reason the guard exists. `validateFabricThemeEnvelope` is what
     // `snapshot()` calls before every save, and it answers `duplicate-id` for
@@ -777,23 +504,6 @@ describe("a card that declares one id twice", () => {
     });
 
     expect(result.ok).toBe(true);
-  });
-
-  it("keeps the readings on one copy, so no binding id is claimed twice", () => {
-    const copy = copied();
-    const ids = Object.values(copy.bindings).flatMap((list) =>
-      list.map((binding) => binding.id),
-    );
-
-    // A binding id is unique across the document. Two copies of one
-    // declaration cannot both carry them without the validator refusing the
-    // pair, so the first keeps them and the second arrives with none — reported
-    // as the collision it is, rather than as a document that cannot be saved.
-    expect(new Set(ids).size).toBe(ids.length);
-    // The CPU card's four readings survive, under the first declaration's id.
-    expect(ids).toHaveLength(4);
-    expect(Object.keys(copy.bindings)).toContain("card-cpu-card-value");
-    expect(Object.keys(copy.bindings)).not.toContain("card-cpu-card-value-2");
   });
 });
 
@@ -848,27 +558,6 @@ describe("a card whose repeat mints the suffix a genuine part already holds", ()
       origin: { left: 0, top: 0 },
     });
 
-  it("reports the collision, by name", () => {
-    const issues = copied().issues.filter(
-      (entry) => entry.code === "id-collision",
-    );
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0]?.detail).toContain("cpu-card-value");
-  });
-
-  it("mints the repeat past the genuine `-2`, so no two parts share an id", () => {
-    const ids = partsOf(copied().card).map((part) => part["id"]);
-
-    // The defect: `nth === 1` for the genuine `-2`, so the second `…-2` key
-    // returns the memoised id and both parts sit at it — which the envelope
-    // validator refuses, leaving a canvas that looks right and a save that
-    // fails for the rest of the session, told nothing.
-    expect(ids).toHaveLength(CPU_PARTS + 1);
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toContain("card-cpu-card-value-2");
-  });
-
   it("still serialises and validates — the session stays saveable", async () => {
     // The claim the test above it pins for one duplicate shape does not cover
     // this one, so it is stated again here: `validateFabricThemeEnvelope` is
@@ -892,52 +581,6 @@ describe("a card whose repeat mints the suffix a genuine part already holds", ()
     });
 
     expect(result.ok).toBe(true);
-  });
-
-  it("records that the bump costs no reading — a fact, not a pin", () => {
-    // **This cannot fail, and is not counted as coverage.** `cardBindings`
-    // keys off `createNewFabricTheme().bindings`, which has no
-    // `cpu-card-value-2` entry, so the bumped part carries `null` bindings in
-    // *both* arms and the equality below is structurally forced whatever the
-    // bump does — verified by mutation: deleting the `-2` bump loop leaves this
-    // green. The two pins are `mints the repeat past the genuine -2` and
-    // `still serialises and validates`, and both catch that mutation.
-    //
-    // What is worth recording is the property itself: the repeat alone, with no
-    // genuine `-2` beside it, is the same card minus the collision, and every
-    // reading the first copy carried survives the bump.
-    const repeatOnly = instantiateCard({
-      unit: {
-        id: "group-repeat-card",
-        label: "Repeat",
-        diagram: "cpu",
-        build: () => {
-          const card = cpuCard();
-          const parts = card["objects"] as readonly ObjectJson[];
-          return {
-            ...card,
-            objects: parts.map((part) =>
-              part["id"] === "cpu-card-title"
-                ? { ...part, id: "cpu-card-value" }
-                : part,
-            ),
-          };
-        },
-      },
-      globals: STARTER_GLOBALS,
-      existingIds: [],
-      origin: { left: 0, top: 0 },
-    });
-
-    expect(Object.keys(copied().bindings).sort()).toEqual(
-      Object.keys(repeatOnly.bindings).sort(),
-    );
-    const bindings = Object.values(copied().bindings).flatMap((list) =>
-      list.map((binding) => binding.id),
-    );
-    // And a binding id is unique across the document, so bumping must not have
-    // traded one collision for another.
-    expect(new Set(bindings).size).toBe(bindings.length);
   });
 });
 

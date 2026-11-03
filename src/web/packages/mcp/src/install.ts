@@ -1,0 +1,497 @@
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  type InstallResult,
+  listInstalledServers,
+  type RemoveServerResult,
+  removeServer,
+  upsertServer,
+} from "add-mcp";
+
+/** The agent `add-mcp` registers the server for. */
+export const AGENT_TYPE = "claude-code";
+
+/**
+ * The skills CLI agent whose global directory is the shared `~/.agents/skills`.
+ *
+ * `codex` is only the CLI's universal-selector name for that directory
+ * (`skillsDir: ".agents/skills"`); it does not add a second MCP agent. The
+ * server half stays `AGENT_TYPE`.
+ */
+export const SKILL_AGENT = "codex";
+
+/** The server entry name the agent shows and the skill refers to. */
+export const SERVER_NAME = "yunari";
+
+/** The one permission rule `add-mcp` adds for this server's global install. */
+export const AUTO_APPROVAL_RULE = `mcp__${SERVER_NAME}`;
+
+/** The skill folder name, which is also its installed directory name. */
+export const SKILL_NAME = "yunari-theme-designer";
+
+/** The stdio entry a registered server runs. */
+export interface ServerEntry {
+  readonly command: string;
+  readonly args: string[];
+  /** An empty list means "every tool", which is the user's chosen default. */
+  readonly autoApproveTools: string[];
+}
+
+/** The port shape every test injects; production defaults live in `createPorts`. */
+export interface InstallPorts {
+  /** The home directory the agent config and the skill directory live under. */
+  readonly home: string;
+  /** The skill folder in this repository. */
+  readonly skillSourceDir: string;
+  /** The built stdio entry the agent config points at. */
+  readonly serverEntry: string;
+  /** Runs the `skills` CLI and resolves its exit code. */
+  readonly runSkills: (
+    args: readonly string[],
+  ) => Promise<{ readonly code: number | null; readonly error?: string }>;
+  readonly upsert: (
+    config: ServerEntry,
+    options: { readonly local: boolean },
+  ) => InstallResult;
+  readonly remove: (options: { readonly local: boolean }) => RemoveServerResult;
+  readonly removeAutoApproval: () => AutoApprovalRemoval;
+  readonly isServerInstalled: () => Promise<boolean>;
+  readonly fileExists: (path: string) => boolean;
+  readonly probeHost: () => Promise<HostProbe>;
+}
+
+/** What the uninstall's settings step found and did. */
+export interface AutoApprovalRemoval {
+  readonly ok: boolean;
+  readonly removed: boolean;
+  readonly path: string;
+  readonly error?: string;
+}
+
+/** What `status` reports about the host: reachable, or the reason it is not. */
+export interface HostProbe {
+  readonly reachable: boolean;
+  readonly url?: string;
+  readonly error?: string;
+}
+
+/** One half of an install or uninstall, reported on its own. */
+export interface StepOutcome {
+  readonly step: "server" | "skill" | "approval";
+  readonly ok: boolean;
+  readonly detail: string;
+}
+
+/** Both halves are attempted; `ok` is true only when both succeeded. */
+export interface InstallReport {
+  readonly ok: boolean;
+  readonly steps: readonly StepOutcome[];
+  readonly skillPath: string;
+}
+
+/** What `status` answers without writing anything. */
+export interface StatusReport {
+  readonly host: HostProbe;
+  readonly server: { readonly present: boolean; readonly detail: string };
+  readonly skill: { readonly present: boolean; readonly path: string };
+}
+
+/** The canonical installed path named in the design. */
+export function skillFilePath(home: string): string {
+  return join(home, ".agents", "skills", SKILL_NAME, "SKILL.md");
+}
+
+/** The settings file `add-mcp` writes its auto-approval rule into. */
+export function claudeSettingsPath(home: string): string {
+  return join(home, ".claude", "settings.json");
+}
+
+/**
+ * Removes only this server's auto-approval rule from the Claude settings file,
+ * leaving every other permission and setting exactly as found. `add-mcp`'s
+ * `removeServer` does not undo `installClaudeCodeAutoApproval`, so uninstall
+ * does it here through the same file it wrote.
+ */
+export function removeAutoApprovalRule(home: string): AutoApprovalRemoval {
+  const path = claudeSettingsPath(home);
+  if (!existsSync(path)) return { ok: true, removed: false, path };
+
+  let settings: unknown;
+  try {
+    settings = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    return { ok: false, removed: false, path, error: messageOf(error) };
+  }
+  if (
+    typeof settings !== "object" ||
+    settings === null ||
+    Array.isArray(settings)
+  ) {
+    return {
+      ok: false,
+      removed: false,
+      path,
+      error: "it is not a JSON object",
+    };
+  }
+
+  const record = settings as Record<string, unknown>;
+  const permissions = record["permissions"];
+  if (
+    typeof permissions !== "object" ||
+    permissions === null ||
+    Array.isArray(permissions)
+  ) {
+    return { ok: true, removed: false, path };
+  }
+
+  const holder = permissions as Record<string, unknown>;
+  const allow = holder["allow"];
+  if (!Array.isArray(allow) || !allow.includes(AUTO_APPROVAL_RULE)) {
+    return { ok: true, removed: false, path };
+  }
+
+  holder["allow"] = allow.filter((rule) => rule !== AUTO_APPROVAL_RULE);
+  try {
+    writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  } catch (error) {
+    return { ok: false, removed: false, path, error: messageOf(error) };
+  }
+  return { ok: true, removed: true, path };
+}
+
+/** Where the CLI put the skill, if it is at the canonical path. */
+function installedSkillPath(
+  ports: Pick<InstallPorts, "home" | "fileExists">,
+): string | undefined {
+  const path = skillFilePath(ports.home);
+  return ports.fileExists(path) ? path : undefined;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function describeExit(result: {
+  readonly code: number | null;
+  readonly error?: string;
+}): string {
+  if (result.error !== undefined) return result.error;
+  return `the skills CLI exited ${result.code === null ? "without a status" : result.code}`;
+}
+
+/** The skill is installed globally at the shared path, copied rather than linked. */
+export function skillInstallArgs(skillSourceDir: string): readonly string[] {
+  return ["add", skillSourceDir, "-g", "-a", SKILL_AGENT, "--copy", "-y"];
+}
+
+/** Removal names the skill, not a source path. */
+export function skillRemoveArgs(): readonly string[] {
+  return ["remove", "-g", "-a", SKILL_AGENT, "-y", SKILL_NAME];
+}
+
+/**
+ * The entry the server config carries: this Node, the built server, `serve`.
+ *
+ * A named URL travels in the arguments so a host on a custom port survives a
+ * later session; without one the server keeps its probe range.
+ */
+export function serverEntryFor(serverEntry: string, url?: string): ServerEntry {
+  return {
+    command: process.execPath,
+    args: [serverEntry, "serve", ...(url === undefined ? [] : ["--url", url])],
+    autoApproveTools: [],
+  };
+}
+
+/**
+ * Installs both halves and reports each one. A failure on one half does not
+ * abandon the other, and a partial result is never reported as success.
+ */
+export async function install(
+  ports: InstallPorts,
+  url?: string,
+): Promise<InstallReport> {
+  const canonical = skillFilePath(ports.home);
+  let skillPath = canonical;
+  const steps: StepOutcome[] = [];
+
+  try {
+    const run = await ports.runSkills(skillInstallArgs(ports.skillSourceDir));
+    if (run.code !== 0) {
+      steps.push({
+        step: "skill",
+        ok: false,
+        detail: `could not install the skill: ${describeExit(run)}`,
+      });
+    } else {
+      const found = installedSkillPath(ports);
+      if (found === undefined) {
+        steps.push({
+          step: "skill",
+          ok: false,
+          detail: `the skills CLI succeeded but ${canonical} does not exist`,
+        });
+      } else {
+        skillPath = found;
+        steps.push({ step: "skill", ok: true, detail: `installed ${found}` });
+      }
+    }
+  } catch (error) {
+    steps.push({
+      step: "skill",
+      ok: false,
+      detail: `could not install the skill: ${messageOf(error)}`,
+    });
+  }
+
+  try {
+    // The bin shim is the entry the agent runs: it explains a missing build
+    // instead of failing on an unresolved import. Registering a path that does
+    // not exist would hand the agent that stack trace at the next session.
+    if (!ports.fileExists(ports.serverEntry)) {
+      steps.push({
+        step: "server",
+        ok: false,
+        detail: `${ports.serverEntry} does not exist; build it with "npm run build -w @yunari/mcp"`,
+      });
+    } else {
+      const result = ports.upsert(serverEntryFor(ports.serverEntry, url), {
+        local: false,
+      });
+      if (!result.success) {
+        steps.push({
+          step: "server",
+          ok: false,
+          detail: `could not register "${SERVER_NAME}": ${result.error ?? result.path}`,
+        });
+      } else {
+        const extra =
+          result.extraPaths === undefined || result.extraPaths.length === 0
+            ? ""
+            : ` (also wrote ${result.extraPaths.join(", ")})`;
+        steps.push({
+          step: "server",
+          ok: true,
+          detail: `registered "${SERVER_NAME}" in ${result.path}${extra}`,
+        });
+      }
+    }
+  } catch (error) {
+    steps.push({
+      step: "server",
+      ok: false,
+      detail: `could not register "${SERVER_NAME}": ${messageOf(error)}`,
+    });
+  }
+
+  return {
+    ok: steps.every((step) => step.ok),
+    steps,
+    skillPath,
+  };
+}
+
+/**
+ * Removes the server entry, the auto-approval rule it wrote and the skill. The
+ * entry's own result says whether it was present; the skill half fails if the
+ * CLI fails or the file survives.
+ */
+export async function uninstall(ports: InstallPorts): Promise<InstallReport> {
+  const canonical = skillFilePath(ports.home);
+  const skillPath = installedSkillPath(ports) ?? canonical;
+  const steps: StepOutcome[] = [];
+  try {
+    const result = ports.remove({ local: false });
+    if (!result.success) {
+      steps.push({
+        step: "server",
+        ok: false,
+        detail: `could not remove "${SERVER_NAME}": ${result.error ?? result.path}`,
+      });
+    } else {
+      steps.push({
+        step: "server",
+        ok: true,
+        detail: result.removed
+          ? `removed "${SERVER_NAME}" from ${result.path}`
+          : `"${SERVER_NAME}" was not registered in ${result.path}`,
+      });
+    }
+  } catch (error) {
+    steps.push({
+      step: "server",
+      ok: false,
+      detail: `could not remove "${SERVER_NAME}": ${messageOf(error)}`,
+    });
+  }
+
+  try {
+    const approval = ports.removeAutoApproval();
+    if (!approval.ok) {
+      steps.push({
+        step: "approval",
+        ok: false,
+        detail: `could not remove "${AUTO_APPROVAL_RULE}" from ${approval.path}: ${approval.error ?? "unknown error"}`,
+      });
+    } else {
+      steps.push({
+        step: "approval",
+        ok: true,
+        detail: approval.removed
+          ? `removed "${AUTO_APPROVAL_RULE}" from ${approval.path}`
+          : `no "${AUTO_APPROVAL_RULE}" rule in ${approval.path}`,
+      });
+    }
+  } catch (error) {
+    steps.push({
+      step: "approval",
+      ok: false,
+      detail: `could not remove "${AUTO_APPROVAL_RULE}": ${messageOf(error)}`,
+    });
+  }
+
+  try {
+    const run = await ports.runSkills(skillRemoveArgs());
+    if (run.code !== 0) {
+      steps.push({
+        step: "skill",
+        ok: false,
+        detail: `could not remove the skill: ${describeExit(run)}`,
+      });
+    } else {
+      const leftover = installedSkillPath(ports);
+      if (leftover !== undefined) {
+        steps.push({
+          step: "skill",
+          ok: false,
+          detail: `the skills CLI succeeded but ${leftover} is still present`,
+        });
+      } else {
+        steps.push({ step: "skill", ok: true, detail: `removed ${skillPath}` });
+      }
+    }
+  } catch (error) {
+    steps.push({
+      step: "skill",
+      ok: false,
+      detail: `could not remove the skill: ${messageOf(error)}`,
+    });
+  }
+
+  return {
+    ok: steps.every((step) => step.ok),
+    steps,
+    skillPath,
+  };
+}
+
+/** Reads the three states the user needs; every port here is read-only. */
+export async function status(ports: InstallPorts): Promise<StatusReport> {
+  let host: HostProbe;
+  try {
+    host = await ports.probeHost();
+  } catch (error) {
+    host = { reachable: false, error: messageOf(error) };
+  }
+
+  let server: StatusReport["server"];
+  try {
+    const present = await ports.isServerInstalled();
+    server = {
+      present,
+      detail: present
+        ? `"${SERVER_NAME}" is registered for ${AGENT_TYPE}`
+        : `"${SERVER_NAME}" is not registered for ${AGENT_TYPE}`,
+    };
+  } catch (error) {
+    server = {
+      present: false,
+      detail: `the agent config could not be read: ${messageOf(error)}`,
+    };
+  }
+
+  const found = installedSkillPath(ports);
+  return {
+    host,
+    server,
+    skill: {
+      present: found !== undefined,
+      path: found ?? skillFilePath(ports.home),
+    },
+  };
+}
+
+/** The `skills` package's CLI, resolved beside the installed dependencies. */
+function skillsCliPath(): string {
+  const require = createRequire(import.meta.url);
+  return join(
+    dirname(require.resolve("skills/package.json")),
+    "bin",
+    "cli.mjs",
+  );
+}
+
+/** Runs the CLI with telemetry off and its output on this process's streams. */
+function runSkillsCli(
+  args: readonly string[],
+): Promise<{ readonly code: number | null; readonly error?: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [skillsCliPath(), ...args], {
+      env: { ...process.env, DISABLE_TELEMETRY: "1" },
+      stdio: "inherit",
+    });
+    child.once("error", (error) =>
+      resolve({ code: null, error: error.message }),
+    );
+    child.once("close", (code) => resolve({ code }));
+  });
+}
+
+/** Reads the agent config through add-mcp's own reader, never a hand-rolled one. */
+async function serverIsInstalled(): Promise<boolean> {
+  const listings = await listInstalledServers({
+    global: true,
+    agents: [AGENT_TYPE],
+  });
+  return listings.some((listing) =>
+    listing.servers.some((server) => server.serverName === SERVER_NAME),
+  );
+}
+
+export interface CreateIntegrationPortsOptions {
+  readonly home?: string;
+  readonly skillSourceDir?: string;
+  readonly serverEntry?: string;
+  /** `status` has to know whether a host answers; the CLI supplies this. */
+  readonly probeHost: () => Promise<HostProbe>;
+}
+
+/** Production ports: the real home, the real CLI and the real agent config. */
+export function createPorts(
+  options: CreateIntegrationPortsOptions,
+): InstallPorts {
+  const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
+  const home = options.home ?? homedir();
+  return {
+    home,
+    skillSourceDir:
+      options.skillSourceDir ??
+      join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
+    serverEntry:
+      options.serverEntry ?? join(packageDir, "bin", "yunari-mcp.js"),
+    runSkills: runSkillsCli,
+    upsert: (config, upsertOptions) =>
+      upsertServer(AGENT_TYPE, SERVER_NAME, config, upsertOptions),
+    remove: (removeOptions) =>
+      removeServer(AGENT_TYPE, SERVER_NAME, removeOptions),
+    removeAutoApproval: () => removeAutoApprovalRule(home),
+    isServerInstalled: serverIsInstalled,
+    fileExists: existsSync,
+    probeHost: options.probeHost,
+  };
+}
