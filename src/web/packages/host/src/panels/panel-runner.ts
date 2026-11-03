@@ -69,6 +69,19 @@ export const DEFAULT_PANEL_INTERVAL_MS = 1_000;
  * owner sees the panel come back soon after the manager's retry pass.
  */
 const FAILURES_BEFORE_LOST = 3;
+/**
+ * Attempts at the device's video mode before the panel is a still panel.
+ *
+ * A save of the assigned theme restarts the runner and publishes a revision
+ * the page follows with a navigation. That race can hand one capture an opaque
+ * frame, or make one clip start fail on a busy device, and the first version
+ * of this runner treated that single refusal as "this panel has no video
+ * mode" — the panel then stayed on 1 fps stills until it was reassigned
+ * (2026-11-03). Three attempts span the navigation and are still bounded, so a
+ * clip the device really will not play costs three uploads, not an endless
+ * one.
+ */
+const VIDEO_ATTEMPTS_BEFORE_STILLS = 3;
 
 export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   const intervalMs = options.intervalMs ?? DEFAULT_PANEL_INTERVAL_MS;
@@ -86,6 +99,10 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
   let source = options.video;
   /** The device is playing the clip, so stop releases it. */
   let playing = false;
+  /** Consecutive failed clip starts, retried until the mode is given up on. */
+  let startFailures = 0;
+  /** Consecutive overlay refusals, retried the same way. */
+  let overlayFailures = 0;
   /** Set once the clip was stopped, so a retried stop does not ask twice. */
   let clipStopped = false;
   /** The overlay path still works; a refused overlay drops the panel to stills. */
@@ -166,6 +183,13 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     useOverlay: boolean,
     present: (frame: Uint8Array) => Promise<void>,
     presentFailed?: () => void,
+    /**
+     * False for an overlay the device refused. A refusal is an answer from a
+     * live device, not evidence its port is gone, so it must not count toward
+     * `onLost`; the still path that follows a refused overlay is where a lost
+     * port is detected.
+     */
+    countsAsDeviceFailure = true,
   ): Promise<boolean> => {
     let frame: Uint8Array;
 
@@ -186,7 +210,11 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     } catch (error) {
       // A send that failed did not put these pixels on the panel, so the last
       // frame is not this one: keeping it would suppress the retry.
-      failed(error);
+      if (countsAsDeviceFailure) {
+        failed(error);
+      } else {
+        report(exactly(error));
+      }
       presentFailed?.();
       return false;
     }
@@ -205,27 +233,32 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
         await video.start(source.bytes, source.placement, source.rotation);
         playing = true;
         overlay = true;
+        source = undefined;
       } catch (error) {
-        // A clip this device will not play is a mode it does not have: the
-        // panel falls back to stills for the rest of its life rather than
-        // retrying an upload that already failed.
         report(exactly(error));
+        startFailures += 1;
+        // **A start is retried before it is believed.** The refusal can be the
+        // page navigation the save just triggered; only a device that refuses
+        // every attempt is a panel with no video mode.
+        if (startFailures >= VIDEO_ATTEMPTS_BEFORE_STILLS) source = undefined;
       }
-
-      // Started or refused, the upload is not repeated.
-      source = undefined;
     }
 
     if (overlay && video !== undefined) {
       return await send(
         true,
-        (frame) => video.presentOverlay(frame),
+        async (frame) => {
+          await video.presentOverlay(frame);
+          overlayFailures = 0;
+        },
         () => {
-          // An overlay the device will not take is a video mode it cannot
+          overlayFailures += 1;
+          // An overlay the device keeps refusing is a video mode it cannot
           // compose. Stills are the honest fallback, and the clip keeps playing
           // underneath until stop releases it.
-          overlay = false;
+          if (overlayFailures >= VIDEO_ATTEMPTS_BEFORE_STILLS) overlay = false;
         },
+        false,
       );
     }
 
@@ -283,14 +316,38 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
 
         // The clip belongs to the device once started, so it is stopped with
         // it rather than left playing behind a port the next runner wants.
+        //
+        // **Every release is attempted.** A stop that returned at the first
+        // failure — a clip the disconnected device refuses, a page target
+        // already gone — left the port open, and the host then read its own
+        // stale handle as another program holding it: the panel could not
+        // reconnect until the process exited (2026-11-03). The first failure
+        // is still the answer, so the caller hears it.
+        let failure: unknown;
+
         if (playing && !clipStopped) {
-          await options.device.video?.stop();
-          clipStopped = true;
+          try {
+            await options.device.video?.stop();
+            clipStopped = true;
+          } catch (error) {
+            failure = error;
+          }
         }
 
-        await options.rasterizer.close();
-        await options.device.close();
-        closed = true;
+        try {
+          await options.rasterizer.close();
+        } catch (error) {
+          failure ??= error;
+        }
+
+        try {
+          await options.device.close();
+          closed = true;
+        } catch (error) {
+          failure ??= error;
+        }
+
+        if (failure !== undefined) throw failure;
       })().finally(() => {
         if (stopping === attempt) stopping = undefined;
       });

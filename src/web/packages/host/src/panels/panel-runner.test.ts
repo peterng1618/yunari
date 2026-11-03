@@ -301,22 +301,53 @@ describe("createPanelRunner", () => {
     expect(stopVideo).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to still frames when the video will not start, once", async () => {
-    const onError = vi.fn();
+  it("retries a clip that failed to start before giving up on it", async () => {
+    const presentOverlay = vi.fn(async () => {});
     const present = vi.fn(async () => {});
+    let attempts = 0;
+    const start = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("the page was navigating");
+    });
     let frame = 0;
     const device: PanelDevice = {
       geometry: { width: 4, height: 4 },
       open: async () => {},
       present,
       close: async () => {},
-      video: {
-        start: async () => {
-          throw new Error("no");
-        },
-        presentOverlay: async () => {},
-        stop: async () => {},
-      },
+      video: { start, presentOverlay, stop: async () => {} },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of((frame += 1))),
+      captureOverlay: vi.fn(async () => Uint8Array.of(9, (frame += 1))),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    // The first refusal shows a still; the next tick retries the clip and
+    // recovers, which is what a save's page navigation requires.
+    await runner.tick();
+    await runner.tick();
+    await runner.tick();
+
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(present).toHaveBeenCalledTimes(1);
+    expect(presentOverlay).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a clip the device keeps refusing", async () => {
+    const onError = vi.fn();
+    const present = vi.fn(async () => {});
+    const start = vi.fn(async () => {
+      throw new Error("no");
+    });
+    let frame = 0;
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: { start, presentOverlay: async () => {}, stop: async () => {} },
     };
     const rasterizer: Rasterizer = {
       capture: vi.fn(async () => Uint8Array.of((frame += 1))),
@@ -330,13 +361,13 @@ describe("createPanelRunner", () => {
       video: SOURCE,
       onError,
     });
-    await runner.tick();
-    await runner.tick();
+    for (let tick = 0; tick < 5; tick += 1) await runner.tick();
 
-    // The retry is the point: a refused clip is reported once, then the panel
-    // shows stills rather than spinning on an upload that already failed.
-    expect(present).toHaveBeenCalledTimes(2);
-    expect(onError).toHaveBeenCalledTimes(1);
+    // A retried upload that never lands stops being retried: stills are the
+    // honest mode, and the attempts are what the log shows.
+    expect(start).toHaveBeenCalledTimes(3);
+    expect(onError).toHaveBeenCalledTimes(3);
+    expect(present).toHaveBeenCalledTimes(5);
   });
 
   it("keeps the still path when no video source is given", async () => {
@@ -486,13 +517,49 @@ describe("createPanelRunner", () => {
     expect(order).toEqual(["start", "overlay", "stop", "close"]);
   });
 
-  it("falls back to stills when the overlay is refused after the clip started", async () => {
-    const errors: string[] = [];
-    const present = vi.fn(async () => {});
+  it("retries an overlay the device refused once", async () => {
     let overlayCalls = 0;
     const presentOverlay = vi.fn(async () => {
       overlayCalls += 1;
-      if (overlayCalls === 3) throw new Error("overlay refused");
+      if (overlayCalls === 1) throw new Error("overlay refused");
+    });
+    const present = vi.fn(async () => {});
+    let overlayFrame = 0;
+    let stillFrame = 0;
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present,
+      close: async () => {},
+      video: {
+        start: async () => {},
+        presentOverlay,
+        stop: async () => {},
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(10, (stillFrame += 1))),
+      captureOverlay: vi.fn(async () => Uint8Array.of(1, (overlayFrame += 1))),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    await runner.tick();
+    await runner.tick();
+    await runner.tick();
+
+    // A save's page reload can hand one capture an opaque frame the device
+    // refuses; the next tick must offer the UI again rather than stick on
+    // stills until the panel is reassigned.
+    expect(presentOverlay).toHaveBeenCalledTimes(3);
+    expect(present).not.toHaveBeenCalled();
+  });
+
+  it("falls back to stills once the overlay is refused repeatedly", async () => {
+    const errors: string[] = [];
+    const present = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => {
+      throw new Error("overlay refused");
     });
     const start = vi.fn(async () => {});
     let overlayFrame = 0;
@@ -521,10 +588,71 @@ describe("createPanelRunner", () => {
     await expect(runner.tick()).resolves.toBe(false);
     await expect(runner.tick()).resolves.toBe(true);
 
-    // Refused once, then stills for the rest of the runner's life.
+    // A refusal that keeps happening is a mode the panel does not have:
+    // attempted a bounded number of times, then stills for the rest of its life.
     expect(presentOverlay).toHaveBeenCalledTimes(3);
     expect(present).toHaveBeenCalledTimes(1);
-    expect(errors).toEqual(["overlay refused"]);
+    expect(errors).toEqual([
+      "overlay refused",
+      "overlay refused",
+      "overlay refused",
+    ]);
     expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the rasteriser and the device when the clip's stop fails", async () => {
+    const close = vi.fn(async () => {});
+    const deviceClose = vi.fn(async () => {});
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: deviceClose,
+      video: {
+        start: async () => {},
+        presentOverlay: async () => {},
+        // A disconnected panel refuses this write; the port is still open and
+        // must be released before anything can open it again.
+        stop: async () => {
+          throw new Error("The serial port is closed.");
+        },
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close,
+    };
+
+    const runner = createPanelRunner({ device, rasterizer, video: SOURCE });
+    await runner.tick();
+    await expect(runner.stop()).rejects.toThrow("The serial port is closed.");
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(deviceClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the device when the rasteriser will not close", async () => {
+    const deviceClose = vi.fn(async () => {});
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: deviceClose,
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {
+        throw new Error("the page is gone");
+      },
+    };
+
+    const runner = createPanelRunner({ device, rasterizer });
+    await runner.tick();
+    await expect(runner.stop()).rejects.toThrow("the page is gone");
+
+    // A page that cannot close is not a reason to keep the port.
+    expect(deviceClose).toHaveBeenCalledTimes(1);
   });
 });
