@@ -15,11 +15,13 @@ import {
   AGENT_TYPE,
   AUTO_APPROVAL_RULE,
   claudeSettingsPath,
+  compareSkill,
   createPorts,
   type InstallPorts,
   install,
   removeAutoApprovalRule,
   resolveInterpreter,
+  resolveSkillSourceDir,
   SKILL_AGENT,
   SKILL_NAME,
   serverEntryFor,
@@ -64,6 +66,10 @@ interface Behaviour {
   readonly approvalFails?: boolean;
   readonly serverInstalled?: boolean;
   readonly serverEntryMissing?: boolean;
+  readonly serverEntryRecorded?: {
+    readonly command?: string;
+    readonly args: readonly string[];
+  };
 }
 
 /**
@@ -101,6 +107,7 @@ function fakePorts(
     skillSourceDir: join(home, "repo-skills", "yunari-theme-designer"),
     serverEntry,
     interpreter: process.execPath,
+    bundledSkillDir: join(home, "bundled-skills", SKILL_NAME),
     runSkills: async (args) => {
       calls.skills.push([...args]);
       if (args[0] === "add" && behaviour.skillLocation !== "none") {
@@ -156,10 +163,16 @@ function fakePorts(
       calls.checks += 1;
       return behaviour.serverInstalled ?? true;
     },
-    fileExists: (path) =>
-      path === serverEntry
-        ? behaviour.serverEntryMissing !== true
-        : presentAt !== undefined && path === presentAt,
+    installedServer: async () =>
+      behaviour.serverEntryRecorded ??
+      (behaviour.serverInstalled === false
+        ? undefined
+        : { command: process.execPath, args: [serverEntry, "serve"] }),
+    fileExists: (path) => {
+      if (path === process.execPath) return true;
+      if (path === serverEntry) return behaviour.serverEntryMissing !== true;
+      return presentAt !== undefined && path === presentAt;
+    },
     probeHost: async () => {
       calls.probes += 1;
       return { reachable: true, url: "http://127.0.0.1:5227" };
@@ -387,7 +400,11 @@ describe("status", () => {
     expect(calls.checks).toBe(1);
     expect(report.host.reachable).toBe(true);
     expect(report.server.present).toBe(true);
-    expect(report.skill).toEqual({ present: false, path: skillPath });
+    expect(report.skill).toEqual({
+      present: false,
+      path: skillPath,
+      state: "not-installed",
+    });
   });
 
   it("reports the skill present at the canonical path", async () => {
@@ -397,6 +414,21 @@ describe("status", () => {
     await expect(status(ports)).resolves.toMatchObject({
       skill: { present: true, path: skillFilePath(home) },
     });
+  });
+
+  it("reports an entry whose interpreter vanished as absent with a repair", async () => {
+    const home = temporaryHome();
+    const { ports } = fakePorts(home, {
+      serverEntryRecorded: {
+        command: join(home, "gone", "node.exe"),
+        args: [join(home, "pkg", "bin", "yunari-mcp.js"), "serve"],
+      },
+    });
+
+    const report = await status(ports);
+
+    expect(report.server.present).toBe(false);
+    expect(report.server.detail).toContain("re-run install");
   });
 });
 
@@ -445,8 +477,7 @@ describe("createPorts", () => {
     });
   });
 
-  it("honours an injected home without resolving the real one", () => {
-    const home = temporaryHome();
+  it("honours an injected home without resolving the real one", () => {    const home = temporaryHome();
     const ports = createPorts({
       home,
       probeHost: async () => ({ reachable: false }),
@@ -457,6 +488,34 @@ describe("createPorts", () => {
       join(home, ".agents", "skills", "yunari-theme-designer", "SKILL.md"),
     );
     expect(AGENT_TYPE).toBe("claude-code");
+  });
+});
+
+describe("skill source and drift", () => {
+  it("prefers the package-local skill and falls back to the checkout", () => {
+    const packageDir = join(tmpdir(), "yunari-pkg");
+    const bundled = join(packageDir, "skills", SKILL_NAME);
+    expect(resolveSkillSourceDir(packageDir, (path) => path === bundled)).toBe(
+      bundled,
+    );
+    expect(resolveSkillSourceDir(packageDir, () => false)).toBe(
+      join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
+    );
+  });
+
+  it("reports a drifted skill when a reference differs", () => {
+    const bundled = mkdtempSync(join(tmpdir(), "yunari-skill-bundled-"));
+    const installed = mkdtempSync(join(tmpdir(), "yunari-skill-installed-"));
+    homes.push(bundled, installed);
+    for (const dir of [bundled, installed]) {
+      mkdirSync(join(dir, "references"));
+      writeFileSync(join(dir, "SKILL.md"), "a");
+      writeFileSync(join(dir, "references", "design-rules.md"), "b");
+    }
+    expect(compareSkill(installed, bundled)).toBe("current");
+    writeFileSync(join(installed, "references", "design-rules.md"), "changed");
+    expect(compareSkill(installed, bundled)).toBe("drifted");
+    expect(compareSkill(undefined, bundled)).toBe("not-installed");
   });
 });
 

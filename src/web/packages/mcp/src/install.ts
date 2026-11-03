@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import {
   existsSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
@@ -60,6 +61,8 @@ export interface InstallPorts {
    * directory disappears with that shell.
    */
   readonly interpreter: string;
+  /** The skill folder inside this package, when it is packaged. */
+  readonly bundledSkillDir: string;
   /** Runs the `skills` CLI and resolves its exit code. */
   readonly runSkills: (
     args: readonly string[],
@@ -71,6 +74,12 @@ export interface InstallPorts {
   readonly remove: (options: { readonly local: boolean }) => RemoveServerResult;
   readonly removeAutoApproval: () => AutoApprovalRemoval;
   readonly isServerInstalled: () => Promise<boolean>;
+  /** The entry the agent config holds, or undefined when it is not registered. */
+  readonly installedServer: (
+    agents: readonly string[],
+  ) => Promise<
+    { readonly command?: string; readonly args: readonly string[] } | undefined
+  >;
   readonly fileExists: (path: string) => boolean;
   readonly probeHost: () => Promise<HostProbe>;
 }
@@ -108,12 +117,72 @@ export interface InstallReport {
 export interface StatusReport {
   readonly host: HostProbe;
   readonly server: { readonly present: boolean; readonly detail: string };
-  readonly skill: { readonly present: boolean; readonly path: string };
+  readonly skill: {
+    readonly present: boolean;
+    readonly path: string;
+    readonly state: SkillState;
+  };
 }
+
+/** Whether the installed skill still matches the copy the package ships. */
+export type SkillState = "current" | "drifted" | "not-installed";
 
 /** The canonical installed path named in the design. */
 export function skillFilePath(home: string): string {
   return join(home, ".agents", "skills", SKILL_NAME, "SKILL.md");
+}
+
+/**
+ * The skill this package ships. A staged package carries its own copy, so an
+ * installed package never reads the checkout it was built from; a repository
+ * run still finds the root `skills/` folder.
+ */
+export function resolveSkillSourceDir(
+  packageDir: string,
+  exists: (path: string) => boolean = existsSync,
+): string {
+  const bundled = join(packageDir, "skills", SKILL_NAME);
+  return exists(bundled)
+    ? bundled
+    : join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME);
+}
+
+/** Every file below `dir`, as relative POSIX paths. */
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      join(entry.parentPath, entry.name).slice(dir.length + 1).replaceAll("\\", "/"),
+    )
+    .sort();
+}
+
+/**
+ * Compares the installed skill with the packaged copy by relative path and
+ * bytes. An unreadable packaged copy is reported as drift, never as current.
+ */
+export function compareSkill(
+  installedDir: string | undefined,
+  bundledDir: string,
+): SkillState {
+  if (installedDir === undefined) return "not-installed";
+  try {
+    const expected = filesUnder(bundledDir);
+    const actual = filesUnder(installedDir);
+    if (expected.length !== actual.length) return "drifted";
+    for (const file of expected) {
+      if (
+        !readFileSync(join(bundledDir, file)).equals(
+          readFileSync(join(installedDir, file)),
+        )
+      ) {
+        return "drifted";
+      }
+    }
+    return "current";
+  } catch {
+    return "drifted";
+  }
 }
 
 /** The settings file `add-mcp` writes its auto-approval rule into. */
@@ -434,12 +503,28 @@ export async function status(ports: InstallPorts): Promise<StatusReport> {
   let server: StatusReport["server"];
   try {
     const present = await ports.isServerInstalled();
-    server = {
-      present,
-      detail: present
-        ? `"${SERVER_NAME}" is registered for ${AGENT_TYPE}`
-        : `"${SERVER_NAME}" is not registered for ${AGENT_TYPE}`,
-    };
+    if (!present) {
+      server = {
+        present: false,
+        detail: `"${SERVER_NAME}" is not registered for ${AGENT_TYPE}`,
+      };
+    } else {
+      const entry = await ports.installedServer([AGENT_TYPE]);
+      const missing = [entry?.command, entry?.args[0]].filter(
+        (path): path is string =>
+          path !== undefined && !ports.fileExists(path),
+      );
+      server =
+        missing.length === 0
+          ? {
+              present: true,
+              detail: `"${SERVER_NAME}" is registered for ${AGENT_TYPE}`,
+            }
+          : {
+              present: false,
+              detail: `"${SERVER_NAME}" is registered, but ${missing.join(" and ")} is missing; re-run install`,
+            };
+    }
   } catch (error) {
     server = {
       present: false,
@@ -454,6 +539,10 @@ export async function status(ports: InstallPorts): Promise<StatusReport> {
     skill: {
       present: found !== undefined,
       path: found ?? skillFilePath(ports.home),
+      state: compareSkill(
+        found === undefined ? undefined : dirname(found),
+        ports.bundledSkillDir,
+      ),
     },
   };
 }
@@ -495,9 +584,38 @@ async function serverIsInstalled(): Promise<boolean> {
   );
 }
 
+/** The registered entry's `command` and `args`, as add-mcp read them back. */
+async function installedServerEntry(
+  agents: readonly string[],
+): Promise<
+  { readonly command?: string; readonly args: readonly string[] } | undefined
+> {
+  const listings = await listInstalledServers({
+    global: true,
+    agents: agents as never,
+  });
+  for (const listing of listings) {
+    for (const server of listing.servers) {
+      if (server.serverName !== SERVER_NAME) continue;
+      const config = server.config as { command?: unknown; args?: unknown };
+      return {
+        ...(typeof config.command === "string"
+          ? { command: config.command }
+          : {}),
+        args: Array.isArray(config.args)
+          ? config.args.filter((arg): arg is string => typeof arg === "string")
+          : [],
+      };
+    }
+  }
+  return undefined;
+}
+
 export interface CreateIntegrationPortsOptions {
   readonly home?: string;
   readonly skillSourceDir?: string;
+  /** The copy `status` compares against; defaults to the package's own skill. */
+  readonly bundledSkillDir?: string;
   readonly serverEntry?: string;
   /** Defaults to `resolveInterpreter(process.execPath)`. */
   readonly interpreter?: string;
@@ -514,8 +632,9 @@ export function createPorts(
   return {
     home,
     skillSourceDir:
-      options.skillSourceDir ??
-      join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
+      options.skillSourceDir ?? resolveSkillSourceDir(packageDir),
+    bundledSkillDir:
+      options.bundledSkillDir ?? resolveSkillSourceDir(packageDir),
     serverEntry:
       options.serverEntry ?? join(packageDir, "bin", "yunari-mcp.js"),
     interpreter:
@@ -527,6 +646,7 @@ export function createPorts(
       removeServer(AGENT_TYPE, SERVER_NAME, removeOptions),
     removeAutoApproval: () => removeAutoApprovalRule(home),
     isServerInstalled: serverIsInstalled,
+    installedServer: installedServerEntry,
     fileExists: existsSync,
     probeHost: options.probeHost,
   };
