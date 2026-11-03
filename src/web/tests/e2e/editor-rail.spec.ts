@@ -3320,37 +3320,40 @@ test("the store opens a library theme as the document, from the cell and its foo
   ).toHaveCount(3);
 
   // ── The cards pack as justified rows, at each theme's own ratio ────────────
-  // **A row is scaled as a whole.** Its cards and 12px gutters together meet
-  // the pane's right edge, and every card in it shares one picture height. Each
-  // card's width is that height times its own ratio, so the 32:9 theme takes a
-  // wide card rather than a thin strip, and the two 16:9 themes beside it are
-  // their own widths, not one track each.
+  // **A row is one grid of ratio-weighted tracks.** The tracks fill the pane's
+  // width, so every full row meets both edges and every card in it shares one
+  // picture height; the 32:9 theme takes a wide track rather than a thin strip.
+  // A final row the packing kept at the target height carries its own maximum
+  // width and stops short on the right.
   const gallery = region.locator("[data-yunari-store-gallery]");
   await expect(gallery, "the store draws no gallery").toHaveCount(1);
   const pack = await gallery.evaluate((node) => {
     const style = getComputedStyle(node);
-    const cells = Array.from(
-      node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
-      (cell) => {
-        const rect = cell.getBoundingClientRect();
-        const picture = cell.querySelector("[data-yunari-store-picture]");
-        return {
-          id: cell.getAttribute("data-yunari-store-cell"),
-          width: rect.width,
-          right: rect.right,
-          top: Math.round(rect.top),
-          pictureHeight: picture?.getBoundingClientRect().height ?? 0,
-        };
-      },
-    );
     return {
       display: style.display,
-      wrap: style.flexWrap,
-      gap: Number.parseFloat(style.columnGap),
       rowGap: Number.parseFloat(style.rowGap),
       width: node.clientWidth,
       left: node.getBoundingClientRect().left,
-      cells,
+      rows: Array.from(
+        node.querySelectorAll<HTMLElement>("[data-yunari-store-row]"),
+        (row) => ({
+          tracks: row.style.gridTemplateColumns.split(" ").length,
+          gap: Number.parseFloat(getComputedStyle(row).columnGap),
+          maxWidth: row.style.maxWidth,
+          right: row.getBoundingClientRect().right,
+          cells: Array.from(
+            row.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+            (cell) => ({
+              id: cell.getAttribute("data-yunari-store-cell"),
+              width: cell.getBoundingClientRect().width,
+              pictureHeight:
+                cell
+                  .querySelector("[data-yunari-store-picture]")
+                  ?.getBoundingClientRect().height ?? 0,
+            }),
+          ),
+        }),
+      ),
     };
   });
   const packReading = `store gallery ${JSON.stringify(pack)}`;
@@ -3359,44 +3362,42 @@ test("the store opens a library theme as the document, from the cell and its foo
     type: "store-gallery",
     description: packReading,
   });
-  expect(pack.display, `the gallery is not a flex row (${packReading})`).toBe(
-    "flex",
-  );
-  expect(pack.wrap, `the gallery does not wrap its rows (${packReading})`).toBe(
-    "wrap",
-  );
-  expect(pack.gap, `the gallery's gutter is not 12px (${packReading})`).toBe(
-    12,
-  );
+  expect(
+    pack.display,
+    `the gallery is not a column of rows (${packReading})`,
+  ).toBe("flex");
   expect(
     pack.rowGap,
     `the gallery's row gap is not 12px (${packReading})`,
   ).toBe(12);
-  const rows = new Map<number, typeof pack.cells>();
-  for (const cell of pack.cells) {
-    rows.set(cell.top, [...(rows.get(cell.top) ?? []), cell]);
-  }
-  const laidOut = [...rows.values()];
   expect(
-    laidOut.length,
+    pack.rows.length,
     `the cards drew one row (${packReading})`,
   ).toBeGreaterThan(1);
-  // Every row but the last is full, and "full" means flush with both edges. The
-  // tail is the one row allowed to stop short on the right.
-  for (const row of laidOut.slice(0, -1)) {
-    const last = row[row.length - 1];
+  for (const row of pack.rows) {
     expect(
-      Math.round((last?.right ?? 0) - pack.left),
-      `a full row does not meet the pane's right edge (${packReading})`,
-    ).toBe(pack.width);
-    for (const cell of row) {
+      row.tracks,
+      `a row does not hold one track per card (${packReading})`,
+    ).toBe(row.cells.length);
+    expect(row.gap, `a row's gutter is not 12px (${packReading})`).toBe(12);
+    // A full row fills the pane; the short tail is the one row allowed to stop
+    // before the right edge.
+    if (row.maxWidth === "") {
+      expect(
+        Math.round(row.right - pack.left),
+        `a full row does not meet the pane's right edge (${packReading})`,
+      ).toBe(pack.width);
+    }
+    for (const cell of row.cells) {
       expect(
         Math.round(cell.pictureHeight),
         `${cell.id}'s picture is not the row's height (${packReading})`,
-      ).toBe(Math.round(row[0]?.pictureHeight ?? 0));
+      ).toBe(Math.round(row.cells[0]?.pictureHeight ?? 0));
     }
   }
-  const wideCard = pack.cells.find((cell) => cell.id === "store-wide");
+  const wideCard = pack.rows
+    .flatMap((row) => row.cells)
+    .find((cell) => cell.id === "store-wide");
   expect(
     wideCard?.width ?? 0,
     `the 32:9 theme is not a wide card (${packReading})`,

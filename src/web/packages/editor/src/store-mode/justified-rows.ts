@@ -22,6 +22,10 @@ export interface GalleryRow<T> {
   readonly items: readonly GalleryRowItem<T>[];
   /** The picture height every card in the row shares. */
   readonly height: number;
+  /** Whether the row keeps the target height and stops short of the container
+   *  rather than being scaled to fill it. Only a final row whose cards fit at
+   *  the target can be short. */
+  readonly short: boolean;
 }
 
 export interface JustifiedRowsInput<T> {
@@ -63,6 +67,7 @@ export function justifiedRows<T>(
         },
       ],
       height: target,
+      short: true,
     }));
   }
 
@@ -126,6 +131,7 @@ export function justifiedRows<T>(
         width: cardWidth,
       })),
       height: rawHeight,
+      short: ragged,
     });
     index += count;
   }

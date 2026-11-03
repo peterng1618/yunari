@@ -113,7 +113,7 @@ export function Gallery(props: {
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
   useLayoutEffect(() => {
@@ -121,10 +121,19 @@ export function Gallery(props: {
     if (node === null) return undefined;
     const measure = (): void => setWidth(node.clientWidth);
     measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
+    // The window listener is the fallback for a resize the observer does not
+    // report: a stale width would leave the rows at the size of a pane that no
+    // longer exists, and the cards would wrap out of their own row.
+    window.addEventListener("resize", measure);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", measure);
+    }
     const observer = new ResizeObserver(measure);
     observer.observe(node);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   const columns = columnsForWidth(width, props.density);
@@ -144,26 +153,49 @@ export function Gallery(props: {
   });
 
   return (
-    <ul
+    <div
       ref={listRef}
+      role="list"
       data-yunari-store-gallery=""
-      className="flex flex-wrap items-start gap-[var(--space-12)]"
+      className="flex flex-col gap-[var(--space-12)]"
     >
-      {rows.flatMap((row) =>
-        row.items.map(({ item, width: cardWidth }) => (
-          <Cell
-            key={item.id}
-            item={item}
-            width={cardWidth}
-            pictureHeight={row.height}
-            onAction={props.onAction}
-            onOpenItem={props.onOpenItem}
-            install={props.install}
-            submit={props.submit}
-          />
-        )),
-      )}
-    </ul>
+      {/* **A row is a container, and its columns are ratios.** Each card takes
+          a track proportional to its own ratio, so the tracks fill the row and
+          every card's picture lands on the same height — the browser justifies
+          the row without a width read, and a resize cannot leave the cards
+          wrapping out of the row the packing gave them. A row the packing kept
+          at the target height carries its own width and stops short. */}
+      {rows.map((row) => {
+        const shortWidth =
+          row.items.reduce((sum, card) => sum + card.width, 0) +
+          GALLERY_GAP * (row.items.length - 1);
+        return (
+          <div
+            key={row.items[0]?.item.id ?? row.height}
+            data-yunari-store-row=""
+            className="grid gap-[var(--space-12)]"
+            style={{
+              gridTemplateColumns: row.items
+                .map(({ item }) => `${ratioOf(item)}fr`)
+                .join(" "),
+              ...(row.short ? { maxWidth: shortWidth } : {}),
+            }}
+          >
+            {row.items.map(({ item }) => (
+              <Cell
+                key={item.id}
+                item={item}
+                ratio={ratioOf(item)}
+                onAction={props.onAction}
+                onOpenItem={props.onOpenItem}
+                install={props.install}
+                submit={props.submit}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -184,10 +216,9 @@ export function Gallery(props: {
  */
 function Cell(props: {
   readonly item: StoreItem;
-  /** The row's width for this card, in pixels. */
-  readonly width: number;
-  /** The row's picture height, shared by every card in it. */
-  readonly pictureHeight: number;
+  /** The theme's own width/height, which is the card's track weight and its
+   *  picture's shape. */
+  readonly ratio: number;
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
@@ -225,10 +256,10 @@ function Cell(props: {
     ) : null;
 
   return (
-    <li
+    <div
+      role="listitem"
       data-yunari-store-cell={item.id}
-      style={{ width: props.width }}
-      className="group relative flex flex-none flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
+      className="group relative flex min-w-0 flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
       {/* **The author is a hover chip, not a line.** The chip sits over the
           picture's top-right corner, appears while the card is attended, and
@@ -250,7 +281,7 @@ function Cell(props: {
         onClick={() => onOpenItem(item.id)}
         className="block w-full"
       >
-        <Picture item={item} height={props.pictureHeight} />
+        <Picture item={item} ratio={props.ratio} />
       </button>
       {/* **The date and the controls share one line.** The date is the resting
           reading; attending the card fades it out and the controls fade in over
@@ -384,7 +415,7 @@ function Cell(props: {
           )}
         </div>
       )}
-    </li>
+    </div>
   );
 }
 
@@ -444,10 +475,10 @@ function InstallAction(props: {
 /**
  * The picture box, and the theme's own ground behind it.
  *
- * **The box's height is the row's, and the row's width is the theme's own
- * ratio** — the two together give the picture exactly the shape it was drawn
- * at, so `object-contain` letterboxes nothing and crops nothing. A row whose
- * width has not been measured yet still reserves the card at its natural size.
+ * **The box's shape is the theme's own ratio, and the row's tracks make the
+ * heights agree** — every card in a row gets a width proportional to its ratio,
+ * so width ÷ ratio is the same for all of them. The picture is contained, so
+ * nothing is cropped and nothing is letterboxed.
  *
  * **A theme with no picture draws its ground, not a broken image.** The host
  * answers `404` at a theme's thumbnail address when it has stored none
@@ -471,7 +502,7 @@ function InstallAction(props: {
  */
 function Picture(props: {
   readonly item: StoreItem;
-  readonly height: number;
+  readonly ratio: number;
 }): React.JSX.Element {
   const { item } = props;
   const picture =
@@ -490,7 +521,7 @@ function Picture(props: {
       aria-hidden
       className="relative block w-full overflow-hidden"
       style={{
-        height: props.height,
+        aspectRatio: props.ratio,
         ...(item.ground === undefined ? {} : { background: item.ground }),
       }}
     >
