@@ -326,9 +326,8 @@ const recoveredSource: SampleSource = {
   history: () => [],
 };
 
-/** A key whose absence only a person can end: no weather place is set, so the
- *  provider has nothing to ask. Unlike a failed reading, this will never clear
- *  on its own. */
+/** A key with no place to read from: a state only a person ends, and still a
+ *  strip that must clear itself like every other one. */
 const unplaceableSource: SampleSource = {
   revision: 0,
   latest: () => ({
@@ -353,14 +352,24 @@ describe("the availability warning's own lifetime", () => {
     vi.useRealTimers();
   });
 
-  it("clears itself three seconds after it is raised", () => {
+  it("clears itself five seconds after it is raised", () => {
     showAvailabilityNotice(gapSource(), GAP_KEYS);
     expect(document.getElementById("yunari-availability")).not.toBeNull();
 
-    vi.advanceTimersByTime(2_999);
+    vi.advanceTimersByTime(4_999);
     expect(document.getElementById("yunari-availability")).not.toBeNull();
 
     vi.advanceTimersByTime(1);
+    expect(document.getElementById("yunari-availability")).toBeNull();
+  });
+
+  it("clears an unavailable reason too, however long the state lasts", () => {
+    // An unplaceable sensor never recovers on its own, and the strip still
+    // leaves: a notice nobody can dismiss outranks the explanation, because a
+    // theme with weather bound stays usable without it.
+    showAvailabilityNotice(unplaceableSource, GAP_KEYS);
+    vi.advanceTimersByTime(5_000);
+
     expect(document.getElementById("yunari-availability")).toBeNull();
   });
 
@@ -371,7 +380,7 @@ describe("the availability warning's own lifetime", () => {
     // `setTimeout` here would have shipped.
     const source = gapSource();
     showAvailabilityNotice(source, GAP_KEYS);
-    vi.advanceTimersByTime(3_000);
+    vi.advanceTimersByTime(5_000);
 
     for (let call = 0; call < 30; call += 1) {
       showAvailabilityNotice(source, GAP_KEYS);
@@ -384,7 +393,7 @@ describe("the availability warning's own lifetime", () => {
 
   it("raises it again when the condition has cleared and returns", () => {
     showAvailabilityNotice(gapSource(), GAP_KEYS);
-    vi.advanceTimersByTime(3_000);
+    vi.advanceTimersByTime(5_000);
     showAvailabilityNotice(recoveredSource, GAP_KEYS);
     showAvailabilityNotice(gapSource(), GAP_KEYS);
 
@@ -400,23 +409,6 @@ describe("the availability warning's own lifetime", () => {
     expect(document.getElementById("yunari-availability")?.style.position).toBe(
       "fixed",
     );
-  });
-
-  it("keeps a reason only a person can clear up until it can answer", () => {
-    // A failed reading may come back by itself, so its strip clears after three
-    // seconds. "No place is set" does not: a viewer who looks at the wall a
-    // minute later still sees weather that reports nothing, and the sentence
-    // that says where to set the place is the only explanation there is.
-    showAvailabilityNotice(unplaceableSource, GAP_KEYS);
-    vi.advanceTimersByTime(60_000);
-
-    expect(
-      document.getElementById("yunari-availability")?.textContent,
-    ).toContain("Set a place in Settings");
-
-    // The one thing that ends it: the condition does.
-    showAvailabilityNotice(recoveredSource, GAP_KEYS);
-    expect(document.getElementById("yunari-availability")).toBeNull();
   });
 
   it("gives no other strip a lifetime: the transport notice is unchanged by this", () => {
