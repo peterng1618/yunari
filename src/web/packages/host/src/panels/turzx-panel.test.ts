@@ -408,6 +408,55 @@ describe("openTurzxPanel", () => {
     }
   });
 
+  it("sends whole upload frames in one write, with the same bytes on the wire", async () => {
+    // A 249-byte write is one drain round trip; a clip is thousands, and that
+    // was the upload's duration. Batching must not change a byte the panel
+    // reads: every frame keeps its own pad, in order.
+    const clip = Uint8Array.from({ length: 1000 }, (_, index) => index % 251);
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored
+      "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing it
+      "play_video_success", // START_VIDEO
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: clip }),
+      sleep: async () => {},
+    });
+
+    try {
+      await panel.video!.start(clip, { offsetX: 0, offsetY: 0 });
+    } finally {
+      await panel.close();
+    }
+
+    const header = fake.writes.findIndex((bytes) => bytes[0] === 0x6f);
+    const startVideo = fake.writes.findIndex((bytes) => bytes[0] === 0x78);
+    const sent = fake.writes.slice(header + 1, startVideo);
+    const frames = Math.ceil(clip.length / 249);
+
+    expect(sent.length, "one write per 249-byte chunk").toBeLessThan(frames);
+    expect(sent.every((bytes) => bytes.length % 250 === 0)).toBe(true);
+
+    const joined = new Uint8Array(
+      sent.reduce((total, bytes) => total + bytes.length, 0),
+    );
+    let at = 0;
+    for (const bytes of sent) {
+      joined.set(bytes, at);
+      at += bytes.length;
+    }
+
+    const expected = new Uint8Array(frames * 250);
+    for (let index = 0; index < frames; index += 1) {
+      expected.set(clip.subarray(index * 249, (index + 1) * 249), index * 250);
+    }
+
+    expect(joined).toEqual(expected);
+  });
+
   it("does not start the clip before the upload reports the file is written", async () => {
     // Observed on hardware: START_VIDEO sent between `create_success` and the
     // transfer's own `file_rev_done` was never answered, and the runner fell
