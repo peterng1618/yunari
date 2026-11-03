@@ -115,6 +115,21 @@ describe("WeatherProvider", () => {
     ).toBe("image");
   });
 
+  it("waits for the first reading when the catalogue asks for one", async () => {
+    // `/api/sensors` composes `describe()` and one `sample()`; a provider that
+    // starts its fetch and returns the empty cache reports every weather key
+    // unmeasured until the next catalogue read. The catalogue's own context
+    // asks for the first answer, which is what makes the sensors visible.
+    const now = Date.now();
+    const provider = host(settingsStore(), fetcherOf().fetcher);
+
+    const entries = await provider.sample(["weather.temp"], now, {
+      awaitFirstReading: true,
+    });
+
+    expect(entries[0]?.sample).toMatchObject({ status: "ok", value: 11.3 });
+  });
+
   it("turns one cached reading into every weather sample", async () => {
     const now = Date.now();
     const { fetcher } = fetcherOf();

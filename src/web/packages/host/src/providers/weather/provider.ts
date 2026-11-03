@@ -141,6 +141,8 @@ export class WeatherProvider implements SensorProvider {
   #lastIdentity: string | undefined;
   #generation = 0;
   #polling = false;
+  /** The acquisition `sample` started, so a catalogue read can await it. */
+  #pending: Promise<void> | undefined;
   #lastDemandMs = Number.NEGATIVE_INFINITY;
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -178,9 +180,21 @@ export class WeatherProvider implements SensorProvider {
 
     if (!this.#running) {
       this.#running = true;
-      void this.#poll();
+      void this.#startPoll();
     } else if (moved) {
       this.#pollNow();
+    }
+
+    // **The catalogue read waits for its first answer.** A display's next poll
+    // sees the cache anyway, but `/api/sensors` asks once: without this a
+    // provider that just started reports every key unmeasured, which reads as
+    // weather with no readings. Bounded by the fetch's own timeout.
+    if (
+      context.awaitFirstReading === true &&
+      this.#lastGood === undefined &&
+      this.#failure === undefined
+    ) {
+      await this.#pending;
     }
 
     // Only the cached reading's text is localized here: the clock above owns
@@ -238,7 +252,20 @@ export class WeatherProvider implements SensorProvider {
 
     // An in-flight poll checks the generation before storing its reading and
     // schedules the next one at zero, so this cannot double-fetch.
-    if (!this.#polling) void this.#poll();
+    if (!this.#polling) void this.#startPoll();
+  }
+
+  /** One acquisition, shared by the clock and a caller awaiting it. */
+  #startPoll(): Promise<void> {
+    if (this.#pending !== undefined) return this.#pending;
+    if (!this.#running) return Promise.resolve();
+
+    const pending = this.#poll();
+    this.#pending = pending;
+    void pending.finally(() => {
+      if (this.#pending === pending) this.#pending = undefined;
+    });
+    return pending;
   }
 
   async #poll(): Promise<void> {
@@ -361,7 +388,7 @@ export class WeatherProvider implements SensorProvider {
 
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
-      void this.#poll();
+      void this.#startPoll();
     }, delayMs);
     // A host whose displays are idle still exits on its own.
     (this.#timer as { unref?: () => void }).unref?.();
