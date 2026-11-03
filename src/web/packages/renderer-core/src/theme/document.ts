@@ -194,10 +194,14 @@ export interface Artboard {
 export const BACKGROUND_MEDIA_BOUNDS = ["theme", "display"] as const;
 export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
 
-/** Refused, never clamped: an offset outside these is an authoring bug, not a
- *  reading to round into range. */
-export const MIN_BACKGROUND_OFFSET = -1;
-export const MAX_BACKGROUND_OFFSET = 1;
+/** The media's pan, as a fraction of the box's own dimensions. Refused, never
+ *  clamped: an offset outside these is an authoring bug, not a reading to round
+ *  into range. The placement scales a cover image enough to make the pan
+ *  reachable, so the bound is a zoom ceiling rather than a crop limit; ±5
+ *  matches the scale range and lets a tall subject be framed inside a short
+ *  clip. */
+export const MIN_BACKGROUND_OFFSET = -5;
+export const MAX_BACKGROUND_OFFSET = 5;
 
 /** The media's zoom over its cover fit, as a fraction: 1 is the cover the
  *  renderer painted before scale existed, 5 is the 500% ceiling an author sees.

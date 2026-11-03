@@ -8,6 +8,7 @@ import {
   type EngineColor,
   normalizePosition,
   resolveFlatColor,
+  toLinearGradient,
 } from "./fill.js";
 import {
   gaugeGap,
@@ -21,9 +22,8 @@ import {
 export { mixHex } from "./fill.js";
 
 /**
- * Gauge adapter. ECharts supports arbitrary sweeps, and gauge track/progress
- * paint accepts arc segments, so a gradient follows the ring rather than a
- * cartesian axis.
+ * Gauge adapter. ECharts supports arbitrary sweeps; the track takes arc
+ * segments, while the continuous progress arc takes a colour or gradient.
  */
 
 type ColorSegment = [number, string];
@@ -47,9 +47,10 @@ export interface GaugeOption {
         show: boolean;
         width: number;
         roundCap: boolean;
-        /** ECharts applies progress colour across the swept arc, so a gradient
-         * is expressed as arc segments exactly like the track. */
-        itemStyle: { color: EngineColor | ColorSegment[] };
+        /** A gradient is an engine gradient object: ECharts accepts
+         * `[proportion, color]` segments only on `axisLine`, and silently draws
+         * no arc when they arrive here. */
+        itemStyle: { color: EngineColor };
       };
       pointer: { show: false };
       axisTick: { show: false };
@@ -320,18 +321,19 @@ export function approximateGradient(
 /**
  * Resolve the progress arc separately from the track.
  *
- * A gradient fill is expressed as arc segments, because ECharts applies gauge
- * `progress` colour across the swept arc: a cartesian `to-right` gradient would
- * not follow it. A threshold fill stays a flat colour per current value, which
- * is what a threshold means for a progress arc.
+ * A gradient is emitted as an engine gradient object: `progress.itemStyle.color`
+ * accepts a colour or gradient, not the `[proportion, color]` segments that
+ * `axisLine.lineStyle.color` takes — an array there paints nothing. A threshold
+ * fill stays a flat colour per current value, which is what a threshold means
+ * for a progress arc.
  */
 function progressItemStyle(
   fill: Fill,
   settings: GaugeSettings,
   value: number,
-): { itemStyle: { color: EngineColor | ColorSegment[] } } {
+): { itemStyle: { color: EngineColor } } {
   if (fill.kind === "gradient") {
-    return { itemStyle: { color: toColorSegments(fill, settings) } };
+    return { itemStyle: { color: toLinearGradient(fill.stops, "to-right") } };
   }
 
   return {

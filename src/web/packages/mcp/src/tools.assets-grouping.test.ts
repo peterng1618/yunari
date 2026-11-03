@@ -142,6 +142,53 @@ describe("asset tools", () => {
     });
   });
 
+  it("previews a video with the row's poster still", async () => {
+    const still = Buffer.from([0xff, 0xd8, 0xff]);
+    let base = "";
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/assets/search") {
+        return {
+          body: {
+            pages: [
+              {
+                source: "pexels",
+                results: [
+                  {
+                    id: "pexels:poster",
+                    name: "Poster clip",
+                    kind: "video",
+                    preview: `${base}/still.jpg`,
+                    licence: "CC0",
+                    sourceUrl: "https://example.test/poster",
+                  },
+                ],
+                totalPages: 1,
+              },
+            ],
+          },
+        };
+      }
+      if (url.pathname === "/still.jpg") {
+        return { headers: { "content-type": "image/jpeg" }, body: still };
+      }
+      return hostHandler()(request);
+    });
+    base = host.url;
+    const ctx = context(host);
+    const found = payload(await searchAssets(ctx, "poster", ["pexels"], 1));
+    const ref = (found.results as { assetRef: string }[])[0]
+      ?.assetRef as string;
+
+    const preview = await previewAsset(ctx, ref);
+    const image = preview.content[1];
+    expect(image?.type).toBe("image");
+    if (image?.type === "image") {
+      expect(image.mimeType).toBe("image/jpeg");
+      expect(image.data).toBe(still.toString("base64"));
+    }
+  });
+
   it("refuses a local import without the user's stated licence", async () => {
     const host = await startHost(hostHandler());
     const ctx = context(host);

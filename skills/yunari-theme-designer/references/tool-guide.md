@@ -112,6 +112,19 @@ A preview saves the draft into the library first, on both paths: a player reads
 a stored theme by id, so an unsaved or edited draft would otherwise show a 404
 or the old version. A failed save returns the validator issues and no preview.
 
+**Wait for live data before judging a browser preview.** The page sets
+`data-yunari-live="true"` on `document.documentElement` once the first sample
+batch has been ingested; before that the readings are placeholders and the
+connection strip is showing. A capture taken before that marker is not evidence
+of a layout defect.
+
+**A chart's history starts when its player loads.** A line or area trace is
+empty at first paint because no samples have accumulated yet — that is the
+absence of data, not a render bug, and it must never be filled with invented
+values. If the design depends on the trace, leave the preview open for about
+30 seconds after the live marker and judge it then; otherwise judge the frame
+and note that the trace was not yet populated.
+
 ## 9. Revise
 
 Read the preview against `references/design-rules.md`: hierarchy, contrast,
