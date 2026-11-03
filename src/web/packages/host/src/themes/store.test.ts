@@ -2771,6 +2771,28 @@ describe("ThemeStore remove", () => {
     ).toContain("thumbnail.png");
   });
 
+  it("keeps a picture the save did not carry", async () => {
+    await store.write("living-room", save("living-room", "Living Room"));
+    await fs.writeFile(
+      path.join(tmpDir, "living-room", "thumbnail.png"),
+      "a picture",
+    );
+
+    await store.write("living-room", save("living-room", "Living Room"), {
+      overwrite: true,
+    });
+
+    // The folder is staged whole and renamed over the old one, so a member the
+    // save did not carry has to be copied forward, or every resave blanks the
+    // library's picture until another capture lands.
+    expect(
+      await fs.readFile(
+        path.join(tmpDir, "living-room", "thumbnail.png"),
+        "utf8",
+      ),
+    ).toBe("a picture");
+  });
+
   it("refuses a folder that is not a theme, and never touches it", async () => {
     // A directory whose name a theme id could claim but which holds no theme:
     // the author left it, or a tool did. The listing does not show it, and a

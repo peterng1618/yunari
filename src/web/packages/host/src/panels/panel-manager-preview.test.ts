@@ -77,6 +77,32 @@ describe("panel manager preview", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  it("renders a theme page at a requested size for a library picture", async () => {
+    const capture = vi.fn(async () => Uint8Array.of(7));
+    const close = vi.fn(async () => {});
+    h.rasterizer = () => ({ capture, captureOverlay: vi.fn(), close });
+
+    const themePageFor = vi.fn(
+      (themeId: string) => `http://127.0.0.1:1/?theme=${themeId}`,
+    );
+    const manager = managerOver({ themePageFor });
+
+    const bytes = await manager.captureTheme?.("night", {
+      width: 640,
+      height: 360,
+    });
+
+    expect(bytes).toEqual(Uint8Array.of(7));
+    expect(themePageFor).toHaveBeenLastCalledWith("night");
+    expect((h.browsers[0] as FakeBrowser).create).toHaveBeenCalledWith({
+      url: "http://127.0.0.1:1/?theme=night",
+      geometry: { width: 640, height: 360 },
+      stillFormat: "png",
+      prepare: expect.any(Function),
+    });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("closes the target when the capture fails", async () => {
     const open = vi.fn(async () => deviceOver());
     const close = vi.fn(async () => {});

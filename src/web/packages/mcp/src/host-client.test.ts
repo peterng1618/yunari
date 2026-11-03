@@ -170,6 +170,8 @@ describe("HttpHostClient", () => {
         return undefined;
       }
       expect(request.headers["content-type"]).toBe("application/json");
+      // No agent-only header: a stored theme with no picture is the host's to
+      // fill, for any client.
       const body = JSON.parse(request.body.toString("utf8")) as {
         envelope: { id: string };
         assets: Record<string, string>;

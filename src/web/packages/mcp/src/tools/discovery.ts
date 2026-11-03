@@ -42,6 +42,62 @@ export async function listDisplays(
   });
 }
 
+/**
+ * Families that describe what this machine is doing now — what is playing, what
+ * game is running, the weather — rather than how loaded its hardware is.
+ *
+ * A design brief that leaves the readings open is better served by one of these
+ * than by a fourth load figure. The list is product vocabulary, not a copy of
+ * the catalogue: every family the host reports still appears in `families`,
+ * and a family added later appears as non-contextual until it is classified.
+ */
+const CONTEXTUAL_FAMILIES = new Set([
+  "time",
+  "date",
+  "media",
+  "game",
+  "frame",
+  "weather",
+  "audio",
+  "battery",
+  "wifi",
+  "system",
+]);
+
+/** Per-family counts, so a caller can see the catalogue at a glance. */
+function familiesOf(
+  sensors: readonly {
+    readonly semanticKey: string;
+    readonly family?: string | undefined;
+  }[],
+  measured: ReadonlySet<string>,
+): {
+  family: string;
+  keys: number;
+  measured: number;
+  contextual: boolean;
+}[] {
+  const byFamily = new Map<
+    string,
+    { family: string; keys: number; measured: number; contextual: boolean }
+  >();
+
+  for (const sensor of sensors) {
+    if (sensor.family === undefined || sensor.family === "") continue;
+    const row = byFamily.get(sensor.family) ?? {
+      family: sensor.family,
+      keys: 0,
+      measured: 0,
+      contextual: CONTEXTUAL_FAMILIES.has(sensor.family),
+    };
+    row.keys += 1;
+    if (measured.has(sensor.semanticKey)) row.measured += 1;
+    byFamily.set(sensor.family, row);
+  }
+
+  return [...byFamily.values()];
+}
+
 export async function listSensors(
   context: ToolContext,
   measured = true,
@@ -55,8 +111,11 @@ export async function listSensors(
         family: sensor.family,
         label: sensor.label,
         unit: sensor.unit,
+        valueKind: sensor.valueKind,
+        mediaKind: sensor.mediaKind,
         measured: answering.has(sensor.semanticKey),
       })),
+      families: familiesOf(listing.sensors, answering),
       measured,
     };
   });

@@ -20,7 +20,10 @@ import {
   ThemeValidationError,
 } from "../themes/store.js";
 import { backgroundVideoOf, type ThemeMedia } from "../themes/theme-media.js";
-import type { ThumbnailStore } from "../themes/thumbnails.js";
+import {
+  type ThumbnailStore,
+  thumbnailGeometry,
+} from "../themes/thumbnails.js";
 import { TrashRefusal } from "../themes/trash.js";
 import {
   type DecodedThemeSave,
@@ -443,6 +446,34 @@ export function createThemeWrites(
             // itself was saved and the panel still draws.
             console.error(error);
           });
+        }
+
+        // A stored theme always has a library picture. The editor draws one
+        // from its live canvas and uploads it after saving; a client that
+        // cannot draw leaves the host to fill the gap. Checking first keeps a
+        // save from starting a browser for a picture the theme already has. A
+        // failed capture is the picture's failure, never the save's: the
+        // document is already stored.
+        if (
+          thumbnails !== undefined &&
+          options.panels?.captureTheme !== undefined
+        ) {
+          const hasPicture = await thumbnails.has(rawId).catch(() => false);
+          if (!hasPicture) {
+            try {
+              const picture = await options.panels.captureTheme(
+                rawId,
+                thumbnailGeometry(decoded.content.envelope.artboard),
+              );
+              await thumbnails.write(rawId, picture);
+            } catch (error) {
+              console.error(
+                `Theme ${rawId}: the library picture could not be rendered: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            }
+          }
         }
 
         // **Release running panels before publishing.** A panel's page reloads

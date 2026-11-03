@@ -33,6 +33,10 @@ export interface RasterPageOptions {
   readonly geometry: PanelGeometry;
   /** The still encoding the device consumes; JPEG when it states none. */
   readonly stillFormat?: "jpeg" | "png";
+  /** Runs after the scene mounts and before the first capture. A picture is
+   *  the artboard, so its renderer waits for the theme and hides the chrome a
+   *  running display keeps. */
+  readonly prepare?: (devtools: Devtools) => Promise<void>;
 }
 
 export interface Rasterizer {
@@ -494,6 +498,7 @@ export async function createPageRasterizer(
 
   await devtools.send("Page.navigate", { url: options.url });
   await waitForScene(devtools);
+  await options.prepare?.(devtools);
 
   let closed = false;
   let frames: Screencast | undefined;

@@ -16,7 +16,7 @@ import {
   createPanelManager,
   type PanelManager,
 } from "./panels/panel-manager.js";
-import { panelPageUrl } from "./panels/panel-page.js";
+import { panelPageUrl, themePageUrl } from "./panels/panel-page.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -565,6 +565,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     displays,
     pageFor: (displayId, clip, themeId) =>
       panelPageUrl(bound, displayId, clip, themeId),
+    // A library picture is the theme's own player page at the artboard's
+    // ratio. The same shared browser renders it, so a save from a client with
+    // no canvas gets a picture without a second renderer.
+    themePageFor: (themeId) => themePageUrl(bound, themeId),
     // A panel's encoded clip is disposable host data, kept beside the other
     // caches so a restart reuses the transcode instead of paying for it again.
     videoCacheDir: path.join(path.dirname(settingsDir), "cache", "panel-video"),

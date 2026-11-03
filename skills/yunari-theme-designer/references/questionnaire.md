@@ -19,8 +19,11 @@ stand or sit?"
 
 Ask: "Which readings matter most, and is there one number that should dominate?"
 
-- Derive candidates from `list_sensors`, grouped by family (CPU, GPU, memory,
-  storage, network, time, weather).
+- Derive candidates from `list_sensors`. Read its `families` summary first: it
+  names every family this host catalogs and marks the contextual ones — now
+  playing, the running game, weather, battery, Wi-Fi, system.
+- When the brief names no readings, propose one contextual reading as well as
+  the hardware set, and say which of them this host measures.
 - Ask which one is the focal reading. Do not silently pick one.
 
 ## 3. Data versus media balance
@@ -29,15 +32,23 @@ Ask: "Should this be mostly data, mostly imagery, or an even split?"
 
 - Derive a default from the brief: a monitoring ask is data-centric, a
   wallpaper-led ask is media-centric.
+- A media showcase is a full answer: 3–5 readings over a video or still, not a
+  data grid with a picture behind it. Do not treat it as a lesser brief.
+- When the balance is media-led, ask whether a moving backdrop is wanted; the
+  host's Wallpaper Engine library is the first source to search.
 - State the chosen balance before composing.
 
 ## 4. Style and mood
 
-Ask: "Describe the look in a few words — for example minimal, industrial,
-soft, retro, or matching a reference."
+Ask: "Describe the look in a few words — for example cinematic, editorial,
+retro, soft, playful, minimal, or matching a reference."
 
 - Derive it when the user attached a reference image or named a style.
-- Ask before inventing a style; the answer changes palette, radius and type.
+- Ask before inventing a style; the answer changes direction, palette, type and
+  layout topology, not only colour.
+- Ask for a font lean only when the brief is silent: "Any type personality —
+  condensed, serif, script, geometric, mono?" A display face is part of the
+  direction, not a detail to pick after the layout.
 
 ## 5. Light or dark
 

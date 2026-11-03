@@ -23,3 +23,14 @@ export function panelPageUrl(
     ? withClip
     : `${withClip}&theme=${encodeURIComponent(themeId)}`;
 }
+
+/**
+ * The player page a library picture is rendered from.
+ *
+ * A theme id is the whole request: the picture is the artboard, not a display's
+ * presentation, and the host's own player is the renderer the theme will be
+ * shown in.
+ */
+export function themePageUrl(port: number, themeId: string): string {
+  return `http://127.0.0.1:${port}/?theme=${encodeURIComponent(themeId)}`;
+}

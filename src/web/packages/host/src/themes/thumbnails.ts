@@ -3,7 +3,7 @@ import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { relativeLuminanceOf } from "@yunari/renderer-core";
 import { readContainedFile } from "./contained-read.js";
-import { isValidThemeId } from "./store.js";
+import { isValidThemeId, THUMBNAIL_FILE } from "./store.js";
 
 /**
  * A still of a theme's artboard, stored inside that theme's own folder so the
@@ -18,7 +18,6 @@ import { isValidThemeId } from "./store.js";
  * never an error; the library falls back to text.
  */
 
-const FILE = "thumbnail.png";
 /** A screenshot of a dashboard; anything larger is not one. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -33,6 +32,29 @@ export const MAX_THUMBNAIL_PIXELS = 16_777_216;
 
 /** PNG magic: the only format the library renders. */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/** Longest edge of a picture a capture renders; a library cell needs no more.
+ *  The editor captures at the same size, so both save paths look alike. */
+const CAPTURE_MAX_EDGE = 640;
+
+/** The pixel size a theme's picture is rendered at: the artboard's own ratio,
+ *  squared for a disc because that is the surface the panel shows. */
+export function thumbnailGeometry(artboard: {
+  readonly width: number;
+  readonly height: number;
+  readonly shape?: "rect" | "circle";
+}): { readonly width: number; readonly height: number } {
+  const long = Math.max(artboard.width, artboard.height);
+  if (artboard.shape === "circle") {
+    const side = Math.max(1, Math.round(Math.min(CAPTURE_MAX_EDGE, long)));
+    return { width: side, height: side };
+  }
+  const scale = long > 0 ? Math.min(1, CAPTURE_MAX_EDGE / long) : 1;
+  return {
+    width: Math.max(1, Math.round(artboard.width * scale)),
+    height: Math.max(1, Math.round(artboard.height * scale)),
+  };
+}
 
 export interface ThumbnailStore {
   read(id: string): Promise<Uint8Array | undefined>;
@@ -274,7 +296,8 @@ function scratchName(): string {
  *   renders, so it is addressed through the same directory the theme is.
  */
 export function createThumbnailStore(library: string): ThumbnailStore {
-  const filePath = (id: string): string => path.join(library, id, FILE);
+  const filePath = (id: string): string =>
+    path.join(library, id, THUMBNAIL_FILE);
 
   return {
     async read(id) {
@@ -289,7 +312,7 @@ export function createThumbnailStore(library: string): ThumbnailStore {
       // read bound too, refused before the file is buffered.
       const bytes = await readContainedFile(
         library,
-        `${id}/${FILE}`,
+        `${id}/${THUMBNAIL_FILE}`,
         MAX_BYTES,
       );
 

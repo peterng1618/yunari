@@ -332,6 +332,10 @@ export interface ThemeStore {
 const NONCE_REGEX = /^[0-9a-z]+$/;
 const THEME_FILE = "theme.json";
 const ASSETS_DIR = "assets";
+/** The library picture, written by the editor's canvas capture or the host's
+ *  own render. It is a member of the theme folder, so a save carries it
+ *  forward rather than replacing the folder without it. */
+export const THUMBNAIL_FILE = "thumbnail.png";
 
 /** Which half of the save a scratch folder is part of. */
 type ScratchKind = "staging" | "retired";
@@ -1234,6 +1238,23 @@ export function createThemeStore(
             } else {
               await fs.writeFile(file, bytes);
             }
+          }
+
+          // The library picture is a member of the folder, not part of the
+          // document: a save that carried no new picture keeps the one it
+          // replaces. The editor uploads its own after saving; a client that
+          // cannot draw depends on this copy, and so does the library while a
+          // fresh capture is still in flight.
+          const picture = path.join(target, THUMBNAIL_FILE);
+          if (
+            await fs
+              .stat(picture)
+              .then(() => true)
+              .catch(() => false)
+          ) {
+            await fs.cp(picture, path.join(staging, THUMBNAIL_FILE), {
+              preserveTimestamps: true,
+            });
           }
 
           hadPrevious = await fs

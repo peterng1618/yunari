@@ -225,6 +225,7 @@ export async function setTypeTokens(
         {
           readonly family?: string | undefined;
           readonly weight?: string | number | undefined;
+          readonly face?: string | undefined;
         }
       >
     >
@@ -243,10 +244,13 @@ export async function setTypeTokens(
         throw new Error(`The "${role}" type token needs a font family.`);
       }
       const weight = update.weight ?? next[role]?.weight;
+      const face =
+        update.face === undefined ? next[role]?.face : { assetId: update.face };
       next[role] = {
         ...next[role],
         family,
         ...(weight === undefined ? {} : { weight }),
+        ...(face === undefined ? {} : { face }),
       };
     }
     draft.envelope = kitSetTypeTokens(draft.envelope, next);
@@ -352,6 +356,11 @@ export async function discardDraft(
 const roleUpdateSchema = z.object({
   family: z.string().min(1).optional(),
   weight: z.union([z.string(), z.number()]).optional(),
+  face: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("The packaged font asset's assetId, so this role loads it."),
 });
 
 /** Registers the draft and token tools on the server. */
@@ -446,7 +455,7 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_type_tokens",
     {
       description:
-        "Set the heading, body or mono type token's family and weight. Sizes belong to individual text runs.",
+        "Set the heading, body or mono type token's family, weight and packaged face. Sizes belong to individual text runs.",
       inputSchema: z.object({
         heading: roleUpdateSchema.optional(),
         body: roleUpdateSchema.optional(),

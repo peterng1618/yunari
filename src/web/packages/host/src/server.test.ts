@@ -815,6 +815,67 @@ describe("Host theme routes", () => {
     expect(content).toEqual(encodeThemeContent(validEmptyAssetTheme));
   });
 
+  it("renders a library picture for a theme that has none", async () => {
+    // A real 1×1 PNG: the thumbnail store bounds the size its header declares.
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+      0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00,
+      0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
+    const captureTheme = vi.fn(async () => png);
+    const rendering = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      thumbnails: createThumbnailStore(tmpDir),
+      panels: {
+        running: () => [],
+        captureTheme,
+      } as unknown as PanelManager,
+    });
+
+    try {
+      const editorSave = await request(
+        rendering.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(validEmptyAssetTheme),
+      );
+      expect(editorSave.status).toBe(200);
+      // A theme with no stored picture gets one, whichever client saved it.
+      expect(captureTheme).toHaveBeenCalledWith("living-room", {
+        width: 640,
+        height: 360,
+      });
+
+      captureTheme.mockClear();
+      const secondSave = await request(
+        rendering.server,
+        "PUT",
+        "/api/themes/living-room",
+        themeBody(validEmptyAssetTheme, { overwrite: true }),
+      );
+      expect(secondSave.status).toBe(200);
+      // A picture that already exists is the editor's to replace; the save
+      // does not start a browser for it.
+      expect(captureTheme).not.toHaveBeenCalled();
+      expect(
+        (
+          await request(
+            rendering.server,
+            "GET",
+            "/api/themes/living-room/thumbnail",
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      await rendering.close();
+    }
+  });
+
   it("serves a panel's derived background and drops it when a save changes the video", async () => {
     const base = createValidPackage("living-room", "Living Room");
     const videoTheme: ThemeContent = {

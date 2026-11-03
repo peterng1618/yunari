@@ -9,22 +9,50 @@ A Yunari theme is a Fabric scene inside the product's versioned theme envelope.
 The MCP server owns the document, its validation and its previews. This skill
 owns the questions, the design decisions and the order the tools are called in.
 
+## Read the brief before the tool calls
+
+Write the reading down before you choose a direction. It is judgment, not a
+deliverable, and it keeps the answer to the person's request from drifting into
+a style you like.
+
+- **Subject and mood** — what the theme is *about*, in one sentence.
+- **Requirements** — every named reading, language, style, screen and
+  constraint, with the one focal reading. A stated requirement is not optional;
+  a missing sensor is reported, never invented.
+- **Target** — the screen's geometry, shape and viewing distance, from the brief
+  or the questionnaire's derivation.
+- **Device** — the single expressive device, chosen because it serves the
+  subject. If none comes, the direction is not decided yet.
+- **Difference** — when the person asked for several themes, the axes this one
+  uses that the others do not: direction, media, type, topology, focal element.
+
+After previewing, check the theme against this list before saving. If a
+requirement is missing, change the theme rather than explaining it away.
+
 ## Mandatory workflow
 
 Read `references/tool-guide.md` before the first tool call. The order is fixed:
 
 1. **Discover** — `yunari_status`, `list_displays`, `list_sensors`,
-   `list_themes`, `list_asset_sources`.
+   `list_themes`, `list_asset_sources`. Read the `families` summary
+   `list_sensors` returns: it names every family this host catalogs, its key
+   count and whether it is contextual.
 2. **Ask** — follow `references/questionnaire.md`. Ask one question per gap the
    brief, the host or an attached file does not already answer.
-3. **Decide** — apply `references/design-rules.md`. State the target display,
-   hierarchy, palette and reading budget before composing.
-4. **Assets** — `search_assets` and `preview_asset` first. Import a local file
-   or generate media only when the user asked for that.
+3. **Decide** — apply `references/design-rules.md`. State the named visual
+   direction, media balance, type pairing, layout topology, target display,
+   hierarchy and reading budget before composing. A grid of equal metric cards
+   is one direction, not the default.
+4. **Assets** — search the Asset Finder for media, icons and fonts before
+   composing: `search_assets`, `preview_asset`, then import what fits. Wallpaper
+   Engine videos are the preferred moving backdrop. Import a local file or
+   generate media only when the user asked for that.
 5. **Create** — `create_theme`, then `set_artboard`, `set_palette`,
-   `set_type_tokens`, `set_background`.
+   `set_type_tokens`, `set_background`, including imported media and faces.
 6. **Compose** — `add_card`, `add_text`, `add_shape`, `add_image`, `add_icon`,
-   `add_chart`, `add_binding`; inspect with `list_objects`.
+   `add_chart`, `add_binding`; inspect with `list_objects`. Use icons,
+   decorative display type and one expressive device where the direction calls
+   for them.
 7. **Validate** — `validate_theme`; fix every issue before previewing.
 8. **Preview** — `preview_theme`; judge at the returned viewport ratio and size,
    or read the panel PNG. Revise, then repeat 6–8.
@@ -35,6 +63,30 @@ Read `references/tool-guide.md` before the first tool call. The order is fixed:
 
 - **Asset Finder first.** Use `search_assets` before importing anything.
   Generation and local-file imports happen only on explicit user request.
+- **Decorate first.** Decoration is the default: most themes are part of
+  someone's PC setup, so design the picture before the data and never inherit
+  the starter theme's heading, card grid or density unless that style was asked
+  for. An information-dense, monitoring-first dashboard is allowed only when
+  the user explicitly asks for one or the brief reasonably implies one (a
+  dedicated status display, an ops wall, "every sensor at a glance"); say the
+  derivation in one line before composing.
+- **A stated requirement is acceptance criteria.** If the brief names a reading,
+  a language, a screen shape or a mood, the saved theme shows it. State any
+  requirement the host cannot satisfy; never replace it silently.
+- **Vary more than the palette.** When asked for several themes, each must
+  differ in direction, media, layout topology and type, not only colour.
+- **One story per reading set.** The values belong to one story — loads and
+  their temperatures, memory used and its share — not one number from each
+  subsystem. A mixed sample reads as random even when every key is measured.
+- **Use the machine's context.** When the brief leaves the readings open, prefer
+  what this PC is doing now — the track playing, the running game, the weather,
+  the battery or Wi-Fi it sits on — over a fourth hardware number. One reading
+  that belongs to the subject is enough; a brief that names its readings is
+  never padded.
+- **Do not title the theme by default.** A theme name in display type belongs
+  only when the heading is the composition's device, not as page chrome.
+- **Legibility outranks expressiveness.** A decorative heading, angled type or
+  full-bleed video never shrinks a reading below its minimum or breaks contrast.
 - **Never fabricate telemetry.** Bind a semantic key only when `list_sensors`
   reports that this host measures it. A missing reading stays absent; never
   write zero, a dash or a default for a sensor the host did not measure.

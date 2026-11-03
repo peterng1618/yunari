@@ -10,6 +10,52 @@ import { createBlankTheme } from "./starter.js";
 
 const BYTES = new TextEncoder().encode("abc");
 
+describe("declaring a font", () => {
+  it("carries the face metadata a type token and the player need", async () => {
+    const declared = await declareAsset({
+      path: "PlayfairDisplay-700.woff2",
+      bytes: BYTES,
+      license: "SIL Open Font License 1.1",
+      font: {
+        family: "Playfair Display",
+        weight: 700,
+        style: "normal",
+        format: "woff2",
+        subset: "latin",
+      },
+    });
+
+    expect(declared.reference).toMatchObject({
+      kind: "font",
+      path: "assets/playfairdisplay-700-ba7816bf.woff2",
+      family: "Playfair Display",
+      weight: 700,
+      style: "normal",
+      format: "woff2",
+      subset: "latin",
+    });
+  });
+
+  it("refuses a font with no face metadata, or a format the path denies", async () => {
+    await expect(
+      declareAsset({ path: "face.woff2", bytes: BYTES, license: "OFL" }),
+    ).rejects.toThrow(/needs its family/u);
+    await expect(
+      declareAsset({
+        path: "face.woff2",
+        bytes: BYTES,
+        license: "OFL",
+        font: {
+          family: "Face",
+          weight: 400,
+          style: "normal",
+          format: "ttf",
+        },
+      }),
+    ).rejects.toThrow(/extension is woff2/u);
+  });
+});
+
 describe("declaring an asset", () => {
   it("derives an id, path, digest, kind and credit from the bytes", async () => {
     const declared = await declareAsset({
