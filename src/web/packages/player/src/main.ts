@@ -16,6 +16,7 @@ import {
 } from "@yunari/renderer-core";
 import {
   applyAuthoredText,
+  applyObjectPalettePaints,
   chartAnimationFor,
   loadFontAssets,
   mountFabricScene,
@@ -326,6 +327,10 @@ async function startHostedTheme(
     const url = resolveAsset(assetId);
     return url === undefined ? undefined : session.withToken(url);
   });
+  // A resolved fill is derived, not authored: the palette token is the truth.
+  // Rebuilding it here gives every paint form the same path the editor's mount
+  // takes, including a gradient the revived scene could not carry by itself.
+  applyObjectPalettePaints(handle.canvas, theme.globals);
   // Every text object, bound or not, takes its box, its alignment and its
   // clip from the authored content once after revival. `refreshBoundText`
   // only visits objects a binding resolves, so without this an unbound label

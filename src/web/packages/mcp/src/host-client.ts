@@ -11,6 +11,7 @@ import type {
   ThemeContent,
   ThemeSummary,
   VideoTrim,
+  WallpaperListing,
 } from "./types.js";
 
 /** The ports a host started without an explicit URL is probed on, in order. */
@@ -231,7 +232,9 @@ export class HttpHostClient implements HostClient {
       `/api/themes/${encodeURIComponent(id)}`,
       {
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+        },
         body: JSON.stringify({
           envelope: input.envelope,
           assets,
@@ -310,6 +313,28 @@ export class HttpHostClient implements HostClient {
     return {
       bytes: new Uint8Array(await response.arrayBuffer()),
       filename: response.headers.get("x-yunari-filename") ?? "",
+    };
+  }
+
+  async listWallpapers(): Promise<WallpaperListing> {
+    return await this.json<WallpaperListing>("/api/wallpaper-engine");
+  }
+
+  async wallpaperBytes(
+    id: string,
+    part: "preview" | "asset",
+  ): Promise<{
+    readonly bytes: Uint8Array;
+    readonly filename: string;
+    readonly contentType: string;
+  }> {
+    const response = await this.request(
+      `/api/wallpaper-engine/item/${encodeURIComponent(id)}/${part}`,
+    );
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      filename: response.headers.get("x-yunari-filename") ?? "",
+      contentType: response.headers.get("content-type") ?? "",
     };
   }
 
@@ -441,6 +466,21 @@ export class LazyHostClient implements HostClient {
     id: string,
   ): Promise<{ readonly bytes: Uint8Array; readonly filename: string }> {
     return await (await this.client()).assetBytes(source, id);
+  }
+
+  async listWallpapers(): Promise<WallpaperListing> {
+    return await (await this.client()).listWallpapers();
+  }
+
+  async wallpaperBytes(
+    id: string,
+    part: "preview" | "asset",
+  ): Promise<{
+    readonly bytes: Uint8Array;
+    readonly filename: string;
+    readonly contentType: string;
+  }> {
+    return await (await this.client()).wallpaperBytes(id, part);
   }
 
   async normalizeVideo(

@@ -3,7 +3,7 @@ import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { relativeLuminanceOf } from "@yunari/renderer-core";
 import { readContainedFile } from "./contained-read.js";
-import { isValidThemeId } from "./store.js";
+import { isValidThemeId, THUMBNAIL_FILE } from "./store.js";
 
 /**
  * A still of a theme's artboard, stored inside that theme's own folder so the
@@ -18,7 +18,6 @@ import { isValidThemeId } from "./store.js";
  * never an error; the library falls back to text.
  */
 
-const FILE = "thumbnail.png";
 /** A screenshot of a dashboard; anything larger is not one. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -302,7 +301,8 @@ function scratchName(): string {
  *   renders, so it is addressed through the same directory the theme is.
  */
 export function createThumbnailStore(library: string): ThumbnailStore {
-  const filePath = (id: string): string => path.join(library, id, FILE);
+  const filePath = (id: string): string =>
+    path.join(library, id, THUMBNAIL_FILE);
 
   return {
     async read(id) {
@@ -317,7 +317,7 @@ export function createThumbnailStore(library: string): ThumbnailStore {
       // read bound too, refused before the file is buffered.
       const bytes = await readContainedFile(
         library,
-        `${id}/${FILE}`,
+        `${id}/${THUMBNAIL_FILE}`,
         MAX_BYTES,
       );
 

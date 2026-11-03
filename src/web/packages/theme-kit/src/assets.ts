@@ -2,6 +2,8 @@ import type {
   AssetKind,
   AssetReference,
   FabricThemeEnvelope,
+  FontAssetFormat,
+  FontAssetReference,
 } from "@yunari/renderer-core";
 import { YUNARI_ASSET_PROPERTY } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
@@ -55,6 +57,18 @@ export interface DeclareAssetInput {
   readonly license: string;
   readonly sourceUrl?: string;
   readonly changes?: string;
+  /** A face's registration metadata. Required for a font, refused otherwise. */
+  readonly font?: DeclareFontFace;
+}
+
+/** The face metadata a packaged font needs to register and match a type token. */
+export interface DeclareFontFace {
+  readonly family: string;
+  readonly weight: string | number;
+  readonly style: "normal" | "italic";
+  readonly format: FontAssetFormat;
+  /** The published subset this cut came from; absent on a local face. */
+  readonly subset?: string;
 }
 
 export interface DeclaredAsset {
@@ -148,6 +162,50 @@ export function assetKindForPath(path: string): AssetKind {
 }
 
 /**
+ * A font's reference carries the face metadata every consumer needs: the
+ * player cannot register a face without a family, weight, style and format,
+ * and a type token's `face` must match its family.
+ */
+function fontReference(
+  input: DeclareAssetInput,
+  base: {
+    readonly id: string;
+    readonly path: string;
+    readonly sha256: string;
+    readonly license: { readonly name: string; readonly url?: string };
+  },
+): FontAssetReference {
+  const font = input.font;
+  if (font === undefined) {
+    throw new Error(
+      `"${input.path}" is a font, so it needs its family, weight, style and format.`,
+    );
+  }
+  const ext = extensionOf(input.path);
+  if (ext !== font.format) {
+    throw new Error(
+      `"${input.path}" is declared as ${font.format}, but its extension is ${ext || "missing"}.`,
+    );
+  }
+  if (font.family.trim() === "") {
+    throw new Error(`"${input.path}" needs a non-empty font family.`);
+  }
+  return {
+    id: base.id,
+    kind: "font",
+    path: base.path,
+    sha256: base.sha256,
+    ...(input.sourceUrl === undefined ? {} : { sourceUrl: input.sourceUrl }),
+    license: base.license,
+    family: font.family,
+    weight: font.weight,
+    style: font.style,
+    format: font.format,
+    ...(font.subset === undefined ? {} : { subset: font.subset }),
+  };
+}
+
+/**
  * Declares one asset from its bytes.
  *
  * The id and path are derived from the file's stem and its digest, so
@@ -177,14 +235,23 @@ export async function declareAsset(
   const id = `${slug}-${sha256.slice(0, 8)}`;
   const path = `assets/${slug}-${sha256.slice(0, 8)}.${ext}`;
   const title = input.title ?? slug;
-  const reference: AssetReference = {
-    id,
-    kind,
-    path,
-    sha256,
-    ...(input.sourceUrl === undefined ? {} : { sourceUrl: input.sourceUrl }),
-    license: { name: input.license },
-  };
+  const license =
+    input.sourceUrl === undefined
+      ? { name: input.license }
+      : { name: input.license, url: input.sourceUrl };
+  const reference: AssetReference =
+    kind === "font"
+      ? fontReference(input, { id, path, sha256, license })
+      : {
+          id,
+          kind,
+          path,
+          sha256,
+          ...(input.sourceUrl === undefined
+            ? {}
+            : { sourceUrl: input.sourceUrl }),
+          license: { name: input.license },
+        };
   const credit: ThemeCreditsEntry = {
     kind,
     title,

@@ -162,6 +162,7 @@ describe("discovery tools", () => {
           measured: false,
         },
       ],
+      families: [{ family: "cpu", keys: 1, measured: 1, contextual: false }],
       measured: true,
     });
   });
@@ -175,6 +176,12 @@ describe("discovery tools", () => {
               sensors: [
                 { semanticKey: "cpu.load", label: "CPU", family: "cpu" },
                 { semanticKey: "gpu.temp", label: "GPU", unit: "°C" },
+                {
+                  semanticKey: "media.title",
+                  label: "Title",
+                  family: "media",
+                  valueKind: "text",
+                },
               ],
               measured: ["cpu.load"],
             },
@@ -184,6 +191,12 @@ describe("discovery tools", () => {
               sensors: [
                 { semanticKey: "cpu.load", label: "CPU", family: "cpu" },
                 { semanticKey: "gpu.temp", label: "GPU", unit: "°C" },
+                {
+                  semanticKey: "media.title",
+                  label: "Title",
+                  family: "media",
+                  valueKind: "text",
+                },
               ],
             },
           };
@@ -204,6 +217,17 @@ describe("discovery tools", () => {
           unit: "°C",
           measured: false,
         },
+        {
+          key: "media.title",
+          family: "media",
+          label: "Title",
+          valueKind: "text",
+          measured: false,
+        },
+      ],
+      families: [
+        { family: "cpu", keys: 1, measured: 0, contextual: false },
+        { family: "media", keys: 1, measured: 0, contextual: true },
       ],
       measured: false,
     });
@@ -221,6 +245,17 @@ describe("discovery tools", () => {
           unit: "°C",
           measured: false,
         },
+        {
+          key: "media.title",
+          family: "media",
+          label: "Title",
+          valueKind: "text",
+          measured: false,
+        },
+      ],
+      families: [
+        { family: "cpu", keys: 1, measured: 1, contextual: false },
+        { family: "media", keys: 1, measured: 0, contextual: true },
       ],
       measured: true,
     });

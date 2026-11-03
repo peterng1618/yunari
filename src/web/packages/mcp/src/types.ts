@@ -132,6 +132,27 @@ export interface HostStatus {
   }[];
 }
 
+/** One row of the host's Wallpaper Engine library. */
+export interface WallpaperItem {
+  readonly workshopId: string;
+  readonly title: string;
+  /** Only `video` items are usable as a theme backdrop. */
+  readonly kind: string;
+  readonly previewUrl: string;
+  readonly filesize: number;
+  readonly attribution?: {
+    readonly steamId?: string;
+    readonly workshopUrl?: string;
+  };
+}
+
+/** `GET /api/wallpaper-engine` — an unavailable library states its reason. */
+export interface WallpaperListing {
+  readonly available: boolean;
+  readonly reason?: string;
+  readonly items?: readonly WallpaperItem[];
+}
+
 /** Every loopback route the server needs, one method per route. */
 export interface HostClient {
   readonly url: string;
@@ -153,6 +174,15 @@ export interface HostClient {
     source: string,
     id: string,
   ): Promise<{ readonly bytes: Uint8Array; readonly filename: string }>;
+  listWallpapers(): Promise<WallpaperListing>;
+  wallpaperBytes(
+    id: string,
+    part: "preview" | "asset",
+  ): Promise<{
+    readonly bytes: Uint8Array;
+    readonly filename: string;
+    readonly contentType: string;
+  }>;
   normalizeVideo(bytes: Uint8Array, trim?: VideoTrim): Promise<Uint8Array>;
   panelPreview(id: string, display: string, clip: boolean): Promise<Uint8Array>;
 }

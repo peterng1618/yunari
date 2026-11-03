@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panelPageUrl } from "./panel-page.js";
+import { panelPageUrl, themePageUrl } from "./panel-page.js";
 
 /**
  * The page a hardware panel renders. `panel=1` is what the player reads to make
@@ -38,5 +38,15 @@ describe("the panel page URL", () => {
   it("leaves the theme off a page that renders the display's own choice", () => {
     const url = new URL(panelPageUrl(5227, "turzx-1", false));
     expect(url.searchParams.get("theme")).toBeNull();
+  });
+});
+
+describe("the theme page URL", () => {
+  it("names only the theme, escaped, in panel mode", () => {
+    const url = new URL(themePageUrl(5227, "night sky/2"));
+    expect(url.origin).toBe("http://127.0.0.1:5227");
+    expect(url.searchParams.get("theme")).toBe("night sky/2");
+    expect(url.searchParams.has("display")).toBe(false);
+    expect(url.searchParams.get("panel")).toBe("1");
   });
 });

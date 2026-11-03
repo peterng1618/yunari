@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
+import type { FontAssetFormat } from "@yunari/renderer-core";
 import {
   addAsset,
   assetKindForPath,
@@ -11,14 +12,18 @@ import {
   removeAsset,
 } from "@yunari/theme-kit";
 import { z } from "zod/v4";
-import type {
-  AssetSearchRequest,
-  ThemeCredits,
-  ToolContext,
-  VideoTrim,
-} from "../types.js";
+import type { ThemeCredits, ToolContext, VideoTrim } from "../types.js";
 import { draftFor } from "./draft.js";
 import { errorResult, imageResult, jsonAttempt } from "./result.js";
+
+/** One face's registration metadata, carried so import can declare it. */
+export interface AssetRefFont {
+  readonly family: string;
+  readonly weight: string | number;
+  readonly style: "normal" | "italic";
+  readonly format: FontAssetFormat;
+  readonly subset?: string;
+}
 
 /** The opaque, agent-carried reference to one finder result. */
 export interface AssetRef {
@@ -29,10 +34,51 @@ export interface AssetRef {
   readonly preview: string;
   readonly licence: string;
   readonly sourceUrl: string;
+  /** Present for a font row: the lead face's metadata. */
+  readonly font?: AssetRefFont;
 }
 
 function encodeRef(ref: AssetRef): string {
   return Buffer.from(JSON.stringify(ref), "utf8").toString("base64");
+}
+
+const FONT_FORMATS: ReadonlySet<string> = new Set([
+  "woff2",
+  "woff",
+  "ttf",
+  "otf",
+]);
+
+function fontOf(value: unknown): AssetRefFont | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null) {
+    throw new Error('That assetRef has a malformed "font".');
+  }
+  const font = value as Record<string, unknown>;
+  const { family, weight, style, format, subset } = font;
+  if (typeof family !== "string" || family.trim() === "") {
+    throw new Error('That assetRef font has no "family".');
+  }
+  if (
+    (typeof weight !== "string" && typeof weight !== "number") ||
+    (style !== "normal" && style !== "italic") ||
+    typeof format !== "string" ||
+    !FONT_FORMATS.has(format)
+  ) {
+    throw new Error(
+      "That assetRef font has no usable weight, style or format.",
+    );
+  }
+  if (subset !== undefined && typeof subset !== "string") {
+    throw new Error('That assetRef font has a malformed "subset".');
+  }
+  return {
+    family,
+    weight,
+    style,
+    format: format as FontAssetFormat,
+    ...(subset === undefined ? {} : { subset }),
+  };
 }
 
 function decodeRef(value: string): AssetRef {
@@ -60,6 +106,7 @@ function decodeRef(value: string): AssetRef {
     const keys = Object.keys(record).sort().join(", ") || "(none)";
     throw new Error(`That assetRef has no "licence". Its keys are ${keys}.`);
   }
+  const font = fontOf(record["font"]);
   return {
     source: text("source"),
     id: text("id"),
@@ -68,6 +115,7 @@ function decodeRef(value: string): AssetRef {
     preview: text("preview"),
     licence,
     sourceUrl: text("sourceUrl"),
+    ...(font === undefined ? {} : { font }),
   };
 }
 
@@ -87,6 +135,26 @@ function extensionOf(path: string): string {
   return extname(path).slice(1).toLowerCase();
 }
 
+/** The extension a host response's media type implies, when no filename did. */
+function extensionOfContentType(contentType: string): string {
+  const type = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  const known: Readonly<Record<string, string>> = {
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+    "font/woff2": "woff2",
+    "font/woff": "woff",
+    "font/ttf": "ttf",
+    "font/otf": "otf",
+  };
+  return known[type] ?? "";
+}
+
 function mimeOf(path: string): string {
   return MIME_BY_EXTENSION[extensionOf(path)] ?? "application/octet-stream";
 }
@@ -96,7 +164,7 @@ function isVideo(path: string): boolean {
 }
 
 function extensionForKind(kind: string): string {
-  return kind === "svg"
+  return kind === "svg" || kind === "icon"
     ? "svg"
     : kind === "gif"
       ? "gif"
@@ -107,6 +175,10 @@ function extensionForKind(kind: string): string {
           : "png";
 }
 
+/** Wallpaper Engine is a library on this PC, not a searchable provider, so a
+ *  page of its matches is fixed rather than paged through the finder. */
+const WALLPAPER_PAGE_SIZE = 40;
+
 /** The finder answers with ids already prefixed `<source>:`; keep them whole. */
 export async function searchAssets(
   context: ToolContext,
@@ -115,46 +187,149 @@ export async function searchAssets(
   page?: number,
 ): Promise<CallToolResult> {
   return await jsonAttempt(async () => {
-    const enabled =
-      sourceIds ??
-      (await context.host.listAssetSources()).map((source) => source.id);
+    const sources = await context.host.listAssetSources().catch(() => []);
+    const enabled = sourceIds ?? sources.map((source) => source.id);
     if (enabled.length === 0) {
       throw new Error("This host has no asset sources to search.");
     }
-    const pages: Record<string, number> = {};
-    for (const id of enabled) pages[id] = page ?? 1;
 
-    const request: AssetSearchRequest = { query, enabled, pages, body: "grid" };
-    const answer = await context.host.searchAssets(request);
+    const selected = enabled.map((id) => {
+      const source = sources.find((candidate) => candidate.id === id);
+      // An id the listing omitted is still searched as a grid source: the host
+      // owns which sources exist and refuses or ignores an unknown one.
+      return source ?? { id, body: "grid" as const };
+    });
 
-    return {
-      results: answer.pages.flatMap((answerPage) =>
-        answerPage.results.map((result) => ({
-          assetRef: encodeRef({
-            source: answerPage.source,
-            id: result.id,
+    // A finder body is per source family: a font source answers the picker's
+    // shape, a grid source the search shape, and Wallpaper Engine only lists.
+    const idsOf = (body: string): string[] =>
+      selected
+        .filter((source) => source.body === body)
+        .map((source) => source.id);
+
+    const requestFor = (
+      body: "grid" | "font-picker",
+      ids: readonly string[],
+    ) => {
+      const pages: Record<string, number> = {};
+      for (const id of ids) pages[id] = page ?? 1;
+      return context.host.searchAssets({ query, enabled: ids, pages, body });
+    };
+
+    const grid = idsOf("grid");
+    const fonts = idsOf("font-picker");
+    const wallpapers = idsOf("wallpaper-engine").length > 0;
+
+    const [gridAnswer, fontAnswer, wallpaperAnswer] = await Promise.all([
+      grid.length === 0
+        ? Promise.resolve({ pages: [] })
+        : requestFor("grid", grid),
+      fonts.length === 0
+        ? Promise.resolve({ pages: [] })
+        : requestFor("font-picker", fonts),
+      wallpapers
+        ? context.host.listWallpapers().catch((error: unknown) => ({
+            available: false as const,
+            reason: error instanceof Error ? error.message : String(error),
+          }))
+        : Promise.resolve(undefined),
+    ]);
+
+    const rows = [...gridAnswer.pages, ...fontAnswer.pages].flatMap(
+      (answerPage) =>
+        answerPage.results.map((result) => {
+          const cut = result.font?.cuts[0];
+          const font =
+            cut === undefined
+              ? undefined
+              : {
+                  family: cut.family,
+                  weight: cut.weight,
+                  style: cut.style,
+                  format: cut.format,
+                  ...(cut.subset === undefined ? {} : { subset: cut.subset }),
+                };
+          return {
+            assetRef: encodeRef({
+              source: answerPage.source,
+              id: result.id,
+              name: result.name,
+              kind: result.kind,
+              preview:
+                result.preview === ""
+                  ? (cut?.previewUrl ?? "")
+                  : result.preview,
+              licence: result.licence,
+              sourceUrl: result.sourceUrl,
+              ...(font === undefined ? {} : { font }),
+            }),
             name: result.name,
             kind: result.kind,
-            preview: result.preview,
+            preview:
+              result.preview === "" ? (cut?.previewUrl ?? "") : result.preview,
             licence: result.licence,
             sourceUrl: result.sourceUrl,
-          }),
-          name: result.name,
-          kind: result.kind,
-          preview: result.preview,
-          licence: result.licence,
-          sourceUrl: result.sourceUrl,
-          ...(result.subtitle === undefined
-            ? {}
-            : { subtitle: result.subtitle }),
-        })),
-      ),
-      failures: answer.pages.flatMap((answerPage) =>
-        answerPage.failure === undefined
-          ? []
-          : [{ source: answerPage.source, ...answerPage.failure }],
-      ),
-    };
+            ...(result.subtitle === undefined
+              ? {}
+              : { subtitle: result.subtitle }),
+            ...(font === undefined ? {} : { font }),
+          };
+        }),
+    );
+
+    const wallpaperRows =
+      wallpaperAnswer === undefined || wallpaperAnswer.available !== true
+        ? []
+        : (wallpaperAnswer.items ?? [])
+            .filter(
+              (item) =>
+                item.kind === "video" &&
+                item.title.toLowerCase().includes(query.trim().toLowerCase()),
+            )
+            .slice(0, WALLPAPER_PAGE_SIZE)
+            .map((item) => {
+              const preview = `${context.host.url}/api/wallpaper-engine/item/${encodeURIComponent(item.workshopId)}/preview`;
+              const sourceUrl = item.attribution?.workshopUrl ?? "";
+              return {
+                assetRef: encodeRef({
+                  source: "wallpaper-engine",
+                  id: item.workshopId,
+                  name: item.title,
+                  kind: "video",
+                  preview,
+                  licence: "Unknown",
+                  sourceUrl,
+                }),
+                name: item.title,
+                kind: "video",
+                preview,
+                licence: "Unknown",
+                sourceUrl,
+                subtitle: `${Math.round(item.filesize / 1024 / 1024)} MB · Wallpaper Engine`,
+              };
+            });
+
+    const failures: {
+      source: string;
+      reason: string;
+      message?: string;
+      credential?: string;
+    }[] = [...gridAnswer.pages, ...fontAnswer.pages].flatMap((answerPage) =>
+      answerPage.failure === undefined
+        ? []
+        : [{ source: answerPage.source, ...answerPage.failure }],
+    );
+    if (wallpaperAnswer !== undefined && wallpaperAnswer.available !== true) {
+      failures.push({
+        source: "wallpaper-engine",
+        reason: "failed",
+        message:
+          wallpaperAnswer.reason ??
+          "The Wallpaper Engine library is unavailable.",
+      });
+    }
+
+    return { results: [...rows, ...wallpaperRows], failures };
   });
 }
 
@@ -296,15 +471,33 @@ export async function importAsset(
     let license: string;
     let author: string | undefined;
     let sourceUrl: string | undefined;
+    let font: AssetRefFont | undefined;
 
     if (input.assetRef !== undefined) {
       const ref = decodeRef(input.assetRef);
-      const fetched = await context.host.assetBytes(ref.source, ref.id);
-      bytes = fetched.bytes;
-      declarationPath =
-        fetched.filename === ""
-          ? `${ref.name || "asset"}.${extensionForKind(ref.kind)}`
-          : basename(fetched.filename);
+      font = ref.font;
+      if (ref.source === "wallpaper-engine") {
+        const fetched = await context.host.wallpaperBytes(ref.id, "asset");
+        bytes = fetched.bytes;
+        const fetchedExtension =
+          extensionOf(fetched.filename) === ""
+            ? extensionOfContentType(fetched.contentType)
+            : extensionOf(fetched.filename);
+        declarationPath = `${ref.name || "body"}.${
+          fetchedExtension === "" ? "mp4" : fetchedExtension
+        }`;
+      } else {
+        const fetched = await context.host.assetBytes(ref.source, ref.id);
+        bytes = fetched.bytes;
+        const fetchedName =
+          fetched.filename === "" ? ref.name : basename(fetched.filename);
+        declarationPath =
+          font === undefined
+            ? fetched.filename === ""
+              ? `${ref.name || "asset"}.${extensionForKind(ref.kind)}`
+              : fetchedName
+            : `${fetchedName.replace(/\.[^.]+$/u, "") || "font"}.${font.format}`;
+      }
       title = ref.name;
       license = ref.licence === "" ? "Unknown" : ref.licence;
       sourceUrl = ref.sourceUrl === "" ? undefined : ref.sourceUrl;
@@ -355,6 +548,7 @@ export async function importAsset(
       ...(author === undefined ? {} : { author }),
       license,
       ...(sourceUrl === undefined ? {} : { sourceUrl }),
+      ...(font === undefined ? {} : { font }),
       ...(trim === undefined
         ? {}
         : { changes: `Trimmed to ${trim.startMs}-${trim.endMs} ms.` }),

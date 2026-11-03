@@ -142,6 +142,118 @@ describe("asset tools", () => {
     });
   });
 
+  it("searches fonts with the picker body and lists Wallpaper Engine videos", async () => {
+    const bodies: string[] = [];
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/assets/sources") {
+        return {
+          body: {
+            sources: [
+              {
+                id: "fonts",
+                label: "Fonts",
+                category: "font",
+                body: "font-picker",
+              },
+              {
+                id: "wallpaper-engine",
+                label: "Wallpaper Engine",
+                category: "local",
+                body: "wallpaper-engine",
+              },
+            ],
+          },
+        };
+      }
+      if (url.pathname === "/api/assets/search") {
+        const body = JSON.parse(request.body.toString("utf8")) as {
+          body: string;
+        };
+        bodies.push(body.body);
+        return {
+          body: {
+            pages: [
+              {
+                source: "fonts",
+                results: [
+                  {
+                    id: "fonts:cut:display",
+                    name: "Display serif",
+                    kind: "font",
+                    preview: "",
+                    licence: "OFL",
+                    sourceUrl: "https://example.test/face",
+                    font: {
+                      cuts: [
+                        {
+                          id: "cut:display",
+                          source: "fonts",
+                          family: "Playfair Display",
+                          weight: 700,
+                          style: "normal",
+                          subset: "latin",
+                          format: "woff2",
+                          previewUrl: "https://example.test/face.woff2",
+                          licence: "OFL",
+                        },
+                      ],
+                    },
+                  },
+                ],
+                totalPages: 1,
+              },
+            ],
+          },
+        };
+      }
+      if (url.pathname === "/api/wallpaper-engine") {
+        return {
+          body: {
+            available: true,
+            items: [
+              {
+                workshopId: "42",
+                title: "Campfire Night",
+                kind: "video",
+                previewUrl: "/preview",
+                filesize: 4 * 1024 * 1024,
+              },
+              {
+                workshopId: "43",
+                title: "Campfire Scene",
+                kind: "scene",
+                previewUrl: "/preview",
+                filesize: 1024,
+              },
+            ],
+          },
+        };
+      }
+      return hostHandler()(request);
+    });
+    const ctx = context(host);
+
+    const found = payload(
+      await searchAssets(ctx, "campfire", ["fonts", "wallpaper-engine"], 1),
+    );
+    const rows = found.results as {
+      name: string;
+      kind: string;
+      font?: { family: string };
+    }[];
+
+    // A font source is asked in the picker's shape, never the grid's.
+    expect(bodies).toEqual(["font-picker"]);
+    expect(rows.map((row) => row.name)).toEqual([
+      "Display serif",
+      "Campfire Night",
+    ]);
+    expect(rows[0]?.font?.family).toBe("Playfair Display");
+    // A scene wallpaper is not a video a theme background can play.
+    expect(rows.some((row) => row.name === "Campfire Scene")).toBe(false);
+  });
+
   it("previews a video with the row's poster still", async () => {
     const still = Buffer.from([0xff, 0xd8, 0xff]);
     let base = "";

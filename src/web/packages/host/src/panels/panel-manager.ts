@@ -34,7 +34,6 @@ import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
 
 export interface PanelManagerOptions {
   readonly displays: DisplayStore;
-  /** The player page a display is shown at, including its credential. */
   /** The page for a panel. `clip` says the device plays the theme's clip
    *  itself, so the page stands on one poster frame instead. `themeId` renders
    *  a theme the display is not assigned, for a preview. */
