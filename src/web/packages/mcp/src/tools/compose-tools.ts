@@ -38,6 +38,8 @@ const bindingSchema = z.object({
 });
 
 const themeIdSchema = z.string().min(1).optional();
+/** The name the editor's layer tree prints; the object's type word when omitted. */
+const nameSchema = z.string().min(1).optional();
 
 /** Registers the scene-composition tools on the server. */
 export function registerComposeTools(server: McpServer, context: ToolContext) {
@@ -64,6 +66,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
         "Add a text object with literal and value runs. A value run names a binding supplied in bindings. A run may name a type token (heading, body or mono); its size is the fallback role.",
       inputSchema: z.object({
         box: boxSchema,
+        name: nameSchema,
         runs: z
           .array(
             z.object({
@@ -96,6 +99,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
       inputSchema: z.object({
         kind: z.enum(["rect", "ellipse", "path"]),
         box: boxSchema,
+        name: nameSchema,
         token: z.string().min(1).optional(),
         radius: z.number().optional(),
         points: z.array(z.array(z.union([z.string(), z.number()]))).optional(),
@@ -114,6 +118,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
       inputSchema: z.object({
         assetId: z.string().min(1),
         box: boxSchema,
+        name: nameSchema,
         fit: z.enum(["cover", "contain"]).optional(),
         themeId: themeIdSchema,
       }),
@@ -128,6 +133,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
       inputSchema: z.object({
         icon: z.string().min(1),
         box: boxSchema,
+        name: nameSchema,
         token: z.string().min(1).optional(),
         themeId: themeIdSchema,
       }),
@@ -143,6 +149,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
       inputSchema: z.object({
         family: z.enum(["line", "bar", "gauge"]),
         box: boxSchema,
+        name: nameSchema,
         binding: bindingSchema.optional(),
         bindings: z.array(bindingSchema).optional(),
         settings: z.unknown().optional(),
@@ -224,14 +231,15 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "group_objects",
     {
       description:
-        "Wrap root scene objects in a Fabric group, minting fresh ids for the group and its children.",
+        "Wrap root scene objects in a Fabric group, minting fresh ids for the group and its children. Name the group for the component its objects form.",
       inputSchema: z.object({
         objectIds: z.array(z.string().min(1)).min(1),
+        name: nameSchema,
         themeId: themeIdSchema,
       }),
     },
-    async ({ objectIds, themeId }) =>
-      await groupObjects(context, objectIds, themeId),
+    async ({ objectIds, name, themeId }) =>
+      await groupObjects(context, objectIds, themeId, name),
   );
 
   server.registerTool(

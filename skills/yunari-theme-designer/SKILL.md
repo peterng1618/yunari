@@ -50,7 +50,8 @@ Read `references/tool-guide.md` before the first tool call. The order is fixed:
 5. **Create** — `create_theme`, then `set_artboard`, `set_palette`,
    `set_type_tokens`, `set_background`, including imported media and faces.
 6. **Compose** — `add_card`, `add_text`, `add_shape`, `add_image`, `add_icon`,
-   `add_chart`, `add_binding`; inspect with `list_objects`. Use icons,
+   `add_chart`, `add_binding`; inspect with `list_objects`. Pass `name` on every
+   add call, and `group_objects` the parts that form one component. Use icons,
    decorative display type and one expressive device where the direction calls
    for them.
 7. **Validate** — `validate_theme`; fix every issue before previewing.
@@ -72,6 +73,13 @@ override a preference for a nicer picture.
   write zero, a dash or a default for a sensor the host did not measure.
 - **Legibility outranks expressiveness.** A decorative heading, angled type or
   full-bleed video never shrinks a reading below its minimum or breaks contrast.
+- **Name every layer for what it is.** Every object and group carries a short
+  name that states its content — "CPU temperature", "Clock face", "Scrim" — not
+  the tool's type word. Pass `name` on the compose call; `update_object` renames
+  one later. An unnamed layer reads as "text" or "shape" in the tree.
+- **Group the parts of one component.** A clock's face, ticks and hands are one
+  component: compose its parts, then `group_objects` them under the component's
+  name. Group only what reads as one thing; unrelated objects stay separate.
 - **Decorate first.** Decoration is the default; never inherit the starter
   theme's heading, card grid or density unless that style was asked for. A
   monitoring-first dashboard is allowed only when the brief implies one; say

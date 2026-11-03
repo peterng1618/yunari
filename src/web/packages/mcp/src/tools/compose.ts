@@ -172,6 +172,7 @@ export async function addText(
   context: ToolContext,
   input: {
     readonly box: Box;
+    readonly name?: string | undefined;
     readonly runs: readonly {
       readonly kind?: "literal" | "value" | undefined;
       readonly bindingId?: string | undefined;
@@ -229,6 +230,7 @@ export async function addText(
     });
     const built = addTextObject({
       id: "text",
+      ...(input.name === undefined ? {} : { name: input.name }),
       ...input.box,
       runs,
       ...(input.align === undefined ? {} : { align: input.align }),
@@ -248,6 +250,7 @@ export async function addShape(
   input: {
     readonly kind: "rect" | "ellipse" | "path";
     readonly box: Box;
+    readonly name?: string | undefined;
     readonly token?: string | undefined;
     readonly radius?: number | undefined;
     readonly points?: readonly (readonly (string | number)[])[] | undefined;
@@ -293,6 +296,7 @@ export async function addShape(
         : undefined;
     const object = addShapeObject({
       id: "shape",
+      ...(input.name === undefined ? {} : { name: input.name }),
       kind: input.kind,
       ...input.box,
       ...(input.token === undefined
@@ -312,6 +316,7 @@ export async function addImage(
   input: {
     readonly assetId: string;
     readonly box: Box;
+    readonly name?: string | undefined;
     readonly fit?: "cover" | "contain" | undefined;
     readonly themeId?: string | undefined;
   },
@@ -335,6 +340,7 @@ export async function addImage(
     }
     const object = addImageObject({
       id: "image",
+      ...(input.name === undefined ? {} : { name: input.name }),
       assetId: asset.id,
       kind: asset.kind,
       ...input.box,
@@ -357,6 +363,7 @@ export async function addIcon(
   input: {
     readonly icon: string;
     readonly box: Box;
+    readonly name?: string | undefined;
     readonly token?: string | undefined;
     readonly themeId?: string | undefined;
   },
@@ -371,6 +378,7 @@ export async function addIcon(
     const palette = paletteOf(draft);
     const object = addIconObject({
       id: "icon",
+      ...(input.name === undefined ? {} : { name: input.name }),
       icon: input.icon as keyof typeof starterIcons,
       left: input.box.left,
       top: input.box.top,
@@ -389,6 +397,7 @@ export async function addChart(
   input: {
     readonly family: "line" | "bar" | "gauge";
     readonly box: Box;
+    readonly name?: string | undefined;
     readonly binding?: BindingInput | undefined;
     readonly bindings?: readonly BindingInput[] | undefined;
     readonly settings?: unknown;
@@ -406,6 +415,7 @@ export async function addChart(
     const draft = draftFor(context, input.themeId);
     const built = addChartObject({
       id: "chart",
+      ...(input.name === undefined ? {} : { name: input.name }),
       ...input.box,
       family: input.family,
       bindings: bindingsOf(bindings),
@@ -546,15 +556,29 @@ function scaleOf(object: ObjectJson, key: "scaleX" | "scaleY"): number {
  * An object's true bounding box in artboard coordinates.
  *
  * Fabric places an object by its anchor, so a group must read the authored
- * origin rather than assuming every box starts at `left`/`top`.
+ * origin rather than assuming every box starts at `left`/`top`. A text object
+ * authors no top-level height — Fabric measures it on load — so its box height
+ * comes from `yunariText.box`, the box the text pass restores.
  */
 function boxOf(object: ObjectJson, id: string): Box {
+  const record = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
+  const authoredHeight = (): number | undefined => {
+    const value = record(record(object["yunariText"])?.["box"])?.["height"];
+    return typeof value === "number" && Number.isFinite(value)
+      ? value
+      : undefined;
+  };
   const read = (key: "left" | "top" | "width" | "height"): number => {
     const value = object[key];
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new Error(`Object "${id}" has no authored ${key} to group by.`);
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (key === "height") {
+      const measured = authoredHeight();
+      if (measured !== undefined) return measured;
     }
-    return value;
+    throw new Error(`Object "${id}" has no authored ${key} to group by.`);
   };
   const width = read("width") * scaleOf(object, "scaleX");
   const height = read("height") * scaleOf(object, "scaleY");
@@ -569,7 +593,8 @@ function boxOf(object: ObjectJson, id: string): Box {
 export async function groupObjects(
   context: ToolContext,
   objectIds: readonly string[],
-  themeId?: string,
+  themeId?: string | undefined,
+  name?: string | undefined,
 ): Promise<CallToolResult> {
   return await jsonAttempt(() => {
     if (objectIds.length === 0) {
@@ -635,7 +660,7 @@ export async function groupObjects(
     const group: ObjectJson = {
       type: "Group",
       id: "group",
-      name: "group",
+      name: name ?? "group",
       left: minX,
       top: minY,
       width: maxX - minX,

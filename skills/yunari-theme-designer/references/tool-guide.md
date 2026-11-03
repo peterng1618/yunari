@@ -142,6 +142,11 @@ Current behaviours, each has cost a save or preview when missed.
   revealing its top; positive `offsetX` moves it right, revealing its left. The
   offset is a fraction of the cover overhang, so ±1 reaches the full pan on any
   crop; choose a source whose subject survives at that limit.
+- **An unnamed layer reads as its type word.** A compose call without `name`
+  names the object after the id it mints — a tree of "text", "shape" and
+  "icon". Pass a short, content-specific `name` on every add, and name a group
+  for the component its parts form (a clock's face, ticks and hands are
+  "Clock").
 - **A theme language localizes the date, not contextual text.** With `language`
   set, `date.today` renders in that language, but `weather.condition`,
   `weather.location`, media titles and game names stay as the host sends them.
@@ -179,15 +184,15 @@ tokens before composing so objects can reference them by id.
 |---|---|
 | `list_objects` | the draft's ids before updating or removing anything |
 | `add_card` | a starter unit (`group-time-card`, `group-cpu-card`, `group-gpu-card`, `group-ram-card`, `group-vram-card`, `group-trends-card`, `group-storage-card`, `group-network-card`) at left/top, optional scale |
-| `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow |
+| `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow, `name` |
 | `add_shape` | rect/ellipse/path, box, one palette `token`; radius on a rect, path points and stroke width on a path — other combinations are refused |
-| `add_image` | declared asset id, box |
-| `add_icon` | `icon` from the shared icon set, box, palette token |
-| `add_chart` | family line/bar/gauge, box, binding, optional settings |
+| `add_image` | declared asset id, box, `name` |
+| `add_icon` | `icon` from the shared icon set, box, palette token, `name` |
+| `add_chart` | family line/bar/gauge, box, binding, optional settings, `name` |
 | `add_binding` | replace an object's `bindings` array with one or more semantic keys |
 | `update_object` | validated JSON merge by object id, under the `patch` field |
 | `remove_object` | delete an object by id; not a saved-theme delete |
-| `group_objects` / `ungroup_objects` | group ids / group id |
+| `group_objects` / `ungroup_objects` | group ids under the component's `name` / group id |
 
 Compose tools return the ids they created and any issue the kit reported. Fix
 reported issues before the next call. Never bind a key `list_sensors` did not

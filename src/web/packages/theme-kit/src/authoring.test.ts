@@ -30,6 +30,74 @@ const letterSpacingOf = (run: AuthoredRun | undefined): unknown =>
   )?.letterSpacing?.value;
 
 describe("the compose vocabulary", () => {
+  it("names an object by its authored name, else by its id", () => {
+    const text = addTextObject({
+      id: "text",
+      name: "CPU temperature",
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 20,
+      runs: [{ kind: "literal", text: "CPU", token: "text", size: 20 }],
+    });
+    expect(text.object["name"]).toBe("CPU temperature");
+
+    const shape = addShapeObject({
+      id: "shape",
+      name: "Clock face",
+      kind: "ellipse",
+      left: 0,
+      top: 0,
+      width: 100,
+      height: 100,
+    });
+    const unnamed = addShapeObject({
+      id: "shape",
+      kind: "rect",
+      left: 0,
+      top: 0,
+      width: 10,
+      height: 10,
+    });
+    expect(shape["name"]).toBe("Clock face");
+    expect(unnamed["name"]).toBe("shape");
+
+    expect(
+      addImageObject({
+        id: "image",
+        name: "Album art",
+        assetId: "cover",
+        kind: "image",
+        left: 0,
+        top: 0,
+        width: 10,
+        height: 10,
+      })["name"],
+    ).toBe("Album art");
+    expect(
+      addIconObject({
+        id: "icon",
+        name: "CPU icon",
+        icon: "cpu",
+        left: 0,
+        top: 0,
+        size: 24,
+      })["name"],
+    ).toBe("CPU icon");
+    expect(
+      addChartObject({
+        id: "chart",
+        name: "CPU load history",
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        family: "line",
+        bindings: [{ id: "cpu-load", semanticKey: "cpu.load" }],
+      }).object["name"],
+    ).toBe("CPU load history");
+  });
+
   it("builds a text box whose value run names its binding", () => {
     const { object, bindings } = addTextObject({
       id: "load",
