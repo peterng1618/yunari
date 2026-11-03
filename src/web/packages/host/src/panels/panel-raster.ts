@@ -76,7 +76,10 @@ export interface LiveFrame {
 }
 
 export interface Screencast {
-  /** The first frame newer than `after`; waits at most `FRAME_TIMEOUT_MS`. */
+  /** The first frame newer than `after`, waiting at most `FRAME_TIMEOUT_MS`.
+   *  With no newer frame, the newest one already answered — a page that has
+   *  not recomposed still has a picture. Refuses only when it has never had
+   *  one. */
   next(after: number): Promise<LiveFrame>;
   stop(): Promise<void>;
 }
@@ -156,6 +159,17 @@ export async function startScreencast(
       return await new Promise<LiveFrame>((resolve, reject) => {
         const timer = setTimeout(() => {
           waiting = undefined;
+          // **A page that does not recompose has not failed.** A clock without
+          // seconds, a still, a photo: the compositor hands over one frame and
+          // then nothing until the picture changes. Answering the newest frame
+          // is the truth — the consumer compares bytes and sends nothing —
+          // where rejecting read as a lost panel and made the manager restart
+          // the page every few seconds. Only a page that has never produced a
+          // frame is one this rasteriser cannot answer.
+          if (newest !== undefined) {
+            resolve(newest);
+            return;
+          }
           reject(
             new Error(
               `the panel page produced no frame in ${FRAME_TIMEOUT_MS} ms`,
