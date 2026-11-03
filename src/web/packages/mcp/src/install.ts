@@ -17,6 +17,7 @@ import {
   removeServer,
   upsertServer,
 } from "add-mcp";
+import { type InstallChoices, resolveChoices } from "./choices.js";
 
 /** The agent `add-mcp` registers the server for. */
 export const AGENT_TYPE = "claude-code";
@@ -43,8 +44,8 @@ export const SKILL_NAME = "yunari-theme-designer";
 export interface ServerEntry {
   readonly command: string;
   readonly args: string[];
-  /** An empty list means "every tool", which is the user's chosen default. */
-  readonly autoApproveTools: string[];
+  /** An empty list means "every tool"; absent means no auto-approval at all. */
+  readonly autoApproveTools?: string[];
 }
 
 /** The port shape every test injects; production defaults live in `createPorts`. */
@@ -68,12 +69,20 @@ export interface InstallPorts {
     args: readonly string[],
   ) => Promise<{ readonly code: number | null; readonly error?: string }>;
   readonly upsert: (
+    agent: string,
     config: ServerEntry,
-    options: { readonly local: boolean },
+    options: { readonly local: boolean; readonly cwd?: string },
   ) => InstallResult;
-  readonly remove: (options: { readonly local: boolean }) => RemoveServerResult;
+  readonly remove: (
+    agent: string,
+    options: { readonly local: boolean; readonly cwd?: string },
+  ) => RemoveServerResult;
   readonly removeAutoApproval: () => AutoApprovalRemoval;
-  readonly isServerInstalled: () => Promise<boolean>;
+  readonly isServerInstalled: (
+    agents?: readonly string[],
+    scope?: "global" | "local",
+    cwd?: string,
+  ) => Promise<boolean>;
   /** The entry the agent config holds, or undefined when it is not registered. */
   readonly installedServer: (
     agents: readonly string[],
@@ -298,11 +307,12 @@ export function serverEntryFor(
   serverEntry: string,
   url?: string,
   interpreter: string = resolveInterpreter(process.execPath),
+  autoApprove = true,
 ): ServerEntry {
   return {
     command: interpreter,
     args: [serverEntry, "serve", ...(url === undefined ? [] : ["--url", url])],
-    autoApproveTools: [],
+    ...(autoApprove ? { autoApproveTools: [] } : {}),
   };
 }
 
@@ -312,82 +322,98 @@ export function serverEntryFor(
  */
 export async function install(
   ports: InstallPorts,
-  url?: string,
+  choices: InstallChoices = resolveChoices({}, process.cwd()),
 ): Promise<InstallReport> {
   const canonical = skillFilePath(ports.home);
   let skillPath = canonical;
   const steps: StepOutcome[] = [];
 
-  try {
-    const run = await ports.runSkills(skillInstallArgs(ports.skillSourceDir));
-    if (run.code !== 0) {
-      steps.push({
-        step: "skill",
-        ok: false,
-        detail: `could not install the skill: ${describeExit(run)}`,
-      });
-    } else {
-      const found = installedSkillPath(ports);
-      if (found === undefined) {
+  if (choices.skill) {
+    try {
+      const run = await ports.runSkills(skillInstallArgs(ports.skillSourceDir));
+      if (run.code !== 0) {
         steps.push({
           step: "skill",
           ok: false,
-          detail: `the skills CLI succeeded but ${canonical} does not exist`,
+          detail: `could not install the skill: ${describeExit(run)}`,
         });
       } else {
-        skillPath = found;
-        steps.push({ step: "skill", ok: true, detail: `installed ${found}` });
+        const found = installedSkillPath(ports);
+        if (found === undefined) {
+          steps.push({
+            step: "skill",
+            ok: false,
+            detail: `the skills CLI succeeded but ${canonical} does not exist`,
+          });
+        } else {
+          skillPath = found;
+          steps.push({ step: "skill", ok: true, detail: `installed ${found}` });
+        }
       }
+    } catch (error) {
+      steps.push({
+        step: "skill",
+        ok: false,
+        detail: `could not install the skill: ${messageOf(error)}`,
+      });
     }
-  } catch (error) {
-    steps.push({
-      step: "skill",
-      ok: false,
-      detail: `could not install the skill: ${messageOf(error)}`,
-    });
   }
 
-  try {
-    // The bin shim is the entry the agent runs: it explains a missing build
-    // instead of failing on an unresolved import. Registering a path that does
-    // not exist would hand the agent that stack trace at the next session.
-    if (!ports.fileExists(ports.serverEntry)) {
-      steps.push({
-        step: "server",
-        ok: false,
-        detail: `${ports.serverEntry} does not exist; build it with "npm run build -w @yunari/mcp"`,
-      });
-    } else {
-      const result = ports.upsert(
-        serverEntryFor(ports.serverEntry, url, ports.interpreter),
-        {
-          local: false,
-        },
-      );
-      if (!result.success) {
-        steps.push({
-          step: "server",
-          ok: false,
-          detail: `could not register "${SERVER_NAME}": ${result.error ?? result.path}`,
-        });
-      } else {
+  // The bin shim is the entry the agent runs: it explains a missing build
+  // instead of failing on an unresolved import. Registering a path that does
+  // not exist would hand the agent that stack trace at the next session.
+  if (!ports.fileExists(ports.serverEntry)) {
+    steps.push({
+      step: "server",
+      ok: false,
+      detail: `${ports.serverEntry} does not exist; build it with "npm run build -w @yunari/mcp"`,
+    });
+  } else {
+    const options =
+      choices.scope === "local"
+        ? { local: true, cwd: choices.cwd }
+        : { local: false };
+    for (const agent of choices.agents) {
+      try {
+        const result = ports.upsert(
+          agent,
+          serverEntryFor(
+            ports.serverEntry,
+            choices.url,
+            ports.interpreter,
+            choices.autoApprove,
+          ),
+          options,
+        );
+        if (!result.success) {
+          steps.push({
+            step: "server",
+            ok: false,
+            detail: `could not register "${SERVER_NAME}" for ${agent}: ${result.error ?? result.path}`,
+          });
+          continue;
+        }
         const extra =
           result.extraPaths === undefined || result.extraPaths.length === 0
             ? ""
             : ` (also wrote ${result.extraPaths.join(", ")})`;
+        const dropped =
+          result.droppedFields === undefined || result.droppedFields.length === 0
+            ? ""
+            : ` (${agent} ignores ${result.droppedFields.join(", ")})`;
         steps.push({
           step: "server",
           ok: true,
-          detail: `registered "${SERVER_NAME}" in ${result.path}${extra}`,
+          detail: `registered "${SERVER_NAME}" for ${agent} in ${result.path}${extra}${dropped}`,
+        });
+      } catch (error) {
+        steps.push({
+          step: "server",
+          ok: false,
+          detail: `could not register "${SERVER_NAME}" for ${agent}: ${messageOf(error)}`,
         });
       }
     }
-  } catch (error) {
-    steps.push({
-      step: "server",
-      ok: false,
-      detail: `could not register "${SERVER_NAME}": ${messageOf(error)}`,
-    });
   }
 
   return {
@@ -402,33 +428,42 @@ export async function install(
  * entry's own result says whether it was present; the skill half fails if the
  * CLI fails or the file survives.
  */
-export async function uninstall(ports: InstallPorts): Promise<InstallReport> {
+export async function uninstall(
+  ports: InstallPorts,
+  choices: InstallChoices = resolveChoices({}, process.cwd()),
+): Promise<InstallReport> {
   const canonical = skillFilePath(ports.home);
   const skillPath = installedSkillPath(ports) ?? canonical;
   const steps: StepOutcome[] = [];
-  try {
-    const result = ports.remove({ local: false });
-    if (!result.success) {
+  const options =
+    choices.scope === "local"
+      ? { local: true, cwd: choices.cwd }
+      : { local: false };
+  for (const agent of choices.agents) {
+    try {
+      const result = ports.remove(agent, options);
+      if (!result.success) {
+        steps.push({
+          step: "server",
+          ok: false,
+          detail: `could not remove "${SERVER_NAME}" for ${agent}: ${result.error ?? result.path}`,
+        });
+      } else {
+        steps.push({
+          step: "server",
+          ok: true,
+          detail: result.removed
+            ? `removed "${SERVER_NAME}" for ${agent} from ${result.path}`
+            : `"${SERVER_NAME}" was not registered for ${agent} in ${result.path}`,
+        });
+      }
+    } catch (error) {
       steps.push({
         step: "server",
         ok: false,
-        detail: `could not remove "${SERVER_NAME}": ${result.error ?? result.path}`,
-      });
-    } else {
-      steps.push({
-        step: "server",
-        ok: true,
-        detail: result.removed
-          ? `removed "${SERVER_NAME}" from ${result.path}`
-          : `"${SERVER_NAME}" was not registered in ${result.path}`,
+        detail: `could not remove "${SERVER_NAME}" for ${agent}: ${messageOf(error)}`,
       });
     }
-  } catch (error) {
-    steps.push({
-      step: "server",
-      ok: false,
-      detail: `could not remove "${SERVER_NAME}": ${messageOf(error)}`,
-    });
   }
 
   try {
@@ -456,32 +491,38 @@ export async function uninstall(ports: InstallPorts): Promise<InstallReport> {
     });
   }
 
-  try {
-    const run = await ports.runSkills(skillRemoveArgs());
-    if (run.code !== 0) {
-      steps.push({
-        step: "skill",
-        ok: false,
-        detail: `could not remove the skill: ${describeExit(run)}`,
-      });
-    } else {
-      const leftover = installedSkillPath(ports);
-      if (leftover !== undefined) {
+  if (choices.skill) {
+    try {
+      const run = await ports.runSkills(skillRemoveArgs());
+      if (run.code !== 0) {
         steps.push({
           step: "skill",
           ok: false,
-          detail: `the skills CLI succeeded but ${leftover} is still present`,
+          detail: `could not remove the skill: ${describeExit(run)}`,
         });
       } else {
-        steps.push({ step: "skill", ok: true, detail: `removed ${skillPath}` });
+        const leftover = installedSkillPath(ports);
+        if (leftover !== undefined) {
+          steps.push({
+            step: "skill",
+            ok: false,
+            detail: `the skills CLI succeeded but ${leftover} is still present`,
+          });
+        } else {
+          steps.push({
+            step: "skill",
+            ok: true,
+            detail: `removed ${skillPath}`,
+          });
+        }
       }
+    } catch (error) {
+      steps.push({
+        step: "skill",
+        ok: false,
+        detail: `could not remove the skill: ${messageOf(error)}`,
+      });
     }
-  } catch (error) {
-    steps.push({
-      step: "skill",
-      ok: false,
-      detail: `could not remove the skill: ${messageOf(error)}`,
-    });
   }
 
   return {
@@ -574,10 +615,12 @@ function runSkillsCli(
 }
 
 /** Reads the agent config through add-mcp's own reader, never a hand-rolled one. */
-async function serverIsInstalled(): Promise<boolean> {
+async function serverIsInstalled(
+  agents: readonly string[] = [AGENT_TYPE],
+): Promise<boolean> {
   const listings = await listInstalledServers({
     global: true,
-    agents: [AGENT_TYPE],
+    agents: agents as never,
   });
   return listings.some((listing) =>
     listing.servers.some((server) => server.serverName === SERVER_NAME),
@@ -640,10 +683,10 @@ export function createPorts(
     interpreter:
       options.interpreter ?? resolveInterpreter(process.execPath),
     runSkills: runSkillsCli,
-    upsert: (config, upsertOptions) =>
-      upsertServer(AGENT_TYPE, SERVER_NAME, config, upsertOptions),
-    remove: (removeOptions) =>
-      removeServer(AGENT_TYPE, SERVER_NAME, removeOptions),
+    upsert: (agent, config, upsertOptions) =>
+      upsertServer(agent as never, SERVER_NAME, config, upsertOptions),
+    remove: (agent, removeOptions) =>
+      removeServer(agent as never, SERVER_NAME, removeOptions),
     removeAutoApproval: () => removeAutoApprovalRule(home),
     isServerInstalled: serverIsInstalled,
     installedServer: installedServerEntry,

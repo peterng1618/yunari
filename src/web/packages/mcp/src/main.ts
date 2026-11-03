@@ -1,6 +1,9 @@
 import { realpathSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { detectGlobalAgents } from "add-mcp";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { parseInstallArgs, resolveChoices } from "./choices.js";
 import { InMemoryDraftStore } from "./drafts.js";
 import { LazyHostClient, PROBE_PORTS } from "./host-client.js";
 import {
@@ -12,6 +15,7 @@ import {
 } from "./install.js";
 import { buildServer } from "./server.js";
 import type { ToolContext } from "./types.js";
+import { refusal, runWizard, type WizardIo } from "./wizard.js";
 
 const USAGE = `Usage:
   yunari-mcp serve [--url <url>]   Start the MCP server over stdio.
@@ -185,8 +189,126 @@ async function probeHost(url?: string) {
   }
 }
 
+/** What the CLI reads from the process; tests supply their own. */
+export interface RunOptions {
+  readonly isTTY?: boolean;
+  readonly cwd?: string;
+  readonly io?: WizardIo;
+}
+
+function terminalIo(): WizardIo {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return {
+    ask: (question) => rl.question(question),
+    write: (text) => process.stdout.write(text),
+    close: () => rl.close(),
+  };
+}
+
+/** Everything the installer asks, resolved from flags, `--yes` or the wizard. */
+async function runInstaller(
+  command: "install" | "uninstall",
+  argv: readonly string[],
+  options: RunOptions,
+): Promise<number> {
+  const parsed = parseInstallArgs(argv);
+  if (parsed.kind === "error") {
+    if (parsed.message === "help") {
+      console.log(USAGE);
+      return 0;
+    }
+    console.error(`${parsed.message}\n\n${USAGE}`);
+    return 1;
+  }
+
+  const cwd = options.cwd ?? process.cwd();
+  let choices;
+  if (command === "install") {
+    const isTTY = options.isTTY ?? process.stdin.isTTY === true;
+    if (!parsed.yes && !isTTY) {
+      console.error(refusal());
+      return 2;
+    }
+    if (parsed.yes) {
+      choices = resolveChoices(parsed.choices, cwd);
+    } else {
+      const io = options.io ?? terminalIo();
+      try {
+        const detected = await detectGlobalAgents().catch(() => []);
+        const wizard = await runWizard(io, cwd, detected, async () => {
+          try {
+            return await resolveHostUrl({});
+          } catch {
+            return undefined;
+          }
+        });
+        const { cwd: wizardCwd, ...answers } = wizard;
+        choices = resolveChoices({ ...answers, ...parsed.choices }, wizardCwd);
+      } finally {
+        io.close?.();
+      }
+    }
+  } else {
+    choices = resolveChoices(parsed.choices, cwd);
+  }
+
+  const ports = createPorts({ probeHost: () => probeHost(choices.url) });
+  const report =
+    command === "install"
+      ? await install(ports, choices)
+      : await uninstall(ports, choices);
+  if (parsed.json) {
+    console.log(JSON.stringify(report));
+  } else {
+    printReport(report, command === "install" ? "Installed" : "Removed");
+  }
+  return report.ok ? 0 : 1;
+}
+
+/** `yunari-mcp` with no command, from a terminal: the install menu. */
+async function runMenu(options: RunOptions): Promise<number> {
+  const io = options.io ?? terminalIo();
+  try {
+    io.write("1) Install  2) Uninstall  3) Status  0) Exit\n");
+    const answer = (await io.ask("> ")).trim();
+    switch (answer) {
+      case "1":
+        return await runInstaller("install", ["install"], options);
+      case "2":
+        return await runInstaller("uninstall", ["uninstall"], options);
+      case "3":
+        return await run(["status"], options);
+      default:
+        return 0;
+    }
+  } finally {
+    io.close?.();
+  }
+}
+
 /** The CLI. `serve` starts the server; the rest own the agent install. */
-export async function run(argv: readonly string[]): Promise<number> {
+export async function run(
+  argv: readonly string[],
+  options: RunOptions = {},
+): Promise<number> {
+  const command = argv[0];
+
+  // The installer owns its own flag grammar, so it is routed before the
+  // `serve` parser sees `--yes`, `--agent` or `--json`.
+  if (command === "install" || command === "uninstall") {
+    return runInstaller(command, argv, options);
+  }
+  if (command === undefined) {
+    if (options.isTTY !== true) {
+      console.error(USAGE);
+      return 1;
+    }
+    return runMenu(options);
+  }
+
   let parsed: ParsedArgs;
 
   try {
@@ -201,36 +323,22 @@ export async function run(argv: readonly string[]): Promise<number> {
     return 0;
   }
 
-  if (
-    parsed.command === "install" ||
-    parsed.command === "uninstall" ||
-    parsed.command === "status"
-  ) {
+  if (parsed.command === "status") {
     const ports = createPorts({ probeHost: () => probeHost(parsed.url) });
-
-    if (parsed.command === "status") {
-      const report = await status(ports);
-      const at = report.host.url === undefined ? "" : ` at ${report.host.url}`;
-      console.log(
-        report.host.reachable
-          ? `host: reachable${at}`
-          : `host: unreachable${at}${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
-      );
-      console.log(`server: ${report.server.detail}`);
-      console.log(
-        report.skill.present
-          ? `skill: installed at ${report.skill.path}`
-          : `skill: missing at ${report.skill.path}`,
-      );
-      return 0;
-    }
-
-    const report =
-      parsed.command === "install"
-        ? await install(ports, parsed.url)
-        : await uninstall(ports);
-    printReport(report, parsed.command === "install" ? "Installed" : "Removed");
-    return report.ok ? 0 : 1;
+    const report = await status(ports);
+    const at = report.host.url === undefined ? "" : ` at ${report.host.url}`;
+    console.log(
+      report.host.reachable
+        ? `host: reachable${at}`
+        : `host: unreachable${at}${report.host.error === undefined ? "" : ` — ${report.host.error}`}`,
+    );
+    console.log(`server: ${report.server.detail}`);
+    console.log(
+      report.skill.present
+        ? `skill: installed at ${report.skill.path} (${report.skill.state})`
+        : `skill: missing at ${report.skill.path}`,
+    );
+    return 0;
   }
 
   if (parsed.command !== "serve") {

@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { InstallResult, RemoveServerResult } from "add-mcp";
 import { afterEach, describe, expect, it } from "vitest";
+import type { InstallChoices } from "./choices.js";
+import { resolveChoices } from "./choices.js";
 import {
   AGENT_TYPE,
   AUTO_APPROVAL_RULE,
@@ -48,8 +50,8 @@ afterEach(() => {
 
 interface Calls {
   skills: string[][];
-  upserts: { config: unknown; options: unknown }[];
-  removes: unknown[];
+  upserts: { agent: string; config: unknown; options: unknown }[];
+  removes: { agent: string; options: unknown }[];
   approvals: number;
   probes: number;
   checks: number;
@@ -62,6 +64,7 @@ interface Behaviour {
   readonly installedAlready?: boolean;
   readonly keepsSkillAfterRemove?: boolean;
   readonly upsertFails?: boolean;
+  readonly upsertFailsFor?: string;
   readonly removeFails?: boolean;
   readonly approvalFails?: boolean;
   readonly serverInstalled?: boolean;
@@ -123,9 +126,10 @@ function fakePorts(
           : { error: behaviour.skillsError }),
       };
     },
-    upsert: (config: unknown, options): InstallResult => {
-      calls.upserts.push({ config, options });
-      return behaviour.upsertFails === true
+    upsert: (agent: string, config: unknown, options): InstallResult => {
+      calls.upserts.push({ agent, config, options });
+      return behaviour.upsertFails === true ||
+        behaviour.upsertFailsFor === agent
         ? { success: false, path: "/agent/config.json", error: "refused" }
         : {
             success: true,
@@ -133,8 +137,8 @@ function fakePorts(
             extraPaths: ["/agent/settings.json"],
           };
     },
-    remove: (options): RemoveServerResult => {
-      calls.removes.push(options);
+    remove: (agent: string, options): RemoveServerResult => {
+      calls.removes.push({ agent, options });
       return behaviour.removeFails === true
         ? {
             success: false,
@@ -257,7 +261,10 @@ describe("install", () => {
     const home = temporaryHome();
     const { ports, calls } = fakePorts(home);
 
-    const report = await install(ports, "http://127.0.0.1:6000");
+    const report = await install(
+      ports,
+      resolveChoices({ url: "http://127.0.0.1:6000" }, "/work"),
+    );
 
     expect(report.ok).toBe(true);
     expect((calls.upserts[0]?.config as { args: string[] }).args).toEqual([
@@ -304,7 +311,7 @@ describe("uninstall", () => {
     const report = await uninstall(ports);
 
     expect(report.ok).toBe(true);
-    expect(calls.removes).toEqual([{ local: false }]);
+    expect(calls.removes).toEqual([{ agent: AGENT_TYPE, options: { local: false } }]);
     expect(calls.approvals).toBe(1);
     expect(calls.skills).toEqual([[...skillRemoveArgs()]]);
     expect([...skillRemoveArgs()]).toEqual([
@@ -575,5 +582,76 @@ describe("removeAutoApprovalRule", () => {
       path,
     });
     expect(() => readFileSync(path, "utf8")).toThrow();
+  });
+});
+
+describe("install choices", () => {
+  const choices = (overrides: Partial<InstallChoices> = {}): InstallChoices => ({
+    agents: ["claude-code"],
+    scope: "global",
+    skill: false,
+    autoApprove: true,
+    cwd: "/work",
+    ...overrides,
+  });
+
+  it("registers the server for each selected agent exactly once", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    const report = await install(
+      ports,
+      choices({ agents: ["claude-code", "cursor"] }),
+    );
+
+    expect(report.ok).toBe(true);
+    expect(calls.upserts.map((call) => call.agent)).toEqual([
+      "claude-code",
+      "cursor",
+    ]);
+    expect(
+      (calls.upserts[0]?.config as { autoApproveTools?: string[] })
+        .autoApproveTools,
+    ).toEqual([]);
+  });
+
+  it("reports failure and keeps the other agent's step when one agent fails", async () => {
+    const home = temporaryHome();
+    const { ports } = fakePorts(home, { upsertFailsFor: "cursor" });
+
+    const report = await install(
+      ports,
+      choices({ agents: ["claude-code", "cursor"] }),
+    );
+
+    expect(report.ok).toBe(false);
+    expect(
+      report.steps.filter((step) => step.step === "server" && step.ok),
+    ).toHaveLength(1);
+  });
+
+  it("keeps auto-approval out of the entry when the user declines it", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    await install(ports, choices({ autoApprove: false }));
+
+    expect(calls.upserts[0]?.config).not.toHaveProperty("autoApproveTools");
+  });
+
+  it("removes exactly the agents and halves it installed", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    await install(ports, choices({ agents: ["claude-code", "cursor"] }));
+    calls.removes.length = 0;
+    calls.skills.length = 0;
+    await uninstall(ports, choices({ agents: ["claude-code", "cursor"] }));
+
+    expect(calls.removes.map((call) => call.agent)).toEqual([
+      "claude-code",
+      "cursor",
+    ]);
+    expect(calls.skills).toHaveLength(0);
   });
 });

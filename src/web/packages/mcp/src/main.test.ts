@@ -255,3 +255,28 @@ describe("run", () => {
     }
   });
 });
+
+describe("installer CLI", () => {
+  it("refuses a piped install without --yes instead of waiting on stdin", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await run(["install"], { isTTY: false })).toBe(2);
+      expect(error.mock.calls.flat().join("\n")).toContain("--yes");
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("opens the menu only from a terminal and exits cleanly", async () => {
+    const written: string[] = [];
+    const code = await run([], {
+      isTTY: true,
+      io: {
+        ask: async () => "0",
+        write: (text) => written.push(text),
+      },
+    });
+    expect(code).toBe(0);
+    expect(written.join("")).toContain("Install");
+  });
+});
