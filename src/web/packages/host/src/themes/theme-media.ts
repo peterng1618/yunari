@@ -139,17 +139,7 @@ export function panelVideoPlacement(
       right: region.right ?? 0,
       bottom: region.bottom ?? 0,
     },
-    ...(region.blend === undefined
-      ? {}
-      : {
-          blend: {
-            shape: region.blend.shape,
-            ...(region.blend.shape === "linear"
-              ? { edge: region.blend.edge }
-              : {}),
-            length: region.blend.length,
-          },
-        }),
+    ...(region.blend === undefined ? {} : { blend: region.blend }),
     ...(fill === undefined ? {} : { fill }),
   };
 }
