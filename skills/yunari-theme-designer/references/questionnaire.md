@@ -2,6 +2,8 @@
 
 Ask one question per gap. When several gaps share one format decision, ask them
 as one message; never re-ask what the brief or a tool answer already fixes.
+When no one can answer — an unattended run — derive every gap from the brief,
+the host and these rules, state each assumption in the report, and proceed.
 
 ## 1. Target display and viewing distance
 
@@ -10,8 +12,7 @@ stand or sit?"
 
 - Derive it when the user named a display id or a device already in
   `list_displays`: use its `kind`, `shape`, rotation and panel geometry.
-- Derive the kind when `preview_theme` can only answer for the listed displays.
-- Ask the distance unless it is obvious from the device: a handheld or desk
+- Derive the distance when it is obvious from the device: a handheld or desk
   monitor is close; a wall panel, a shelf panel or a TV is far. Type size and
   reading count depend on it.
 
@@ -90,8 +91,8 @@ Ask: "What should the theme be called, and whose name should it carry?"
 Ask, naming the theme: "Open **<name>** for editing? This replaces its draft in
 this session and saves back over the existing theme."
 
-- Never derive this consent. It is required before `open_theme`.
-- It is also required before saving over a stored theme through `save_theme`.
+- Never derive this consent. It is required before `open_theme` and before
+  saving over a stored theme through `save_theme`.
 
 ## One message shape
 
