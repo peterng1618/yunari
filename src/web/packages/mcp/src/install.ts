@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type InstallResult,
@@ -194,6 +194,30 @@ export function skillRemoveArgs(): readonly string[] {
   return ["remove", "-g", "-a", SKILL_AGENT, "-y", SKILL_NAME];
 }
 
+/** Whether `child` sits under `parent`, across Windows drive differences. */
+function inside(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * The interpreter a registered entry runs.
+ *
+ * **Never a path under the temp directory.** Some version managers run Node
+ * from a per-session extraction under `os.tmpdir()`; recording that path leaves
+ * the agent pointing at an interpreter the next session cannot find, and the
+ * failure reads as a broken server rather than a stale entry. Such a run
+ * registers the stable name `node`, which the agent resolves from `PATH`. An
+ * installed interpreter keeps its absolute path, which survives a PATH that
+ * does not include Node.
+ */
+export function nodeCommand(
+  execPath: string,
+  tempRoot: string = tmpdir(),
+): string {
+  return inside(tempRoot, execPath) ? "node" : execPath;
+}
+
 /**
  * The entry the server config carries: this Node, the built server, `serve`.
  *
@@ -202,7 +226,7 @@ export function skillRemoveArgs(): readonly string[] {
  */
 export function serverEntryFor(serverEntry: string, url?: string): ServerEntry {
   return {
-    command: process.execPath,
+    command: nodeCommand(process.execPath),
     args: [serverEntry, "serve", ...(url === undefined ? [] : ["--url", url])],
     autoApproveTools: [],
   };

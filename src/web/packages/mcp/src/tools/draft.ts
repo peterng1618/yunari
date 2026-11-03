@@ -365,7 +365,7 @@ function weightOf(
   return /^\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
 }
 
-const roleUpdateSchema = z.object({
+export const roleUpdateSchema = z.strictObject({
   family: z.string().min(1).optional(),
   weight: z.union([z.string(), z.number()]).optional(),
   face: z
@@ -373,6 +373,16 @@ const roleUpdateSchema = z.object({
     .min(1)
     .optional()
     .describe("The packaged font asset's assetId, so this role loads it."),
+});
+
+/** The tool's top-level shape. **Strict**, so a caller that nests the roles
+ *  under a `roles` key is told that the shape is wrong instead of receiving a
+ *  success whose input was silently stripped. */
+export const typeTokensInputSchema = z.strictObject({
+  heading: roleUpdateSchema.optional(),
+  body: roleUpdateSchema.optional(),
+  mono: roleUpdateSchema.optional(),
+  themeId: z.string().min(1).optional(),
 });
 
 /** Registers the draft and token tools on the server. */
@@ -467,13 +477,8 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_type_tokens",
     {
       description:
-        "Set the heading, body or mono type token's family, weight and packaged face. Sizes belong to individual text runs.",
-      inputSchema: z.object({
-        heading: roleUpdateSchema.optional(),
-        body: roleUpdateSchema.optional(),
-        mono: roleUpdateSchema.optional(),
-        themeId: z.string().min(1).optional(),
-      }),
+        "Set the heading, body or mono type token's family, weight and packaged face. Pass roles flat — `heading`, `body` or `mono` at the top level, not nested under a `roles` key. Sizes belong to individual text runs.",
+      inputSchema: typeTokensInputSchema,
     },
     async ({ heading, body, mono, themeId }) =>
       await setTypeTokens(

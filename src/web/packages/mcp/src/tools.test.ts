@@ -29,6 +29,7 @@ import {
   setPalette,
   setThemeMetadata,
   setTypeTokens,
+  typeTokensInputSchema,
 } from "./tools/draft.js";
 import {
   assignTheme,
@@ -748,6 +749,26 @@ describe("draft authoring and verification", () => {
     const discarded = payload(await discardDraft(ctx, themeId));
     expect(discarded.discarded).toBe(true);
     expect(host.requests).toHaveLength(0);
+  });
+});
+
+describe("the type-token tool's input shape", () => {
+  it("refuses a nested roles object rather than stripping it into a no-op", () => {
+    const parsed = typeTokensInputSchema.safeParse({
+      roles: { body: { family: "Georgia" } },
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.code).toBe("unrecognized_keys");
+  });
+
+  it("refuses an unknown key inside one role", () => {
+    const parsed = typeTokensInputSchema.safeParse({
+      body: { family: "Georgia", families: "Georgia" },
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(["body"]);
   });
 });
 

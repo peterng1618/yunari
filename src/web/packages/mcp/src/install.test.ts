@@ -16,6 +16,7 @@ import {
   createPorts,
   type InstallPorts,
   install,
+  nodeCommand,
   removeAutoApprovalRule,
   SKILL_AGENT,
   SKILL_NAME,
@@ -397,6 +398,22 @@ describe("status", () => {
 });
 
 describe("createPorts", () => {
+  it("registers node by name when the interpreter lives in a temp directory", () => {
+    // A version manager that extracts Node per session leaves a path the next
+    // session cannot find; the stable name resolves from PATH instead.
+    const tempRoot = join(tmpdir(), "vm-session");
+    expect(nodeCommand(join(tempRoot, "node.exe"), tempRoot)).toBe("node");
+  });
+
+  it("keeps an installed interpreter's own path", () => {
+    expect(
+      nodeCommand(
+        "C:/Program Files/nodejs/node.exe",
+        join(tmpdir(), "vm-session"),
+      ),
+    ).toBe("C:/Program Files/nodejs/node.exe");
+  });
+
   it("points the entry at this Node and the bin shim", () => {
     const entry = serverEntryFor("C:/repo/packages/mcp/bin/yunari-mcp.js");
     expect(entry.command).toBe(process.execPath);
