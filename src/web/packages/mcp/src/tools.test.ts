@@ -602,7 +602,7 @@ describe("draft authoring and verification", () => {
       ?.typeTokens as Record<string, unknown>;
     expect(tokens["body"]).toEqual({
       family: "Packaged",
-      weight: "500",
+      weight: 500,
       face: { assetId: "font-1" },
     });
   });
