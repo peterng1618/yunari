@@ -56,11 +56,11 @@ export function buildServer(context: ToolContext): McpServer {
           .boolean()
           .optional()
           .describe(
-            "Actually poll the host for readings. Without it, every sensor reports measured: false.",
+            "Poll the host for readings. Defaults to true; pass false to list the catalogue without asking the host what it measures.",
           ),
       }),
     },
-    async ({ measured }) => await listSensors(context, measured ?? false),
+    async ({ measured }) => await listSensors(context, measured),
   );
 
   server.registerTool(

@@ -152,7 +152,9 @@ export class HttpHostClient implements HostClient {
 
     return {
       url: this.url,
-      reachable: true,
+      // Every section failing is not a partial answer: no route answered, so
+      // the host is down however the individual errors read.
+      reachable: unavailable.length < 4,
       themeCount: themeList === undefined ? null : themeList.length,
       displays: displays === undefined ? null : displays.displays.length,
       sensorCount: sensorList === undefined ? null : sensorList.sensors.length,
@@ -334,5 +336,103 @@ export class HttpHostClient implements HostClient {
       `/api/themes/${encodeURIComponent(id)}/panel-preview?${query}`,
     );
     return new Uint8Array(await response.arrayBuffer());
+  }
+}
+
+/**
+ * A client that finds the host on its first call instead of before serving.
+ *
+ * `serve` must start even when the host is down: an MCP client keeps the stdio
+ * connection up, so a host started later has to be reachable without
+ * restarting this process. A failed resolution is not cached — the next tool
+ * call probes again — while a successful one is reused for the process's life.
+ */
+export class LazyHostClient implements HostClient {
+  private resolved: HttpHostClient | undefined;
+  private resolving: Promise<HttpHostClient> | undefined;
+
+  constructor(private readonly resolveUrl: () => Promise<string>) {}
+
+  get url(): string {
+    if (this.resolved === undefined) {
+      throw new Error(
+        "The host URL is not resolved yet; this client resolves it on the first host call.",
+      );
+    }
+    return this.resolved.url;
+  }
+
+  private async client(): Promise<HttpHostClient> {
+    if (this.resolved !== undefined) return this.resolved;
+    this.resolving ??= this.resolveUrl().then(
+      (url) => {
+        this.resolved = new HttpHostClient(url);
+        this.resolving = undefined;
+        return this.resolved;
+      },
+      (error: unknown) => {
+        this.resolving = undefined;
+        throw error;
+      },
+    );
+    return await this.resolving;
+  }
+
+  async status(): Promise<HostStatus> {
+    return await (await this.client()).status();
+  }
+
+  async listThemes(): Promise<readonly ThemeSummary[]> {
+    return await (await this.client()).listThemes();
+  }
+
+  async getTheme(id: string): Promise<ThemeContent> {
+    return await (await this.client()).getTheme(id);
+  }
+
+  async saveTheme(id: string, input: SaveThemeInput): Promise<SaveResult> {
+    return await (await this.client()).saveTheme(id, input);
+  }
+
+  async sensors(measured: boolean): Promise<SensorListing> {
+    return await (await this.client()).sensors(measured);
+  }
+
+  async activeThemes(): Promise<ActiveThemeMap> {
+    return await (await this.client()).activeThemes();
+  }
+
+  async assignTheme(display: string, id: string): Promise<void> {
+    await (await this.client()).assignTheme(display, id);
+  }
+
+  async listAssetSources(): Promise<readonly AssetSourceListing[]> {
+    return await (await this.client()).listAssetSources();
+  }
+
+  async searchAssets(request: AssetSearchRequest): Promise<AssetSearchAnswer> {
+    return await (await this.client()).searchAssets(request);
+  }
+
+  async assetBytes(
+    source: string,
+    id: string,
+  ): Promise<{ readonly bytes: Uint8Array; readonly filename: string }> {
+    return await (await this.client()).assetBytes(source, id);
+  }
+
+  async normalizeVideo(
+    bytes: Uint8Array,
+    trim?: VideoTrim,
+  ): Promise<Uint8Array> {
+    return await (await this.client()).normalizeVideo(bytes, trim);
+  }
+
+  async panelPreview(
+    id: string,
+    display: string,
+    clip: boolean,
+  ): Promise<Uint8Array> {
+    return await (await this.client()).panelPreview(id, display, clip);
   }
 }

@@ -159,6 +159,141 @@ describe("draft authoring and verification", () => {
     );
   });
 
+  it("saves an opened draft before a browser preview returns its URL", async () => {
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/themes/stored" && request.method === "GET") {
+        const envelope = createBlankTheme({
+          artboard: { width: 800, height: 480 },
+          name: "Stored",
+        });
+        return {
+          body: { envelope: { ...envelope, id: "stored" }, assets: {} },
+        };
+      }
+      return hostHandler()(request);
+    });
+    const ctx = context(host);
+    await openTheme(ctx, "stored", true);
+
+    const preview = payload(await previewTheme(ctx, undefined, "stored"));
+
+    expect(preview).toMatchObject({
+      mode: "browser",
+      saved: true,
+      url: `${host.url}/?theme=stored`,
+    });
+    const order = host.requests.map(
+      (request) => `${request.method} ${request.path.split("?")[0]}`,
+    );
+    expect(order).toContain("PUT /api/themes/stored");
+  });
+
+  it("returns validator issues and no URL when a browser preview's save is refused", async () => {
+    const host = await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname.startsWith("/api/themes/") && request.method === "PUT") {
+        return {
+          status: 422,
+          body: {
+            error: "Invalid theme",
+            issues: [{ code: "bad-path", path: "/a", message: "bad" }],
+          },
+        };
+      }
+      return hostHandler()(request);
+    });
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+
+    const result = await previewTheme(ctx, undefined, themeId);
+
+    expect(result.isError).toBe(true);
+    const body = payload(result);
+    expect(body).toMatchObject({
+      ok: false,
+      status: 422,
+      issues: [{ code: "bad-path", path: "/a" }],
+    });
+    expect("url" in body).toBe(false);
+  });
+
+  it("keeps the content fit create_theme was given", async () => {
+    const host = await startHost(hostHandler());
+    const ctx = context(host);
+
+    const created = payload(
+      await createTheme(ctx, {
+        name: "Cover",
+        width: 800,
+        height: 480,
+        contentFit: "cover",
+      }),
+    );
+
+    expect(
+      (created.envelope as { artboard: { contentFit?: string } }).artboard,
+    ).toMatchObject({ contentFit: "cover" });
+    expect(payload(await validateTheme(ctx)).ok).toBe(true);
+  });
+
+  it("refuses shape fields the kind cannot express", async () => {
+    const host = await startHost(hostHandler());
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const box = { left: 0, top: 0, width: 10, height: 10 };
+
+    const rectPoints = await addShape(ctx, {
+      kind: "rect",
+      box,
+      points: [["M", 0, 0]],
+    });
+    expect(refusalTextOf(rectPoints)).toContain('"points"');
+
+    const ellipseStroke = await addShape(ctx, {
+      kind: "ellipse",
+      box,
+      strokeWidth: 2,
+    });
+    expect(refusalTextOf(ellipseStroke)).toContain('"strokeWidth"');
+
+    const ellipseRadius = await addShape(ctx, {
+      kind: "ellipse",
+      box,
+      radius: 4,
+    });
+    expect(refusalTextOf(ellipseRadius)).toContain('"radius"');
+
+    const pathRadius = await addShape(ctx, {
+      kind: "path",
+      box,
+      points: [["M", 0, 0]],
+      radius: 4,
+    });
+    expect(refusalTextOf(pathRadius)).toContain('"radius"');
+
+    // The valid forms stay green: a path's commands and stroke, a rect's radius.
+    expect(
+      (
+        await addShape(ctx, {
+          kind: "path",
+          box,
+          points: [
+            ["M", 0, 0],
+            ["L", 10, 10],
+          ],
+          strokeWidth: 2,
+        })
+      ).isError,
+    ).toBeUndefined();
+    expect(
+      (await addShape(ctx, { kind: "rect", box, radius: 4 })).isError,
+    ).toBe(undefined);
+  });
+
   it("relays validator issues and writes nothing for an invalid envelope", async () => {
     const host = await startHost(hostHandler());
     const ctx = context(host);

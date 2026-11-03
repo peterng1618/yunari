@@ -194,11 +194,16 @@ export function skillRemoveArgs(): readonly string[] {
   return ["remove", "-g", "-a", SKILL_AGENT, "-y", SKILL_NAME];
 }
 
-/** The entry the server config carries: this Node, the built server, `serve`. */
-export function serverEntryFor(serverEntry: string): ServerEntry {
+/**
+ * The entry the server config carries: this Node, the built server, `serve`.
+ *
+ * A named URL travels in the arguments so a host on a custom port survives a
+ * later session; without one the server keeps its probe range.
+ */
+export function serverEntryFor(serverEntry: string, url?: string): ServerEntry {
   return {
     command: process.execPath,
-    args: [serverEntry, "serve"],
+    args: [serverEntry, "serve", ...(url === undefined ? [] : ["--url", url])],
     autoApproveTools: [],
   };
 }
@@ -207,7 +212,10 @@ export function serverEntryFor(serverEntry: string): ServerEntry {
  * Installs both halves and reports each one. A failure on one half does not
  * abandon the other, and a partial result is never reported as success.
  */
-export async function install(ports: InstallPorts): Promise<InstallReport> {
+export async function install(
+  ports: InstallPorts,
+  url?: string,
+): Promise<InstallReport> {
   const canonical = skillFilePath(ports.home);
   let skillPath = canonical;
   const steps: StepOutcome[] = [];
@@ -242,25 +250,36 @@ export async function install(ports: InstallPorts): Promise<InstallReport> {
   }
 
   try {
-    const result = ports.upsert(serverEntryFor(ports.serverEntry), {
-      local: false,
-    });
-    if (!result.success) {
+    // The bin shim is the entry the agent runs: it explains a missing build
+    // instead of failing on an unresolved import. Registering a path that does
+    // not exist would hand the agent that stack trace at the next session.
+    if (!ports.fileExists(ports.serverEntry)) {
       steps.push({
         step: "server",
         ok: false,
-        detail: `could not register "${SERVER_NAME}": ${result.error ?? result.path}`,
+        detail: `${ports.serverEntry} does not exist; build it with "npm run build -w @yunari/mcp"`,
       });
     } else {
-      const extra =
-        result.extraPaths === undefined || result.extraPaths.length === 0
-          ? ""
-          : ` (also wrote ${result.extraPaths.join(", ")})`;
-      steps.push({
-        step: "server",
-        ok: true,
-        detail: `registered "${SERVER_NAME}" in ${result.path}${extra}`,
+      const result = ports.upsert(serverEntryFor(ports.serverEntry, url), {
+        local: false,
       });
+      if (!result.success) {
+        steps.push({
+          step: "server",
+          ok: false,
+          detail: `could not register "${SERVER_NAME}": ${result.error ?? result.path}`,
+        });
+      } else {
+        const extra =
+          result.extraPaths === undefined || result.extraPaths.length === 0
+            ? ""
+            : ` (also wrote ${result.extraPaths.join(", ")})`;
+        steps.push({
+          step: "server",
+          ok: true,
+          detail: `registered "${SERVER_NAME}" in ${result.path}${extra}`,
+        });
+      }
     }
   } catch (error) {
     steps.push({
@@ -463,7 +482,8 @@ export function createPorts(
     skillSourceDir:
       options.skillSourceDir ??
       join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
-    serverEntry: options.serverEntry ?? join(packageDir, "dist", "main.js"),
+    serverEntry:
+      options.serverEntry ?? join(packageDir, "bin", "yunari-mcp.js"),
     runSkills: runSkillsCli,
     upsert: (config, upsertOptions) =>
       upsertServer(AGENT_TYPE, SERVER_NAME, config, upsertOptions),

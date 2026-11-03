@@ -3,9 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PROBE_PORTS } from "./host-client.js";
+import { InMemoryDraftStore } from "./drafts.js";
+import { LazyHostClient, PROBE_PORTS } from "./host-client.js";
 import { isEntryPoint, resolveHostUrl, run } from "./main.js";
+import { buildServer } from "./server.js";
 import { type FakeHost, startFakeHost } from "./testing/fake-host.js";
+import { yunariStatus } from "./tools/discovery.js";
 
 const hosts: FakeHost[] = [];
 
@@ -129,6 +132,51 @@ describe("resolveHostUrl", () => {
     const message = error instanceof Error ? error.message : "";
     expect(message).toContain(`http://127.0.0.1:${closedPort}`);
     expect(message).toContain("YUNARI_URL");
+  });
+});
+
+describe("serve without a host", () => {
+  it("builds the server with no host and reports the connection error on a tool call", async () => {
+    const closed = await fakeHost(() => undefined);
+    const closedPort = portOf(closed.url);
+    await closed.close();
+    hosts.splice(hosts.indexOf(closed), 1);
+
+    const context = {
+      host: new LazyHostClient(() => resolveHostUrl({ ports: [closedPort] })),
+      drafts: new InMemoryDraftStore(),
+    };
+
+    // Construction must not reach for the host: the stdio connection comes up
+    // first, and a host started later is what the next call finds.
+    expect(buildServer(context)).toBeDefined();
+
+    const status = await yunariStatus(context);
+
+    expect(status.isError).toBe(true);
+    const block = status.content[0];
+    if (block?.type !== "text") throw new Error("Expected a text block.");
+    expect(block.text).toContain("No Yunari host answered");
+    expect(block.text).toContain(`http://127.0.0.1:${closedPort}`);
+    expect(block.text).toContain("YUNARI_URL");
+  });
+
+  it("reaches a host started after the first failed call", async () => {
+    let live: string | undefined;
+    const client = new LazyHostClient(() =>
+      live === undefined
+        ? Promise.reject(new Error("No Yunari host answered."))
+        : Promise.resolve(live),
+    );
+
+    await expect(client.listThemes()).rejects.toThrow(/No Yunari host/u);
+
+    const host = await fakeHost((_request, url) =>
+      url.pathname === "/api/themes" ? { body: { themes: [] } } : undefined,
+    );
+    live = host.url;
+
+    await expect(client.listThemes()).resolves.toEqual([]);
   });
 });
 

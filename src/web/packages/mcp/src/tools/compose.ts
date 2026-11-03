@@ -247,6 +247,22 @@ export async function addShape(
     if (input.kind === "path" && input.points === undefined) {
       throw new Error("A path shape needs its own commands.");
     }
+    // A field this kind cannot express is a mistake in the call, not a value
+    // to drop: the author would never see it in the scene and would not know.
+    if (input.kind !== "path") {
+      for (const field of ["points", "strokeWidth"] as const) {
+        if (input[field] !== undefined) {
+          throw new Error(
+            `"${field}" is only for a path shape, not a "${input.kind}".`,
+          );
+        }
+      }
+    }
+    if (input.kind !== "rect" && input.radius !== undefined) {
+      throw new Error(
+        `"radius" is only for a rect shape, not a "${input.kind}".`,
+      );
+    }
     const points = input.points?.map((command) => {
       if (typeof command[0] !== "string") {
         throw new Error("Every path command starts with its letter.");

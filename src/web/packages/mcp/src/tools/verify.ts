@@ -144,6 +144,18 @@ export async function previewTheme(
       throw new Error(`There is no display "${displayId}" on this host.`);
     }
 
+    // A player reads a stored theme by id, so a preview must save first: a new
+    // draft's id is unknown to the host, and an edited one would render its
+    // stored version. Both paths share this one save.
+    const saved = await saveDraft(context, themeId);
+    if (!saved.ok) {
+      return failureResult({
+        mode: display?.kind === "panel" ? "panel" : "browser",
+        saved: false,
+        issues: saved.issues,
+      });
+    }
+
     // Both preview modes report bound keys this host does not measure; an agent
     // judging either one needs the same missing-sensor warning.
     const bound = boundKeysOf(draft);
@@ -161,19 +173,11 @@ export async function previewTheme(
         themeId: draft.id,
         ...(displayId === undefined ? {} : { displayId }),
         url: url.toString(),
+        saved: true,
         viewport: browserViewport(draft.envelope.artboard),
         shape: draft.envelope.artboard.shape ?? "rect",
         boundSensors: bound,
         missingSensors,
-      });
-    }
-
-    const saved = await saveDraft(context, themeId);
-    if (!saved.ok) {
-      return failureResult({
-        mode: "panel",
-        saved: false,
-        issues: saved.issues,
       });
     }
 
@@ -239,7 +243,7 @@ export function registerVerifyTools(server: McpServer, context: ToolContext) {
     "preview_theme",
     {
       description:
-        "A browser display answers the player URL and an artboard-aspect viewport. A panel display saves the draft first and answers a PNG at its geometry.",
+        "Saves the draft to the host's theme library, then previews it. A browser display answers the player URL and an artboard-aspect viewport; a panel display answers a PNG at its geometry. A refused save returns its issues and no preview.",
       inputSchema: z.object({
         themeId: z.string().min(1).optional(),
         displayId: z.string().min(1).optional(),

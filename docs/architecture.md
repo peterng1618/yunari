@@ -37,8 +37,8 @@ The MCP server is a separate Node process speaking MCP over stdio. It is a
 client of the host's loopback HTTP API, not a second host: it reads themes,
 sensors, displays and assets through the same routes the editor uses, keeps
 drafts in its own memory. It writes the theme library through `save_theme` and
-through the panel preview's save; `assign_theme` changes a display's assignment
-separately.
+through `preview_theme`, which saves the draft on both the browser and panel
+paths; `assign_theme` changes a display's assignment separately.
 
 ### Boundary rules
 

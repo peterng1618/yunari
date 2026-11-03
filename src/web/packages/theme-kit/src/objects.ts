@@ -1,5 +1,10 @@
-import type { FabricPalette, WidgetProvenance } from "@yunari/renderer-core";
-import { fabricArtboardPaint } from "@yunari/scene-fabric";
+import {
+  artboardGradientLine,
+  artboardSolidColor,
+  type FabricPalette,
+  isArtboardGradient,
+  type WidgetProvenance,
+} from "@yunari/renderer-core";
 import {
   charSpacingPx,
   frost,
@@ -29,9 +34,9 @@ type Palette = FabricPalette;
  * renderer reads. The box is passed because a gradient's line is measured in
  * the object's own pixels.
  *
- * `Gradient.toObject()` keeps `undefined` fields; the envelope's JSON check
- * refuses them, so they are dropped here rather than written into a scene that
- * cannot validate.
+ * The gradient is written as the JSON Fabric's `Gradient.toObject()` persists,
+ * built from renderer-core's pure geometry. Constructing a live `Gradient`
+ * here would put Fabric in this Node-only package and in the MCP bundle.
  */
 export function paintOfToken(
   token: string,
@@ -39,16 +44,23 @@ export function paintOfToken(
   height: number,
   palette: Palette,
 ): unknown {
-  const paint = fabricArtboardPaint(palette[token]?.value, width, height);
-  if (paint === undefined) {
+  const value = palette[token]?.value;
+  const solid = artboardSolidColor(value);
+  if (solid !== undefined) return solid;
+  if (!isArtboardGradient(value)) {
     throw new Error(`"${token}" is not a paint this build can resolve.`);
   }
-  if (typeof paint === "string") return paint;
-  // Authoring produces plain JSON, so a gradient is written in the serialised
-  // form Fabric persists rather than as a live `Gradient` instance.
-  return Object.fromEntries(
-    Object.entries(paint.toObject()).filter(([, value]) => value !== undefined),
-  );
+  return {
+    type: "linear",
+    coords: artboardGradientLine(value, width, height),
+    colorStops: value.stops.map((stop) => ({
+      offset: stop.offset,
+      color: stop.color,
+    })),
+    offsetX: 0,
+    offsetY: 0,
+    gradientUnits: "pixels",
+  };
 }
 
 /**

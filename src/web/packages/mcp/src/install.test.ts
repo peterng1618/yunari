@@ -60,6 +60,7 @@ interface Behaviour {
   readonly removeFails?: boolean;
   readonly approvalFails?: boolean;
   readonly serverInstalled?: boolean;
+  readonly serverEntryMissing?: boolean;
 }
 
 /**
@@ -90,11 +91,12 @@ function fakePorts(
     behaviour.skillLocation === "claude" ? claudePath : canonicalPath;
   let presentAt: string | undefined =
     behaviour.installedAlready === true ? locationPath : undefined;
+  const serverEntry = join(home, "packages", "mcp", "bin", "yunari-mcp.js");
 
   const ports: InstallPorts = {
     home,
     skillSourceDir: join(home, "repo-skills", "yunari-theme-designer"),
-    serverEntry: join(home, "packages", "mcp", "dist", "main.js"),
+    serverEntry,
     runSkills: async (args) => {
       calls.skills.push([...args]);
       if (args[0] === "add" && behaviour.skillLocation !== "none") {
@@ -150,7 +152,10 @@ function fakePorts(
       calls.checks += 1;
       return behaviour.serverInstalled ?? true;
     },
-    fileExists: (path) => presentAt !== undefined && path === presentAt,
+    fileExists: (path) =>
+      path === serverEntry
+        ? behaviour.serverEntryMissing !== true
+        : presentAt !== undefined && path === presentAt,
     probeHost: async () => {
       calls.probes += 1;
       return { reachable: true, url: "http://127.0.0.1:5227" };
@@ -185,7 +190,7 @@ describe("install", () => {
     const entry = calls.upserts[0]?.config;
     expect(entry).toEqual({
       command: process.execPath,
-      args: [join(home, "packages", "mcp", "dist", "main.js"), "serve"],
+      args: [join(home, "packages", "mcp", "bin", "yunari-mcp.js"), "serve"],
       autoApproveTools: [],
     });
     expect(calls.upserts[0]?.options).toEqual({ local: false });
@@ -229,6 +234,34 @@ describe("install", () => {
 
     expect(report.ok).toBe(false);
     expect(report.steps[0]?.detail).toContain(skillFilePath(home));
+  });
+
+  it("puts a named URL into the registered server's arguments", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    const report = await install(ports, "http://127.0.0.1:6000");
+
+    expect(report.ok).toBe(true);
+    expect((calls.upserts[0]?.config as { args: string[] }).args).toEqual([
+      ports.serverEntry,
+      "serve",
+      "--url",
+      "http://127.0.0.1:6000",
+    ]);
+  });
+
+  it("fails the server step when the registered entry does not exist", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home, { serverEntryMissing: true });
+
+    const report = await install(ports);
+
+    expect(report.ok).toBe(false);
+    const server = report.steps.find((step) => step.step === "server");
+    expect(server?.ok).toBe(false);
+    expect(server?.detail).toContain(ports.serverEntry);
+    expect(calls.upserts).toHaveLength(0);
   });
 
   it("keeps a server refusal visible instead of claiming success", async () => {
@@ -364,10 +397,13 @@ describe("status", () => {
 });
 
 describe("createPorts", () => {
-  it("points the entry at this Node and the built server", () => {
-    const entry = serverEntryFor("C:/repo/packages/mcp/dist/main.js");
+  it("points the entry at this Node and the bin shim", () => {
+    const entry = serverEntryFor("C:/repo/packages/mcp/bin/yunari-mcp.js");
     expect(entry.command).toBe(process.execPath);
-    expect(entry.args).toEqual(["C:/repo/packages/mcp/dist/main.js", "serve"]);
+    expect(entry.args).toEqual([
+      "C:/repo/packages/mcp/bin/yunari-mcp.js",
+      "serve",
+    ]);
     expect(entry.autoApproveTools).toEqual([]);
   });
 
@@ -378,6 +414,7 @@ describe("createPorts", () => {
       probeHost: async () => ({ reachable: false }),
     });
     expect(ports.home).toBe(home);
+    expect(ports.serverEntry.endsWith(join("bin", "yunari-mcp.js"))).toBe(true);
     expect(skillFilePath(ports.home)).toBe(
       join(home, ".agents", "skills", "yunari-theme-designer", "SKILL.md"),
     );

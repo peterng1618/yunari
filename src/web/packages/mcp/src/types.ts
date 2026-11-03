@@ -118,7 +118,9 @@ export interface VideoTrim {
 /** What `yunari_status` reports about the host. */
 export interface HostStatus {
   readonly url: string;
-  readonly reachable: true;
+  /** False when no section answered, which is what an unreachable host looks
+   *  like once every request has already failed. */
+  readonly reachable: boolean;
   /** Null when the host answered, but this section could not be read. */
   readonly themeCount: number | null;
   readonly displays: number | null;

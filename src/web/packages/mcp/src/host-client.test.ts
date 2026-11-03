@@ -95,6 +95,21 @@ describe("HttpHostClient", () => {
     expect(status.unavailable[0]?.reason).toContain("404");
   });
 
+  it("reports an unreachable host when every section fails", async () => {
+    const host = await fakeHost(() => ({ status: 500, body: "boom" }));
+
+    const status = await new HttpHostClient(host.url).status();
+
+    expect(status.reachable).toBe(false);
+    expect(status.unavailable.map((entry) => entry.section)).toEqual([
+      "themes",
+      "displays",
+      "sensors",
+      "asset sources",
+    ]);
+    expect(status.themeCount).toBeNull();
+  });
+
   it("maps the listing's facets to an artboard", async () => {
     const host = await fakeHost((_request, url) =>
       url.pathname === "/api/themes"

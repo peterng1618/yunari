@@ -123,9 +123,22 @@ describe("the compose vocabulary", () => {
       [rect, "palette.storageFill"],
       [icon, "palette.sparkArea"],
     ] as const) {
-      expect(object["fill"]).toMatchObject({ type: "linear" });
       expect(object["yunariPaint"]).toEqual({ fill: ref });
     }
+    // The exact JSON Fabric's `Gradient.toObject()` persists. A live instance
+    // would put Fabric in this Node-only package; the shape is what matters.
+    expect(rect["fill"]).toEqual({
+      type: "linear",
+      coords: { x1: 0, y1: 6, x2: 300, y2: 6 },
+      colorStops: [
+        { offset: 0, color: "#3f7fe0" },
+        { offset: 1, color: "#5ea2ff" },
+      ],
+      offsetX: 0,
+      offsetY: 0,
+      gradientUnits: "pixels",
+    });
+    expect(icon["fill"]).toMatchObject({ type: "linear" });
     expect(line["stroke"]).toMatchObject({ type: "linear" });
   });
 

@@ -190,6 +190,10 @@ describe("discovery tools", () => {
       ],
       measured: true,
     });
+    // Omitting the flag polls, so the host's answer is not silently dropped.
+    expect(payload(await listSensors(ctx))).toEqual(
+      payload(await listSensors(ctx, true)),
+    );
   });
 
   it("lists themes from the library", async () => {

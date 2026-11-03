@@ -1062,6 +1062,56 @@ describe("Host theme routes", () => {
     }
   });
 
+  it("relays a thrown panel capture as 500 with the manager's own sentence", async () => {
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(validEmptyAssetTheme),
+    );
+    expect(saved.status).toBe(200);
+
+    const displays = createDisplayStore(tmpDir);
+    const strip = await displays.createPanel("Strip", {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      model: "lianli-9-2",
+    });
+    const panels: PanelManager = {
+      start: () => Promise.resolve(),
+      command: () => Promise.resolve(""),
+      stop: () => Promise.resolve(),
+      refresh: () => Promise.resolve(),
+      refreshVideo: () => Promise.resolve(),
+      reconcile: () => Promise.resolve(),
+      running: () => [],
+      status: () => "connected",
+      reconnect: () => Promise.resolve(),
+      stopAll: () => Promise.resolve(),
+      capturePreview: () =>
+        Promise.reject(new Error("The preview browser is not running.")),
+    };
+    const previewing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      displays,
+      panels,
+    });
+
+    try {
+      const answer = await request(
+        previewing.server,
+        "GET",
+        `/api/themes/living-room/panel-preview?display=${strip.id}`,
+      );
+      expect(answer.status).toBe(500);
+      expect(answer.text()).toBe("The preview browser is not running.");
+    } finally {
+      await previewing.close();
+    }
+  });
+
   it("answers a stored theme past the size bound with 413, and keeps 404 for an absent one", async () => {
     // vg-409: an over-large `theme.json` was answered as absence, so the author
     // was told a theme they can see on disk does not exist and the editor

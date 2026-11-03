@@ -653,11 +653,23 @@ export function createThemeRoutes(
         return true;
       }
 
-      const bytes = await panels.capturePreview(
-        record.id,
-        rawId,
-        url.searchParams.get("clip") === "1",
-      );
+      // The route is loopback-only, so the manager's own sentence is safe to
+      // relay. It names why the capture failed; the generic 500 would not.
+      let bytes: Uint8Array;
+      try {
+        bytes = await panels.capturePreview(
+          record.id,
+          rawId,
+          url.searchParams.get("clip") === "1",
+        );
+      } catch (error) {
+        sendText(
+          response,
+          500,
+          error instanceof Error ? error.message : String(error),
+        );
+        return true;
+      }
       response.writeHead(200, {
         "content-type": "image/png",
         "x-content-type-options": "nosniff",

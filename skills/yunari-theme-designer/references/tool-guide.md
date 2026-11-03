@@ -2,7 +2,7 @@
 
 Every tool answers through the MCP server. Host calls are loopback HTTP; drafts
 live in the server process. A stopped server loses drafts; `save_theme` writes
-the theme library, and a panel `preview_theme` saves the draft first.
+the theme library, and `preview_theme` saves the draft first on both paths.
 
 ## 1. Discover
 
@@ -13,7 +13,7 @@ sensor key or asset source.
 |---|---|
 | `yunari_status` | host URL, reachability, theme and display counts, asset sources, sensor count |
 | `list_displays` | display id, label, kind, shape, rotation, active theme; a panel's geometry, status and commands |
-| `list_sensors` | semantic keys, family, label, unit, and whether this host measures each key; pass `measured: true` to poll |
+| `list_sensors` | semantic keys, family, label, unit, and whether this host measures each key; polls by default, pass `measured: false` to skip the poll |
 | `list_themes` | stored ids and names before opening or saving |
 | `list_asset_sources` | source ids, labels, categories, credential requirements |
 
@@ -108,8 +108,9 @@ issue before previewing. A save of an invalid draft is refused.
   Inspect the image itself. Never substitute a browser screenshot for a panel,
   and never claim a panel preview without this image.
 
-A panel preview saves the draft into the library first. A failed save returns
-the validator issues and no preview.
+A preview saves the draft into the library first, on both paths: a player reads
+a stored theme by id, so an unsaved or edited draft would otherwise show a 404
+or the old version. A failed save returns the validator issues and no preview.
 
 ## 9. Revise
 

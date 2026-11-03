@@ -44,7 +44,7 @@ export async function listDisplays(
 
 export async function listSensors(
   context: ToolContext,
-  measured: boolean,
+  measured = true,
 ): Promise<CallToolResult> {
   return await attempt(async () => {
     const listing = await context.host.sensors(measured);

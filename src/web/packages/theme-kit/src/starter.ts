@@ -282,6 +282,10 @@ export function createBlankTheme(input: {
       ...(input.artboard.shape === "circle"
         ? { shape: "circle" as const }
         : {}),
+      // Same rule for fit: absence means contain, so only cover is written.
+      ...(input.artboard.contentFit === "cover"
+        ? { contentFit: "cover" as const }
+        : {}),
     },
     // A blank theme has no backdrop, so the background layer paints its board
     // instead, and the page it paints is a choice the palette has to earn.

@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { InMemoryDraftStore } from "./drafts.js";
-import { HttpHostClient, PROBE_PORTS } from "./host-client.js";
+import { LazyHostClient, PROBE_PORTS } from "./host-client.js";
 import {
   createPorts,
   type InstallReport,
@@ -227,7 +227,7 @@ export async function run(argv: readonly string[]): Promise<number> {
 
     const report =
       parsed.command === "install"
-        ? await install(ports)
+        ? await install(ports, parsed.url)
         : await uninstall(ports);
     printReport(report, parsed.command === "install" ? "Installed" : "Removed");
     return report.ok ? 0 : 1;
@@ -242,9 +242,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   }
 
   try {
-    const url = await resolveHostUrl({ url: parsed.url });
+    // Resolved on the first tool call, not here: the stdio connection has to
+    // come up even when the host is down, so a host started later is reachable
+    // without restarting this process.
     const context: ToolContext = {
-      host: new HttpHostClient(url),
+      host: new LazyHostClient(() => resolveHostUrl({ url: parsed.url })),
       drafts: new InMemoryDraftStore(),
     };
     serveStdio(() => buildServer(context), {
