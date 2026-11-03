@@ -32,13 +32,19 @@ export interface WeatherSettings {
   readonly pollIntervalMs: number;
 }
 
-/** No place, the keyless backend, and a ten-minute cadence. */
+/** No manual place, the keyless backend, and a ten-minute cadence.
+ *
+ *  **Windows location is on until a person says otherwise.** Weather bound in a
+ *  theme has to report without the author first finding this page; with the
+ *  fallback off, a fresh install showed a column of gaps with no reading and no
+ *  reason. The fallback still asks Windows for permission and never guesses a
+ *  place, so turning it off costs nothing but the out-of-box reading. */
 export const DEFAULT_WEATHER_SETTINGS: WeatherSettings = {
   provider: "open-meteo",
   label: "",
   latitude: 0,
   longitude: 0,
-  useWindowsLocation: false,
+  useWindowsLocation: true,
   pollIntervalMs: 600_000,
 };
 
@@ -146,7 +152,8 @@ export function normalizeWeatherSettings(input: unknown): WeatherSettings {
     label: label.trim(),
     latitude: readNumber(record, "latitude", 0, -90, 90),
     longitude: readNumber(record, "longitude", 0, -180, 180),
-    useWindowsLocation: useWindowsLocation ?? false,
+    useWindowsLocation:
+      useWindowsLocation ?? DEFAULT_WEATHER_SETTINGS.useWindowsLocation,
     pollIntervalMs,
   };
 }

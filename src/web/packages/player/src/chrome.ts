@@ -200,11 +200,24 @@ type AvailabilityNoticeState = "idle" | "up" | "dismissed";
 
 let availabilityNotice: AvailabilityNoticeState = "idle";
 let availabilityTimer: ReturnType<typeof setTimeout> | undefined;
+/** Whether the strip that is up is waiting on a person rather than a reading. */
+let availabilityDurable = false;
 
 function clearAvailabilityTimer(): void {
   if (availabilityTimer === undefined) return;
   clearTimeout(availabilityTimer);
   availabilityTimer = undefined;
+}
+
+/** Arms the three-second clearing of a strip a retry may resolve. */
+function armAvailabilityDismissal(): void {
+  clearAvailabilityTimer();
+  availabilityTimer = setTimeout(() => {
+    availabilityTimer = undefined;
+    availabilityNotice = "dismissed";
+    availabilityDurable = false;
+    removeStrip("yunari-availability");
+  }, AVAILABILITY_VISIBLE_MS);
 }
 
 /**
@@ -213,33 +226,53 @@ function clearAvailabilityTimer(): void {
  * charts and no reason for them.
  *
  * Called on every refresh cadence, so it is idempotent by state rather than by
- * argument: the warning goes up once, clears itself three seconds later, and
- * stays down while the same sensors stay unreadable — a warning that came back
- * every frame is one nobody reads. The wording is `availabilityNoticeText`'s,
- * which groups by cause so a reason shared by several sensors is said once.
+ * argument: a warning goes up once and is not rebuilt every frame. **How long
+ * it stays up is the kind of failure's.** A reading that failed may come back
+ * by itself, so its strip clears after three seconds and stays down while the
+ * same failure persists — a warning that came back every frame is one nobody
+ * reads. A sensor that answers `unavailable` is not waiting on a retry: no
+ * weather place is set, no media session has started, no frame app is running.
+ * Only a person ends that, and the sentence that says where is the whole
+ * explanation a viewer looking at the wall minutes later gets, so it stays up
+ * until the condition clears and is re-said when its sentence changes. The
+ * wording is `availabilityNoticeText`'s, which groups by cause so a reason
+ * shared by several sensors is said once.
  */
 export function showAvailabilityNotice(
   source: SampleSource,
   semanticKeys: readonly string[],
 ): void {
-  const text = availabilityNoticeText(
-    semanticKeys.map((key) => source.latest(key)),
-  );
+  const samples = semanticKeys.map((key) => source.latest(key));
+  const text = availabilityNoticeText(samples);
 
   if (text === undefined) {
     // Every requested sensor answers again: the warning is no longer owed, the
     // strip that may still be up is stale, and the next failure is a new one.
     clearAvailabilityTimer();
     availabilityNotice = "idle";
+    availabilityDurable = false;
     removeStrip("yunari-availability");
     return;
   }
 
-  // Up, or already told for this failure. Either way this cadence has nothing
-  // to add — rebuilding here is what would keep the timer from ever firing.
-  if (availabilityNotice !== "idle") return;
+  // A reason only a person can end, as against one a later reading may.
+  const durable = samples.some((sample) => sample?.status === "unavailable");
+  const strip = document.getElementById("yunari-availability");
 
-  const strip = putStrip({
+  if (availabilityNotice === "dismissed" && !durable) return;
+
+  if (strip !== null && strip.textContent === text) {
+    // The same sentence is still true: keep the strip, and let a change in the
+    // kind of failure move its lifetime rather than its words.
+    if (durable === availabilityDurable) return;
+    availabilityDurable = durable;
+    if (durable) clearAvailabilityTimer();
+    else armAvailabilityDismissal();
+    return;
+  }
+
+  // No strip, or the sentence changed because the set of causes did.
+  const raised = putStrip({
     side: "top",
     id: "yunari-availability",
     text,
@@ -249,13 +282,11 @@ export function showAvailabilityNotice(
     // composition when it clears.
     overlay: true,
   });
-  strip.dataset["yunariAvailability"] = "";
+  raised.dataset["yunariAvailability"] = "";
   availabilityNotice = "up";
-  availabilityTimer = setTimeout(() => {
-    availabilityTimer = undefined;
-    availabilityNotice = "dismissed";
-    removeStrip("yunari-availability");
-  }, AVAILABILITY_VISIBLE_MS);
+  availabilityDurable = durable;
+  if (durable) clearAvailabilityTimer();
+  else armAvailabilityDismissal();
 }
 
 /** Shows non-live connection states; a healthy live display needs no badge. */

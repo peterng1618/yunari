@@ -326,6 +326,20 @@ const recoveredSource: SampleSource = {
   history: () => [],
 };
 
+/** A key whose absence only a person can end: no weather place is set, so the
+ *  provider has nothing to ask. Unlike a failed reading, this will never clear
+ *  on its own. */
+const unplaceableSource: SampleSource = {
+  revision: 0,
+  latest: () => ({
+    sensorId: GAP_KEYS[0] ?? "",
+    timestamp: "2026-10-17T00:00:00.000Z",
+    status: "unavailable",
+    message: "Set a place in Settings, or turn on Windows location.",
+  }),
+  history: () => [],
+};
+
 describe("the availability warning's own lifetime", () => {
   beforeEach(() => {
     skeleton();
@@ -386,6 +400,23 @@ describe("the availability warning's own lifetime", () => {
     expect(document.getElementById("yunari-availability")?.style.position).toBe(
       "fixed",
     );
+  });
+
+  it("keeps a reason only a person can clear up until it can answer", () => {
+    // A failed reading may come back by itself, so its strip clears after three
+    // seconds. "No place is set" does not: a viewer who looks at the wall a
+    // minute later still sees weather that reports nothing, and the sentence
+    // that says where to set the place is the only explanation there is.
+    showAvailabilityNotice(unplaceableSource, GAP_KEYS);
+    vi.advanceTimersByTime(60_000);
+
+    expect(
+      document.getElementById("yunari-availability")?.textContent,
+    ).toContain("Set a place in Settings");
+
+    // The one thing that ends it: the condition does.
+    showAvailabilityNotice(recoveredSource, GAP_KEYS);
+    expect(document.getElementById("yunari-availability")).toBeNull();
   });
 
   it("gives no other strip a lifetime: the transport notice is unchanged by this", () => {
