@@ -941,6 +941,9 @@ test("importing a trio offers every weight its role families publish", async ({
 
   // The apply is asynchronous; the heading row's specimen changing family is
   // the token write landing, and the modal has to be out of the way first.
+  // A selected card is what the first Escape drops; the next closes the finder
+  // (`asset-finder/modal.tsx`'s `onEscape`).
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await openPane(page, "Design tokens");
@@ -1132,7 +1135,7 @@ test("the Colours tab adds a palette to the presets", async ({
   expect(bytesAsked).toBe(0);
 });
 
-test("a source that needs a key opens Settings on Connections", async ({
+test("a source that needs a key opens Settings on Asset sources", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1157,14 +1160,17 @@ test("a source that needs a key opens Settings on Connections", async ({
 
   await page.locator("[data-yunari-asset-connections]").click();
 
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings).toBeVisible();
+  // The finder hands the gap to the Settings mode, on the page that fixes it.
+  // Settings is a page beside the rail rather than a dialog, so the surface a
+  // reader lands on is the mode's region and its chosen row.
+  const region = page.locator("[data-yunari-settings-region]");
+  await expect(region).toBeVisible();
   await expect(
-    settings.getByRole("tab", { name: "Connections" }),
+    region.locator('[data-yunari-settings-nav-item="asset-sources"]'),
   ).toHaveAttribute("aria-selected", "true");
 });
 
-test("captures the Connections tab's provider row", async ({
+test("captures the Asset sources page's provider row", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1189,11 +1195,13 @@ test("captures the Connections tab's provider row", async ({
   await page.goto(EDITOR);
   await page.waitForFunction(() => "yunariEditorBridge" in window);
   await page.locator(".editor-shell-rail-settings").click();
-  const settings = page.getByRole("dialog", { name: "Settings" });
-  await expect(settings).toBeVisible();
-  await settings.getByRole("tab", { name: "Connections" }).click();
+  const region = page.locator("[data-yunari-settings-region]");
+  await expect(region).toBeVisible();
+  await region
+    .locator('[data-yunari-settings-nav-item="asset-sources"]')
+    .click();
   await expect(
-    settings.locator('[data-yunari-credential-row="unsplash"]'),
+    region.locator('[data-yunari-credential-row="unsplash"]'),
   ).toBeVisible();
 
   await captureVisualReview(page, testInfo, "editor-finder-connections");
