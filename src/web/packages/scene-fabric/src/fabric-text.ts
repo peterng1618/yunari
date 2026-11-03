@@ -112,7 +112,11 @@ function applyVerticalAlign(
       value: () => {
         const align = verticalAlignOf.get(object) ?? "top";
         if (align === "top") return base();
-        const slack = object.height - object.calcTextHeight();
+        // **Never a negative slack.** A run taller than its box has no room to
+        // spend, and subtracting the overflow moves the first line above the
+        // box — over whatever the label sits under. The alignment can only use
+        // slack the box actually has, so an overflowing run starts at the top.
+        const slack = Math.max(0, object.height - object.calcTextHeight());
         return base() + (align === "bottom" ? slack : slack / 2);
       },
     });

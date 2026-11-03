@@ -388,6 +388,37 @@ describe("alignment acts inside the authored box", () => {
     expect(topOffsetOf(bottom)).toBeCloseTo(-BOX.height / 2 + bottomSlack, 6);
   });
 
+  it("keeps a bottom-aligned run inside the box when the text is taller", () => {
+    // A run whose line height exceeds the authored box has no slack to give a
+    // bottom alignment. Subtracting the overflow moves the line origin above
+    // the box instead, so the glyphs paint over whatever sits above them — the
+    // reported defect. The alignment may only spend slack the box has.
+    const object = new Textbox("BIG", {
+      id: "big-value",
+      left: BOX.x,
+      top: BOX.y,
+      width: BOX.width,
+      fontSize: 160,
+      strokeWidth: 0,
+      originX: "left",
+      originY: "top",
+    });
+    object.set(YUNARI_TEXT_PROPERTY, {
+      overflow: "visible",
+      verticalAlign: "bottom",
+      box: { width: BOX.width, height: BOX.height },
+      runs: [{ kind: "literal", text: "BIG" }],
+    });
+    const canvas = canvasOf(object);
+    paint(canvas);
+
+    const topOffsetOf = (): number =>
+      (object as unknown as { _getTopOffset(): number })._getTopOffset();
+
+    expect(object.calcTextHeight()).toBeGreaterThan(BOX.height);
+    expect(topOffsetOf()).toBeCloseTo(-BOX.height / 2, 6);
+  });
+
   it("re-reads the authored box rather than the pass cache", () => {
     // `buildText` caches the box it first laid out with, and a later author
     // write (`writeAuthoredBoxDimension`, a Size field, a dragged handle) only
