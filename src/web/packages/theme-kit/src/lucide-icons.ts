@@ -101,3 +101,63 @@ export const lucideWifi: readonly LucideIconNode[] = [
   ["path", { d: "M5 12.859a10 10 0 0 1 14 0", key: "1x1e6c" }],
   ["path", { d: "M8.5 16.429a5 5 0 0 1 7 0", key: "1bycff" }],
 ];
+
+export const lucideThermometer: readonly LucideIconNode[] = [
+  ["path", { d: "M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z", key: "17jzev" }],
+];
+
+export const lucideFan: readonly LucideIconNode[] = [
+  [
+    "path",
+    {
+      d: "M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z",
+      key: "484a7f",
+    },
+  ],
+  ["path", { d: "M12 12v.01", key: "u5ubse" }],
+];
+
+export const lucideGauge: readonly LucideIconNode[] = [
+  ["path", { d: "m12 14 4-4", key: "9kzdfg" }],
+  ["path", { d: "M3.34 19a10 10 0 1 1 17.32 0", key: "19p75a" }],
+];
+
+export const lucideActivity: readonly LucideIconNode[] = [
+  [
+    "path",
+    {
+      d: "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",
+      key: "169zse",
+    },
+  ],
+];
+
+export const lucidePower: readonly LucideIconNode[] = [
+  ["path", { d: "M12 2v10", key: "mnfbl" }],
+  ["path", { d: "M18.4 6.6a9 9 0 1 1-12.77.04", key: "obofu9" }],
+];
+
+export const lucideClock: readonly LucideIconNode[] = [
+  ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+  ["path", { d: "M12 6v6l4 2", key: "mmk7yg" }],
+];
+
+export const lucideZap: readonly LucideIconNode[] = [
+  [
+    "path",
+    {
+      d: "M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z",
+      key: "1v7up4",
+    },
+  ],
+];
+
+export const lucideArrowUp: readonly LucideIconNode[] = [
+  ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
+  ["path", { d: "M12 19V5", key: "x0mq9r" }],
+];
+
+export const lucideArrowDown: readonly LucideIconNode[] = [
+  ["path", { d: "M12 5v14", key: "s699le" }],
+  ["path", { d: "m19 12-7 7-7-7", key: "1idqje" }],
+];

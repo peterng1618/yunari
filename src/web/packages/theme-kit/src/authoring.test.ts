@@ -139,12 +139,10 @@ describe("the compose vocabulary", () => {
       ],
     });
 
-    for (const [object, ref] of [
-      [rect, "palette.storageFill"],
-      [icon, "palette.sparkArea"],
-    ] as const) {
+    for (const [object, ref] of [[rect, "palette.storageFill"]] as const) {
       expect(object["yunariPaint"]).toEqual({ fill: ref });
     }
+    expect(icon["yunariPaint"]).toEqual({ stroke: "palette.sparkArea" });
     // The exact JSON Fabric's `Gradient.toObject()` persists. A live instance
     // would put Fabric in this Node-only package; the shape is what matters.
     expect(rect["fill"]).toEqual({
@@ -158,7 +156,7 @@ describe("the compose vocabulary", () => {
       offsetY: 0,
       gradientUnits: "pixels",
     });
-    expect(icon["fill"]).toMatchObject({ type: "linear" });
+    expect(icon["stroke"]).toMatchObject({ type: "linear" });
     expect(line["stroke"]).toMatchObject({ type: "linear" });
   });
 
@@ -181,7 +179,7 @@ describe("the compose vocabulary", () => {
     });
   });
 
-  it("draws an icon as a filled path inside its box", () => {
+  it("draws an icon as a stroked path inside its box", () => {
     const icon = addIconObject({
       id: "cpu-icon",
       icon: "cpu",
@@ -192,9 +190,10 @@ describe("the compose vocabulary", () => {
     });
     expect(icon).toMatchObject({
       type: "Path",
-      fill: "#4da3ff",
-      stroke: null,
-      yunariPaint: { fill: "palette.cpu" },
+      fill: null,
+      stroke: "#4da3ff",
+      strokeWidth: (44 * 2) / 24,
+      yunariPaint: { stroke: "palette.cpu" },
     });
     expect((icon["path"] as readonly unknown[]).length).toBeGreaterThan(2);
   });
@@ -251,10 +250,12 @@ describe("the compose vocabulary", () => {
       palette,
     });
 
-    for (const object of [text, shape, icon]) {
+    for (const object of [text, shape]) {
       expect(object["fill"]).toBe("#ff0000");
       expect(object["yunariPaint"]).toEqual({ fill: "palette.accent" });
     }
+    expect(icon["stroke"]).toBe("#ff0000");
+    expect(icon["yunariPaint"]).toEqual({ stroke: "palette.accent" });
   });
 
   it("builds a one-run literal label", () => {

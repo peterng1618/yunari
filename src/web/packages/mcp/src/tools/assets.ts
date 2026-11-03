@@ -4,9 +4,11 @@ import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import {
   addAsset,
   assetKindForPath,
+  assetOwner,
   type DeclaredAsset,
   declareAsset,
   MAX_ASSET_BYTES,
+  removeAsset,
 } from "@yunari/theme-kit";
 import { z } from "zod/v4";
 import type {
@@ -317,6 +319,46 @@ const assetRefSchema = z
   .min(1)
   .describe("The opaque assetRef a search_assets row returned.");
 
+/**
+ * Drops a declared asset the draft no longer uses.
+ *
+ * Replacing a media asset used to leave the old declaration, its bytes and its
+ * credit in the package. A referenced asset is refused rather than silently
+ * breaking the object that names it.
+ */
+export async function removeDraftAsset(
+  context: ToolContext,
+  assetId: string,
+  themeId?: string,
+): Promise<CallToolResult> {
+  return await jsonAttempt(() => {
+    const draft = draftFor(context, themeId);
+    const asset = (draft.envelope.assets ?? []).find(
+      (candidate) => candidate.id === assetId,
+    );
+    if (asset === undefined) {
+      throw new Error(`There is no asset "${assetId}" in this theme.`);
+    }
+    const owner = assetOwner(draft.envelope, assetId);
+    if (owner !== undefined) {
+      throw new Error(
+        `"${assetId}" is still used by ${owner}; remove that reference first.`,
+      );
+    }
+    draft.envelope = removeAsset(draft.envelope, assetId);
+    context.drafts.deleteAsset(draft.id, asset.path);
+    if (draft.credits !== undefined) {
+      context.drafts.setCredits(draft.id, {
+        ...draft.credits,
+        entries: draft.credits.entries.filter(
+          (entry) => entry.assetId !== assetId,
+        ),
+      });
+    }
+    return { themeId: draft.id, removed: assetId, path: asset.path };
+  });
+}
+
 /** Registers the three asset tools on the server. */
 export function registerAssetTools(server: McpServer, context: ToolContext) {
   server.registerTool(
@@ -368,5 +410,19 @@ export function registerAssetTools(server: McpServer, context: ToolContext) {
       }),
     },
     async (input) => await importAsset(context, input),
+  );
+
+  server.registerTool(
+    "remove_asset",
+    {
+      description:
+        "Remove a declared asset the draft no longer uses, with its bytes and credit. Refuses an asset an object, the background or a font face still references.",
+      inputSchema: z.object({
+        assetId: z.string().min(1),
+        themeId: z.string().min(1).optional(),
+      }),
+    },
+    async ({ assetId, themeId }) =>
+      await removeDraftAsset(context, assetId, themeId),
   );
 }

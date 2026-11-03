@@ -1,11 +1,20 @@
 import {
+  lucideActivity as activity,
+  lucideArrowDown as arrowDown,
+  lucideArrowUp as arrowUp,
   lucideCircuitBoard as board,
   lucideChartColumns as chartColumns,
   lucideChevronRight as chevron,
   lucideCpu as chip,
+  lucideClock as clock,
   lucideHardDrive as drive,
+  lucideFan as fan,
+  lucideGauge as gauge,
+  lucidePower as power,
   lucideMemoryStick as stick,
+  lucideThermometer as thermometer,
   lucideWifi as waves,
+  lucideZap as zap,
 } from "./lucide-icons.js";
 
 /**
@@ -74,6 +83,13 @@ export function lucidePath(
   let startY = 0;
 
   for (const [tag, attributes] of node) {
+    // Each Lucide node is its own SVG element, so its current point starts at
+    // the origin. Carrying one across elements would displace a path that
+    // begins with a relative moveto (`arrow-down`).
+    x = 0;
+    y = 0;
+    startX = 0;
+    startY = 0;
     if (tag === "rect") {
       commands.push(...roundedRect(attributes, scale));
       continue;
@@ -108,15 +124,35 @@ export function lucidePath(
       // `m9 18 6-6-6-6`, so reading only the first pair leaves `6-6-6` to be
       // mistaken for a command letter.
       const pairs = upper === "M" ? countPairs(tokens, index + 1) : 1;
-      const args = tokens
-        .slice(index + 1, index + 1 + pairs * arity)
-        .map((token) => Number(token));
-      if (
-        args.length !== pairs * arity ||
-        args.some((value) => !Number.isFinite(value))
-      )
+      const args: number[] = [];
+      let at = index + 1;
+      // An arc's two flags are single characters and SVG lets them run into
+      // each other and into the next number ("001.5", "01-4"). Read a flag as
+      // one character of the current token and leave the rest in place.
+      const take = (flag: boolean): number | undefined => {
+        const token = tokens[at];
+        if (token === undefined) return undefined;
+        if (flag) {
+          const first = token[0];
+          if (first !== "0" && first !== "1") return undefined;
+          const rest = token.slice(1);
+          if (rest === "") at += 1;
+          else tokens[at] = rest;
+          return Number(first);
+        }
+        at += 1;
+        return Number(token);
+      };
+      for (let pair = 0; pair < pairs; pair += 1) {
+        for (let slot = 0; slot < arity; slot += 1) {
+          const value = take(upper === "A" && (slot === 3 || slot === 4));
+          if (value === undefined || !Number.isFinite(value)) break;
+          args.push(value);
+        }
+      }
+      if (args.length !== pairs * arity)
         throw new Error(`Lucide path command "${letter}" is truncated.`);
-      index += 1 + pairs * arity;
+      index = at;
       if (upper === "M") {
         for (let pair = 0; pair < pairs; pair += 1) {
           const end = absolute(
@@ -294,4 +330,13 @@ export const starterIcons = {
   storage: (size: number): PathCommand[] => lucidePath(drive, size),
   network: (size: number): PathCommand[] => lucidePath(waves, size),
   chevron: (size: number): PathCommand[] => lucidePath(chevron, size),
+  thermometer: (size: number): PathCommand[] => lucidePath(thermometer, size),
+  fan: (size: number): PathCommand[] => lucidePath(fan, size),
+  gauge: (size: number): PathCommand[] => lucidePath(gauge, size),
+  activity: (size: number): PathCommand[] => lucidePath(activity, size),
+  power: (size: number): PathCommand[] => lucidePath(power, size),
+  clock: (size: number): PathCommand[] => lucidePath(clock, size),
+  zap: (size: number): PathCommand[] => lucidePath(zap, size),
+  "arrow-up": (size: number): PathCommand[] => lucidePath(arrowUp, size),
+  "arrow-down": (size: number): PathCommand[] => lucidePath(arrowDown, size),
 } as const;

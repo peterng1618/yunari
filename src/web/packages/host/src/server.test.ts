@@ -948,8 +948,6 @@ describe("Host theme routes", () => {
       disconnect: () => Promise.resolve(),
       stopped: () => false,
       stopAll: () => Promise.resolve(),
-      disconnect: () => Promise.resolve(),
-      stopped: () => false,
       capturePreview: (displayId, themeId, clip) => {
         captured.push({ displayId, themeId, clip });
         return Promise.resolve(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]));
@@ -1094,8 +1092,6 @@ describe("Host theme routes", () => {
       disconnect: () => Promise.resolve(),
       stopped: () => false,
       stopAll: () => Promise.resolve(),
-      disconnect: () => Promise.resolve(),
-      stopped: () => false,
       capturePreview: () =>
         Promise.reject(new Error("The preview browser is not running.")),
     };
