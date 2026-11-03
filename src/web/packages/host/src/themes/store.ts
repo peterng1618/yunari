@@ -929,6 +929,36 @@ export function createThemeStore(
   // The ids with a save in flight, so a listing landing inside one does not
   // mistake that save's scratch folders for the debris of a dead one.
   const saving = new Set<string>();
+  /**
+   * The saves whose folder swap a reader must wait out, by id.
+   *
+   * The swap is two renames: the old folder goes to `.retired-`, then the staged
+   * one takes its name. Between them the id names nothing, and a reader that
+   * landed in that gap answered "this theme is not stored". The display
+   * assignment then fell back to the default theme and the panel followed it to
+   * the wrong scene until the next resolution. The gap is the host's own doing
+   * and lasts two renames, so a reader waits for it rather than believing it.
+   */
+  const swapping = new Map<string, Set<Promise<void>>>();
+
+  /** Resolves once no save is swapping `id`'s folder — one that failed
+   *  included, whose folder is then whatever it left behind. */
+  async function awaitSwap(id: string): Promise<void> {
+    for (;;) {
+      const pending = swapping.get(id);
+      if (pending === undefined || pending.size === 0) return;
+      await Promise.all([...pending].map((run) => run.catch(() => undefined)));
+    }
+  }
+
+  /** {@link awaitSwap} for every theme: a listing shows them all. */
+  async function awaitEverySwap(): Promise<void> {
+    for (;;) {
+      const pending = [...swapping.values()].flatMap((runs) => [...runs]);
+      if (pending.length === 0) return;
+      await Promise.all(pending.map((run) => run.catch(() => undefined)));
+    }
+  }
 
   return {
     /**
@@ -942,6 +972,7 @@ export function createThemeStore(
      * the repaired theme appears in the listing that repaired it.
      */
     async list(): Promise<readonly ThemeStoreEntry[]> {
+      await awaitEverySwap();
       try {
         await fs.mkdir(directory, { recursive: true });
         const seen = await fs.readdir(directory, { withFileTypes: true });
@@ -973,6 +1004,7 @@ export function createThemeStore(
       if (!isValidThemeId(id)) {
         return undefined;
       }
+      await awaitSwap(id);
       const stored = await readStored(directory, id);
       if (stored === undefined) {
         return undefined;
@@ -1028,6 +1060,7 @@ export function createThemeStore(
       if (!isValidThemeId(id)) {
         return undefined;
       }
+      await awaitSwap(id);
       return storedEnvelope(directory, id);
     },
 
@@ -1050,6 +1083,7 @@ export function createThemeStore(
       if (!isValidThemeId(id)) {
         return undefined;
       }
+      await awaitSwap(id);
       const envelope = await storedEnvelope(directory, id);
       const declared = (envelope?.assets ?? []).find(
         (asset) => asset.path === assetPath,
@@ -1068,10 +1102,11 @@ export function createThemeStore(
 
     /** Whether a theme whose document the store can read is stored here. */
     async exists(id: string): Promise<boolean> {
-      return (
-        isValidThemeId(id) &&
-        (await storedEnvelope(directory, id)) !== undefined
-      );
+      if (!isValidThemeId(id)) {
+        return false;
+      }
+      await awaitSwap(id);
+      return (await storedEnvelope(directory, id)) !== undefined;
     },
 
     /**
@@ -1165,6 +1200,13 @@ export function createThemeStore(
         // `.retired-` name rather than gone.
         let hadPrevious = false;
         saving.add(id);
+        let finishSwap!: () => void;
+        const swapped = new Promise<void>((resolve) => {
+          finishSwap = resolve;
+        });
+        const pending = swapping.get(id) ?? new Set<Promise<void>>();
+        pending.add(swapped);
+        swapping.set(id, pending);
 
         try {
           const reusable = await reusableAssets(
@@ -1280,6 +1322,12 @@ export function createThemeStore(
           throw error;
         } finally {
           saving.delete(id);
+          pending.delete(swapped);
+          if (pending.size === 0 && swapping.get(id) === pending) {
+            swapping.delete(id);
+          }
+          // Last, so a reader that wakes here sees the folder the save left.
+          finishSwap();
         }
 
         if (hadPrevious) {

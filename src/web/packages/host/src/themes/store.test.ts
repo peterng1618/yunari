@@ -1545,6 +1545,83 @@ describe("ThemeStore", () => {
 });
 
 /**
+ * A save swaps its folder with two renames. These pin what a reader sees while
+ * it is between them.
+ */
+describe("ThemeStore readers during a save", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "yunari-theme-swap-test-"),
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("waits out the two renames instead of answering that the theme is gone", async () => {
+    let hold = false;
+    let reached!: () => void;
+    const atSwap = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const store = createThemeStore(tmpDir, {
+      rename: async (from, to) => {
+        if (hold && path.basename(from).startsWith(".staging-")) {
+          reached();
+          await released;
+        }
+        await fs.rename(from, to);
+      },
+    });
+
+    await store.write(
+      "night-sky",
+      withAsset("night-sky", "First", "assets/badge.svg", Uint8Array.of(1)),
+    );
+    hold = true;
+
+    const saving = store.write(
+      "night-sky",
+      withAsset("night-sky", "Second", "assets/badge.svg", Uint8Array.of(2)),
+      { overwrite: true },
+    );
+    await atSwap;
+
+    // The gap is real: between the two renames the id names nothing. Without
+    // the wait every reader below answered from exactly this state, which is
+    // how a display fell back to the default theme mid-save.
+    await expect(fs.stat(path.join(tmpDir, "night-sky"))).rejects.toMatchObject(
+      { code: "ENOENT" },
+    );
+
+    const readers = Promise.all([
+      store.exists("night-sky"),
+      store.readEnvelope("night-sky"),
+      store.read("night-sky"),
+      store.readAsset("night-sky", "assets/badge.svg"),
+      store.list(),
+    ]);
+    release();
+    const [exists, envelope, record, asset, list] = await readers;
+    await saving;
+
+    expect(exists).toBe(true);
+    expect(envelope?.metadata?.name).toBe("Second");
+    expect(record?.envelope.metadata?.name).toBe("Second");
+    expect([...(asset?.bytes ?? [])]).toEqual([2]);
+    expect(list.map((entry) => entry.name)).toContain("Second");
+  });
+});
+
+/**
  * A crash cannot be made impossible here — renaming onto an existing directory
  * is not portable — so it has to be undone. These kill a real save with
  * `crashSave`, at both points a kill can reach, and then start again.
