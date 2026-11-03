@@ -100,8 +100,9 @@ Current behaviours, each has cost a save or preview when missed.
 - **A panel's video overlay is coarser than its preview.** The TURZX overlay
   carries 4 bits per colour channel and 4 bits of opacity, so a soft black-to-
   transparent gradient becomes a handful of flat bands that read as a grey wash.
-  The browser preview and the Lian Li PNG layer keep the full ramp. A mask for a
-  TURZX target is solid fills or a few wide steps, and it is judged on the panel.
+  The browser preview and the Lian Li PNG layer keep the full ramp. A fade over
+  video is therefore a background composition, not a UI scrim: the host bakes
+  it into the panel clip, where the ramp keeps its precision.
 - **A fill-only rect keeps no border.** `add_shape` authors `strokeWidth: 0`;
   never put a stroke on a scrim, and do not rely on a border to hide an edge.
 - **An ellipse has fill only.** `add_shape` refuses a stroke on an ellipse; a ring
@@ -149,6 +150,12 @@ Current behaviours, each has cost a save or preview when missed.
   revealing its top; positive `offsetX` moves it right, revealing its left. The
   offset is a fraction of the cover overhang, so ±1 reaches the full pan on any
   crop; choose a source whose subject survives at that limit.
+- **A region is authored inside the media's bounds box.** `inset` gives the
+  media area in fractions of that box (`left`/`right`/`top`/`bottom`, each
+  0–0.9, and the two sides of one axis must leave room), and `blend` fades the
+  media into `fill` — the palette colour the uncovered area is painted with. On
+  a panel overlay the media and its fill are one picture, so the overlay layer
+  hides with them rather than painting background pixels over the UI.
 - **An unnamed layer reads as its type word.** A compose call without `name`
   names the object after the id it mints — a tree of "text", "shape" and
   "icon". Pass a short, content-specific `name` on every add, and name a group
@@ -177,7 +184,7 @@ Current behaviours, each has cost a save or preview when missed.
 | `set_artboard` | width, height, shape, contentFit |
 | `set_palette` | entries `{id, name, value}`; a value may be a solid colour or a gradient paint, so a scrim can be a palette token |
 | `set_type_tokens` | heading/body/mono family and weight, plus the imported face's `assetId` as `face` (a string; the envelope stores `{ assetId }`); a text run carries its own size |
-| `set_background` | palette colour and optional media asset, bounds, fallback frame |
+| `set_background` | palette colour and optional media asset, bounds, fallback frame; `fill` paints the area a region leaves, `inset` places the media in that region, `blend` fades it into the fill |
 | `open_theme` | an existing theme, only with `confirmExisting: true` after consent |
 | `discard_draft` | drop the in-memory draft; never touches the host |
 
