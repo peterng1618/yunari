@@ -160,6 +160,29 @@ describe("startScreencast", () => {
     }
   });
 
+  it("answers the newest frame when the page has not recomposed", async () => {
+    vi.useFakeTimers();
+    try {
+      const { devtools, push } = fakeDevtools();
+      const cast = await startScreencast(devtools, "png");
+      push("Page.screencastFrame", frameEvent("still", 1));
+      const first = await cast.next(0);
+
+      // A clock without seconds, a photo, an icon: one frame and then no
+      // change until the picture does. The panel already holds this frame, so
+      // handing it back lets the runner compare bytes and send nothing;
+      // rejecting here read as a lost panel and restarted the page.
+      const pending = cast.next(first.sequence);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const settled = await pending;
+
+      expect(settled.sequence).toBe(first.sequence);
+      expect(Buffer.from(settled.bytes).toString()).toBe("still");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("stops the page's stream once", async () => {
     const { devtools, sent } = fakeDevtools();
     const cast = await startScreencast(devtools, "png");

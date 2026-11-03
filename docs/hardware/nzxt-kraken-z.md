@@ -181,6 +181,14 @@ that is the invariant the two-bucket ring exists to satisfy.
 - **Read the firmware and LCD queries before trusting the handle.** They are the
   only proof that the opened HID handle is one the firmware is listening on.
 - **Do not claim the HID interface through libusb on Windows.**
+- **A still page produces no frames, and that is not a lost panel.** The
+  panel's page is read through Chromium's screencast, which pushes a frame only
+  when the page recomposes. A clock without seconds, a photo or an icon
+  composites once and then stays still; a capture that waited for a *newer*
+  frame timed out, three timeouts counted as three failed frames, and the
+  manager restarted the page every few seconds. The rasteriser now answers the
+  newest frame it already has, which the runner compares against what the
+  glass holds and sends nothing.
 
 ## Open questions
 
