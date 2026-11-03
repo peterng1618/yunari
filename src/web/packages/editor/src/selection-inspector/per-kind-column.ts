@@ -65,7 +65,7 @@ import {
  * here. Deleting the member to tidy it would be a behaviour change dressed as
  * tidying.
  */
-export type ColumnSectionId = SettingsSection | "advanced";
+export type ColumnSectionId = SettingsSection | "advanced" | "composition";
 
 /** What one section holds, as values: its rows. */
 interface SectionParts {
@@ -252,6 +252,7 @@ function sectionOrder(id: ColumnSectionId): number {
 
 function titleOf(id: ColumnSectionId): string {
   if (id === "advanced") return uiCopy.inspectorFields.advanced;
+  if (id === "composition") return uiCopy.panels.backgroundComposition;
   return SETTINGS_SECTIONS.find((entry) => entry.id === id)?.label ?? id;
 }
 

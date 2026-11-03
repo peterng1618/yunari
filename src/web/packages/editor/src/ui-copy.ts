@@ -2221,6 +2221,26 @@ export const uiCopy = {
    * model rather than a choice, so it has no words here.
    */
   backgroundBounds: { theme: "Fill theme", display: "Fill display" },
+  /** The edges a background's media may be pinned to, and the mode that insets
+   *  every side. `full` is no region at all — the picture covers the box. */
+  backgroundInsetModes: {
+    full: "Full",
+    left: "Left edge",
+    right: "Right edge",
+    top: "Top edge",
+    bottom: "Bottom edge",
+    inset: "Inset all sides",
+  },
+  /** The fade's source edge. `all` is the radial ramp from the region's middle. */
+  backgroundBlendEdges: {
+    none: "None",
+    left: "Left edge",
+    right: "Right edge",
+    top: "Top edge",
+    bottom: "Bottom edge",
+    all: "Around",
+  },
+  backgroundBlendShapes: { linear: "Linear", radial: "Radial" },
   /**
    * The four ways a reading may print its unit, keyed by what is stored.
    *
@@ -2512,6 +2532,8 @@ export const uiCopy = {
     widthMark: "W",
     heightMark: "H",
     background: "Background color",
+    /** The paint a media region leaves uncovered. */
+    backgroundFill: "Fill",
     /** The background column's own rows: the box its media fills, the zoom over
         its cover fit, the one pair that moves both axes, and the two paint-time
         mirrors. */
@@ -2520,6 +2542,13 @@ export const uiCopy = {
     backgroundOffset: "Offset",
     backgroundFlipX: "Flip horizontally",
     backgroundFlipY: "Flip vertically",
+    /** Where the picture sits inside its box, and how it fades into the fill. */
+    backgroundComposition: "Composition",
+    backgroundInset: "Media area",
+    backgroundInsetAmount: "Area size",
+    backgroundBlendEdges: "Fade from",
+    backgroundBlendLength: "Fade length",
+    backgroundBlendShape: "Fade shape",
     /** The frame a video background shows where it cannot play, and the still
         the glass material samples. */
     backgroundFallbackFrame: "Fallback frame",
