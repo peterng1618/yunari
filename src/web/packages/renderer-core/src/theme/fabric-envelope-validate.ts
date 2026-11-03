@@ -126,6 +126,7 @@ export function validateFabricThemeEnvelope(
   palettePaints(input["globals"], issues);
   editorMetadata(input["editorMetadata"], issues);
   rejectGifAssets(input["assets"], issues);
+  sceneAssetReferences(input["scene"], input["assets"], issues);
   fontPresetFaces(
     input["globals"],
     input["assets"],
@@ -1419,6 +1420,77 @@ function bindings(
         }
       }
     }
+  }
+}
+
+/**
+ * A scene object's `yunariAsset` is the authored reference a revival resolves.
+ * Only an image object carries one, and its bytes must be a picture: a video or
+ * font reference can never resolve to something `FabricImage` paints, so it is
+ * refused here instead of surviving validation and drawing a black box.
+ */
+function sceneAssetReferences(
+  scene: unknown,
+  assets: unknown,
+  issues: ValidationIssue[],
+): void {
+  if (!isRecord(scene) || !Array.isArray(scene["objects"])) return;
+
+  const kinds = new Map<string, unknown>();
+  if (Array.isArray(assets)) {
+    for (const asset of assets) {
+      if (isRecord(asset) && typeof asset["id"] === "string") {
+        kinds.set(asset["id"], asset["kind"]);
+      }
+    }
+  }
+
+  const visit = (object: unknown, path: string): void => {
+    if (!isRecord(object)) return;
+
+    const reference = object["yunariAsset"];
+    if (reference !== undefined) {
+      if (!isRecord(reference)) {
+        issues.push(
+          issue(
+            "wrong-type",
+            `${path}/yunariAsset`,
+            "An image asset reference must be an object.",
+          ),
+        );
+      } else {
+        const assetId = reference["assetId"];
+        const kind = reference["kind"];
+        if (kind !== "image" && kind !== "svg") {
+          issues.push(
+            issue(
+              "invalid-enum",
+              `${path}/yunariAsset/kind`,
+              "A scene object can only reference an image or SVG asset; a video is a background, not a scene image.",
+            ),
+          );
+        } else if (typeof assetId !== "string" || kinds.get(assetId) !== kind) {
+          issues.push(
+            issue(
+              "unresolved-asset-ref",
+              `${path}/yunariAsset/assetId`,
+              "A scene object must reference a declared image or SVG asset of the kind it names.",
+            ),
+          );
+        }
+      }
+    }
+
+    const children = object["objects"];
+    if (Array.isArray(children)) {
+      for (const [index, child] of children.entries()) {
+        visit(child, `${path}/objects/${index}`);
+      }
+    }
+  };
+
+  for (const [index, object] of scene["objects"].entries()) {
+    visit(object, `/scene/objects/${index}`);
   }
 }
 

@@ -1,5 +1,4 @@
 import {
-  type AssetKind,
   type Binding,
   defaultBarSettings,
   defaultGaugeSettings,
@@ -161,11 +160,12 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
   };
 }
 
-/** A declared asset placed in the scene. */
+/** A declared asset placed in the scene. Only a picture can be one: a video is
+ *  the background's media, and a font has no image bytes to paint. */
 export interface AddImageObjectInput {
   readonly id: string;
   readonly assetId: string;
-  readonly kind: AssetKind;
+  readonly kind: "image" | "svg";
   readonly left: number;
   readonly top: number;
   readonly width: number;

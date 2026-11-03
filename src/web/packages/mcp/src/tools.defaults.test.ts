@@ -121,8 +121,8 @@ describe("authoring defaults", () => {
     const bytes = Uint8Array.from([1, 2, 3]);
     const reference = {
       id: "clip-1",
-      kind: "video" as const,
-      path: "assets/clip-1.mp4",
+      kind: "image" as const,
+      path: "assets/clip-1.png",
       sha256: "ab".repeat(32),
       license: { name: "CC0" },
     };
@@ -148,5 +148,33 @@ describe("authoring defaults", () => {
     const refused = await removeDraftAsset(ctx, "clip-1", themeId);
     expect(refused.isError).toBe(true);
     expect(refusalTextOf(refused)).toContain("still used");
+  });
+
+  it("refuses to place a video asset as a scene image", async () => {
+    const host = await startHost(hostHandler());
+    const ctx = context(host);
+    const created = payload(
+      await createTheme(ctx, { name: "Mine", width: 800, height: 480 }),
+    );
+    const themeId = created.themeId as string;
+    const draft = ctx.drafts.read(themeId);
+    draft.envelope = addAsset(
+      draft.envelope,
+      {
+        id: "clip",
+        kind: "video",
+        path: "assets/clip.mp4",
+        license: { name: "CC0" },
+      },
+      Uint8Array.from([1, 2, 3]),
+    );
+
+    const refused = await addImage(ctx, {
+      assetId: "clip",
+      box: { left: 0, top: 0, width: 100, height: 100 },
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(refusalTextOf(refused)).toContain("background");
   });
 });
