@@ -82,6 +82,15 @@ export interface FabricSceneOptions
    * written before the field existed. A circle theme fits by the rect rule and
    * clips its composition to the disc inscribed in its square artboard. */
   readonly themeShape?: ArtboardShape;
+  /** Reports every fit's transform and the artboard it was fitted from: the
+   *  mount, a resize, and an artboard or presentation change. **The frame is
+   *  the scene's fact**, so the player's chrome rides this rather than watching
+   *  the same events a second time — a notice already up turns with the
+   *  composition instead of waiting for the next one raised. */
+  readonly onFit?: (
+    transform: ArtboardTransform,
+    artboard: SceneArtboard,
+  ) => void;
 }
 
 export interface FabricSceneHandle extends SceneHandle {
@@ -371,6 +380,16 @@ export function mountFabricScene(
     return made;
   }
 
+  /** Where the composition landed, for whoever rides it. Called from `fit`
+   *  itself so every path that moves the composition reports it. */
+  function reportFit(
+    transform: ArtboardTransform,
+    board: SceneArtboard,
+  ): ArtboardTransform {
+    options.onFit?.(transform, board);
+    return transform;
+  }
+
   function fit(): ArtboardTransform {
     // The document's artboard when there is one, because it is the only source
     // that moves: `ScenePlan` cannot carry a document-level change, and
@@ -438,7 +457,7 @@ export function mountFabricScene(
     }
 
     if (transform.isDegenerate) {
-      return transform;
+      return reportFit(transform, geometry);
     }
 
     canvas.setDimensions({
@@ -452,7 +471,7 @@ export function mountFabricScene(
       clampRenderScale(transform.scale * canvas.getRetinaScaling(), 1, 1),
     );
 
-    return transform;
+    return reportFit(transform, geometry);
   }
 
   adapter.apply(plan);

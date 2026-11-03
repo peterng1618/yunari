@@ -26,14 +26,88 @@ import { uiCopy } from "./ui-copy.js";
  * right when the notice arrives and left when it leaves (vg-028, measured and
  * ruled 2026-10-14). Every strip left here is a transport or availability
  * notice, which can flash on any reconnect and would move a dashboard nobody
- * touched, so every one of them `overlay`s — they sit at the display's edge and
- * the composition stays put. The one strip that took room was the crop notice,
- * and it is gone (`vg-578`). The theme chooser
+ * touched, so every one of them `overlay`s — a notice rides the composition's
+ * edge once it is turned (`setChromeFrame`) and the composition stays put. The
+ * one strip that took room was the crop notice, and it is gone (`vg-578`). The theme chooser
  * (`theme-chooser.ts`) is the deliberate exception: it is persistent, and its
  * one re-fit happens at mount rather than flashing under a reader's hand.
  */
 
 export type ChromeSide = "top" | "bottom";
+
+/** Where the composition sits on the display, in viewport pixels. */
+export interface ChromeFrame {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+  /** Whole degrees clockwise, the composition's own angle. */
+  readonly rotation: number;
+}
+
+/** The composition's frame, as the scene last fitted it. */
+let frame: ChromeFrame | undefined;
+
+/**
+ * The box a notice rides: the composition's, so a turned display turns its
+ * notices with it.
+ *
+ * **The screen has no edge at the composition's angle.** A quarter-turned board
+ * is a narrow column on a landscape display, and a strip pinned to the screen's
+ * top edge crossed it at right angles — the defect a reader reported. The scene
+ * reports the frame after every fit, so a resize or a mounting angle reaches
+ * the strips already up rather than only the next one raised.
+ *
+ * `undefined` is a scene that has not fitted yet (or a collapsed viewport); an
+ * upright frame is the display's own edge, which is where a notice belongs.
+ */
+export function setChromeFrame(next: ChromeFrame | undefined): void {
+  frame = next;
+  for (const strip of document.querySelectorAll<HTMLElement>(
+    "[data-yunari-chrome-strip][data-yunari-chrome-overlay]",
+  )) {
+    placeOverlay(
+      strip,
+      strip.dataset["yunariChromeSide"] === "bottom" ? "bottom" : "top",
+    );
+  }
+}
+
+/** Puts an overlay strip on the frame. Read right to left: a bottom strip goes
+ *  up by its own height first, so its bottom edge — not its top — lands on the
+ *  composition's.
+ *
+ *  **An upright composition keeps the display's edge.** Up there the screen is
+ *  the frame a notice belongs to: it spans the display even where the board is
+ *  letterboxed, which is the shape the built phone was measured against
+ *  (`host-chrome.spec.ts`). A turned one has no screen edge at its angle, so it
+ *  rides the board. */
+function placeOverlay(strip: HTMLElement, side: ChromeSide): void {
+  if (frame === undefined || frame.rotation % 360 === 0) {
+    strip.style.position = "fixed";
+    strip.style.left = "0";
+    strip.style.right = "0";
+    strip.style.top = side === "top" ? "0" : "";
+    strip.style.bottom = side === "bottom" ? "0" : "";
+    strip.style.width = "";
+    strip.style.transform = "";
+    return;
+  }
+  strip.style.position = "fixed";
+  strip.style.left = `${frame.left}px`;
+  strip.style.top = `${frame.top}px`;
+  strip.style.right = "";
+  strip.style.bottom = "";
+  strip.style.width = `${frame.width}px`;
+  // The width is the composition's, so the inset padding has to sit inside it.
+  strip.style.boxSizing = "border-box";
+  // The board plate's pivot: the composition's own top-left corner.
+  strip.style.transformOrigin = "0 0";
+  strip.style.transform =
+    side === "top"
+      ? `rotate(${frame.rotation}deg)`
+      : `rotate(${frame.rotation}deg) translateY(${frame.height}px) translateY(-100%)`;
+}
 
 /** The band a strip belongs in.
  *
@@ -93,6 +167,12 @@ export function putStrip(
       : "") +
     `background:${input.background};color:${input.color};` +
     "font:12px/1.4 ui-monospace,monospace;letter-spacing:0.02em";
+
+  if (input.overlay === true) {
+    strip.dataset["yunariChromeOverlay"] = "";
+    strip.dataset["yunariChromeSide"] = input.side;
+    placeOverlay(strip, input.side);
+  }
 
   chromeBand(input.side).append(strip);
   return strip;

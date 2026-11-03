@@ -28,7 +28,11 @@ import {
 } from "@yunari/scene-fabric";
 import { Group } from "fabric/es";
 import { boundSemanticKeys } from "./bound-keys.js";
-import { showAvailabilityNotice, showConnectionState } from "./chrome.js";
+import {
+  setChromeFrame,
+  showAvailabilityNotice,
+  showConnectionState,
+} from "./chrome.js";
 import { mountDisplayControls } from "./display-controls.js";
 import {
   type HostProbe,
@@ -313,6 +317,24 @@ async function startHostedTheme(
       return url === undefined ? undefined : { url: session.withToken(url) };
     },
     onGlassError: reportGlassError,
+    // The notices ride the composition, so a turned display turns them too
+    // (`chrome.ts`). The board's mapped corner is the transform's offset inside
+    // the host; the strips are fixed to the viewport, so the host's own box is
+    // added to it.
+    onFit: (transform, board) => {
+      const box = host.getBoundingClientRect();
+      setChromeFrame(
+        transform.isDegenerate
+          ? undefined
+          : {
+              left: box.left + transform.offsetX,
+              top: box.top + transform.offsetY,
+              width: board.width * transform.scale,
+              height: board.height * transform.scale,
+              rotation: transform.rotation,
+            },
+      );
+    },
     ...(defaultSampling === undefined ? {} : { defaultSampling }),
   });
   const releaseFonts = await loadFontAssets({

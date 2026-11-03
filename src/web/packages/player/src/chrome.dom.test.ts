@@ -6,6 +6,7 @@ import {
   chromeBand,
   putStrip,
   removeStrip,
+  setChromeFrame,
   showAvailabilityNotice,
   showConnectionState,
 } from "./chrome.js";
@@ -198,6 +199,105 @@ describe("the strips the display is told by", () => {
 
     expect(stripsIn("top")).toHaveLength(0);
     expect(stripsIn("bottom")).toHaveLength(0);
+  });
+});
+
+describe("a strip's edge on a turned display", () => {
+  beforeEach(skeleton);
+  // The frame is module state, and this file holds one module.
+  afterEach(() => setChromeFrame(undefined));
+
+  /** A 640×360 composition turned a quarter, placed 100px in and 40px down —
+   *  numbers no viewport-edge rule could produce, so a strip that reads the
+   *  frame cannot pass by reading the screen instead. */
+  const FRAME = { left: 100, top: 40, width: 640, height: 360, rotation: 90 };
+
+  function overlay(side: "top" | "bottom"): HTMLElement {
+    return putStrip({
+      side,
+      id: `yunari-${side}`,
+      text: "x",
+      background: "#000",
+      color: "#fff",
+      overlay: true,
+    });
+  }
+
+  it("rides the composition's top edge at the composition's angle", () => {
+    setChromeFrame(FRAME);
+
+    const strip = overlay("top");
+
+    expect(strip.style.position).toBe("fixed");
+    expect(strip.style.left).toBe("100px");
+    expect(strip.style.top).toBe("40px");
+    expect(strip.style.width).toBe("640px");
+    // The board plate's own pivot: the composition's top-left corner.
+    expect(strip.style.transformOrigin).toBe("0 0");
+    expect(strip.style.transform).toBe("rotate(90deg)");
+  });
+
+  it("puts a bottom strip's own bottom edge on the composition's bottom edge", () => {
+    setChromeFrame(FRAME);
+
+    const strip = overlay("bottom");
+
+    // Read right to left: up by its own height, down by the board's, then the
+    // board's turn. The strip's bottom edge lands on the board's.
+    expect(strip.style.transform).toBe(
+      "rotate(90deg) translateY(360px) translateY(-100%)",
+    );
+  });
+
+  it("moves a strip already up when the composition is refitted", () => {
+    setChromeFrame(FRAME);
+    const strip = overlay("top");
+
+    setChromeFrame({
+      ...FRAME,
+      left: 0,
+      top: 10,
+      width: 320,
+      height: 180,
+      rotation: 180,
+    });
+
+    expect(strip.style.left).toBe("0px");
+    expect(strip.style.top).toBe("10px");
+    expect(strip.style.width).toBe("320px");
+    expect(strip.style.transform).toBe("rotate(180deg)");
+  });
+
+  it("keeps an upright notice on the display's own edge", () => {
+    // The screen is the frame a notice belongs to while the composition is
+    // upright: it spans the display even where the board is letterboxed, which
+    // is the shape the built phone is measured against.
+    setChromeFrame({ ...FRAME, rotation: 0 });
+
+    const strip = overlay("bottom");
+
+    expect(strip.style.left).toBe("0px");
+    expect(strip.style.right).toBe("0px");
+    expect(strip.style.bottom).toBe("0px");
+    expect(strip.style.width).toBe("");
+    expect(strip.style.transform).toBe("");
+  });
+
+  it("leaves a strip that takes room in its band", () => {
+    // The theme chooser is the one strip still in flow: its room comes from
+    // the artboard, so it is not on the composition's frame.
+    setChromeFrame(FRAME);
+
+    const strip = putStrip({
+      side: "top",
+      id: "yunari-theme-chooser",
+      children: [document.createElement("span")],
+      background: "#14161c",
+      color: "#e8ecf3",
+    });
+
+    expect(strip.style.position).toBe("");
+    expect(strip.style.transform).toBe("");
   });
 });
 
