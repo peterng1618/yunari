@@ -71,6 +71,9 @@ override a preference for a nicer picture.
 - **Never fabricate telemetry.** Bind a semantic key only when `list_sensors`
   reports that this host measures it. A missing reading stays absent; never
   write zero, a dash or a default for a sensor the host did not measure.
+- **A mask survives the target's output.** A TURZX overlay carries 4 bits per
+  colour channel and 4 bits of opacity, so a soft opacity gradient becomes flat
+  grey bands. Build a mask from solid fills, and judge it on the panel.
 - **Legibility outranks expressiveness.** A decorative heading, angled type or
   full-bleed video never shrinks a reading below its minimum or breaks contrast.
 - **Name every layer for what it is.** Every object and group carries a short

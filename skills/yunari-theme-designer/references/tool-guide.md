@@ -97,6 +97,13 @@ Current behaviours, each has cost a save or preview when missed.
   and `90` bottom to top. Author a scrim by its anchor edge: a bottom fade is
   `90` with the dark stop at the bottom, a left fade is `0` with it at the left.
   Inspect the boundary in the preview.
+- **A panel's video overlay is coarser than its preview.** The TURZX overlay
+  carries 4 bits per colour channel and 4 bits of opacity, so a soft black-to-
+  transparent gradient becomes a handful of flat bands that read as a grey wash.
+  The browser preview and the Lian Li PNG layer keep the full ramp. A mask for a
+  TURZX target is solid fills or a few wide steps, and it is judged on the panel.
+- **A fill-only rect keeps no border.** `add_shape` authors `strokeWidth: 0`;
+  never put a stroke on a scrim, and do not rely on a border to hide an edge.
 - **An ellipse has fill only.** `add_shape` refuses a stroke on an ellipse; a ring
   is two stacked filled ellipses (outer minus inner) or a path with a stroke.
 - **A date or time format is a small token set, not an ICU pattern.** `YYYY YY

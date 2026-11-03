@@ -163,6 +163,10 @@ describe("the compose vocabulary", () => {
     expect(rect).toMatchObject({ type: "Rect", rx: 10, ry: 10 });
     expect(ellipse).toMatchObject({ type: "Ellipse", rx: 50, ry: 30 });
     expect(line).toMatchObject({ type: "Path", fill: null, strokeWidth: 2 });
+    // A fill-only shape must not keep Fabric's default strokeWidth of 1: the
+    // unpainted edge leaves a transparent one-pixel gap over what it covers.
+    expect(rect["strokeWidth"]).toBe(0);
+    expect(ellipse["strokeWidth"]).toBe(0);
     expect(() =>
       addShapeObject({
         id: "bad",

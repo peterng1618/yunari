@@ -140,6 +140,9 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
   const common = {
     id: input.id,
     name: input.name ?? input.id,
+    // Fabric defaults strokeWidth to 1 even with no stroke, and a fill-only
+    // box then paints its edges short of the authored box.
+    strokeWidth: 0,
     left: input.left,
     top: input.top,
     width: input.width,
