@@ -952,6 +952,8 @@ describe("Host theme routes", () => {
         captured.push({ displayId, themeId, clip });
         return Promise.resolve(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]));
       },
+      captureTheme: () =>
+        Promise.resolve(Uint8Array.from([0x89, 0x50, 0x4e, 0x47])),
     };
     const previewing = createHostServer({
       registry: new ProviderRegistry([]),
@@ -1094,6 +1096,8 @@ describe("Host theme routes", () => {
       stopAll: () => Promise.resolve(),
       capturePreview: () =>
         Promise.reject(new Error("The preview browser is not running.")),
+      captureTheme: () =>
+        Promise.reject(new Error("The preview browser is not running.")),
     };
     const previewing = createHostServer({
       registry: new ProviderRegistry([]),
@@ -1113,6 +1117,93 @@ describe("Host theme routes", () => {
       expect(answer.text()).toBe("The preview browser is not running.");
     } finally {
       await previewing.close();
+    }
+  });
+
+  it("captures a missing thumbnail at the artboard's size, and keeps an existing one", async () => {
+    const saved = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(validEmptyAssetTheme),
+    );
+    expect(saved.status).toBe(200);
+
+    // A real 1×1 PNG: the store bounds the surface its header declares.
+    const png = Uint8Array.from(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8z8BQDwAEgQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const captured: { id: string; width: number; height: number }[] = [];
+    const panels = {
+      start: () => Promise.resolve(),
+      command: () => Promise.resolve(""),
+      stop: () => Promise.resolve(),
+      refresh: () => Promise.resolve(),
+      refreshVideo: () => Promise.resolve(),
+      reconcile: () => Promise.resolve(),
+      running: () => [],
+      status: () => "connected",
+      reconnect: () => Promise.resolve(),
+      disconnect: () => Promise.resolve(),
+      stopped: () => false,
+      stopAll: () => Promise.resolve(),
+      capturePreview: () => Promise.reject(new Error("Not a preview.")),
+      captureTheme: (
+        id: string,
+        geometry: { width: number; height: number },
+      ) => {
+        captured.push({ id, ...geometry });
+        return Promise.resolve(png);
+      },
+    } satisfies PanelManager;
+    const capturing = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      themeStore: createThemeStore(tmpDir),
+      thumbnails: createThumbnailStore(tmpDir),
+      panels,
+    });
+
+    try {
+      const answer = await request(
+        capturing.server,
+        "POST",
+        "/api/themes/living-room/thumbnail/capture",
+      );
+      expect(answer.status).toBe(200);
+      // 1920×1080 at the capture edge: the library's own picture size.
+      expect(answer.json()).toEqual({
+        ok: true,
+        captured: true,
+        width: 640,
+        height: 360,
+      });
+      expect(captured).toEqual([
+        { id: "living-room", width: 640, height: 360 },
+      ]);
+      expect(
+        (
+          await request(
+            capturing.server,
+            "GET",
+            "/api/themes/living-room/thumbnail",
+          )
+        ).status,
+      ).toBe(200);
+
+      // The editor's capture is finer; a second ask leaves it alone.
+      const again = await request(
+        capturing.server,
+        "POST",
+        "/api/themes/living-room/thumbnail/capture",
+      );
+      expect(again.json()).toMatchObject({ ok: true, captured: false });
+      expect(captured).toHaveLength(1);
+    } finally {
+      await capturing.close();
     }
   });
 
@@ -5421,6 +5512,7 @@ describe("A local monitor is specified rather than paired", () => {
         running: () => running,
         status: () => "connected",
         capturePreview: () => Promise.resolve(Uint8Array.of()),
+        captureTheme: () => Promise.resolve(Uint8Array.of()),
         reconnect: () => Promise.resolve(),
         disconnect: () => Promise.resolve(),
         stopped: () => false,

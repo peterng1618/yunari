@@ -89,7 +89,26 @@ export async function saveTheme(
     if (!saved.ok) {
       return failureResult({ ok: false, issues: saved.issues });
     }
-    return textResult({ ...saved.result, ok: true, saved: true });
+
+    // The host photographs a missing picture; an existing one is the editor's
+    // and is kept. A failed capture does not undo the save: the document is
+    // stored, and the absence is reported rather than hidden.
+    const thumbnail = await context.host
+      .captureThumbnail(saved.draft.id)
+      .catch((error: unknown) => ({
+        captured: false,
+        reason: error instanceof Error ? error.message : String(error),
+      }));
+
+    return textResult({
+      ...saved.result,
+      ok: true,
+      saved: true,
+      thumbnail: thumbnail.captured,
+      ...(thumbnail.reason === undefined
+        ? {}
+        : { thumbnailReason: thumbnail.reason }),
+    });
   } catch (error) {
     return errorResult(error);
   }

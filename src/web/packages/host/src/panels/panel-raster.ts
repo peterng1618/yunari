@@ -26,6 +26,10 @@ const START_TIMEOUT_MS = 20_000;
 const REPLY_TIMEOUT_MS = 5_000;
 /** A composited frame is 33 ms away; a second of nothing is a page that stopped. */
 const FRAME_TIMEOUT_MS = 1_000;
+/** A one-shot wait for the page to say its stream is live and its background
+ *  picture is ready; a page that never reports either keeps what it has
+ *  painted after this. */
+const LIVE_WAIT_MS = 6_000;
 
 export interface RasterPageOptions {
   /** The player page for a display, including its session. */
@@ -33,6 +37,14 @@ export interface RasterPageOptions {
   readonly geometry: PanelGeometry;
   /** The still encoding the device consumes; JPEG when it states none. */
   readonly stillFormat?: "jpeg" | "png";
+  /**
+   * Photograph the page once instead of reading its compositor frames.
+   *
+   * A panel consumes a stream, but a preview or a thumbnail is one instant:
+   * the screencast's first frame can still be the blank page before the theme
+   * paints, while a screenshot waits for the live signal and composes then.
+   */
+  readonly oneShot?: boolean;
 }
 
 export interface Rasterizer {
@@ -540,8 +552,16 @@ export async function createPageRasterizer(
   };
 
   return {
-    capture(): Promise<Uint8Array> {
-      return nextFrame();
+    async capture(): Promise<Uint8Array> {
+      if (options.oneShot === true) {
+        await waitForLive(connected());
+        return shot(
+          connected(),
+          options.geometry,
+          options.stillFormat ?? "png",
+        );
+      }
+      return await nextFrame();
     },
 
     async captureOverlay(): Promise<Uint8Array> {
@@ -680,4 +700,39 @@ async function waitForScene(devtools: Devtools): Promise<void> {
   throw new Error(
     "The player page mounted no scene, so the panel has nothing to show.",
   );
+}
+
+/**
+ * Waits for the page to say its stream is live, so a one-shot picture does not
+ * photograph the connection strip or the blank page before the theme paints.
+ *
+ * The player's own live marker (`data-yunari-live`) says the stream started,
+ * and the background layer's own media says its picture is ready: a theme's
+ * image loads after the stream, and a thumbnail without it advertises a
+ * different theme. A page that never reports either is bounded and photographed
+ * as it stands; no second readiness model is added to the player.
+ */
+async function waitForLive(devtools: Devtools): Promise<void> {
+  const deadline = Date.now() + LIVE_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    const reply = await devtools.send("Runtime.evaluate", {
+      expression: `(() => {
+        if (document.documentElement.dataset["yunariLive"] !== "true") return false;
+        const media = document.querySelectorAll(
+          "[data-yunari-background-media] img, [data-yunari-background-media] video",
+        );
+        return [...media].every((element) =>
+          element.tagName === "IMG"
+            ? element.complete && element.naturalWidth > 0
+            : element.readyState >= 2,
+        );
+      })()`,
+      returnByValue: true,
+    });
+    const value = reply.result?.["result"] as { value?: unknown } | undefined;
+    if (value?.value === true) return;
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

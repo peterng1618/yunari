@@ -1,9 +1,11 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import { createPageCapture } from "./panel-capture.js";
 import type {
   PanelConnectionStatus,
   PanelControlCommand,
   PanelDevice,
+  PanelGeometry,
   PanelVideoSource,
 } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
@@ -41,6 +43,9 @@ export interface PanelManagerOptions {
     clip: boolean,
     themeId?: string,
   ) => string;
+  /** The player page for a theme no display is assigned, used to photograph a
+   *  thumbnail for an authoring client that has no canvas. */
+  readonly pageForTheme: (themeId: string) => string;
   /** The clip the display's theme plays itself, or undefined for a still theme.
    *  Read once per start: a changed assignment is a restart, not a re-read. */
   readonly videoFor?: (
@@ -121,6 +126,10 @@ export interface PanelManager {
     themeId: string,
     clip: boolean,
   ): Promise<Uint8Array>;
+  /** Photographs a theme's player page at `geometry`, with no display record
+   *  and no device opened. The shared browser and the player renderer are the
+   *  same ones a panel uses. */
+  captureTheme(themeId: string, geometry: PanelGeometry): Promise<Uint8Array>;
   /** Stops and starts one display now: the manual retake. */
   reconnect(displayId: string): Promise<void>;
   /** Stops the panel and suppresses its automatic reopen until this process
@@ -228,15 +237,18 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     return rasterBrowser;
   };
 
-  /** Renders one display's page at its family's size; no device is opened, the
-   *  runtime is shared, and the target closes on both paths. */
+  const capturePageNow = createPageCapture({
+    browserFor: rasterBrowserFor,
+    browser: options.browser,
+    isStopping: () => stopping,
+  });
+
+  /** Renders one display's page at its family's size. */
   const captureNow = async (
     displayId: string,
     themeId: string,
     clip: boolean,
   ): Promise<Uint8Array> => {
-    if (stopping) throw new Error("The host is shutting down.");
-
     const record = await options.displays.find(displayId);
     if (record === undefined || record.kind !== "panel") {
       throw new Error(`Display ${displayId} is not a panel.`);
@@ -254,24 +266,10 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const executable = options.browser ?? findBrowser();
-    if (executable === undefined) {
-      throw new Error(
-        "No Chromium-family browser was found, and a preview needs one to render.",
-      );
-    }
-
-    const rasterizer = await rasterBrowserFor(executable).create({
-      url: options.pageFor(displayId, clip, themeId),
-      geometry: family.geometry,
-      stillFormat: "png",
-    });
-
-    try {
-      return await rasterizer.capture();
-    } finally {
-      await rasterizer.close();
-    }
+    return await capturePageNow(
+      options.pageFor(displayId, clip, themeId),
+      family.geometry,
+    );
   };
 
   const startNow = async (displayId: string): Promise<void> => {
@@ -676,6 +674,9 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     capturePreview: (displayId, themeId, clip) =>
       enqueue(displayId, () => captureNow(displayId, themeId, clip)),
+
+    captureTheme: (themeId, geometry) =>
+      capturePageNow(options.pageForTheme(themeId), geometry),
 
     reconnect: (displayId) => {
       disconnected.delete(displayId);

@@ -108,6 +108,14 @@ export function fakeBrowser(
   const browser: FakeBrowser = {
     closed: false,
     create: vi.fn(async () => rasterizer() as Rasterizer),
+    capturePage: vi.fn(async () => {
+      const page = rasterizer() as Rasterizer;
+      try {
+        return await page.capture();
+      } finally {
+        await page.close();
+      }
+    }),
     stop: vi.fn(async () => {
       browser.closed = true;
       events.push("browser:stop");
@@ -124,6 +132,7 @@ export function managerOver(
   return createPanelManager({
     displays: store,
     pageFor: (displayId) => `http://127.0.0.1:1/?display=${displayId}`,
+    pageForTheme: (themeId) => `http://127.0.0.1:1/?theme=${themeId}`,
     rasterBrowserFactory: () => {
       const browser = fakeBrowser(harness.events, harness.rasterizer);
       harness.browsers.push(browser);

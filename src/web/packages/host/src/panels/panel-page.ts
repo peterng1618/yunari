@@ -23,3 +23,12 @@ export function panelPageUrl(
     ? withClip
     : `${withClip}&theme=${encodeURIComponent(themeId)}`;
 }
+
+/**
+ * The player page for a theme no display is assigned, with `panel=1` so the
+ * page keeps none of its browser chrome: a thumbnail is the theme, and an
+ * authoring client that has no canvas asks the host to photograph this page.
+ */
+export function themePageUrl(port: number, themeId: string): string {
+  return `http://127.0.0.1:${port}/?theme=${encodeURIComponent(themeId)}&panel=1`;
+}

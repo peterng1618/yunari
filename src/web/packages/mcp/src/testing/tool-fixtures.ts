@@ -94,6 +94,12 @@ export function hostHandler(options: { readonly panel?: boolean } = {}) {
     if (url.pathname.endsWith("/panel-preview")) {
       return { headers: { "content-type": "image/png" }, body: png };
     }
+    if (
+      url.pathname.endsWith("/thumbnail/capture") &&
+      request.method === "POST"
+    ) {
+      return { body: { ok: true, captured: true } };
+    }
     if (url.pathname.startsWith("/api/themes/") && request.method === "PUT") {
       const id = url.pathname.slice("/api/themes/".length);
       return { body: { ok: true, id, base: "base-1", name: "Mine" } };
