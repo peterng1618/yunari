@@ -2576,6 +2576,18 @@ it("states why a held port cannot be added", async () => {
   );
 
   expect(row.textContent).toContain(reason);
+  // **The reason takes a wrapped line of its own.** A driver's sentence is long
+  // and unbounded, and a row that keeps it on the label's line has no width to
+  // wrap into — the notice runs out of its card. jsdom lays nothing out, so the
+  // row's wrap and the reason's full-width, breakable line are the declaration
+  // a browser test would otherwise repeat.
+  expect(row.className).toContain("flex-wrap");
+  const reasonNode = must(
+    row.querySelector<HTMLElement>("[data-yunari-panel-reason]"),
+    "the held port's reason",
+  );
+  expect(reasonNode.className).toContain("w-full");
+  expect(reasonNode.className).toContain("break-words");
   expect(
     row.querySelector("[data-yunari-panel-add]"),
     "a port the host cannot open is still offered",

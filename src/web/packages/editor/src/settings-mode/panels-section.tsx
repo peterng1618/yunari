@@ -116,7 +116,7 @@ export function PanelsSection(props: {
             <div
               key={key}
               data-yunari-panel={key}
-              className="flex items-center gap-[var(--space-12)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)]"
+              className="flex flex-wrap items-center gap-x-[var(--space-12)] gap-y-[var(--space-6)] rounded-lg border border-edge bg-panel-2 px-[var(--space-10)] py-[var(--space-8)]"
             >
               <span className="flex min-w-0 flex-1 flex-col text-xs text-text">
                 {panel.label}
@@ -127,7 +127,7 @@ export function PanelsSection(props: {
               {panel.reason !== undefined ? (
                 <span
                   data-yunari-panel-reason={key}
-                  className="text-2xs text-warn"
+                  className="w-full break-words text-2xs text-warn"
                 >
                   {panel.reason}
                 </span>
