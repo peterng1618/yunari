@@ -194,6 +194,44 @@ export interface Artboard {
 export const BACKGROUND_MEDIA_BOUNDS = ["theme", "display"] as const;
 export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
 
+/** The edges a linear blend can ramp from. The ramp starts transparent at the
+ *  named edge and reaches full opacity `length` into the region. */
+export const BACKGROUND_EDGES = ["left", "right", "top", "bottom"] as const;
+export type BackgroundEdge = (typeof BACKGROUND_EDGES)[number];
+
+/** A radial blend fits its ellipse to the region; a linear one runs from an
+ *  edge. Both are authored as fractions of the media's bounds box. */
+export const BACKGROUND_BLEND_SHAPES = ["linear", "radial"] as const;
+export type BackgroundBlendShape = (typeof BACKGROUND_BLEND_SHAPES)[number];
+
+/** An inset is a fraction of the box's own dimension. It is refused above this
+ *  so two opposite insets can never meet or cross; the pair is refused at the
+ *  region when they sum to 1 or more. */
+export const MAX_BACKGROUND_INSET = 0.9;
+
+/** The ramp is a visibility fade, so a zero length is a hard edge (expressed by
+ *  omitting the blend) and a length over the box has no meaning. */
+export const MIN_BACKGROUND_BLEND_LENGTH = 0.01;
+export const MAX_BACKGROUND_BLEND_LENGTH = 1;
+
+export type BackgroundBlend =
+  | {
+      readonly shape: "linear";
+      readonly edge: BackgroundEdge;
+      readonly length: number;
+    }
+  | { readonly shape: "radial"; readonly length: number };
+
+/** Where the media sits inside its bounds box, and how it fades at one edge
+ *  into the box's fill. Absent means full cover with a hard edge. */
+export interface BackgroundRegion {
+  readonly left?: number;
+  readonly top?: number;
+  readonly right?: number;
+  readonly bottom?: number;
+  readonly blend?: BackgroundBlend;
+}
+
 /** The media's pan, as a fraction of the box's own dimensions. Refused, never
  *  clamped: an offset outside these is an authoring bug, not a reading to round
  *  into range. The placement scales a cover image enough to make the pan
@@ -239,6 +277,8 @@ export interface BackgroundMedia {
    * still the glass material samples instead of a blur per video frame.
    */
   readonly fallbackFrame?: number;
+  /** Where the media sits inside its bounds box. Absent means the whole box. */
+  readonly region?: BackgroundRegion;
 }
 
 /**
@@ -248,9 +288,13 @@ export interface BackgroundMedia {
  * `bounds: "theme"` — one paint, so the two cannot disagree. It sits behind the
  * media, so it shows wherever the media does not cover; with `cover` that is
  * never inside the media's box.
+ *
+ * `fill` is the paint behind the media inside its bounds box: the colour a
+ * region or blend reveals. Absent means `color` is the fill.
  */
 export interface Background {
   readonly color?: StyleValue;
+  readonly fill?: StyleValue;
   readonly media?: BackgroundMedia;
 }
 
