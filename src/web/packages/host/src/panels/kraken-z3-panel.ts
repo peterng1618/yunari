@@ -172,6 +172,15 @@ class KrakenControl {
   }
 }
 
+/** A frame the device would not store. `status` is the firmware's byte 14, or
+ *  `undefined` when the begin-write drew no reply at all — the two need
+ *  different repairs, so the caller has to see which it was. */
+class FrameRefused extends Error {
+  constructor(readonly status: number | undefined) {
+    super(`The Kraken refused a frame upload (status ${status ?? "none"}).`);
+  }
+}
+
 class KrakenPanel implements PanelDevice {
   readonly geometry: PanelGeometry = { width: SIZE, height: SIZE };
   /**
@@ -231,16 +240,49 @@ class KrakenPanel implements PanelDevice {
       this.ready = true;
     }
 
+    // `prepare` leaves bucket 0 on the glass (in liquid mode), and every later
+    // frame targets the bucket `shown` is not.
     const target = this.shown === 0 ? 1 : 0;
-    await this.writeFrame(target, rgba);
-    this.shown = target;
+
+    try {
+      await this.writeFrame(target, rgba);
+      this.shown = target;
+    } catch (error) {
+      if (!(error instanceof FrameRefused) || error.status !== 9) throw error;
+
+      // **Status 9 is a dropped switch, and the ring can repair itself.**
+      // `shown` names the bucket the switch was supposed to put up, so when
+      // the glass refused our target it is still showing the bucket we wrote
+      // last. That bucket is therefore the one not displayed: write it again,
+      // which recovers without liquefying the glass.
+      const other = target === 0 ? 1 : 0;
+
+      try {
+        await this.writeFrame(other, rgba);
+        this.shown = other;
+      } catch (retry) {
+        // Neither bucket takes a frame: the table itself changed under us, so
+        // the next frame rebuilds it.
+        this.ready = false;
+        throw retry;
+      }
+    }
   }
 
-  /** Liquefy the glass, then empty every bucket so the ring has its range. */
+  /**
+   * Liquefy the glass, then empty every bucket so the ring has its range.
+   *
+   * **It leaves bucket 0 on the glass**, in liquid mode. That is the bucket the
+   * ring must not write next, so `shown` is set here rather than left at a
+   * stale index: a rebuild after a refusal used to keep the old index and
+   * write the bucket `prepare` had just switched to, which answered status 9
+   * and started the rebuild again.
+   */
   private async prepare(): Promise<void> {
     this.control.ask([0x36, 0x03]);
     // Liquid mode first: the firmware refuses to delete the bucket it plays.
     this.switchBucket(0, 0x02);
+    this.shown = 0;
 
     for (let index = 0; index < BUCKET_COUNT; index += 1) {
       this.deleteBucket(index);
@@ -260,15 +302,15 @@ class KrakenPanel implements PanelDevice {
 
     this.control.write([0x36, 0x01, index]);
     const started = this.control.readUntil(0x37, 0x01);
-    if (started?.report[14] !== 0x01) {
-      // Status 9 is the bucket on the glass, 18 a busy device: either way this
-      // frame was not stored, and the table is worth rebuilding next time.
-      this.ready = false;
-      throw new Error(
-        `The Kraken refused a frame upload (status ${
-          started?.report[14] ?? "none"
-        }).`,
-      );
+    const status = started?.report[14];
+    if (status !== 0x01) {
+      // **Only status 9 means the table is wrong**, and `present` repairs that
+      // by addressing the other bucket. A busy device (18) or a command that
+      // drew no reply (`none`) left the table intact, and the next tick's
+      // delete/create retries the same bucket. Rebuilding for those liquefied
+      // the glass — a visible blank — every time the device missed one frame
+      // (2026-11-04).
+      throw new FrameRefused(status);
     }
 
     await this.bulk.write(transferHeader(RGBA_MODE, rgba.length));
