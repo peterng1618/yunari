@@ -102,10 +102,11 @@ A stdio MCP server built on `@modelcontextprotocol/server` v2 and zod 4.
   new panel-preview route.
 - Drafts are held in memory, keyed by theme id. A draft is
   `{ envelope, assets, credits, base?, origin: "new" | "opened" }`.
-- `save_theme` is the only write into the theme library. `preview_theme`
-  saves first when the preview cannot read an unsaved document (the panel
-  path); a browser preview returns a URL and needs no write. A failed save
-  returns the validator's issues and no preview.
+- `save_theme` and `preview_theme` are the writes into the theme library.
+  `preview_theme` saves the draft first on both paths: a browser player reads a
+  stored theme by id, so an unsaved or edited draft would otherwise show a 404
+  or the old version. A failed save returns the validator's issues and no
+  preview.
 
 ### Host changes
 
@@ -147,7 +148,9 @@ second copy under `~/.claude/skills/`.
 
 `yunari-mcp uninstall` removes the same server entry and the skill through the
 same libraries. `yunari-mcp status` reports the host connection, the config
-entry and the installed skill path without changing anything.
+entry and the installed skill path without changing anything. `install --url`
+puts that URL into the registered server's arguments, so a host on a custom
+port survives a later session.
 
 ## MCP tool surface
 
@@ -157,7 +160,7 @@ entry and the installed skill path without changing anything.
 |---|---|---|
 | `yunari_status` | none | host URL, reachable, theme count, displays, asset sources, sensor count |
 | `list_displays` | none | id, label, kind, shape, rotation, active theme; panel geometry/status/commands |
-| `list_sensors` | `measured?: boolean` | semantic key, family, label, unit, and whether this host currently answers that key |
+| `list_sensors` | `measured?: boolean` (default true) | semantic key, family, label, unit, and whether this host currently answers that key |
 | `list_themes` | none | id, name, author, updatedAt and origin from the host's listing; artboard, description, credits and sensors come from `get_theme` |
 | `get_theme` | `themeId` | envelope, asset references and credit summary; never asset bytes |
 | `list_asset_sources` | none | source id, label, category, credential requirement |
@@ -225,7 +228,7 @@ refuses a group carrying a scale or rotation rather than baking transforms.
 | `save_theme` | theme id | saved id, base, validation issues if refused |
 | `assign_theme` | display id, theme id | active-theme map entry for that display |
 
-`preview_theme` for a browser display returns
+`preview_theme` saves the draft, then returns
 `http://<host>/?theme=<id>[&display=<id>]` and a viewport that preserves the
 artboard's aspect (long edge capped at 1600). The skill tells the agent to set
 the browser to exactly that size before judging or screenshotting. A circle

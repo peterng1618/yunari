@@ -40,7 +40,7 @@ node packages/mcp/bin/yunari-mcp.js status
 Without `--url`, `serve` probes `127.0.0.1:5227` through `:5236` for a host that
 answers `/api/themes`. `YUNARI_URL` does the same job as `--url`.
 
-`install` registers the built `dist/main.js` as `yunari` for Claude Code
+`install` registers `bin/yunari-mcp.js` as `yunari` for Claude Code
 globally (`add-mcp`, all tools auto-approved) and installs the skill in
 `skills/yunari-theme-designer/` through the `skills` CLI. `uninstall` removes
 both; `status` reports the host, the config entry and the installed skill
@@ -51,8 +51,8 @@ node packages/mcp/bin/yunari-mcp.js install
 node packages/mcp/bin/yunari-mcp.js uninstall
 ```
 
-Build the package before installing: the registered entry is the built
-`dist/main.js`, not the TypeScript source.
+Build the package before installing: the registered bin imports the built
+`dist/main.js`, and reports a missing build when it is absent.
 
 ## Commands
 

@@ -75,8 +75,8 @@ tokens before composing so objects can reference them by id.
 | `list_objects` | the draft's ids before updating or removing anything |
 | `add_card` | a starter unit (`group-time-card`, `group-cpu-card`, `group-gpu-card`, `group-ram-card`, `group-vram-card`, `group-trends-card`, `group-storage-card`, `group-network-card`) at left/top, optional scale |
 | `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow |
-| `add_shape` | rect/ellipse/path, box, one palette `token`, radius, path points, stroke width |
-| `add_image` | declared asset id, box, fit |
+| `add_shape` | rect/ellipse/path, box, one palette `token`; radius on a rect, path points and stroke width on a path — other combinations are refused |
+| `add_image` | declared asset id, box |
 | `add_icon` | `icon` from the shared icon set, box, palette token |
 | `add_chart` | family line/bar/gauge, box, binding, optional settings |
 | `add_binding` | replace an object's `bindings` array with one or more semantic keys |
