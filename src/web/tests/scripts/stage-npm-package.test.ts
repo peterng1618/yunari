@@ -67,7 +67,10 @@ function fakeTree({ main = true } = {}): Fake {
     JSON.stringify({
       packages: Object.fromEntries(
         [...new Set([...RUNTIME_DEPENDENCIES, ...MCP_DEPENDENCIES])].map(
-          (name, index) => [`node_modules/${name}`, { version: `1.0.${index}` }],
+          (name, index) => [
+            `node_modules/${name}`,
+            { version: `1.0.${index}` },
+          ],
         ),
       ),
     }),
@@ -283,7 +286,9 @@ it("stages a standalone MCP package with no workspace dependency", () => {
       name.startsWith("@yunari/"),
     ),
   ).toBe(false);
-  expect(existsSync(path.join(out, "skills", "yunari-theme-designer", "SKILL.md"))).toBe(true);
+  expect(
+    existsSync(path.join(out, "skills", "yunari-theme-designer", "SKILL.md")),
+  ).toBe(true);
 });
 
 it("refuses an mcp-out inside the source tree or matching --out", () => {
@@ -297,9 +302,14 @@ it("refuses an mcp-out inside the source tree or matching --out", () => {
     }).ok,
   ).toBe(false);
 
-  const run = spawnSync(
-    process.execPath,
-    [SCRIPT, "--source", tree.source, "--out", tree.out, "--mcp-out", tree.out],
-  );
+  const run = spawnSync(process.execPath, [
+    SCRIPT,
+    "--source",
+    tree.source,
+    "--out",
+    tree.out,
+    "--mcp-out",
+    tree.out,
+  ]);
   expect(run.status).not.toBe(0);
 });

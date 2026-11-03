@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted
-- **Paths:** `scripts/stage-npm-package.mjs`
+- **Paths:** `scripts/stage-npm-package.mjs`, `scripts/check-workflows.mjs`
 
 ## Problem
 
@@ -68,3 +68,8 @@ Extend the existing staging script. `stageMcpPackage` shares `inside`,
 empty-directory and version checks with `stagePackage`; the CLI stages the
 bundle and, when `--mcp-out` is given, the standalone tree. Both manifests name
 the same version and lockfile-pinned dependencies.
+
+`scripts/check-workflows.mjs` allows `install` to define the staging variables
+its steps use; the standalone tree adds `MCP_STAGE` and `MCP_SMOKE` beside the
+existing `STAGE`, `ASSETS` and `SMOKE`, so the allowlist names all five rather
+than exempting the new step.

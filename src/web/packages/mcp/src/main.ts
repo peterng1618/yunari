@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { detectGlobalAgents } from "add-mcp";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { detectGlobalAgents } from "add-mcp";
 import { parseInstallArgs, resolveChoices } from "./choices.js";
 import { InMemoryDraftStore } from "./drafts.js";
 import { LazyHostClient, PROBE_PORTS } from "./host-client.js";

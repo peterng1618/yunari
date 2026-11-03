@@ -311,7 +311,9 @@ describe("uninstall", () => {
     const report = await uninstall(ports);
 
     expect(report.ok).toBe(true);
-    expect(calls.removes).toEqual([{ agent: AGENT_TYPE, options: { local: false } }]);
+    expect(calls.removes).toEqual([
+      { agent: AGENT_TYPE, options: { local: false } },
+    ]);
     expect(calls.approvals).toBe(1);
     expect(calls.skills).toEqual([[...skillRemoveArgs()]]);
     expect([...skillRemoveArgs()]).toEqual([
@@ -484,7 +486,8 @@ describe("createPorts", () => {
     });
   });
 
-  it("honours an injected home without resolving the real one", () => {    const home = temporaryHome();
+  it("honours an injected home without resolving the real one", () => {
+    const home = temporaryHome();
     const ports = createPorts({
       home,
       probeHost: async () => ({ reachable: false }),
@@ -586,7 +589,9 @@ describe("removeAutoApprovalRule", () => {
 });
 
 describe("install choices", () => {
-  const choices = (overrides: Partial<InstallChoices> = {}): InstallChoices => ({
+  const choices = (
+    overrides: Partial<InstallChoices> = {},
+  ): InstallChoices => ({
     agents: ["claude-code"],
     scope: "global",
     skill: false,

@@ -1,7 +1,12 @@
 import type { InstallChoices } from "./choices.js";
 
 /** The four clients the prompt names; any other add-mcp id can be typed. */
-export const COMMON_AGENTS = ["claude-code", "codex", "cursor", "vscode"] as const;
+export const COMMON_AGENTS = [
+  "claude-code",
+  "codex",
+  "cursor",
+  "vscode",
+] as const;
 
 /** The text I/O the wizard needs; main supplies readline, tests a queue. */
 export interface WizardIo {
@@ -63,7 +68,9 @@ export async function runWizard(
   const scopeAnswer = await io.ask("Scope: 1) global 2) project [1]: ");
   const scope = scopeAnswer.trim() === "2" ? "local" : "global";
 
-  const skill = !/^n/i.test((await io.ask("Install the theme-designer skill? [Y/n]: ")).trim());
+  const skill = !/^n/i.test(
+    (await io.ask("Install the theme-designer skill? [Y/n]: ")).trim(),
+  );
 
   const approve = !/^2/.test(
     (await io.ask("Auto-approve: 1) all tools 2) none [1]: ")).trim(),

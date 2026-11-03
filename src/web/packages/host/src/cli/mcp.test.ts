@@ -25,14 +25,12 @@ afterEach(() => {
 
 it("routes mcp to the bundled bin with the same arguments", () => {
   const calls: unknown[] = [];
-  const code = runMcpCommand(
-    ["install", "--yes"],
-    packageRoot(true),
-    ((...args: unknown[]) => {
-      calls.push(args);
-      return { status: 7 };
-    }) as never,
-  );
+  const code = runMcpCommand(["install", "--yes"], packageRoot(true), ((
+    ...args: unknown[]
+  ) => {
+    calls.push(args);
+    return { status: 7 };
+  }) as never);
 
   expect(code).toBe(7);
   expect(calls[0]).toEqual([

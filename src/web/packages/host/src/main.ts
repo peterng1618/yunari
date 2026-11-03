@@ -4,8 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
-import { mcpBinPath, runMcpCommand } from "./cli/mcp.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
+import { mcpBinPath, runMcpCommand } from "./cli/mcp.js";
 import {
   lanAddress,
   listenWithFallback,

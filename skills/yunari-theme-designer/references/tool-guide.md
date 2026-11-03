@@ -4,6 +4,16 @@ Every tool answers through the MCP server. Host calls are loopback HTTP; drafts
 live in the server process. A stopped server loses drafts; `save_theme` writes
 the theme library, and `preview_theme` saves the draft first on both paths.
 
+## 0. Install and status
+
+`yunari mcp install` (bundle) or `yunari-mcp install` (standalone) registers the
+server and installs this skill. It asks for agents, scope, the skill, tool
+approval and the host URL; every question has a flag (`--agent`, `--scope`,
+`--skill`/`--no-skill`, `--auto-approve all|none`, `--url`). `--yes` takes every
+default and a piped run without it exits 2 instead of waiting. `yunari mcp
+status` reports the host, the registered entry and whether the installed skill
+matches the packaged copy. Reinstall to update.
+
 ## 1. Discover
 
 Start with these and state what the host answered. Never guess a display id,

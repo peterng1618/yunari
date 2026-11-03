@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import {
   existsSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
@@ -161,7 +161,9 @@ function filesUnder(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile())
     .map((entry) =>
-      join(entry.parentPath, entry.name).slice(dir.length + 1).replaceAll("\\", "/"),
+      join(entry.parentPath, entry.name)
+        .slice(dir.length + 1)
+        .replaceAll("\\", "/"),
     )
     .sort();
 }
@@ -398,7 +400,8 @@ export async function install(
             ? ""
             : ` (also wrote ${result.extraPaths.join(", ")})`;
         const dropped =
-          result.droppedFields === undefined || result.droppedFields.length === 0
+          result.droppedFields === undefined ||
+          result.droppedFields.length === 0
             ? ""
             : ` (${agent} ignores ${result.droppedFields.join(", ")})`;
         steps.push({
@@ -552,8 +555,7 @@ export async function status(ports: InstallPorts): Promise<StatusReport> {
     } else {
       const entry = await ports.installedServer([AGENT_TYPE]);
       const missing = [entry?.command, entry?.args[0]].filter(
-        (path): path is string =>
-          path !== undefined && !ports.fileExists(path),
+        (path): path is string => path !== undefined && !ports.fileExists(path),
       );
       server =
         missing.length === 0
@@ -674,14 +676,12 @@ export function createPorts(
   const home = options.home ?? homedir();
   return {
     home,
-    skillSourceDir:
-      options.skillSourceDir ?? resolveSkillSourceDir(packageDir),
+    skillSourceDir: options.skillSourceDir ?? resolveSkillSourceDir(packageDir),
     bundledSkillDir:
       options.bundledSkillDir ?? resolveSkillSourceDir(packageDir),
     serverEntry:
       options.serverEntry ?? join(packageDir, "bin", "yunari-mcp.js"),
-    interpreter:
-      options.interpreter ?? resolveInterpreter(process.execPath),
+    interpreter: options.interpreter ?? resolveInterpreter(process.execPath),
     runSkills: runSkillsCli,
     upsert: (agent, config, upsertOptions) =>
       upsertServer(agent as never, SERVER_NAME, config, upsertOptions),
