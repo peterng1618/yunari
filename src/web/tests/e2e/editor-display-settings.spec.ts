@@ -8,13 +8,13 @@ import {
   openSettings,
   ratioRows,
   removeRatio,
-  resetRatios,
+  restoreRatios,
   SCREEN,
 } from "./editor-stage.js";
 
 /**
  * The display catalogue the menu offers: the ratio rows settings can add,
- * remove and reset, and what the menu does when that catalogue is empty.
+ * remove and restore, and what the menu does when that catalogue is empty.
  *
  * The stage's framing and lens drawing are the sibling display specs; this one
  * only owns the values the product lets an author put in the menu.
@@ -54,8 +54,11 @@ test.describe("the stage looks through a display", () => {
       "removing the row removes its token once",
     ).not.toContain("21:9");
     await addRatio(page, "21:9");
-    await resetRatios(page);
+    await restoreRatios(page);
+    // The defaults come back and the author's own ratio stays: restoring the
+    // catalogue is not a reset of what the author added.
     expect(await ratioRows(page)).toEqual([
+      "21:9",
       "19.5:9",
       "16:9",
       "4:3",
@@ -64,8 +67,10 @@ test.describe("the stage looks through a display", () => {
     ]);
     await closeSettings(page);
 
-    const reset = await displayMenuItems(page);
+    const restored = await displayMenuItems(page);
     for (const label of [
+      "21:9",
+      "9:21",
       "16:9",
       "19.5:9",
       "4:3",
@@ -75,14 +80,13 @@ test.describe("the stage looks through a display", () => {
       "9:19.5",
       "3:4",
     ]) {
-      expect(reset).toContain(label);
+      expect(restored).toContain(label);
     }
-    expect(reset).not.toContain("21:9");
   });
 
   test("an empty catalogue leaves no lens to choose", async ({ page }) => {
     await openSettings(page, uiCopy.settings.previews);
-    await resetRatios(page);
+    await restoreRatios(page);
     for (const row of await ratioRows(page)) await removeRatio(page, row);
     await closeSettings(page);
 

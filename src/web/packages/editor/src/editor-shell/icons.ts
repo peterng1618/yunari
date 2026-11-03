@@ -48,6 +48,7 @@ import {
   MemoryStick,
   Minus,
   Monitor,
+  MonitorActivity,
   Network,
   OctagonAlert,
   Palette,
@@ -187,6 +188,9 @@ export const DISPLAYS_GLYPH: LucideIcon = Monitor;
 export const HARDWARE_GLYPH: LucideIcon = Cpu;
 export const UNITS_GLYPH: LucideIcon = Gauge;
 export const READINGS_GLYPH: LucideIcon = Activity;
+/** The header's readings-source toggle. It keeps one glyph in both states, so
+ *  the selected state — not a second picture — says which source is shown. */
+export const MONITOR_ACTIVITY_GLYPH: LucideIcon = MonitorActivity;
 /** The tokens palette — the rail's slot and the settings Appearance tab. */
 export const PALETTE_GLYPH: LucideIcon = Palette;
 

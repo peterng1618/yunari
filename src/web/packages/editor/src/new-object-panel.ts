@@ -20,7 +20,9 @@ import {
 } from "./new-object-defaults.js";
 import { AddPane } from "./panes/add/add-pane.js";
 import {
+  activeRemovedPathPresetIds,
   activeUserPathPresets,
+  subscribeRemovedPathPresetIds,
   subscribeUserPathPresets,
 } from "./path-presets.js";
 import type { TextPlacement } from "./text-manager/index.js";
@@ -119,6 +121,7 @@ export interface InsertGroup {
  * simplification — the test that pins both sections is what makes it one.
  */
 export function insertGroups(): readonly InsertGroup[] {
+  const removed = activeRemovedPathPresetIds();
   const objects: readonly InsertableObject[] = [
     ...CARD_LIBRARY.map((unit) => ({
       kind: "card" as const,
@@ -132,12 +135,14 @@ export function insertGroups(): readonly InsertGroup[] {
       label: uiCopy.shapeKinds[shape],
       shape,
     })),
-    ...PATH_PRESET_IDS.map((preset) => ({
-      kind: "shape" as const,
-      label: uiCopy.pathPresets[preset],
-      shape: preset,
-      path: PATH_PRESETS[preset],
-    })),
+    ...PATH_PRESET_IDS.filter((preset) => !removed.includes(preset)).map(
+      (preset) => ({
+        kind: "shape" as const,
+        label: uiCopy.pathPresets[preset],
+        shape: preset,
+        path: PATH_PRESETS[preset],
+      }),
+    ),
     ...activeUserPathPresets().map((preset) => ({
       kind: "shape" as const,
       label: preset.label,
@@ -387,9 +392,11 @@ export function createNewObjectPanel(
   // Flushed, so a caller that reads the pane straight after building it sees
   // the tiles rather than the empty frame before React's first commit.
   flushSync(render);
-  // The author's custom presets live in Settings; adding or removing one there
-  // must change this pane without rebuilding the session.
+  // The author's custom presets and the built-ins they removed live in
+  // Settings; adding or removing one there must change this pane without
+  // rebuilding the session.
   const unsubscribe = subscribeUserPathPresets(render);
+  const unsubscribeRemoved = subscribeRemovedPathPresetIds(render);
 
   return {
     root,
@@ -398,6 +405,7 @@ export function createNewObjectPanel(
     },
     destroy() {
       unsubscribe();
+      unsubscribeRemoved();
       reactRoot.unmount();
       root.remove();
     },

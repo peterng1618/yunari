@@ -5,6 +5,7 @@ import type { SerialTransport } from "./serial-transport.js";
 import {
   attachedTurzxPanels,
   openTurzxPanel,
+  SIZE_PROBE_TIMEOUT_MS,
   type TurzxOptions,
 } from "./turzx-panel.js";
 
@@ -16,6 +17,7 @@ import {
  */
 function fakeTransport(...replies: string[]) {
   const writes: Uint8Array[] = [];
+  const reads: number[] = [];
   let next = 0;
   const take = (): Uint8Array =>
     next < replies.length
@@ -24,11 +26,16 @@ function fakeTransport(...replies: string[]) {
 
   return {
     writes,
+    /** The timeout each read asked for, in call order. */
+    reads,
     transport: {
       write: async (bytes: Uint8Array) => {
         writes.push(Uint8Array.from(bytes));
       },
-      read: async () => take(),
+      read: async (timeoutMs: number) => {
+        reads.push(timeoutMs);
+        return take();
+      },
       // Every scripted reply is already on the wire, so the next one is what a
       // drain discards: a control test scripts the stale reply first.
       drainPending: take,
@@ -365,6 +372,10 @@ describe("openTurzxPanel", () => {
         offsetX: 0,
         offsetY: 0,
       });
+
+      // The first read after HELLO is the stored-size probe. A missing file's
+      // silence must not cost the full answer timeout.
+      expect(fake.reads[1]).toBe(SIZE_PROBE_TIMEOUT_MS);
     } finally {
       await panel.close();
     }

@@ -11,6 +11,11 @@ import { mountBackgroundMedia } from "./background-media.js";
 
 const ARTBOARD = { width: 400, height: 200 } as const;
 const LOOP = { id: "loop", kind: "video", path: "assets/loop.webm" } as const;
+const OTHER = {
+  id: "other",
+  kind: "video",
+  path: "assets/other.webm",
+} as const;
 const HERO = { id: "hero", kind: "image", path: "assets/hero.png" } as const;
 
 /** A fake 2D context that records the media's own operations. */
@@ -326,7 +331,149 @@ describe("a video background's declared frame", () => {
       for (const restore of restores.reverse()) restore();
     }
   });
+
+  it("does not let a stopped video's aborted play condemn the one swapped in", async () => {
+    // Swapping the background stops the old video, whose pending `play()`
+    // rejects with an abort *after* the new element is mounted. Marking the
+    // mount failed from that stale rejection made its still replace the live
+    // video, which froze the preview and left the play control nothing to act
+    // on.
+    const media = stubProbeMedia();
+    const plays: {
+      promise: Promise<void>;
+      reject: (error: unknown) => void;
+    }[] = [];
+    const beforePlay = Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,
+      "play",
+    );
+    Object.defineProperty(HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      value: () => {
+        let reject!: (error: unknown) => void;
+        const promise = new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        });
+        plays.push({ promise, reject });
+        return promise;
+      },
+    });
+    try {
+      const host = document.createElement("div");
+      const handle = mountBackgroundMedia({
+        host,
+        background: { media: { assetId: "loop", bounds: "theme" } },
+        artboard: ARTBOARD,
+        assets: [LOOP, OTHER],
+        resolveAsset: (id) => ({ url: `blob:${id}` }),
+      });
+      const first = plays[0];
+      handle.setBackground({ media: { assetId: "other", bounds: "theme" } });
+      const live = host.querySelector("video");
+      expect(first, "the first mount asked to play").toBeDefined();
+      expect(live, "the swapped video is mounted").not.toBeNull();
+
+      // The removed element's play aborts now that the replacement is in place.
+      first?.reject(new Error("AbortError"));
+      await Promise.resolve();
+
+      // The replacement's still is extracted, which is when a wrong `failed`
+      // would swap the live video for it.
+      const videos = host.querySelectorAll("video");
+      videos[videos.length - 1]?.dispatchEvent(new Event("loadedmetadata"));
+      measureFrameRate(media);
+
+      expect(host.querySelector("video"), "the live video stays").toBe(live);
+      expect(
+        host.querySelector("[data-yunari-background-media] img"),
+        "a stale abort replaced the swapped video with its still",
+      ).toBeNull();
+      handle.destroy();
+    } finally {
+      if (beforePlay === undefined) {
+        Reflect.deleteProperty(HTMLMediaElement.prototype, "play");
+      } else {
+        Object.defineProperty(HTMLMediaElement.prototype, "play", beforePlay);
+      }
+      media.restore();
+    }
+  });
+
+  it("places the fallback still by its own size once it loads", () => {
+    // The still replaces a video that cannot play, and the video's own
+    // intrinsic listener leaves with it. Without one on the image, an
+    // undecoded still was placed as the bare box — stretched — and never
+    // corrected when it loaded.
+    const media = stubProbeMedia();
+    try {
+      const host = document.createElement("div");
+      const handle = mountBackgroundMedia({
+        host,
+        background: { media: { assetId: "loop", bounds: "theme" } },
+        artboard: ARTBOARD,
+        assets: [LOOP],
+        resolveAsset: () => ({ url: "blob:loop" }),
+      });
+      const videos = host.querySelectorAll("video");
+      videos[videos.length - 1]?.dispatchEvent(new Event("loadedmetadata"));
+      measureFrameRate(media);
+
+      handle.setBounds({
+        artboard: { left: 0, top: 0, width: 400, height: 200 },
+      });
+      host.querySelector("video")?.dispatchEvent(new Event("error"));
+      const image = host.querySelector<HTMLImageElement>(
+        "[data-yunari-background-media] img",
+      );
+      expect(image, "the still stands in for the video").not.toBeNull();
+      // Before it decodes the box is all there is: 400 × 200.
+      expect(image?.style.height).toBe("200px");
+
+      const restore = stubImageSize(320, 180);
+      try {
+        image?.dispatchEvent(new Event("load"));
+        // 320 × 180 covering 400 × 200 is 400 × 225, not a stretch to 200.
+        expect(image?.style.width, "the still covers the box").toBe("400px");
+        expect(image?.style.height, "the still keeps its own aspect").toBe(
+          "225px",
+        );
+      } finally {
+        restore();
+      }
+      handle.destroy();
+    } finally {
+      media.restore();
+    }
+  });
 });
+
+/** jsdom decodes nothing: the still reports the size it would have after load. */
+function stubImageSize(width: number, height: number): () => void {
+  const restores = (
+    [
+      ["complete", () => true],
+      ["naturalWidth", () => width],
+      ["naturalHeight", () => height],
+    ] as const
+  ).map(([key, value]) => {
+    const before = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      key,
+    );
+    Object.defineProperty(HTMLImageElement.prototype, key, {
+      configurable: true,
+      get: value,
+    });
+    return () => {
+      if (before === undefined)
+        Reflect.deleteProperty(HTMLImageElement.prototype, key);
+      else Object.defineProperty(HTMLImageElement.prototype, key, before);
+    };
+  });
+  return () => {
+    for (const restore of restores.reverse()) restore();
+  };
+}
 
 /** A read-only image property jsdom answers with nothing; the restore puts it back. */
 function stubImageProperty(

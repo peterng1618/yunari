@@ -109,6 +109,12 @@ export interface PanelManager {
   status(displayId: string): PanelConnectionStatus;
   /** Stops and starts one display now: the manual retake. */
   reconnect(displayId: string): Promise<void>;
+  /** Stops the panel and suppresses its automatic reopen until this process
+   *  exits. A manual reconnect or a start clears the suppression; removing the
+   *  record is the permanent answer. */
+  disconnect(displayId: string): Promise<void>;
+  /** Whether a disconnect, not a missing device, keeps this panel stopped. */
+  stopped(displayId: string): boolean;
   /** What the manager holds, for a surface that reports it. */
   running(): readonly string[];
   stopAll(): Promise<void>;
@@ -160,6 +166,8 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
    * port has no lock of its own, so this queue is the lock.
    */
   const chains = new Map<string, Promise<unknown>>();
+  /** Displays the owner disconnected: the retry loop and a start skip them. */
+  const disconnected = new Set<string>();
   let stopping = false;
   /** The one runtime every running panel's page lives in. */
   let rasterBrowser: RasterBrowser | undefined;
@@ -207,7 +215,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
   };
 
   const startNow = async (displayId: string): Promise<void> => {
-    if (stopping) return;
+    if (stopping || disconnected.has(displayId)) return;
 
     const existing = entries.get(displayId);
     if (existing?.runner !== undefined) return;
@@ -576,8 +584,22 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
     return entry.runner?.running === true ? "connected" : "connecting";
   };
 
+  /**
+   * Stops one display and keeps it stopped: the retry loop and a start see the
+   * suppression, so only a reconnect or a start clears it. The stop may throw
+   * when the device will not release; the suppression stays, because the
+   * owner asked for the panel to be off, not merely for one attempt.
+   */
+  const disconnectNow = async (displayId: string): Promise<void> => {
+    disconnected.add(displayId);
+    await stopNow(displayId);
+  };
+
   return {
-    start: (displayId) => enqueue(displayId, () => startNow(displayId)),
+    start: (displayId) => {
+      disconnected.delete(displayId);
+      return enqueue(displayId, () => startNow(displayId));
+    },
 
     command: (displayId, command) => commandNow(displayId, command),
 
@@ -592,7 +614,15 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     status: statusNow,
 
-    reconnect: (displayId) => enqueue(displayId, () => refreshNow(displayId)),
+    reconnect: (displayId) => {
+      disconnected.delete(displayId);
+      return enqueue(displayId, () => refreshNow(displayId));
+    },
+
+    disconnect: (displayId) =>
+      enqueue(displayId, () => disconnectNow(displayId)),
+
+    stopped: (displayId) => disconnected.has(displayId),
 
     running(): readonly string[] {
       return [...entries.entries()]

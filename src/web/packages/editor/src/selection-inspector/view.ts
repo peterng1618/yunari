@@ -7,6 +7,7 @@ import type {
 } from "../chart-manager/chart-fields.js";
 import { rowNameOf } from "../editor-shell/layer-tree.js";
 import type { CuratedFontFace } from "../font-catalog.js";
+import type { SensorKeyStatus } from "../sensor-key-options.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   type ColumnContext,
@@ -222,6 +223,9 @@ export interface RunOptionView {
    * the author can recognise; it just is not a choice here.
    */
   readonly disabled?: boolean;
+  /** A reading's state on this PC, drawn as the dot before its name. Absent
+   *  for entries that are not readings, such as the static-text prompt. */
+  readonly status?: SensorKeyStatus;
 }
 
 /**

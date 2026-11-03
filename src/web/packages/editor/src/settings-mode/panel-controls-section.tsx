@@ -41,6 +41,11 @@ const SLEEP_DELAY_ID = "yunari-panel-sleep-delay";
  * two presses because it drops the panel for about fifteen seconds; a command
  * to a device the host does not hold would be a refusal for a press that could
  * not have worked.
+ *
+ * **The button is the state's opposite.** While the device is open it offers
+ * Disconnect, which stops the panel and keeps it stopped until a reconnect or a
+ * host restart; while it is not, it offers Reconnect. Removing the display is
+ * the permanent answer, so the section never offers that here.
  */
 export function PanelControlsSection(props: {
   readonly displayId: string;
@@ -50,10 +55,14 @@ export function PanelControlsSection(props: {
   /** What the host says this display's device is doing, and what it accepts. */
   readonly connection: {
     readonly status: PanelConnectionStatus;
+    /** The owner disconnected it: the retry loop will not reopen it. */
+    readonly stopped?: boolean;
     readonly commands: readonly string[];
   };
   /** Stops and opens the device again. The caller re-reads the map afterwards. */
   readonly onReconnect: () => Promise<void>;
+  /** Stops the device and keeps it stopped. The caller re-reads the map. */
+  readonly onDisconnect: () => Promise<void>;
   readonly onCommand: (command: EditorPanelCommand) => Promise<string>;
 }): React.JSX.Element {
   const copy = uiCopy.hostSettings.panels.controls;
@@ -79,6 +88,14 @@ export function PanelControlsSection(props: {
    *  `connecting` state catches the retry loop's attempts; this one covers the
    *  press before the host answers. */
   const [reconnecting, setReconnecting] = useState(false);
+  /** True while this surface's own disconnect is in flight, for the same
+   *  reason as `reconnecting`. */
+  const [disconnecting, setDisconnecting] = useState(false);
+  /** A connection press that failed, drawn outside the door: the door does not
+   *  exist while disconnected, and a disconnect can fail while it is open. */
+  const [connectionFailure, setConnectionFailure] = useState<
+    string | undefined
+  >(undefined);
 
   /** The newest command's number. A reply carrying an older number belongs to
    *  a command something has overtaken, or to one this dialog abandoned, and is
@@ -117,13 +134,30 @@ export function PanelControlsSection(props: {
   const reconnect = (): void => {
     if (reconnecting) return;
     setReconnecting(true);
-    setFailure(undefined);
+    setConnectionFailure(undefined);
     void props.onReconnect().then(
       () => setReconnecting(false),
       (reason: unknown) => {
         setReconnecting(false);
-        setFailure(
+        setConnectionFailure(
           copy.reconnectFailed(
+            reason instanceof Error ? reason.message : String(reason),
+          ),
+        );
+      },
+    );
+  };
+
+  const disconnect = (): void => {
+    if (disconnecting) return;
+    setDisconnecting(true);
+    setConnectionFailure(undefined);
+    void props.onDisconnect().then(
+      () => setDisconnecting(false),
+      (reason: unknown) => {
+        setDisconnecting(false);
+        setConnectionFailure(
+          copy.disconnectFailed(
             reason instanceof Error ? reason.message : String(reason),
           ),
         );
@@ -194,21 +228,43 @@ export function PanelControlsSection(props: {
           </span>
           {copy.connection[status]}
         </span>
-        <button
-          type="button"
-          data-yunari-panel-reconnect={props.displayId}
-          className={plainButtonClasses}
-          disabled={reconnecting || status === "connecting"}
-          onClick={reconnect}
-        >
-          {reconnecting || status === "connecting"
-            ? copy.reconnecting
-            : copy.reconnect}
-        </button>
+        {connected ? (
+          <button
+            type="button"
+            data-yunari-panel-disconnect={props.displayId}
+            className={plainButtonClasses}
+            disabled={disconnecting || reconnecting}
+            onClick={disconnect}
+          >
+            {disconnecting ? copy.disconnecting : copy.disconnect}
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-yunari-panel-reconnect={props.displayId}
+            className={plainButtonClasses}
+            disabled={reconnecting || status === "connecting"}
+            onClick={reconnect}
+          >
+            {reconnecting || status === "connecting"
+              ? copy.reconnecting
+              : copy.reconnect}
+          </button>
+        )}
       </div>
       {status === "disconnected" ? (
-        <p className="m-0 text-2xs text-faint">{copy.disconnectedHint}</p>
+        <p className="m-0 text-2xs text-faint">
+          {props.connection.stopped === true
+            ? copy.stoppedHint
+            : copy.disconnectedHint}
+        </p>
       ) : null}
+
+      {connectionFailure === undefined ? null : (
+        <p role="alert" className="m-0 text-xs text-warn">
+          {connectionFailure}
+        </p>
+      )}
 
       {/* The record is a fact about the hardware rather than about a command,
           so it stands beside the door as well as inside it: a firmware the
@@ -490,14 +546,6 @@ export function PanelControlsSection(props: {
           </Dialog>
         </>
       ) : null}
-
-      {/* A reconnect failure is drawn outside the door, because the door does
-          not exist while disconnected — the state this press is about. */}
-      {connected || failure === undefined ? null : (
-        <p role="alert" className="m-0 text-xs text-warn">
-          {failure}
-        </p>
-      )}
     </Group>
   );
 }

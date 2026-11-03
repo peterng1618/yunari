@@ -16,6 +16,7 @@ import { DARK_GROUND, fixtureEntry } from "../store-mode/item-fixture.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import type { EditorShellBridge } from "./bridge.js";
+import type { LayerRow } from "./layer-tree.js";
 import type { RailSlot } from "./rail.js";
 import type {
   EditorActionFacade,
@@ -204,6 +205,25 @@ function selectingBridge(): EditorShellBridge {
   });
 }
 
+/** A tree row, for the selection the shell reads back from the layer tree. */
+function layerRow(id: string, selected: boolean): LayerRow {
+  return {
+    id,
+    name: id,
+    kind: "shape",
+    mark: { kind: "shape", shape: undefined },
+    role: { kind: "shape" },
+    bound: [],
+    depth: 0,
+    parentId: undefined,
+    hasChildren: false,
+    collapsed: false,
+    visible: true,
+    locked: false,
+    selected,
+  };
+}
+
 it("keeps the inspector whatever is selected, and its handle folds it", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
@@ -223,6 +243,66 @@ it("keeps the inspector whatever is selected, and its handle folds it", async ()
   expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 
   await act(async () => toggle?.click());
+  expect(body?.dataset["inspector"]).toBeUndefined();
+  expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+
+  layout.destroy();
+});
+
+it("reopens a folded inspector when a new object is selected", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
+  const inspector = root.querySelector<HTMLElement>(".editor-shell-inspector");
+  const toggle = root.querySelector<HTMLButtonElement>(
+    "[data-yunari-inspector-toggle]",
+  );
+  let selected: string | undefined;
+  const listeners = new Set<() => void>();
+  const changed = (): void => {
+    for (const listener of listeners) listener();
+  };
+  layout.setBridge(
+    bridgeStub({
+      snapshot: () => ({
+        objectCount: selected === undefined ? 0 : 1,
+        tokenCount: 0,
+        selectedCount: selected === undefined ? 0 : 1,
+        locked: false,
+        activeKind: selected === undefined ? "none" : "object",
+        documentName: undefined,
+        selectionPresetId: undefined,
+      }),
+      layers: () => [
+        layerRow("shape", selected === "shape"),
+        layerRow("label", selected === "label"),
+      ],
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    }),
+    undefined,
+  );
+
+  await act(async () => {
+    selected = "shape";
+    changed();
+  });
+  await act(async () => toggle?.click());
+  expect(inspector?.dataset["collapsed"]).toBe("true");
+
+  // A layer update while the same object is selected does not undo the fold.
+  await act(async () => changed());
+  expect(body?.dataset["inspector"]).toBe("collapsed");
+
+  // A new subject is the author asking for its panel.
+  await act(async () => {
+    selected = "label";
+    changed();
+  });
   expect(body?.dataset["inspector"]).toBeUndefined();
   expect(toggle?.getAttribute("aria-expanded")).toBe("true");
 
@@ -1154,8 +1234,11 @@ it("flips the canvas's source from one toolbar toggle", async () => {
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
   );
   // A toggle, not a menu: the source is changed many times a session, so the
-  // name says which one is showing and the press flips it.
+  // name says which one is showing and the press flips it. The selected state
+  // is the real source; the theme's own sensors are unselected.
   expect(preview.getAttribute("aria-haspopup")).toBeNull();
+  expect(preview.getAttribute("aria-pressed")).toBe("false");
+  const glyph = preview.innerHTML;
   preview.click();
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenCalledWith("live");
@@ -1165,6 +1248,10 @@ it("flips the canvas's source from one toolbar toggle", async () => {
     `${uiCopy.view.dataSource}: ${uiCopy.view.live}`,
   );
   expect(live).toBe(preview);
+  expect(live.getAttribute("aria-pressed")).toBe("true");
+  // One glyph in both states: the selected state, not a second picture, says
+  // which source is showing.
+  expect(live.innerHTML).toBe(glyph);
   live.click();
   await Promise.resolve();
   expect(view.setSourceMode).toHaveBeenLastCalledWith("preview");
@@ -1197,9 +1284,9 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
   // toolbar — a menu coming back is the duplication this ruling removed.
   expect(root.querySelector(".editor-shell-menubar")).toBeNull();
 
-  // File's functions, the document's own actions and the view toggle are one
-  // toolbar, in that order. The lists are their owners' own, so a new row cannot
-  // escape this read.
+  // The document's lifecycle, the document's own actions and the editor's
+  // tools are one toolbar, in that order. The lists are their owners' own, so a
+  // new row cannot escape this read.
   const toolbar = root.querySelector<HTMLElement>(
     "[data-yunari-theme-toolbar]",
   );
@@ -1210,12 +1297,16 @@ it("has no Insert or Edit menu, and draws the theme actions as a toolbar", async
     button.getAttribute("aria-label"),
   );
   expect(toolbarNames).toEqual([
+    // Make one, open one, bring one in.
     uiCopy.file.newDocument,
     uiCopy.file.newFromTemplate,
-    uiCopy.file.findAssets,
+    uiCopy.file.openLibrary,
     uiCopy.file.openRecent,
-    uiCopy.file.exportWidget,
+    uiCopy.file.importPackage,
+    // Keep it, then send it out.
     ...THEME_TOOLBAR_ACTIONS.map((row) => row.label),
+    // The editor's own tools.
+    uiCopy.file.findAssets,
     `${uiCopy.view.dataSource}: ${uiCopy.view.preview}`,
   ]);
   // The selection's commands are not the document's: they live in the pane
@@ -1255,8 +1346,8 @@ it("reaches every toolbar button by keyboard and runs the one it presses", async
   );
   if (toolbar === null) throw new Error("No theme toolbar.");
   const buttons = [...toolbar.querySelectorAll<HTMLButtonElement>("button")];
-  // File's five functions, the document's six actions and the view toggle.
-  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length + 6);
+  // The lifecycle's five, the document's actions, Find assets and the toggle.
+  expect(buttons).toHaveLength(THEME_TOOLBAR_ACTIONS.length + 7);
   // Buttons, not divs with handlers: the native button is the keyboard's own
   // Enter/Space target, and nothing may take it out of the tab order.
   for (const button of buttons) {
@@ -1707,8 +1798,8 @@ it("draws the editor's own header actions only in editor mode", async () => {
     publish: root.querySelector("[data-yunari-publish]") !== null,
   });
   const editorActions = {
-    // File's five functions, the document's six actions and the view toggle.
-    toolbar: THEME_TOOLBAR_ACTIONS.length + 6,
+    // The lifecycle's five, the document's actions, Find assets and the toggle.
+    toolbar: THEME_TOOLBAR_ACTIONS.length + 7,
     publish: true,
   };
 
@@ -1737,119 +1828,12 @@ it("draws the editor's own header actions only in editor mode", async () => {
   vi.unstubAllGlobals();
 });
 
-/** The prompt the switch asks, or a failure saying it asked nothing. */
-function openedPrompt(): HTMLElement {
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-  if (dialog === null) throw new Error("the mode switch asked no question");
-  return dialog;
-}
-
-async function answerPrompt(word: string): Promise<void> {
-  const button = [...openedPrompt().querySelectorAll("button")].find(
-    (candidate) => candidate.textContent === word,
-  );
-  if (button === undefined) throw new Error(`the prompt offers no "${word}"`);
-  await act(async () => {
-    button.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
-    );
-  });
-}
-
 /**
- * The plan's one invariant, driven directly: a mode switch never loses an
- * unsaved document.
- *
- * A dirty document is the case that separates a guard from a no-op, so the
- * bridge is told the document differs from its last save and the question is
- * answered all three ways. **The refusal is the load-bearing half**: a `cancel`
- * must leave the chosen segment where it was, which is what "the mode does not
- * change until it answers" means, and a test that only read the accept path
- * would pass on a switch that never asked.
- *
- * It is the editor's **existing** replacement prompt, asked with the switch's
- * own words — so the instrument is read for what it offers (Save among the
- * three answers) and for the question it was given, not merely for appearing.
+ * A mode switch hides the editor's body rather than unmounting it, so a dirty
+ * document keeps its unsaved work and the switch asks nothing. The replacement
+ * prompt stays on New/Open, which do replace the document.
  */
-it("asks the editor's own replacement prompt before it leaves a dirty document", async () => {
-  // Base UI's dialog dispatches through a pointer event, which jsdom lacks.
-  window.PointerEvent ??= MouseEvent as never;
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-  // A save that lands clears the dirty mark, which is the only thing the shell
-  // reads back — so the stub has to move it, or the successful path is
-  // indistinguishable from the failed one.
-  let dirty = true;
-  const saveLibrary = vi.fn(async () => {
-    dirty = false;
-  });
-  layout.setBridge(
-    bridgeStub({
-      session: { ...facade(), isDirty: () => dirty, saveLibrary },
-    }),
-    undefined,
-  );
-  await Promise.resolve();
-
-  await act(async () => modeSegments(root)[0]?.click());
-  const dialog = openedPrompt();
-  expect(dialog.getAttribute("aria-label")).toBe(uiCopy.modes.unsaved);
-  expect(dialog.querySelector(".editor-shell-dialog-lead")?.textContent).toBe(
-    uiCopy.modes.unsaved,
-  );
-
-  await answerPrompt(uiCopy.replaceDocument.cancel);
-  expect(chosen(root), "the mode moved while the guard was refusing").toEqual([
-    "false",
-    "true",
-    "false",
-  ]);
-  expect(saveLibrary, "a refusal saved the document").not.toHaveBeenCalled();
-
-  await act(async () => modeSegments(root)[0]?.click());
-  await answerPrompt(uiCopy.replaceDocument.save);
-  await act(async () => {});
-  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
-  expect(chosen(root), "the guard's save did not move the mode").toEqual([
-    "true",
-    "false",
-    "false",
-  ]);
-  expect(
-    document.querySelector('[role="dialog"]'),
-    "the prompt outlived its answer",
-  ).toBeNull();
-
-  // And the other half of the guard: a clean document is not asked at all.
-  layout.setBridge(
-    bridgeStub({ session: { ...facade(), isDirty: () => false } }),
-    undefined,
-  );
-  await act(async () => modeSegments(root)[1]?.click());
-  await act(async () => modeSegments(root)[0]?.click());
-  expect(chosen(root), "a clean document was not switched").toEqual([
-    "true",
-    "false",
-    "false",
-  ]);
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-
-  layout.destroy();
-});
-
-/**
- * A save that does not land keeps the author in the editor.
- *
- * `saveLibrary()` resolves either way — `ThemeLibraryManager.save()` reports its
- * own failure through the editor's error channel — so "the save was awaited" is
- * not "the save happened". The only thing that tells the two apart is the
- * document's own dirty mark, read after the await.
- *
- * The save is made to fail by leaving the mark where it was: `isDirty()` keeps
- * answering `true` and `saveLibrary()` resolves without clearing it, which is
- * exactly the shape a refused or failed write has.
- */
-it("stays in the editor when the save does not land", async () => {
+it("switches away from a dirty editor without asking, and keeps the document", async () => {
   window.PointerEvent ??= MouseEvent as never;
   const root = document.createElement("div");
   const layout = createShellLayout(root);
@@ -1861,17 +1845,25 @@ it("stays in the editor when the save does not land", async () => {
     undefined,
   );
   await Promise.resolve();
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
 
   await act(async () => modeSegments(root)[0]?.click());
-  await answerPrompt(uiCopy.replaceDocument.save);
-  await act(async () => {});
 
-  expect(saveLibrary, "the save answer did not save").toHaveBeenCalledTimes(1);
-  expect(chosen(root), "the mode moved past a save that did not land").toEqual([
-    "false",
+  expect(chosen(root), "the switch did not move").toEqual([
     "true",
     "false",
+    "false",
   ]);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(
+    saveLibrary,
+    "a mode switch saved the document",
+  ).not.toHaveBeenCalled();
+  expect(body?.hidden, "the editor body was unmounted, not hidden").toBe(true);
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(chosen(root)).toEqual(["false", "true", "false"]);
+  expect(body?.hidden).toBe(false);
 
   layout.destroy();
 });

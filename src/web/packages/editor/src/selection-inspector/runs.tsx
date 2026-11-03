@@ -9,7 +9,6 @@ import {
   defaultTypeSize,
   describeSemanticKey,
   formatInstant,
-  groupDescriptorsByFamily,
   instantIn,
   isOfferedPaletteToken,
   knownTimeZones,
@@ -22,7 +21,10 @@ import { useEffect, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
-import { ControlSelect } from "../components/ui/control-select.js";
+import {
+  type ControlOption,
+  ControlSelect,
+} from "../components/ui/control-select.js";
 import { ControlSwatch } from "../components/ui/control-swatch.js";
 import { ControlText } from "../components/ui/control-text.js";
 import {
@@ -31,12 +33,17 @@ import {
   useControlIds,
   useDraftCommit,
 } from "../components/ui/control-well.js";
+import { SensorKeyDot } from "../components/ui/sensor-key-dot.js";
 import {
   ADD_GLYPH,
   DELETE_ITEM_GLYPH,
   Glyph,
   TWISTY_GLYPHS,
 } from "../editor-shell/icons.js";
+import {
+  sensorKeyOptions,
+  sensorKeyStatusName,
+} from "../sensor-key-options.js";
 import {
   FONT_FINDER_ID,
   fontActionOptions,
@@ -101,6 +108,12 @@ interface RunsProjection {
    * table it cannot verify.
    */
   readonly measured?: ReadonlySet<string>;
+  /**
+   * Every key this theme binds, across its nodes. A key on it that the host
+   * does not report is the state the red dot names; absent means no binding is
+   * known, so no key is marked that way.
+   */
+  readonly bound?: ReadonlySet<string>;
 }
 
 /** A run's description for a list: what it is, and what it says. */
@@ -349,35 +362,19 @@ export function projectRuns(
     ...pinnedZones.filter((zone) => !zones.includes(zone)),
     ...zones,
   ];
-  // Grouped rather than flat: a discovered key sits under the heading of its
-  // own family instead of at the end of the list, and consecutive entries
-  // sharing a group render as one run.
-  const known = new Set<string>();
-  const sources = [
-    ...groupDescriptorsByFamily(context.descriptors ?? SEMANTIC_KEYS),
-  ].flatMap(([group, descriptors]) =>
-    descriptors.map((descriptor) => {
-      known.add(descriptor.key);
-      // A key the host did not answer with an `ok` reading stays listed but is
-      // not a choice here. It is unavailable, never a zero reading: the host
-      // said what it measures, not what the sensor would have said.
-      const disabled =
-        context.measured !== undefined && !context.measured.has(descriptor.key);
-      return {
-        id: descriptor.key,
-        name: descriptor.label,
-        group,
-        ...(disabled ? { disabled: true } : {}),
-      };
-    }),
+  // One compact list: catalogue order without family headings, each key with
+  // the state its dot shows, and a saved key the catalogue no longer lists at
+  // the end under its own spelling — the rule a chart's series options follow.
+  // `sensorKeyOptions` is the same builder the inline `@` suggestion uses. This
+  // node's own bindings join the theme-wide set: they are bound whether or not
+  // the caller supplied the wider one.
+  const bound = new Set(context.bound ?? []);
+  for (const binding of bindings) bound.add(binding.semanticKey);
+  const sources = sensorKeyOptions(
+    context.descriptors ?? SEMANTIC_KEYS,
+    context.measured,
+    bound,
   );
-  // A theme may name a key this host no longer lists. Dropping it would show
-  // the run as reading nothing and offer no way back to the key it holds, so a
-  // declared binding the catalogue does not know stays, ungrouped, under its
-  // own spelling — the rule a chart's series options follow.
-  const retained = [...new Set(bindings.map((binding) => binding.semanticKey))]
-    .filter((key) => !known.has(key))
-    .map((key) => ({ id: key, name: key }));
 
   const swatchValues: Record<string, string> = {};
   for (const option of palettes) {
@@ -407,11 +404,7 @@ export function projectRuns(
         name,
       }),
     ),
-    sources: [
-      { id: "", name: uiCopy.inspectorFields.staticText },
-      ...sources,
-      ...retained,
-    ],
+    sources: [{ id: "", name: uiCopy.inspectorFields.staticText }, ...sources],
     zones: withPinned,
     bindable,
     removable: runs.length > 1,
@@ -668,7 +661,7 @@ function RunRow(props: {
           label={uiCopy.inspectorFields.runSource}
           data={{ "data-yunari-run-source": String(index) }}
           value={row.sourceKey}
-          options={view.sources}
+          options={sourceOptions(view)}
           onChange={(key) => edits.setSource(index, key)}
         />
       ) : null}
@@ -736,6 +729,22 @@ function RunRow(props: {
 /** The resolved colour a swatch shows, or `transparent` when it no longer resolves. */
 function colourValueOf(view: RunsView, ref: string): string {
   return view.swatchValues[ref] ?? "transparent";
+}
+
+/** The projected source list, with a reading's state as a dot before its name
+ *  and in its accessible name. The static-text entry carries neither. */
+function sourceOptions(view: RunsView): readonly ControlOption[] {
+  return view.sources.map((option) => ({
+    id: option.id,
+    name: option.name,
+    ...(option.disabled === undefined ? {} : { disabled: option.disabled }),
+    ...(option.status === undefined
+      ? {}
+      : {
+          leading: <SensorKeyDot status={option.status} />,
+          ariaLabel: sensorKeyStatusName(option.name, option.status),
+        }),
+  }));
 }
 
 /**

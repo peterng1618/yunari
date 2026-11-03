@@ -192,44 +192,57 @@ describe("transcodeForPanel", () => {
   });
 
   it("fits the box the mount puts the clip in, then turns it", async () => {
-    const upright = recordingRun();
-    const bytes = randomBytes(16);
-    await transcodeForPanel(bytes, {
-      run: upright.run,
-      verifyForTest: true,
-    });
-    expect(filterOf(upright.calls[0]!)).toBe(
-      "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480",
-    );
+    // A test's own cache, with the same home as every other transcode case:
+    // the host's default directory is shared and its eviction only counts
+    // bytes, so these small random clips would leak an entry per run and make
+    // every later directory scan slower.
+    const directory = await cacheDir();
+    try {
+      const upright = recordingRun();
+      const bytes = randomBytes(16);
+      await transcodeForPanel(bytes, {
+        cacheDir: directory,
+        run: upright.run,
+        verifyForTest: true,
+      });
+      expect(filterOf(upright.calls[0]!)).toBe(
+        "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480",
+      );
 
-    // A quarter turn swaps the layer's box before it turns, so the crop is
-    // portrait and the turn comes after it.
-    const turned = recordingRun();
-    await transcodeForPanel(randomBytes(16), {
-      run: turned.run,
-      verifyForTest: true,
-      rotation: 90,
-    });
-    expect(filterOf(turned.calls[0]!)).toBe(
-      "scale=480:800:force_original_aspect_ratio=increase:force_divisible_by=2,crop=480:800,transpose=1",
-    );
+      // A quarter turn swaps the layer's box before it turns, so the crop is
+      // portrait and the turn comes after it.
+      const turned = recordingRun();
+      await transcodeForPanel(randomBytes(16), {
+        cacheDir: directory,
+        run: turned.run,
+        verifyForTest: true,
+        rotation: 90,
+      });
+      expect(filterOf(turned.calls[0]!)).toBe(
+        "scale=480:800:force_original_aspect_ratio=increase:force_divisible_by=2,crop=480:800,transpose=1",
+      );
 
-    const counter = recordingRun();
-    await transcodeForPanel(randomBytes(16), {
-      run: counter.run,
-      verifyForTest: true,
-      rotation: 270,
-    });
-    expect(filterOf(counter.calls[0]!)).toMatch(/,transpose=2$/);
+      const counter = recordingRun();
+      await transcodeForPanel(randomBytes(16), {
+        cacheDir: directory,
+        run: counter.run,
+        verifyForTest: true,
+        rotation: 270,
+      });
+      expect(filterOf(counter.calls[0]!)).toMatch(/,transpose=2$/);
 
-    const upsideDown = recordingRun();
-    await transcodeForPanel(randomBytes(16), {
-      run: upsideDown.run,
-      verifyForTest: true,
-      rotation: 180,
-    });
-    expect(filterOf(upsideDown.calls[0]!)).toMatch(/,hflip,vflip$/);
-    expect(filterOf(upsideDown.calls[0]!)).toContain("crop=800:480");
+      const upsideDown = recordingRun();
+      await transcodeForPanel(randomBytes(16), {
+        cacheDir: directory,
+        run: upsideDown.run,
+        verifyForTest: true,
+        rotation: 180,
+      });
+      expect(filterOf(upsideDown.calls[0]!)).toMatch(/,hflip,vflip$/);
+      expect(filterOf(upsideDown.calls[0]!)).toContain("crop=800:480");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("refuses an angle the panel cannot compose, without encoding", async () => {
@@ -246,30 +259,37 @@ describe("transcodeForPanel", () => {
 
   it("encodes again when only the mounting angle changed", async () => {
     const bytes = randomBytes(16);
+    const directory = await cacheDir();
 
-    const upright = recordingRun([1]);
-    expect(
-      (
-        await transcodeForPanel(bytes, {
-          run: upright.run,
-          verifyForTest: true,
-        })
-      ).ok,
-    ).toBe(true);
+    try {
+      const upright = recordingRun([1]);
+      expect(
+        (
+          await transcodeForPanel(bytes, {
+            cacheDir: directory,
+            run: upright.run,
+            verifyForTest: true,
+          })
+        ).ok,
+      ).toBe(true);
 
-    // The same source and pan on a turned glass is a different clip: a cache
-    // keyed without the angle would serve the upright file.
-    const turned = recordingRun([2]);
-    expect(
-      (
-        await transcodeForPanel(bytes, {
-          run: turned.run,
-          verifyForTest: true,
-          rotation: 90,
-        })
-      ).ok,
-    ).toBe(true);
-    expect(turned.calls).toHaveLength(1);
+      // The same source and pan on a turned glass is a different clip: a cache
+      // keyed without the angle would serve the upright file.
+      const turned = recordingRun([2]);
+      expect(
+        (
+          await transcodeForPanel(bytes, {
+            cacheDir: directory,
+            run: turned.run,
+            verifyForTest: true,
+            rotation: 90,
+          })
+        ).ok,
+      ).toBe(true);
+      expect(turned.calls).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

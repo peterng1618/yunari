@@ -5211,6 +5211,8 @@ describe("A local monitor is specified rather than paired", () => {
         running: () => running,
         status: () => "connected",
         reconnect: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
+        stopped: () => false,
         stopAll: () => Promise.resolve(),
       };
     }
@@ -5245,8 +5247,8 @@ describe("A local monitor is specified rather than paired", () => {
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',
-                supportedFirmware: [],
-                updatedAt: "2026-10-28",
+                supportedFirmware: ["lianli92_0001_2026041401"],
+                updatedAt: "2026-10-31",
               },
             },
           ],
@@ -5283,8 +5285,8 @@ describe("A local monitor is specified rather than paired", () => {
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',
-                supportedFirmware: [],
-                updatedAt: "2026-10-28",
+                supportedFirmware: ["lianli92_0001_2026041401"],
+                updatedAt: "2026-10-31",
               },
             },
           ],
@@ -6184,6 +6186,40 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("disconnects a panel on request and answers the state it left", async () => {
+      const disconnected: string[] = [];
+      const hosting = host({
+        attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
+        panels: {
+          ...managerOver([], []),
+          disconnect: (id) => {
+            disconnected.push(id);
+            return Promise.resolve();
+          },
+          status: () => "disconnected",
+        },
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/strip/panel/disconnect",
+        );
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({ ok: true, status: "disconnected" });
+        expect(disconnected).toEqual(["strip"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("refuses a reconnect for a non-panel record and an unknown display", async () => {
       const hosting = host({ panels: managerOver([], []) });
 
@@ -6245,7 +6281,11 @@ describe("A local monitor is specified rather than paired", () => {
         themeStore: themes,
         activeTheme: createActiveThemeStore(dir),
         attachedPanels: () => Promise.resolve(ATTACHED_PANELS),
-        panels: { ...managerOver([], []), status: () => "disconnected" },
+        panels: {
+          ...managerOver([], []),
+          status: () => "disconnected",
+          stopped: () => true,
+        },
       });
 
       try {
@@ -6261,7 +6301,11 @@ describe("A local monitor is specified rather than paired", () => {
             displays: readonly {
               id: string;
               kind: string;
-              panel?: { status: string; commands: readonly string[] };
+              panel?: {
+                status: string;
+                stopped: boolean;
+                commands: readonly string[];
+              };
             }[];
           }
         ).displays;
@@ -6270,6 +6314,10 @@ describe("A local monitor is specified rather than paired", () => {
         // that is the display the surface draws a reconnect for.
         expect(rows.find((row) => row.id === "strip")?.panel?.status).toBe(
           "disconnected",
+        );
+        // A disconnect is a decision, not a missing device: the map says so.
+        expect(rows.find((row) => row.id === "strip")?.panel?.stopped).toBe(
+          true,
         );
         expect(
           rows.find((row) => row.id === "strip")?.panel?.commands,

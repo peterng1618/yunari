@@ -99,6 +99,8 @@ palette resolves it:
 | `--attention` | Work in flight: unsaved or unpublished changes, a pending operation, a reading awaiting the author |
 | `--warn` | Something needs attention; not an error |
 | `--hot` | Destructive. Delete, and only delete |
+| `--ok` | A reading inside its healthy range, such as a theme under its size bound |
+| `--error` | A reading whose bound is crossed and therefore blocks the action |
 
 **`--accent` is rationed.** At most one accent-filled element is visible in a
 region at a time: the selected rail slot, the focused control, the selected row,
@@ -112,6 +114,18 @@ only on an unsaved or unpublished indicator, an operation still running, or a
 reading that is stale and waiting for the author. It never fills a button,
 never shares an element with `--accent`, and does not stand in for `--warn`
 (something needs attention) or `--hot` (destructive).
+
+**`--ok` and `--error` are readings, not affordances.** They state a value's
+relation to its bound — a theme at 60% of its limit is `--ok`, one past 100% is
+`--error` — and never paint a control. A reading that blocks an action carries
+`--error`; the control it blocks still uses its own vocabulary, and a fault that
+is not destructive never borrows `--hot`.
+
+**A sensor key's availability is a dot before its name.** Green (`--ok`) means
+the host reports the key now, red (`--error`) means the theme binds it but the
+host does not report it, and grey (`--faint`) means unknown — the host has not
+answered, or the key is neither reported nor bound. The row's accessible name
+repeats the state, because colour alone does not reach every author.
 
 ## Typography
 
@@ -206,8 +220,10 @@ no breakpoint is invented for it.
 the authored canvas's aspect ratio and contains the picture rather than cropping
 it, so the library's heights vary with what the author drew. The grid has a 1px
 row unit and `row dense`, and each card spans the rows its measured height
-needs. **A theme at 2:1 or wider spans two columns**; a narrower one keeps one,
-so a wide theme does not tower over the portrait cards beside it.
+needs. **The gutter is the same horizontally and vertically**: the row span
+already carries the 12px gutter, so the grid states no row-gap and the columns
+state the one gap. **A theme at 2:1 or wider spans two columns**; a narrower one
+keeps one, so a wide theme does not tower over the portrait cards beside it.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
@@ -231,13 +247,15 @@ toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then one **toolbar** of icon
   buttons in three groups, each divided by a short vertical rule:
-  - **File's functions**: New theme, New from template, Find assets, Open
-    recent, Export selection as widget.
-  - **The open document's actions**: Import theme, Open, Save, Save as,
-    Activate, Export theme.
-  - **The view setting**: one toggle whose glyph, tooltip and accessible name
-    say the source currently shown — preview or live — and whose press flips
-    it.
+  - **The document's lifecycle**: New theme, New from template, Open, Open
+    recent, Import theme — make one, open one, bring one in.
+  - **The open document's actions**: Save, Save as, Activate, Export theme,
+    Export selection as widget — keep it, then send it out.
+  - **The editor's tools**: Find assets, then one readings-source toggle. The
+    toggle keeps the `monitor-activity` glyph in both states; its selected
+    state is the live source and its unselected state the theme's sensors,
+    while its tooltip and accessible name say which source is shown. A press
+    flips it.
   Every button carries its word as the tooltip and the accessible name, so no
   visible label is repeated beside it. The buttons are not rows nested in a
   menu: a command changed while designing is one gesture away, not two. The
@@ -339,7 +357,13 @@ thing actually raises**, and describes what the thing *is*:
   `--text-md`, and the binding key beneath the row when one is bound — a
   multi-selection, which has no kind of its own, draws the name alone. It does
   not open with a chrome label, and **the kind is that glyph, not a line of its
-  own**.
+  own**. The column's fold handle shares the subject's row at its right end and
+  stays at the column's top while the sections scroll; the row reserves the
+  handle's track so the name and key never run beneath it.
+- **Folding is the author's while the selection stands, but a new selection
+  reopens the column.** A fold made by accident must not hide the panel the
+  subject the author just chose needs, and the canvas offers no route back to a
+  folded column.
 - **A section with nothing in it is not rendered** — no header, no zero count.
 - **Every section opens; none starts closed**, with one exception: the
   `advanced` treatment, a disclosure a caller mounts deliberately and that a

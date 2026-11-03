@@ -7,15 +7,22 @@ import {
 } from "./new-object-defaults.js";
 import { insertGroups } from "./new-object-panel.js";
 import {
+  activeRemovedPathPresetIds,
   activeUserPathPresets,
+  REMOVED_PATH_PRESETS_STORAGE_KEY,
+  readRemovedPathPresetIds,
   readUserPathPresets,
+  removedPathPresetIdsKey,
+  setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
+  subscribeRemovedPathPresetIds,
   subscribeUserPathPresets,
   USER_PATH_PRESETS_STORAGE_KEY,
   type UserPathPreset,
   userPathPreset,
   userPathPresetFrom,
   userPathPresetsKey,
+  writeRemovedPathPresetIds,
   writeUserPathPresets,
 } from "./path-presets.js";
 
@@ -52,6 +59,7 @@ function preset(label: string, data: string): UserPathPreset {
 
 afterEach(() => {
   setActiveUserPathPresets([]);
+  setActiveRemovedPathPresetIds([]);
 });
 
 describe("a preset made from the settings form", () => {
@@ -154,6 +162,65 @@ describe("the stored preset list", () => {
       },
     } as unknown as Storage;
     expect(writeUserPathPresets(refusing, [])).toBe(false);
+  });
+});
+
+describe("the built-in presets the author removed", () => {
+  it("round-trips through its own key, deduped", () => {
+    const storage = memoryStorage();
+
+    expect(writeRemovedPathPresetIds(storage, ["arc", "arc"])).toBe(true);
+    expect(storage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).not.toBeNull();
+    expect(readRemovedPathPresetIds(storage)).toEqual(["arc"]);
+  });
+
+  it("drops entries that are not ids rather than failing the list", () => {
+    const storage = memoryStorage({
+      [REMOVED_PATH_PRESETS_STORAGE_KEY]: JSON.stringify([
+        "wedge",
+        7,
+        null,
+        "line",
+      ]),
+    });
+
+    expect(readRemovedPathPresetIds(storage)).toEqual(["wedge", "line"]);
+  });
+
+  it("keeps the author's presets and removes only the built-in from the Add pane", () => {
+    const first = preset("Star", "M 0 0 L 10 0 L 10 10 Z");
+    setActiveUserPathPresets([first]);
+    setActiveRemovedPathPresetIds(["arc"]);
+
+    const custom = insertGroups().find((group) => group.id === "custom-shape");
+    const shapes = custom?.objects.flatMap((object) =>
+      object.kind === "shape" ? [object.shape] : [],
+    );
+
+    expect(shapes).toContain(first.id);
+    expect(shapes).toContain("line");
+    expect(shapes).not.toContain("arc");
+  });
+
+  it("notifies on a real removal change only", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeRemovedPathPresetIds(listener);
+
+    setActiveRemovedPathPresetIds(["arc"]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    const key = removedPathPresetIdsKey();
+
+    setActiveRemovedPathPresetIds(["arc"]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(removedPathPresetIdsKey()).toBe(key);
+
+    setActiveRemovedPathPresetIds([]);
+    expect(activeRemovedPathPresetIds()).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    setActiveRemovedPathPresetIds(["line"]);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });
 

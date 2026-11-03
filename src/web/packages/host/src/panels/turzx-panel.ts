@@ -44,6 +44,14 @@ const LABEL = 'TURZX 5" Panel';
 const PROBE_TIMEOUT_MS = 500;
 /** A file command's answer may follow a whole upload, not just its header. */
 const FILE_TIMEOUT_MS = 10_000;
+/**
+ * The stored-size probe's own cap, shorter than a command's answer.
+ *
+ * A missing file has no verified reply, and a missed answer only means
+ * "upload". Waiting out the ack timeout on the device that most needs the clip
+ * adds ten seconds to every new video; a re-upload costs less than that.
+ */
+export const SIZE_PROBE_TIMEOUT_MS = 2_000;
 /** The panel dropped an overlay update sent 8 ms after init; 1.5 s worked. */
 const OVERLAY_SETTLE_MS = 1500;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
@@ -347,11 +355,14 @@ class TurzxPanel implements PanelDevice {
     rotation: number,
   ): Promise<void> {
     await this.enqueue(async () => {
+      const began = Date.now();
       const transcoded = await this.transcode(mp4, placement, rotation);
       if (!transcoded.ok) throw new Error(transcoded.message);
+      const encoded = Date.now();
 
       const remotePath = `${VIDEO_DIRECTORY}/yunari-${sha256(transcoded.bytes).slice(0, 16)}.mp4`;
       const stored = await this.fileSize(remotePath);
+      const sized = Date.now();
 
       if (stored !== transcoded.bytes.length) {
         if (stored > 0) {
@@ -359,6 +370,7 @@ class TurzxPanel implements PanelDevice {
         }
         await this.upload(remotePath, transcoded.bytes);
       }
+      const uploaded = Date.now();
 
       await this.send(fileHeader(TURZX_COMMAND.startVideo, remotePath));
 
@@ -370,6 +382,7 @@ class TurzxPanel implements PanelDevice {
       // that failure is the reason the caller must hear.
       try {
         await this.readFor("play_video_success");
+        const started = Date.now();
 
         await this.send(TURZX_COMMAND.preUpdate);
         await this.send(TURZX_COMMAND.startBitmap);
@@ -401,6 +414,17 @@ class TurzxPanel implements PanelDevice {
         }
         await this.sleep(OVERLAY_SETTLE_MS);
         await this.send(TURZX_COMMAND.queryStatus);
+        const settled = Date.now();
+
+        // One line per start, as the panel manager keeps one per runner: the
+        // first video is the slow one, so the phases that follow the cache hit
+        // are what a report of "uploads are slow" has to name.
+        console.log(
+          `Panel ${this.path}: clip ready in ${settled - began} ms ` +
+            `(encode ${encoded - began}, size ${sized - encoded}, ` +
+            `upload ${uploaded - sized}, start ${started - uploaded}, ` +
+            `overlay ${settled - started}).`,
+        );
 
         this.previousOverlay = transparent;
         // A fresh init re-renders from scratch, so a count carried over from the
@@ -468,7 +492,10 @@ class TurzxPanel implements PanelDevice {
     // ponytail: GET_FILE_SIZE's reply for a missing file is unverified; no
     // numeral within the cap means unknown, so upload rather than strand the
     // panel that is exactly the one needing the clip.
-    return (await this.readReplies(parseFileSizeText)).accepted ?? 0;
+    return (
+      (await this.readReplies(parseFileSizeText, SIZE_PROBE_TIMEOUT_MS))
+        .accepted ?? 0
+    );
   }
 
   private async upload(remotePath: string, bytes: Uint8Array): Promise<void> {
@@ -549,12 +576,13 @@ class TurzxPanel implements PanelDevice {
    */
   private async readReplies<T>(
     accept: (text: string) => T | undefined,
+    readTimeoutMs: number = FILE_TIMEOUT_MS,
   ): Promise<{ readonly accepted: T | undefined; readonly last: string }> {
     let last = "";
     const deadline = Date.now() + FILE_REPLY_DEADLINE_MS;
 
     while (Date.now() < deadline) {
-      const text = decodeReply(await this.transport.read(FILE_TIMEOUT_MS));
+      const text = decodeReply(await this.transport.read(readTimeoutMs));
       if (text === "") return { accepted: undefined, last };
 
       const accepted = accept(text);

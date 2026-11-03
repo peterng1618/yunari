@@ -217,6 +217,31 @@ export function DisplaysList(props: {
  * probe that failed states its reason instead of offering a choice no route
  * would accept.
  */
+export /**
+ * The smallest whole-number ratio a pixel size describes.
+ *
+ * Two screens that read as the same shape report different pixel counts —
+ * 2048×1152 and 1920×1080 are both 16:9 — so the ratio is what the label names
+ * before the count, and an unusual count stops looking like a broken probe. A
+ * size that is not a positive whole number has no ratio to name; absent is
+ * honest, and the count still shows.
+ */
+function aspectRatioOf(width: number, height: number): string | undefined {
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+
+  const divisorOf = (a: number, b: number): number =>
+    b === 0 ? a : divisorOf(b, a % b);
+  const divisor = divisorOf(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
 export function AddDisplaySection(props: {
   readonly settings: Pick<HostSettingsClient, "listMonitors">;
   /** Adds one local display. Answers whether the host accepted it, so the form
@@ -309,6 +334,7 @@ export function AddDisplaySection(props: {
               id: String(index),
               name: copy.monitorOption(
                 monitor.deviceName,
+                aspectRatioOf(monitor.currentResX, monitor.currentResY),
                 monitor.currentResX,
                 monitor.currentResY,
                 monitor.main,

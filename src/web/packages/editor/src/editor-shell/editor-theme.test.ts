@@ -35,7 +35,13 @@ describe("editor theme token vocabulary", () => {
       design.indexOf("## Typography"),
     );
     const named = new Set(colors.match(/--[a-z0-9][a-z0-9-]*/g) ?? []);
-    expect([...named].sort()).toEqual([...EDITOR_THEME_TOKENS].sort());
+    // `--ok` and `--error` are product readings, not author choices: a theme
+    // cannot pick the colour that reports a size against its bound any more
+    // than it can pick the bound, so they stay outside the saved vocabulary.
+    const productOwned = new Set(["--ok", "--error"]);
+    expect(
+      [...named].filter((token) => !productOwned.has(token)).sort(),
+    ).toEqual([...EDITOR_THEME_TOKENS].sort());
   });
 
   /** Applying a theme writes the palette sources too, so every role a theme can

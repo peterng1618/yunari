@@ -155,6 +155,13 @@ export function useSpecimens(cuts: readonly FontCut[]): void {
   }, [cuts]);
 }
 
+/** The longest sample the specimen box takes. The panel is 336px and the
+ *  family specimen sets the line at `--font-specimen-glyph-size`, so a sample
+ *  past this wraps out of the fixed card; the box clips the rest with an
+ *  ellipsis rather than growing the column. Also the input's own ceiling, so
+ *  the cap is the author's while typing and not only the renderer's. */
+export const SAMPLE_MAX_CHARS = 40;
+
 /**
  * The finder's 336px preview column: the fixed specimen card, the author's
  * sample text and the family's cut choice (R6, R7, R9).
@@ -249,8 +256,12 @@ export function FontPreviewPanel({
           id="font-preview-sample"
           data-yunari-font-preview-sample=""
           value={sample}
+          maxLength={SAMPLE_MAX_CHARS}
           onChange={(event) => {
-            onChange({ ...state, sample: event.target.value });
+            onChange({
+              ...state,
+              sample: event.target.value.slice(0, SAMPLE_MAX_CHARS),
+            });
           }}
           className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-6)] py-[var(--space-4)] text-xs"
         />
@@ -274,7 +285,7 @@ export function FontPreviewPanel({
           >
             <span
               style={faceStyle(selectedCut)}
-              className="text-[length:var(--font-specimen-glyph-size)] leading-[1.08]"
+              className="truncate text-[length:var(--font-specimen-glyph-size)] leading-[1.08]"
             >
               {sample}
             </span>
@@ -384,10 +395,10 @@ export function FontPreviewPanel({
                   style={faceStyle(cut)}
                   className={
                     roleName === "heading"
-                      ? "text-lg leading-[1.12]"
+                      ? "truncate text-lg leading-[1.12]"
                       : roleName === "body"
-                        ? "text-xs leading-[1.5] text-muted"
-                        : "mt-auto font-mono text-[10px]"
+                        ? "truncate text-xs leading-[1.5] text-muted"
+                        : "mt-auto truncate font-mono text-[10px]"
                   }
                 >
                   {sample}

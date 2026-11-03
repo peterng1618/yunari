@@ -65,6 +65,7 @@ function documentWith(
     consumers: {
       runtime: () => ({ setThemeLanguage: () => undefined }),
       selection: () => ({ setLocale: () => undefined }),
+      artboard: () => ({ render: () => undefined }),
     } as never,
   });
 }

@@ -26,6 +26,12 @@ import { uiCopy } from "../../ui-copy.js";
 import { AssetCard } from "./asset-card.js";
 import { ASSET_HEADER_BUTTON } from "./asset-header-button.js";
 import {
+  AssetImportDialogs,
+  type AssetPlacement,
+  type AssetVideoImport,
+  type AssetVideoTrim,
+} from "./asset-import-dialogs.js";
+import {
   ASSET_FILE_ACCEPT,
   GROUP_OF,
   importMessage,
@@ -36,18 +42,14 @@ import {
   rowsOf,
   SECTIONS,
 } from "./asset-rows.js";
+import { AssetSizeMeter, type AssetSizeSummary } from "./asset-size-meter.js";
 import {
   type FontMetadata,
   FontMetadataForm,
   fontMetadataFromFilename,
 } from "./font-metadata-form.js";
-import {
-  ImportVideoModal,
-  type VideoImportStep,
-} from "./import-video-modal.js";
-import { PlaceImageModal } from "./place-image-modal.js";
+import type { VideoImportStep } from "./import-video-modal.js";
 import { isPreviewable, openAssetPreview } from "./preview-modal.js";
-import { VideoTrimModal } from "./video-trim-modal.js";
 
 /**
  * The Assets pane's body: every declared file as a card, grouped by kind.
@@ -105,6 +107,9 @@ interface AssetsPaneProps {
     onStep: (step: VideoImportStep) => void,
     trim?: VideoTrimRange,
   ) => Promise<ImportOutcome>;
+  /** The document's own measure of the theme and its unused files; the pane
+   *  draws declarations but cannot see the envelope. */
+  readonly sizeSummary: () => AssetSizeSummary;
   /** The one font commit: declares or amends the face, then writes the preset
    *  and the credit. The cap check and the document writes are the caller's,
    *  because neither can be reached from the pane. Required: a face cannot be
@@ -144,6 +149,7 @@ export function AssetsPane({
   onBackground,
   onFontCommit,
   onImportVideo,
+  sizeSummary,
 }: AssetsPaneProps): React.JSX.Element {
   const importInput = useRef<HTMLInputElement>(null);
   const replaceInput = useRef<HTMLInputElement>(null);
@@ -154,29 +160,15 @@ export function AssetsPane({
   /** A just-declared picture waiting for its destination. The file is declared
    *  at the pick so the modal's preview can read the manager's bytes; the
    *  destination is the author's answer, not the kind's. */
-  const [placement, setPlacement] = useState<
-    | {
-        readonly file: File;
-        readonly asset: LocalAssetReference;
-        readonly previewUrl: string | undefined;
-      }
-    | undefined
-  >();
+  const [placement, setPlacement] = useState<AssetPlacement | undefined>();
   /** The pick the modal is running: a video or package the host prepares before
    *  anything is declared. */
   const [videoImport, setVideoImport] = useState<
-    | {
-        readonly file: File;
-        readonly package: boolean;
-        readonly trim?: VideoTrimRange;
-      }
-    | undefined
+    AssetVideoImport | undefined
   >();
   /** A picked video's trim surface, open before the import modal. The object
    *  URL is the player's source and is revoked when the surface gives way. */
-  const [videoTrim, setVideoTrim] = useState<
-    { readonly file: File; readonly src: string } | undefined
-  >();
+  const [videoTrim, setVideoTrim] = useState<AssetVideoTrim | undefined>();
   // The picked file's object URL lives only while its trim surface does.
   useEffect(() => {
     if (videoTrim === undefined) return;
@@ -631,6 +623,7 @@ export function AssetsPane({
           <span className="truncate">{uiCopy.panels.assetFinder}</span>
         </button>
       </div>
+      <AssetSizeMeter summary={sizeSummary()} />
       {/* A picked font has no card until the form's commit or cancel, so its
           form stands where the card will be rather than waiting for one. */}
       {font !== undefined && "file" in font && (
@@ -701,51 +694,31 @@ export function AssetsPane({
           </section>
         );
       })}
-      {placement === undefined ? null : (
-        <PlaceImageModal
-          name={assetFileName(placement.asset)}
-          {...(placement.previewUrl === undefined
-            ? {}
-            : { previewUrl: placement.previewUrl })}
-          onPlace={() => void submit(() => placeDeclared(placement))}
-          onBackground={
-            onBackground === undefined
-              ? undefined
-              : () => backgroundDeclared(placement)
-          }
-          onClose={() => setPlacement(undefined)}
-        />
-      )}
-      {videoTrim === undefined ? null : (
-        <VideoTrimModal
-          src={videoTrim.src}
-          name={videoTrim.file.name}
-          onConfirm={(trim) => {
-            setVideoImport({
-              file: videoTrim.file,
-              package: false,
-              ...(trim === undefined ? {} : { trim }),
-            });
-            setVideoTrim(undefined);
-          }}
-          onClose={() => setVideoTrim(undefined)}
-        />
-      )}
-      {videoImport !== undefined && (
-        <ImportVideoModal
-          file={videoImport.file}
-          package={videoImport.package}
-          onRun={(onStep) =>
-            runVideoImport(
-              videoImport.file,
-              videoImport.package,
-              onStep,
-              videoImport.trim,
-            )
-          }
-          onClose={() => setVideoImport(undefined)}
-        />
-      )}
+      <AssetImportDialogs
+        placement={placement}
+        videoTrim={videoTrim}
+        videoImport={videoImport}
+        onPlace={(picked) => void submit(() => placeDeclared(picked))}
+        onBackground={
+          onBackground === undefined
+            ? undefined
+            : (picked) => backgroundDeclared(picked)
+        }
+        onPlacementClose={() => setPlacement(undefined)}
+        onVideoTrimConfirm={(trim, file) => {
+          setVideoImport({
+            file,
+            package: false,
+            ...(trim === undefined ? {} : { trim }),
+          });
+          setVideoTrim(undefined);
+        }}
+        onVideoTrimClose={() => setVideoTrim(undefined)}
+        onVideoRun={(pick, onStep) =>
+          runVideoImport(pick.file, pick.package, onStep, pick.trim)
+        }
+        onVideoImportClose={() => setVideoImport(undefined)}
+      />
       <p role="alert">{message}</p>
       <input
         ref={importInput}

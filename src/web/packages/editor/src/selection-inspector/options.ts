@@ -44,6 +44,9 @@ export interface SelectionInspectorOptions {
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /** The keys the host answers now, or `undefined` before it has said. */
   readonly measured?: () => ReadonlySet<string> | undefined;
+  /** Every key the theme binds; a bound key the host does not answer is the
+   *  state the reading list marks red. Absent means no bound set was supplied. */
+  readonly bound?: () => ReadonlySet<string>;
   /**
    * Re-resolves the glass lifecycle. The handle belongs to the shell that
    * created it and re-resolves on its own only when the canvas gains or loses

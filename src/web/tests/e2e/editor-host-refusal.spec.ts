@@ -289,11 +289,11 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   await expect(card).toContainText(uiCopy.saveCleanup.reason.image);
   await expect(card).toContainText(bytes);
   await expect(dialog).toContainText(uiCopy.saveCleanup.note);
-  await expect(dialog).toContainText(uiCopy.saveCleanup.removeAfterSave(1));
   await expect(dialog).toContainText(uiCopy.saveCleanup.warning);
   await expect(dialog).toContainText(`${bytes} unused`);
-  const remove = dialog.locator("[data-yunari-save-cleanup-remove]");
-  await expect(remove).not.toBeChecked();
+  const fileCheckbox = dialog.locator(`[data-yunari-save-cleanup-file]`);
+  await expect(fileCheckbox).toHaveCount(1);
+  await expect(fileCheckbox).not.toBeChecked();
 
   // **The host's own refusal**, read from the same route before the save asks
   // it. The staging root is a file, so `mkdtemp` fails and the route answers
@@ -322,7 +322,7 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   page.on("download", (download) =>
     downloads.push(download.suggestedFilename()),
   );
-  await remove.check();
+  await fileCheckbox.check();
   await dialog
     .getByRole("button", { name: uiCopy.file.exportTheme, exact: true })
     .click();

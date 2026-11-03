@@ -121,6 +121,8 @@ function section(options: {
   readonly status?: PanelConnectionStatus;
   readonly commands?: readonly string[];
   readonly onReconnect?: () => Promise<void>;
+  readonly onDisconnect?: () => Promise<void>;
+  readonly stopped?: boolean;
   readonly displayId?: string;
 }): ReactElement {
   return (
@@ -129,9 +131,11 @@ function section(options: {
       panel={options.panel}
       connection={{
         status: options.status ?? "connected",
+        ...(options.stopped === true ? { stopped: true } : {}),
         commands: options.commands ?? ALL_COMMANDS,
       }}
       onReconnect={options.onReconnect ?? (async () => undefined)}
+      onDisconnect={options.onDisconnect ?? (async () => undefined)}
       onCommand={options.onCommand}
     />
   );
@@ -281,6 +285,50 @@ it("shows a reconnect failure beside the status it is about", async () => {
   await click(buttonNamed(/^reconnect$/i));
   const alert = must(container.querySelector('[role="alert"]'), "alert");
   expect(alert.textContent).toContain("No such display.");
+});
+
+it("offers Disconnect while the device is open", async () => {
+  const onDisconnect = vi.fn(async () => undefined);
+  const container = await mount(
+    section({
+      panel: CONTROLLABLE,
+      onCommand: async () => "ok",
+      onDisconnect,
+    }),
+  );
+  expect(document.querySelector("[data-yunari-panel-reconnect]")).toBeNull();
+  await click(buttonNamed(/^disconnect$/i));
+  expect(onDisconnect).toHaveBeenCalledTimes(1);
+  expect(container.textContent).not.toContain("every 15 seconds");
+});
+
+it("shows a disconnect failure beside the status it is about", async () => {
+  const container = await mount(
+    section({
+      panel: CONTROLLABLE,
+      onCommand: async () => "ok",
+      onDisconnect: async () => {
+        throw new Error("The port would not close.");
+      },
+    }),
+  );
+  await click(buttonNamed(/^disconnect$/i));
+  const alert = must(container.querySelector('[role="alert"]'), "alert");
+  expect(alert.textContent).toContain("The port would not close.");
+});
+
+it("says a disconnected panel stays off rather than promising a retry", async () => {
+  const container = await mount(
+    section({
+      panel: undefined,
+      status: "disconnected",
+      stopped: true,
+      commands: [],
+      onCommand: async () => "ok",
+    }),
+  );
+  expect(container.textContent).toContain("Disconnected by hand.");
+  expect(container.textContent).not.toContain("every 15 seconds");
 });
 
 it("sends brightness as a whole percent and shows the reply", async () => {

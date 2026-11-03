@@ -18,14 +18,13 @@ import {
   Glyph,
   IMPORT_THEME_GLYPH,
   type LucideIcon,
+  MONITOR_ACTIVITY_GLYPH,
   NEW_THEME_GLYPH,
   OPEN_RECENT_GLYPH,
   OPEN_THEME_GLYPH,
-  READINGS_GLYPH,
   SAVE_THEME_AS_GLYPH,
   SAVE_THEME_GLYPH,
   TEMPLATE_THEME_GLYPH,
-  VISIBLE_GLYPH,
 } from "./icons.js";
 import type {
   EditorActionFacade,
@@ -49,30 +48,54 @@ export interface ThemeToolbarAction {
 /**
  * The toolbar's rows, in order — the one owner of what it draws.
  *
- * **Document actions only.** The Edit and Insert menus are gone because their
- * commands live where they act: a selection's copy, cut, duplicate, delete,
- * group and arrange are the Composition pane's footer toolbar, and everything
- * insertable is the Add pane. Undo and redo remain on their chords and in the
- * `?` sheet.
- *
- * **File's functions and the View setting are rows here.** A command changed
- * while designing is one gesture away rather than two, and a glyph with its word
- * as the tooltip and the accessible name is the same control the document
- * actions beside it use. The dividers keep File's functions, the document's own
- * actions and the view setting distinct.
+ * **Three groups, split by a divider: the document's lifecycle, its own
+ * actions, then the editor's tools.** The Edit and Insert menus are gone
+ * because their commands live where they act: a selection's copy, cut,
+ * duplicate, delete, group and arrange are the Composition pane's footer
+ * toolbar, and everything insertable is the Add pane. Undo and redo remain on
+ * their chords and in the `?` sheet. A command changed while designing is one
+ * gesture away rather than two, and a glyph with its word as the tooltip and
+ * the accessible name is the same control the document actions beside it use.
  */
+/**
+ * The document's lifecycle, in the order an author meets it: make one, open
+ * one, bring one in. "Open" is the library theme, so it leads "Open recent";
+ * importing a package also opens a document, so it closes the group.
+ */
+function openActions(): readonly ThemeToolbarAction[] {
+  return [
+    {
+      label: uiCopy.file.newDocument,
+      icon: NEW_THEME_GLYPH,
+      shortcut: "file.new",
+      run: (session) => void session?.newDocument(),
+    },
+    {
+      label: uiCopy.file.newFromTemplate,
+      icon: TEMPLATE_THEME_GLYPH,
+      run: (session) => void session?.newFromStarter(),
+    },
+    {
+      label: uiCopy.file.openLibrary,
+      icon: OPEN_THEME_GLYPH,
+      run: (session) => void session?.openLibrary(),
+    },
+    {
+      label: uiCopy.file.openRecent,
+      icon: OPEN_RECENT_GLYPH,
+      run: (session) => void session?.openRecent(),
+    },
+    {
+      label: uiCopy.file.importPackage,
+      icon: IMPORT_THEME_GLYPH,
+      shortcut: "file.open",
+      run: (session) => session?.importPackage(),
+    },
+  ];
+}
+
+/** The open document's own actions: keep it, then send it out. */
 export const THEME_TOOLBAR_ACTIONS: readonly ThemeToolbarAction[] = [
-  {
-    label: uiCopy.file.importPackage,
-    icon: IMPORT_THEME_GLYPH,
-    shortcut: "file.open",
-    run: (session) => session?.importPackage(),
-  },
-  {
-    label: uiCopy.file.openLibrary,
-    icon: OPEN_THEME_GLYPH,
-    run: (session) => void session?.openLibrary(),
-  },
   {
     label: uiCopy.file.saveLibrary,
     icon: SAVE_THEME_GLYPH,
@@ -94,39 +117,22 @@ export const THEME_TOOLBAR_ACTIONS: readonly ThemeToolbarAction[] = [
     icon: EXPORT_THEME_GLYPH,
     run: (session) => void session?.exportTheme(),
   },
+  {
+    label: uiCopy.file.exportWidget,
+    icon: EXPORT_WIDGET_GLYPH,
+    run: (session) => void session?.exportWidget(),
+  },
 ];
 
-/** File's functions, in the order the header draws them. */
-function fileActions(onFindAssets: () => void): readonly ThemeToolbarAction[] {
-  return [
-    {
-      label: uiCopy.file.newDocument,
-      icon: NEW_THEME_GLYPH,
-      shortcut: "file.new",
-      run: (session) => void session?.newDocument(),
-    },
-    {
-      label: uiCopy.file.newFromTemplate,
-      icon: TEMPLATE_THEME_GLYPH,
-      run: (session) => void session?.newFromStarter(),
-    },
-    {
-      label: uiCopy.file.findAssets,
-      icon: FIND_GLYPH,
-      shortcut: "file.findAssets",
-      run: () => onFindAssets(),
-    },
-    {
-      label: uiCopy.file.openRecent,
-      icon: OPEN_RECENT_GLYPH,
-      run: (session) => void session?.openRecent(),
-    },
-    {
-      label: uiCopy.file.exportWidget,
-      icon: EXPORT_WIDGET_GLYPH,
-      run: (session) => void session?.exportWidget(),
-    },
-  ];
+/** The editor's own browsing tool. It belongs with the view setting rather
+ *  than the document's lifecycle: neither makes or keeps a theme. */
+function findAssetsAction(onFindAssets: () => void): ThemeToolbarAction {
+  return {
+    label: uiCopy.file.findAssets,
+    icon: FIND_GLYPH,
+    shortcut: "file.findAssets",
+    run: () => onFindAssets(),
+  };
 }
 
 /** One toolbar button. `ControlIconButton` is the design's icon button and the
@@ -195,7 +201,7 @@ export function ShellMenuBar({
       aria-label={uiCopy.toolbar.label}
       data-yunari-theme-toolbar=""
     >
-      {fileActions(onFindAssets).map((action) => (
+      {openActions().map((action) => (
         <ToolbarAction key={action.label} action={action} session={session} />
       ))}
       <ToolbarDivider />
@@ -203,8 +209,13 @@ export function ShellMenuBar({
         <ToolbarAction key={action.label} action={action} session={session} />
       ))}
       <ToolbarDivider />
+      <ToolbarAction
+        action={findAssetsAction(onFindAssets)}
+        session={session}
+      />
       <ControlIconButton
         label={`${uiCopy.view.dataSource}: ${sourceName}`}
+        pressed={source === "live"}
         data={{ "data-yunari-source": "" }}
         onClick={() => {
           const next = source === "preview" ? "live" : "preview";
@@ -212,10 +223,7 @@ export function ShellMenuBar({
           setSource(next);
         }}
       >
-        <Glyph
-          icon={source === "preview" ? VISIBLE_GLYPH : READINGS_GLYPH}
-          size={15}
-        />
+        <Glyph icon={MONITOR_ACTIVITY_GLYPH} size={15} />
       </ControlIconButton>
     </div>
   );

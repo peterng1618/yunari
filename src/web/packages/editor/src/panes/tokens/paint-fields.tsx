@@ -1,4 +1,5 @@
 import type {
+  Background,
   FabricPalette,
   FabricPaletteEntry,
   PalettePaint,
@@ -46,7 +47,13 @@ export interface PaintFieldsProps {
    *  edit — the rename, the kind switch. Without the latter they are
    *  unundoable, and a later undo's globals restore silently reverts them. */
   readonly onSettled?: (() => void) | undefined;
-  readonly onDelete: ((id: string, replacement: string) => void) | undefined;
+  readonly onDelete:
+    | ((id: string, replacement: string | undefined) => void)
+    | undefined;
+  /** The artboard background, whose colour is a palette reference the objects
+   *  walk does not see. Absent means the caller cannot rule one out, so the
+   *  token is treated as referenced. */
+  readonly background?: (() => Background | undefined) | undefined;
 }
 
 export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
@@ -59,8 +66,14 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
     onChange,
     onSettled,
     onDelete,
+    background,
   } = props;
   const uses = usage?.();
+  const color = background?.()?.color;
+  const referenced =
+    uses === undefined ||
+    (uses[id]?.length ?? 0) > 0 ||
+    (color !== undefined && "ref" in color && color.ref === `palette.${id}`);
   const commit = (next: FabricPaletteEntry): void => {
     onChange({ ...palette, [id]: next });
   };
@@ -114,7 +127,12 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
           onSettled={onSettled}
         />
       )}
-      <DeletionControls palette={palette} selected={id} onDelete={onDelete} />
+      <DeletionControls
+        palette={palette}
+        selected={id}
+        referenced={referenced}
+        onDelete={onDelete}
+      />
       {uses === undefined ? null : (
         <LayerUses uses={uses[id] ?? []} onRevealLayer={onRevealLayer} />
       )}
@@ -181,9 +199,12 @@ function GradientFields(props: {
 function DeletionControls(props: {
   readonly palette: FabricPalette;
   readonly selected: string;
-  readonly onDelete: ((id: string, replacement: string) => void) | undefined;
+  readonly referenced: boolean;
+  readonly onDelete:
+    | ((id: string, replacement: string | undefined) => void)
+    | undefined;
 }): React.JSX.Element | null {
-  const { palette, selected, onDelete } = props;
+  const { palette, selected, referenced, onDelete } = props;
   if (onDelete === undefined) return null;
   const options = Object.entries(palette)
     .filter(([id]) => id !== selected)
@@ -191,6 +212,7 @@ function DeletionControls(props: {
   return (
     <TokenDelete
       options={options}
+      referenced={referenced}
       label={uiCopy.panels.deleteColour}
       selectData={{ "data-yunari-palette-replacement": "" }}
       buttonData={{ "data-yunari-palette-delete": "" }}

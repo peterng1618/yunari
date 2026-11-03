@@ -6,6 +6,11 @@ import {
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
 import { type Canvas, IText, Textbox } from "fabric/es";
+import {
+  type SensorKeyOption,
+  sensorKeyOptions,
+  sensorKeyStatusName,
+} from "../sensor-key-options.js";
 import { GUIDE_COLOR, GUIDE_WIDTH } from "../snap-manager/constants.js";
 import { uiCopy } from "../ui-copy.js";
 import { scaledRuns } from "./scale-runs.js";
@@ -82,6 +87,12 @@ export interface TextCreationOptions {
  */
 export interface TextMentionPort {
   readonly descriptors: () => readonly SemanticKeyDescriptor[];
+  /** The keys the host answers now; absent until it has said, which leaves
+   *  every key unknown rather than claiming one is unavailable. */
+  readonly measured?: () => ReadonlySet<string> | undefined;
+  /** Every key the theme binds. A bound key the host does not answer is the
+   *  "bound but unavailable" state its dot shows. */
+  readonly bound?: () => ReadonlySet<string>;
   /**
    * Replaces the typed `@query` range with a value run for `semanticKey`.
    * `false` refuses, and the typed text is then left as prose.
@@ -218,7 +229,7 @@ export function createTextManager(
    */
   let mentions: TextMentionPort | undefined;
   let mention: { readonly target: IText; readonly start: number } | undefined;
-  let mentionOptions: readonly SemanticKeyDescriptor[] = [];
+  let mentionOptions: readonly SensorKeyOption[] = [];
   let mentionSelected = 0;
   let mentionOverlay: HTMLDivElement | undefined;
   let mentionTextarea: HTMLTextAreaElement | null = null;
@@ -288,16 +299,26 @@ export function createTextManager(
     if (overlay === undefined) return;
 
     overlay.replaceChildren(
-      ...mentionOptions.map((descriptor, index) => {
+      ...mentionOptions.map((option, index) => {
         const row = document.createElement("div");
         row.setAttribute("role", "option");
         row.setAttribute("aria-selected", String(index === mentionSelected));
-        row.dataset["yunariMention"] = descriptor.key;
-        row.textContent = descriptor.label;
+        row.setAttribute(
+          "aria-label",
+          sensorKeyStatusName(option.name, option.status),
+        );
+        row.dataset["yunariMention"] = option.id;
+        // The dot is the same mark the run picker draws; the accessible name
+        // above is what carries its state to a screen reader.
+        const dot = document.createElement("span");
+        dot.className = "editor-shell-sensor-dot";
+        dot.dataset["status"] = option.status;
+        dot.setAttribute("aria-hidden", "true");
+        row.append(dot, option.name);
         // The press must not take the caret out of Fabric's textarea; the commit
         // reads the range from the edit itself.
         row.addEventListener("mousedown", (event) => event.preventDefault());
-        row.addEventListener("click", () => acceptMention(descriptor));
+        row.addEventListener("click", () => acceptMention(option));
         return row;
       }),
     );
@@ -330,12 +351,16 @@ export function createTextManager(
       return;
     }
 
-    const all = mentions?.descriptors() ?? [];
+    const all = sensorKeyOptions(
+      mentions?.descriptors() ?? [],
+      mentions?.measured?.(),
+      mentions?.bound?.() ?? new Set<string>(),
+    );
     mentionOptions = all
       .filter(
-        (descriptor) =>
-          descriptor.label.toLowerCase().includes(query) ||
-          descriptor.key.toLowerCase().includes(query),
+        (option) =>
+          option.name.toLowerCase().includes(query) ||
+          option.id.toLowerCase().includes(query),
       )
       .slice(0, MENTION_LIMIT);
     mentionSelected = 0;
@@ -363,7 +388,7 @@ export function createTextManager(
     refreshMentions(target);
   };
 
-  const acceptMention = (descriptor: SemanticKeyDescriptor): void => {
+  const acceptMention = (option: SensorKeyOption): void => {
     const active = mention;
     const target = active?.target;
     const insert = mentions?.insert;
@@ -377,7 +402,7 @@ export function createTextManager(
       text: target.text,
       start: active.start,
       end: target.selectionStart,
-      semanticKey: descriptor.key,
+      semanticKey: option.id,
     });
 
     // A refusal leaves the typed `@query` as prose; the edit then ends with the

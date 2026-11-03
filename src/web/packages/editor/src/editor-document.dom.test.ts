@@ -4,6 +4,7 @@ import type {
   FabricThemeEnvelopeInput,
   FontCut,
   FontTrioInfo,
+  ThemeMetadata,
 } from "@yunari/renderer-core";
 import { setObjectAssetReference } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
@@ -13,7 +14,7 @@ import {
   AssetManager,
   type LocalAssetReference,
 } from "./asset-manager/index.js";
-import { EditorDocument } from "./editor-document.js";
+import { EditorDocument, themeSizeRefusal } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { HistoryEnvelopePort } from "./history-manager/index.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
@@ -84,6 +85,12 @@ function documentWith(
     readonly onSaved?: (message?: string) => void;
     readonly onError?: (message: string) => void;
     readonly client?: ThemeLibraryClient;
+    /** The Document pane's redraw, so a test can read what a metadata write
+     *  handed it. */
+    readonly artboardRender?: (
+      artboard: Artboard,
+      metadata: ThemeMetadata | undefined,
+    ) => void;
   } = {},
 ): EditorDocument {
   return new EditorDocument({
@@ -112,6 +119,13 @@ function documentWith(
     consumers: {
       runtime: () => ({ setThemeLanguage: () => {} }),
       selection: () => ({ setLocale: () => {} }),
+      artboard: () => ({
+        render:
+          seams.artboardRender ??
+          (() => {
+            return undefined;
+          }),
+      }),
     } as never,
   });
 }
@@ -173,6 +187,37 @@ const entry = (title: string, url: string): ThemeCreditsEntry => ({
   license: "ISC",
   changes: "Imported unchanged",
   source: { url },
+});
+
+describe("EditorDocument metadata", () => {
+  it("redraws the document pane when the identity chip renames the theme", () => {
+    // The chip's rename reaches the document without passing through the
+    // Document pane's own fields. Without the redraw the pane kept the name it
+    // was last given, so the new name appeared only after a reopen.
+    const render = vi.fn();
+    const document = documentWith(undefined, { artboardRender: render });
+    render.mockClear();
+
+    document.renameTheme("Living Room");
+
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ width: expect.any(Number) }),
+      expect.objectContaining({ name: "Living Room" }),
+    );
+  });
+
+  it("redraws the document pane when Save as adopts the new theme's name", () => {
+    const render = vi.fn();
+    const document = documentWith(undefined, { artboardRender: render });
+    render.mockClear();
+
+    document.adoptIdentity("living-room", "Living Room");
+
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ width: expect.any(Number) }),
+      expect.objectContaining({ name: "Living Room" }),
+    );
+  });
 });
 
 describe("EditorDocument credits", () => {
@@ -431,6 +476,36 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
+  it("counts the document and referenced bytes, and reports unused bytes apart", () => {
+    const assetManager = managerWith([imageAsset("photo"), imageAsset("logo")]);
+    const document = documentWith(undefined, {
+      assetManager,
+      objects: [placedObject("logo")],
+      envelope: bareEnvelope(),
+    });
+
+    const size = document.sizeSummary();
+
+    expect(size.unusedBytes).toBe(1);
+    // `logo`'s byte plus the serialized document; the unused `photo` is not in
+    // either measure.
+    expect(size.themeBytes).toBeGreaterThan(1);
+    expect(size.limitBytes).toBe(90 * 1024 * 1024);
+    document.destroy();
+  });
+
+  it("refuses a theme past its bound, and could not be made to fit by pruning", () => {
+    expect(
+      themeSizeRefusal(90 * 1024 * 1024, 90 * 1024 * 1024),
+    ).toBeUndefined();
+    expect(themeSizeRefusal(90 * 1024 * 1024 + 1, 90 * 1024 * 1024)).toBe(
+      uiCopy.saveCleanup.themeTooLarge(
+        uiCopy.panels.assetCard.size(90 * 1024 * 1024 + 1),
+        uiCopy.panels.assetCard.size(90 * 1024 * 1024),
+      ),
+    );
+  });
+
   it("cancel writes nothing and keeps the file", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const onSaved = vi.fn();
@@ -448,6 +523,7 @@ describe("EditorDocument save cleanup", () => {
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
+            id: "photo",
             name: "photo.png",
             kind: "image",
             sizeBytes: 1,
@@ -466,7 +542,7 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
-  it("keep saves and keeps the assets and their credits", async () => {
+  it("keep leaves the file in the document and out of the package", async () => {
     const assetManager = managerWith([imageAsset("photo")]);
     const linked: ThemeCreditsEntry = {
       ...entry("photo", "https://example.test/photo"),
@@ -482,8 +558,10 @@ describe("EditorDocument save cleanup", () => {
 
     expect(save).toHaveBeenCalledTimes(1);
     const [current, assets] = save.mock.calls[0] ?? [];
-    expect(current?.assets?.map((asset) => asset.id)).toEqual(["photo"]);
-    expect(Object.keys(assets ?? {})).toEqual(["assets/photo.png"]);
+    // Nothing references the file, so the package carries neither its
+    // declaration, its bytes nor its credit.
+    expect(current?.assets).toEqual([]);
+    expect(assets).toEqual({});
     expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
       "photo",
     ]);
@@ -498,7 +576,7 @@ describe("EditorDocument save cleanup", () => {
       assetId: "photo",
     };
     const unlinked = entry("house", "https://lucide.dev/icons/house");
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({ ok: true });
     const save = vi
       .spyOn(PersistenceManager.prototype, "save")
@@ -525,6 +603,67 @@ describe("EditorDocument save cleanup", () => {
     document.destroy();
   });
 
+  it("removes only the files the answer names", async () => {
+    const assetManager = managerWith([imageAsset("photo"), imageAsset("logo")]);
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
+    trashAssetsMock.mockResolvedValue({ ok: true });
+    const save = vi
+      .spyOn(PersistenceManager.prototype, "save")
+      .mockResolvedValue(undefined);
+    const document = documentWith(undefined, {
+      assetManager,
+      // `logo` is on the canvas, so only `photo` is the question; choosing it
+      // must not take the file the author kept.
+      objects: [placedObject("logo")],
+      envelope: bareEnvelope(),
+    });
+
+    await document.downloadPackage();
+
+    expect(trashAssetsMock).toHaveBeenCalledWith([
+      { name: "photo.png", bytes: new Uint8Array([1]) },
+    ]);
+    expect(assetManager.declarations.map((asset) => asset.id)).toEqual([
+      "logo",
+    ]);
+    expect(save).toHaveBeenCalledTimes(1);
+    const [current, assets] = save.mock.calls[0] ?? [];
+    expect(current?.assets?.map((asset) => asset.id)).toEqual(["logo"]);
+    expect(Object.keys(assets ?? {})).toEqual(["assets/logo.png"]);
+    document.destroy();
+  });
+
+  it("offers a video the same preview URL its Assets card draws", async () => {
+    const video: LocalAssetReference = {
+      id: "loop",
+      kind: "video",
+      path: "assets/loop.webm",
+      sha256: "0",
+    };
+    const assetManager = managerWith([video]);
+    cleanupMock.mockResolvedValue("cancel");
+    const document = documentWith(undefined, {
+      assetManager,
+      envelope: bareEnvelope(),
+    });
+
+    await document.downloadPackage();
+
+    expect(cleanupMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: [
+          expect.objectContaining({
+            id: "loop",
+            name: "loop.webm",
+            kind: "video",
+            previewUrl: expect.stringMatching(/^blob:/),
+          }),
+        ],
+      }),
+    );
+    document.destroy();
+  });
+
   it("refuses before trashing when the post-prune package would not build", async () => {
     // A package the serializer refuses must cost nothing but the refusal: the
     // trash move is ordered last, after the cleanup's own result is buildable.
@@ -544,7 +683,7 @@ describe("EditorDocument save cleanup", () => {
       { "assets/photo.png": new Uint8Array([1]) },
     );
     const onError = vi.fn();
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({ ok: true });
     const save = vi
       .spyOn(PersistenceManager.prototype, "save")
@@ -581,7 +720,7 @@ describe("EditorDocument save cleanup", () => {
     };
     const onSaved = vi.fn();
     const onError = vi.fn();
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin is not available on this machine.",
@@ -671,7 +810,10 @@ describe("EditorDocument save cleanup", () => {
     await document.release();
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(markSaved).toHaveBeenCalledTimes(1);
+    // The save marks the package it wrote, then the document marks its own
+    // full snapshot: the export strips unused files from the package but must
+    // not make the author's document read dirty for keeping them.
+    expect(markSaved).toHaveBeenCalledTimes(2);
     expect(onSaved).toHaveBeenCalledWith("Released 0.1.0");
     expect(document.isDirty()).toBe(false);
     document.destroy();
@@ -698,6 +840,7 @@ describe("EditorDocument save cleanup", () => {
         documentName: "System dashboard",
         files: [
           expect.objectContaining({
+            id: "photo",
             name: "photo.png",
             kind: "image",
             sizeBytes: 1,
@@ -721,7 +864,7 @@ describe("EditorDocument save cleanup", () => {
     const onError = vi.fn();
     const client = libraryClient();
     replacementMock.mockResolvedValue("save");
-    cleanupMock.mockResolvedValue("remove");
+    cleanupMock.mockResolvedValue({ action: "remove", assetIds: ["photo"] });
     trashAssetsMock.mockResolvedValue({
       ok: false,
       message: "The Recycle Bin refused it.",
@@ -808,6 +951,10 @@ describe("EditorDocument globals commits", () => {
         name: "Accent",
         value: { kind: "solid", color: "rgb(200 0 0)" },
       },
+      spare: {
+        name: "Spare",
+        value: { kind: "solid", color: "rgb(0 0 200)" },
+      },
     } as never);
     expect(
       saveState,
@@ -822,6 +969,12 @@ describe("EditorDocument globals commits", () => {
 
     document.deletePalette("accent", "none");
     expect(saveState).toHaveBeenCalledTimes(3);
+
+    // An unreferenced token drops without a reassignment walk, and the drop is
+    // still its own undoable commit.
+    document.deletePalette("spare", undefined);
+    expect(saveState).toHaveBeenCalledTimes(4);
+    expect(document.envelope.globals?.palette).not.toHaveProperty("spare");
     document.destroy();
   });
 });

@@ -110,6 +110,8 @@ export function mountRunEditor(options: {
   readonly descriptors?: () => readonly SemanticKeyDescriptor[];
   /** The keys the host answers; absent leaves every catalogue key offered. */
   readonly measured?: ReadonlySet<string>;
+  /** The keys the theme binds; absent leaves every unmeasured key unknown. */
+  readonly bound?: ReadonlySet<string>;
   /** The token list's action ports; absent leaves its action rows off. */
   readonly openFontFinder?: () => void;
   readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
@@ -172,6 +174,7 @@ export function mountRunEditor(options: {
         ? {}
         : { descriptors: options.descriptors() }),
       ...(options.measured === undefined ? {} : { measured: options.measured }),
+      ...(options.bound === undefined ? {} : { bound: options.bound }),
     });
     if (view === undefined) {
       throw new Error("the object carries no authored text to edit");

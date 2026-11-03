@@ -35,7 +35,7 @@ export function deleteType(
   document: EditorDocument,
   selection: TokenSelectionStore | undefined,
   id: string,
-  replacement: string,
+  replacement: string | undefined,
 ): void {
   document.deleteType(id, replacement);
   clearDeletedToken(selection, "preset", id);
@@ -49,7 +49,7 @@ export function deletePalette(
   document: EditorDocument,
   selection: TokenSelectionStore | undefined,
   id: string,
-  replacement: string,
+  replacement: string | undefined,
 ): void {
   document.deletePalette(id, replacement);
   clearDeletedToken(selection, "paint", id);

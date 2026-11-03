@@ -67,11 +67,7 @@ import {
   createSelectionInspector,
   type SelectionInspector,
 } from "./selection-inspector/index.js";
-import {
-  insertReading,
-  type RunTarget,
-  writeTypedText,
-} from "./selection-inspector/run-edits.js";
+import { createMentionPort } from "./selection-inspector/mention-port.js";
 import { ShortcutManager } from "./shortcut-manager/index.js";
 import { createSnapManager, type SnapManager } from "./snap-manager/index.js";
 import {
@@ -290,6 +286,9 @@ export class EditorSession {
       options.sensors?.descriptors() ?? SEMANTIC_KEYS;
     const measured = (): ReadonlySet<string> | undefined =>
       options.sensors?.measured();
+    // Every reading the theme binds. A key on this set that the host does not
+    // answer is what the reading list marks "bound but unavailable".
+    const bound = (): ReadonlySet<string> => this.#document.boundKeys();
     this.charts = new ChartManager({
       editor: options.shell.editor,
       scene: options.shell.scene,
@@ -323,6 +322,7 @@ export class EditorSession {
       // Which of those readings this PC answers now; `undefined` until the host
       // says, and then the picker leaves every key offered as it does today.
       measured,
+      bound,
       // The shell owns the glass handle; the inspector writes the property and
       // asks it to re-resolve.
       refreshGlass: () => options.shell.refreshGlass(),
@@ -431,6 +431,7 @@ export class EditorSession {
               id,
               replacement,
             ),
+          background: () => this.#document.envelope.background,
           usage: paletteUsage,
         },
         // The type half: the same one walk, so the users list under the preset
@@ -478,27 +479,9 @@ export class EditorSession {
     options.shell.editor.textManager.setRepaint(() => this.#runtime.refresh());
     // An inline `@` names a reading. The run write is the document's, because
     // it owns the node's bindings, and the readings offered are the catalogue's.
-    const runTarget = (object: RunTarget["object"]): RunTarget | undefined => {
-      const nodeId = object.get("id");
-      if (typeof nodeId !== "string" || nodeId === "") return undefined;
-      return {
-        object,
-        nodeId,
-        bindings: () => this.#document.envelope.bindings?.[nodeId] ?? [],
-        setBindings: (next) => this.#document.setBindings(nodeId, next),
-      };
-    };
-    options.shell.editor.textManager.setMentions({
-      descriptors,
-      insert: (object, range) => {
-        const target = runTarget(object);
-        return target === undefined ? false : insertReading(target, range);
-      },
-      settle: (object, text) => {
-        const target = runTarget(object);
-        return target === undefined ? false : writeTypedText(target, text);
-      },
-    });
+    options.shell.editor.textManager.setMentions(
+      createMentionPort(this.#document, descriptors, measured),
+    );
     this.#newObjects = createNewObjectPanel(
       options.panelHosts.add,
       options.shell.editor,
@@ -525,6 +508,7 @@ export class EditorSession {
       // author and a licence the declaration never carries still surface.
       creditFor: (assetId) => this.#document.creditForAsset(assetId),
       onFontCommit: (input) => commitFont(this.#fontHost(), input),
+      sizeSummary: () => this.#document.sizeSummary(),
       onImportVideo: (file, isPackage, onStep, trim) =>
         this.importPickedVideo(file, {
           package: isPackage,

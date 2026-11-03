@@ -14,10 +14,11 @@ import {
 } from "../display-lens.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import {
+  readRemovedPathPresetIds,
   readUserPathPresets,
+  setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
 } from "../path-presets.js";
-import { confirmDocumentReplacement } from "../persistence-manager/index.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
   SettingsRegion,
@@ -296,6 +297,7 @@ export function createShellLayout(
   // and nothing after this re-reads storage — the settings tab writes both.
   setActivePreviewRatios(readPreviewRatioTokens(storage));
   setActiveUserPathPresets(readUserPathPresets(storage));
+  setActiveRemovedPathPresetIds(readRemovedPathPresetIds(storage));
   const initial = resolveShellPalette(
     storage === undefined ? undefined : readShellChoice(storage),
     prefersDarkAppearance(),
@@ -432,7 +434,8 @@ export function createShellLayout(
      *  shell's one reading of `ThemeMetadata` — the bridge snapshot — so the
      *  About tab's version is the same fact the Document pane's
      *  `releaseVersion` row reads, never a second source. */
-    const { releaseVersion, objectCount, assetCount } = useSelection(store);
+    const selection = useSelection(store);
+    const { releaseVersion, objectCount, assetCount } = selection;
     const sheetOpen = useSheet(sheet);
     const finderState = useFinder(finder);
     const finderOpen = finderState.open;
@@ -466,6 +469,25 @@ export function createShellLayout(
       setInspectorCollapsed((current) => !current);
       refitOnViewportChange();
     };
+
+    /** A newly selected object reopens the inspector.
+     *
+     * Folding is the author's while the selection stands, but a column folded
+     * and then forgotten has no route back from the canvas — the selection is
+     * what should lead them to it. The snapshot carries no object id, so the
+     * change is read from the selected rows of the layer tree, the same
+     * projection the composition pane draws. Comparing the joined ids keeps an
+     * unrelated layer update from undoing a fold. */
+    const shownSelection = useRef("");
+    useEffect(() => {
+      const next = (store.bridge?.layers() ?? [])
+        .filter((row) => row.selected)
+        .map((row) => row.id)
+        .join("\n");
+      if (next === shownSelection.current) return;
+      shownSelection.current = next;
+      if (next !== "") setInspectorCollapsed(false);
+    }, [selection]);
 
     /** Each pane's scroll offset, kept across the swap.
      *
@@ -956,31 +978,11 @@ export function createShellLayout(
     }, []);
     const requestMode = (next: ShellMode): void => {
       if (next === mode) return;
-      // The one place a mode change lands: the boot's announcement reads the
-      // mode the switch actually took, not one a refused dirty-document guard
-      // would have stopped.
-      const switchTo = (chosen: ShellMode): void => {
-        setMode(chosen);
-        options.onModeChange?.(chosen);
-      };
-      const session = store.bridge?.session;
-      if (
-        next !== "themes" ||
-        session === undefined ||
-        session.isDirty() !== true
-      ) {
-        switchTo(next);
-        return;
-      }
-      void (async () => {
-        const choice = await confirmDocumentReplacement(uiCopy.modes.unsaved);
-        if (choice === "cancel") return;
-        if (choice === "save") {
-          await session.saveLibrary();
-          if (session.isDirty()) return;
-        }
-        switchTo(next);
-      })().catch(() => undefined);
+      // A mode switch hides the editor's body, never unmounts it, so it moves
+      // no document and can lose no unsaved work. The replacement prompt
+      // belongs to New/Open, which do replace the document.
+      setMode(next);
+      options.onModeChange?.(next);
     };
     return <Shell mode={mode} onModeChange={requestMode} />;
   }

@@ -155,6 +155,13 @@ export function harness(options: {
    *  Nothing unused by default, so an existing case is not about it. */
   readonly cleanup?: () => Promise<CleanupAnswer>;
   readonly credits?: () => ThemeCredits | undefined;
+  /** The copy a save stores; by default the envelope being written and the
+   *  document's bytes. */
+  readonly output?: (envelope: FabricThemeEnvelope) => {
+    readonly envelope: FabricThemeEnvelope;
+    readonly assets: Readonly<Record<string, Uint8Array>>;
+    readonly credits?: ThemeCredits;
+  };
   readonly adoptIdentity?: (id: string, name: string) => void;
 }): Harness {
   const save = vi.fn(async () => "base-after-save");
@@ -198,10 +205,21 @@ export function harness(options: {
     listDisplays,
     ...options.client,
   };
+  const snapshot = options.snapshot ?? (() => envelope);
+  const assets = options.assets ?? assetsWith([], {});
   const manager = new ThemeLibraryManager({
-    snapshot: options.snapshot ?? (() => envelope),
-    assets: options.assets ?? assetsWith([], {}),
-    ...(options.credits === undefined ? {} : { credits: options.credits }),
+    snapshot,
+    assets,
+    output:
+      options.output ??
+      ((saved) => {
+        const credits = options.credits?.();
+        return {
+          envelope: saved,
+          assets: assets.assets,
+          ...(credits === undefined ? {} : { credits }),
+        };
+      }),
     picture: options.picture ?? (async () => undefined),
     markSaved,
     announceChange,

@@ -63,7 +63,11 @@ const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
 /** The narrowest a card column may get; the same 272px the grid declares. */
 const MASONRY_MIN_COLUMN = 272;
 /** The grid's gutter, and the height of the row unit the spans are counted in.
- *  A card's span covers `span * ROW + (span - 1) * GAP` pixels. */
+ *  **The gutter rides the row span, not `row-gap`.** A row-gap and a
+ *  `ceil`-rounded span each add their own air, so the vertical gap varied by
+ *  up to a row unit while the column gap stayed fixed. With no row-gap the
+ *  span covers `height + GAP` and the visible gap is the same GAP the columns
+ *  use. */
 const MASONRY_GAP = 12;
 const MASONRY_ROW = 1;
 
@@ -116,7 +120,7 @@ function useMasonrySpan(ref: React.RefObject<HTMLLIElement | null>): void {
       const height = node.getBoundingClientRect().height;
       if (height <= 0) return;
       node.style.gridRowEnd = `span ${Math.ceil(
-        (height + MASONRY_GAP) / (MASONRY_ROW + MASONRY_GAP),
+        (height + MASONRY_GAP) / MASONRY_ROW,
       )}`;
     };
     measure();
@@ -165,7 +169,7 @@ export function Gallery(props: {
     <ul
       ref={list}
       data-yunari-store-gallery=""
-      className="grid auto-rows-[1px] grid-cols-[repeat(auto-fill,minmax(272px,1fr))] items-start gap-[var(--space-12)] [grid-auto-flow:row_dense]"
+      className="grid auto-rows-[1px] grid-cols-[repeat(auto-fill,minmax(272px,1fr))] items-start gap-x-[var(--space-12)] [grid-auto-flow:row_dense]"
     >
       {props.items.map((item) => (
         <Cell
@@ -183,8 +187,8 @@ export function Gallery(props: {
 }
 
 /**
- * One item: its picture, its name, and one meta band with the byline and the
- * card's controls.
+ * One item: its picture, its name, and one meta band with the updated date and
+ * the card's controls.
  *
  * **The picture is the theme's own shape, contained, not cropped**: a card
  * advertises the theme's own picture, and a cropped one shows a composition the
@@ -192,9 +196,8 @@ export function Gallery(props: {
  * varied heights. **The band's left slot
  * has one occupant per half, and they are exclusive**: an online item draws the
  * kind badge and the download count, and a library item draws the origin pill
- * where the host holds a record of where the theme came from. The byline sits
- * before it, so the name row keeps the width and the facts share one muted
- * line.
+ * where the host holds a record of where the theme came from. The date sits
+ * before it, and the author is a hover chip over the picture.
  */
 function Cell(props: {
   readonly item: StoreItem;
@@ -245,25 +248,34 @@ function Cell(props: {
       data-yunari-store-cell={item.id}
       data-wide={props.wide ? "" : undefined}
       style={props.wide ? { gridColumn: "span 2" } : undefined}
-      className="flex flex-col self-start overflow-hidden rounded-lg border border-edge bg-panel-2"
+      className="group relative flex flex-col self-start overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
+      {/* **The author is a hover chip, not a line.** The name row belongs to
+          the theme, and the facts band's slots are the kind, the count and the
+          actions; a byline before them spent width on every card for a fact
+          read once. The chip sits over the picture's top-right corner, appears
+          while the card is attended, and keeps its words in the tree either
+          way — `opacity` hides it from sight, not from a screen reader. */}
+      <span
+        data-yunari-store-cell-author=""
+        className="pointer-events-none absolute right-[var(--space-8)] top-[var(--space-8)] rounded-full bg-panel/80 px-[var(--space-8)] py-[var(--space-4)] font-mono text-2xs text-muted opacity-0 transition-opacity group-hover:opacity-100"
+      >
+        {authorChip(item)}
+      </span>
       {/* **The cell's own surface is a control**. A button rather than a handler
           on the `li`, because the item's modal must be reachable without a
           mouse (the keyboard section) — and because a press on one of the four
           actions below must not open the item as well.
 
-          **It is the picture and the name, and the byline is its sibling.** A
-          button's own descendants are presentational, so a byline inside it
+          **It is the picture and the name, and the date line is its sibling.**
+          A button's own descendants are presentational, so a date inside it
           would be reachable only through the button's name; beside it, the
-          author and the date are still read, and the button's own name is the
-          theme's.
+          date is still read, and the button's own name is the theme's.
 
-          **The padding is the surface's own arithmetic, kept exactly** now that
-          the surface, the byline and the facts band are three elements: the
-          name's box pads the picture on three sides and stops 6px short of the
-          byline, the byline stops 6 short of the band, and the band's wrapper
-          carries the rest — so the name, the byline and the 26px band sit where
-          they sat inside one padded column. */}
+          **The padding is the surface's own arithmetic**: the name's box pads
+          the picture on three sides and stops 4px short of the band, and the
+          band's wrapper carries the 10px foot — the same name, date and 26px
+          band the card drew before the author became a chip. */}
       <button
         type="button"
         data-yunari-store-cell-surface=""
@@ -526,21 +538,21 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
 }
 
 /**
- * The mono line under the name: `@mira-k · 2026-10-15`, or its own
- * *No author* in the same slot — a fact about the theme rather than a missing
- * reading.
+ * The card's meta line: the day `updatedAt` names.
  *
- * The date is `updatedAt`'s day. The host sends an ISO-8601 instant and the
- * UI prints a day, and the first ten characters of ISO-8601 *are* that day
- * in UTC — so no reader sees a different one, which a locale-formatted date
- * would give them. An entry with no time at all (a template) prints the author
- * alone rather than a separator with nothing after it.
+ * The host sends an ISO-8601 instant and the UI prints a day, and the first ten
+ * characters of ISO-8601 *are* that day in UTC — so no reader sees a different
+ * one, which a locale-formatted date would give them. An entry with no time at
+ * all (a template) leaves the line empty rather than inventing a day.
  */
 function byline(item: StoreItem): string {
-  const author =
-    item.author === undefined ? uiCopy.store.cell.noAuthor : `@${item.author}`;
-  const date = item.updatedAt?.slice(0, 10);
-  return date === undefined || date === ""
-    ? author
-    : `${author}${uiCopy.store.readingSeparator}${date}`;
+  return item.updatedAt?.slice(0, 10) ?? "";
+}
+
+/** The author's hover chip: `© Yunari`, or the no-author word where the
+ *  document declares none — the same fact the byline used to carry. */
+function authorChip(item: StoreItem): string {
+  return item.author === undefined
+    ? uiCopy.store.cell.noAuthor
+    : `© ${item.author}`;
 }

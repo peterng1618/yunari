@@ -14,6 +14,30 @@ display-only player, a desktop editor, and settings.
 - **GitHub Issues is the backlog.** Do not create a local backlog, decision log,
   evidence tree or task database in the repository. Repository docs describe
   current behaviour; history belongs in Git.
+- **File an off-task report immediately.** If the user reports a defect or gives
+  feedback unrelated to the current task, record it with
+  `node scripts/file-issue.mjs` and continue; do not fix it now or leave it in a
+  local note. `--recap` is your own paraphrase of the report — never paste the
+  user's message, and drop names, contact details and anything else personal.
+  Generalize machine-specific detail too: local absolute paths, computer or
+  account names, hostnames, IP/MAC addresses, serial numbers and tokens become
+  what a repro needs ("the authoring PC", `<repo>/src/web/...`); the script
+  refuses the path and address shapes it can recognise. It posts the recap under
+  the issue form's `What` heading with its source and current branch/commit, adds
+  the form's labels, and targets `peterng1618/yunari` rather than whatever
+  `GH_REPO` points at. The body stays minimal: add `--journey`/`--done` only if
+  you already know them. Use `--source agent` when the issue is your own finding
+  rather than the user's report, `--body-file` when you investigated it fully,
+  `--repo` for a fork, and `--dry-run` to preview the issue as JSON. Write the
+  recap file outside the repository and pass its path. Attach only a file the
+  user sent for this report (`--attach <path>`):
+
+  ```bash
+  node scripts/file-issue.mjs --kind bug --title "<symptom as a sentence>" \
+    --recap-file <path>
+  node scripts/file-issue.mjs --kind request --title "<what the user wants>" \
+    --recap "<paraphrase>"
+  ```
 - **CodeGraph first.** If `.codegraph/` exists at the repository root, query it
   before grep or file reads for code questions: `codegraph explore "<symbols or
   question>"`, or the `codegraph_explore` MCP tool. Skip it when no index exists.

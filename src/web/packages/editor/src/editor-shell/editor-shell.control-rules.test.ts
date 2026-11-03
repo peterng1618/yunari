@@ -188,10 +188,13 @@ function colourBearingMarkableControls(): readonly string[] {
  *    ink from the UA's own rule rather than by inheritance.
  *  - `.editor-shell-mode-switch button[aria-pressed="true"]` — the chosen
  *    segment, whose lifted ink is the shared chosen treatment.
+ *  - `.editor-shell-toolbar button[aria-pressed="true"]` — the readings-source
+ *    toggle. The toolbar renders the document actions, none of which carries
+ *    the destructive mark, so its accent ink cannot beat the marker.
  *
  * The first five were measured at `d9f81f1f` by parsing every rule body in the
  * stylesheet, which is how that set was reproduced rather than copied; the last
- * two arrived with the mode switch.
+ * three arrived with the mode switch and the source toggle.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   ".editor-shell-dialog > button:not(.editor-shell-dialog-close)",
@@ -201,6 +204,7 @@ const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   ".editor-shell-rail button",
   ".editor-shell-rail button.editor-shell-rail-settings",
   '.editor-shell-rail button[aria-pressed="true"]',
+  '.editor-shell-toolbar button[aria-pressed="true"]',
 ];
 
 describe("the destructive mark", () => {

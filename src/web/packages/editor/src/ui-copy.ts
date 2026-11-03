@@ -234,7 +234,8 @@ export const uiCopy = {
     previewRatioField: "W:H ratio",
     previewRatioAdd: "Add",
     previewRatioRemove: "Remove preview ratio",
-    previewRatioReset: "Reset",
+    /** Brings back removed defaults and leaves author-added items alone. */
+    restoreDefaults: "Restore defaults",
     /** the refusal rule: a refusal states its reason. `duplicate` is the exact
         token; `equivalent` names both spellings of one rect shape, because the
         entered name is kept rather than reduced. */
@@ -258,6 +259,7 @@ export const uiCopy = {
     pathPresetDataPlaceholder: "M 0 0 L 10 0 L 5 10 Z",
     pathPresetAdd: "Add shape",
     pathPresetRemove: "Remove custom shape",
+    pathPresetRemoveBuiltin: "Remove built-in shape",
     pathPresetEmpty: "No custom shapes yet.",
     pathPresetNameRequired: "A custom shape needs a name.",
     pathPresetDataRequired: "A custom shape needs path data.",
@@ -411,6 +413,13 @@ export const uiCopy = {
     runColour: "Color",
     runSource: "Reads",
     staticText: "Static text",
+    /** What the dot before a reading says about this PC. The accessible name
+        repeats the state, because colour alone does not reach every author. */
+    sensorStatus: {
+      reporting: "reporting now",
+      bound: "bound but unavailable",
+      unknown: "unknown",
+    },
     runFormat: "Format",
     /**
      * The token vocabulary, under the field. The formatter's own rule is that
@@ -485,11 +494,6 @@ export const uiCopy = {
     /** The third surface: this PC's settings and the editor's own preferences,
      *  one page each. It was called Host while it held host settings only. */
     settings: "Settings",
-    /** Asked before the editor is left with unsaved work. It is the question
-     *  the editor's own replacement prompt is given, so it offers the same
-     *  three answers — Save, Discard, Cancel — and the author can save rather
-     *  than choose between losing the work and staying put. */
-    unsaved: "Save changes before leaving the editor?",
   },
   /**
    * The Host mode's own surface: the machine and its display.
@@ -553,14 +557,19 @@ export const uiCopy = {
       addName: "Name",
       addNameHint: "What this display is called. You can rename it later.",
       addMonitor: "Monitor",
-      /** One screen, as the probe describes it: the device name it reports, its
-       *  own resolution, and whether it is the main display. */
+      /** One screen, as the probe describes it: the device name it reports, the
+       *  aspect ratio its pixel count describes, that count, and whether it is
+       *  the main display. The ratio leads because two screens that read alike
+       *  report different counts — 2048×1152 is 16:9 — and a count alone does
+       *  not say whether it is the shape the author expected. */
       monitorOption: (
         name: string,
+        ratio: string | undefined,
         width: number,
         height: number,
         main: boolean,
-      ): string => `${name} - ${width}x${height}${main ? " (main)" : ""}`,
+      ): string =>
+        `${name} - ${ratio === undefined ? "" : `${ratio}, `}${width}x${height}${main ? " (main)" : ""}`,
       noMonitors:
         "The Host reported no monitor, so a local display cannot be added here.",
       add: "Add display",
@@ -629,10 +638,18 @@ export const uiCopy = {
          *  host's retry cadence, stated so the owner knows to wait rather than
          *  unplug anything. */
         disconnectedHint: "The host tries this panel again every 15 seconds.",
+        /** The owner disconnected it. This is not the retry loop's state, so
+         *  the surface must not promise the panel will come back on its own. */
+        stoppedHint:
+          "Disconnected by hand. It stays off until you reconnect it or Yunari restarts.",
         reconnect: "Reconnect",
         reconnecting: "Reconnecting…",
         reconnectFailed: (reason: string): string =>
           `The panel could not be reconnected: ${reason}`,
+        disconnect: "Disconnect",
+        disconnecting: "Disconnecting…",
+        disconnectFailed: (reason: string): string =>
+          `The panel could not be disconnected: ${reason}`,
         dialogTitle: (panel: string): string => `Controls — ${panel}`,
         close: "Close",
         brightness: "Brightness",
@@ -1430,6 +1447,12 @@ export const uiCopy = {
       default: "Default",
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",
+      /** The confirming press: choosing a display stages it, and this writes
+       *  the assignment. Its two other words are the write's own states, so a
+       *  press that is out cannot read as one that has not been made. */
+      assignButton: "Assign",
+      assigning: "Assigning…",
+      assignedButton: "Assigned",
       /** What a landed assignment says where the choice stays on screen. It
        *  names the display, so the confirmation is the assignment rather than
        *  a bare "done" (`assign-display.tsx`). */
@@ -1883,8 +1906,9 @@ export const uiCopy = {
       font: "no type token refers to it",
     } satisfies Record<LocalAssetReference["kind"], string>,
     note: "Nothing on the canvas, the background, or a type token refers to these files. Their attribution goes with them.",
-    removeAfterSave: (count: number): string =>
-      `Remove these ${count} ${count === 1 ? "file" : "files"} after saving`,
+    removeAll: "Remove all unused assets",
+    themeTooLarge: (size: string, limit: string): string =>
+      `This theme comes to ${size}; a theme may be at most ${limit}. Remove an asset, then save again.`,
     warning:
       "Moves them to the Recycle Bin. The theme itself is saved either way.",
     cancel: "Cancel",
@@ -2320,6 +2344,13 @@ export const uiCopy = {
       remove: "Remove",
       createTypeToken: "Create type token",
       size: fileSize,
+    },
+    /** The pane's size meter, under its Import row. The percentage carries the
+     *  same state as the colour, so the reading survives without it. */
+    assetSizes: {
+      theme: (percent: number, limit: string): string =>
+        `Theme ${percent}% of ${limit}`,
+      unused: (size: string): string => `Unused ${size}`,
     },
     /** The inline form a chosen font expands to: the facts the file cannot
      *  answer for itself, and the one write that binds it to a preset. */

@@ -1033,6 +1033,9 @@ interface ActiveThemeHost {
   /** How many times the display list was read. **The surface's claim that it
    *  keeps no list is exactly that this grows once per opening.** */
   reads: number;
+  /** A write the case holds open, so the button's in-flight state is on screen
+   *  while the assertion runs. Absent resolves immediately. */
+  writeGate?: Promise<void>;
 }
 
 function hostServing(
@@ -1063,6 +1066,7 @@ function clientOver(
         return new Response("Not found", { status: 404 });
       }
       if (init?.method === "PUT") {
+        await host.writeGate;
         host.writes.push(
           JSON.parse(String(init.body)) as {
             readonly display?: unknown;
@@ -1198,6 +1202,19 @@ async function chooseDisplay(value: string): Promise<void> {
   );
 }
 
+/** The confirming press. The select stages a display; this is the only control
+ *  that writes the assignment. */
+async function pressAssign(): Promise<void> {
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-assign-confirm]",
+      ),
+      "the choice's assign button",
+    ).click(),
+  );
+}
+
 /** A host holding the two displays the cases below choose between. */
 function twoDisplays(): ActiveThemeHost {
   return hostServing({
@@ -1241,8 +1258,65 @@ it("assigns the theme to the display that was chosen and to no other", async () 
 
   expect(
     host.writes,
+    "choosing a display wrote the assignment before the Assign press",
+  ).toEqual([]);
+  await pressAssign();
+
+  expect(
+    host.writes,
     "the choice did not assign this theme to the display that was chosen, or assigned more than once",
   ).toEqual([{ display: "kitchen-tablet", id: "living-room" }]);
+  expect(
+    assignIsOpen(),
+    "the choice stayed open after the assignment it made",
+  ).toBe(false);
+});
+
+/**
+ * **The press has its own three states.** A write that is out reads as one, so
+ * the button cannot be pressed again and the select cannot stage another
+ * display underneath it; the landed answer is the confirmation the choice
+ * already draws.
+ */
+it("shows the assignment in flight and refuses a second press", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const host = { ...twoDisplays(), writeGate: gate };
+  await mountOver(host);
+
+  await openAssign("living-room");
+  await openDisplays();
+  await chooseDisplay("kitchen-tablet");
+  await pressAssign();
+
+  const confirm = () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-assign-confirm]",
+      ),
+      "the choice's assign button",
+    );
+  expect(
+    confirm().textContent,
+    "a write that is out did not say so on the control that made it",
+  ).toBe(uiCopy.store.assign.assigning);
+  expect(confirm().disabled, "an in-flight write can be pressed again").toBe(
+    true,
+  );
+  expect(
+    assignSelect().hasAttribute("disabled"),
+    "the select staged another display while the write was out",
+  ).toBe(true);
+
+  await act(async () => {
+    release();
+    await gate;
+  });
+  expect(host.writes).toEqual([
+    { display: "kitchen-tablet", id: "living-room" },
+  ]);
   expect(
     assignIsOpen(),
     "the choice stayed open after the assignment it made",
@@ -1291,6 +1365,7 @@ it("offers the default beside the displays rather than as one of them", async ()
   ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
 
   await chooseDisplay("default");
+  await pressAssign();
   expect(host.writes, "the default is not the key the route accepts").toEqual([
     { display: "default", id: "living-room" },
   ]);
@@ -1341,6 +1416,7 @@ it("reports the host's refusal in the host's own words", async () => {
   await openAssign("living-room");
   await openDisplays();
   await chooseDisplay("kitchen-tablet");
+  await pressAssign();
 
   expect(assignStatus(), "the refusal is not the message the host sent").toBe(
     "No such display.",
@@ -1407,6 +1483,9 @@ it("reads the displays each time the choice opens rather than keeping a list", a
     host.reads,
     "the choice read the displays more than once per opening",
   ).toBe(1);
+  // Staging a display writes nothing, so the choice is closed the way a person
+  // leaves it: the close mark, not a landed assignment.
+  await closeAssign();
 
   // The host paired a second display while the choice was closed.
   host.answer = {
@@ -1600,6 +1679,7 @@ it("confirms an assignment from the modal beside the choice it made", async () =
   );
   await openDisplays();
   await chooseDisplay("kitchen-tablet");
+  await pressAssign();
 
   expect(host.writes).toEqual([
     { display: "kitchen-tablet", id: "living-room" },

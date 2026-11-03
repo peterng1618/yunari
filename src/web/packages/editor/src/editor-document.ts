@@ -17,6 +17,7 @@ import { isLocked, isTextObject } from "@yunari/scene-fabric";
 import {
   checkDeclaredAssets,
   MAX_CREDITS_ENTRIES,
+  MAX_THEME_BYTES,
   type ThemeCredits,
   type ThemeCreditsEntry,
 } from "@yunari/theme-package";
@@ -92,6 +93,18 @@ import { extractSelectionWidget } from "./widget-export.js";
 export type CleanupAnswer =
   | { readonly proceed: true }
   | { readonly proceed: false; readonly message?: string };
+
+/** Why a theme's own bytes do not fit its bound, or undefined when they do.
+ *  Unused declarations are never part of this measure, so a file the output
+ *  strips cannot make a save refuse. */
+export function themeSizeRefusal(
+  themeBytes: number,
+  limitBytes: number,
+): string | undefined {
+  if (themeBytes <= limitBytes) return undefined;
+  const read = (bytes: number): string => uiCopy.panels.assetCard.size(bytes);
+  return uiCopy.saveCleanup.themeTooLarge(read(themeBytes), read(limitBytes));
+}
 
 /**
  * What the document needs of whoever is editing it, which is the session's own
@@ -281,7 +294,7 @@ export class EditorDocument {
     this.#library = new ThemeLibraryManager({
       snapshot: () => this.snapshot(),
       assets: this.#assets,
-      credits: () => this.#creditsPackage(),
+      output: (envelope) => this.#outputCopy(envelope),
       picture: () => this.picture(),
       // The baseline, not the document: a save in the same task has bumped no
       // revision, so the memo would answer for the old one.
@@ -423,15 +436,50 @@ export class EditorDocument {
     this.announceChange();
   }
 
-  /** The package member, or nothing when there is nothing to attribute. */
-  #creditsPackage(): ThemeCredits | undefined {
-    return this.#credits.length === 0
+  /** The package member, or nothing when there is nothing to attribute.
+   *  `dropped` is the set of asset ids an output leaves out, so a credit for a
+   *  file the output does not carry does not travel with it. */
+  #creditsPackage(dropped?: ReadonlySet<string>): ThemeCredits | undefined {
+    const entries =
+      dropped === undefined
+        ? this.#credits
+        : this.#credits.filter(
+            (entry) =>
+              entry.assetId === undefined || !dropped.has(entry.assetId),
+          );
+    return entries.length === 0
       ? undefined
       : {
           format: "yunari-theme-credits",
           version: 1,
-          entries: [...this.#credits],
+          entries: [...entries],
         };
+  }
+
+  /** The document an output carries: the same theme without the declarations
+   *  nothing references, nor their bytes or credits.
+   *
+   *  Both writing roads — the exported package and the library save a publish
+   *  starts from — take this copy, because an unused file is the author's to
+   *  keep in the document but never part of what they send. */
+  #outputCopy(envelope: FabricThemeEnvelope = this.snapshot()): {
+    readonly envelope: FabricThemeEnvelope;
+    readonly assets: Readonly<Record<string, Uint8Array>>;
+    readonly credits?: ThemeCredits;
+  } {
+    const dropped = new Set(this.unusedAssets().map((asset) => asset.id));
+    const declared = (envelope.assets ?? []).filter(
+      (asset) => !dropped.has(asset.id),
+    );
+    const paths = new Set(declared.map((asset) => asset.path));
+    const credits = this.#creditsPackage(dropped);
+    return {
+      envelope: { ...envelope, assets: declared },
+      assets: Object.fromEntries(
+        Object.entries(this.#assets.assets).filter(([path]) => paths.has(path)),
+      ),
+      ...(credits === undefined ? {} : { credits }),
+    };
   }
 
   /** Told "look again", not told the answer: a path that announces without
@@ -511,10 +559,10 @@ export class EditorDocument {
         if (cleanup.message !== undefined) options.onError?.(cleanup.message);
         return false;
       }
-      const current = this.snapshot();
+      const copy = this.#outputCopy();
       const output = await this.#exportCopy(
-        current,
-        this.#assets.assets,
+        copy.envelope,
+        copy.assets,
         uiCopy.file.exportTheme,
       );
       if (output === undefined) return false;
@@ -524,8 +572,13 @@ export class EditorDocument {
         output.envelope,
         output.assets,
         await this.picture(),
-        this.#creditsPackage(),
+        copy.credits,
       );
+      // The package carries less than the document — unused declarations are
+      // stripped — so the saved baseline is the author's own document, not the
+      // subset that was written. Otherwise a theme with an unused file would
+      // read dirty the moment it was saved.
+      this.#persistence.markSaved(this.snapshot(), this.#assets.assets);
       // The baseline moved while the revision did not: keep the memo from
       // answering with the pre-save document for the rest of this task.
       this.#dirty = undefined;
@@ -705,6 +758,7 @@ export class EditorDocument {
       id,
       metadata: { ...(this.#envelope.metadata ?? {}), name },
     });
+    this.#renderDocumentPane();
   }
 
   /** Rewrites the theme's display name in place. The stored id, the version
@@ -866,28 +920,69 @@ export class EditorDocument {
   }
 
   /**
-   * The one owner of the cleanup question both saves ask.
+   * What the asset pane's meter and the pre-save refusal read: the theme's own
+   * bytes — its document plus every asset something still references — the
+   * bytes only unused declarations hold, and the bound both compare against.
    *
-   * Nothing unused means nothing to ask and the save runs unchanged. A
-   * dismissal is a cancel, never a keep: closing the sheet is not permission to
-   * remove a file. `"remove"` proves the post-prune package buildable, and only
-   * a proof that passed moves the files to the host's trash; only a trash that
-   * succeeded prunes. A refusal stops the save with the host's or the
-   * serializer's own sentence, so nothing is removed and nothing is written.
+   * One owner, because a bar that reads full and a save that accepts the same
+   * theme would be two answers to one question. Unused bytes are reported but
+   * never counted: an output carries none of them.
+   */
+  sizeSummary(): {
+    readonly themeBytes: number;
+    readonly unusedBytes: number;
+    readonly limitBytes: number;
+  } {
+    const unused = new Set(this.unusedAssets().map((asset) => asset.id));
+    const assets = this.#assets.assets;
+    let usedBytes = 0;
+    let unusedBytes = 0;
+    for (const asset of this.#assets.declarations) {
+      const bytes = assets[asset.path]?.byteLength ?? 0;
+      if (unused.has(asset.id)) unusedBytes += bytes;
+      else usedBytes += bytes;
+    }
+    const documentBytes = new TextEncoder().encode(
+      JSON.stringify(this.snapshot()),
+    ).byteLength;
+    return {
+      themeBytes: documentBytes + usedBytes,
+      unusedBytes,
+      limitBytes: MAX_THEME_BYTES,
+    };
+  }
+
+  /**
+   * The one owner of the pre-save questions both saves ask.
+   *
+   * A theme over its own bound is refused before anything is built or asked:
+   * removing an unused file cannot make room, because an output never carried
+   * it. Nothing unused means nothing more to ask and the save runs unchanged.
+   * A dismissal is a cancel, never a keep: closing the sheet is not permission
+   * to remove a file. A chosen removal proves the post-prune package
+   * buildable, and only a proof that passed moves those files to the host's
+   * trash; only a trash that succeeded prunes. A refusal stops the save with
+   * the host's or the serializer's own sentence, so nothing is removed and
+   * nothing is written.
    */
   async confirmAssetCleanup(
     title: string = uiCopy.file.exportTheme,
   ): Promise<CleanupAnswer> {
+    const size = this.sizeSummary();
+    const tooLarge = themeSizeRefusal(size.themeBytes, size.limitBytes);
+    if (tooLarge !== undefined) return { proceed: false, message: tooLarge };
+
     const unused = this.unusedAssets();
     if (unused.length === 0) return { proceed: true };
 
     const assets = this.#assets.assets;
     const files: SaveCleanupFile[] = unused.map((asset) => {
+      // A font's bytes are not a thumbnail; every other kind asks the manager
+      // for the same blob URL its Assets card draws.
       const previewUrl =
-        asset.kind === "image" || asset.kind === "svg"
-          ? this.#assets.previewUrl(asset.id)
-          : undefined;
+        asset.kind === "font" ? undefined : this.#assets.previewUrl(asset.id);
       return {
+        id: asset.id,
         name: assetFileName(asset),
         kind: asset.kind,
         // A declaration with no bytes is already broken; it contributes nothing
@@ -902,10 +997,16 @@ export class EditorDocument {
       title,
       ...(documentName === undefined ? {} : { documentName }),
       files,
-      themeBytes: this.#themeBytes(unused),
+      themeBytes: size.themeBytes,
     });
     if (answer === "cancel") return { proceed: false };
     if (answer === "keep") return { proceed: true };
+
+    const removingIds = new Set(answer.assetIds);
+    const removed = unused.filter((asset) => removingIds.has(asset.id));
+    // The ids come from this same list, but an empty or stale answer must not
+    // turn the question into a prune of files the author did not check.
+    if (removed.length === 0) return { proceed: true };
 
     // The trash move is ordered last, after the save is otherwise ready: a
     // package the writer would refuse must cost nothing but the refusal, not
@@ -915,8 +1016,8 @@ export class EditorDocument {
     // this cannot reproduce — unreachable while `canAddCredit` and the credits
     // reader bound the list, reachable from a hand-edited package that seeds
     // `#credits` past it.
-    const unusedIds = new Set(unused.map((asset) => asset.id));
-    const unusedPaths = new Set(unused.map((asset) => asset.path));
+    const unusedIds = new Set(removed.map((asset) => asset.id));
+    const unusedPaths = new Set(removed.map((asset) => asset.path));
     const candidate = checkDeclaredAssets(
       {
         assets: this.#assets.declarations.filter(
@@ -930,29 +1031,14 @@ export class EditorDocument {
     if (!candidate.ok) return { proceed: false, message: candidate.message };
 
     const outcome = await trashAssets(
-      unused.map((asset) => ({
+      removed.map((asset) => ({
         name: assetFileName(asset),
         bytes: assets[asset.path] ?? new Uint8Array(),
       })),
     );
     if (!outcome.ok) return { proceed: false, message: outcome.message };
-    this.pruneAssets(unused.map((asset) => asset.id));
+    this.pruneAssets(removed.map((asset) => asset.id));
     return { proceed: true };
-  }
-
-  /** The theme's own size, without the files the cleanup is about: the
-   *  envelope as JSON plus the bytes still referenced. */
-  #themeBytes(unused: readonly LocalAssetReference[]): number {
-    const unusedIds = new Set(unused.map((asset) => asset.id));
-    const assets = this.#assets.assets;
-    let bytes = new TextEncoder().encode(
-      JSON.stringify(this.snapshot()),
-    ).byteLength;
-    for (const asset of this.#assets.declarations) {
-      if (unusedIds.has(asset.id)) continue;
-      bytes += assets[asset.path]?.byteLength ?? 0;
-    }
-    return bytes;
   }
 
   /**
@@ -1058,6 +1144,17 @@ export class EditorDocument {
     // — unlike the globals fan-out above, which every globals setter goes
     // through rather than repeating the receiver list.
     this.#pushLocale();
+    this.#renderDocumentPane();
+  }
+
+  /** The Document pane shows this envelope's metadata and artboard, and a
+   *  metadata write can come from outside the pane — the identity chip's rename
+   *  is one — so the pane is redrawn from the envelope rather than relying on
+   *  the field that committed to hand the value back. */
+  #renderDocumentPane(): void {
+    this.#consumers
+      .artboard()
+      .render(this.#envelope.artboard, this.#envelope.metadata);
   }
 
   #pushLocale(): void {
@@ -1077,6 +1174,17 @@ export class EditorDocument {
     this.#shell.setBackgroundMedia(this.#assets.declarations, (assetId) =>
       this.#assets.backgroundSource(assetId),
     );
+  }
+
+  /** Every semantic key the theme binds, across its nodes. A reading picker
+   *  marks a key on this set that the host does not answer as bound but
+   *  unavailable; a key off it that is likewise unanswered is only unknown. */
+  boundKeys(): ReadonlySet<string> {
+    const keys = new Set<string>();
+    for (const bindings of Object.values(this.envelope.bindings ?? {})) {
+      for (const binding of bindings) keys.add(binding.semanticKey);
+    }
+    return keys;
   }
 
   setBindings(id: string, bindings: readonly Binding[]): void {
@@ -1237,8 +1345,23 @@ export class EditorDocument {
     this.#consumers.palette().render(palette);
   }
 
-  deletePalette(id: string, replacement: string): void {
-    if (id === "none" || id === replacement) return;
+  /**
+   * Drops a paint token. `replacement` is the token its references move to;
+   * `undefined` means the caller's live walk found none, so the key is dropped
+   * with no reassignment walk.
+   */
+  deletePalette(id: string, replacement: string | undefined): void {
+    if (id === "none") return;
+    if (replacement === undefined) {
+      const { [id]: _deleted, ...palette } =
+        this.#envelope.globals?.palette ?? {};
+      this.#deleteGlobalsEntry(
+        { ...this.#envelope.globals, palette },
+        { repaint: () => this.#consumers.palette().render(palette) },
+      );
+      return;
+    }
+    if (id === replacement) return;
     const { from, to, background, palette } = reassignPaletteToken(
       this.#shell.editor.canvas,
       this.#envelope.background,
@@ -1273,7 +1396,21 @@ export class EditorDocument {
     this.#shell.editor.historyManager.saveState();
   }
 
-  deleteType(id: string, replacement: string): void {
+  /**
+   * Drops a type preset. `replacement` is the preset its references move to;
+   * `undefined` means the caller's live walk found none, so the key is dropped
+   * with no reassignment walk.
+   */
+  deleteType(id: string, replacement: string | undefined): void {
+    if (replacement === undefined) {
+      const { [id]: _deleted, ...typeTokens } = (this.#envelope.globals
+        ?.typeTokens ?? {}) as TypeTokens;
+      this.#deleteGlobalsEntry(
+        { ...this.#envelope.globals, typeTokens },
+        { repaint: () => this.#consumers.types().render(typeTokens) },
+      );
+      return;
+    }
     if (id === replacement) return;
     const typeTokens = reassignTypeToken(
       this.#shell.editor.canvas,

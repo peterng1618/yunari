@@ -234,6 +234,9 @@ export interface HostSettingsClient {
   /** Stops and opens the panel's device again. Answers the state the host
    *  reached, so a caller can say what happened without waiting for a poll. */
   reconnectPanel(id: string): Promise<PanelConnectionStatus>;
+  /** Closes the panel's device and keeps it closed until a reconnect or a host
+   *  restart. Removing the record stays the permanent answer. */
+  disconnectPanel(id: string): Promise<PanelConnectionStatus>;
 }
 
 /** One command the editor can send a panel, spelled as the host's route takes
@@ -1015,6 +1018,20 @@ export function createHostSettingsClient(options?: {
       const body = (await response.json()) as { readonly status?: unknown };
       // An answer this build cannot read is the state it just failed to enter;
       // the caller re-reads the map anyway, so nothing is invented here.
+      return isPanelConnectionStatus(body?.status)
+        ? body.status
+        : "disconnected";
+    },
+
+    async disconnectPanel(id) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}/panel/disconnect`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw await refusal(response, "Could not disconnect that panel");
+      }
+      const body = (await response.json()) as { readonly status?: unknown };
       return isPanelConnectionStatus(body?.status)
         ? body.status
         : "disconnected";

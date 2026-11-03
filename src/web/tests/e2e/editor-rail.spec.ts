@@ -1135,7 +1135,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     `the chosen segment is inked with the accent (${report})`,
   ).not.toBe(paint.accent);
 
-  // ── The guard, on a document the product dirtied ──────────────────────────
+  // ── The round trip, on a document the product dirtied ─────────────────────
   const identity = page.locator(".editor-shell-identity");
   await expect(identity).toHaveAttribute("data-dirty", "false");
   await selectLayer(page, "group-cpu-card");
@@ -1175,36 +1175,14 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "the editor painted nothing before the switch, so the round trip is untested",
   ).toBeGreaterThan(0);
 
-  // The question, refused. The instrument is the editor's own replacement
-  // prompt, so it is answered in the DOM rather than through `page.on("dialog")`.
-  const prompt = page.getByRole("dialog");
+  // A mode switch hides the editor's body rather than unmounting it, so it
+  // keeps the dirty document and asks nothing. The replacement prompt belongs
+  // to New/Open, which do replace the document.
   await segment(uiCopy.modes.themes).click();
-  await expect(prompt, "leaving a dirty document asked nothing").toBeVisible();
-  await expect(prompt).toHaveAttribute("aria-label", uiCopy.modes.unsaved);
-  // Save is offered, which is the whole reason the instrument is the editor's
-  // own prompt and not a browser dialog. It is not *pressed* here: a real save
-  // downloads a package, and the dom case covers that path instead.
   await expect(
-    prompt.getByRole("button", {
-      name: uiCopy.replaceDocument.save,
-      exact: true,
-    }),
-  ).toBeVisible();
-  await prompt
-    .getByRole("button", { name: uiCopy.replaceDocument.cancel, exact: true })
-    .click();
-  await expect(prompt).toHaveCount(0);
-  await expect(
-    segment(uiCopy.modes.editor),
-    "the mode moved while the guard was refused",
-  ).toHaveAttribute("aria-pressed", "true");
-
-  // The question, discarded: the mode moves, and the editor's own header actions
-  // do not follow it — the right-hand region is per-mode.
-  await segment(uiCopy.modes.themes).click();
-  await prompt
-    .getByRole("button", { name: uiCopy.replaceDocument.discard, exact: true })
-    .click();
+    page.getByRole("dialog"),
+    "leaving a dirty document asked a question it cannot lose the answer to",
+  ).toHaveCount(0);
   await expect(segment(uiCopy.modes.themes)).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -3304,7 +3282,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   // before this case's first open, and the base's own reading below would start
   // out true rather than false — proving nothing about the open that moved it.
   // An entry with no time is a shape the wire really has (a template is not a
-  // stored file and has none), and the cells draw the byline without a date.
+  // stored file and has none), and the cells leave the date line empty.
   await page.route("**/api/themes", (route) =>
     route.fulfill({
       json: {
@@ -3415,6 +3393,7 @@ test("the store opens a library theme as the document, from the cell and its foo
       rowUnit: style.gridAutoRows,
       flow: style.gridAutoFlow,
       gap: Number.parseFloat(style.columnGap),
+      rowGap: style.rowGap,
       cells: Array.from(
         node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
         (cell) => ({
@@ -3439,6 +3418,13 @@ test("the store opens a library theme as the document, from the cell and its foo
   expect(pack.flow, `the grid does not pack densely (${packReading})`).toBe(
     "dense",
   );
+  // The row span carries the gutter, so the vertical gap is the same 12px the
+  // columns state. A row-gap here would add a second, variable gap on top of
+  // the span's rounded-up remainder.
+  expect(
+    pack.rowGap,
+    `the grid adds a row-gap beside the span's gutter (${packReading})`,
+  ).toBe("normal");
   const wideCell = pack.cells.find((cell) => cell.wide);
   const narrow = pack.cells.filter((cell) => !cell.wide);
   expect(
@@ -3474,8 +3460,9 @@ test("the store opens a library theme as the document, from the cell and its foo
   // spacing scale's step table owns as `--space-8`, `--space-4` and
   // `--space-10`. The 26px band is the facts band's own height and is read
   // here too, because it is what the band fixes and a wrapper that padded it
-  // would squash it. **The byline has moved into that band**, so this reading
-  // also holds it there by its vertical centre rather than by a gap of its own.
+  // would squash it. **The date keeps a line in that band**, so this reading
+  // also holds it there by its vertical centre; the author is a hover chip over
+  // the picture and is read below.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
@@ -3585,6 +3572,17 @@ test("the store opens a library theme as the document, from the cell and its foo
     gapOf(bands.bandTop, bands.bandBottom, "band"),
     `the facts band is not the 26px the band fixes (${bandReading})`,
   ).toBe(26);
+
+  // **The author is a chip over the picture, hidden until the card is
+  // attended.** Its words stay in the tree at rest, which is why the reading
+  // asks for the computed opacity rather than the text.
+  const authorChip = cellOf(fromCell.id).locator(
+    "[data-yunari-store-cell-author]",
+  );
+  await expect(authorChip).toHaveText("© huyng");
+  await expect(authorChip).toHaveCSS("opacity", "0");
+  await cellOf(fromCell.id).hover();
+  await expect(authorChip).toHaveCSS("opacity", "1");
 
   // **The cell's own surface opens the item's**, and the open control below is
   // read from the surface the same gesture reaches.

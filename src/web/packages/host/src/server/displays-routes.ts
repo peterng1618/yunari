@@ -570,8 +570,8 @@ export function createDisplayRoutes(
     const commandMatch = url.pathname.match(
       /^\/api\/displays\/([^/]+)\/panel\/command$/,
     );
-    const reconnectMatch = url.pathname.match(
-      /^\/api\/displays\/([^/]+)\/panel\/reconnect$/,
+    const connectionMatch = url.pathname.match(
+      /^\/api\/displays\/([^/]+)\/panel\/(reconnect|disconnect)$/,
     );
 
     if (commandMatch !== null && request.method === "POST") {
@@ -655,10 +655,12 @@ export function createDisplayRoutes(
       return true;
     }
 
-    // The manual retake: close what this host holds and open the device
-    // again. A panel the retry loop is already reopening joins the same
-    // per-display chain, so the two cannot open the port twice.
-    if (reconnectMatch !== null && request.method === "POST") {
+    // The manual connection controls: a reconnect closes what this host holds
+    // and opens the device again; a disconnect closes it and keeps it closed
+    // until a later reconnect or start. A panel the retry loop is already
+    // reopening joins the same per-display chain, so the two cannot open the
+    // port twice.
+    if (connectionMatch !== null && request.method === "POST") {
       if (options.panels === undefined) {
         sendText(
           response,
@@ -668,8 +670,8 @@ export function createDisplayRoutes(
         return true;
       }
 
-      const reconnectId = decodeURIComponent(reconnectMatch[1] ?? "");
-      const display = await displays.find(reconnectId);
+      const connectionId = decodeURIComponent(connectionMatch[1] ?? "");
+      const display = await displays.find(connectionId);
 
       if (display === undefined) {
         sendText(response, 404, "No such display.");
@@ -682,7 +684,11 @@ export function createDisplayRoutes(
       }
 
       try {
-        await options.panels.reconnect(reconnectId);
+        if (connectionMatch[2] === "disconnect") {
+          await options.panels.disconnect(connectionId);
+        } else {
+          await options.panels.reconnect(connectionId);
+        }
       } catch (error) {
         if (isPortFailure(error)) {
           sendText(
@@ -703,7 +709,7 @@ export function createDisplayRoutes(
 
       sendJson(response, 200, {
         ok: true,
-        status: options.panels.status(reconnectId),
+        status: options.panels.status(connectionId),
       });
       return true;
     }
@@ -719,7 +725,7 @@ export function createDisplayRoutes(
             ? "GET and POST"
             : url.pathname === "/api/displays"
               ? "POST"
-              : commandMatch !== null || reconnectMatch !== null
+              : commandMatch !== null || connectionMatch !== null
                 ? "POST"
                 : id === undefined
                   ? undefined

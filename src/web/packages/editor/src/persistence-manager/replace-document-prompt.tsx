@@ -17,8 +17,7 @@ const ANSWERS = [
 ] as const;
 
 /**
- * Asks before the open document is replaced by another — or before the shell
- * leaves it, which is the same question about the same work.
+ * Asks before the open document is replaced by another.
  *
  * The question an author reads on the way to losing their work, so it says what
  * is about to happen rather than naming the button, and it is a `Dialog` rather
@@ -27,10 +26,8 @@ const ANSWERS = [
  * and their words are the imperative dialog's own.
  *
  * **The question is the caller's**, because the copy is the only thing that
- * makes this prompt a *replacement*: the shell's mode switch asks the same
- * question about the same unsaved document with its own words
- * (`uiCopy.modes.unsaved`) rather than carrying a second guard that could not
- * offer Save. The three answers are the same three either way.
+ * makes this prompt a *replacement*. A mode switch does not ask: the editor's
+ * body is hidden, never unmounted, so it loses no unsaved work.
  */
 export function ReplaceDocumentPrompt({
   question,

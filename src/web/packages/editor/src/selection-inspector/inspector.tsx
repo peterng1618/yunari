@@ -113,7 +113,10 @@ function Inspector({
   if (published === undefined) return null;
   if (subject === undefined) {
     return (
-      <p className="m-0 text-sm text-muted" data-yunari-nothing-selected="">
+      <p
+        className="m-0 pr-[var(--space-32)] text-sm text-muted"
+        data-yunari-nothing-selected=""
+      >
         {uiCopy.inspectorFields.nothingSelected}
       </p>
     );
@@ -126,13 +129,15 @@ function Inspector({
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col gap-[var(--space-4)] border-b border-edge pb-[var(--space-8)]">
+      <div className="flex flex-col gap-[var(--space-4)] border-b border-edge pr-[var(--space-32)] pb-[var(--space-8)]">
         {/* The mark and the name on one line, as the pane title draws its own
             (`pane.tsx`): the glyph inherits `--muted` from the row and the name
             takes `--text` for itself. A kind with no layer kind — a
             multi-selection — draws no mark rather than a second table's guess
-            at one. */}
-        <div className="flex items-center gap-[var(--space-8)] text-muted">
+            at one. The row is the height of the fold handle, which sits at its
+            right end; the padding is that handle's track, so neither the name
+            nor the binding key runs beneath it. */}
+        <div className="flex min-h-[26px] items-center gap-[var(--space-8)] text-muted">
           {subject.kind === "activeSelection" ? null : (
             <Glyph icon={KIND_GLYPHS[subject.kind]} size={14} />
           )}

@@ -329,6 +329,12 @@ it("lists the displays with a pair-a-new-display row, and assigns the chosen one
   ]);
 
   await act(async () => options[1]?.click());
+  // Choosing stages the display; the Assign press is the write.
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>("[data-yunari-store-assign-confirm]")
+      ?.click(),
+  );
   expect(
     SESSION_WITH_DISPLAYS.assignThemeTo,
     "choosing a display did not assign the open theme to it",

@@ -55,7 +55,7 @@ export interface TypeTokenFontActions {
 export function createTypeTokenPanel(
   host: HTMLElement,
   onChange: (presets: TypeTokens) => void,
-  onDelete?: (id: string, replacement: string) => void,
+  onDelete?: (id: string, replacement: string | undefined) => void,
   fontActions?: TypeTokenFontActions,
   tokenSelection?: TokenSelectionStore,
   usage?: () => TokenUsage,

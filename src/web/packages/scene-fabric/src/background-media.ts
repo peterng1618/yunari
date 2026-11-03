@@ -345,6 +345,13 @@ export function mountBackgroundMedia(
     image.style.cssText = video.style.cssText;
     video.replaceWith(image);
     element = image;
+    // **The still is placed by its own size, not by the box.** The listener
+    // that re-places on intrinsic size was armed on the video, so it goes with
+    // it; without re-arming the replacement, an image that has not decoded
+    // yet was placed as the bare box — stretched — and never corrected once it
+    // loaded.
+    stopIntrinsic?.();
+    stopIntrinsic = notifyOnIntrinsic(image, place);
     place();
     onFrame?.();
   };
@@ -416,6 +423,9 @@ export function mountBackgroundMedia(
       child.addEventListener(
         "error",
         () => {
+          // A torn-down element's late error is not this mount's: acting on it
+          // tore down the replacement the author had just swapped in.
+          if (element !== child) return;
           // A source the host could not produce is today's page: the theme's
           // own asset, rather than a blank panel.
           overrideFailed = true;
@@ -436,13 +446,19 @@ export function mountBackgroundMedia(
 
     if (child instanceof HTMLVideoElement) {
       child.addEventListener("error", () => {
+        if (element !== child) return;
         failed = true;
         showFallback();
       });
 
       // An autoplay refusal is a display without video, not an error: the
-      // still is what it shows instead.
+      // still is what it shows instead. **The refusal must be this element's**:
+      // a swap stops the old video, whose pending `play()` rejects with an
+      // abort after the new one is mounted — and that stale rejection marked
+      // the new video failed, so its extracted still replaced it and the
+      // preview froze.
       void child.play()?.catch(() => {
+        if (element !== child) return;
         failed = true;
         showFallback();
       });

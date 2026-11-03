@@ -149,6 +149,10 @@ export function createThemeRoutes(
               : {
                   panel: {
                     status: options.panels.status(record.id),
+                    // A disconnect is the owner's decision, not a missing
+                    // device: the surface says the panel stays off rather
+                    // than promising the retry loop will bring it back.
+                    stopped: options.panels.stopped(record.id),
                     commands: family?.commands ?? [],
                   },
                 }),

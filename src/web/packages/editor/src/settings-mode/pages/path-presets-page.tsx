@@ -6,12 +6,18 @@ import { Glyph, MINUS_GLYPH } from "../../editor-shell/icons.js";
 import { PATH_PRESET_IDS, PATH_PRESETS } from "../../new-object-defaults.js";
 import { PathGlyph } from "../../panes/add/path-glyph.js";
 import {
+  activeRemovedPathPresetIds,
   activeUserPathPresets,
+  clearRemovedPathPresetIds,
+  removedPathPresetIdsKey,
+  setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
+  subscribeRemovedPathPresetIds,
   subscribeUserPathPresets,
   type UserPathPreset,
   userPathPresetFrom,
   userPathPresetsKey,
+  writeRemovedPathPresetIds,
   writeUserPathPresets,
 } from "../../path-presets.js";
 import { uiCopy } from "../../ui-copy.js";
@@ -19,9 +25,13 @@ import { Page } from "../page.js";
 import { Group } from "../section-group.js";
 
 /**
- * The author's custom shapes. The three shipped presets come first and cannot
- * be removed — they are Add-pane vocabulary, not author state — then every
- * preset the author has saved, each with the form that adds another.
+ * The Add pane's shapes: the shipped presets and the author's custom ones.
+ *
+ * **A shipped preset is removable.** It is Add-pane vocabulary rather than
+ * authored state, but an author who never draws an arc should not carry it in
+ * the menu; the removal is author state of its own. Restore defaults brings
+ * back every removed built-in and leaves the author's presets untouched, which
+ * is why the two lists are stored under separate keys.
  */
 export function PathPresetsPage(props: {
   readonly storage: Storage | undefined;
@@ -43,7 +53,10 @@ function PathPresetsSection(props: {
   readonly storage: Storage | undefined;
 }): React.JSX.Element {
   useSyncExternalStore(subscribeUserPathPresets, userPathPresetsKey);
+  useSyncExternalStore(subscribeRemovedPathPresetIds, removedPathPresetIdsKey);
   const presets = activeUserPathPresets();
+  const removed = activeRemovedPathPresetIds();
+  const builtins = PATH_PRESET_IDS.filter((id) => !removed.includes(id));
   const [name, setName] = useState("");
   const [data, setData] = useState("");
   const [reason, setReason] = useState<string | undefined>(undefined);
@@ -81,13 +94,28 @@ function PathPresetsSection(props: {
     commit(presets.filter((preset) => preset.id !== id));
   };
 
+  /** Removing a built-in writes the removals list, not the author's presets. */
+  const removeBuiltin = (id: string): void => {
+    setReason(undefined);
+    const next = [...removed, id];
+    setPersisted(writeRemovedPathPresetIds(props.storage, next));
+    setActiveRemovedPathPresetIds(next);
+  };
+
+  /** Every built-in back, the author's own list as it was. */
+  const restoreDefaults = (): void => {
+    setReason(undefined);
+    setPersisted(clearRemovedPathPresetIds(props.storage));
+    setActiveRemovedPathPresetIds([]);
+  };
+
   return (
     <div
       className="flex flex-col gap-[var(--space-8)]"
       data-yunari-path-presets=""
     >
       <div className="flex flex-col gap-[var(--space-4)]">
-        {PATH_PRESET_IDS.map((id) => (
+        {builtins.map((id) => (
           <div
             key={id}
             className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-4)]"
@@ -102,6 +130,13 @@ function PathPresetsSection(props: {
             <span className="min-w-0 flex-1 truncate text-sm">
               {uiCopy.pathPresets[id]}
             </span>
+            <ControlIconButton
+              label={`${uiCopy.settings.pathPresetRemoveBuiltin} ${uiCopy.pathPresets[id]}`}
+              data={{ "data-yunari-path-preset-builtin-remove": id }}
+              onClick={() => removeBuiltin(id)}
+            >
+              <Glyph icon={MINUS_GLYPH} size={14} />
+            </ControlIconButton>
           </div>
         ))}
         {presets.map((preset) => (
@@ -125,7 +160,7 @@ function PathPresetsSection(props: {
             </ControlIconButton>
           </div>
         ))}
-        {presets.length === 0 ? (
+        {builtins.length === 0 && presets.length === 0 ? (
           <p className="text-sm text-muted">
             {uiCopy.settings.pathPresetEmpty}
           </p>
@@ -167,6 +202,15 @@ function PathPresetsSection(props: {
           className={ACTION_BUTTON}
         >
           {uiCopy.settings.pathPresetAdd}
+        </button>
+        <button
+          type="button"
+          disabled={removed.length === 0}
+          onClick={restoreDefaults}
+          data-yunari-path-preset-restore=""
+          className={ACTION_BUTTON}
+        >
+          {uiCopy.settings.restoreDefaults}
         </button>
       </div>
       {reason === undefined ? null : (

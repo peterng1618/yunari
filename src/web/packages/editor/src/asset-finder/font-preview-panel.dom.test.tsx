@@ -10,6 +10,7 @@ import {
   FontPreviewPanel,
   type FontResult,
   familyCutsOf,
+  SAMPLE_MAX_CHARS,
 } from "./font-preview-panel.js";
 import type { FontPreviewState } from "./fonts.js";
 
@@ -210,6 +211,31 @@ it("edits the sample line and re-renders the card", () => {
 
   for (const node of specimenRoles()) {
     expect(node.textContent).toBe("Ship it today");
+  }
+});
+
+it("caps an overlong sample and clips each specimen with an ellipsis", () => {
+  mount(<Editable selected={trio} />);
+  const input = document.querySelector<HTMLInputElement>(
+    "[data-yunari-font-preview-sample]",
+  );
+  if (input === null) throw new Error("no sample input.");
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  act(() => {
+    setter?.call(input, "A very long sample ".repeat(10));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  expect(input.maxLength).toBe(SAMPLE_MAX_CHARS);
+  expect(input.value).toHaveLength(SAMPLE_MAX_CHARS);
+  // The box clips rather than grows: every role's line truncates, so a sample
+  // at the cap cannot wrap the fixed specimen card.
+  for (const node of specimenRoles()) {
+    expect(node.textContent).toHaveLength(SAMPLE_MAX_CHARS);
+    expect(node.classList.contains("truncate")).toBe(true);
   }
 });
 

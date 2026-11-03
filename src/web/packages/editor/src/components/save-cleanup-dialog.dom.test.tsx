@@ -52,12 +52,14 @@ const KB = 1024;
 
 const FILES: readonly SaveCleanupFile[] = [
   {
+    id: "manrope",
     name: "Manrope-Variable.woff2",
     kind: "font",
     sizeBytes: 34 * KB,
     reason: uiCopy.saveCleanup.reason.font,
   },
   {
+    id: "studio",
     name: "studio.png",
     kind: "image",
     sizeBytes: 840 * KB,
@@ -65,10 +67,12 @@ const FILES: readonly SaveCleanupFile[] = [
     previewUrl: "blob:studio",
   },
   {
+    id: "loop",
     name: "loop-alt.webm",
     kind: "video",
     sizeBytes: 2.5 * 1024 * KB,
     reason: uiCopy.saveCleanup.reason.video,
+    previewUrl: "blob:loop",
   },
 ];
 
@@ -110,12 +114,20 @@ function buttonNamed(word: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
-function checkbox(): HTMLInputElement {
-  const input = opened().querySelector<HTMLInputElement>(
-    'input[type="checkbox"]',
+function fileCheckboxes(): HTMLInputElement[] {
+  return [
+    ...opened().querySelectorAll<HTMLInputElement>(
+      "[data-yunari-save-cleanup-file]",
+    ),
+  ];
+}
+
+function removeAll(): HTMLButtonElement {
+  const button = opened().querySelector<HTMLButtonElement>(
+    "[data-yunari-save-cleanup-remove-all]",
   );
-  if (input === null) throw new Error("the sheet draws no checkbox");
-  return input;
+  if (button === null) throw new Error("the sheet offers no remove-all");
+  return button;
 }
 
 async function press(button: HTMLButtonElement): Promise<void> {
@@ -152,45 +164,60 @@ describe("the save cleanup sheet", () => {
     expect(opened().textContent).toContain("2.1 MB theme · 3.4 MB unused");
   });
 
-  it("draws an image's own thumbnail and a video's play mark", () => {
+  it("draws an image's and a video's own thumbnail", () => {
     void open();
 
     const rows = [...opened().querySelectorAll("li")];
-    // The same mark the Assets pane draws for the same file.
+    // The same marks the Assets pane draws for the same files.
     expect(rows[1]?.querySelector("img")?.getAttribute("src")).toBe(
       "blob:studio",
     );
-    expect(rows[2]?.querySelector("svg")).not.toBeNull();
+    expect(rows[2]?.querySelector("video")?.getAttribute("src")).toBe(
+      "blob:loop",
+    );
     // No name was given, so no subtitle line is drawn for one: a rendered
     // `undefined · <title>` would contain the separator and fail here.
     expect(opened().textContent).not.toContain(` · ${TITLE}`);
   });
 
-  it("defaults the checkbox off", () => {
+  it("defaults every file checkbox off and offers selecting them all", () => {
     void open();
 
-    expect(checkbox().checked).toBe(false);
-    expect(checkbox().getAttribute("data-yunari-save-cleanup-remove")).toBe("");
-    expect(opened().textContent).toContain(
-      uiCopy.saveCleanup.removeAfterSave(FILES.length),
+    expect(fileCheckboxes().map((input) => input.checked)).toEqual(
+      FILES.map(() => false),
     );
+    expect(removeAll().textContent).toBe(uiCopy.saveCleanup.removeAll);
     expect(opened().textContent).toContain(uiCopy.saveCleanup.warning);
   });
 
-  it("answers keep when the save is pressed unchecked", async () => {
+  it("answers keep when the save is pressed with nothing checked", async () => {
     const pending = open();
 
     await press(buttonNamed(TITLE));
     expect(await pending).toBe("keep");
   });
 
-  it("answers remove only when the checkbox was checked", async () => {
+  it("answers only the files that were checked", async () => {
     const pending = open();
 
-    await act(async () => checkbox().click());
-    expect(checkbox().checked).toBe(true);
+    await act(async () => fileCheckboxes()[1]?.click());
     await press(buttonNamed(TITLE));
-    expect(await pending).toBe("remove");
+    expect(await pending).toEqual({ action: "remove", assetIds: ["studio"] });
+  });
+
+  it("selects every file from the remove-all button", async () => {
+    const pending = open();
+
+    await press(removeAll());
+    expect(fileCheckboxes().map((input) => input.checked)).toEqual(
+      FILES.map(() => true),
+    );
+    expect(removeAll().disabled).toBe(true);
+    await press(buttonNamed(TITLE));
+    expect(await pending).toEqual({
+      action: "remove",
+      assetIds: FILES.map((file) => file.id),
+    });
   });
 
   it("answers cancel from its own button", async () => {

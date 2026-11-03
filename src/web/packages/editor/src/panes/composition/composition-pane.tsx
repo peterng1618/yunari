@@ -502,9 +502,11 @@ export function CompositionPane({
               // here is cheap and the shell has no global key handler to own
               // the roving state, so all rows stay tabbable.
               tabIndex={0}
-              // What the row says, not the key behind it: a tooltip that
-              // printed a raw uuid told the author nothing the row did not.
-              title={row.name}
+              // **No `title`.** A native tooltip appears on hover and repeats
+              // what the row already says: the name, or the kind's own word for
+              // an unnamed object, which reads as the object's class. The hover
+              // state is the state controls and nothing else, because a tooltip
+              // that duplicates the row's text adds noise instead of a fact.
               onMouseEnter={() => setHovered(row.id)}
               // `mouseleave` rather than `mouseout`: it fires once on leaving
               // the row, not again for every descendant the pointer crosses on
@@ -785,12 +787,11 @@ export function CompositionPane({
                   accessible name is the concatenation of its own columns, so the
                   `@key` the specimen used to carry as well said every binding in
                   the panel twice over — which is why the projection no longer
-                  prints one where this column will. */}
+                  prints one where this column will. **No `title` either**: a
+                  native tooltip on this span repeated the token name on hover,
+                  and hover belongs to the state controls. */}
               {row.bound.length === 0 ? null : (
-                <span
-                  className="yunari-layer-bound"
-                  title={row.bound.join(uiCopy.panels.boundSeparator)}
-                >
+                <span className="yunari-layer-bound">
                   {row.bound.join(uiCopy.panels.boundSeparator)}
                 </span>
               )}
