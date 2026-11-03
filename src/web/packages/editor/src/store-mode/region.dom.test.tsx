@@ -299,10 +299,11 @@ it("draws the search well and the sort well, and the sort follows the half", asy
 
 /**
  * **The density slider names the level the cards are drawn at and writes the
- * viewer's choice.** jsdom reports no width, so the cards fall back to one per
- * row at the level's own target height; the card's width is therefore the
- * visible answer the chosen level reached the grid. The stored value is the
- * level's name, not a count: the count moves with the window.
+ * viewer's choice.** jsdom reports no width, so the packing falls back to one
+ * card per row at the level's own target height; that target is the row's
+ * width, which is therefore the visible answer the chosen level reached the
+ * grid. The stored value is the level's name, not a count: the count moves with
+ * the window.
  */
 it("starts from the default level and applies a chosen one", async () => {
   await mountStore(listing(2));
@@ -314,18 +315,23 @@ it("starts from the default level and applies a chosen one", async () => {
       ),
       "density slider",
     );
+  const firstRow = (): HTMLElement =>
+    must(
+      document.body.querySelector<HTMLElement>("[data-yunari-store-row]"),
+      "gallery row",
+    );
   expect(
     slider().getAttribute("aria-valuetext"),
     "the slider does not name the level it starts on",
   ).toBe(uiCopy.store.density.levels.comfortable);
-  /** The drawing fixture is 16:9, so a level's target height answers the card's
+  /** The drawing fixture is 16:9, so a level's target height answers the row's
    *  width in the unmeasured fallback. */
-  const cardWidthAt = (level: "comfortable" | "spacious"): number =>
+  const rowWidthAt = (level: "comfortable" | "spacious"): number =>
     Math.round(targetCardWidth(level) * (16 / 9));
   expect(
-    Number.parseFloat(cells()[0]?.style.width ?? ""),
+    Number.parseFloat(firstRow().style.maxWidth),
     "the grid did not take the default level's target",
-  ).toBe(cardWidthAt("comfortable"));
+  ).toBe(rowWidthAt("comfortable"));
 
   await chooseDensity("spacious");
 
@@ -334,9 +340,9 @@ it("starts from the default level and applies a chosen one", async () => {
     "the slider does not name the level the viewer chose",
   ).toBe(uiCopy.store.density.levels.spacious);
   expect(
-    Number.parseFloat(cells()[0]?.style.width ?? ""),
+    Number.parseFloat(firstRow().style.maxWidth),
     "the chosen level did not reach the grid",
-  ).toBe(cardWidthAt("spacious"));
+  ).toBe(rowWidthAt("spacious"));
   expect(
     window.localStorage.getItem("yunari.editor.store-density"),
     "the chosen level was not remembered",

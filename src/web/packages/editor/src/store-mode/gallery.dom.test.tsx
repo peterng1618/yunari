@@ -20,7 +20,6 @@ import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import { targetCardWidth } from "../editor-shell/grid-density.js";
 import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { Gallery } from "./gallery.js";
@@ -252,16 +251,16 @@ it("contains the theme's picture in the card's band", async () => {
 });
 
 /**
- * **A card is the row's height and its own ratio's width.** The row gives every
- * card one height; each card takes the width that keeps its picture whole, so a
- * portrait theme is a narrow card beside a landscape one instead of a square
- * that reserves as much area as any other card.
+ * **A card's track weight is its own ratio.** The picture box carries that
+ * ratio, and the row's tracks are weighted by it, so a portrait card is a
+ * narrow track beside a landscape one instead of a square that reserves as much
+ * area as any other card — and equal weights-per-ratio make the row's picture
+ * heights agree.
  *
  * jsdom measures nothing, so the pane reports no width and the packing falls
- * back to one card per row at the density's target height. The widths below are
- * that fallback's arithmetic, and the equal heights are the row's own rule.
+ * back to one card per row at the density's target height.
  */
-it("lays each card at the row's height and its ratio's width", async () => {
+it("weights each card's track by its own ratio", async () => {
   const portrait = facetRecordOf({
     ...DOCUMENT,
     artboard: { width: 1080, height: 1920 },
@@ -283,37 +282,36 @@ it("lays each card at the row's height and its ratio's width", async () => {
     />,
   );
 
-  const heights = Array.from(
+  const pictures = Array.from(
     container.querySelectorAll<HTMLElement>("[data-yunari-store-picture]"),
-    (box) => Number.parseFloat(box.style.height),
+    (box) => Number.parseFloat(box.style.aspectRatio),
   );
-  const target = targetCardWidth("comfortable");
-  expect(heights, "the row did not give both cards one height").toEqual([
-    target,
-    target,
-  ]);
-  const widths = Array.from(
-    container.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
-    (cell) => Number.parseFloat(cell.style.width),
+  expect(pictures[0], "the landscape box is not 16:9").toBeCloseTo(16 / 9);
+  expect(pictures[1], "the portrait box is not 9:16").toBeCloseTo(9 / 16);
+  const rows = Array.from(
+    container.querySelectorAll<HTMLElement>("[data-yunari-store-row]"),
   );
-  expect(widths, "a card is not its own ratio's width").toEqual([
-    Math.round(target * (16 / 9)),
-    Math.round(target * (9 / 16)),
-  ]);
+  expect(
+    rows,
+    "the no-width fallback did not give each card its own row",
+  ).toHaveLength(2);
+  expect(
+    rows.map((row) => Number.parseFloat(row.style.gridTemplateColumns)),
+    "a card's track is not weighted by its own ratio",
+  ).toEqual(pictures);
 });
 
 /**
- * **A row is flushed at both edges, and every card keeps its own ratio.** A wide
- * theme takes the width it needs to stay legible instead of being squeezed into
- * one column's strip; the portrait theme beside it takes a narrow slot. The two
- * cards and their gutter together are exactly the pane's width, which is what
- * "justified" means — the row is not merely wrapped.
+ * **A row is one grid of ratio-weighted tracks, not a wrap.** A wide theme gets
+ * a wide track and the portrait theme beside it a narrow one; the tracks are
+ * fractions of the row, so the row reaches both edges without the packing's
+ * pixel arithmetic having to survive a resize.
  *
  * jsdom reports no width, so this case supplies the pane's measurement for the
  * mount. The packing's own arithmetic is proved in `justified-rows.test.ts`;
  * what this case adds is that the measured width reaches it.
  */
-it("packs wide and portrait cards into one row flush at both edges", async () => {
+it("packs wide and portrait cards into one ratio-weighted row", async () => {
   const PANE = 1352;
   const container = await withClientWidth(PANE, () =>
     mount(
@@ -335,40 +333,32 @@ it("packs wide and portrait cards into one row flush at both edges", async () =>
     ),
   );
 
-  const grid = must(
-    container.querySelector<HTMLElement>("[data-yunari-store-gallery]"),
-    "gallery",
-  );
-  expect(
-    grid.style.gridTemplateColumns,
-    "the gallery is still a CSS grid rather than justified rows",
-  ).toBe("");
   const cells = Array.from(
     container.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
   );
   expect(cells, "the two cards did not pack into one row").toHaveLength(2);
-  const widths = cells.map((cell) => Number.parseFloat(cell.style.width));
+  const row = must(
+    container.querySelector<HTMLElement>("[data-yunari-store-row]"),
+    "the row the packing gave the two cards",
+  );
   expect(
-    widths[0],
-    "the wide theme was squeezed into a column's strip",
-  ).toBeGreaterThan(900);
+    container.querySelectorAll("[data-yunari-store-row]"),
+    "the cards did not share the one row the packing gave them",
+  ).toHaveLength(1);
+  const tracks = row.style.gridTemplateColumns
+    .split(" ")
+    .map((track) => Number.parseFloat(track));
+  expect(tracks[0], "the wide theme's track is not its own ratio").toBeCloseTo(
+    3840 / 1080,
+  );
   expect(
-    widths[1],
-    "the portrait theme did not take a narrow slot",
-  ).toBeLessThan(300);
+    tracks[1],
+    "the portrait theme's track is not its own ratio",
+  ).toBeCloseTo(1080 / 1920);
   expect(
-    (widths[0] ?? 0) + (widths[1] ?? 0) + 12,
-    "the row is not flush at both edges",
-  ).toBe(PANE);
-  expect(
-    new Set(
-      Array.from(
-        container.querySelectorAll<HTMLElement>("[data-yunari-store-picture]"),
-        (box) => box.style.height,
-      ),
-    ).size,
-    "the cards in one row do not share a height",
-  ).toBe(1);
+    row.style.maxWidth,
+    "a full row carries a maximum width and cannot reach the far edge",
+  ).toBe("");
 });
 
 /**

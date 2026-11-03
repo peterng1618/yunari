@@ -35,6 +35,7 @@ describe("justifiedRows", () => {
     const [row] = rows([item("a", 1), item("b", 1), item("c", 1)]);
     expect(row?.height).toBe(272);
     expect(row && rowWidth(row)).toBe(840);
+    expect(row?.short, "the fitting tail is not marked short").toBe(true);
   });
 
   it("scales a full row until it lands on the container edge", () => {
