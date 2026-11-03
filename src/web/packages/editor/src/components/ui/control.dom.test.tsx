@@ -137,6 +137,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "two range inputs: a drag is the value, with no draft to compose or commit",
   ],
   [
+    "store-mode/density-slider.tsx",
+    "a range input: a discrete level is the value, with no draft to compose or commit",
+  ],
+  [
     "panes/composition/composition-pane.tsx",
     "a copy: the inline rename field is uncontrolled and keeps its own Enter, Escape and blur; only the composing guard is shared",
   ],

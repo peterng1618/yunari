@@ -2,6 +2,12 @@ import type * as React from "react";
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import {
+  cardWidthFor,
+  columnsForWidth,
+  type GridDensityLevel,
+  targetCardWidth,
+} from "../editor-shell/grid-density.js";
+import {
   ASSIGN_ITEM_GLYPH,
   CHECK_GLYPH,
   DELETE_ITEM_GLYPH,
@@ -16,6 +22,7 @@ import { uiCopy } from "../ui-copy.js";
 import { CELL_ACTION_REASONS } from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
 import { type InstallState, installStateOf } from "./install-state.js";
+import { justifiedRows } from "./justified-rows.js";
 import type { CellAction, StoreItem } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
 import type { SubmitControl } from "./use-submit.js";
@@ -60,58 +67,40 @@ const CELL_ACTION_GLYPHS: Readonly<Record<CellAction, LucideIcon>> = {
  *  this follows `uiCopy`. */
 const DOWNLOAD_COUNT = new Intl.NumberFormat("en-US");
 
-/** The grid's gutter, and the height of the row unit the spans are counted in.
- *  **The gutter rides the row span, not `row-gap`.** A row-gap and a
- *  `ceil`-rounded span each add their own air, so the vertical gap varied by
- *  up to a row unit while the column gap stayed fixed. With no row-gap the
- *  span covers `height + GAP` and the visible gap is the same GAP the columns
- *  use. */
-const MASONRY_GAP = 12;
-const MASONRY_ROW = 1;
+/** The gallery's gutter, in both directions. */
+const GALLERY_GAP = 12;
 
-/** Gives one card the row span its own height needs, so the grid packs cards
- *  of different heights under each other rather than holding every card to its
- *  row's tallest one. `self-start` keeps the card's measured height its
- *  content's; without it the span would stretch the card and the measurement
- *  would chase itself. */
-function useMasonrySpan(ref: React.RefObject<HTMLLIElement | null>): void {
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (node === null || typeof ResizeObserver === "undefined") return;
-    const measure = (): void => {
-      const height = node.getBoundingClientRect().height;
-      if (height <= 0) return;
-      node.style.gridRowEnd = `span ${Math.ceil(
-        (height + MASONRY_GAP) / MASONRY_ROW,
-      )}`;
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref]);
+/** The ratio a record without a usable size is laid out at: the old 2:1 band
+ *  rather than a card that collapses. */
+function ratioOf(item: StoreItem): number {
+  return item.facets.width > 0 && item.facets.height > 0
+    ? item.facets.width / item.facets.height
+    : 2;
 }
 
 /**
  * The grid of cells: a masonry of cards at the themes' own heights.
  *
- * **Every card takes one column**, whatever its own ratio: a wide theme shows a
- * short card rather than a double-width one, so the columns stay the density
- * the viewer chose. The count is the region's — a stored choice, or the width's
- * own count where the viewer has made none — and the grid only spells it.
+ * **A row is justified, not a masonry column.** Cards are collected until their
+ * natural widths pass the scroller, and the row is scaled so its cards and
+ * gutters together equal the scroller's width — flush at both edges. A 4:1
+ * theme therefore takes the width it needs to stay legible instead of becoming
+ * a strip, and a square theme no longer reserves a square's area out of every
+ * row. The final row keeps the target height and is short on the right.
  *
- * The packing itself is the one-row-unit span the cards set after measuring:
- * CSS has no masonry, so each card reserves the rows its height needs and
- * `row dense` backfills the gaps.
+ * **The density is a level, and the columns are the width's answer for it.**
+ * The count is derived here from the measured scroller rather than handed down
+ * as a number, so a resize re-derives it instead of freezing the count that was
+ * chosen in another window size.
  *
  * The four actions travel through one `onAction`, because a cell draws four and
  * a callback per action would be four props a caller can half-wire.
  */
 export function Gallery(props: {
   readonly items: readonly StoreItem[];
-  /** How many columns the grid draws. The region owns the number so the density
-   *  control and the grid cannot disagree. */
-  readonly columns: number;
+  /** The viewer's density level. The header's slider owns it; the grid only
+   *  reads it, so the control and the packing cannot disagree. */
+  readonly density: GridDensityLevel;
   readonly onAction: (action: CellAction, id: string) => void;
   /** Opens one item's own surface — the modal — which is the cell's own
    *  gesture rather than one of its four actions. */
@@ -124,51 +113,87 @@ export function Gallery(props: {
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
+  const listRef = useRef<HTMLUListElement>(null);
+  const [width, setWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const node = listRef.current;
+    if (node === null) return undefined;
+    const measure = (): void => setWidth(node.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const columns = columnsForWidth(width, props.density);
+  // Before the first measurement, the count answers for a pane of the target
+  // card size, so the first frame reserves the cards it is about to draw.
+  const unit = targetCardWidth(props.density);
+  const targetHeight =
+    width > 0
+      ? cardWidthFor(width, columns)
+      : cardWidthFor(columns * unit + GALLERY_GAP * (columns - 1), columns);
+  const rows = justifiedRows({
+    items: props.items,
+    ratioOf,
+    width,
+    targetHeight,
+    gap: GALLERY_GAP,
+  });
+
   return (
     <ul
+      ref={listRef}
       data-yunari-store-gallery=""
-      style={{
-        gridTemplateColumns: `repeat(${props.columns}, minmax(0, 1fr))`,
-      }}
-      className="grid auto-rows-[1px] items-start gap-x-[var(--space-12)] [grid-auto-flow:row_dense]"
+      className="flex flex-wrap items-start gap-[var(--space-12)]"
     >
-      {props.items.map((item) => (
-        <Cell
-          key={item.id}
-          item={item}
-          onAction={props.onAction}
-          onOpenItem={props.onOpenItem}
-          install={props.install}
-          submit={props.submit}
-        />
-      ))}
+      {rows.flatMap((row) =>
+        row.items.map(({ item, width: cardWidth }) => (
+          <Cell
+            key={item.id}
+            item={item}
+            width={cardWidth}
+            pictureHeight={row.height}
+            onAction={props.onAction}
+            onOpenItem={props.onOpenItem}
+            install={props.install}
+            submit={props.submit}
+          />
+        )),
+      )}
     </ul>
   );
 }
 
 /**
- * One item: its picture, its name, and one meta band with the updated date and
- * the card's controls.
+ * One item: its picture, one row for the name, the updated date and the card's
+ * controls, and — only where it carries facts of its own — a band beneath.
  *
  * **The picture is the theme's own shape, contained, not cropped**: a card
  * advertises the theme's own picture, and a cropped one shows a composition the
- * author never drew. That is also what lets the library flow as a masonry of
- * varied heights. **The band's left slot
- * has one occupant per half, and they are exclusive**: an online item draws the
- * kind badge and the download count, and a library item draws the origin pill
- * where the host holds a record of where the theme came from. The date sits
- * before it, and the author is a hover chip over the picture.
+ * author never drew. In a justified row its height is the row's, so the picture
+ * fills exactly the width the row gave it.
+ *
+ * **The date and the controls share the name's line.** The date sits at the
+ * right of that line; attending the card fades it out and fades the controls in
+ * over the same space. A band remains only for the facts that are not this
+ * theme's identity — an online item's kind and download count, or an origin
+ * pill — so a plain library theme no longer repeats a date line under its name.
  */
 function Cell(props: {
   readonly item: StoreItem;
+  /** The row's width for this card, in pixels. */
+  readonly width: number;
+  /** The row's picture height, shared by every card in it. */
+  readonly pictureHeight: number;
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
   const { item, onAction, onOpenItem, install, submit } = props;
-  const ref = useRef<HTMLLIElement>(null);
-  useMasonrySpan(ref);
   const catalogue = item.catalogue;
   // The left slot branches on whether the item has catalogue facts; the action
   // slot on the install decision. They read different facts on purpose: a
@@ -201,118 +226,61 @@ function Cell(props: {
 
   return (
     <li
-      ref={ref}
       data-yunari-store-cell={item.id}
-      className="group relative flex flex-col self-start overflow-hidden rounded-lg border border-edge bg-panel-2"
+      style={{ width: props.width }}
+      className="group relative flex flex-none flex-col overflow-hidden rounded-lg border border-edge bg-panel-2"
     >
-      {/* **The author is a hover chip, not a line.** The name row belongs to
-          the theme, and the facts band's slots are the kind, the count and the
-          actions; a byline before them spent width on every card for a fact
-          read once. The chip sits over the picture's top-right corner, appears
-          while the card is attended, and keeps its words in the tree either
-          way — `opacity` hides it from sight, not from a screen reader. */}
+      {/* **The author is a hover chip, not a line.** The chip sits over the
+          picture's top-right corner, appears while the card is attended, and
+          keeps its words in the tree either way — `opacity` hides it from
+          sight, not from a screen reader. */}
       <span
         data-yunari-store-cell-author=""
         className="pointer-events-none absolute right-[var(--space-8)] top-[var(--space-8)] rounded-full bg-panel/80 px-[var(--space-8)] py-[var(--space-4)] font-mono text-2xs text-muted opacity-0 transition-opacity group-hover:opacity-100"
       >
         {authorChip(item)}
       </span>
-      {/* **The cell's own surface is a control**. A button rather than a handler
-          on the `li`, because the item's modal must be reachable without a
-          mouse (the keyboard section) — and because a press on one of the four
-          actions below must not open the item as well.
-
-          **It is the picture and the name, and the date line is its sibling.**
-          A button's own descendants are presentational, so a date inside it
-          would be reachable only through the button's name; beside it, the
-          date is still read, and the button's own name is the theme's.
-
-          **The padding is the surface's own arithmetic**: the name's box pads
-          the picture on three sides and stops 4px short of the band, and the
-          band's wrapper carries the 10px foot — the same name, date and 26px
-          band the card drew before the author became a chip. */}
+      {/* **The picture and the name are two presses on the same document.**
+          They are separate buttons so the controls can sit outside both: a
+          button's own descendants are presentational, and one wrapping the
+          actions would open the item on every press. */}
       <button
         type="button"
         data-yunari-store-cell-surface=""
         onClick={() => onOpenItem(item.id)}
-        className="flex w-full flex-col text-left"
+        className="block w-full"
       >
-        <Picture item={item} />
-        {/* The name's box is this wrapper so the state's word can sit after the
-            name without leaving the padded column: **the badge belongs to the
-            name's line**, not to the facts band, which is one occupant per half
-            and nothing about the author's store row. The padding is the
-            surface's own arithmetic, kept on the wrapper. */}
-        <span className="flex items-center gap-[var(--space-6)] px-[var(--space-10)] pt-[var(--space-8)] pb-[var(--space-4)]">
+        <Picture item={item} height={props.pictureHeight} />
+      </button>
+      {/* **The date and the controls share one line.** The date is the resting
+          reading; attending the card fades it out and the controls fade in over
+          the same space, so the row never grows and the card never repeats a
+          second date line beneath itself. */}
+      <div className="relative flex items-center gap-[var(--space-6)] px-[var(--space-10)] pt-[var(--space-8)] pb-[var(--space-10)]">
+        <button
+          type="button"
+          data-yunari-store-cell-name-press=""
+          onClick={() => onOpenItem(item.id)}
+          className="min-w-0 flex-1 text-left"
+        >
           <span
             data-yunari-store-cell-name=""
-            className="truncate text-sm font-medium text-text"
+            className="block truncate text-sm font-semibold text-text"
           >
             {item.name}
           </span>
-          <StoreStatusBadge status={item.status} />
-        </span>
-      </button>
-      <div className="px-[var(--space-10)] pb-[var(--space-10)]">
-        {/* The band's own hook, because **what the badge sits in is the claim**:
-            the layout puts it here rather than beside the name, so a case that
-            only asked whether the badge exists would stay green through a move
-            that changed the grid. */}
+        </button>
+        <StoreStatusBadge status={item.status} />
         <span
-          data-yunari-store-cell-band=""
-          className="flex min-w-0 items-center gap-[var(--space-6)]"
+          data-yunari-store-cell-byline=""
+          className="flex-none font-mono text-2xs text-muted transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
         >
-          <span
-            data-yunari-store-cell-byline=""
-            className="min-w-0 truncate font-mono text-xs text-muted"
-          >
-            {byline(item)}
-          </span>
-          {/* **The left slot has one occupant per half** — the online cell's
-              kind and count, or the library cell's origin pill — because the
-              two derive from facts the other half does not have and fitting
-              four readings in the band would change the grid's minimum shape.
-              The origin pill is drawn only for a theme the host holds a record
-              of: a theme the author made here came from nowhere, and a badge
-              saying so would be a fact no record carries. */}
-          {catalogue === undefined ? (
-            item.origin === undefined ? null : (
-              <span
-                data-yunari-store-cell-origin=""
-                className="flex-none rounded-full border border-edge bg-panel px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
-              >
-                {uiCopy.store.fromStore}
-              </span>
-            )
-          ) : (
-            <>
-              <span
-                data-yunari-store-cell-kind=""
-                className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
-              >
-                {/* A kind this build does not know prints its identifier, which
-                    is the rule for a client older than the kind. */}
-                {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
-              </span>
-              <span
-                data-yunari-store-cell-downloads=""
-                className="flex flex-none items-center gap-[var(--space-4)] font-mono text-xs text-muted"
-              >
-                {/* The download mark, the same glyph the export
-                    action wears: one arrow for "taken from the store". The
-                    mark is `--faint`, one step below the number's `--muted`. */}
-                <span className="flex-none text-faint">
-                  <Glyph icon={EXPORT_ITEM_GLYPH} size={12} />
-                </span>
-                {/* The noun is read, not seen — see `uiCopy.store.counts`. */}
-                {DOWNLOAD_COUNT.format(catalogue.downloads)}
-                <span className="sr-only">
-                  {` ${uiCopy.store.counts.downloads(catalogue.downloads)}`}
-                </span>
-              </span>
-            </>
-          )}
-          <span className="flex-1" />
+          {byline(item)}
+        </span>
+        <div
+          data-yunari-store-cell-actions=""
+          className="pointer-events-none absolute right-[var(--space-10)] top-[var(--space-8)] flex items-center gap-[var(--space-6)] opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+        >
           {installState === "none" ? (
             <>
               {CELL_ACTIONS.map((action) => {
@@ -325,9 +293,6 @@ function Cell(props: {
                       id={controlId}
                       label={uiCopy.store.cell.actions[action]}
                       disabled={reason !== undefined}
-                      // `exactOptionalPropertyTypes` wants the prop omitted rather
-                      // than handed `undefined`, and a button with a reason of its
-                      // own must not describe itself by one it does not have.
                       {...(reason === undefined
                         ? {}
                         : { describedById: `${controlId}-reason` })}
@@ -349,23 +314,76 @@ function Cell(props: {
           ) : (
             <InstallAction item={item} state={installState} install={install} />
           )}
-        </span>
-        {/* **The host's reason, beside the control it refused** — in the cell
+        </div>
+      </div>
+      {catalogue === undefined && item.origin === undefined ? null : (
+        <div className="px-[var(--space-10)] pb-[var(--space-10)]">
+          {/* The band's own hook, because **what the badge sits in is the claim**:
+            the layout puts it here rather than beside the name, so a case that
+            only asked whether the badge exists would stay green through a move
+            that changed the grid. */}
+          <span
+            data-yunari-store-cell-band=""
+            className="flex min-w-0 items-center gap-[var(--space-6)]"
+          >
+            {/* **The band is the facts the name line cannot carry** — the online
+              cell's kind and count, or the library cell's origin pill. A theme
+              that came from nowhere and has no catalogue record draws no band
+              at all: a row repeating its date under the name it already reads
+              is the repetition this card removed. */}
+            {catalogue === undefined ? (
+              <span
+                data-yunari-store-cell-origin=""
+                className="flex-none rounded-full border border-edge bg-panel px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
+              >
+                {uiCopy.store.fromStore}
+              </span>
+            ) : (
+              <>
+                <span
+                  data-yunari-store-cell-kind=""
+                  className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
+                >
+                  {/* A kind this build does not know prints its identifier, which
+                    is the rule for a client older than the kind. */}
+                  {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
+                </span>
+                <span
+                  data-yunari-store-cell-downloads=""
+                  className="flex flex-none items-center gap-[var(--space-4)] font-mono text-xs text-muted"
+                >
+                  {/* The download mark, the same glyph the export
+                    action wears: one arrow for "taken from the store". The
+                    mark is `--faint`, one step below the number's `--muted`. */}
+                  <span className="flex-none text-faint">
+                    <Glyph icon={EXPORT_ITEM_GLYPH} size={12} />
+                  </span>
+                  {/* The noun is read, not seen — see `uiCopy.store.counts`. */}
+                  {DOWNLOAD_COUNT.format(catalogue.downloads)}
+                  <span className="sr-only">
+                    {` ${uiCopy.store.counts.downloads(catalogue.downloads)}`}
+                  </span>
+                </span>
+              </>
+            )}
+          </span>
+          {/* **The host's reason, beside the control it refused** — in the cell
             rather than in the band, because a sentence is not a 26px reading
             and truncating it would swallow the part that says what to fix. Only
             a cell with catalogue facts can have been refused: drawn
             unconditionally, a library item whose id collided with a refused
             catalogue id would carry the sentence with no control. The
             announcement is the region's one live region, not this span's. */}
-        {installState === "none" || refusal === undefined ? null : (
-          <span
-            data-yunari-store-cell-install-refusal=""
-            className="block pt-[var(--space-6)] text-2xs text-warn"
-          >
-            {refusal}
-          </span>
-        )}
-      </div>
+          {installState === "none" || refusal === undefined ? null : (
+            <span
+              data-yunari-store-cell-install-refusal=""
+              className="block pt-[var(--space-6)] text-2xs text-warn"
+            >
+              {refusal}
+            </span>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -426,11 +444,10 @@ function InstallAction(props: {
 /**
  * The picture box, and the theme's own ground behind it.
  *
- * **The box is the theme's own shape.** A card keeps the authored canvas's
- * aspect ratio rather than cropping it to one band, which is what lets the
- * library flow as a masonry of varied heights. `object-contain` inside the
- * reserved box means a thumbnail whose pixels do not share the box's exact
- * ratio is letterboxed on its ground, never cropped.
+ * **The box's height is the row's, and the row's width is the theme's own
+ * ratio** — the two together give the picture exactly the shape it was drawn
+ * at, so `object-contain` letterboxes nothing and crops nothing. A row whose
+ * width has not been measured yet still reserves the card at its natural size.
  *
  * **A theme with no picture draws its ground, not a broken image.** The host
  * answers `404` at a theme's thumbnail address when it has stored none
@@ -452,7 +469,10 @@ function InstallAction(props: {
  * The image is `alt=""` because the cell names the theme beside it: a picture
  * repeating the name is read twice.
  */
-function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
+function Picture(props: {
+  readonly item: StoreItem;
+  readonly height: number;
+}): React.JSX.Element {
   const { item } = props;
   const picture =
     item.thumbnailUrl === undefined
@@ -463,12 +483,6 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
         };
   const [broken, setBroken] = useState<string | undefined>(undefined);
   const showPicture = picture !== undefined && picture.key !== broken;
-  // The authored canvas's ratio, which every theme declares. A record without a
-  // usable size falls back to the old 2:1 band rather than collapsing.
-  const ratio =
-    item.facets.width > 0 && item.facets.height > 0
-      ? `${item.facets.width} / ${item.facets.height}`
-      : "2 / 1";
 
   return (
     <span
@@ -476,7 +490,7 @@ function Picture(props: { readonly item: StoreItem }): React.JSX.Element {
       aria-hidden
       className="relative block w-full overflow-hidden"
       style={{
-        aspectRatio: ratio,
+        height: props.height,
         ...(item.ground === undefined ? {} : { background: item.ground }),
       }}
     >

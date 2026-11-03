@@ -4,17 +4,16 @@ import {
   semanticKeysByFamily,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlWell } from "../components/ui/control-well.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import {
-  autoColumnsForWidth,
   createGridDensityPreference,
-  GRID_COLUMNS_MAX,
-  GRID_COLUMNS_MIN,
+  DEFAULT_GRID_DENSITY,
+  type GridDensityLevel,
 } from "../editor-shell/grid-density.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
 import { fileNameFor, serializeThemePackage } from "../persist.js";
@@ -26,6 +25,7 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { AssignChoice, AssignDisplay } from "./assign-display.js";
+import { DensitySlider } from "./density-slider.js";
 import {
   type Facet,
   type FacetOption,
@@ -65,24 +65,11 @@ export type StoreTab = "local" | "online";
  *  browser case reaches for it by name. */
 const SORT_ID = "yunari-store-sort";
 
-/** The density well's id, named for the same reason `SORT_ID` is. */
-const DENSITY_ID = "yunari-store-density";
-
 /** How many more cells arrive each time the sentinel reaches the scroller's
  *  lower half. Two rows of a 1080p grid's four columns, so the reader reaches the
  *  new rows before the old ones end without the region mounting the library in
  *  one pass. */
 const LOAD_BATCH = 24;
-
-/** The density well's list, 2 to 8: the bounds are the module's, so the control
- *  cannot offer a count the grid refuses. */
-const DENSITY_OPTIONS = Array.from(
-  { length: GRID_COLUMNS_MAX - GRID_COLUMNS_MIN + 1 },
-  (_unused, index) => {
-    const columns = GRID_COLUMNS_MIN + index;
-    return { id: String(columns), name: String(columns) };
-  },
-);
 
 /**
  * The browser's own storage, or nothing where the accessor itself refuses — a
@@ -524,17 +511,15 @@ function StoreRegion(props: {
     ...DEFAULT_SORT,
   });
   const [chosen, setChosen] = useState<FacetSelection>({});
-  /** The viewer's density choice, or `undefined` until they make one. The
-   *  default is responsive: the scroller's width answers the count, so 1080p,
-   *  4K and an ultrawide each open on a column count that fits them. */
+  /** The viewer's density level, or the default until they choose one. The
+   *  level is the choice; the column count is the width's answer for it inside
+   *  `Gallery`, so a resize re-derives the count rather than freezing it. */
   const [density] = useState(() =>
     createGridDensityPreference(browserStorage()),
   );
-  const [chosenColumns, setChosenColumns] = useState<number | undefined>(() =>
-    density.read(),
+  const [level, setLevel] = useState<GridDensityLevel>(
+    () => density.read() ?? DEFAULT_GRID_DENSITY,
   );
-  /** The width's own count, kept in state so a resize redraws the grid. */
-  const [autoColumns, setAutoColumns] = useState(GRID_COLUMNS_MIN);
   /** How many cells the scroller has reached. A filter, a sort or a half change
    *  puts the list back to its first batch, which is the old "first page" rule
    *  expressed for a list with no pages. */
@@ -660,23 +645,6 @@ function StoreRegion(props: {
       props.onThemePublished?.(backup.id);
     },
   });
-  // The scroller is the width CSS lays the grid across, so it is the one
-  // element the responsive default measures. `useLayoutEffect` keeps the first
-  // paint from showing the fallback count before the measurement lands.
-  useLayoutEffect(() => {
-    const node = scroller.current;
-    if (node === null) return undefined;
-    const measure = (): void => {
-      const width = node.clientWidth;
-      if (width > 0) setAutoColumns(autoColumnsForWidth(width));
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
   // A half is a different listing, so it starts at the first batch rather than
   // at whatever depth the previous half had reached.
   useEffect(() => {
@@ -726,7 +694,6 @@ function StoreRegion(props: {
   /** What the scroller has reached. The rest is the region's, not the grid's:
    *  the sentinel below asks for another batch as the reader nears the end. */
   const shown = sorted.slice(0, visible);
-  const columns = chosenColumns ?? autoColumns;
 
   // Which half's read is being drawn, and how to ask that half again. The
   // online half chooses its own source, so its retry follows the same choice.
@@ -953,7 +920,7 @@ function StoreRegion(props: {
     <div data-yunari-store-region="" className="flex min-h-0 flex-1 flex-col">
       <div
         data-yunari-store-header=""
-        className="flex flex-none flex-wrap items-center gap-[var(--space-16)] px-[var(--space-16)] pt-[var(--space-12)]"
+        className="flex flex-none flex-wrap items-center gap-[var(--space-16)] px-[var(--space-16)] pt-[var(--space-12)] pb-[var(--space-12)]"
       >
         {/* A region mounted directly owns its half control; the shell hands
             one down and draws the same control in the header instead. */}
@@ -1019,26 +986,14 @@ function StoreRegion(props: {
             showFromTop();
           }}
         />
-        {/* The density well. Its value is the count the grid draws — the
-            viewer's choice once made, the width's own count before that — so the
-            control reads the default a person is looking at rather than a
-            hidden zero. A choice is a view preference, never authored state. */}
-        <ControlSelect
-          id={DENSITY_ID}
-          label={uiCopy.store.density.label}
-          data={{ "data-yunari-store-density": "" }}
-          value={String(columns)}
-          options={DENSITY_OPTIONS}
-          onChange={(id) => {
-            const next = Number(id);
-            if (
-              !Number.isInteger(next) ||
-              next < GRID_COLUMNS_MIN ||
-              next > GRID_COLUMNS_MAX
-            ) {
-              return;
-            }
-            setChosenColumns(next);
+        {/* The density slider, at the bar's far end. It chooses a level rather
+            than a count: the count is the pane's answer for that level and
+            follows a resize. A choice is a view preference, never authored
+            state. */}
+        <DensitySlider
+          level={level}
+          onChange={(next) => {
+            setLevel(next);
             density.write(next);
           }}
         />
@@ -1078,7 +1033,7 @@ function StoreRegion(props: {
         {body.kind === "items" ? (
           <Gallery
             items={body.items}
-            columns={columns}
+            density={level}
             onAction={onAction}
             onOpenItem={setOpenId}
             install={install.control}

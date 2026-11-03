@@ -596,6 +596,11 @@ body,
      other dimension (`vg-274`). */
   --finder-search-width: 510px;
   --store-search-width: 360px;
+  /* The density slider's track and its reading column: the four steps need a
+     track wide enough to fall on, and the column holds the longest level's
+     word without moving the header. */
+  --store-density-track-width: 120px;
+  --store-density-reading-width: 84px;
   /* The narrowest card the grid draws; a 4:3 well needs this width to read. */
   --finder-card-min-width: 168px;
   /* The asset preview's box and right panel: the finder's inset-24 size, a

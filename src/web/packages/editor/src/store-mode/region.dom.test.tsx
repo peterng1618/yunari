@@ -19,7 +19,10 @@
 import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { GRID_COLUMNS_MIN } from "../editor-shell/grid-density.js";
+import {
+  GRID_DENSITY_LEVELS,
+  targetCardWidth,
+} from "../editor-shell/grid-density.js";
 import {
   createThemeLibraryClient,
   type ThemedDisplay,
@@ -123,7 +126,7 @@ afterEach(async () => {
 beforeEach(() => {
   // The grid density is the one thing this surface persists
   // (`grid-density.ts`), and jsdom's storage outlives a test: without this, a
-  // case that chooses two columns changes the next one's grid.
+  // case that chooses a wider level changes the next one's cards.
   window.localStorage.clear();
   // The region reads the catalogue when it mounts, and a case whose subject is
   // the library must not reach the network for it: the default is a failed
@@ -295,35 +298,49 @@ it("draws the search well and the sort well, and the sort follows the half", asy
 });
 
 /**
- * **The density well prints the count the grid draws and writes the viewer's
- * choice.** jsdom reports no width, so the measured default is the range's
- * minimum; choosing six puts six columns on the grid and stores the choice for
- * the next mount.
+ * **The density slider names the level the cards are drawn at and writes the
+ * viewer's choice.** jsdom reports no width, so the cards fall back to one per
+ * row at the level's own target height; the card's width is therefore the
+ * visible answer the chosen level reached the grid. The stored value is the
+ * level's name, not a count: the count moves with the window.
  */
-it("starts from the width's density and applies a chosen one", async () => {
+it("starts from the default level and applies a chosen one", async () => {
   await mountStore(listing(2));
 
-  expect(
+  const slider = (): HTMLInputElement =>
     must(
-      document.body.querySelector<HTMLElement>("[data-yunari-store-density]"),
-      "density well",
-    ).textContent,
-    "the density well does not print the count the grid draws",
-  ).toContain(String(GRID_COLUMNS_MIN));
+      document.body.querySelector<HTMLInputElement>(
+        "[data-yunari-store-density-track]",
+      ),
+      "density slider",
+    );
+  expect(
+    slider().getAttribute("aria-valuetext"),
+    "the slider does not name the level it starts on",
+  ).toBe(uiCopy.store.density.levels.comfortable);
+  /** The drawing fixture is 16:9, so a level's target height answers the card's
+   *  width in the unmeasured fallback. */
+  const cardWidthAt = (level: "comfortable" | "spacious"): number =>
+    Math.round(targetCardWidth(level) * (16 / 9));
+  expect(
+    Number.parseFloat(cells()[0]?.style.width ?? ""),
+    "the grid did not take the default level's target",
+  ).toBe(cardWidthAt("comfortable"));
 
-  await chooseDensity(6);
+  await chooseDensity("spacious");
 
   expect(
-    must(
-      document.body.querySelector<HTMLElement>("[data-yunari-store-gallery]"),
-      "gallery",
-    ).style.gridTemplateColumns,
-    "a chosen density did not reach the grid",
-  ).toBe("repeat(6, minmax(0, 1fr))");
+    slider().getAttribute("aria-valuetext"),
+    "the slider does not name the level the viewer chose",
+  ).toBe(uiCopy.store.density.levels.spacious);
   expect(
-    window.localStorage.getItem("yunari.editor.store-grid-columns"),
-    "the chosen density was not remembered",
-  ).toBe("6");
+    Number.parseFloat(cells()[0]?.style.width ?? ""),
+    "the chosen level did not reach the grid",
+  ).toBe(cardWidthAt("spacious"));
+  expect(
+    window.localStorage.getItem("yunari.editor.store-density"),
+    "the chosen level was not remembered",
+  ).toBe("spacious");
 });
 
 /**
@@ -554,8 +571,29 @@ async function chooseWell(
 const chooseSort = (id: string): Promise<void> =>
   chooseWell("data-yunari-store-sort", id, "sort");
 
-const chooseDensity = (columns: number): Promise<void> =>
-  chooseWell("data-yunari-store-density", String(columns), "density");
+/** The density slider's thumb, moved to `level` the way a range input reports a
+ *  move: the value is set through the native setter, then `input` is dispatched
+ *  so React's change handler reads it. */
+async function chooseDensity(
+  level: (typeof GRID_DENSITY_LEVELS)[number],
+): Promise<void> {
+  const slider = must(
+    document.body.querySelector<HTMLInputElement>(
+      "[data-yunari-store-density-track]",
+    ),
+    "density slider",
+  );
+  const setValue = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  if (setValue === undefined) throw new Error("the test cannot set a slider");
+  setValue.call(slider, String(GRID_DENSITY_LEVELS.indexOf(level) + 1));
+  await act(async () => {
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
 
 /** One cell's action button, pressed the way a person presses it. */
 async function pressCell(id: string, action: CellAction): Promise<void> {

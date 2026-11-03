@@ -1465,10 +1465,17 @@ export const uiCopy = {
        *  a bare "done" (`assign-display.tsx`). */
       assigned: (where: string): string => `Assigned to ${where}`,
     },
-    /** The grid's density well. Its options are the count itself — a number is
-     *  the reading, not a word — so the control needs only its own name. */
+    /** The grid's density slider. Its four levels are named rather than
+     *  numeric: the count is derived from the pane's width, so a number would
+     *  move on resize while the choice stayed still. */
     density: {
-      label: "Columns",
+      label: "Density",
+      levels: {
+        compact: "Compact",
+        comfortable: "Comfortable",
+        roomy: "Roomy",
+        spacious: "Spacious",
+      },
     },
   },
   /** The library chooser. Its two groups say which kind of thing a row is: a

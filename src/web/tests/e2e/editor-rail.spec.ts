@@ -1482,10 +1482,10 @@ test("the store lists a library, opens an item, and comes back to the same list"
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
   // A density another case left behind would make this case read that case's
-  // columns rather than the width's own count. The scroll position starts at
-  // the top because the sentinel is what loads the rest.
+  // level rather than the default. The scroll position starts at the top because
+  // the sentinel is what loads the rest.
   await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-grid-columns"),
+    window.localStorage.removeItem("yunari.editor.store-density"),
   );
   await page
     .locator(".editor-shell-mode-switch")
@@ -1500,22 +1500,44 @@ test("the store lists a library, opens an item, and comes back to the same list"
   const search = region.locator("[data-yunari-store-search]");
 
   // **The gallery, which nothing mounted before A.6**: the first batch of a
-  // thirty-item library, and the density well states the count the grid draws.
+  // thirty-item library. The density slider names the level the gallery is
+  // drawn at, and the first row is flush with the pane's right edge — both only
+  // a browser can say.
   await expect(
     cells,
     "the region does not list the library's first batch",
   ).toHaveCount(24);
   const gallery = region.locator("[data-yunari-store-gallery]");
-  const density = region.locator("[data-yunari-store-density]");
-  await expect(density, "the store draws no density well").toBeVisible();
-  const drawnColumns = await gallery.evaluate(
-    (node) => getComputedStyle(node).gridTemplateColumns.split(" ").length,
-  );
-  const densityText = await density.evaluate((node) => node.textContent ?? "");
+  const density = region.locator("[data-yunari-store-density-track]");
+  await expect(density, "the store draws no density slider").toBeVisible();
+  await expect(
+    density,
+    "the density slider does not name its level",
+  ).toHaveAttribute("aria-valuetext", uiCopy.store.density.levels.comfortable);
+  const firstRow = await gallery.evaluate((node) => {
+    const laid = Array.from(
+      node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+    );
+    const top = Math.round(laid[0]?.getBoundingClientRect().top ?? 0);
+    const row = laid.filter(
+      (cell) => Math.round(cell.getBoundingClientRect().top) === top,
+    );
+    const last = row[row.length - 1]?.getBoundingClientRect();
+    return {
+      width: node.clientWidth,
+      count: row.length,
+      spanned:
+        last === undefined ? 0 : last.right - node.getBoundingClientRect().left,
+    };
+  });
   expect(
-    Number.parseInt(densityText.match(/\d+/)?.[0] ?? "", 10),
-    `the density well does not state the grid's column count (${densityText})`,
-  ).toBe(drawnColumns);
+    firstRow.count,
+    `the first row holds a single card (${JSON.stringify(firstRow)})`,
+  ).toBeGreaterThan(1);
+  expect(
+    Math.round(firstRow.spanned),
+    `the first row is not flush with the pane (${JSON.stringify(firstRow)})`,
+  ).toBe(firstRow.width);
 
   /**
    * The stage's height, the modal box and the caption's stamp for one item,
@@ -3297,44 +3319,38 @@ test("the store opens a library theme as the document, from the cell and its foo
     "the store does not list the stubbed library",
   ).toHaveCount(3);
 
-  // ── The cards pack as a masonry, at the theme's own ratio ──────────────────
-  // **The grid has no masonry in CSS, so the packing is the span each card
-  // measures itself into**: a 1px row unit, `row dense`, and a card whose
-  // `grid-row-end` is that many rows. **Every card takes exactly one column**,
-  // so the 32:9 theme grows taller rather than spanning its neighbour's track;
-  // all three cards are one track wide.
+  // ── The cards pack as justified rows, at each theme's own ratio ────────────
+  // **A row is scaled as a whole.** Its cards and 12px gutters together meet
+  // the pane's right edge, and every card in it shares one picture height. Each
+  // card's width is that height times its own ratio, so the 32:9 theme takes a
+  // wide card rather than a thin strip, and the two 16:9 themes beside it are
+  // their own widths, not one track each.
   const gallery = region.locator("[data-yunari-store-gallery]");
   await expect(gallery, "the store draws no gallery").toHaveCount(1);
-  await expect
-    .poll(
-      () =>
-        region
-          .locator("[data-yunari-store-cell]")
-          .evaluateAll((cells) =>
-            cells.every((cell) =>
-              getComputedStyle(cell).gridRowEnd.startsWith("span "),
-            ),
-          ),
-      "a card never measured itself into the grid's row span",
-    )
-    .toBe(true);
   const pack = await gallery.evaluate((node) => {
     const style = getComputedStyle(node);
-    return {
-      rowUnit: style.gridAutoRows,
-      flow: style.gridAutoFlow,
-      gap: Number.parseFloat(style.columnGap),
-      rowGap: style.rowGap,
-      template: style.gridTemplateColumns,
-      cells: Array.from(
-        node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
-        (cell) => ({
+    const cells = Array.from(
+      node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
+      (cell) => {
+        const rect = cell.getBoundingClientRect();
+        const picture = cell.querySelector("[data-yunari-store-picture]");
+        return {
           id: cell.getAttribute("data-yunari-store-cell"),
-          column: getComputedStyle(cell).gridColumnStart,
-          width: cell.getBoundingClientRect().width,
-          rowEnd: getComputedStyle(cell).gridRowEnd,
-        }),
-      ),
+          width: rect.width,
+          right: rect.right,
+          top: Math.round(rect.top),
+          pictureHeight: picture?.getBoundingClientRect().height ?? 0,
+        };
+      },
+    );
+    return {
+      display: style.display,
+      wrap: style.flexWrap,
+      gap: Number.parseFloat(style.columnGap),
+      rowGap: Number.parseFloat(style.rowGap),
+      width: node.clientWidth,
+      left: node.getBoundingClientRect().left,
+      cells,
     };
   });
   const packReading = `store gallery ${JSON.stringify(pack)}`;
@@ -3343,36 +3359,48 @@ test("the store opens a library theme as the document, from the cell and its foo
     type: "store-gallery",
     description: packReading,
   });
-  expect(pack.rowUnit, `the grid has no 1px row unit (${packReading})`).toBe(
-    "1px",
+  expect(pack.display, `the gallery is not a flex row (${packReading})`).toBe(
+    "flex",
   );
-  // Chrome omits the initial `row` and computes the declaration as `dense`.
-  expect(pack.flow, `the grid does not pack densely (${packReading})`).toBe(
-    "dense",
+  expect(pack.wrap, `the gallery does not wrap its rows (${packReading})`).toBe(
+    "wrap",
   );
-  // The row span carries the gutter, so the vertical gap is the same 12px the
-  // columns state. A row-gap here would add a second, variable gap on top of
-  // the span's rounded-up remainder.
+  expect(pack.gap, `the gallery's gutter is not 12px (${packReading})`).toBe(
+    12,
+  );
   expect(
     pack.rowGap,
-    `the grid adds a row-gap beside the span's gutter (${packReading})`,
-  ).toBe("normal");
-  const tracks = pack.template.trim().split(/\s+/);
-  expect(
-    tracks.length,
-    `the grid does not state its columns (${packReading})`,
-  ).toBeGreaterThan(0);
+    `the gallery's row gap is not 12px (${packReading})`,
+  ).toBe(12);
+  const rows = new Map<number, typeof pack.cells>();
   for (const cell of pack.cells) {
-    expect(
-      Math.round(cell.width) ===
-        Math.round(Number.parseFloat(tracks[0] ?? "0")),
-      `${cell.id} is not one column wide (${packReading})`,
-    ).toBe(true);
-    expect(
-      Number.parseInt(cell.rowEnd.replace(/^span /, ""), 10),
-      `${cell.id}'s row span is not positive (${packReading})`,
-    ).toBeGreaterThan(0);
+    rows.set(cell.top, [...(rows.get(cell.top) ?? []), cell]);
   }
+  const laidOut = [...rows.values()];
+  expect(
+    laidOut.length,
+    `the cards drew one row (${packReading})`,
+  ).toBeGreaterThan(1);
+  // Every row but the last is full, and "full" means flush with both edges. The
+  // tail is the one row allowed to stop short on the right.
+  for (const row of laidOut.slice(0, -1)) {
+    const last = row[row.length - 1];
+    expect(
+      Math.round((last?.right ?? 0) - pack.left),
+      `a full row does not meet the pane's right edge (${packReading})`,
+    ).toBe(pack.width);
+    for (const cell of row) {
+      expect(
+        Math.round(cell.pictureHeight),
+        `${cell.id}'s picture is not the row's height (${packReading})`,
+      ).toBe(Math.round(row[0]?.pictureHeight ?? 0));
+    }
+  }
+  const wideCard = pack.cells.find((cell) => cell.id === "store-wide");
+  expect(
+    wideCard?.width ?? 0,
+    `the 32:9 theme is not a wide card (${packReading})`,
+  ).toBeGreaterThan(600);
 
   const modal = page.locator("[data-yunari-store-item]");
   const cellOf = (id: string) =>
@@ -3380,17 +3408,14 @@ test("the store opens a library theme as the document, from the cell and its foo
   const surfaceOf = (id: string) =>
     cellOf(id).locator("[data-yunari-store-cell-surface]");
 
-  // **The cell's own bands are where the cell puts them, and this is the
-  // reading that says so** (A.7b, and the card's recap). The picture, the name
-  // row and the facts band are three elements, so the spacing between them is
-  // arithmetic a later edit can move without anything failing: the name row's
-  // 8px above the name and 4px below it, the cell's 10px inset, which the
-  // spacing scale's step table owns as `--space-8`, `--space-4` and
-  // `--space-10`. The 26px band is the facts band's own height and is read
-  // here too, because it is what the band fixes and a wrapper that padded it
-  // would squash it. **The date keeps a line in that band**, so this reading
-  // also holds it there by its vertical centre; the author is a hover chip over
-  // the picture and is read below.
+  // **The card's foot is one row, and this is the reading that says so.** The
+  // name is semibold at the left; the updated day sits at the right of the same
+  // row, and the card's four controls fade in over that day while the card is
+  // attended. The spacing is arithmetic a later edit can move: the row's 8px
+  // above the name and 10px below it, the cell's 10px inset, which the spacing
+  // scale's step table owns as `--space-8` and `--space-10`. A plain library
+  // theme — no catalogue, no origin — draws no facts band beneath the row at
+  // all, so the day is not repeated on a second line.
   //
   // **Each reading is the box the air sits outside of.** A span's own rect
   // includes its padding, so two padded bands abut however much air the padding
@@ -3421,22 +3446,21 @@ test("the store opens a library theme as the document, from the cell and its foo
     const name = contentBox(
       cell.querySelector("[data-yunari-store-cell-name]"),
     );
-    const byline = contentBox(
-      cell.querySelector("[data-yunari-store-cell-byline]"),
+    const bylineNode = cell.querySelector<HTMLElement>(
+      "[data-yunari-store-cell-byline]",
     );
-    // The 26px band itself, not the wrapper that pads it and not one action
-    // inside it: the four controls are centred in the band, so a shorter one
-    // would read as a band that is shorter than the 26px the band fixes.
-    const band = cell
-      .querySelector("[data-yunari-store-cell-action]")
-      ?.parentElement?.getBoundingClientRect();
+    const byline = contentBox(bylineNode);
+    const actions = cell.querySelector("[data-yunari-store-cell-actions]");
     const picture = cell
       .querySelector("[data-yunari-store-picture]")
       ?.getBoundingClientRect();
     const cellRect = cell.getBoundingClientRect();
     return {
       // The cell's own 1px edge is inside its box, so the 10px the cell puts
-      // above it is measured from the border's inner edge.
+      // below the name row is measured from the border's inner edge.
+      cellInnerRight:
+        cellRect.right -
+        Number.parseFloat(getComputedStyle(cell).borderRightWidth),
       cellInnerBottom:
         cellRect.bottom -
         Number.parseFloat(getComputedStyle(cell).borderBottomWidth),
@@ -3445,12 +3469,13 @@ test("the store opens a library theme as the document, from the cell and its foo
       nameBottom: name?.bottom ?? null,
       bylineTop: byline?.top ?? null,
       bylineBottom: byline?.bottom ?? null,
-      bylineInBand:
-        cell
-          .querySelector("[data-yunari-store-cell-byline]")
-          ?.parentElement?.hasAttribute("data-yunari-store-cell-band") ?? false,
-      bandTop: band?.top ?? null,
-      bandBottom: band?.bottom ?? null,
+      bylineRight: bylineNode?.getBoundingClientRect().right ?? null,
+      actionsRight: actions?.getBoundingClientRect().right ?? null,
+      bylineInNameRow:
+        bylineNode?.parentElement?.querySelector(
+          "[data-yunari-store-cell-name]",
+        ) != null,
+      factsBand: cell.querySelector("[data-yunari-store-cell-band]") !== null,
     };
   });
   const bandReading = `store-cell bands ${JSON.stringify(bands)}`;
@@ -3471,46 +3496,60 @@ test("the store opens a library theme as the document, from the cell and its foo
     `the name is not 8px under the picture (${bandReading})`,
   ).toBe(8);
   expect(
-    gapOf(bands.nameBottom, bands.bandTop, "facts band"),
-    `the facts band is not 4px under the name (${bandReading})`,
-  ).toBe(4);
+    gapOf(bands.nameBottom, bands.cellInnerBottom, "name row's foot"),
+    `the name row does not sit 10px above the cell's edge (${bandReading})`,
+  ).toBe(10);
   expect(
-    bands.bylineInBand,
-    `the byline is not in the facts band (${bandReading})`,
+    bands.factsBand,
+    `a library theme with no catalogue or origin record drew a facts band (${bandReading})`,
+  ).toBe(false);
+  expect(
+    bands.bylineInNameRow,
+    `the updated day is not in the name's row (${bandReading})`,
   ).toBe(true);
+  expect(
+    Math.round(bands.cellInnerRight - 10 - (bands.bylineRight ?? Number.NaN)),
+    `the updated day is not inset 10px from the card's right edge (${bandReading})`,
+  ).toBe(0);
   expect(
     bands.bylineTop === null ||
       bands.bylineBottom === null ||
-      bands.bandTop === null ||
-      bands.bandBottom === null
+      bands.nameTop === null ||
+      bands.nameBottom === null
       ? null
       : Math.abs(
           Math.round(
             (bands.bylineTop + bands.bylineBottom) / 2 -
-              (bands.bandTop + bands.bandBottom) / 2,
+              (bands.nameTop + bands.nameBottom) / 2,
           ),
         ),
-    `the byline is not centred in the facts band (${bandReading})`,
+    `the updated day is not centred on the name's line (${bandReading})`,
   ).toBeLessThanOrEqual(1);
   expect(
-    gapOf(bands.bandBottom, bands.cellInnerBottom, "band's own foot"),
-    `the facts band does not sit 10px above the cell's edge (${bandReading})`,
-  ).toBe(10);
-  expect(
-    gapOf(bands.bandTop, bands.bandBottom, "band"),
-    `the facts band is not the 26px the band fixes (${bandReading})`,
-  ).toBe(26);
+    Math.round(bands.cellInnerRight - 10 - (bands.actionsRight ?? Number.NaN)),
+    `the controls are not inset 10px from the card's right edge (${bandReading})`,
+  ).toBe(0);
 
   // **The author is a chip over the picture, hidden until the card is
   // attended.** Its words stay in the tree at rest, which is why the reading
-  // asks for the computed opacity rather than the text.
+  // asks for the computed opacity rather than the text. **The day and the four
+  // controls share the name row the other way round**: the day is the resting
+  // reading, and attending the card fades it out as the controls fade in.
   const authorChip = cellOf(fromCell.id).locator(
     "[data-yunari-store-cell-author]",
   );
+  const byline = cellOf(fromCell.id).locator("[data-yunari-store-cell-byline]");
+  const cellActions = cellOf(fromCell.id).locator(
+    "[data-yunari-store-cell-actions]",
+  );
   await expect(authorChip).toHaveText("© huyng");
   await expect(authorChip).toHaveCSS("opacity", "0");
+  await expect(byline).toHaveCSS("opacity", "1");
+  await expect(cellActions).toHaveCSS("opacity", "0");
   await cellOf(fromCell.id).hover();
   await expect(authorChip).toHaveCSS("opacity", "1");
+  await expect(byline).toHaveCSS("opacity", "0");
+  await expect(cellActions).toHaveCSS("opacity", "1");
 
   // **The cell's own surface opens the item's**, and the open control below is
   // read from the surface the same gesture reaches.
