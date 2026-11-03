@@ -2,7 +2,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +19,7 @@ import {
   type InstallPorts,
   install,
   removeAutoApprovalRule,
+  resolveInterpreter,
   SKILL_AGENT,
   SKILL_NAME,
   serverEntryFor,
@@ -97,6 +100,7 @@ function fakePorts(
     home,
     skillSourceDir: join(home, "repo-skills", "yunari-theme-designer"),
     serverEntry,
+    interpreter: process.execPath,
     runSkills: async (args) => {
       calls.skills.push([...args]);
       if (args[0] === "add" && behaviour.skillLocation !== "none") {
@@ -399,12 +403,46 @@ describe("status", () => {
 describe("createPorts", () => {
   it("points the entry at this Node and the bin shim", () => {
     const entry = serverEntryFor("C:/repo/packages/mcp/bin/yunari-mcp.js");
-    expect(entry.command).toBe(process.execPath);
+    expect(entry.command).toBe(resolveInterpreter(process.execPath));
     expect(entry.args).toEqual([
       "C:/repo/packages/mcp/bin/yunari-mcp.js",
       "serve",
     ]);
     expect(entry.autoApproveTools).toEqual([]);
+  });
+
+  it("records the real interpreter, not a per-session shim", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yunari-interp-"));
+    homes.push(dir);
+    const real = join(dir, "node.exe");
+    writeFileSync(real, "");
+    const shim = join(dir, "shim.exe");
+    symlinkSync(real, shim);
+    expect(resolveInterpreter(shim)).toBe(realpathSync(real));
+  });
+
+  it("leaves an unreadable interpreter path unchanged", () => {
+    const missing = join(tmpdir(), "yunari-no-such-node.exe");
+    expect(resolveInterpreter(missing)).toBe(missing);
+  });
+
+  it("serverEntryFor uses the supplied interpreter and the entry path verbatim", () => {
+    expect(
+      serverEntryFor(
+        "C:/pkg/bin/yunari-mcp.js",
+        "http://127.0.0.1:5227",
+        "C:/node.exe",
+      ),
+    ).toEqual({
+      command: "C:/node.exe",
+      args: [
+        "C:/pkg/bin/yunari-mcp.js",
+        "serve",
+        "--url",
+        "http://127.0.0.1:5227",
+      ],
+      autoApproveTools: [],
+    });
   });
 
   it("honours an injected home without resolving the real one", () => {

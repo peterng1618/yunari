@@ -1,5 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -49,6 +54,12 @@ export interface InstallPorts {
   readonly skillSourceDir: string;
   /** The built stdio entry the agent config points at. */
   readonly serverEntry: string;
+  /**
+   * The Node binary the entry runs. `realpathSync(process.execPath)` where
+   * readable: under fnm/nvm `process.execPath` is a per-shell shim whose
+   * directory disappears with that shell.
+   */
+  readonly interpreter: string;
   /** Runs the `skills` CLI and resolves its exit code. */
   readonly runSkills: (
     args: readonly string[],
@@ -195,14 +206,32 @@ export function skillRemoveArgs(): readonly string[] {
 }
 
 /**
+ * The stable path behind a version-manager shim. fnm resolves
+ * `process.execPath` through a multishell directory that exists only for the
+ * shell that created it, so recording it leaves a later session with a missing
+ * interpreter. A path that cannot be resolved is kept as given.
+ */
+export function resolveInterpreter(execPath: string): string {
+  try {
+    return realpathSync(execPath);
+  } catch {
+    return execPath;
+  }
+}
+
+/**
  * The entry the server config carries: this Node, the built server, `serve`.
  *
  * A named URL travels in the arguments so a host on a custom port survives a
  * later session; without one the server keeps its probe range.
  */
-export function serverEntryFor(serverEntry: string, url?: string): ServerEntry {
+export function serverEntryFor(
+  serverEntry: string,
+  url?: string,
+  interpreter: string = resolveInterpreter(process.execPath),
+): ServerEntry {
   return {
-    command: process.execPath,
+    command: interpreter,
     args: [serverEntry, "serve", ...(url === undefined ? [] : ["--url", url])],
     autoApproveTools: [],
   };
@@ -260,9 +289,12 @@ export async function install(
         detail: `${ports.serverEntry} does not exist; build it with "npm run build -w @yunari/mcp"`,
       });
     } else {
-      const result = ports.upsert(serverEntryFor(ports.serverEntry, url), {
-        local: false,
-      });
+      const result = ports.upsert(
+        serverEntryFor(ports.serverEntry, url, ports.interpreter),
+        {
+          local: false,
+        },
+      );
       if (!result.success) {
         steps.push({
           step: "server",
@@ -467,6 +499,8 @@ export interface CreateIntegrationPortsOptions {
   readonly home?: string;
   readonly skillSourceDir?: string;
   readonly serverEntry?: string;
+  /** Defaults to `resolveInterpreter(process.execPath)`. */
+  readonly interpreter?: string;
   /** `status` has to know whether a host answers; the CLI supplies this. */
   readonly probeHost: () => Promise<HostProbe>;
 }
@@ -484,6 +518,8 @@ export function createPorts(
       join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
     serverEntry:
       options.serverEntry ?? join(packageDir, "bin", "yunari-mcp.js"),
+    interpreter:
+      options.interpreter ?? resolveInterpreter(process.execPath),
     runSkills: runSkillsCli,
     upsert: (config, upsertOptions) =>
       upsertServer(AGENT_TYPE, SERVER_NAME, config, upsertOptions),
