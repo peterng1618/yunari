@@ -768,7 +768,10 @@ function messageOf(error: unknown): string {
 }
 
 /** Whether two reads describe the same clip, the same authored pan and the same
- *  display angle: a turned glass shows a different stream. */
+ *  display angle: a turned glass shows a different stream. The placement's
+ *  region, fade and fill are part of the picture the bake produces, so an edit
+ *  to any of them is a different clip even when the bytes and the pan are
+ *  unchanged. */
 function sameVideo(
   first: PanelVideoSource | undefined,
   second: PanelVideoSource | undefined,
@@ -776,8 +779,7 @@ function sameVideo(
   if (first === undefined || second === undefined) return first === second;
 
   return (
-    first.placement.offsetX === second.placement.offsetX &&
-    first.placement.offsetY === second.placement.offsetY &&
+    JSON.stringify(first.placement) === JSON.stringify(second.placement) &&
     (first.rotation ?? 0) === (second.rotation ?? 0) &&
     sameBytes(first.bytes, second.bytes)
   );

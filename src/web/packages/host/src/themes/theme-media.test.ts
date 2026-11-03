@@ -328,6 +328,32 @@ describe("createThemeMedia", () => {
     );
   });
 
+  it("encodes a composed page clip at the region's box, not the whole layer", async () => {
+    const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
+    const service = media({ transcode });
+
+    await service.panelVideo(
+      "theme",
+      envelopeWith({
+        media: {
+          assetId: "bg",
+          bounds: "display",
+          region: { left: 0.5 },
+        },
+      }),
+      { width: 640, height: 360 },
+    );
+
+    // The page lays this clip down inside the region as-is, so its pixels are
+    // the region's cover of the source. Encoding the whole 640×360 layer here
+    // would make the page crop the source a second time.
+    expect(transcode).toHaveBeenCalledWith(
+      new Uint8Array([9, 9, 9]),
+      { width: 320, height: 360, offsetX: 0, offsetY: 0, scale: 1 },
+      undefined,
+    );
+  });
+
   it("bakes the theme's authored pan and zoom into the clip", async () => {
     const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
     const service = media({ transcode });

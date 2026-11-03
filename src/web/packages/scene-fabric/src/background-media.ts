@@ -4,6 +4,7 @@ import {
   type Background,
   type BackgroundMask,
   type BackgroundMedia,
+  type CompositionRect,
   cssArtboardPaint,
   MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_SCALE,
@@ -184,15 +185,38 @@ function flipTransform(media: BackgroundMedia | undefined): string {
  * and 90 points up. The gradient is transparent at the line's start and opaque
  * at its end, which is the media's authored fade.
  */
-function maskCss(mask: BackgroundMask | undefined): string {
+function maskCss(
+  mask: BackgroundMask | undefined,
+  region: CompositionRect,
+): string {
   if (mask === undefined) return "";
   if (mask.kind === "radial") {
     const opaque = Number((mask.opaqueFraction * 100).toFixed(4));
-    return `radial-gradient(ellipse at center, black ${opaque}%, transparent 100%)`;
+    // The masked layer is the region itself, so the resolver's region-sized
+    // ellipse is CSS's closest-side one; the default farthest-corner would end
+    // the fade past the region and disagree with the glass and the bake.
+    return `radial-gradient(closest-side at center, black ${opaque}%, transparent 100%)`;
   }
-  const radians = Math.atan2(-(mask.y2 - mask.y1), mask.x2 - mask.x1);
-  const degrees = Number((90 - (radians * 180) / Math.PI).toFixed(4));
-  return `linear-gradient(${degrees}deg, transparent 0%, black 100%)`;
+  // The gradient line is measured in the region's own pixels. The angle starts
+  // it at the transparent end of the resolver's line, and the stops put the
+  // ramp exactly where the resolver (and the other surfaces) draw it.
+  const x1 = mask.x1 - region.left;
+  const y1 = mask.y1 - region.top;
+  const x2 = mask.x2 - region.left;
+  const y2 = mask.y2 - region.top;
+  if (y1 === y2) {
+    const [angle, from, to] =
+      x2 >= x1 ? [90, x1, x2] : [270, region.width - x1, region.width - x2];
+    return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
+  }
+  const [angle, from, to] =
+    y2 >= y1 ? [180, y1, y2] : [0, region.height - y1, region.height - y2];
+  return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
+}
+
+/** A region-local offset in pixels, written the way the resolver rounded it. */
+function px(value: number): string {
+  return `${Number(value.toFixed(4))}px`;
 }
 
 export interface BackgroundMediaHandle {
@@ -343,17 +367,22 @@ export function mountBackgroundMedia(
     regionLayer.style.top = `${region.top}px`;
     regionLayer.style.width = `${region.width}px`;
     regionLayer.style.height = `${region.height}px`;
-    const mask = maskCss(composition.mask);
+    const mask = maskCss(composition.mask, region);
     regionLayer.style.maskImage = mask;
     regionLayer.style.webkitMaskImage = mask;
     regionLayer.style.maskSize = mask === "" ? "" : "100% 100%";
     const child = element;
     if (child === undefined || media === undefined) return;
-    const rect = placement({
-      box: { width: region.width, height: region.height },
-      source: intrinsic(child),
-      ...geometry(media),
-    });
+    // A host-framed clip was encoded for this region's own box, so it is laid
+    // down at that size. Cover-fitting it again would crop the source twice and
+    // show a picture the player never shows.
+    const rect = framed
+      ? { left: 0, top: 0, width: region.width, height: region.height }
+      : placement({
+          box: { width: region.width, height: region.height },
+          source: intrinsic(child),
+          ...geometry(media),
+        });
     child.style.left = `${rect.left}px`;
     child.style.top = `${rect.top}px`;
     child.style.width = `${rect.width}px`;

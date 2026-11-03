@@ -374,6 +374,49 @@ describe("createPanelManager", () => {
     await manager.stop("strip");
   });
 
+  it("restarts the runner when only the composition changed", async () => {
+    let opens = 0;
+    let clip: PanelVideoSource = {
+      bytes: Uint8Array.of(7),
+      placement: {
+        offsetX: 0,
+        offsetY: 0,
+        region: { left: 0.35 },
+        fill: { kind: "solid", color: "#101418" },
+      },
+    };
+    const start = vi.fn(async () => {});
+    h.family = familyOver(async () => {
+      opens += 1;
+      return deviceOver({
+        frameIntervalMs: 5,
+        video: { start, presentOverlay: async () => {}, stop: async () => {} },
+      });
+    });
+
+    const manager = managerOver({ videoFor: async () => clip });
+
+    await manager.start("strip");
+    await pause(2 * SETTLE_MS);
+
+    // The bytes and the pan are the same; only the region moved, and the clip
+    // the device should play is now a different one.
+    clip = {
+      bytes: Uint8Array.of(7),
+      placement: {
+        offsetX: 0,
+        offsetY: 0,
+        region: { left: 0.5 },
+        fill: { kind: "solid", color: "#101418" },
+      },
+    };
+    await manager.refreshVideo("strip");
+    expect(opens).toBe(2);
+    expect(start).toHaveBeenCalledTimes(2);
+
+    await manager.stop("strip");
+  });
+
   it("does nothing for a display with no runner", async () => {
     const videoFor = vi.fn(async () => SOURCE);
     const manager = managerOver({ videoFor });

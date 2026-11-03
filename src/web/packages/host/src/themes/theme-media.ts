@@ -13,6 +13,7 @@ import {
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   type PalettePaint,
+  resolveBackgroundComposition,
   resolveStyleValue,
 } from "@yunari/renderer-core";
 import type { PanelVideoPlacement } from "../panels/panel-device.js";
@@ -421,7 +422,18 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
     },
 
     panelVideo(id, envelope, viewport) {
-      const size = panelMediaBox(envelope, viewport);
+      // The page composes the region, fill and fade itself, and lays this clip
+      // down inside the region as-is. Encoding the whole layer here would make
+      // the page cover-fit the clip a second time and crop the source twice.
+      const box = panelMediaBox(envelope, viewport);
+      const composition = resolveBackgroundComposition(
+        box,
+        envelope.background?.media?.region,
+      );
+      const size = {
+        width: Math.max(1, Math.round(composition.region.width)),
+        height: Math.max(1, Math.round(composition.region.height)),
+      };
       const geometry = backgroundGeometryOf(envelope);
       const name = panelVideoMediaName(id, envelope, size.width, size.height);
       return cached(name, MAX_VIDEO_BYTES, async () => {
