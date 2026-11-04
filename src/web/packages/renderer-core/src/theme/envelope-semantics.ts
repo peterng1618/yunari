@@ -2,12 +2,17 @@ import { ASSET_EXTENSIONS, themeAssetContentType } from "./asset-media-type.js";
 import {
   ASSET_PATH_PATTERN,
   type AssetKind,
+  BACKGROUND_BLEND_SHAPES,
+  BACKGROUND_EDGES,
   BACKGROUND_MEDIA_BOUNDS,
   FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   MAX_ARTBOARD_DIMENSION,
+  MAX_BACKGROUND_BLEND_LENGTH,
+  MAX_BACKGROUND_INSET,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
+  MIN_BACKGROUND_BLEND_LENGTH,
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   STABLE_ID_PATTERN,
@@ -390,6 +395,7 @@ function validateBackground(
     "The background",
   );
   validateStyleValue(issues, value["color"], "/background/color", globalKeys);
+  validateStyleValue(issues, value["fill"], "/background/fill", globalKeys);
 
   const media = value["media"];
   if (media === undefined) return;
@@ -477,6 +483,105 @@ function validateBackground(
         "fallbackFrame is only for a video background.",
       );
     }
+  }
+
+  validateBackgroundRegion(issues, media["region"]);
+}
+
+/**
+ * The media's sub-box placement and its fade.
+ *
+ * Insets are fractions of the box and the pair on each axis must leave a
+ * positive area; an authoring error is refused here rather than clamped into a
+ * region nobody asked for. The blend's shape selects which keys are legal, so a
+ * linear ramp without an edge and a radial ramp with one are both refused.
+ */
+function validateBackgroundRegion(issues: Issues, value: unknown): void {
+  if (value === undefined) return;
+  if (!issues.object(value, "/background/media/region", "The media region"))
+    return;
+
+  issues.unknownKeys(
+    value,
+    "/background/media/region",
+    envelopeKeysFor("backgroundRegion"),
+    "The media region",
+  );
+
+  const insets: Record<string, number> = {};
+  for (const key of BACKGROUND_EDGES) {
+    const raw = value[key];
+    if (raw === undefined) continue;
+    const path = `/background/media/region/${key}`;
+    if (!issues.finiteNumber(raw, path, key)) continue;
+    if (raw < 0 || raw > MAX_BACKGROUND_INSET) {
+      issues.add(
+        "out-of-range",
+        path,
+        `${key} must be from 0 to ${MAX_BACKGROUND_INSET}.`,
+      );
+      continue;
+    }
+    insets[key] = raw;
+  }
+
+  for (const [first, second] of [
+    ["left", "right"],
+    ["top", "bottom"],
+  ] as const) {
+    if ((insets[first] ?? 0) + (insets[second] ?? 0) >= 1) {
+      issues.add(
+        "out-of-range",
+        "/background/media/region",
+        `The ${first} and ${second} insets must leave a positive area.`,
+      );
+    }
+  }
+
+  const blend = value["blend"];
+  if (blend === undefined) return;
+  const path = "/background/media/region/blend";
+  if (!issues.object(blend, path, "The blend")) return;
+
+  issues.unknownKeys(
+    blend,
+    path,
+    envelopeKeysFor("backgroundBlend"),
+    "The blend",
+  );
+  const shape = blend["shape"];
+  const knownShape =
+    typeof shape === "string" &&
+    BACKGROUND_BLEND_SHAPES.includes(
+      shape as (typeof BACKGROUND_BLEND_SHAPES)[number],
+    );
+  issues.enumValue(shape, BACKGROUND_BLEND_SHAPES, `${path}/shape`, "shape");
+
+  const length = blend["length"];
+  if (issues.finiteNumber(length, `${path}/length`, "length")) {
+    if (
+      length < MIN_BACKGROUND_BLEND_LENGTH ||
+      length > MAX_BACKGROUND_BLEND_LENGTH
+    ) {
+      issues.add(
+        "out-of-range",
+        `${path}/length`,
+        `length must be from ${MIN_BACKGROUND_BLEND_LENGTH} to ${MAX_BACKGROUND_BLEND_LENGTH}.`,
+      );
+    }
+  }
+
+  if (!knownShape) return;
+
+  const edge = blend["edge"];
+  if (shape === "linear") {
+    if (edge === undefined) {
+      issues.add("wrong-type", `${path}/edge`, "A linear blend needs an edge.");
+    } else {
+      issues.enumValue(edge, BACKGROUND_EDGES, `${path}/edge`, "edge");
+    }
+  } else if (edge !== undefined) {
+    issues.add("wrong-type", `${path}/edge`, "A radial blend has no edge.");
   }
 }
 

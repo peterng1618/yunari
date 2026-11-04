@@ -481,6 +481,66 @@ describe("SelectionColumn", () => {
     expect(commit).toHaveBeenCalledWith(1, "background.scale", 2.5);
   });
 
+  it("renders the composition rows and commits the pressed edge", async () => {
+    const commit = vi.fn(() => false);
+    const port: SelectionEdits = {
+      commit,
+      preview: () => false,
+      cancelPreview: () => {},
+    };
+    const view: SelectionView = {
+      targetRevision: 1,
+      subject: {
+        name: "Background",
+        authoredName: "",
+        kind: "background",
+        key: undefined,
+      },
+      locked: false,
+      sections: backgroundColumn({
+        background: {
+          media: {
+            assetId: "a",
+            bounds: "theme",
+            region: { left: 0.35 },
+          },
+        },
+        assets: [],
+        globals: undefined,
+      }),
+    };
+    act(() => {
+      root.render(
+        <SelectionColumn
+          view={view}
+          edits={port}
+          runs={runs}
+          chart={chart}
+          crop={crop}
+          font={font}
+        />,
+      );
+    });
+
+    const inset = [
+      ...host.querySelectorAll<HTMLButtonElement>(
+        "[data-yunari-background-inset]",
+      ),
+    ];
+    expect(inset.length).toBeGreaterThan(1);
+    const right = inset.find((segment) => segment.textContent === "Right edge");
+    expect(right).toBeDefined();
+    act(() => {
+      right?.click();
+    });
+    expect(commit).toHaveBeenCalledWith(1, "background.inset", "right");
+
+    const amount = host.querySelector<HTMLInputElement>(
+      "[data-yunari-background-inset-amount]",
+    )!;
+    expect(amount.value).toBe("65");
+  });
+
   /**
    * `vg-268`/`vg-283`: the face picker the font catalogue plan shipped is
    * mounted on the field the ruling named as its owner, and the face it picks is

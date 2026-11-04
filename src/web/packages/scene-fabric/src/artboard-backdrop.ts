@@ -1,4 +1,10 @@
-import type { ArtboardShape, DisplayShape } from "@yunari/renderer-core";
+import type {
+  ArtboardShape,
+  BackgroundMask,
+  CompositionRect,
+  DisplayShape,
+  GlassSampling,
+} from "@yunari/renderer-core";
 import { fillArtboardPaint } from "./artboard-paint.js";
 import type { MediaBox } from "./background-media.js";
 import type {
@@ -68,6 +74,10 @@ export function artboardBackdrop(
   // display's mount angle.
   const screenRect = media?.screenRect;
   const surface = options.surface;
+  // One scratch reused for every panel on this backdrop sample. The sampler
+  // builds a fresh backdrop per render, so the surface lives as long as the
+  // objects that paint it and is released with them.
+  let scratch: HTMLCanvasElement | undefined;
 
   return {
     // The board's own rect, so the `device` the sampler passes is the board in
@@ -99,15 +109,24 @@ export function artboardBackdrop(
         );
         ctx.clip();
       }
-      if (media !== undefined)
-        media.paint(
-          ctx,
-          region,
+      if (media !== undefined) {
+        const mediaBox =
           screenRect === undefined
             ? mediaDevice(device, board, media.rect)
-            : device,
-          sampling,
-        );
+            : device;
+        if (media.region === undefined) {
+          media.paint(ctx, region, mediaBox, sampling);
+        } else {
+          paintComposition(
+            ctx,
+            region,
+            mediaBox,
+            media,
+            sampling,
+            () => (scratch ??= document.createElement("canvas")),
+          );
+        }
+      }
       if (disc) ctx.restore();
       ctx.save();
       ctx.globalCompositeOperation = "destination-over";
@@ -232,4 +251,104 @@ function mediaDevice(
     width: rect.width * scaleX,
     height: rect.height * scaleY,
   };
+}
+
+/**
+ * The composed media: the fill across its box, then the media clipped to the
+ * authored region and faded by its mask.
+ *
+ * The masked media is built on a scratch surface the size of the region and
+ * drawn once, so `destination-in` never touches the sampler's own context: a
+ * `destination-in` there would erase everything painted beside the media.
+ */
+function paintComposition(
+  ctx: CanvasRenderingContext2D,
+  surfaceRegion: DeviceRect,
+  mediaBox: DeviceRect,
+  media: BackdropMedia,
+  sampling: GlassSampling,
+  scratchOf: () => HTMLCanvasElement,
+): boolean {
+  const region = media.region;
+  if (region === undefined) return false;
+  const box = media.rect;
+  const scaleX = box.width > 0 ? mediaBox.width / box.width : 0;
+  const scaleY = box.height > 0 ? mediaBox.height / box.height : 0;
+  const regionDevice: DeviceRect = {
+    left: mediaBox.left + region.left * scaleX,
+    top: mediaBox.top + region.top * scaleY,
+    width: region.width * scaleX,
+    height: region.height * scaleY,
+  };
+
+  if (media.fill !== undefined)
+    fillArtboardPaint(
+      ctx,
+      regionLocal(mediaBox, surfaceRegion),
+      regionLocal(mediaBox, surfaceRegion),
+      media.fill,
+    );
+
+  const width = Math.round(regionDevice.width);
+  const height = Math.round(regionDevice.height);
+  if (!(width > 0) || !(height > 0)) return false;
+
+  const scratch = scratchOf();
+  if (scratch.width !== width) scratch.width = width;
+  if (scratch.height !== height) scratch.height = height;
+  const context = scratch.getContext("2d");
+  if (context === null) return false;
+  context.clearRect(0, 0, width, height);
+
+  // The media is placed inside the region, exactly as the DOM layer is.
+  const painted = media.paint(context, regionDevice, mediaBox, sampling);
+  if (painted && media.mask !== undefined)
+    applyMask(context, media.mask, region, scaleX, scaleY);
+  ctx.drawImage(
+    scratch,
+    regionDevice.left - surfaceRegion.left,
+    regionDevice.top - surfaceRegion.top,
+  );
+  return painted;
+}
+
+/** Multiplies the scratch's alpha by the resolved ramp, in region-local pixels. */
+function applyMask(
+  ctx: CanvasRenderingContext2D,
+  mask: BackgroundMask,
+  region: CompositionRect,
+  scaleX: number,
+  scaleY: number,
+): void {
+  const x = (value: number): number => (value - region.left) * scaleX;
+  const y = (value: number): number => (value - region.top) * scaleY;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-in";
+  if (mask.kind === "linear") {
+    const gradient = ctx.createLinearGradient(
+      x(mask.x1),
+      y(mask.y1),
+      x(mask.x2),
+      y(mask.y2),
+    );
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+    gradient.addColorStop(1, "rgba(0, 0, 0, 1)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  } else {
+    const rx = mask.rx * scaleX;
+    const ry = mask.ry * scaleY;
+    if (rx > 0 && ry > 0) {
+      ctx.translate(x(mask.cx), y(mask.cy));
+      ctx.scale(rx, ry);
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
+      gradient.addColorStop(mask.opaqueFraction, "rgba(0, 0, 0, 1)");
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-2, -2, 4, 4);
+    }
+  }
+  ctx.restore();
 }

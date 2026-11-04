@@ -299,6 +299,12 @@ export {
   isSafeAssetPath,
   noAssets,
 } from "./theme/assets.js";
+export {
+  type BackgroundComposition,
+  type BackgroundMask,
+  type CompositionRect,
+  resolveBackgroundComposition,
+} from "./theme/background-composition.js";
 export type { CapabilityGroup } from "./theme/capabilities.js";
 export {
   allowsStyleProperty,
@@ -348,8 +354,12 @@ export type {
   AssetLicense,
   AssetReference,
   Background,
+  BackgroundBlend,
+  BackgroundBlendShape,
+  BackgroundEdge,
   BackgroundMedia,
   BackgroundMediaBounds,
+  BackgroundRegion,
   Binding,
   ChartContent,
   ChartFamily,
@@ -372,6 +382,8 @@ export type {
   WidgetProvenance,
 } from "./theme/document.js";
 export {
+  BACKGROUND_BLEND_SHAPES,
+  BACKGROUND_EDGES,
   BACKGROUND_MEDIA_BOUNDS,
   BACKGROUND_MEDIA_DEFAULTS,
   bumpSemanticVersion,
@@ -381,11 +393,14 @@ export {
   isSemanticVersion,
   isTypeTokenRole,
   MAX_ARTBOARD_DIMENSION,
+  MAX_BACKGROUND_BLEND_LENGTH,
+  MAX_BACKGROUND_INSET,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
   MAX_NODE_COUNT,
   MAX_NODE_DEPTH,
   MAX_TAGS,
+  MIN_BACKGROUND_BLEND_LENGTH,
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   NODE_TYPES,

@@ -8,6 +8,7 @@ import type {
   PanelGeometry,
   PanelVideoSource,
 } from "./panel-device.js";
+import { samePanelVideo } from "./panel-device.js";
 import { familyFor } from "./panel-families.js";
 import type { Rasterizer } from "./panel-raster.js";
 import {
@@ -572,7 +573,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       return;
     }
 
-    if (sameVideo(entry.video, video)) return;
+    if (samePanelVideo(entry.video, video)) return;
 
     await refreshNow(displayId);
   };
@@ -768,32 +769,6 @@ function within(work: Promise<unknown>, ms: number): Promise<boolean> {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** Whether two reads describe the same clip, the same authored pan and the same
- *  display angle: a turned glass shows a different stream. */
-function sameVideo(
-  first: PanelVideoSource | undefined,
-  second: PanelVideoSource | undefined,
-): boolean {
-  if (first === undefined || second === undefined) return first === second;
-
-  return (
-    first.placement.offsetX === second.placement.offsetX &&
-    first.placement.offsetY === second.placement.offsetY &&
-    (first.rotation ?? 0) === (second.rotation ?? 0) &&
-    sameBytes(first.bytes, second.bytes)
-  );
-}
-
-function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
-  if (first.length !== second.length) return false;
-
-  for (let index = 0; index < first.length; index += 1) {
-    if (first[index] !== second[index]) return false;
-  }
-
-  return true;
 }
 
 function hex(value: number): string {

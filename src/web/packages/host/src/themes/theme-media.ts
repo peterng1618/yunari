@@ -2,14 +2,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   type AssetReference,
+  artboardSolidColor,
   BACKGROUND_MEDIA_DEFAULTS,
   computeArtboardTransform,
   type FabricThemeEnvelope,
+  type Globals,
+  isArtboardGradient,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
+  type PalettePaint,
+  resolveBackgroundComposition,
+  resolveStyleValue,
 } from "@yunari/renderer-core";
+import type { PanelVideoPlacement } from "../panels/panel-device.js";
 import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
 import {
@@ -88,11 +95,75 @@ export function panelVideoMediaName(
   const geometry = backgroundGeometryOf(envelope);
   // The authored pan and zoom are part of the picture, so a cache written for
   // another offset or scale is a different clip. `o`/`s` also invalidate the
-  // earlier cover-only copies under the same pixel size.
-  const suffix = `${width}x${height}-o${number(geometry.offsetX)}_${number(
-    geometry.offsetY,
-  )}-s${number(geometry.scale)}.mp4`;
+  // earlier cover-only copies under the same pixel size; `c` is the composition.
+  const placement = panelVideoPlacement(envelope);
+  const suffix = `${width}x${height}-o${number(placement.offsetX)}_${number(
+    placement.offsetY,
+  )}-s${number(geometry.scale)}${compositionKey(placement)}.mp4`;
   return mediaName(id, video, suffix);
+}
+
+/**
+ * The panel video's placement: the authored pan, plus the region, blend and
+ * resolved fill when the background composes its media.
+ *
+ * `fill` is the paint a region or fade reveals; a theme that authors none uses
+ * its background colour, which is the same rule the player's backdrop follows.
+ * A theme with no composition answers the pan alone, so the bake keeps its
+ * plain cover path.
+ */
+export function panelVideoPlacement(
+  envelope: FabricThemeEnvelope | undefined,
+): PanelVideoPlacement {
+  const geometry = backgroundGeometryOf(envelope);
+  const background = envelope?.background;
+  const region = background?.media?.region;
+  if (region === undefined) {
+    return { offsetX: geometry.offsetX, offsetY: geometry.offsetY };
+  }
+
+  const fill = paintOf(
+    resolveStyleValue(
+      background?.fill ?? background?.color,
+      (envelope?.globals ?? {}) as Globals,
+      "background",
+      [],
+    ),
+  );
+
+  return {
+    offsetX: geometry.offsetX,
+    offsetY: geometry.offsetY,
+    region: {
+      left: region.left ?? 0,
+      top: region.top ?? 0,
+      right: region.right ?? 0,
+      bottom: region.bottom ?? 0,
+    },
+    ...(region.blend === undefined ? {} : { blend: region.blend }),
+    ...(fill === undefined ? {} : { fill }),
+  };
+}
+
+/** A resolved style value as a palette paint, or nothing when it is not one. */
+function paintOf(value: unknown): PalettePaint | undefined {
+  const solid = artboardSolidColor(value);
+  if (solid !== undefined) return { kind: "solid", color: solid };
+  return isArtboardGradient(value) ? value : undefined;
+}
+
+/** The part of a clip name that changes when the composition changes. */
+function compositionKey(placement: PanelVideoPlacement): string {
+  if (
+    placement.region === undefined &&
+    placement.blend === undefined &&
+    placement.fill === undefined
+  ) {
+    return "";
+  }
+  return `-c${digest(
+    JSON.stringify([placement.region, placement.blend, placement.fill]),
+  )}`;
 }
 
 /** The authored geometry the page would have applied itself. */
@@ -351,7 +422,18 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
     },
 
     panelVideo(id, envelope, viewport) {
-      const size = panelMediaBox(envelope, viewport);
+      // The page composes the region, fill and fade itself, and lays this clip
+      // down inside the region as-is. Encoding the whole layer here would make
+      // the page cover-fit the clip a second time and crop the source twice.
+      const box = panelMediaBox(envelope, viewport);
+      const composition = resolveBackgroundComposition(
+        box,
+        envelope.background?.media?.region,
+      );
+      const size = {
+        width: Math.max(1, Math.round(composition.region.width)),
+        height: Math.max(1, Math.round(composition.region.height)),
+      };
       const geometry = backgroundGeometryOf(envelope);
       const name = panelVideoMediaName(id, envelope, size.width, size.height);
       return cached(name, MAX_VIDEO_BYTES, async () => {

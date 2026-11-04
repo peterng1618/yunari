@@ -460,6 +460,94 @@ describe("the background layer", () => {
       }),
     ).toContain("unresolved-asset-ref");
   });
+
+  it("accepts a media region with a linear blend and a fill", () => {
+    const envelope = withBackground({
+      color: { ref: "palette.ink" },
+      fill: { ref: "palette.ink" },
+      media: {
+        assetId: "clip",
+        bounds: "display",
+        region: {
+          left: 0.35,
+          blend: { shape: "linear", edge: "left", length: 0.12 },
+        },
+      },
+    });
+
+    expect(codes(envelope)).toEqual([]);
+  });
+
+  it("refuses a region that leaves no area", () => {
+    const issues = issuesFor(
+      withBackground({
+        media: {
+          assetId: "clip",
+          bounds: "display",
+          region: { left: 0.5, right: 0.5 },
+        },
+      }),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe("out-of-range");
+    expect(issues[0]!.path).toBe("/background/media/region");
+  });
+
+  it("refuses an inset on a key that is not an edge", () => {
+    const issues = issuesFor(
+      withBackground({
+        media: {
+          assetId: "clip",
+          bounds: "display",
+          region: { diagonal: 0.2 },
+        },
+      }),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe("unknown-field");
+    expect(issues[0]!.path).toBe("/background/media/region/diagonal");
+  });
+
+  it("refuses a linear blend with no edge and a radial blend with one", () => {
+    for (const blend of [
+      { shape: "linear", length: 0.2 },
+      { shape: "radial", edge: "left", length: 0.2 },
+    ]) {
+      const issues = issuesFor(
+        withBackground({
+          media: {
+            assetId: "clip",
+            bounds: "display",
+            region: { blend },
+          },
+        }),
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.code).toBe("wrong-type");
+      expect(issues[0]!.path).toBe("/background/media/region/blend/edge");
+    }
+  });
+
+  it("refuses a blend length that is zero or over one", () => {
+    for (const length of [0, 1.01]) {
+      const issues = issuesFor(
+        withBackground({
+          media: {
+            assetId: "clip",
+            bounds: "display",
+            region: { blend: { shape: "radial", length } },
+          },
+        }),
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0]!.code).toBe("out-of-range");
+      expect(issues[0]!.path).toBe("/background/media/region/blend/length");
+    }
+  });
 });
 
 describe("naming a document that carries none", () => {

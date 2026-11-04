@@ -144,6 +144,9 @@ export interface ScenePlan {
     readonly height: number;
     readonly contentFit: "contain" | "cover";
     readonly background: unknown;
+    /** The paint behind the media inside its bounds box, revealed by a region
+     *  or a blend; resolved like `background`. */
+    readonly fill: unknown;
   };
   readonly nodes: readonly PlanNode[];
   readonly issues: readonly PlanIssue[];
@@ -230,6 +233,7 @@ export function planArtboard(
       "background",
       issues,
     ),
+    fill: resolveStyleValue(background?.fill, globals, "background", issues),
   };
 }
 

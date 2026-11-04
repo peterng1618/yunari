@@ -6,6 +6,12 @@
  * module exporting its own rows; nothing above changes.
  */
 
+import type {
+  BackgroundBlend,
+  BackgroundRegion,
+  PalettePaint,
+} from "@yunari/renderer-core";
+
 /** A panel's own raster size, in the orientation the wire expects. */
 export interface PanelGeometry {
   readonly width: number;
@@ -86,6 +92,12 @@ export interface PanelControls {
 export interface PanelVideoPlacement {
   readonly offsetX: number;
   readonly offsetY: number;
+  /** Fractions of the layer's box the media is inset by. Absent covers it. */
+  readonly region?: BackgroundRegion;
+  /** The media's alpha ramp at one region edge. */
+  readonly blend?: BackgroundBlend;
+  /** The resolved paint behind the media inside its box. */
+  readonly fill?: PalettePaint;
 }
 
 /** A video background, the placement it was authored with, and the display it
@@ -97,6 +109,33 @@ export interface PanelVideoSource {
    *  upright. The device plays the clip itself, so the page's own turn does not
    *  reach it — the adapter has to put the angle into the pixels. */
   readonly rotation?: number;
+}
+
+/** Whether two reads describe the same stream: the same bytes, the same
+ *  placement (pan, region, fade, fill) and the same display angle. A turned
+ *  glass shows a different stream, and the composition is baked into the
+ *  pixels, so any authored change is a different clip. */
+export function samePanelVideo(
+  first: PanelVideoSource | undefined,
+  second: PanelVideoSource | undefined,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+
+  return (
+    JSON.stringify(first.placement) === JSON.stringify(second.placement) &&
+    (first.rotation ?? 0) === (second.rotation ?? 0) &&
+    sameBytes(first.bytes, second.bytes)
+  );
+}
+
+function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] !== second[index]) return false;
+  }
+
+  return true;
 }
 
 /** The video half of a panel that takes frames rather than stills. */
