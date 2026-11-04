@@ -111,3 +111,13 @@ displaying, so a status 9 on any of those commands means `shown` is wrong and
 the other bucket is the one not displayed. A refusal is never carried on as if
 the table were what the last successful frame left it as, and it now names the
 command in the runner's log, which is what makes the next occurrence visible.
+
+Reading a status made the *wait* wrong in a way the drop hid. `readUntil` used
+to spend a fixed **count** of reports, and the firmware broadcasts an
+unsolicited `75 0x` status report about once a second that the OS queues. A
+clock theme sends one frame a minute, so its next delete found ~60 broadcasts
+queued ahead of its answer: the budget was spent in microseconds and the frame
+was refused with `status none` — no reply at all, which the runner turned into
+a reconnect. The wait is now a window in **time** (`REPLY_WINDOW_MS`), and any
+report that is not the awaited `(first, second)` prefix is dropped as
+liquidctl's `_read_until` does.

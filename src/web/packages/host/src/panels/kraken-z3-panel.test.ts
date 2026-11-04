@@ -100,7 +100,7 @@ const fake = vi.hoisted(() => {
     close: () => Promise.resolve(),
   };
 
-  return { state, FakeHid, bulkDevice };
+  return { state, FakeHid, bulkDevice, reply };
 });
 
 vi.mock("node-hid", () => ({
@@ -179,6 +179,20 @@ describe("KrakenPanel transfers", () => {
     fake.state.createStatus = 1;
     await expect(panel.present(frame)).resolves.toBeUndefined();
     expect(fake.state.transfers).toBeGreaterThan(before);
+    await panel.close();
+  });
+
+  it("finds a reply queued behind the firmware's status broadcasts", async () => {
+    const panel = await openKraken("The NZT Kraken".replace("NZT", "NZXT"));
+    const frame = pngOf(320, 320);
+    // The first frame builds the table; the second is the one that arrives
+    // after the device has been broadcasting for a while.
+    await expect(panel.present(frame)).resolves.toBeUndefined();
+    for (let index = 0; index < 20; index += 1) {
+      fake.state.queue.push(fake.reply(0x75, 0x02));
+    }
+
+    await expect(panel.present(frame)).resolves.toBeUndefined();
     await panel.close();
   });
 });

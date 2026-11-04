@@ -70,8 +70,19 @@ const BUCKET_COUNT = 16;
 const FRAME_BYTES = SIZE * SIZE * 4;
 const HEADER_BYTES = HEADER_MAGIC.length + 8;
 const BUCKET_SLOTS = Math.ceil((HEADER_BYTES + FRAME_BYTES) / SLOT_BYTES);
-const MAX_READ_ATTEMPTS = 8;
+/** A single blocking read's timeout. */
 const READ_TIMEOUT_MS = 120;
+/**
+ * How long a command waits for its own reply.
+ *
+ * **A window in time, not a count of reports.** The firmware broadcasts an
+ * unsolicited status report (`75 0x`) about once a second and the operating
+ * system queues them, so a command issued after a quiet minute — a clock theme
+ * sends one frame a minute — finds dozens of them ahead of its answer. Counting
+ * reads spent the whole budget on broadcasts in microseconds and reported
+ * "no reply" for answers that were already on their way.
+ */
+const REPLY_WINDOW_MS = 1_000;
 /** How long the firmware gets to finish storing a bucket before it is shown. */
 const UPLOAD_SETTLE_MS = 10;
 /**
@@ -147,10 +158,14 @@ class KrakenControl {
 
   /**
    * liquidctl's `_read_until`: commands do not answer in order, because the
-   * firmware also emits status reports (`75 01`) on its own.
+   * firmware also emits status reports on its own. Anything that is not this
+   * command's reply is dropped and the wait continues until the window closes,
+   * so a queue full of broadcasts cannot hide an answer.
    */
   readUntil(first: number, second: number): HidReply | undefined {
-    for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt += 1) {
+    const deadline = Date.now() + REPLY_WINDOW_MS;
+
+    while (Date.now() < deadline) {
       const reply = this.read();
       if (reply === undefined) continue;
       if (reply.report[0] === first && reply.report[1] === second) return reply;
