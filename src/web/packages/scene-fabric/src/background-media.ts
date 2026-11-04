@@ -1,9 +1,11 @@
 import {
   type AssetReference,
+  activeBackgroundComposition,
   BACKGROUND_MEDIA_DEFAULTS,
   type Background,
   type BackgroundMask,
   type BackgroundMedia,
+  blendRampStops,
   type CompositionRect,
   cssArtboardPaint,
   MAX_BACKGROUND_SCALE,
@@ -33,8 +35,8 @@ export interface BackgroundMediaOptions {
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
   /** The background's fill, already resolved from its `StyleValue`: the paint
-   *  behind the media inside its bounds box, revealed by a region or a blend.
-   *  Absent paints nothing. */
+   *  behind the media inside its bounds box, revealed by the composition's
+   *  region. Absent paints nothing. */
   readonly fill?: unknown;
   /** What a panel's page loads instead of the declared video: the host's still
    *  of the declared frame, or a clip painted into the theme's media box. A
@@ -178,40 +180,43 @@ function flipTransform(media: BackgroundMedia | undefined): string {
 }
 
 /**
- * The DOM form of the one resolved mask.
+ * The DOM form of the resolved ramps.
  *
- * The linear branch turns the mask line back into a CSS angle with the artboard
- * paint's convention: the stored direction is `(cos, -sin)`, so 0 points right
- * and 90 points up. The gradient is transparent at the line's start and opaque
- * at its end, which is the media's authored fade.
+ * The mask line is turned back into a CSS angle with the artboard paint's
+ * convention: the stored direction is `(cos, -sin)`, so 0 points right and 90
+ * points up. The stops are the shared eased ramp, so the DOM, the glass and
+ * the panel bake draw one curve instead of a visibly creased straight line.
  */
-function maskCss(
-  mask: BackgroundMask | undefined,
+function masksCss(
+  masks: readonly BackgroundMask[],
   region: CompositionRect,
 ): string {
-  if (mask === undefined) return "";
-  if (mask.kind === "radial") {
-    const opaque = Number((mask.opaqueFraction * 100).toFixed(4));
-    // The masked layer is the region itself, so the resolver's region-sized
-    // ellipse is CSS's closest-side one; the default farthest-corner would end
-    // the fade past the region and disagree with the glass and the bake.
-    return `radial-gradient(closest-side at center, black ${opaque}%, transparent 100%)`;
-  }
-  // The gradient line is measured in the region's own pixels. The angle starts
-  // it at the transparent end of the resolver's line, and the stops put the
-  // ramp exactly where the resolver (and the other surfaces) draw it.
-  const x1 = mask.x1 - region.left;
-  const y1 = mask.y1 - region.top;
-  const x2 = mask.x2 - region.left;
-  const y2 = mask.y2 - region.top;
-  if (y1 === y2) {
-    const [angle, from, to] =
-      x2 >= x1 ? [90, x1, x2] : [270, region.width - x1, region.width - x2];
-    return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
-  }
-  const [angle, from, to] =
-    y2 >= y1 ? [180, y1, y2] : [0, region.height - y1, region.height - y2];
-  return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
+  return masks
+    .map((mask) => {
+      const x1 = mask.x1 - region.left;
+      const y1 = mask.y1 - region.top;
+      const x2 = mask.x2 - region.left;
+      const y2 = mask.y2 - region.top;
+      if (y1 === y2) {
+        const [angle, from, to] =
+          x2 >= x1 ? [90, x1, x2] : [270, region.width - x1, region.width - x2];
+        return `linear-gradient(${angle}deg, ${rampStops(from, to)})`;
+      }
+      const [angle, from, to] =
+        y2 >= y1 ? [180, y1, y2] : [0, region.height - y1, region.height - y2];
+      return `linear-gradient(${angle}deg, ${rampStops(from, to)})`;
+    })
+    .join(", ");
+}
+
+/** The shared ramp, projected onto a CSS gradient line between two offsets. */
+function rampStops(from: number, to: number): string {
+  return blendRampStops()
+    .map((stop) => {
+      const at = from + stop.offset * (to - from);
+      return `rgba(0, 0, 0, ${Number(stop.alpha.toFixed(4))}) ${px(at)}`;
+    })
+    .join(", ");
 }
 
 /** A region-local offset in pixels, written the way the resolver rounded it. */
@@ -363,9 +368,14 @@ export function mountBackgroundMedia(
         : "0 0"
       : "";
     layer.style.transform = turned ? `rotate(${box.angle}deg)` : "";
+    const child = element;
+    // A centred band fits the picture's long edge, so the resolver needs the
+    // source's own size; until the bytes arrive it covers the box and the
+    // intrinsic listener re-places it.
     const composition = resolveBackgroundComposition(
       { width: box.width, height: box.height },
-      media?.region,
+      activeBackgroundComposition(background),
+      child === undefined ? undefined : intrinsic(child),
     );
     fillLayer.style.cssText = "position:absolute;inset:0;";
     fillLayer.style.background = cssArtboardPaint(fill) ?? "transparent";
@@ -374,11 +384,17 @@ export function mountBackgroundMedia(
     regionLayer.style.top = `${region.top}px`;
     regionLayer.style.width = `${region.width}px`;
     regionLayer.style.height = `${region.height}px`;
-    const mask = maskCss(composition.mask, region);
-    regionLayer.style.maskImage = mask;
-    regionLayer.style.webkitMaskImage = mask;
-    regionLayer.style.maskSize = mask === "" ? "" : "100% 100%";
-    const child = element;
+    const masks = masksCss(composition.masks, region);
+    regionLayer.style.maskImage = masks;
+    regionLayer.style.webkitMaskImage = masks;
+    regionLayer.style.maskSize = masks === "" ? "" : "100% 100%";
+    regionLayer.style.maskRepeat = masks === "" ? "" : "no-repeat";
+    // Two ramps are two layers; the default `add` would union them and show
+    // the media through both, so the layers intersect.
+    regionLayer.style.maskComposite =
+      composition.masks.length > 1 ? "intersect" : "";
+    regionLayer.style.webkitMaskComposite =
+      composition.masks.length > 1 ? "source-in" : "";
     if (child === undefined || media === undefined) return;
     // A host-framed clip was encoded for this region's own box, so it is laid
     // down at that size. Cover-fitting it again would crop the source twice and
@@ -666,12 +682,14 @@ export function mountBackgroundMedia(
       // pixels, while `rect` stays in artboard units for the placement.
       const angle =
         display === undefined ? bounds?.artboard.angle : display.angle;
-      // The authored region is expressed in the box the layer paints, so it is
-      // resolved against the same rect the glass maps and the DOM places in.
-      const authored = background?.media?.region;
+      // The authored composition is expressed in the box the layer paints, so
+      // it is resolved against the same rect the glass maps and the DOM places
+      // in; a centred band fits the mounted picture's long edge.
+      const authored = activeBackgroundComposition(background);
       const composition = resolveBackgroundComposition(
         { width: rect.width, height: rect.height },
         authored,
+        intrinsic(mounted),
       );
       return {
         rect,
@@ -682,9 +700,9 @@ export function mountBackgroundMedia(
           : {
               fill,
               region: composition.region,
-              ...(composition.mask === undefined
+              ...(composition.masks.length === 0
                 ? {}
-                : { mask: composition.mask }),
+                : { masks: composition.masks }),
             }),
         paint(ctx, region, device, sampling) {
           // A static panel stands on the video's declared frame — or its first

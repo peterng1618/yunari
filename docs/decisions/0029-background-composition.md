@@ -1,4 +1,4 @@
-# 0029 — Background composition: region, fill and blend
+# 0029 — Background composition: anchor, fill and fade
 
 - **Date:** 2026-11-04
 - **Status:** accepted
@@ -108,12 +108,15 @@ equation. The spec records an earlier 0→255 linear `gradients` probe.
 ## Decision
 
 Extend `Background` with an optional `fill` paint and `BackgroundMedia` with an
-optional `region` (four fractions plus an optional `blend`). Fractions are
-refused outside the model's ranges, never clamped. One pure resolver in
-`renderer-core` turns the region into a box rect and a gradient line; the DOM
-layer, the glass sampler and the panel bake all read that output rather than
-re-deriving the maths. The fill is painted inside the existing
-`[data-yunari-background-media]` layer so an overlay capture hides the whole
-composition, and on a panel the composition is baked into the 8-bit clip before
-the turn. No mask primitive, no display-space scene object, no separate overlay
-tint.
+optional `composition`: a five-point `anchor`, an edge band's `extent` and a
+`fade`. An edge anchor makes a band whose size along that axis is `extent`; a
+centre anchor fits the picture's long edge, so the fill covers the two opposite
+gaps and never surrounds the media. Values outside the model's ranges are
+refused, never clamped. One pure resolver in `renderer-core` turns the
+composition into a box rect and a list of linear ramps; the DOM layer, the glass
+sampler and the panel bake all read that output rather than re-deriving the
+maths, and all three sample one eased ramp so the seam has no visible ends. The
+fill is painted inside the existing `[data-yunari-background-media]` layer so an
+overlay capture hides the whole composition, and on a panel the composition is
+baked into the 8-bit clip before the turn. No mask primitive, no display-space
+scene object, no separate overlay tint.

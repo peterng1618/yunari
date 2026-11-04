@@ -2224,26 +2224,16 @@ export const uiCopy = {
   /** The two background models: the full-cover picture every theme predates,
    *  and the composition a theme opts into. */
   backgroundModes: { basic: "Basic", advanced: "Advanced" },
-  /** The edges a background's media may be pinned to, and the mode that insets
-   *  every side. `full` is no region at all — the picture covers the box. */
-  backgroundInsetModes: {
+  /** The points a background's media may be anchored to. `full` is no
+   *  composition at all — the picture covers the box and the fill never shows. */
+  backgroundAnchors: {
     full: "Full",
+    center: "Center",
     left: "Left edge",
     right: "Right edge",
     top: "Top edge",
     bottom: "Bottom edge",
-    inset: "Inset all sides",
   },
-  /** The fade's source edge. `all` is the radial ramp from the region's middle. */
-  backgroundBlendEdges: {
-    none: "None",
-    left: "Left edge",
-    right: "Right edge",
-    top: "Top edge",
-    bottom: "Bottom edge",
-    all: "Around",
-  },
-  backgroundBlendShapes: { linear: "Linear", radial: "Radial" },
   /**
    * The four ways a reading may print its unit, keyed by what is stored.
    *
@@ -2537,7 +2527,7 @@ export const uiCopy = {
     background: "Background color",
     /** Which background model the theme is authored under. */
     backgroundMode: "Mode",
-    /** The paint a media region leaves uncovered. */
+    /** The paint an anchored media leaves uncovered. */
     backgroundFill: "Fill",
     /** The background column's own rows: the box its media fills, the zoom over
         its cover fit, the one pair that moves both axes, and the two paint-time
@@ -2549,11 +2539,9 @@ export const uiCopy = {
     backgroundFlipY: "Flip vertically",
     /** Where the picture sits inside its box, and how it fades into the fill. */
     backgroundComposition: "Composition",
-    backgroundInset: "Media area",
-    backgroundInsetAmount: "Area size",
-    backgroundBlendEdges: "Fade from",
-    backgroundBlendLength: "Fade length",
-    backgroundBlendShape: "Fade shape",
+    backgroundAnchor: "Anchor",
+    backgroundExtent: "Size",
+    backgroundFade: "Fade",
     /** The frame a video background shows where it cannot play, and the still
         the glass material samples. */
     backgroundFallbackFrame: "Fallback frame",

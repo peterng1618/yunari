@@ -77,8 +77,11 @@ that fails first, so no separate probe was needed.
 
 `Background.mode` is `"basic" | "advanced"` and is written only when advanced:
 absence is basic, which is the model every existing theme holds and the one a
-new theme starts in. In basic, `background.fill` and `background.media.region`
+new theme starts in. In basic, `background.fill` and `background.media.composition`
 are refused by the validator and the schema rather than ignored, so a document
-can never claim one model and carry another. Switching a theme to basic in the
-editor or the MCP drops the composition keys it can no longer express; nothing
-is migrated and no converter exists.
+can never claim one model and carry another. An advanced composition anchors the
+picture to one of five points, sizes an edge band and fades the seam into the
+fill; `resolveBackgroundComposition` turns that into the one region and mask
+list every surface reads. Switching a theme to basic in the editor or the MCP
+drops the keys it can no longer express; nothing is migrated and no converter
+exists.

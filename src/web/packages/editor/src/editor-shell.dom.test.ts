@@ -1113,7 +1113,7 @@ describe("the background layer", () => {
       media: {
         assetId: "hero",
         bounds: "theme" as const,
-        region: { left: 0.5 },
+        composition: { anchor: "left" as const, extent: 0.5 },
       },
     };
     const shell = await mount({
@@ -1123,8 +1123,8 @@ describe("the background layer", () => {
       resolveAsset: () => ({ url: "blob:hero" }),
     });
 
-    // The fill is the paint the region reveals; the plate is not painted while
-    // media is declared, so this layer is the only place it can show.
+    // The fill is the paint the anchored media reveals; the plate is not painted
+    // while media is declared, so this layer is the only place it can show.
     const fill = host.querySelector<HTMLElement>(
       "[data-yunari-background-fill-layer]",
     );

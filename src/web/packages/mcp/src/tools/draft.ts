@@ -1,20 +1,20 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import type {
   Artboard,
-  BackgroundBlend,
-  BackgroundEdge,
-  BackgroundRegion,
+  BackgroundAnchor,
+  BackgroundMediaComposition,
   FabricPalette,
   PalettePaint,
   StyleValue,
   TypeToken,
 } from "@yunari/renderer-core";
 import {
-  BACKGROUND_EDGES,
+  BACKGROUND_ANCHORS,
   BACKGROUND_MODES,
-  MAX_BACKGROUND_BLEND_LENGTH,
-  MAX_BACKGROUND_INSET,
-  MIN_BACKGROUND_BLEND_LENGTH,
+  MAX_BACKGROUND_EXTENT,
+  MAX_BACKGROUND_FADE,
+  MIN_BACKGROUND_EXTENT,
+  MIN_BACKGROUND_FADE,
 } from "@yunari/renderer-core";
 import {
   createBlankTheme,
@@ -283,21 +283,10 @@ export async function setBackground(
     readonly flipY?: boolean | undefined;
     readonly mode?: "basic" | "advanced" | undefined;
     readonly fill?: string | PalettePaint | undefined;
-    readonly inset?:
-      | {
-          readonly left?: number | undefined;
-          readonly top?: number | undefined;
-          readonly right?: number | undefined;
-          readonly bottom?: number | undefined;
-        }
-      | undefined;
-    readonly blend?:
-      | {
-          readonly shape?: "linear" | "radial" | undefined;
-          readonly edge?: BackgroundEdge | undefined;
-          readonly length: number;
-        }
-      | undefined;
+    /** `full` is the cover: it removes the composition instead of storing one. */
+    readonly anchor?: "full" | BackgroundAnchor | undefined;
+    readonly extent?: number | undefined;
+    readonly fade?: number | undefined;
     readonly clear?: boolean | undefined;
     readonly themeId?: string | undefined;
   },
@@ -309,7 +298,10 @@ export async function setBackground(
       return { themeId: draft.id, background: null };
     }
 
-    const composing = input.inset !== undefined || input.blend !== undefined;
+    const composing =
+      input.anchor !== undefined ||
+      input.extent !== undefined ||
+      input.fade !== undefined;
     if (
       input.color === undefined &&
       input.mediaAssetId === undefined &&
@@ -369,7 +361,7 @@ export async function setBackground(
           scale?: number;
           flipX?: boolean;
           flipY?: boolean;
-          region?: BackgroundRegion;
+          composition?: BackgroundMediaComposition;
         }
       | undefined;
     if (input.mediaAssetId !== undefined) {
@@ -405,10 +397,9 @@ export async function setBackground(
           "A background composition needs a media background to sit in.",
         );
       }
-      media = {
-        ...media,
-        region: regionOf(media.region, input.inset, input.blend),
-      };
+      const composition = compositionOf(media.composition, input);
+      const { composition: _previous, ...plain } = media;
+      media = composition === undefined ? plain : { ...media, composition };
     }
 
     // Returning to basic drops what the basic model cannot store, rather than
@@ -416,7 +407,7 @@ export async function setBackground(
     const returning = input.mode === "basic";
     let kept = media;
     if (returning && media !== undefined) {
-      const { region: _region, ...plain } = media;
+      const { composition: _composition, ...plain } = media;
       kept = plain;
     }
     const { mode: _mode, fill: _fill, ...basic } = existing ?? {};
@@ -438,90 +429,73 @@ export async function setBackground(
 }
 
 /**
- * The media's region after an edit, with the model's own ranges enforced before
- * the draft holds an invalid background.
+ * The media's composition after an edit, with the model's own ranges enforced
+ * before the draft holds an invalid background.
  *
- * Insets accumulate on the existing region; a blend is replaced whole. A shape
- * follows the edge it was given, and a linear ramp that names no edge keeps a
- * previously authored one rather than guessing.
+ * An omitted key keeps what the composition already stored, so a caller may
+ * move the anchor without restating the fade. A centred band is sized by its
+ * picture, so it stores no extent: an extent that named no edge is refused, and
+ * one left behind by an earlier edge is dropped when the anchor moves to the
+ * centre. `full` removes the composition: the media covers the box again.
  */
-function regionOf(
-  existing: BackgroundRegion | undefined,
-  inset:
-    | {
-        readonly left?: number | undefined;
-        readonly top?: number | undefined;
-        readonly right?: number | undefined;
-        readonly bottom?: number | undefined;
-      }
-    | undefined,
-  blend:
-    | {
-        readonly shape?: "linear" | "radial" | undefined;
-        readonly edge?: BackgroundEdge | undefined;
-        readonly length: number;
-      }
-    | undefined,
-): BackgroundRegion {
-  const next: {
-    left?: number;
-    top?: number;
-    right?: number;
-    bottom?: number;
-    blend?: BackgroundBlend;
-  } = { ...existing };
-
-  if (inset !== undefined) {
-    for (const edge of BACKGROUND_EDGES) {
-      const value = inset[edge];
-      if (value === undefined) continue;
-      if (
-        !Number.isFinite(value) ||
-        value < 0 ||
-        value > MAX_BACKGROUND_INSET
-      ) {
-        throw new Error(
-          `The ${edge} inset must be from 0 to ${MAX_BACKGROUND_INSET}.`,
-        );
-      }
-      next[edge] = value;
+function compositionOf(
+  existing: BackgroundMediaComposition | undefined,
+  input: {
+    readonly anchor?: "full" | BackgroundAnchor | undefined;
+    readonly extent?: number | undefined;
+    readonly fade?: number | undefined;
+  },
+): BackgroundMediaComposition | undefined {
+  if (input.anchor === "full") {
+    if (input.extent !== undefined || input.fade !== undefined) {
+      throw new Error("A full cover has no extent or fade to store.");
     }
-    if ((next.left ?? 0) + (next.right ?? 0) >= 1) {
-      throw new Error("The left and right insets must leave a positive area.");
-    }
-    if ((next.top ?? 0) + (next.bottom ?? 0) >= 1) {
-      throw new Error("The top and bottom insets must leave a positive area.");
-    }
+    return undefined;
   }
 
-  if (blend !== undefined) {
+  const anchor = input.anchor ?? existing?.anchor;
+  const next: {
+    anchor?: BackgroundAnchor;
+    extent?: number;
+    fade?: number;
+  } = anchor === undefined ? {} : { anchor };
+
+  if (input.extent !== undefined) {
     if (
-      !Number.isFinite(blend.length) ||
-      blend.length < MIN_BACKGROUND_BLEND_LENGTH ||
-      blend.length > MAX_BACKGROUND_BLEND_LENGTH
+      !Number.isFinite(input.extent) ||
+      input.extent < MIN_BACKGROUND_EXTENT ||
+      input.extent > MAX_BACKGROUND_EXTENT
     ) {
       throw new Error(
-        `The blend length must be from ${MIN_BACKGROUND_BLEND_LENGTH} to ${MAX_BACKGROUND_BLEND_LENGTH}.`,
+        `The extent must be from ${MIN_BACKGROUND_EXTENT} to ${MAX_BACKGROUND_EXTENT}.`,
       );
     }
-    const shape =
-      blend.shape ?? (blend.edge !== undefined ? "linear" : "radial");
-    if (shape === "linear") {
-      const edge =
-        blend.edge ??
-        (existing?.blend?.shape === "linear" ? existing.blend.edge : undefined);
-      if (edge === undefined) {
-        throw new Error(
-          "A linear blend needs an edge: left, right, top or bottom.",
-        );
-      }
-      next.blend = { shape: "linear", edge, length: blend.length };
-    } else {
-      if (blend.edge !== undefined) {
-        throw new Error("A radial blend has no edge.");
-      }
-      next.blend = { shape: "radial", length: blend.length };
+    if (anchor === undefined || anchor === "center") {
+      throw new Error(
+        "An extent needs an edge anchor: top, right, bottom or left.",
+      );
     }
+    next.extent = input.extent;
+  } else if (
+    anchor !== undefined &&
+    anchor !== "center" &&
+    existing?.extent !== undefined
+  ) {
+    next.extent = existing.extent;
+  }
+
+  const fade = input.fade ?? existing?.fade;
+  if (fade !== undefined) {
+    if (
+      !Number.isFinite(fade) ||
+      fade < MIN_BACKGROUND_FADE ||
+      fade > MAX_BACKGROUND_FADE
+    ) {
+      throw new Error(
+        `The fade must be from ${MIN_BACKGROUND_FADE} to ${MAX_BACKGROUND_FADE}.`,
+      );
+    }
+    next.fade = fade;
   }
 
   return next;
@@ -683,7 +657,7 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_background",
     {
       description:
-        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The basic model covers the box with the media. Set mode to "advanced" to compose it: fill paints the area a region leaves uncovered; inset and blend place the media in a region of the box and fade it into that fill. clear removes the background layer.',
+        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The basic model covers the box with the media. Set mode to "advanced" to compose it: fill paints the gap the anchored media leaves uncovered. anchor places the media at the top, right, bottom, left or centre of its box; extent sets the size of an edge band; fade smooths the seam into the fill. A centre anchor letterboxes the picture to its own aspect. clear removes the background layer.',
       inputSchema: z.object({
         color: z.string().min(1).optional(),
         mediaAssetId: z.string().min(1).optional(),
@@ -696,23 +670,16 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
         flipX: z.boolean().optional(),
         flipY: z.boolean().optional(),
         fill: z.union([z.string().min(1), paintSchema]).optional(),
-        inset: z
-          .object({
-            left: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
-            top: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
-            right: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
-            bottom: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
-          })
+        anchor: z.enum(["full", ...BACKGROUND_ANCHORS]).optional(),
+        extent: z
+          .number()
+          .min(MIN_BACKGROUND_EXTENT)
+          .max(MAX_BACKGROUND_EXTENT)
           .optional(),
-        blend: z
-          .object({
-            shape: z.enum(["linear", "radial"]).optional(),
-            edge: z.enum(BACKGROUND_EDGES).optional(),
-            length: z
-              .number()
-              .min(MIN_BACKGROUND_BLEND_LENGTH)
-              .max(MAX_BACKGROUND_BLEND_LENGTH),
-          })
+        fade: z
+          .number()
+          .min(MIN_BACKGROUND_FADE)
+          .max(MAX_BACKGROUND_FADE)
           .optional(),
         clear: z.boolean().optional(),
         themeId: z.string().min(1).optional(),

@@ -194,42 +194,41 @@ export interface Artboard {
 export const BACKGROUND_MEDIA_BOUNDS = ["theme", "display"] as const;
 export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
 
-/** The edges a linear blend can ramp from. The ramp starts transparent at the
- *  named edge and reaches full opacity `length` into the region. */
-export const BACKGROUND_EDGES = ["left", "right", "top", "bottom"] as const;
-export type BackgroundEdge = (typeof BACKGROUND_EDGES)[number];
+/** The five points a media band can be anchored to inside its bounds box. The
+ *  media keeps the full perpendicular axis, so the fill only ever meets it on
+ *  one side — or two opposite sides for `center`. */
+export const BACKGROUND_ANCHORS = [
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "center",
+] as const;
+export type BackgroundAnchor = (typeof BACKGROUND_ANCHORS)[number];
 
-/** A radial blend fits its ellipse to the region; a linear one runs from an
- *  edge. Both are authored as fractions of the media's bounds box. */
-export const BACKGROUND_BLEND_SHAPES = ["linear", "radial"] as const;
-export type BackgroundBlendShape = (typeof BACKGROUND_BLEND_SHAPES)[number];
+/** The fraction of the box an edge-anchored band keeps. Refused outside this
+ *  so a band can neither vanish nor take the whole box and leave no fill. */
+export const MIN_BACKGROUND_EXTENT = 0.1;
+export const MAX_BACKGROUND_EXTENT = 0.9;
+export const DEFAULT_BACKGROUND_EXTENT = 0.5;
 
-/** An inset is a fraction of the box's own dimension. It is refused above this
- *  so two opposite insets can never meet or cross; the pair is refused at the
- *  region when they sum to 1 or more. */
-export const MAX_BACKGROUND_INSET = 0.9;
+/** A fade is a visibility ramp, so its length is a fraction of the box; a zero
+ *  length is the hard edge expressed by omitting it. */
+export const MIN_BACKGROUND_FADE = 0.01;
+export const MAX_BACKGROUND_FADE = 1;
 
-/** The ramp is a visibility fade, so a zero length is a hard edge (expressed by
- *  omitting the blend) and a length over the box has no meaning. */
-export const MIN_BACKGROUND_BLEND_LENGTH = 0.01;
-export const MAX_BACKGROUND_BLEND_LENGTH = 1;
-
-export type BackgroundBlend =
-  | {
-      readonly shape: "linear";
-      readonly edge: BackgroundEdge;
-      readonly length: number;
-    }
-  | { readonly shape: "radial"; readonly length: number };
-
-/** Where the media sits inside its bounds box, and how it fades at one edge
- *  into the box's fill. Absent means full cover with a hard edge. */
-export interface BackgroundRegion {
-  readonly left?: number;
-  readonly top?: number;
-  readonly right?: number;
-  readonly bottom?: number;
-  readonly blend?: BackgroundBlend;
+/** Where the media sits inside its bounds box and how it dissolves into the
+ *  fill. A `center` anchor keeps no authored extent: its long edge fits the
+ *  box and the aspect decides which axis leaves the two gaps. */
+export interface BackgroundMediaComposition {
+  readonly anchor?: BackgroundAnchor;
+  /** The band's share of the box along the anchored axis; absent means
+   *  `DEFAULT_BACKGROUND_EXTENT`. Ignored by `center`. */
+  readonly extent?: number;
+  /** The ramp at every side the media meets the fill; absent means a hard
+   *  edge. Angles, edges and shapes are derived from the anchor, never
+   *  authored separately. */
+  readonly fade?: number;
 }
 
 /** The media's pan, as a fraction of the box's own dimensions. Refused, never
@@ -277,8 +276,8 @@ export interface BackgroundMedia {
    * still the glass material samples instead of a blur per video frame.
    */
   readonly fallbackFrame?: number;
-  /** Where the media sits inside its bounds box. Absent means the whole box. */
-  readonly region?: BackgroundRegion;
+  /** Where the media sits inside its bounds box. Absent covers the whole box. */
+  readonly composition?: BackgroundMediaComposition;
 }
 
 /**

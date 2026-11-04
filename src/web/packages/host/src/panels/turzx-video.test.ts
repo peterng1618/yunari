@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { blendRampStops } from "@yunari/renderer-core";
 import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice, PanelVideoPlacement } from "./panel-device.js";
@@ -318,19 +319,18 @@ async function filterFor(
 }
 
 describe("the composed panel clip", () => {
-  it("crops the source to the media region and composites it over a solid fill", async () => {
+  it("crops the source to the media's band and composites it over a solid fill", async () => {
     const filter = await filterFor({
       offsetX: 0,
       offsetY: 0,
-      region: { left: 0.35, top: 0, right: 0, bottom: 0 },
-      blend: { shape: "linear", edge: "left", length: 0.12 },
+      composition: { anchor: "left", extent: 0.65, fade: 0.12 },
       fill: { kind: "solid", color: "#101418" },
     });
 
     expect(filter).toContain("crop=");
     expect(filter).toContain("color=c=0x101418");
     expect(filter).toMatch(/maskedmerge|overlay/);
-    // The region starts 35% into the 800px box and is 65% wide.
+    // A left band keeping 65% of the 800px box is 520px wide and full height.
     expect(filter).toContain("scale=520:480");
   });
 
@@ -338,7 +338,7 @@ describe("the composed panel clip", () => {
     const filter = await filterFor({
       offsetX: 0,
       offsetY: 0,
-      region: { top: 0.5 },
+      composition: { anchor: "top", extent: 0.5 },
       fill: {
         kind: "gradient",
         angle: 90,
@@ -352,22 +352,23 @@ describe("the composed panel clip", () => {
     expect(filter).toContain("gradients=");
   });
 
-  it("renders a radial mask with geq and a linear mask with gradients", async () => {
-    const radial = await filterFor({
+  it("draws the shared eased ramp, not a straight one", async () => {
+    const filter = await filterFor({
       offsetX: 0,
       offsetY: 0,
-      region: { left: 0.35 },
-      blend: { shape: "radial", length: 0.4 },
+      composition: { anchor: "left", extent: 0.35, fade: 0.4 },
     });
-    expect(radial).toMatch(/geq/);
-
-    const linear = await filterFor({
-      offsetX: 0,
-      offsetY: 0,
-      region: { left: 0.35 },
-      blend: { shape: "linear", edge: "left", length: 0.4 },
-    });
-    expect(linear).toMatch(/gradients=/);
+    // Eight grayscale stops from the one ramp the DOM and the glass paint.
+    expect(filter).toMatch(/gradients=/);
+    expect(filter).toContain("nb_colors=8");
+    const stops = blendRampStops()
+      .map((stop) =>
+        Math.round(stop.alpha * 255)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .map((value) => `0x${value}${value}${value}`);
+    for (const stop of stops) expect(filter).toContain(stop);
   });
 
   it("keeps the plain -vf path when there is no composition", async () => {
@@ -412,7 +413,7 @@ describe("the composed panel clip", () => {
         placement: {
           offsetX: 0,
           offsetY: 0,
-          region: { left: 0.35 },
+          composition: { anchor: "left", extent: 0.65 },
           fill: { kind: "solid", color: "#101418" },
         },
       });

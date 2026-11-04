@@ -78,8 +78,7 @@ const ENVELOPE_BAGS: Record<EnvelopeKeyBag, readonly string[][]> = {
   globals: [["$defs", "globals"]],
   background: [["$defs", "background"]],
   backgroundMedia: [["$defs", "backgroundMedia"]],
-  backgroundRegion: [["$defs", "backgroundRegion"]],
-  backgroundBlend: [["$defs", "backgroundBlend"]],
+  backgroundComposition: [["$defs", "backgroundComposition"]],
 };
 
 function envelope(): Record<string, unknown> {

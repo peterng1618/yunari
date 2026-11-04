@@ -461,7 +461,7 @@ describe("the background layer", () => {
     ).toContain("unresolved-asset-ref");
   });
 
-  it("accepts a media region with a linear blend and a fill", () => {
+  it("accepts an anchored media band with a fade and a fill", () => {
     const envelope = withBackground({
       mode: "advanced",
       color: { ref: "palette.ink" },
@@ -469,89 +469,63 @@ describe("the background layer", () => {
       media: {
         assetId: "clip",
         bounds: "display",
-        region: {
-          left: 0.35,
-          blend: { shape: "linear", edge: "left", length: 0.12 },
-        },
+        composition: { anchor: "left", extent: 0.35, fade: 0.12 },
       },
     });
 
     expect(codes(envelope)).toEqual([]);
   });
 
-  it("refuses a region that leaves no area", () => {
+  it("refuses a composition key that is not an anchor, extent or fade", () => {
     const issues = issuesFor(
       withBackground({
         mode: "advanced",
         media: {
           assetId: "clip",
           bounds: "display",
-          region: { left: 0.5, right: 0.5 },
-        },
-      }),
-    );
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0]!.code).toBe("out-of-range");
-    expect(issues[0]!.path).toBe("/background/media/region");
-  });
-
-  it("refuses an inset on a key that is not an edge", () => {
-    const issues = issuesFor(
-      withBackground({
-        mode: "advanced",
-        media: {
-          assetId: "clip",
-          bounds: "display",
-          region: { diagonal: 0.2 },
+          composition: { inset: 0.2 },
         },
       }),
     );
 
     expect(issues).toHaveLength(1);
     expect(issues[0]!.code).toBe("unknown-field");
-    expect(issues[0]!.path).toBe("/background/media/region/diagonal");
+    expect(issues[0]!.path).toBe("/background/media/composition/inset");
   });
 
-  it("refuses a linear blend with no edge and a radial blend with one", () => {
-    for (const blend of [
-      { shape: "linear", length: 0.2 },
-      { shape: "radial", edge: "left", length: 0.2 },
+  it("refuses an extent or fade outside the box's bounds", () => {
+    for (const composition of [
+      { anchor: "left", extent: 0.05 },
+      { anchor: "left", extent: 0.95 },
+      { anchor: "left", fade: 0 },
+      { anchor: "left", fade: 1.01 },
     ]) {
       const issues = issuesFor(
         withBackground({
           mode: "advanced",
-          media: {
-            assetId: "clip",
-            bounds: "display",
-            region: { blend },
-          },
-        }),
-      );
-
-      expect(issues).toHaveLength(1);
-      expect(issues[0]!.code).toBe("wrong-type");
-      expect(issues[0]!.path).toBe("/background/media/region/blend/edge");
-    }
-  });
-
-  it("refuses a blend length that is zero or over one", () => {
-    for (const length of [0, 1.01]) {
-      const issues = issuesFor(
-        withBackground({
-          mode: "advanced",
-          media: {
-            assetId: "clip",
-            bounds: "display",
-            region: { blend: { shape: "radial", length } },
-          },
+          media: { assetId: "clip", bounds: "display", composition },
         }),
       );
 
       expect(issues).toHaveLength(1);
       expect(issues[0]!.code).toBe("out-of-range");
-      expect(issues[0]!.path).toBe("/background/media/region/blend/length");
     }
+  });
+
+  it("refuses an anchor the five-point grid does not name", () => {
+    const issues = issuesFor(
+      withBackground({
+        mode: "advanced",
+        media: {
+          assetId: "clip",
+          bounds: "display",
+          composition: { anchor: "middle" },
+        },
+      }),
+    );
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.code).toBe("invalid-enum");
   });
 });
 

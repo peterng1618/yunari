@@ -19,6 +19,7 @@ import path from "node:path";
 import {
   artboardGradientLine,
   type BackgroundMask,
+  blendRampStops,
   type PalettePaint,
   resolveBackgroundComposition,
 } from "@yunari/renderer-core";
@@ -301,12 +302,14 @@ export function panelCrop(
   offsetX: number,
   offsetY: number,
   box: { readonly width: number; readonly height: number } = BOX,
+  scale?: number,
 ): PanelCrop {
   const rect = placement({
     box,
     source,
     offsetX: Number.isFinite(offsetX) ? offsetX : 0,
     offsetY: Number.isFinite(offsetY) ? offsetY : 0,
+    ...(scale === undefined ? {} : { scale }),
   });
 
   const scaleX = rect.width / source.width;
@@ -364,9 +367,7 @@ function panelFilter(
   const box = turnedBox(BOX, turn);
   const facts = readVideoFacts(bytes);
   const composed =
-    placement.region !== undefined ||
-    placement.blend !== undefined ||
-    placement.fill !== undefined;
+    placement.composition !== undefined || placement.fill !== undefined;
 
   if (!composed) {
     return {
@@ -404,6 +405,7 @@ function plainFilter(
     placement.offsetX,
     placement.offsetY,
     box,
+    placement.scale,
   );
 
   return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnSuffix}`;
@@ -425,10 +427,8 @@ function composedFilter(
 ): string {
   const composition = resolveBackgroundComposition(
     { width: box.width, height: box.height },
-    {
-      ...(placement.region ?? {}),
-      ...(placement.blend === undefined ? {} : { blend: placement.blend }),
-    },
+    placement.composition,
+    facts,
   );
   const region = composition.region;
   const width = Math.max(1, Math.round(region.width));
@@ -445,6 +445,7 @@ function composedFilter(
             placement.offsetX,
             placement.offsetY,
             { width: region.width, height: region.height },
+            placement.scale,
           );
           return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:${height}`;
         })();
@@ -455,12 +456,12 @@ function composedFilter(
   ];
 
   let overlayInput = "media";
-  if (composition.mask !== undefined) {
+  for (const [index, mask] of composition.masks.entries()) {
     parts.push(
-      `${maskSource(composition.mask, x, y, width, height)}[mask]`,
-      "[media][mask]alphamerge[composed]",
+      `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
+      `[${overlayInput}][mask${String(index)}]alphamerge[composed${String(index)}]`,
     );
-    overlayInput = "composed";
+    overlayInput = `composed${String(index)}`;
   }
 
   const turnStep = turnFilter(turn);
@@ -512,8 +513,9 @@ function ffmpegColor(color: string): string {
 }
 
 /**
- * The alpha mask, sized to the region and shifted by the region's own offset.
- * The resolver's line is in box pixels; the mask source is region pixels.
+ * One alpha ramp, sized to the region and shifted by the region's own offset.
+ * The stops are the shared eased ramp in grayscale, so the bake draws the same
+ * curve as the DOM and the glass instead of a linear ramp with visible ends.
  */
 function maskSource(
   mask: BackgroundMask,
@@ -522,25 +524,19 @@ function maskSource(
   width: number,
   height: number,
 ): string {
-  if (mask.kind === "linear") {
-    return (
-      `gradients=s=${width}x${height}:c0=black:c1=white` +
-      `:x0=${Math.round(mask.x1 - x)}:y0=${Math.round(mask.y1 - y)}` +
-      `:x1=${Math.round(mask.x2 - x)}:y1=${Math.round(mask.y2 - y)}`
-    );
-  }
-
-  const cx = (mask.cx - x).toFixed(2);
-  const cy = (mask.cy - y).toFixed(2);
-  const rx = Math.max(1, mask.rx);
-  const ry = Math.max(1, mask.ry);
-  const ramp = Math.max(0.0001, 1 - mask.opaqueFraction);
-  // `1 - d` is opaque inside the ellipse and 0 at its boundary; the ramp
-  // starts `opaqueFraction` of the way out and reaches the edge at 1.
-  const expression = `255*min(1,max(0,(1-hypot((X-${cx})/${rx},(Y-${cy})/${ry}))/${ramp}))`;
+  const stops = blendRampStops();
+  const colors = stops
+    .map((stop, index) => {
+      const value = Math.round(stop.alpha * 255)
+        .toString(16)
+        .padStart(2, "0");
+      return `c${String(index)}=0x${value}${value}${value}`;
+    })
+    .join(":");
   return (
-    `color=c=black:s=${width}x${height},` +
-    `geq=lum='${expression}':cb='128':cr='128'`
+    `gradients=s=${width}x${height}:${colors}:nb_colors=${String(stops.length)}` +
+    `:x0=${Math.round(mask.x1 - x)}:y0=${Math.round(mask.y1 - y)}` +
+    `:x1=${Math.round(mask.x2 - x)}:y1=${Math.round(mask.y2 - y)}`
   );
 }
 

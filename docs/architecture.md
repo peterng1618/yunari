@@ -128,17 +128,21 @@ provider or display that falls behind is dropped rather than growing memory.
   `circle`, and absent means `rect`. A circle artboard is square and its glass
   is the inscribed disc; the field is additive, so the schema stays `2.0.0`.
 - `background` is document state: `color` and `fill` are style values, and
-  `media` declares the asset, its bounds and transform. A media `region` gives
-  the picture an area in fractions of its bounds box, and a `blend` fades it into
-  the fill. `mode` is `basic` or `advanced` and absent means `basic`: the
-  full-cover media every theme authored before composition has. Only an
-  `advanced` background may carry a `fill` or a media `region`, and a `fill`
-  needs media to sit behind; the validator and the published schema refuse the
-  wrong combination rather than ignore it. The resolver
-  `resolveBackgroundComposition` is the one geometry: the DOM media layer, the
-  player's glass backdrop and the TURZX clip bake all take the region and mask
-  from it. The bake composites region, fill and mask in the video plane, so a
-  fade never rides the coarse overlay.
+  `media` declares the asset, its bounds and transform. `mode` is `basic` or
+  `advanced` and absent means `basic`: the full-cover media every theme authored
+  before composition has. Only an `advanced` background may carry a `fill` or a
+  media `composition`, and a `fill` needs media to sit behind; the validator and
+  the published schema refuse the wrong combination rather than ignore it. A
+  composition anchors the picture to `top`, `right`, `bottom`, `left` or
+  `center`. An edge anchor makes a band whose size along that axis is `extent`,
+  and the fill takes the other side; a centre anchor fits the picture's long
+  edge, so the fill covers exactly the two opposite gaps and never surrounds the
+  media. `fade` is the length of the eased ramp that smooths each seam into the
+  fill. The resolver `resolveBackgroundComposition` is the one geometry: the DOM
+  media layer, the player's glass backdrop and the TURZX clip bake all take the
+  region and its masks from it, and all three sample the same eased ramp. The
+  bake composites region, fill and mask in the video plane, so a fade never
+  rides the coarse overlay.
 - Current schema is `2.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are
   keyed by the major they migrate from. Missing migration or newer major is a
   refusal, never a best-effort read.

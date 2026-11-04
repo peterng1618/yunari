@@ -58,10 +58,7 @@ describe("background modes", () => {
         fill: { ref: "palette.ink" },
         media: {
           ...MEDIA,
-          region: {
-            left: 0.5,
-            blend: { shape: "linear", edge: "left", length: 0.1 },
-          },
+          composition: { anchor: "left", extent: 0.5, fade: 0.1 },
         },
       }),
     ).toEqual([]);
@@ -76,9 +73,23 @@ describe("background modes", () => {
     );
   });
 
-  it("refuses a region while the mode is basic", () => {
-    expect(codes({ media: { ...MEDIA, region: { left: 0.5 } } })).toContain(
-      "composition-needs-advanced",
+  it("refuses a composition while the mode is basic", () => {
+    expect(
+      codes({ media: { ...MEDIA, composition: { anchor: "left" } } }),
+    ).toContain("composition-needs-advanced");
+  });
+
+  it("refuses an unknown anchor, extent and fade", () => {
+    expect(
+      codes({
+        mode: "advanced",
+        media: {
+          ...MEDIA,
+          composition: { anchor: "middle", extent: 0.95, fade: 2 },
+        },
+      }),
+    ).toEqual(
+      expect.arrayContaining(["invalid-enum", "out-of-range", "out-of-range"]),
     );
   });
 

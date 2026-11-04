@@ -1,20 +1,23 @@
 import {
   type AssetReference,
-  BACKGROUND_EDGES,
+  BACKGROUND_ANCHORS,
   BACKGROUND_MEDIA_BOUNDS,
   BACKGROUND_MEDIA_DEFAULTS,
   BACKGROUND_MODES,
   type Background,
-  type BackgroundBlend,
-  type BackgroundEdge,
+  type BackgroundAnchor,
   type BackgroundMedia,
+  type BackgroundMediaComposition,
   type BackgroundMode,
-  type BackgroundRegion,
+  DEFAULT_BACKGROUND_EXTENT,
   type FabricGlobals,
   type GlobalRef,
+  MAX_BACKGROUND_EXTENT,
+  MAX_BACKGROUND_FADE,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
-  MIN_BACKGROUND_BLEND_LENGTH,
+  MIN_BACKGROUND_EXTENT,
+  MIN_BACKGROUND_FADE,
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   paletteTokenOptions,
@@ -29,17 +32,13 @@ import type {
   PairHalfView,
 } from "./view.js";
 
-/** The area a first region keeps, and the span its size slider offers. The
- *  stored fraction is the area, not the inset: 0.35 leaves a third of the box. */
-const MIN_INSET_AMOUNT = 0.1;
-const MAX_INSET_AMOUNT = 0.9;
-const DEFAULT_INSET_AMOUNT = 0.5;
-/** A first fade's length, and the longest one the editor offers. The model's
- *  floor is 0.01, but a fade over half the box is a wash rather than a ramp. */
-const DEFAULT_BLEND_LENGTH = 0.1;
-const MAX_BLEND_LENGTH = 0.5;
+/** The longest fade the editor offers. The model accepts a longer ramp, but
+ *  past half the box the seam is gone rather than faded. */
+const MAX_FADE_AMOUNT = Math.min(MAX_BACKGROUND_FADE, 0.5);
 
-type RegionMode = "full" | "left" | "right" | "top" | "bottom" | "inset";
+/** The anchor control's reading: the stored point, or `full` for no
+ *  composition at all (the picture covers the box). */
+type AnchorMode = "full" | BackgroundAnchor;
 
 /**
  * The background's column, as values.
@@ -64,7 +63,7 @@ function colourRef(background: Background | undefined): string {
 
 /** The model the background is authored under. Basic is the full-cover media
  *  every theme predates composition; advanced is the opt-in that unlocks the
- *  fill and the media's region. */
+ *  fill and the media's anchor. */
 function modeField(background: Background | undefined): FieldView {
   return {
     id: "background.mode",
@@ -240,73 +239,25 @@ function mediaKind(
 }
 
 /**
- * What the region control reads: the edge the media is pinned to (or `full`),
- * and the area that edge leaves.
- *
- * The mode and the size are projections of one stored region rather than two
- * fields, so switching edges keeps the size the author already set. A region
- * authored elsewhere may inset several sides unequally; the first edge with an
- * inset is the one the control shows, which is the one a further edit keeps.
+ * What the anchor control reads: the stored point, or `full` when the media
+ * carries no composition and so covers the box.
  */
-function regionReading(region: BackgroundRegion | undefined): {
-  readonly mode: RegionMode;
-  readonly amount: number;
-} {
-  const insets = {
-    left: region?.left ?? 0,
-    right: region?.right ?? 0,
-    top: region?.top ?? 0,
-    bottom: region?.bottom ?? 0,
-  };
-  const edged = BACKGROUND_EDGES.filter((edge) => insets[edge] > 0);
-  if (edged.length === 0) {
-    return { mode: "full", amount: DEFAULT_INSET_AMOUNT };
-  }
-  if (
-    edged.length === BACKGROUND_EDGES.length &&
-    insets.left === insets.right &&
-    insets.left === insets.top &&
-    insets.left === insets.bottom
-  ) {
-    // Both sides of each axis carry the same inset, so the size is what two of
-    // them leave rather than one.
-    return { mode: "inset", amount: 1 - 2 * insets.left };
-  }
-  const edge = edged[0] as BackgroundEdge;
-  return { mode: edge, amount: 1 - insets[edge] };
+function anchorReading(
+  composition: BackgroundMediaComposition | undefined,
+): AnchorMode {
+  return composition === undefined ? "full" : (composition.anchor ?? "center");
 }
 
-/** The region a mode and an area store, with the blend that sits inside it. */
-function regionOf(
-  mode: RegionMode,
-  amount: number,
-  blend: BackgroundBlend | undefined,
-): BackgroundRegion | undefined {
-  if (mode === "full") return blend === undefined ? undefined : { blend };
-  const inset = mode === "inset" ? (1 - amount) / 2 : 1 - amount;
-  const region =
-    mode === "inset"
-      ? { left: inset, right: inset, top: inset, bottom: inset }
-      : { [mode]: inset };
-  return blend === undefined ? region : { ...region, blend };
-}
-
-/** The media's region with one key replaced, or dropped when it would be empty. */
-function replaceRegion(
+/** The media with its composition replaced, or dropped when it would be empty. */
+function replaceComposition(
   media: BackgroundMedia,
-  region: BackgroundRegion | undefined,
+  composition: BackgroundMediaComposition | undefined,
 ): BackgroundMedia {
-  if (region === undefined) {
-    const { region: _region, ...without } = media;
+  if (composition === undefined) {
+    const { composition: _composition, ...without } = media;
     return without;
   }
-  return { ...media, region };
-}
-
-/** Which of the three fade shapes the control shows. */
-function blendEdgeReading(blend: BackgroundBlend | undefined): string {
-  if (blend === undefined) return "none";
-  return blend.shape === "radial" ? "all" : blend.edge;
+  return { ...media, composition };
 }
 
 function fillField(
@@ -332,69 +283,60 @@ function fillField(
   };
 }
 
-/** The region and fade rows. They describe where a picture sits inside its box,
-    so they exist only with a picture. */
+/** The anchor, size and fade rows. They describe where a picture sits inside
+    its box and how it meets the fill, so they exist only with a picture. */
 function compositionFields(media: BackgroundMedia): readonly FieldView[] {
-  const reading = regionReading(media.region);
-  const blend = media.region?.blend;
+  const composition = media.composition;
+  const anchor = anchorReading(composition);
+  const edged =
+    anchor === "left" ||
+    anchor === "right" ||
+    anchor === "top" ||
+    anchor === "bottom";
   return [
     {
-      id: "background.inset",
+      id: "background.anchor",
       control: "select",
-      label: uiCopy.panels.backgroundInset,
-      value: reading.mode,
-      options: (
-        ["full", "left", "right", "top", "bottom", "inset"] as const
-      ).map((mode) => ({
+      label: uiCopy.panels.backgroundAnchor,
+      value: anchor,
+      options: (["full", ...BACKGROUND_ANCHORS] as const).map((mode) => ({
         id: mode,
-        name: uiCopy.backgroundInsetModes[mode],
+        name: uiCopy.backgroundAnchors[mode],
       })),
-      data: { "data-yunari-background-inset": "" },
+      data: { "data-yunari-background-anchor": "" },
     },
-    {
-      id: "background.insetAmount",
-      control: "slider",
-      label: uiCopy.panels.backgroundInsetAmount,
-      value: reading.amount,
-      min: MIN_INSET_AMOUNT,
-      max: MAX_INSET_AMOUNT,
-      percent: true,
-      data: { "data-yunari-background-inset-amount": "" },
-    },
-    {
-      id: "background.blendEdges",
-      control: "select",
-      label: uiCopy.panels.backgroundBlendEdges,
-      value: blendEdgeReading(blend),
-      options: (["none", "left", "right", "top", "bottom", "all"] as const).map(
-        (edge) => ({
-          id: edge,
-          name: uiCopy.backgroundBlendEdges[edge],
-        }),
-      ),
-      data: { "data-yunari-background-blend-edges": "" },
-    },
-    {
-      id: "background.blendLength",
-      control: "slider",
-      label: uiCopy.panels.backgroundBlendLength,
-      value: blend?.length ?? DEFAULT_BLEND_LENGTH,
-      min: MIN_BACKGROUND_BLEND_LENGTH,
-      max: MAX_BLEND_LENGTH,
-      percent: true,
-      data: { "data-yunari-background-blend-length": "" },
-    },
-    {
-      id: "background.blendShape",
-      control: "segmented",
-      label: uiCopy.panels.backgroundBlendShape,
-      value: blend?.shape ?? "linear",
-      options: (["linear", "radial"] as const).map((shape) => ({
-        id: shape,
-        name: uiCopy.backgroundBlendShapes[shape],
-      })),
-      data: { "data-yunari-background-blend-shape": "" },
-    },
+    // A centred band is sized by its picture's own aspect, so only an edge
+    // anchor offers a size.
+    ...(edged
+      ? [
+          {
+            id: "background.extent",
+            control: "slider",
+            label: uiCopy.panels.backgroundExtent,
+            value: composition?.extent ?? DEFAULT_BACKGROUND_EXTENT,
+            min: MIN_BACKGROUND_EXTENT,
+            max: MAX_BACKGROUND_EXTENT,
+            percent: true,
+            data: { "data-yunari-background-extent": "" },
+          } satisfies FieldView,
+        ]
+      : []),
+    // With no composition there is no seam, so nothing to fade.
+    ...(composition === undefined
+      ? []
+      : [
+          {
+            id: "background.fade",
+            control: "slider",
+            label: uiCopy.panels.backgroundFade,
+            // Zero is the stored absence of a ramp.
+            value: composition.fade ?? 0,
+            min: 0,
+            max: MAX_FADE_AMOUNT,
+            percent: true,
+            data: { "data-yunari-background-fade": "" },
+          } satisfies FieldView,
+        ]),
   ];
 }
 
@@ -432,7 +374,7 @@ export function backgroundColumn(input: {
             flipField(media, "flipX"),
             flipField(media, "flipY"),
           ]),
-          // The region and fade describe how the media composes with the fill,
+          // The anchor and fade describe how the media composes with the fill,
           // which only an advanced background has.
           ...(advanced
             ? [sectionView("composition", compositionFields(media))]
@@ -469,12 +411,12 @@ export function writeBackgroundField(
       if (mode === "advanced") {
         return { ...current, mode: "advanced" as BackgroundMode };
       }
-      // Basic has no fill and no region, so returning to it drops the keys it
-      // cannot express rather than leaving a document that fails its own
+      // Basic has no fill and no composition, so returning to it drops the keys
+      // it cannot express rather than leaving a document that fails its own
       // validator. The media's own geometry stays.
       const { mode: _mode, fill: _fill, ...basic } = current;
       if (basic.media === undefined) return basic;
-      const { region: _region, ...plainMedia } = basic.media;
+      const { composition: _composition, ...plainMedia } = basic.media;
       return { ...basic, media: plainMedia };
     }
     case "background.color": {
@@ -530,127 +472,63 @@ export function writeBackgroundField(
       if (bounds === undefined) return undefined;
       return { ...current, media: { ...media, bounds } };
     }
-    case "background.inset": {
+    case "background.anchor": {
       if (media === undefined || typeof value !== "string") return undefined;
       if (!advanced) return undefined;
-      const mode = (
-        ["full", "left", "right", "top", "bottom", "inset"] as const
-      ).find((candidate) => candidate === value);
-      if (mode === undefined) return undefined;
-      // The stored region is the only record of the area's size, so a mode
-      // change reads it rather than resetting to the default.
-      const { amount } = regionReading(media.region);
+      if (value === "full") {
+        return { ...current, media: replaceComposition(media, undefined) };
+      }
+      const anchor = BACKGROUND_ANCHORS.find(
+        (candidate) => candidate === value,
+      );
+      if (anchor === undefined) return undefined;
+      // Switching points keeps the size and fade the author already set: the
+      // composition is one stored object, not one field per control.
       return {
         ...current,
-        media: replaceRegion(
-          media,
-          regionOf(mode, amount, media.region?.blend),
-        ),
+        media: replaceComposition(media, { ...media.composition, anchor }),
       };
     }
-    case "background.insetAmount": {
+    case "background.extent": {
       if (
         media === undefined ||
         typeof value !== "number" ||
         !Number.isFinite(value) ||
-        value < MIN_INSET_AMOUNT ||
-        value > MAX_INSET_AMOUNT
+        value < MIN_BACKGROUND_EXTENT ||
+        value > MAX_BACKGROUND_EXTENT
       )
         return undefined;
       if (!advanced) return undefined;
-      // A size with no edge yet becomes the all-sides inset: moving the slider
-      // is what first gives the picture a smaller area.
-      const { mode } = regionReading(media.region);
+      const composition = media.composition;
+      const anchor = composition?.anchor;
+      // A centred band is sized by its picture, so it has no authored size.
+      if (anchor === undefined || anchor === "center") return undefined;
       return {
         ...current,
-        media: replaceRegion(
-          media,
-          regionOf(
-            mode === "full" ? "inset" : mode,
-            value,
-            media.region?.blend,
-          ),
-        ),
+        media: replaceComposition(media, { ...composition, extent: value }),
       };
     }
-    case "background.blendEdges": {
-      if (media === undefined || typeof value !== "string") return undefined;
-      if (!advanced) return undefined;
-      const region = media.region ?? {};
-      const { blend: _blend, ...unblended } = region;
-      if (value === "none") {
-        return {
-          ...current,
-          media: replaceRegion(
-            media,
-            Object.keys(unblended).length === 0 ? undefined : unblended,
-          ),
-        };
-      }
-      const length = region.blend?.length ?? DEFAULT_BLEND_LENGTH;
-      if (value === "all") {
-        return {
-          ...current,
-          media: {
-            ...media,
-            region: { ...unblended, blend: { shape: "radial", length } },
-          },
-        };
-      }
-      const edge = BACKGROUND_EDGES.find((candidate) => candidate === value);
-      if (edge === undefined) return undefined;
-      return {
-        ...current,
-        media: {
-          ...media,
-          region: { ...unblended, blend: { shape: "linear", edge, length } },
-        },
-      };
-    }
-    case "background.blendLength": {
+    case "background.fade": {
       if (
         media === undefined ||
-        media.region?.blend === undefined ||
         typeof value !== "number" ||
         !Number.isFinite(value) ||
-        value < MIN_BACKGROUND_BLEND_LENGTH ||
-        value > MAX_BLEND_LENGTH
+        value < 0 ||
+        value > MAX_FADE_AMOUNT
       )
         return undefined;
       if (!advanced) return undefined;
+      const composition = media.composition;
+      if (composition === undefined) return undefined;
+      if (value === 0) {
+        // Zero is stored by omission: the ramp is derived from a set fade.
+        const { fade: _fade, ...withoutFade } = composition;
+        return { ...current, media: replaceComposition(media, withoutFade) };
+      }
+      if (value < MIN_BACKGROUND_FADE) return undefined;
       return {
         ...current,
-        media: {
-          ...media,
-          region: {
-            ...media.region,
-            blend: { ...media.region.blend, length: value },
-          },
-        },
-      };
-    }
-    case "background.blendShape": {
-      if (
-        media === undefined ||
-        media.region?.blend === undefined ||
-        (value !== "linear" && value !== "radial")
-      )
-        return undefined;
-      if (!advanced) return undefined;
-      const blend = media.region.blend;
-      // The two shapes do not carry the same keys: a radial ramp has no edge,
-      // and returning to linear needs one, so the left edge stands in.
-      const next: BackgroundBlend =
-        value === "radial"
-          ? { shape: "radial", length: blend.length }
-          : {
-              shape: "linear",
-              edge: blend.shape === "linear" ? blend.edge : "left",
-              length: blend.length,
-            };
-      return {
-        ...current,
-        media: { ...media, region: { ...media.region, blend: next } },
+        media: replaceComposition(media, { ...composition, fade: value }),
       };
     }
     case "background.flipX":
