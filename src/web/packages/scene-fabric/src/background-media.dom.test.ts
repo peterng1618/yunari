@@ -1139,7 +1139,7 @@ describe("background media as a glass backdrop", () => {
 
     const layer = host.querySelector("[data-yunari-background-media]");
     const fill = layer?.querySelector<HTMLElement>(
-      "[data-yunari-background-fill]",
+      "[data-yunari-background-fill-layer]",
     );
     const region = layer?.querySelector<HTMLElement>(
       "[data-yunari-background-region]",
@@ -1164,6 +1164,39 @@ describe("background media as a glass backdrop", () => {
     // The child's placement is relative to the region, not the bounds box.
     expect(media?.style.left).toBe("0px");
     expect(media?.style.width).toBe("300px");
+
+    handle.destroy();
+  });
+
+  it("takes a new fill without remounting the media", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        mode: "advanced",
+        media: { assetId: "hero", bounds: "theme" },
+      },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+      fill: { kind: "solid", color: "#111111" },
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+
+    const fill = host.querySelector<HTMLElement>(
+      "[data-yunari-background-fill-layer]",
+    );
+    const media = host.querySelector("[data-yunari-background-region] img");
+    expect(fill?.style.background).toBe("rgb(17, 17, 17)");
+
+    // A token edit repaints the fill; the mounted picture is the same one.
+    handle.setFill({ kind: "solid", color: "#222222" });
+    expect(fill?.style.background).toBe("rgb(34, 34, 34)");
+    expect(host.querySelector("[data-yunari-background-region] img")).toBe(
+      media,
+    );
 
     handle.destroy();
   });

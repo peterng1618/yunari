@@ -224,6 +224,10 @@ export interface BackgroundMediaHandle {
    *  different asset (or none) tears it down and mounts afresh, because a
    *  remount is what restarts a video. */
   setBackground(background: Background | undefined): void;
+  /** Replaces the paint behind the media. The value is the caller's resolved
+   *  style, so an unresolved or non-paint value paints nothing rather than
+   *  guessing a colour. */
+  setFill(fill: unknown): void;
   setArtboardSize(size: {
     readonly width: number;
     readonly height: number;
@@ -263,13 +267,17 @@ export function mountBackgroundMedia(
   // capture hides `[data-yunari-background-media]`, and a fill outside it would
   // paint over the device's baked clip.
   const fillLayer = document.createElement("div");
-  fillLayer.dataset["yunariBackgroundFill"] = "";
+  fillLayer.dataset["yunariBackgroundFillLayer"] = "";
   const regionLayer = document.createElement("div");
   regionLayer.dataset["yunariBackgroundRegion"] = "";
   regionLayer.style.cssText = "position:absolute;overflow:hidden;";
   layer.append(fillLayer, regionLayer);
   const { assets, resolveAsset, onMediaError, onFrame } = options;
   let background = options.background;
+  /** The paint behind the media inside its bounds box. It is resolved from the
+   *  theme's fill by the caller, so a token edit is a new value rather than a
+   *  remount. */
+  let fill = options.fill;
   let artboardSize = {
     width: options.artboard.width,
     height: options.artboard.height,
@@ -360,8 +368,7 @@ export function mountBackgroundMedia(
       media?.region,
     );
     fillLayer.style.cssText = "position:absolute;inset:0;";
-    fillLayer.style.background =
-      cssArtboardPaint(options.fill) ?? "transparent";
+    fillLayer.style.background = cssArtboardPaint(fill) ?? "transparent";
     const region = composition.region;
     regionLayer.style.left = `${region.left}px`;
     regionLayer.style.top = `${region.top}px`;
@@ -587,6 +594,10 @@ export function mountBackgroundMedia(
   setBackground(options.background);
   return {
     setBackground,
+    setFill(next) {
+      fill = next;
+      place();
+    },
     setArtboardSize(size) {
       artboardSize = { width: size.width, height: size.height };
       place();
@@ -669,7 +680,7 @@ export function mountBackgroundMedia(
         ...(authored === undefined
           ? {}
           : {
-              fill: options.fill,
+              fill,
               region: composition.region,
               ...(composition.mask === undefined
                 ? {}
