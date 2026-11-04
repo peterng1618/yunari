@@ -102,26 +102,21 @@ export function PublishControl({
     return () => clearInterval(timer);
   }, [surfaceOpen, expiresAt]);
 
-  // **The address is the host's, not a credential's.** It exists only while the
-  // LAN is on, so turning it off takes the URL off the screen rather than leaving
-  // a stale one behind — and it is drawn whether or not a code has been read,
-  // because the address is what a display has to reach.
-  //
-  // **The name is dialled where the host has one**, because a display's cookie
-  // and storage are scoped to the origin it paired on: a dotted quad that DHCP
-  // moves is a phone that has to pair again, while the name does not move.
-  // The address is still what gates this block and is
-  // still printed, because a device that cannot resolve the name — Android 11
-  // and earlier, or one on Private DNS — is exactly the device an address is
-  // for.
+  // **The address is what a display pairs on.** The name is offered beside it
+  // where the host answers one, because it survives a change of IP — but only
+  // a device that resolves it can use it, and nothing on this host advertises
+  // the name over mDNS, so preferring it made the symbol and the printed URL
+  // fail on a phone that had no such resolver. A display stores the host's name
+  // from `/api/host` when it pairs, so the re-find ladder still has it.
   const shown =
     answer !== undefined &&
     open &&
     answer.address !== null &&
     answer.port !== null
       ? {
-          host: answer.name ?? answer.address,
+          host: answer.address,
           address: answer.address,
+          name: answer.name ?? undefined,
           port: answer.port,
         }
       : undefined;
@@ -256,6 +251,11 @@ export function PublishControl({
             <span className="editor-shell-publish-note">
               {uiCopy.publish.fallback(shown.address, shown.port)}
             </span>
+            {shown.name === undefined ? null : (
+              <span className="editor-shell-publish-note">
+                {uiCopy.publish.stableName(shown.name, shown.port)}
+              </span>
+            )}
             {code === undefined ? null : (
               <>
                 {/* The code in type, because the symbol beside it needs a

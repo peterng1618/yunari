@@ -429,8 +429,10 @@ export async function lanAddress(
  *  **The name survives a DHCP lease; an address does not.** A browser scopes a
  *  display's cookie and storage to an origin, so a host whose address moved
  *  leaves a paired phone holding a credential for nobody — the defect
- * rules on. The name is not ours to publish: the OS
- *  responder already answers it, and `host-refind.ts` already prefers it.
+ * rules on. The OS does not advertise this name by default on Windows, so it
+ * is offered as a second origin and kept in the re-find ladder rather than used
+ * as the pairing address; the publish surface prints the address as the one
+ * every device can dial.
  *
  *  Absent when the platform gives no hostname, because `.local` alone is a name
  *  no host answers to. */

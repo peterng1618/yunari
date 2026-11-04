@@ -2006,13 +2006,13 @@ export const uiCopy = {
     /** The one-time code, printed beside the address because the symbol that
      *  carries it needs a camera and the device may not have one. */
     code: "Pairing code",
-    /** Why the symbol and the line above it disagree in spelling: a dotted quad
-     *  is what an IP change breaks, and the name is what it does not. Said here
-     *  because the card is the only moment the owner is thinking about it. The
-     *  last clause is not hedging — Android 11 and earlier and a device on Private DNS cannot
-     *  resolve the name, and then the address is what it types. */
-    reserveAddress:
-      "The address breaks if the Host's IP changes; the name above survives it, where your device can resolve it.",
+    /** The address is the pairing origin because it is the one every device
+     *  can reach, and the price is that an IP change breaks it. */
+    reserveAddress: "The address above breaks if the Host's IP changes.",
+    /** The optional second origin, printed only where the host answers a name:
+     *  the one route a DHCP move cannot break. */
+    stableName: (name: string, port: number): string =>
+      `Also https://${name}:${port}, which survives a change of IP where your device can resolve it.`,
     warning:
       "Phone access is HTTPS. Plain HTTP is the fallback on your own network — trusted networks only, never the internet.",
     fallback: (address: string, port: number): string =>
