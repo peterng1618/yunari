@@ -547,6 +547,10 @@ async function startHostedTheme(
           side: "bottom",
           current: theme.id,
           onChosen: () => reResolve(),
+          // The chooser is the reader's own control on this display, so it
+          // shares the bar's three-second lifetime rather than sitting there
+          // after the other controls have gone.
+          onStrip: (strip) => controls.track(strip),
           // The host's sentence goes where every other refusal on this display
           // goes; the player, not the chooser, decides where that is.
           onError: (message) => showConnectionState("refused", 0, message),

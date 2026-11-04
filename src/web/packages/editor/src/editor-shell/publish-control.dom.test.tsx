@@ -564,24 +564,22 @@ it("takes the address apart again when the host answers with a new one", async (
   expect(popupText()).not.toContain(`http://${ADDRESS}:${PORT}`);
 });
 
-it("dials the host's stable name, and prints the address beside it", async () => {
+it("pairs on the address, and names the stable name beside it", async () => {
   hostServing({ lan: true, name: "study-pc.local" });
   const container = await mount();
   await openSurface(container);
 
   await vi.waitFor(() =>
-    expect(popupText()).toContain(`https://study-pc.local:${PORT}`),
+    expect(popupText()).toContain(`https://${ADDRESS}:${PORT}`),
   );
-  // **Both, because they are two different facts.** The symbol and the line above
-  // it carry the origin a display pairs on — the name, because a display's cookie
-  // and storage are scoped to the origin and the address is the half DHCP moves.
-  // The address survives as what a device that cannot
-  // resolve the name types: Android 11 and earlier, and any device on Private
-  // DNS, fail on `.local` and need it.
-  expect(popupText()).toContain(`http://${ADDRESS}:${PORT}`);
+  // **The address is the one every device reaches.** A phone cannot resolve a
+  // name this host does not advertise, so the symbol and the printed URL carry
+  // the address; the name is offered as the route that survives an IP change.
   expect(
     document.querySelector("[data-yunari-qr]")?.getAttribute("aria-label"),
-  ).toBe(`QR code: https://study-pc.local:${PORT}/pair?code=${CODE}`);
+  ).toBe(`QR code: ${PAIR_URL}`);
+  expect(popupText()).toContain("Also https://study-pc.local:5227");
+  expect(popupText()).toContain(uiCopy.publish.reserveAddress);
 });
 
 it("falls back to the address when the host has no name to offer", async () => {

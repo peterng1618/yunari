@@ -287,8 +287,7 @@ export function addChartObject(input: AddChartObjectInput): {
   readonly object: ObjectJson;
   readonly bindings: readonly Binding[];
 } {
-  const settings =
-    input.settings ?? defaultChartSettings(input.family, input.palette);
+  const settings = chartSettingsFor(input);
   return {
     object: {
       ...chart(
@@ -303,6 +302,41 @@ export function addChartObject(input: AddChartObjectInput): {
       name: input.name ?? input.id,
     },
     bindings: input.bindings,
+  };
+}
+
+/**
+ * The caller's settings over the family's, so a partial bag cannot drop a
+ * field the family cannot draw without.
+ *
+ * **One level, and deliberately.** Every persisted top-level setting is a leaf
+ * except the optional `animation` block, which is whole when present and whose
+ * own validator decides it; merging into it would invent a second owner for a
+ * block the renderer already defaults. A bag that is not an object is refused
+ * rather than spread, because a string or an array reaching Fabric is a chart
+ * that saves with no settings at all.
+ */
+function chartSettingsFor(input: {
+  readonly family: AuthoringChartFamily;
+  readonly settings?: unknown;
+  readonly palette?: FabricPalette;
+}): unknown {
+  const defaults = defaultChartSettings(input.family, input.palette);
+
+  if (input.settings === undefined) {
+    return defaults;
+  }
+  if (
+    typeof input.settings !== "object" ||
+    input.settings === null ||
+    Array.isArray(input.settings)
+  ) {
+    throw new Error("Chart settings must be an object.");
+  }
+
+  return {
+    ...(defaults as Record<string, unknown>),
+    ...(input.settings as Record<string, unknown>),
   };
 }
 

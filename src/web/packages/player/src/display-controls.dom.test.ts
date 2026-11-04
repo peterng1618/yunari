@@ -91,6 +91,43 @@ describe("the bar the reader reveals", () => {
     expect(bar().style.opacity).toBe("0");
   });
 
+  it("reveals and hides a tracked strip on the bar's own schedule", () => {
+    controls = mountDisplayControls();
+    const strip = document.createElement("div");
+    const button = document.createElement("button");
+    strip.append(button);
+    document.body.append(strip);
+
+    controls.track(strip);
+    expect(strip.style.opacity).toBe("0");
+
+    tap();
+    expect(strip.style.opacity).toBe("1");
+    expect(strip.style.pointerEvents).toBe("auto");
+
+    vi.advanceTimersByTime(3_000);
+    expect(strip.style.opacity).toBe("0");
+    expect(strip.style.pointerEvents).toBe("none");
+  });
+
+  it("holds a tracked strip open while focus is inside it", () => {
+    controls = mountDisplayControls();
+    const strip = document.createElement("div");
+    const button = document.createElement("button");
+    strip.append(button);
+    document.body.append(strip);
+    controls.track(strip);
+
+    tap();
+    button.focus();
+    vi.advanceTimersByTime(3_000);
+    expect(strip.style.opacity).toBe("1");
+
+    button.blur();
+    vi.advanceTimersByTime(3_000);
+    expect(strip.style.opacity).toBe("0");
+  });
+
   it("takes the bar away with the page", () => {
     controls = mountDisplayControls();
     controls.dispose();

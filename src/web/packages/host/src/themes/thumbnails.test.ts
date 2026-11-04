@@ -442,26 +442,34 @@ describe("thumbnails", () => {
 });
 
 describe("the size a host-side capture asks for", () => {
-  it("keeps the artboard's aspect at the capture edge", () => {
+  it("keeps the artboard's aspect within the picture's pixel budget", () => {
     expect(thumbnailCaptureSize({ width: 1920, height: 1080 })).toEqual({
-      width: 640,
-      height: 360,
+      width: 1207,
+      height: 679,
     });
     expect(thumbnailCaptureSize({ width: 800, height: 480 })).toEqual({
-      width: 640,
-      height: 384,
+      width: 800,
+      height: 480,
     });
-    // A board smaller than the edge is not enlarged: the capture is the theme,
-    // not an upscaled copy of it.
+    // A board smaller than the budget is not enlarged: the capture is the
+    // theme, not an upscaled copy of it.
     expect(thumbnailCaptureSize({ width: 320, height: 180 })).toEqual({
       width: 320,
       height: 180,
     });
   });
 
+  it("spends the budget on width for a board whose card is wide", () => {
+    // The library draws a 32:9 card at up to the pane's width; stopping the
+    // capture's long edge at 640 left that card upscaling a 640-pixel picture.
+    const wide = thumbnailCaptureSize({ width: 2564, height: 720 });
+    expect(wide).toEqual({ width: 1708, height: 480 });
+    expect(wide.width).toBeGreaterThan(1600);
+  });
+
   it("makes a circle's picture square, because the disc is inscribed", () => {
     expect(
       thumbnailCaptureSize({ width: 1080, height: 1080, shape: "circle" }),
-    ).toEqual({ width: 640, height: 640 });
+    ).toEqual({ width: 905, height: 905 });
   });
 });

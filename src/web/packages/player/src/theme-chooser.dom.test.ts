@@ -134,6 +134,23 @@ describe("choosing a theme for this display", () => {
     chooser.dispose();
   });
 
+  it("hands the mounted strip to the display controls' visibility", () => {
+    const fetcher = vi.fn<Fetcher>(async () => json({ themes: THEMES }));
+    const onStrip = vi.fn();
+
+    const chooser = createThemeChooser({
+      session: paired(fetcher),
+      side: "bottom",
+      current: "living-room",
+      onChosen: () => undefined,
+      onStrip,
+    });
+
+    expect(onStrip).toHaveBeenCalledTimes(1);
+    expect(onStrip.mock.calls[0]?.[0]).toBe(document.querySelector(CHOOSER));
+    chooser.dispose();
+  });
+
   it("reports the host's refusal in the host's own words", async () => {
     const refusal = "This display is not paired with the host.";
     const fetcher = vi.fn<Fetcher>(async (_input, init) => {

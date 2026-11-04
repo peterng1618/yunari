@@ -414,6 +414,40 @@ describe("the compose vocabulary", () => {
     });
   });
 
+  it("merges authored chart settings over the family defaults", () => {
+    const palette: FabricPalette = {
+      ink: { name: "Ink", value: { kind: "solid", color: "#ff0000" } },
+      track: { name: "Track", value: { kind: "solid", color: "#101010" } },
+    };
+    // The shape that made a gauge draw only its track: the author set the
+    // sweep and the paints, and omitting the bounds replaced defaults that a
+    // gauge cannot draw without.
+    const { object } = addChartObject({
+      id: "load",
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 200,
+      family: "gauge",
+      settings: {
+        startAngle: 180,
+        endAngle: 0,
+        thickness: 10,
+        track: { ref: "palette.track" },
+        progress: { ref: "palette.ink" },
+      },
+      bindings: [{ id: "cpu", semanticKey: "cpu.load" }],
+      palette,
+    });
+    const settings = object["settings"] as Record<string, unknown>;
+
+    expect(settings["startAngle"]).toBe(180);
+    expect(settings["thickness"]).toBe(10);
+    // The bounds are not the author's to remember for every chart.
+    expect(settings["min"]).toBe(0);
+    expect(settings["max"]).toBe(100);
+  });
+
   it("places a chart from its top-left like every other compose tool", () => {
     const { object } = addChartObject({
       id: "trend",

@@ -847,8 +847,8 @@ describe("Host theme routes", () => {
       expect(editorSave.status).toBe(200);
       // A theme with no stored picture gets one, whichever client saved it.
       expect(captureTheme).toHaveBeenCalledWith("living-room", {
-        width: 640,
-        height: 360,
+        width: 1207,
+        height: 679,
       });
 
       captureTheme.mockClear();
@@ -1235,15 +1235,15 @@ describe("Host theme routes", () => {
         "/api/themes/living-room/thumbnail/capture",
       );
       expect(answer.status).toBe(200);
-      // 1920×1080 at the capture edge: the library's own picture size.
+      // 1920×1080 inside the picture's pixel budget: the library's own size.
       expect(answer.json()).toEqual({
         ok: true,
         captured: true,
-        width: 640,
-        height: 360,
+        width: 1207,
+        height: 679,
       });
       expect(captured).toEqual([
-        { id: "living-room", width: 640, height: 360 },
+        { id: "living-room", width: 1207, height: 679 },
       ]);
       expect(
         (

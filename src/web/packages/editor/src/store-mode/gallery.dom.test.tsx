@@ -325,7 +325,7 @@ it("packs wide and portrait cards into one ratio-weighted row", async () => {
             facets: { ...facetRecordOf(DOCUMENT), width: 1080, height: 1920 },
           }),
         ]}
-        density="comfortable"
+        density="roomy"
         onAction={() => undefined}
         onOpenItem={() => undefined}
         install={NO_INSTALL}
