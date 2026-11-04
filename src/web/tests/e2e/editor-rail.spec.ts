@@ -3222,6 +3222,10 @@ test("the store opens a library theme as the document, from the cell and its foo
     });
   const fromCell = themeOf("store-from-cell", CELL_NAME);
   const fromFooter = themeOf("store-from-footer", FOOTER_NAME);
+  // A fourth listing entry, never opened. The library sorts by name, so this
+  // one sorts last: the three before it fill one row and it is the short tail,
+  // which is the only way the ragged end is read in a browser.
+  const beside = themeOf("store-beside", "Zed theme");
   // A third listing entry, never opened: the card layout packs it beside the two
   // above, and its 32:9 artboard is what makes it a two-column card.
   const wide = {
@@ -3239,7 +3243,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   await page.route("**/api/themes", (route) =>
     route.fulfill({
       json: {
-        themes: [fromCell, fromFooter, wide].map((envelope) => ({
+        themes: [fromCell, fromFooter, wide, beside].map((envelope) => ({
           id: envelope.id,
           name: envelope.metadata?.name,
           author: "huyng",
@@ -3317,7 +3321,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   await expect(
     region.locator("[data-yunari-store-cell]"),
     "the store does not list the stubbed library",
-  ).toHaveCount(3);
+  ).toHaveCount(4);
 
   // ── The cards pack as justified rows, at each theme's own ratio ────────────
   // **A row is one grid of ratio-weighted tracks.** The tracks fill the pane's
@@ -3389,10 +3393,13 @@ test("the store opens a library theme as the document, from the cell and its foo
       ).toBe(pack.width);
     }
     for (const cell of row.cells) {
+      // The tracks are fractions of the row and each picture derives its height
+      // from its own track, so the shared height lands on a sub-pixel of
+      // difference; a whole pixel apart would be a row drawn unevenly.
       expect(
-        Math.round(cell.pictureHeight),
+        Math.abs(cell.pictureHeight - (row.cells[0]?.pictureHeight ?? 0)),
         `${cell.id}'s picture is not the row's height (${packReading})`,
-      ).toBe(Math.round(row.cells[0]?.pictureHeight ?? 0));
+      ).toBeLessThanOrEqual(1);
     }
   }
   const wideCard = pack.rows
@@ -3490,7 +3497,10 @@ test("the store opens a library theme as the document, from the cell and its foo
     if (above === null || below === null) {
       throw new Error(`the cell drew no ${what} (${bandReading})`);
     }
-    return Math.round(below - above);
+    // Each end is rounded to the pixel grid the eye sees before the gap is
+    // taken: a card's height is a fraction of a row's track, so a line box can
+    // sit half a pixel off a whole step without any spacing having moved.
+    return Math.round(below) - Math.round(above);
   };
   expect(
     gapOf(bands.pictureBottom, bands.nameTop, "name under the picture"),
