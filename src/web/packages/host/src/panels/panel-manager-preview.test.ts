@@ -4,6 +4,7 @@ import {
   deviceOver,
   type FakeBrowser,
   familyOver,
+  pause,
   RECORD,
   storeOver,
 } from "./panel-manager.fixtures.js";
@@ -127,6 +128,30 @@ describe("panel manager preview", () => {
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(open).not.toHaveBeenCalled();
+  });
+
+  it("answers while the panel's own start is stuck", async () => {
+    // A preview renders a page and never touches the device, so it has no
+    // reason to wait behind a device open that never returns. The display's
+    // chain is the lock for start/stop/refresh, not for a render.
+    const open = vi.fn(() => new Promise<never>(() => {}));
+    h.family = familyOver(open);
+    h.rasterizer = () => ({
+      capture: async () => Uint8Array.of(5),
+      captureOverlay: async () => Uint8Array.of(6),
+      close: async () => {},
+    });
+    const manager = managerOver();
+
+    void manager.start("strip");
+    await pause(0);
+
+    const answer = await Promise.race([
+      manager.capturePreview("strip", "night", false),
+      pause(100).then(() => "blocked" as const),
+    ]);
+
+    expect(answer).toEqual(Uint8Array.of(5));
   });
 
   it("refuses a display that is not a claimed panel", async () => {

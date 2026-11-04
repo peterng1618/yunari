@@ -671,8 +671,11 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
 
     status: statusNow,
 
+    // **Not on the display's chain.** A preview renders a page and never
+    // touches the device, so it shares no state with start, stop or refresh;
+    // enqueueing it only made a wedged device open hold the preview forever.
     capturePreview: (displayId, themeId, clip) =>
-      enqueue(displayId, () => captureNow(displayId, themeId, clip)),
+      captureNow(displayId, themeId, clip),
 
     captureTheme: (themeId, geometry) =>
       capturePageNow(options.pageForTheme(themeId), geometry),
