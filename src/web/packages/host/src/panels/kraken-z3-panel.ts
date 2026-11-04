@@ -167,11 +167,17 @@ class KrakenControl {
 }
 
 /** A frame the device would not store. `status` is the firmware's byte 14, or
- *  `undefined` when the begin-write drew no reply at all — the two need
- *  different repairs, so the caller has to see which it was. */
+ *  `undefined` when the command drew no reply at all — the two need different
+ *  repairs, so the caller has to see which it was. `stage` names the command,
+ *  because a refused bucket setup and a refused switch are different faults. */
 class FrameRefused extends Error {
-  constructor(readonly status: number | undefined) {
-    super(`The Kraken refused a frame upload (status ${status ?? "none"}).`);
+  constructor(
+    readonly status: number | undefined,
+    readonly stage: string,
+  ) {
+    super(
+      `The Kraken refused a frame upload (${stage}, status ${status ?? "none"}).`,
+    );
   }
 }
 
@@ -244,11 +250,11 @@ class KrakenPanel implements PanelDevice {
     } catch (error) {
       if (!(error instanceof FrameRefused) || error.status !== 9) throw error;
 
-      // **Status 9 is a dropped switch, and the ring can repair itself.**
-      // `shown` names the bucket the switch was supposed to put up, so when
-      // the glass refused our target it is still showing the bucket we wrote
-      // last. That bucket is therefore the one not displayed: write it again,
-      // which recovers without liquefying the glass.
+      // **Status 9 means `shown` is wrong, and the ring can repair itself.**
+      // The firmware refuses the bucket it is displaying, so a refused delete,
+      // setup or switch to `target` is the firmware saying that bucket is on
+      // the glass. The bucket `shown` names is therefore the one not displayed:
+      // write it again, which recovers without liquefying the glass.
       const other = target === 0 ? 1 : 0;
 
       try {
@@ -294,27 +300,42 @@ class KrakenPanel implements PanelDevice {
    * the first graphic it stored there.
    */
   private async writeFrame(index: number, rgba: Uint8Array): Promise<void> {
-    this.deleteBucket(index);
-    this.createBucket(index);
+    let status = this.deleteBucket(index);
+    // **A refused delete must never be written over or shown.** The firmware
+    // keeps the first graphic a bucket stored, so a bucket whose delete was
+    // refused still holds the previous frame, and the switch that follows
+    // would put that older picture on the glass. A second delete is the retry
+    // for a refusal the firmware answers once (liquidctl deletes a bucket that
+    // held data twice for the same reason).
+    if (status !== 0x01) status = this.deleteBucket(index);
+    if (status !== 0x01) throw new FrameRefused(status, "delete");
+
+    // **Never stream into a bucket the firmware refused to set up.** liquidctl
+    // only logs this refusal and streams anyway; on the 2023/2024 firmware
+    // that produced wrong pictures and wedged the device into its bootloader.
+    // Nothing can be shown from a setup that failed, so the frame is refused
+    // instead and the glass keeps the frame it already has.
+    status = this.createBucket(index);
+    if (status !== 0x01) throw new FrameRefused(status, "create");
 
     this.control.write([0x36, 0x01, index]);
     const started = this.control.readUntil(0x37, 0x01);
-    const status = started?.report[14];
-    if (status !== 0x01) {
+    const begin = started?.report[14];
+    if (begin !== 0x01) {
       // **A begin whose reply was missed still opened the transfer.** Status 2
       // is the firmware saying "already transferring": the command landed, its
       // reply did not, and every later begin would answer 2 until something
       // ended it. (2026-11-04: that left the runner reopening the panel in a
       // loop of `none`, `2`, `disconnected`.) End the transfer before giving up
       // so the next tick starts clean; the one frame is lost, not the panel.
-      if (status === undefined || status === 0x02) this.endTransfer(index);
+      if (begin === undefined || begin === 0x02) this.endTransfer(index);
 
       // **Only status 9 means the table is wrong**, and `present` repairs that
       // by addressing the other bucket. A busy device (18) left the table
       // intact, and the next tick's delete/create retries the same bucket.
       // Rebuilding for it liquefied the glass — a visible blank — every time
       // the device missed one frame (2026-11-04).
-      throw new FrameRefused(status);
+      throw new FrameRefused(begin, "begin");
     }
 
     await this.bulk.write(transferHeader(RGBA_MODE, rgba.length));
@@ -327,7 +348,10 @@ class KrakenPanel implements PanelDevice {
     // which on a moving theme reads as a tear. Every command still reports
     // success, so no status check can see it.
     await new Promise((resolve) => setTimeout(resolve, UPLOAD_SETTLE_MS));
-    this.switchBucket(index);
+    status = this.switchBucket(index);
+    // The frame is in the bucket but not on the glass, so `shown` must not
+    // move: the next tick rewrites this bucket and tries the switch again.
+    if (status !== 0x01) throw new FrameRefused(status, "switch");
   }
 
   /**
@@ -342,14 +366,16 @@ class KrakenPanel implements PanelDevice {
     this.control.readUntil(0x37, 0x02);
   }
 
-  private deleteBucket(index: number): boolean {
+  /** The firmware's status byte for a delete, or undefined when it said
+   *  nothing. `1` is success. */
+  private deleteBucket(index: number): number | undefined {
     this.control.write([0x32, 0x02, index]);
     // `33 02`, not "the next report": the firmware emits status reports on its
     // own, and a stray `75 01` read as an answer reports a failed delete.
-    return this.control.readUntil(0x33, 0x02)?.report[14] === 0x01;
+    return this.control.readUntil(0x33, 0x02)?.report[14];
   }
 
-  private createBucket(index: number): boolean {
+  private createBucket(index: number): number | undefined {
     const start = index * BUCKET_SLOTS;
     this.control.write([
       0x32,
@@ -363,12 +389,12 @@ class KrakenPanel implements PanelDevice {
       0x01,
     ]);
 
-    return this.control.readUntil(0x33, 0x01)?.report[14] === 0x01;
+    return this.control.readUntil(0x33, 0x01)?.report[14];
   }
 
-  private switchBucket(index: number, mode = 0x04): void {
+  private switchBucket(index: number, mode = 0x04): number | undefined {
     this.control.write([0x38, 0x01, mode, index]);
-    this.control.readUntil(0x39, 0x01);
+    return this.control.readUntil(0x39, 0x01)?.report[14];
   }
 
   async close(): Promise<void> {

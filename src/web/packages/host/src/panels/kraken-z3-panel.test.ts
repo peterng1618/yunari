@@ -19,6 +19,10 @@ const fake = vi.hoisted(() => {
     transferOpen: false,
     /** Begin-writes whose reply is deliberately lost. */
     dropBegins: 0,
+    /** The status the create answers with; `1` unless a case refuses it. */
+    createStatus: 1,
+    /** Bulk transfers the driver made, so a refused setup can prove none ran. */
+    transfers: 0,
     /** Every control report the driver wrote, for assertions. */
     writes: [] as number[][],
   };
@@ -71,7 +75,7 @@ const fake = vi.hoisted(() => {
       } else if (first === 0x32 && second === 0x02) {
         state.queue.push(reply(0x33, 0x02));
       } else if (first === 0x32 && second === 0x01) {
-        state.queue.push(reply(0x33, 0x01));
+        state.queue.push(reply(0x33, 0x01, state.createStatus));
       } else {
         throw new Error(`unexpected report ${value}`);
       }
@@ -88,7 +92,10 @@ const fake = vi.hoisted(() => {
     open: () => Promise.resolve(),
     selectConfiguration: () => Promise.resolve(),
     claimInterface: () => Promise.resolve(),
-    nativeTransferOut: () => Promise.resolve(),
+    nativeTransferOut: () => {
+      fake.state.transfers += 1;
+      return Promise.resolve();
+    },
     releaseInterface: () => Promise.resolve(),
     close: () => Promise.resolve(),
   };
@@ -155,6 +162,23 @@ describe("KrakenPanel transfers", () => {
     expect(ended.length).toBeGreaterThan(0);
 
     await expect(panel.present(frame)).resolves.toBeUndefined();
+    await panel.close();
+  });
+
+  it("streams nothing into a bucket the firmware refused to set up", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const frame = pngOf(320, 320);
+    const before = fake.state.transfers;
+    fake.state.createStatus = 18;
+
+    await expect(panel.present(frame)).rejects.toThrow(/create, status 18/);
+    // The header and the pixels are both bulk writes; a refused setup must
+    // leave the device untouched by either.
+    expect(fake.state.transfers).toBe(before);
+
+    fake.state.createStatus = 1;
+    await expect(panel.present(frame)).resolves.toBeUndefined();
+    expect(fake.state.transfers).toBeGreaterThan(before);
     await panel.close();
   });
 });
