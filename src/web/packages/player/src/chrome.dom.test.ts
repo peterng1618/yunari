@@ -183,10 +183,8 @@ describe("the strips the display is told by", () => {
   it("overlays every notice it raises, so raising one cannot re-fit the scene", () => {
     // A strip in flow takes room, and taking room re-fits the scene: 16-25px of
     // movement on the built display, right as the notice arrives and left as it
-    // leaves (vg-028). Every strip left here is a transport or availability
-    // notice, which can flash on any reconnect, so each is fixed to the
-    // display's edge instead of laid out in the band. The one strip that took
-    // room was the crop notice, and it is gone.
+    // leaves (vg-028). A transport strip can flash on any reconnect, so it is
+    // fixed to the display's edge instead of laid out in the band.
     showConnectionState("reconnecting", 3);
     expect(document.getElementById("yunari-connection")?.style.position).toBe(
       "fixed",
@@ -219,7 +217,6 @@ describe("a strip's edge on a turned display", () => {
       text: "x",
       background: "#000",
       color: "#fff",
-      overlay: true,
     });
   }
 
@@ -283,9 +280,11 @@ describe("a strip's edge on a turned display", () => {
     expect(strip.style.transform).toBe("");
   });
 
-  it("leaves a strip that takes room in its band", () => {
-    // The theme chooser is the one strip still in flow: its room comes from
-    // the artboard, so it is not on the composition's frame.
+  it("overlays the artboard, so no strip takes room from it", () => {
+    // A strip in flow takes room, and taking room re-fits the scene (vg-028).
+    // A strip that hides and returns — the theme chooser now does — would also
+    // keep the artboard, and the display-bounded background media fitted to
+    // it, short of the screen edge while invisible.
     setChromeFrame(FRAME);
 
     const strip = putStrip({
@@ -296,8 +295,8 @@ describe("a strip's edge on a turned display", () => {
       color: "#e8ecf3",
     });
 
-    expect(strip.style.position).toBe("");
-    expect(strip.style.transform).toBe("");
+    expect(strip.style.position).toBe("fixed");
+    expect(strip.style.transform).not.toBe("");
   });
 });
 

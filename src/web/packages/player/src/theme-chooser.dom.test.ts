@@ -151,6 +151,24 @@ describe("choosing a theme for this display", () => {
     chooser.dispose();
   });
 
+  it("overlays the artboard rather than taking room from it", () => {
+    // The chooser hides with the display controls, so a band it sat in would
+    // keep shrinking the artboard — and the display-bounded background media
+    // fitted to it — while the reader could not see the chooser at all.
+    const fetcher = vi.fn<Fetcher>(async () => json({ themes: THEMES }));
+
+    const chooser = createThemeChooser({
+      session: paired(fetcher),
+      side: "bottom",
+      current: "living-room",
+      onChosen: () => undefined,
+    });
+
+    const strip = document.querySelector<HTMLElement>(CHOOSER) as HTMLElement;
+    expect(strip.style.position).toBe("fixed");
+    chooser.dispose();
+  });
+
   it("reports the host's refusal in the host's own words", async () => {
     const refusal = "This display is not paired with the host.";
     const fetcher = vi.fn<Fetcher>(async (_input, init) => {
@@ -228,8 +246,8 @@ describe("choosing a theme for this display", () => {
 
   it("builds its strip through the chrome, inset and font included", async () => {
     // `index.html` sets `viewport-fit=cover`, so the strip's own inset is what
-    // keeps a persistent control out of a notched phone's home indicator; a
-    // hand-written padding is how that inset goes missing.
+    // keeps a control at the screen's bottom edge out of a notched phone's home
+    // indicator; a hand-written padding is how that inset goes missing.
     const fetcher = vi.fn<Fetcher>(async () => json({ themes: THEMES }));
     createThemeChooser({
       session: paired(fetcher),

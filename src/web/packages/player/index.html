@@ -29,12 +29,11 @@
         overflow: hidden;
       }
       /* The display is one column: the chrome's two bands, and the artboard
-         between them. A strip in a band is in flow, so the composition's own
-         chrome takes its room *from* the artboard rather than over it, and an
-         empty band is zero tall — a display with nothing to say is a display
-         unchanged. A notice that can flash is `position:fixed` instead
-         (`chrome.ts`), because taking room re-fits the scene and moves the
-         whole picture (vg-028). */
+         between them. The bands anchor the strips, but no strip is laid out in
+         one: every strip is `position:fixed` (`chrome.ts`), so an empty band is
+         zero tall and the artboard gets the whole viewport. A strip in flow
+         would take room from the artboard, re-fit the scene and move the whole
+         picture (vg-028). */
       body {
         display: flex;
         flex-direction: column;

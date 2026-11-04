@@ -15,12 +15,12 @@ import { uiCopy } from "./ui-copy.js";
  * pairing it lives in an HttpOnly cookie, so the mount owner says
  * `paired: true` for a page whose token the URL and storage do not carry.
  *
- * The chooser is a strip in a chrome band rather than a floating control: it
- * is persistent and takes its room from the artboard the way `chrome.ts`
- * describes. It is mounted only for a page the host resolved itself
- * (`theme-source=map`): a link or a published page names a theme the person
- * meant, and `reResolveUrl` keeps that id, so a chooser there could not
- * deliver what it offered.
+ * The chooser is a chrome strip (`chrome.ts`) rather than a hand-built control:
+ * it overlays the artboard like every other strip, so appearing and hiding on
+ * the display controls' schedule cannot re-fit the scene. It is mounted only
+ * for a page the host resolved itself (`theme-source=map`): a link or a
+ * published page names a theme the person meant, and `reResolveUrl` keeps that
+ * id, so a chooser there could not deliver what it offered.
  *
  * A chosen theme is shown the way an assigned one is — the page navigates to
  * its own URL with the resolution run again (`publish-follower.ts`'s

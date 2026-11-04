@@ -88,5 +88,7 @@ path that moves the composition can skip it. `main.ts` converts the transform an
 the artboard into a viewport-pixel `ChromeFrame` and hands it to
 `setChromeFrame`. `chrome.ts` keeps an upright notice on the display's edge — the
 measured phone shape — and puts a turned one on the board's edge at the board's
-angle, re-placing strips already up. In-flow strips (the theme chooser) are
-untouched: their room still comes from the artboard.
+angle, re-placing strips already up. In-flow strips (the theme chooser) were
+untouched: their room still came from the artboard. The chooser now overlays
+too — it hides with the display controls, so it is no longer persistent
+(0106).
