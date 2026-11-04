@@ -111,6 +111,33 @@ export interface PanelVideoSource {
   readonly rotation?: number;
 }
 
+/** Whether two reads describe the same stream: the same bytes, the same
+ *  placement (pan, region, fade, fill) and the same display angle. A turned
+ *  glass shows a different stream, and the composition is baked into the
+ *  pixels, so any authored change is a different clip. */
+export function samePanelVideo(
+  first: PanelVideoSource | undefined,
+  second: PanelVideoSource | undefined,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+
+  return (
+    JSON.stringify(first.placement) === JSON.stringify(second.placement) &&
+    (first.rotation ?? 0) === (second.rotation ?? 0) &&
+    sameBytes(first.bytes, second.bytes)
+  );
+}
+
+function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] !== second[index]) return false;
+  }
+
+  return true;
+}
+
 /** The video half of a panel that takes frames rather than stills. */
 export interface PanelVideo {
   /** Plays `video` (an MP4). The adapter owns every conversion the device
