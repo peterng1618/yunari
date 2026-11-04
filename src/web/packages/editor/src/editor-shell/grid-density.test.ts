@@ -38,16 +38,24 @@ const KEY = "yunari.editor.store-density";
 
 describe("columnsForWidth", () => {
   it("derives the count from the width at the chosen level", () => {
-    expect(columnsForWidth(1352, "comfortable"), "1080p").toBe(4);
-    expect(columnsForWidth(1352, "compact")).toBe(6);
-    expect(columnsForWidth(1352, "roomy")).toBe(3);
-    expect(columnsForWidth(1352, "spacious")).toBe(2);
+    expect(columnsForWidth(1352, "comfortable"), "1080p").toBe(6);
+    expect(columnsForWidth(1352, "compact")).toBe(8);
+    expect(columnsForWidth(1352, "roomy")).toBe(4);
+    expect(columnsForWidth(1352, "spacious")).toBe(3);
   });
 
   it("follows a resize instead of freezing a chosen count", () => {
-    expect(columnsForWidth(900, "comfortable")).toBe(3);
-    expect(columnsForWidth(1900, "comfortable")).toBe(6);
+    expect(columnsForWidth(900, "comfortable")).toBe(4);
+    expect(columnsForWidth(1900, "comfortable")).toBe(8);
     expect(columnsForWidth(3500, "comfortable")).toBe(GRID_COLUMNS_MAX);
+  });
+
+  it("keeps the two closest levels apart on a wide pane", () => {
+    // At 2209 the densest two levels both reached the old ceiling of ten, so a
+    // step of the ladder did nothing.
+    expect(columnsForWidth(2209, "compact")).toBeGreaterThan(
+      columnsForWidth(2209, "comfortable"),
+    );
   });
 
   it("clamps to the offered range", () => {

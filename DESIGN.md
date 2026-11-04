@@ -221,9 +221,10 @@ A final row whose cards fit keeps the target height and stays short on the right
 
 **The density is a named level, and the column count follows the pane.** The
 header's slider, at the bar's far end, offers four levels — Compact, Comfortable,
-Roomy, Spacious — targeting 200, 272, 360 and 480px cards. The level is the view
+Roomy, Spacious — targeting 150, 204, 270 and 360px cards, a quarter denser than
+the gallery's first sizes at every step. The level is the view
 preference that persists; the count is recomputed on every resize as
-`floor((width + 12) / (target + 12))` clamped to 2–10. Four named levels rather
+`floor((width + 12) / (target + 12))` clamped to 2–12. Four named levels rather
 than a numeric well, because a stored count stops following the window the
 moment it is chosen. The track is 120px and its reading column 84px, the width
 that holds the longest level's word without moving the header.

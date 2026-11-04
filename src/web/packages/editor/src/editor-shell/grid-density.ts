@@ -24,21 +24,25 @@ export const DEFAULT_GRID_DENSITY: GridDensityLevel = "comfortable";
 
 /**
  * The card width each level targets, before the width's own count is derived.
- * `comfortable` is the 272px the gallery was designed around; the others step
- * down to a phone-like size and up to one image at a time.
+ * Every level sits a quarter below the size the gallery was first drawn at
+ * (comfortable was 272px), so each step shows about a third more cards in the
+ * same pane: the ladder stays the same four names, just denser throughout.
  */
 const TARGET_CARD_WIDTH: Readonly<Record<GridDensityLevel, number>> = {
-  compact: 200,
-  comfortable: 272,
-  roomy: 360,
-  spacious: 480,
+  compact: 150,
+  comfortable: 204,
+  roomy: 270,
+  spacious: 360,
 };
 
 /** The gutter between cards, which the count has to leave room for. */
 const COLUMN_GAP = 12;
 
 export const GRID_COLUMNS_MIN = 2;
-export const GRID_COLUMNS_MAX = 10;
+/** Ten columns was the ceiling at the old sizes; the denser card would clamp
+ *  the two closest levels together on a wide pane, so the ceiling moves with
+ *  the ladder. */
+export const GRID_COLUMNS_MAX = 12;
 
 /** The card width `level` aims at. The count is derived from the pane's width;
  *  this is the one input the level itself fixes, and the unmeasured first frame
