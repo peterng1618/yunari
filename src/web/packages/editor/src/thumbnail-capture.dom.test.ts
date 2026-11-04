@@ -73,6 +73,50 @@ describe("the capture's artboard plane", () => {
   });
 });
 
+describe("the capture's size", () => {
+  /** The picture a capture of `artboard` at zoom 1 produces. */
+  function captureOf(artboard: {
+    readonly width: number;
+    readonly height: number;
+  }): HTMLCanvasElement {
+    const canvas = {
+      width: artboard.width,
+      height: artboard.height,
+      viewportTransform: [1, 0, 0, 1, 0, 0],
+      toCanvasElement: (multiplier: number) => {
+        const shot = document.createElement("canvas");
+        shot.width = Math.round(artboard.width * multiplier);
+        shot.height = Math.round(artboard.height * multiplier);
+        return shot;
+      },
+    } as unknown as Canvas;
+    const picture = captureCanvas(canvas, undefined, undefined, undefined, {
+      ...artboard,
+      shape: "rect",
+    });
+    if (picture === undefined)
+      throw new Error("the capture produced no picture");
+    return picture;
+  }
+
+  it("spends the picture's budget on width where the card is wide", () => {
+    // A 32:9 card is drawn up to the pane's width; a fixed 640-pixel capture
+    // left it upscaling. The picture keeps the board's ratio and a bounded
+    // pixel count instead.
+    const { width, height } = captureOf({ width: 2564, height: 720 });
+    expect([width, height]).toEqual([1708, 480]);
+    // Rounding each dimension to whole pixels moves the sum by a few hundred.
+    expect(width * height).toBeLessThanOrEqual(830_000);
+  });
+
+  it("does not enlarge a board smaller than the budget", () => {
+    expect(captureOf({ width: 320, height: 180 })).toMatchObject({
+      width: 320,
+      height: 180,
+    });
+  });
+});
+
 describe("the capture's view state", () => {
   /** A canvas that records the order of the calls the capture makes around it. */
   function recording(canvas: { readonly shoot: () => void }): {

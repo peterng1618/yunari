@@ -40,16 +40,22 @@ export const MAX_THUMBNAIL_PIXELS = 16_777_216;
 /** PNG magic: the only format the library renders. */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-/** Longest edge a host-side capture renders. The editor caps its own canvas
- *  capture at the same size, so a picture looks the same whichever save
+/** Pixels a stored picture may spend: twice the 640² ceiling a fixed edge gave
+ *  every shape. A card in the library is as wide as the theme's own ratio and
+ *  the pane allow, so a fixed long edge starved exactly the boards whose cards
+ *  are widest — a 32:9 capture stopped at 640 pixels across while its card drew
+ *  at twice that, and the picture was visibly soft. A budget turns those pixels
+ *  into width where the card needs it, while a photo-backed board cannot grow
+ *  the file past the 2 MB a package and a thumbnail upload accept. The editor
+ *  captures within the same budget, so a picture looks the same whichever save
  *  produced it. */
-const CAPTURE_MAX_EDGE = 640;
+const CAPTURE_PIXELS = 819_200;
 
 /**
- * The size a host-side capture asks the player for: the artboard's aspect, its
- * long edge capped, and a square for a circle because the disc is inscribed in
- * it. The player letterboxes the artboard into the page, so a rect theme fills
- * the picture and a circle theme shows its disc.
+ * The size a host-side capture asks the player for: the artboard's aspect
+ * within the picture's pixel budget, and a square for a circle because the disc
+ * is inscribed in it. The player letterboxes the artboard into the page, so a
+ * rect theme fills the picture and a circle theme shows its disc.
  */
 export function thumbnailCaptureSize(artboard: {
   readonly width: number;
@@ -58,10 +64,19 @@ export function thumbnailCaptureSize(artboard: {
 }): { readonly width: number; readonly height: number } {
   const long = Math.max(artboard.width, artboard.height);
   if (artboard.shape === "circle") {
-    const side = Math.max(1, Math.round(Math.min(CAPTURE_MAX_EDGE, long)));
+    const side = Math.max(
+      1,
+      Math.round(Math.min(Math.sqrt(CAPTURE_PIXELS), long)),
+    );
     return { width: side, height: side };
   }
-  const scale = long > 0 ? Math.min(CAPTURE_MAX_EDGE, long) / long : 1;
+  const scale =
+    artboard.width * artboard.height > 0
+      ? Math.min(
+          1,
+          Math.sqrt(CAPTURE_PIXELS / (artboard.width * artboard.height)),
+        )
+      : 1;
   return {
     width: Math.max(1, Math.round(artboard.width * scale)),
     height: Math.max(1, Math.round(artboard.height * scale)),

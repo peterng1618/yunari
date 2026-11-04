@@ -14,13 +14,26 @@ import { type Canvas, Circle } from "fabric/es";
  * glass sampler already uses.
  */
 
-/** Longest edge of the stored picture; a library card needs no more. */
-const MAX_EDGE = 640;
+/** Pixels a stored picture may spend: twice the 640² ceiling a fixed edge gave
+ *  every shape. A card in the library is as wide as the theme's own ratio and
+ *  the pane allow, so a fixed long edge starved exactly the boards whose cards
+ *  are widest: a 32:9 capture stopped at 640 pixels across while its card drew
+ *  at twice that, and the picture was visibly soft. A budget turns those pixels
+ *  into width where the card needs it, while a photo-backed board cannot grow
+ *  the file past the 2 MB a package and a thumbnail upload accept. The host's
+ *  capture asks for the same budget, so a picture looks the same whichever save
+ *  produced it. */
+const CAPTURE_PIXELS = 819_200;
 
 export function captureCanvas(
   canvas: Canvas,
   backdrop: BackdropMedia | undefined,
-  maxEdge = MAX_EDGE,
+  /**
+   * A hard cap on the export's longest edge, for a caller that needs one size
+   * whatever the board is. The pixel budget below is the production bound; this
+   * only tightens it.
+   */
+  maxEdge = Number.POSITIVE_INFINITY,
   /**
    * Suspends the canvas's view state — the entered-group dim — for the shot and
    * restores it after. **A capture reads the document, not the screen**,
@@ -59,7 +72,11 @@ export function captureCanvas(
           height: artboard.height * view[3],
         };
   if (!(frame.width > 0) || !(frame.height > 0)) return undefined;
-  const scale = Math.min(1, maxEdge / Math.max(frame.width, frame.height));
+  const scale = Math.min(
+    1,
+    maxEdge / Math.max(frame.width, frame.height),
+    Math.sqrt(CAPTURE_PIXELS / (frame.width * frame.height)),
+  );
   const previousClip = canvas.clipPath;
   let release: () => void = () => {};
   let scene: HTMLCanvasElement;
@@ -145,7 +162,7 @@ export function captureCanvas(
 
 export async function captureThumbnail(
   canvas: Canvas,
-  maxEdge = MAX_EDGE,
+  maxEdge = Number.POSITIVE_INFINITY,
   backdrop?: BackdropMedia,
   suspendViewState: () => () => void = () => () => {},
   artboard?: Pick<Artboard, "width" | "height" | "shape">,
