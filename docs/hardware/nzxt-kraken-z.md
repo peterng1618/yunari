@@ -46,9 +46,12 @@ Open probes the firmware before anything is written:
 driver does not read either: the display record owns rotation, and brightness is
 not implemented for this family.
 
-**The firmware emits unsolicited `75 01` status reports.** A reader must match
-the exact expected reply prefix (`33 02`, `37 01`, …) rather than "the next
-report", or a stray `75 01` is read as a failed command.
+- **The firmware emits unsolicited `75 01` status reports.** A reader must match
+  the exact expected reply prefix (`33 02`, `37 01`, …) rather than "the next
+  report", or a stray `75 01` is read as a failed command. They arrive about
+  once a second, and the OS HID queue holds 64 per handle; after an idle spell
+  a command's own reply can sit behind a queue of them. Measured 2026-11-04
+  with a passive second handle and with a 60 s silent run.
 
 Reads use a 120 ms timeout and 8 attempts.
 
@@ -78,8 +81,15 @@ The delete, create and begin-write replies the driver checks carry success as
 **The firmware refuses the bucket it is displaying.** Deleting or starting a
 write on the shown bucket answers status **9**, `BucketIsBeingDisplayed`, and
 nothing is stored — every write still succeeds on the wire. Status **18** means
-the device is busy. A begin-write that draws **no reply at all** is reported as
-status `none`.
+the device is busy. **Status 2 means a transfer is already open**, and status
+`none` is a begin-write that drew no reply at all.
+
+**A begin-write with no reply may still have opened the transfer.** The command
+landed; only its answer went missing. Until `36 02 <index>` (end) or `36 03`
+closes it, every further begin answers **2**. The driver ends the transfer when
+a begin answers `none` or `2`, so one missed reply costs one frame rather than
+a reconnect loop (2026-11-04: the host looped `none`, `2`, `disconnected` until
+this was added).
 
 **Only status 9 means the ring is out of step.** It means a switch was dropped,
 so the bucket `shown` names is the one the glass is *not* showing: the driver

@@ -159,12 +159,6 @@ class KrakenControl {
     return undefined;
   }
 
-  /** liquidctl's `_write_then_read`: a command whose next report is its answer. */
-  ask(bytes: readonly number[]): Uint8Array | undefined {
-    this.write(bytes);
-    return this.read()?.report;
-  }
-
   drain(): void {
     for (let attempt = 0; attempt < 80; attempt += 1) {
       if (this.read() === undefined) return;
@@ -279,7 +273,10 @@ class KrakenPanel implements PanelDevice {
    * and started the rebuild again.
    */
   private async prepare(): Promise<void> {
-    this.control.ask([0x36, 0x03]);
+    // Read `37 03`, not "the next report": the firmware emits `75 01` on its
+    // own, and taking one as this reply shifts every read after it.
+    this.control.write([0x36, 0x03]);
+    this.control.readUntil(0x37, 0x03);
     // Liquid mode first: the firmware refuses to delete the bucket it plays.
     this.switchBucket(0, 0x02);
     this.shown = 0;
@@ -304,12 +301,19 @@ class KrakenPanel implements PanelDevice {
     const started = this.control.readUntil(0x37, 0x01);
     const status = started?.report[14];
     if (status !== 0x01) {
+      // **A begin whose reply was missed still opened the transfer.** Status 2
+      // is the firmware saying "already transferring": the command landed, its
+      // reply did not, and every later begin would answer 2 until something
+      // ended it. (2026-11-04: that left the runner reopening the panel in a
+      // loop of `none`, `2`, `disconnected`.) End the transfer before giving up
+      // so the next tick starts clean; the one frame is lost, not the panel.
+      if (status === undefined || status === 0x02) this.endTransfer(index);
+
       // **Only status 9 means the table is wrong**, and `present` repairs that
-      // by addressing the other bucket. A busy device (18) or a command that
-      // drew no reply (`none`) left the table intact, and the next tick's
-      // delete/create retries the same bucket. Rebuilding for those liquefied
-      // the glass — a visible blank — every time the device missed one frame
-      // (2026-11-04).
+      // by addressing the other bucket. A busy device (18) left the table
+      // intact, and the next tick's delete/create retries the same bucket.
+      // Rebuilding for it liquefied the glass — a visible blank — every time
+      // the device missed one frame (2026-11-04).
       throw new FrameRefused(status);
     }
 
@@ -324,6 +328,18 @@ class KrakenPanel implements PanelDevice {
     // success, so no status check can see it.
     await new Promise((resolve) => setTimeout(resolve, UPLOAD_SETTLE_MS));
     this.switchBucket(index);
+  }
+
+  /**
+   * Closes a transfer the firmware opened but this driver will not complete.
+   *
+   * The reply to the end is read and dropped: the device is back in its idle
+   * state whether or not the report arrives, and a missed `37 02` must not
+   * shift the next command's read.
+   */
+  private endTransfer(index: number): void {
+    this.control.write([0x36, 0x02, index]);
+    this.control.readUntil(0x37, 0x02);
   }
 
   private deleteBucket(index: number): boolean {
