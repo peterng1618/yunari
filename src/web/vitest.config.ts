@@ -40,6 +40,9 @@ export default defineConfig({
     ],
     environment: "node",
     restoreMocks: true,
+    // Lets a test file's queued scheduler work run before its environment is
+    // torn down; see the file for the React `window is not defined` failure.
+    setupFiles: ["./test-setup.ts"],
     // The default 5s per-test budget is below the floor this harness imposes: at
     // 144 files Vitest spawns a worker per file (~5.2s of startup each), and a
     // jsdom file needs 5-8s of wall clock under load. The budget was failing
