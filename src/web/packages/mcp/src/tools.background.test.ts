@@ -45,6 +45,7 @@ describe("set_background composition", () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       color: "accent",
       mediaAssetId: "clip",
       fill: "surface",
@@ -64,6 +65,7 @@ describe("set_background composition", () => {
   it("keeps the declared media when only composition fields are passed", async () => {
     const { ctx } = await themeWithClip();
     await setBackground(ctx, {
+      mode: "advanced",
       mediaAssetId: "clip",
       bounds: "display",
       inset: { left: 0.2 },
@@ -84,7 +86,11 @@ describe("set_background composition", () => {
 
   it("refuses a blend length outside the model range", async () => {
     const { ctx } = await themeWithClip();
-    await setBackground(ctx, { mediaAssetId: "clip", inset: { left: 0.2 } });
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      inset: { left: 0.2 },
+    });
     const before = structuredClone(ctx.drafts.current().envelope.background);
 
     const result = await setBackground(ctx, {
@@ -100,6 +106,7 @@ describe("set_background composition", () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       mediaAssetId: "clip",
       inset: { left: 0.5, right: 0.5 },
     });
@@ -112,11 +119,58 @@ describe("set_background composition", () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       fill: "surface",
       inset: { left: 0.2 },
     });
 
     expect(result.isError).toBe(true);
     expect(refusalTextOf(result)).toMatch(/media/i);
+  });
+});
+
+describe("set_background modes", () => {
+  it("refuses composition fields until the theme opts into advanced", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, { color: "accent", mediaAssetId: "clip" });
+
+    for (const input of [
+      { fill: "surface" },
+      { inset: { left: 0.2 } },
+      { blend: { edge: "left" as const, length: 0.2 } },
+    ]) {
+      const result = await setBackground(ctx, input);
+      expect(result.isError).toBe(true);
+      expect(refusalTextOf(result)).toMatch(/advanced/i);
+    }
+  });
+
+  it("refuses a fill with no media behind it", async () => {
+    const { ctx } = await themeWithClip();
+    const result = await setBackground(ctx, {
+      mode: "advanced",
+      fill: "surface",
+    });
+    expect(result.isError).toBe(true);
+    expect(refusalTextOf(result)).toMatch(/media/i);
+  });
+
+  it("drops the composition keys when the theme returns to basic", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      fill: "surface",
+      inset: { left: 0.2 },
+      blend: { edge: "left", length: 0.2 },
+    });
+
+    const result = await setBackground(ctx, { mode: "basic" });
+    expect(result.isError).toBeUndefined();
+
+    const background = ctx.drafts.current().envelope.background;
+    expect(background?.mode).toBeUndefined();
+    expect(background?.fill).toBeUndefined();
+    expect(background?.media?.region).toBeUndefined();
   });
 });

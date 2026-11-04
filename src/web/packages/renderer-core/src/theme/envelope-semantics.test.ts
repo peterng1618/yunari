@@ -463,6 +463,7 @@ describe("the background layer", () => {
 
   it("accepts a media region with a linear blend and a fill", () => {
     const envelope = withBackground({
+      mode: "advanced",
       color: { ref: "palette.ink" },
       fill: { ref: "palette.ink" },
       media: {
@@ -481,6 +482,7 @@ describe("the background layer", () => {
   it("refuses a region that leaves no area", () => {
     const issues = issuesFor(
       withBackground({
+        mode: "advanced",
         media: {
           assetId: "clip",
           bounds: "display",
@@ -497,6 +499,7 @@ describe("the background layer", () => {
   it("refuses an inset on a key that is not an edge", () => {
     const issues = issuesFor(
       withBackground({
+        mode: "advanced",
         media: {
           assetId: "clip",
           bounds: "display",
@@ -517,6 +520,7 @@ describe("the background layer", () => {
     ]) {
       const issues = issuesFor(
         withBackground({
+          mode: "advanced",
           media: {
             assetId: "clip",
             bounds: "display",
@@ -535,6 +539,7 @@ describe("the background layer", () => {
     for (const length of [0, 1.01]) {
       const issues = issuesFor(
         withBackground({
+          mode: "advanced",
           media: {
             assetId: "clip",
             bounds: "display",

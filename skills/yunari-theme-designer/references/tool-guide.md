@@ -184,7 +184,7 @@ Current behaviours, each has cost a save or preview when missed.
 | `set_artboard` | width, height, shape, contentFit |
 | `set_palette` | entries `{id, name, value}`; a value may be a solid colour or a gradient paint, so a scrim can be a palette token |
 | `set_type_tokens` | heading/body/mono family and weight, plus the imported face's `assetId` as `face` (a string; the envelope stores `{ assetId }`); a text run carries its own size |
-| `set_background` | palette colour and optional media asset, bounds, fallback frame; `fill` paints the area a region leaves, `inset` places the media in that region, `blend` fades it into the fill |
+| `set_background` | palette colour and optional media asset, bounds, fallback frame; `mode: "advanced"` opts into composition, where `fill` paints the area a region leaves, `inset` places the media in that region and `blend` fades it into the fill |
 | `open_theme` | an existing theme, only with `confirmExisting: true` after consent |
 | `discard_draft` | drop the in-memory draft; never touches the host |
 

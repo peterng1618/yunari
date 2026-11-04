@@ -2221,6 +2221,9 @@ export const uiCopy = {
    * model rather than a choice, so it has no words here.
    */
   backgroundBounds: { theme: "Fill theme", display: "Fill display" },
+  /** The two background models: the full-cover picture every theme predates,
+   *  and the composition a theme opts into. */
+  backgroundModes: { basic: "Basic", advanced: "Advanced" },
   /** The edges a background's media may be pinned to, and the mode that insets
    *  every side. `full` is no region at all — the picture covers the box. */
   backgroundInsetModes: {
@@ -2532,6 +2535,8 @@ export const uiCopy = {
     widthMark: "W",
     heightMark: "H",
     background: "Background color",
+    /** Which background model the theme is authored under. */
+    backgroundMode: "Mode",
     /** The paint a media region leaves uncovered. */
     backgroundFill: "Fill",
     /** The background column's own rows: the box its media fills, the zoom over

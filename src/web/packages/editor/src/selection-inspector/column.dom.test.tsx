@@ -499,6 +499,7 @@ describe("SelectionColumn", () => {
       locked: false,
       sections: backgroundColumn({
         background: {
+          mode: "advanced",
           media: {
             assetId: "a",
             bounds: "theme",
@@ -522,15 +523,21 @@ describe("SelectionColumn", () => {
       );
     });
 
+    // The area picker is a select, so the press opens its list first.
+    const trigger = host.querySelector<HTMLElement>(
+      "[data-yunari-background-inset]",
+    );
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.click();
+    });
     const inset = [
-      ...host.querySelectorAll<HTMLButtonElement>(
-        "[data-yunari-background-inset]",
-      ),
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
     ];
     expect(inset.length).toBeGreaterThan(1);
-    const right = inset.find((segment) => segment.textContent === "Right edge");
+    const right = inset.find((option) => option.textContent === "Right edge");
     expect(right).toBeDefined();
-    act(() => {
+    await act(async () => {
       right?.click();
     });
     expect(commit).toHaveBeenCalledWith(1, "background.inset", "right");

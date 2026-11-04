@@ -3,10 +3,12 @@ import {
   BACKGROUND_EDGES,
   BACKGROUND_MEDIA_BOUNDS,
   BACKGROUND_MEDIA_DEFAULTS,
+  BACKGROUND_MODES,
   type Background,
   type BackgroundBlend,
   type BackgroundEdge,
   type BackgroundMedia,
+  type BackgroundMode,
   type BackgroundRegion,
   type FabricGlobals,
   type GlobalRef,
@@ -58,6 +60,23 @@ function colourRef(background: Background | undefined): string {
     colour.ref.startsWith("palette.")
     ? colour.ref
     : "";
+}
+
+/** The model the background is authored under. Basic is the full-cover media
+ *  every theme predates composition; advanced is the opt-in that unlocks the
+ *  fill and the media's region. */
+function modeField(background: Background | undefined): FieldView {
+  return {
+    id: "background.mode",
+    control: "segmented",
+    label: uiCopy.panels.backgroundMode,
+    value: background?.mode ?? "basic",
+    options: BACKGROUND_MODES.map((mode) => ({
+      id: mode,
+      name: uiCopy.backgroundModes[mode],
+    })),
+    data: { "data-yunari-background-mode": "" },
+  };
 }
 
 function colourField(
@@ -321,7 +340,7 @@ function compositionFields(media: BackgroundMedia): readonly FieldView[] {
   return [
     {
       id: "background.inset",
-      control: "segmented",
+      control: "select",
       label: uiCopy.panels.backgroundInset,
       value: reading.mode,
       options: (
@@ -385,10 +404,16 @@ export function backgroundColumn(input: {
   readonly globals: FabricGlobals | undefined;
 }): readonly ColumnSectionView[] {
   const media = input.background?.media;
+  const advanced = input.background?.mode === "advanced";
   return [
     sectionView("content", [
+      modeField(input.background),
       colourField(input.background, input.globals),
-      fillField(input.background, input.globals),
+      // The fill is the paint behind the media, so it waits for one: with no
+      // media it would be stored and never paint.
+      ...(advanced && media !== undefined
+        ? [fillField(input.background, input.globals)]
+        : []),
       mediaField(media, input.assets),
       ...(mediaKind(media, input.assets) === "video"
         ? [fallbackFrameField(media)]
@@ -407,7 +432,11 @@ export function backgroundColumn(input: {
             flipField(media, "flipX"),
             flipField(media, "flipY"),
           ]),
-          sectionView("composition", compositionFields(media)),
+          // The region and fade describe how the media composes with the fill,
+          // which only an advanced background has.
+          ...(advanced
+            ? [sectionView("composition", compositionFields(media))]
+            : []),
         ]),
   ];
 }
@@ -431,8 +460,23 @@ export function writeBackgroundField(
 ): Background | undefined {
   const current = background ?? {};
   const media = current.media;
+  const advanced = current.mode === "advanced";
 
   switch (fieldId) {
+    case "background.mode": {
+      const mode = BACKGROUND_MODES.find((candidate) => candidate === value);
+      if (mode === undefined) return undefined;
+      if (mode === "advanced") {
+        return { ...current, mode: "advanced" as BackgroundMode };
+      }
+      // Basic has no fill and no region, so returning to it drops the keys it
+      // cannot express rather than leaving a document that fails its own
+      // validator. The media's own geometry stays.
+      const { mode: _mode, fill: _fill, ...basic } = current;
+      if (basic.media === undefined) return basic;
+      const { region: _region, ...plainMedia } = basic.media;
+      return { ...basic, media: plainMedia };
+    }
     case "background.color": {
       if (typeof value !== "string") return undefined;
       if (value === "") {
@@ -446,7 +490,9 @@ export function writeBackgroundField(
     case "background.media": {
       if (typeof value !== "string") return undefined;
       if (value === "") {
-        const { media: _media, ...withoutMedia } = current;
+        // The fill sits behind the media, so clearing the media clears it too
+        // rather than leaving a document its own validator refuses.
+        const { media: _media, fill: _fill, ...withoutMedia } = current;
         return withoutMedia;
       }
       // A new picture keeps the box and transform the author set for the last
@@ -472,6 +518,9 @@ export function writeBackgroundField(
         const { fill: _fill, ...withoutFill } = current;
         return withoutFill;
       }
+      // A fill is composition, so a basic background refuses it at the write
+      // boundary even though the row is not drawn.
+      if (!advanced) return undefined;
       if (!value.startsWith("palette.")) return undefined;
       return { ...current, fill: { ref: value as GlobalRef } };
     }
@@ -483,6 +532,7 @@ export function writeBackgroundField(
     }
     case "background.inset": {
       if (media === undefined || typeof value !== "string") return undefined;
+      if (!advanced) return undefined;
       const mode = (
         ["full", "left", "right", "top", "bottom", "inset"] as const
       ).find((candidate) => candidate === value);
@@ -507,6 +557,7 @@ export function writeBackgroundField(
         value > MAX_INSET_AMOUNT
       )
         return undefined;
+      if (!advanced) return undefined;
       // A size with no edge yet becomes the all-sides inset: moving the slider
       // is what first gives the picture a smaller area.
       const { mode } = regionReading(media.region);
@@ -524,6 +575,7 @@ export function writeBackgroundField(
     }
     case "background.blendEdges": {
       if (media === undefined || typeof value !== "string") return undefined;
+      if (!advanced) return undefined;
       const region = media.region ?? {};
       const { blend: _blend, ...unblended } = region;
       if (value === "none") {
@@ -565,6 +617,7 @@ export function writeBackgroundField(
         value > MAX_BLEND_LENGTH
       )
         return undefined;
+      if (!advanced) return undefined;
       return {
         ...current,
         media: {
@@ -583,6 +636,7 @@ export function writeBackgroundField(
         (value !== "linear" && value !== "radial")
       )
         return undefined;
+      if (!advanced) return undefined;
       const blend = media.region.blend;
       // The two shapes do not carry the same keys: a radial ramp has no edge,
       // and returning to linear needs one, so the left edge stands in.

@@ -5,6 +5,7 @@ import {
   BACKGROUND_BLEND_SHAPES,
   BACKGROUND_EDGES,
   BACKGROUND_MEDIA_BOUNDS,
+  BACKGROUND_MODES,
   FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
   MAX_ARTBOARD_DIMENSION,
@@ -51,7 +52,9 @@ export type IssueCode =
   | "invalid-asset-path"
   | "too-deep"
   | "too-many-nodes"
-  | "invalid-fabric-scene";
+  | "invalid-fabric-scene"
+  | "composition-needs-advanced"
+  | "fill-needs-media";
 
 export interface ValidationIssue {
   readonly code: IssueCode;
@@ -396,6 +399,50 @@ function validateBackground(
   );
   validateStyleValue(issues, value["color"], "/background/color", globalKeys);
   validateStyleValue(issues, value["fill"], "/background/fill", globalKeys);
+
+  // The composition keys belong to the advanced model only. Refused rather
+  // than ignored: a basic document carrying one would draw a hard-edged cover
+  // and leave the author's fade stored but unpainted.
+  if (value["mode"] !== undefined) {
+    issues.enumValue(
+      value["mode"],
+      BACKGROUND_MODES,
+      "/background/mode",
+      "mode",
+    );
+  }
+  if (value["mode"] !== "advanced") {
+    const refusal =
+      'Add mode: "advanced" to the background to compose its media.';
+    if (value["fill"] !== undefined) {
+      issues.add("composition-needs-advanced", "/background/fill", refusal);
+    }
+    if (value["fill"] !== undefined && value["media"] === undefined) {
+      issues.add(
+        "fill-needs-media",
+        "/background/fill",
+        "The fill is the paint behind the media; add media or remove the fill.",
+      );
+    }
+    const media = value["media"];
+    if (isRecord(media) && media["region"] !== undefined) {
+      issues.add(
+        "composition-needs-advanced",
+        "/background/media/region",
+        refusal,
+      );
+    }
+  }
+
+  // A fill is the paint a region or a blend reveals inside the media's box, so
+  // with no media it has nothing to sit behind and would never paint.
+  if (value["fill"] !== undefined && value["media"] === undefined) {
+    issues.add(
+      "fill-needs-media",
+      "/background/fill",
+      "The fill is the paint behind the media; add media or remove the fill.",
+    );
+  }
 
   const media = value["media"];
   if (media === undefined) return;

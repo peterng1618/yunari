@@ -11,6 +11,7 @@ import type {
 } from "@yunari/renderer-core";
 import {
   BACKGROUND_EDGES,
+  BACKGROUND_MODES,
   MAX_BACKGROUND_BLEND_LENGTH,
   MAX_BACKGROUND_INSET,
   MIN_BACKGROUND_BLEND_LENGTH,
@@ -280,6 +281,7 @@ export async function setBackground(
     readonly scale?: number | undefined;
     readonly flipX?: boolean | undefined;
     readonly flipY?: boolean | undefined;
+    readonly mode?: "basic" | "advanced" | undefined;
     readonly fill?: string | PalettePaint | undefined;
     readonly inset?:
       | {
@@ -312,12 +314,21 @@ export async function setBackground(
       input.color === undefined &&
       input.mediaAssetId === undefined &&
       input.fill === undefined &&
+      input.mode === undefined &&
       !composing
     ) {
       throw new Error("A background needs a colour token or a media asset.");
     }
 
     const existing = draft.envelope.background;
+    // The optional composition is opted into, never inferred: a stray `fill`
+    // under the basic model would be stored and never painted.
+    const advanced = (input.mode ?? existing?.mode) === "advanced";
+    if ((input.fill !== undefined || composing) && !advanced) {
+      throw new Error(
+        'A background composition needs mode: "advanced"; the basic background covers its box with the media.',
+      );
+    }
     const palette = draft.envelope.globals?.palette ?? {};
     let color: { readonly ref: `palette.${string}` } | undefined;
     if (input.color !== undefined) {
@@ -400,12 +411,27 @@ export async function setBackground(
       };
     }
 
+    // Returning to basic drops what the basic model cannot store, rather than
+    // leaving keys the validator would refuse on the next read.
+    const returning = input.mode === "basic";
+    let kept = media;
+    if (returning && media !== undefined) {
+      const { region: _region, ...plain } = media;
+      kept = plain;
+    }
+    const { mode: _mode, fill: _fill, ...basic } = existing ?? {};
     const background = {
-      ...(existing ?? {}),
+      ...(returning ? basic : (existing ?? {})),
       ...(color === undefined ? {} : { color }),
-      ...(fill === undefined ? {} : { fill }),
-      ...(media === undefined ? {} : { media }),
+      ...(returning || fill === undefined ? {} : { fill }),
+      ...(kept === undefined ? {} : { media: kept }),
+      ...(input.mode === undefined || returning ? {} : { mode: input.mode }),
     };
+    // The fill is the paint behind the media; with none it would be stored and
+    // never painted, which is the dead state the validator refuses too.
+    if (background.fill !== undefined && background.media === undefined) {
+      throw new Error("A fill needs a media background to sit behind.");
+    }
     draft.envelope = kitSetBackground(draft.envelope, background);
     return { themeId: draft.id, background };
   });
@@ -657,10 +683,11 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_background",
     {
       description:
-        "Set the draft background's colour token and optional declared media asset, bounds and fallback frame. fill paints the area a region leaves uncovered; inset and blend place the media in a region of the box and fade it into that fill. clear removes the background layer.",
+        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The basic model covers the box with the media. Set mode to "advanced" to compose it: fill paints the area a region leaves uncovered; inset and blend place the media in a region of the box and fade it into that fill. clear removes the background layer.',
       inputSchema: z.object({
         color: z.string().min(1).optional(),
         mediaAssetId: z.string().min(1).optional(),
+        mode: z.enum(BACKGROUND_MODES).optional(),
         bounds: z.enum(["theme", "display"]).optional(),
         fallbackFrame: z.number().int().min(0).optional(),
         offsetX: z.number().optional(),

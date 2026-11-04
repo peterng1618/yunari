@@ -65,9 +65,26 @@
       "description": "The bottom-most layer: a colour behind the board, a fill behind the media inside its box, and optional media clipped to its bounds.",
       "type": "object", "additionalProperties": false,
       "properties": {
+        "mode": {
+          "enum": ["basic", "advanced"],
+          "description": "The background model. Absent is basic: full-cover media over a colour. Only an advanced background may carry a fill or a media region."
+        },
         "color": { "$ref": "#/$defs/paletteReference" },
         "fill": { "$ref": "#/$defs/paletteReference" },
         "media": { "$ref": "#/$defs/backgroundMedia" }
+      },
+      "dependentRequired": { "fill": ["media"] },
+      "if": {
+        "not": {
+          "required": ["mode"],
+          "properties": { "mode": { "const": "advanced" } }
+        }
+      },
+      "then": {
+        "allOf": [
+          { "properties": { "fill": false } },
+          { "properties": { "media": { "properties": { "region": false } } } }
+        ]
       }
     },
     "backgroundMedia": {

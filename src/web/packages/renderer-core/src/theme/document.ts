@@ -292,7 +292,18 @@ export interface BackgroundMedia {
  * `fill` is the paint behind the media inside its bounds box: the colour a
  * region or blend reveals. Absent means `color` is the fill.
  */
+/** The two background models a theme can be authored under. `basic` is the
+ *  full-cover media with a colour behind it; `advanced` adds the composition
+ *  (`fill` and the media's `region`), and is opted into by a theme that says
+ *  so. Absence is `basic`, which is every theme authored before it existed. */
+export const BACKGROUND_MODES = ["basic", "advanced"] as const;
+export type BackgroundMode = (typeof BACKGROUND_MODES)[number];
+
 export interface Background {
+  /** Absent means basic. An advanced background is the only one allowed to
+   *  carry `fill` or the media's `region`; the validator and the published
+   *  schema refuse either under a basic one rather than ignoring it. */
+  readonly mode?: BackgroundMode;
   readonly color?: StyleValue;
   readonly fill?: StyleValue;
   readonly media?: BackgroundMedia;
