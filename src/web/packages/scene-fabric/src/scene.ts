@@ -237,6 +237,7 @@ export function mountFabricScene(
     media = mountBackgroundMedia({
       host,
       background: options.background,
+      fill: plan.artboard.fill,
       artboard: currentArtboard,
       assets: options.assets,
       resolveAsset: options.resolveAsset,

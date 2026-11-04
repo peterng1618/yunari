@@ -12,7 +12,7 @@
  * it inserts, and no two units share one; a shape's is its kind and nothing
  * more.
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
 import { uiCopy } from "../../ui-copy.js";
 
@@ -45,6 +45,10 @@ function editorStub() {
  * `actions` is what the case that drives the pre-document refusal leaves out:
  * the pane has no session to insert through, which is the state the refusal was
  * written for. Nothing else here presses a tile hard enough to need one.
+ *
+ * Every pane is released in `afterEach`: the panel owns a React root, and a root
+ * left mounted past the file schedules a commit that runs after the environment
+ * is gone, where its `window` lookup throws.
  */
 function mount(actions?: Parameters<typeof createNewObjectPanel>[3]): {
   readonly pane: HTMLElement;
@@ -55,8 +59,22 @@ function mount(actions?: Parameters<typeof createNewObjectPanel>[3]): {
   const host = document.createElement("div");
   document.body.append(host);
   const panel = createNewObjectPanel(host, editor as never, undefined, actions);
+  mounted.push(panel);
   return { pane: panel.root, editor, panel };
 }
+
+const mounted: ReturnType<typeof createNewObjectPanel>[] = [];
+
+/** Release one pane now, so `afterEach` does not unmount it a second time. */
+function release(panel: ReturnType<typeof createNewObjectPanel>): void {
+  const at = mounted.indexOf(panel);
+  if (at !== -1) mounted.splice(at, 1);
+  panel.destroy();
+}
+
+afterEach(() => {
+  for (const panel of mounted.splice(0)) panel.destroy();
+});
 
 /** The headings the pane drew, in the order it drew them. */
 function groupHeadings(pane: HTMLElement): readonly (string | null)[] {
@@ -243,7 +261,7 @@ describe("the Add pane's insert surface", () => {
 
     try {
       const { panel } = mount();
-      panel.destroy();
+      release(panel);
 
       // Every grid tile carries a tooltip, and the tooltip's press-elsewhere
       // dismissal is a `document`-level `pointerdown`

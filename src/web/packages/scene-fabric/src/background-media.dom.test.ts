@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { BackgroundBlend } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   type MediaBounds,
@@ -94,7 +95,7 @@ describe("background media", () => {
     expect(host.querySelector("video[data-yunari-frame-probe]")).not.toBeNull();
     expect(
       host.querySelector(
-        "[data-yunari-background-media] > video:not([data-yunari-frame-probe])",
+        "[data-yunari-background-media] > [data-yunari-background-region] > video:not([data-yunari-frame-probe])",
       ),
       "the mounted video is not the probe",
     ).not.toBeNull();
@@ -206,6 +207,42 @@ describe("background media", () => {
     handle.destroy();
   });
 
+  it("places a host-framed clip in the region it was baked for", () => {
+    // The host bakes the region's own cover into the clip, so the page lays it
+    // down at the region's size. Cover-fitting it again would crop the source a
+    // second time and show a picture the player never shows.
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        media: {
+          assetId: "loop",
+          bounds: "display",
+          region: { left: 0.5, top: 0.5 },
+        },
+      },
+      artboard: { width: 200, height: 100 },
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+      backgroundSource: { url: "/api/theme/panel-video", kind: "video" },
+    });
+    const child = host.querySelector<HTMLVideoElement>(
+      "[data-yunari-background-media] video",
+    );
+    if (child === null) throw new Error("the layer mounted no video");
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 200, height: 100 },
+      display: { left: 0, top: 0, width: 200, height: 100 },
+    });
+
+    expect(child.style.left).toBe("0px");
+    expect(child.style.top).toBe("0px");
+    expect(child.style.width).toBe("100px");
+    expect(child.style.height).toBe("50px");
+    handle.destroy();
+  });
+
   it("places a host-framed clip without re-applying its pan and zoom", () => {
     // The host bakes the authored geometry into the clip, so the page adds
     // none: a themed offset and scale would otherwise zoom the picture twice.
@@ -239,12 +276,12 @@ describe("background media", () => {
       display: { left: 0, top: 0, width: 200, height: 100 },
     });
 
-    // A 320×320 clip covers the 200×100 box at 200×200; none of the authored
-    // quarter-box pan or 2× zoom is applied on top.
+    // The clip is the box itself, so it fills the 200×100 region at its own
+    // size; none of the authored quarter-box pan or 2× zoom is applied on top.
     expect(child.style.left).toBe("0px");
-    expect(child.style.top).toBe("-50px");
+    expect(child.style.top).toBe("0px");
     expect(child.style.width).toBe("200px");
-    expect(child.style.height).toBe("200px");
+    expect(child.style.height).toBe("100px");
     handle.destroy();
   });
 
@@ -1068,5 +1105,143 @@ describe("background media as a glass backdrop", () => {
         delete (proto as Record<string, unknown>)["cancelVideoFrameCallback"];
       }
     }
+  });
+
+  it("paints a fill behind a region and masks the media at its edge", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        media: {
+          assetId: "hero",
+          bounds: "theme",
+          region: {
+            left: 0.25,
+            blend: { shape: "linear", edge: "left", length: 0.1 },
+          },
+        },
+      },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+      fill: {
+        kind: "gradient",
+        angle: 0,
+        stops: [
+          { offset: 0, color: "#101418" },
+          { offset: 1, color: "#000000" },
+        ],
+      },
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+
+    const layer = host.querySelector("[data-yunari-background-media]");
+    const fill = layer?.querySelector<HTMLElement>(
+      "[data-yunari-background-fill]",
+    );
+    const region = layer?.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const media = region?.querySelector<HTMLElement>("video, img");
+
+    expect(layer?.contains(fill as Node)).toBe(true);
+    expect(fill?.style.background).toContain("linear-gradient");
+    // 400×200 box: a quarter inset leaves 100px at the left and 300px of region.
+    expect(region?.style.left).toBe("100px");
+    expect(region?.style.top).toBe("0px");
+    expect(region?.style.width).toBe("300px");
+    expect(region?.style.height).toBe("200px");
+    // A 10% ramp of the box's width is 40px, measured from the region's left
+    // edge rather than spread over the whole region.
+    expect(region?.style.maskImage).toBe(
+      "linear-gradient(90deg, transparent 0px, black 40px)",
+    );
+    expect(region?.style.maskSize).toBe("100% 100%");
+    expect(region?.style.webkitMaskImage).toBe(region?.style.maskImage);
+    expect(media?.parentElement).toBe(region);
+    // The child's placement is relative to the region, not the bounds box.
+    expect(media?.style.left).toBe("0px");
+    expect(media?.style.width).toBe("300px");
+
+    handle.destroy();
+  });
+
+  it("places the media over the whole box when there is no region", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "theme" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const media = region?.querySelector("video, img");
+    expect(region?.style.left).toBe("0px");
+    expect(region?.style.width).toBe("400px");
+    expect(region?.style.maskImage).toBe("");
+    expect(region?.style.webkitMaskImage).toBe("");
+    expect(media?.parentElement).toBe(region);
+
+    handle.destroy();
+  });
+
+  it("paints the resolver's ramp, not a full-region wash, at each edge", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "hero", bounds: "theme" } },
+      artboard: ARTBOARD,
+      assets: [HERO],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 200 },
+    });
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+
+    const masks = (blend: BackgroundBlend) => {
+      handle.setBackground({
+        media: {
+          assetId: "hero",
+          bounds: "theme",
+          region: { left: 0.25, blend },
+        },
+      });
+      return region?.style.maskImage;
+    };
+
+    // The region is 300×200 at x 100. A 10% ramp is 40px across the box, so the
+    // stops sit 40px in from the edge the resolver named — the same endpoints
+    // the glass and the panel bake read, not a wash over the whole region.
+    expect(masks({ shape: "linear", edge: "left", length: 0.1 })).toBe(
+      "linear-gradient(90deg, transparent 0px, black 40px)",
+    );
+    expect(masks({ shape: "linear", edge: "right", length: 0.1 })).toBe(
+      "linear-gradient(270deg, transparent 0px, black 40px)",
+    );
+    expect(masks({ shape: "linear", edge: "top", length: 0.1 })).toBe(
+      "linear-gradient(180deg, transparent 0px, black 20px)",
+    );
+    expect(masks({ shape: "linear", edge: "bottom", length: 0.1 })).toBe(
+      "linear-gradient(0deg, transparent 0px, black 20px)",
+    );
+    // The ellipse is the region's own inscribed ellipse, so its fade ends on
+    // the region edge like the glass's, rather than at the farthest corner.
+    expect(masks({ shape: "radial", length: 0.4 })).toBe(
+      "radial-gradient(closest-side, black 60%, transparent 100%)",
+    );
+
+    handle.destroy();
   });
 });

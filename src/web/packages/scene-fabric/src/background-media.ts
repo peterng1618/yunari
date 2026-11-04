@@ -2,9 +2,13 @@ import {
   type AssetReference,
   BACKGROUND_MEDIA_DEFAULTS,
   type Background,
+  type BackgroundMask,
   type BackgroundMedia,
+  type CompositionRect,
+  cssArtboardPaint,
   MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_SCALE,
+  resolveBackgroundComposition,
 } from "@yunari/renderer-core";
 import type { BackdropMedia } from "./glass.js";
 
@@ -28,6 +32,10 @@ export interface BackgroundMediaOptions {
    *  following frames by omitting it. Nothing subscribes unless a video is the
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
+  /** The background's fill, already resolved from its `StyleValue`: the paint
+   *  behind the media inside its bounds box, revealed by a region or a blend.
+   *  Absent paints nothing. */
+  readonly fill?: unknown;
   /** What a panel's page loads instead of the declared video: the host's still
    *  of the declared frame, or a clip painted into the theme's media box. A
    *  clip already carries the authored pan and zoom, so the page places it
@@ -169,6 +177,48 @@ function flipTransform(media: BackgroundMedia | undefined): string {
   return scales.join(" ");
 }
 
+/**
+ * The DOM form of the one resolved mask.
+ *
+ * The linear branch turns the mask line back into a CSS angle with the artboard
+ * paint's convention: the stored direction is `(cos, -sin)`, so 0 points right
+ * and 90 points up. The gradient is transparent at the line's start and opaque
+ * at its end, which is the media's authored fade.
+ */
+function maskCss(
+  mask: BackgroundMask | undefined,
+  region: CompositionRect,
+): string {
+  if (mask === undefined) return "";
+  if (mask.kind === "radial") {
+    const opaque = Number((mask.opaqueFraction * 100).toFixed(4));
+    // The masked layer is the region itself, so the resolver's region-sized
+    // ellipse is CSS's closest-side one; the default farthest-corner would end
+    // the fade past the region and disagree with the glass and the bake.
+    return `radial-gradient(closest-side at center, black ${opaque}%, transparent 100%)`;
+  }
+  // The gradient line is measured in the region's own pixels. The angle starts
+  // it at the transparent end of the resolver's line, and the stops put the
+  // ramp exactly where the resolver (and the other surfaces) draw it.
+  const x1 = mask.x1 - region.left;
+  const y1 = mask.y1 - region.top;
+  const x2 = mask.x2 - region.left;
+  const y2 = mask.y2 - region.top;
+  if (y1 === y2) {
+    const [angle, from, to] =
+      x2 >= x1 ? [90, x1, x2] : [270, region.width - x1, region.width - x2];
+    return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
+  }
+  const [angle, from, to] =
+    y2 >= y1 ? [180, y1, y2] : [0, region.height - y1, region.height - y2];
+  return `linear-gradient(${angle}deg, transparent ${px(from)}, black ${px(to)})`;
+}
+
+/** A region-local offset in pixels, written the way the resolver rounded it. */
+function px(value: number): string {
+  return `${Number(value.toFixed(4))}px`;
+}
+
 export interface BackgroundMediaHandle {
   /** Reconfigures the layer. Same asset re-places the mounted element; a
    *  different asset (or none) tears it down and mounts afresh, because a
@@ -209,6 +259,15 @@ export function mountBackgroundMedia(
   layer.style.cssText =
     "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
   options.host.prepend(layer);
+  // The whole composition lives inside the one media layer: a TURZX overlay
+  // capture hides `[data-yunari-background-media]`, and a fill outside it would
+  // paint over the device's baked clip.
+  const fillLayer = document.createElement("div");
+  fillLayer.dataset["yunariBackgroundFill"] = "";
+  const regionLayer = document.createElement("div");
+  regionLayer.dataset["yunariBackgroundRegion"] = "";
+  regionLayer.style.cssText = "position:absolute;overflow:hidden;";
+  layer.append(fillLayer, regionLayer);
   const { assets, resolveAsset, onMediaError, onFrame } = options;
   let background = options.background;
   let artboardSize = {
@@ -296,13 +355,34 @@ export function mountBackgroundMedia(
         : "0 0"
       : "";
     layer.style.transform = turned ? `rotate(${box.angle}deg)` : "";
+    const composition = resolveBackgroundComposition(
+      { width: box.width, height: box.height },
+      media?.region,
+    );
+    fillLayer.style.cssText = "position:absolute;inset:0;";
+    fillLayer.style.background =
+      cssArtboardPaint(options.fill) ?? "transparent";
+    const region = composition.region;
+    regionLayer.style.left = `${region.left}px`;
+    regionLayer.style.top = `${region.top}px`;
+    regionLayer.style.width = `${region.width}px`;
+    regionLayer.style.height = `${region.height}px`;
+    const mask = maskCss(composition.mask, region);
+    regionLayer.style.maskImage = mask;
+    regionLayer.style.webkitMaskImage = mask;
+    regionLayer.style.maskSize = mask === "" ? "" : "100% 100%";
     const child = element;
     if (child === undefined || media === undefined) return;
-    const rect = placement({
-      box: { width: box.width, height: box.height },
-      source: intrinsic(child),
-      ...geometry(media),
-    });
+    // A host-framed clip was encoded for this region's own box, so it is laid
+    // down at that size. Cover-fitting it again would crop the source twice and
+    // show a picture the player never shows.
+    const rect = framed
+      ? { left: 0, top: 0, width: region.width, height: region.height }
+      : placement({
+          box: { width: region.width, height: region.height },
+          source: intrinsic(child),
+          ...geometry(media),
+        });
     child.style.left = `${rect.left}px`;
     child.style.top = `${rect.top}px`;
     child.style.width = `${rect.width}px`;
@@ -417,7 +497,7 @@ export function mountBackgroundMedia(
     disposeSource = source.dispose;
     element = child;
     mountedAssetId = asset.id;
-    layer.append(child);
+    regionLayer.append(child);
 
     if (override !== undefined) {
       child.addEventListener(
@@ -430,7 +510,7 @@ export function mountBackgroundMedia(
           // own asset, rather than a blank panel.
           overrideFailed = true;
           stop();
-          layer.replaceChildren();
+          regionLayer.replaceChildren();
           element = undefined;
           mount(media);
         },
@@ -496,7 +576,7 @@ export function mountBackgroundMedia(
 
     if (changed) {
       stop();
-      layer.replaceChildren();
+      regionLayer.replaceChildren();
       element = undefined;
       mountedAssetId = undefined;
       if (media !== undefined) mount(media);
@@ -575,10 +655,26 @@ export function mountBackgroundMedia(
       // pixels, while `rect` stays in artboard units for the placement.
       const angle =
         display === undefined ? bounds?.artboard.angle : display.angle;
+      // The authored region is expressed in the box the layer paints, so it is
+      // resolved against the same rect the glass maps and the DOM places in.
+      const authored = background?.media?.region;
+      const composition = resolveBackgroundComposition(
+        { width: rect.width, height: rect.height },
+        authored,
+      );
       return {
         rect,
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
+        ...(authored === undefined
+          ? {}
+          : {
+              fill: options.fill,
+              region: composition.region,
+              ...(composition.mask === undefined
+                ? {}
+                : { mask: composition.mask }),
+            }),
         paint(ctx, region, device, sampling) {
           // A static panel stands on the video's declared frame — or its first
           // frame when it declares none. An image is already a still, so it is
@@ -597,16 +693,26 @@ export function mountBackgroundMedia(
           const media = background?.media;
           // The child is placed inside this rect, the layer's box in artboard
           // units; the glass maps that box onto the device rect it samples, so
-          // the sampler and the element cannot show different crops.
+          // the sampler and the element cannot show different crops. A region
+          // narrows the placement to the same box the DOM wrapper uses.
           const placed = placement({
-            box: { width: rect.width, height: rect.height },
+            box: {
+              width: composition.region.width,
+              height: composition.region.height,
+            },
             source,
             ...geometry(media),
           });
           const scaleX = rect.width > 0 ? device.width / rect.width : 0;
           const scaleY = rect.height > 0 ? device.height / rect.height : 0;
-          const left = device.left - region.left + placed.left * scaleX;
-          const top = device.top - region.top + placed.top * scaleY;
+          const left =
+            device.left -
+            region.left +
+            (composition.region.left + placed.left) * scaleX;
+          const top =
+            device.top -
+            region.top +
+            (composition.region.top + placed.top) * scaleY;
           const width = placed.width * scaleX;
           const height = placed.height * scaleY;
           // Five arguments: the whole source, placed. A source window is the

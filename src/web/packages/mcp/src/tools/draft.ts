@@ -1,9 +1,19 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import type {
   Artboard,
+  BackgroundBlend,
+  BackgroundEdge,
+  BackgroundRegion,
   FabricPalette,
   PalettePaint,
+  StyleValue,
   TypeToken,
+} from "@yunari/renderer-core";
+import {
+  BACKGROUND_EDGES,
+  MAX_BACKGROUND_BLEND_LENGTH,
+  MAX_BACKGROUND_INSET,
+  MIN_BACKGROUND_BLEND_LENGTH,
 } from "@yunari/renderer-core";
 import {
   createBlankTheme,
@@ -270,6 +280,22 @@ export async function setBackground(
     readonly scale?: number | undefined;
     readonly flipX?: boolean | undefined;
     readonly flipY?: boolean | undefined;
+    readonly fill?: string | PalettePaint | undefined;
+    readonly inset?:
+      | {
+          readonly left?: number | undefined;
+          readonly top?: number | undefined;
+          readonly right?: number | undefined;
+          readonly bottom?: number | undefined;
+        }
+      | undefined;
+    readonly blend?:
+      | {
+          readonly shape?: "linear" | "radial" | undefined;
+          readonly edge?: BackgroundEdge | undefined;
+          readonly length: number;
+        }
+      | undefined;
     readonly clear?: boolean | undefined;
     readonly themeId?: string | undefined;
   },
@@ -280,10 +306,18 @@ export async function setBackground(
       draft.envelope = kitSetBackground(draft.envelope, undefined);
       return { themeId: draft.id, background: null };
     }
-    if (input.color === undefined && input.mediaAssetId === undefined) {
+
+    const composing = input.inset !== undefined || input.blend !== undefined;
+    if (
+      input.color === undefined &&
+      input.mediaAssetId === undefined &&
+      input.fill === undefined &&
+      !composing
+    ) {
       throw new Error("A background needs a colour token or a media asset.");
     }
 
+    const existing = draft.envelope.background;
     const palette = draft.envelope.globals?.palette ?? {};
     let color: { readonly ref: `palette.${string}` } | undefined;
     if (input.color !== undefined) {
@@ -296,6 +330,24 @@ export async function setBackground(
       color = { ref: `palette.${token}` };
     }
 
+    let fill: StyleValue | undefined;
+    if (input.fill !== undefined) {
+      fill =
+        typeof input.fill === "string"
+          ? (() => {
+              const token = input.fill.startsWith("palette.")
+                ? input.fill.slice("palette.".length)
+                : input.fill;
+              if (palette[token] === undefined) {
+                throw new Error(
+                  `There is no palette token "${token}" in this theme.`,
+                );
+              }
+              return { ref: `palette.${token}` };
+            })()
+          : { value: input.fill };
+    }
+
     let media:
       | {
           assetId: string;
@@ -306,6 +358,7 @@ export async function setBackground(
           scale?: number;
           flipX?: boolean;
           flipY?: boolean;
+          region?: BackgroundRegion;
         }
       | undefined;
     if (input.mediaAssetId !== undefined) {
@@ -329,15 +382,123 @@ export async function setBackground(
         ...(input.flipX === undefined ? {} : { flipX: input.flipX }),
         ...(input.flipY === undefined ? {} : { flipY: input.flipY }),
       };
+    } else {
+      // Composition fields address the media that is already there; a bare
+      // colour edit must not drop it.
+      media = existing?.media;
+    }
+
+    if (composing) {
+      if (media === undefined) {
+        throw new Error(
+          "A background composition needs a media background to sit in.",
+        );
+      }
+      media = {
+        ...media,
+        region: regionOf(media.region, input.inset, input.blend),
+      };
     }
 
     const background = {
+      ...(existing ?? {}),
       ...(color === undefined ? {} : { color }),
+      ...(fill === undefined ? {} : { fill }),
       ...(media === undefined ? {} : { media }),
     };
     draft.envelope = kitSetBackground(draft.envelope, background);
     return { themeId: draft.id, background };
   });
+}
+
+/**
+ * The media's region after an edit, with the model's own ranges enforced before
+ * the draft holds an invalid background.
+ *
+ * Insets accumulate on the existing region; a blend is replaced whole. A shape
+ * follows the edge it was given, and a linear ramp that names no edge keeps a
+ * previously authored one rather than guessing.
+ */
+function regionOf(
+  existing: BackgroundRegion | undefined,
+  inset:
+    | {
+        readonly left?: number | undefined;
+        readonly top?: number | undefined;
+        readonly right?: number | undefined;
+        readonly bottom?: number | undefined;
+      }
+    | undefined,
+  blend:
+    | {
+        readonly shape?: "linear" | "radial" | undefined;
+        readonly edge?: BackgroundEdge | undefined;
+        readonly length: number;
+      }
+    | undefined,
+): BackgroundRegion {
+  const next: {
+    left?: number;
+    top?: number;
+    right?: number;
+    bottom?: number;
+    blend?: BackgroundBlend;
+  } = { ...existing };
+
+  if (inset !== undefined) {
+    for (const edge of BACKGROUND_EDGES) {
+      const value = inset[edge];
+      if (value === undefined) continue;
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > MAX_BACKGROUND_INSET
+      ) {
+        throw new Error(
+          `The ${edge} inset must be from 0 to ${MAX_BACKGROUND_INSET}.`,
+        );
+      }
+      next[edge] = value;
+    }
+    if ((next.left ?? 0) + (next.right ?? 0) >= 1) {
+      throw new Error("The left and right insets must leave a positive area.");
+    }
+    if ((next.top ?? 0) + (next.bottom ?? 0) >= 1) {
+      throw new Error("The top and bottom insets must leave a positive area.");
+    }
+  }
+
+  if (blend !== undefined) {
+    if (
+      !Number.isFinite(blend.length) ||
+      blend.length < MIN_BACKGROUND_BLEND_LENGTH ||
+      blend.length > MAX_BACKGROUND_BLEND_LENGTH
+    ) {
+      throw new Error(
+        `The blend length must be from ${MIN_BACKGROUND_BLEND_LENGTH} to ${MAX_BACKGROUND_BLEND_LENGTH}.`,
+      );
+    }
+    const shape =
+      blend.shape ?? (blend.edge !== undefined ? "linear" : "radial");
+    if (shape === "linear") {
+      const edge =
+        blend.edge ??
+        (existing?.blend?.shape === "linear" ? existing.blend.edge : undefined);
+      if (edge === undefined) {
+        throw new Error(
+          "A linear blend needs an edge: left, right, top or bottom.",
+        );
+      }
+      next.blend = { shape: "linear", edge, length: blend.length };
+    } else {
+      if (blend.edge !== undefined) {
+        throw new Error("A radial blend has no edge.");
+      }
+      next.blend = { shape: "radial", length: blend.length };
+    }
+  }
+
+  return next;
 }
 
 export async function discardDraft(
@@ -496,7 +657,7 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_background",
     {
       description:
-        "Set the draft background's colour token and optional declared media asset, bounds and fallback frame. clear removes the background layer.",
+        "Set the draft background's colour token and optional declared media asset, bounds and fallback frame. fill paints the area a region leaves uncovered; inset and blend place the media in a region of the box and fade it into that fill. clear removes the background layer.",
       inputSchema: z.object({
         color: z.string().min(1).optional(),
         mediaAssetId: z.string().min(1).optional(),
@@ -507,6 +668,25 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
         scale: z.number().optional(),
         flipX: z.boolean().optional(),
         flipY: z.boolean().optional(),
+        fill: z.union([z.string().min(1), paintSchema]).optional(),
+        inset: z
+          .object({
+            left: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
+            top: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
+            right: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
+            bottom: z.number().min(0).max(MAX_BACKGROUND_INSET).optional(),
+          })
+          .optional(),
+        blend: z
+          .object({
+            shape: z.enum(["linear", "radial"]).optional(),
+            edge: z.enum(BACKGROUND_EDGES).optional(),
+            length: z
+              .number()
+              .min(MIN_BACKGROUND_BLEND_LENGTH)
+              .max(MAX_BACKGROUND_BLEND_LENGTH),
+          })
+          .optional(),
         clear: z.boolean().optional(),
         themeId: z.string().min(1).optional(),
       }),

@@ -63,7 +63,7 @@ import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import { createWeatherSettingsStore } from "./settings/weather.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
-import { createThemeMedia } from "./themes/theme-media.js";
+import { createThemeMedia, panelVideoPlacement } from "./themes/theme-media.js";
 import { createThumbnailStore } from "./themes/thumbnails.js";
 import { createSecureOrigin, type SecureOrigin } from "./tls/authority.js";
 import { openTrayAction } from "./tray/actions.js";
@@ -610,7 +610,7 @@ export async function run(argv: readonly string[]): Promise<number> {
 
       return {
         bytes: asset.bytes,
-        placement: { offsetX: media.offsetX ?? 0, offsetY: media.offsetY ?? 0 },
+        placement: panelVideoPlacement(envelope),
         rotation: display?.rotation ?? 0,
       };
     },

@@ -9,6 +9,7 @@ export function plan(artboard: Partial<ScenePlan["artboard"]> = {}): ScenePlan {
       height: 300,
       contentFit: "contain",
       background: "#000",
+      fill: undefined,
       ...artboard,
     },
     nodes: [],

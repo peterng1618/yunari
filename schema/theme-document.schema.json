@@ -62,10 +62,11 @@
       }
     },
     "background": {
-      "description": "The bottom-most layer: a colour behind the board and optional media clipped to its bounds.",
+      "description": "The bottom-most layer: a colour behind the board, a fill behind the media inside its box, and optional media clipped to its bounds.",
       "type": "object", "additionalProperties": false,
       "properties": {
         "color": { "$ref": "#/$defs/paletteReference" },
+        "fill": { "$ref": "#/$defs/paletteReference" },
         "media": { "$ref": "#/$defs/backgroundMedia" }
       }
     },
@@ -79,8 +80,39 @@
         "offsetY": { "type": "number", "minimum": -5, "maximum": 5 },
         "flipX": { "type": "boolean" },
         "flipY": { "type": "boolean" },
-        "fallbackFrame": { "type": "integer", "minimum": 0 }
+        "fallbackFrame": { "type": "integer", "minimum": 0 },
+        "region": { "$ref": "#/$defs/backgroundRegion" }
       }
+    },
+    "backgroundRegion": {
+      "description": "Where the media sits inside its bounds box, as fractions of that box, and how it fades at one edge into the fill. The runtime refuses each axis whose insets sum to 1 or more; JSON Schema cannot compare two properties.",
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "left": { "type": "number", "minimum": 0, "maximum": 0.9 },
+        "top": { "type": "number", "minimum": 0, "maximum": 0.9 },
+        "right": { "type": "number", "minimum": 0, "maximum": 0.9 },
+        "bottom": { "type": "number", "minimum": 0, "maximum": 0.9 },
+        "blend": { "$ref": "#/$defs/backgroundBlend" }
+      }
+    },
+    "backgroundBlend": {
+      "description": "The media's alpha ramp at a region edge. A linear ramp needs an edge and a radial one refuses it; the length is a fraction of the box.",
+      "type": "object", "additionalProperties": false, "required": ["shape", "length"],
+      "properties": {
+        "shape": { "enum": ["linear", "radial"] },
+        "edge": { "enum": ["left", "right", "top", "bottom"] },
+        "length": { "type": "number", "minimum": 0.01, "maximum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["shape"], "properties": { "shape": { "const": "linear" } } },
+          "then": { "required": ["edge"] }
+        },
+        {
+          "if": { "required": ["shape"], "properties": { "shape": { "const": "radial" } } },
+          "then": { "not": { "required": ["edge"] } }
+        }
+      ]
     },
     "globals": {
       "type": "object", "additionalProperties": false,

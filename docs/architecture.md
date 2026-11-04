@@ -127,6 +127,13 @@ provider or display that falls behind is dropped rather than growing memory.
 - `artboard` is `{ width, height, contentFit, shape? }`; `shape` is `rect` or
   `circle`, and absent means `rect`. A circle artboard is square and its glass
   is the inscribed disc; the field is additive, so the schema stays `2.0.0`.
+- `background` is document state: `color` and `fill` are style values, and
+  `media` declares the asset, its bounds and transform. A media `region` gives
+  the picture an area in fractions of its bounds box, and a `blend` fades it into
+  the fill. The resolver `resolveBackgroundComposition` is the one geometry: the
+  DOM media layer, the player's glass backdrop and the TURZX clip bake all take
+  the region and mask from it. The bake composites region, fill and mask in the
+  video plane, so a fade never rides the coarse overlay.
 - Current schema is `2.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are
   keyed by the major they migrate from. Missing migration or newer major is a
   refusal, never a best-effort read.

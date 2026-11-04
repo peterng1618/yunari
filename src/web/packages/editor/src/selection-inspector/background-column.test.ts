@@ -25,6 +25,7 @@ describe("backgroundColumn", () => {
     expect(bare.map((section) => section.id)).toEqual(["content"]);
     expect(bare[0]?.fields.map((field) => field.id)).toEqual([
       "background.color",
+      "background.fill",
       "background.media",
     ]);
 
@@ -37,6 +38,7 @@ describe("backgroundColumn", () => {
     expect(withMedia.map((section) => section.id)).toEqual([
       "content",
       "position",
+      "composition",
     ]);
     expect(withMedia[1]?.fields.map((field) => field.id)).toEqual([
       "background.bounds",
@@ -168,6 +170,7 @@ describe("backgroundColumn", () => {
     });
     expect(video[0]?.fields.map((field) => field.id)).toEqual([
       "background.color",
+      "background.fill",
       "background.media",
       "background.fallbackFrame",
     ]);
@@ -186,6 +189,82 @@ describe("backgroundColumn", () => {
     expect(image[0]?.fields.map((field) => field.id)).not.toContain(
       "background.fallbackFrame",
     );
+  });
+
+  it("asks Content for a fill after the colour, and a composition once media exists", () => {
+    const sections = backgroundColumn({
+      background: {
+        media: {
+          assetId: "a",
+          bounds: "theme",
+          region: {
+            left: 0.65,
+            blend: { shape: "linear", edge: "left", length: 0.12 },
+          },
+        },
+      },
+      assets: [],
+      globals: undefined,
+    });
+
+    // A fill is content: it is what the uncovered area is painted with.
+    expect(sections[0]?.fields.map((field) => field.id)).toEqual([
+      "background.color",
+      "background.fill",
+      "background.media",
+    ]);
+    expect(sections.map((section) => section.id)).toEqual([
+      "content",
+      "position",
+      "composition",
+    ]);
+    expect(sections[2]?.fields.map((field) => field.id)).toEqual([
+      "background.inset",
+      "background.insetAmount",
+      "background.blendEdges",
+      "background.blendLength",
+      "background.blendShape",
+    ]);
+    expect(
+      sections[2]?.fields.find((field) => field.id === "background.inset"),
+    ).toMatchObject({ control: "segmented", value: "left" });
+    expect(
+      sections[2]?.fields.find(
+        (field) => field.id === "background.insetAmount",
+      ),
+    ).toMatchObject({
+      control: "slider",
+      value: 0.35,
+      min: 0.1,
+      max: 0.9,
+      percent: true,
+    });
+    expect(
+      sections[2]?.fields.find((field) => field.id === "background.blendEdges"),
+    ).toMatchObject({ control: "select", value: "left" });
+    expect(
+      sections[2]?.fields.find(
+        (field) => field.id === "background.blendLength",
+      ),
+    ).toMatchObject({
+      control: "slider",
+      value: 0.12,
+      min: 0.01,
+      max: 0.5,
+      percent: true,
+    });
+    expect(
+      sections[2]?.fields.find((field) => field.id === "background.blendShape"),
+    ).toMatchObject({ control: "segmented", value: "linear" });
+
+    // A composition places a picture, so it waits for one.
+    expect(
+      backgroundColumn({
+        background: undefined,
+        assets: [],
+        globals: undefined,
+      }).map((section) => section.id),
+    ).toEqual(["content"]);
   });
 
   it("offers only the assets a background can be", () => {
@@ -298,6 +377,144 @@ describe("writeBackgroundField", () => {
     expect(
       writeBackgroundField({}, "background.fallbackFrame", 0),
     ).toBeUndefined();
+  });
+
+  it("writes a fill as a palette reference and clears it", () => {
+    expect(
+      writeBackgroundField(background, "background.fill", "palette.ink"),
+    ).toMatchObject({ fill: { ref: "palette.ink" } });
+    expect(
+      writeBackgroundField(
+        { fill: { ref: "palette.ink" } },
+        "background.fill",
+        "",
+      ),
+    ).toEqual({});
+    expect(
+      writeBackgroundField(background, "background.fill", "not-a-token"),
+    ).toBeUndefined();
+  });
+
+  it("turns a region mode into insets at the size already authored", () => {
+    // A left inset of 0.65 is an area of 35%, and that size survives a change
+    // of edge: the mode says which edge, the existing region says how much.
+    const edged: Background = {
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        region: { right: 0.65 },
+      },
+    };
+    expect(
+      writeBackgroundField(edged, "background.inset", "left"),
+    ).toMatchObject({ media: { region: { left: 0.65 } } });
+    expect(
+      writeBackgroundField(edged, "background.inset", "full")?.media,
+    ).not.toHaveProperty("region");
+    expect(
+      writeBackgroundField(edged, "background.inset", "bogus"),
+    ).toBeUndefined();
+    // A picture with no region keeps half its box when a mode first appears.
+    expect(
+      writeBackgroundField(background, "background.inset", "left"),
+    ).toMatchObject({ media: { region: { left: 0.5 } } });
+    // All four sides split the uncovered half, so each axis keeps the authored
+    // size; a full 0.65 inset on both sides of an axis would leave no area.
+    expect(
+      writeBackgroundField(edged, "background.inset", "inset"),
+    ).toMatchObject({
+      media: {
+        region: {
+          left: 0.325,
+          right: 0.325,
+          top: 0.325,
+          bottom: 0.325,
+        },
+      },
+    });
+  });
+
+  it("writes the area size on the current mode and refuses it out of range", () => {
+    const edged: Background = {
+      media: { assetId: "a", bounds: "theme", region: { right: 0.65 } },
+    };
+    expect(
+      writeBackgroundField(edged, "background.insetAmount", 0.4),
+    ).toMatchObject({ media: { region: { right: 0.6 } } });
+    for (const value of [0.05, 0.95, Number.NaN]) {
+      expect(
+        writeBackgroundField(edged, "background.insetAmount", value),
+      ).toBeUndefined();
+    }
+  });
+
+  it("writes the blend's edge, length and shape", () => {
+    const plain: Background = {
+      media: { assetId: "a", bounds: "theme" },
+    };
+    // "Around" is the radial ramp, and a first fade starts at the default
+    // length rather than inventing one per control.
+    expect(
+      writeBackgroundField(plain, "background.blendEdges", "all"),
+    ).toMatchObject({
+      media: { region: { blend: { shape: "radial", length: 0.1 } } },
+    });
+    // Nothing to lengthen until a fade exists.
+    expect(
+      writeBackgroundField(plain, "background.blendLength", 0.2),
+    ).toBeUndefined();
+
+    const blended: Background = {
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        region: {
+          left: 0.2,
+          blend: { shape: "linear", edge: "top", length: 0.2 },
+        },
+      },
+    };
+    expect(
+      writeBackgroundField(blended, "background.blendLength", 0.4),
+    ).toMatchObject({
+      media: {
+        region: { blend: { shape: "linear", edge: "top", length: 0.4 } },
+      },
+    });
+    expect(
+      writeBackgroundField(blended, "background.blendEdges", "right"),
+    ).toMatchObject({
+      media: {
+        region: { blend: { shape: "linear", edge: "right", length: 0.2 } },
+      },
+    });
+    expect(
+      writeBackgroundField(blended, "background.blendEdges", "none")?.media,
+    ).not.toHaveProperty("blend");
+    expect(
+      writeBackgroundField(blended, "background.blendShape", "radial"),
+    ).toMatchObject({
+      media: { region: { blend: { shape: "radial", length: 0.2 } } },
+    });
+    // A radial ramp has no edge, so going back to linear needs one; the left
+    // edge is the least surprising pick.
+    expect(
+      writeBackgroundField(
+        {
+          media: {
+            assetId: "a",
+            bounds: "theme",
+            region: { blend: { shape: "radial", length: 0.2 } },
+          },
+        },
+        "background.blendShape",
+        "linear",
+      ),
+    ).toMatchObject({
+      media: {
+        region: { blend: { shape: "linear", edge: "left", length: 0.2 } },
+      },
+    });
   });
 
   it("drops the frame when the picture stops being a video", () => {

@@ -7,6 +7,7 @@ import {
   backgroundVideoOf,
   createThemeMedia,
   panelVideoMediaName,
+  panelVideoPlacement,
   stillMediaName,
   type ThemeMediaOptions,
 } from "./theme-media.js";
@@ -131,6 +132,86 @@ describe("media names", () => {
     expect(stillMediaName("theme", image)).toBeUndefined();
     expect(panelVideoMediaName("theme", image, 320, 320)).toBeUndefined();
   });
+
+  it("invalidate the clip when the composition changes", () => {
+    const plain = envelopeWith(BACKGROUND);
+    const composed = envelopeWith({
+      media: {
+        assetId: "bg",
+        fallbackFrame: 12,
+        region: { left: 0.35 },
+      },
+    });
+
+    expect(panelVideoMediaName("theme", composed, 320, 320)).not.toBe(
+      panelVideoMediaName("theme", plain, 320, 320),
+    );
+  });
+});
+
+describe("panelVideoPlacement", () => {
+  const palette = {
+    palette: {
+      ink: { name: "Ink", value: { kind: "solid", color: "#101418" } },
+    },
+  };
+
+  it("maps the media region, blend and resolved fill", () => {
+    const envelope = {
+      id: "theme",
+      artboard: { width: 100, height: 100 },
+      assets: [VIDEO_ASSET],
+      globals: palette,
+      background: {
+        fill: { ref: "palette.ink" },
+        media: {
+          assetId: "bg",
+          bounds: "display",
+          region: {
+            left: 0.35,
+            blend: { shape: "linear", edge: "left", length: 0.12 },
+          },
+        },
+      },
+    } as unknown as FabricThemeEnvelope;
+
+    expect(panelVideoPlacement(envelope)).toEqual({
+      offsetX: 0,
+      offsetY: 0,
+      region: { left: 0.35, top: 0, right: 0, bottom: 0 },
+      blend: { shape: "linear", edge: "left", length: 0.12 },
+      fill: { kind: "solid", color: "#101418" },
+    });
+  });
+
+  it("uses the colour as the fill when no fill is authored", () => {
+    const envelope = {
+      id: "theme",
+      artboard: { width: 100, height: 100 },
+      assets: [VIDEO_ASSET],
+      globals: palette,
+      background: {
+        color: { ref: "palette.ink" },
+        media: { assetId: "bg", bounds: "display", region: { top: 0.5 } },
+      },
+    } as unknown as FabricThemeEnvelope;
+
+    expect(panelVideoPlacement(envelope).fill).toEqual({
+      kind: "solid",
+      color: "#101418",
+    });
+  });
+
+  it("answers the pan alone when no composition is authored", () => {
+    const envelope = envelopeWith({
+      media: { assetId: "bg", offsetX: 0.25, offsetY: -0.1 },
+    });
+
+    expect(panelVideoPlacement(envelope)).toEqual({
+      offsetX: 0.25,
+      offsetY: -0.1,
+    });
+  });
 });
 
 describe("createThemeMedia", () => {
@@ -243,6 +324,32 @@ describe("createThemeMedia", () => {
     expect(transcode).toHaveBeenLastCalledWith(
       new Uint8Array([9, 9, 9]),
       expect.objectContaining({ width: 464, height: 464 }),
+      undefined,
+    );
+  });
+
+  it("encodes a composed page clip at the region's box, not the whole layer", async () => {
+    const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
+    const service = media({ transcode });
+
+    await service.panelVideo(
+      "theme",
+      envelopeWith({
+        media: {
+          assetId: "bg",
+          bounds: "display",
+          region: { left: 0.5 },
+        },
+      }),
+      { width: 640, height: 360 },
+    );
+
+    // The page lays this clip down inside the region as-is, so its pixels are
+    // the region's cover of the source. Encoding the whole 640×360 layer here
+    // would make the page crop the source a second time.
+    expect(transcode).toHaveBeenCalledWith(
+      new Uint8Array([9, 9, 9]),
+      { width: 320, height: 360, offsetX: 0, offsetY: 0, scale: 1 },
       undefined,
     );
   });
