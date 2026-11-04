@@ -1,9 +1,11 @@
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
+import { mcpBinPath, mcpConsoleLaunch, runMcpCommand } from "./cli/mcp.js";
 import {
   lanAddress,
   listenWithFallback,
@@ -82,6 +84,11 @@ function style(code: string, text: string): string {
  *  paths below resolve the same way from either. */
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+/** The directory holding `packages/host` and, in a release, `packages/mcp`. */
+function packageRoot(): string {
+  return path.join(here, "..", "..");
+}
+
 const VERSION = productVersion();
 
 /** The product's version, read from the workspace manifest — the one place a
@@ -99,6 +106,12 @@ function defaultLhmExecutable(): string {
 }
 
 export async function run(argv: readonly string[]): Promise<number> {
+  // The bundled MCP CLI owns its flags, so it is routed before this parser
+  // sees `--yes`, `--agent` or `--json`.
+  if (argv[0] === "mcp") {
+    return runMcpCommand(argv.slice(1), packageRoot());
+  }
+
   const normalized = await normalizeVideoCommand(argv);
   if (normalized !== undefined) return normalized;
 
@@ -878,6 +891,7 @@ export async function run(argv: readonly string[]): Promise<number> {
             // would query the OS route table on every 5 s poll.
             lan: lanBinding?.isLan() ?? false,
             autostart: autostart.state(),
+            mcp: mcpBinPath(packageRoot()) !== undefined,
             lhm,
             rtss,
           };
@@ -892,6 +906,25 @@ export async function run(argv: readonly string[]): Promise<number> {
             case "settings":
             case "folder":
               return openTrayAction(action, { localPlain, settingsDir });
+            case "mcp": {
+              const bin = mcpBinPath(packageRoot());
+              if (bin === undefined) {
+                return {
+                  ok: false,
+                  message: "The MCP tools are not installed in this package.",
+                };
+              }
+              // A console window is the menu's only surface: the editor and
+              // settings pages are in-process, but the installer is a CLI.
+              const launch = mcpConsoleLaunch(bin);
+              const child = spawn(launch.command, launch.args, {
+                detached: true,
+                stdio: "ignore",
+                windowsHide: true,
+              });
+              child.unref();
+              return { ok: true, message: "Opened the agent tools." };
+            }
             case "lhm":
               return externalApps.startLhm();
             case "rtss":

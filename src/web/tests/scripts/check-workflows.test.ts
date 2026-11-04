@@ -55,8 +55,10 @@ jobs:
       contents: read
     env:
       STAGE: stage
+      MCP_STAGE: mcp-stage
       ASSETS: assets
       SMOKE: smoke
+      MCP_SMOKE: mcp-smoke
     steps:
 ${CHECKOUT}${GUARD}${SETUP_NODE}  publish:
     needs: install
@@ -665,7 +667,7 @@ it("refuses DRY_RUN in the install job's env", () => {
       expect(exitCode).toBe(1);
       const out = lines.join("\n");
       expect(out).toContain(
-        "install job's env may only define STAGE, ASSETS, SMOKE",
+        "install job's env may only define STAGE, MCP_STAGE, ASSETS, SMOKE, MCP_SMOKE",
       );
       expect(out).toContain('found "DRY_RUN"');
     },

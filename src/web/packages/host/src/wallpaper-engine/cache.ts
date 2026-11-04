@@ -229,6 +229,9 @@ function storedOf(value: unknown): StoredItem | undefined {
     title,
     kind,
     filesize,
+    // The editor's "Updated" sort orders by this; a cache read that dropped it
+    // left every item without one, so choosing that sort changed nothing.
+    ...(updatedAt === undefined ? {} : { updatedAt }),
     tags,
     properties,
     ...(durationMs === undefined ? {} : { durationMs }),

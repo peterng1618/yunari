@@ -57,6 +57,17 @@ const OVERLAY_SETTLE_MS = 1500;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
 /**
+ * Frames per write.
+ *
+ * The device reads a byte stream, not one write per frame, so a 249-byte write
+ * buys nothing but a `write`+`drain` round trip: a 1.8 MB panel clip is about
+ * 7,400 of them, and each waits for the port to drain before the next starts.
+ * That was the upload's whole duration. 64 frames is 16 KB — far under the
+ * 1.54 MB `present()` already writes in one call — and the bytes on the wire
+ * are unchanged, frame for frame.
+ */
+const UPLOAD_BATCH_FRAMES = 64;
+/**
  * A file command's answer loop gives up after this long, not after a fixed
  * number of reads: the transport now retains every ack the device sent, and a
  * start writes three commands whose acks can all sit ahead of the reply.
@@ -519,9 +530,21 @@ class TurzxPanel implements PanelDevice {
       return seen.has("create_success") ? true : undefined;
     });
 
+    // Whole frames are batched into one write. Each still ends on its own 250-
+    // byte boundary with its own pad, so the stream the panel reads is identical;
+    // only the number of host-side drains changes.
+    const batch = new Uint8Array(UPLOAD_BATCH_FRAMES * FRAME_SIZE);
+    let filled = 0;
     for (let start = 0; start < bytes.length; start += FILE_CHUNK_BYTES) {
-      await this.send(frame(bytes.subarray(start, start + FILE_CHUNK_BYTES)));
+      const framed = frame(bytes.subarray(start, start + FILE_CHUNK_BYTES));
+      batch.set(framed, filled);
+      filled += framed.length;
+      if (filled === batch.length) {
+        await this.send(batch);
+        filled = 0;
+      }
     }
+    if (filled > 0) await this.send(batch.subarray(0, filled));
 
     // A firmware that emits the completion before the create has already said
     // it; waiting again would be waiting for a reply it does not send twice.

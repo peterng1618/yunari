@@ -4,6 +4,16 @@ Every tool answers through the MCP server. Host calls are loopback HTTP; drafts
 live in the server process. A stopped server loses drafts; `save_theme` writes
 the theme library, and `preview_theme` saves the draft first on both paths.
 
+## 0. Install and status
+
+`yunari mcp install` (bundle) or `yunari-mcp install` (standalone) registers the
+server and installs this skill. It asks for agents, scope, the skill, tool
+approval and the host URL; every question has a flag (`--agent`, `--scope`,
+`--skill`/`--no-skill`, `--auto-approve all|none`, `--url`). `--yes` takes every
+default and a piped run without it exits 2 instead of waiting. `yunari mcp
+status` reports the host, the registered entry and whether the installed skill
+matches the packaged copy. Reinstall to update.
+
 ## 1. Discover
 
 Start with these and state what the host answered. Never guess a display id,
@@ -87,6 +97,13 @@ Current behaviours, each has cost a save or preview when missed.
   and `90` bottom to top. Author a scrim by its anchor edge: a bottom fade is
   `90` with the dark stop at the bottom, a left fade is `0` with it at the left.
   Inspect the boundary in the preview.
+- **A panel's video overlay is coarser than its preview.** The TURZX overlay
+  carries 4 bits per colour channel and 4 bits of opacity, so a soft black-to-
+  transparent gradient becomes a handful of flat bands that read as a grey wash.
+  The browser preview and the Lian Li PNG layer keep the full ramp. A mask for a
+  TURZX target is solid fills or a few wide steps, and it is judged on the panel.
+- **A fill-only rect keeps no border.** `add_shape` authors `strokeWidth: 0`;
+  never put a stroke on a scrim, and do not rely on a border to hide an edge.
 - **An ellipse has fill only.** `add_shape` refuses a stroke on an ellipse; a ring
   is two stacked filled ellipses (outer minus inner) or a path with a stroke.
 - **A date or time format is a small token set, not an ICU pattern.** `YYYY YY
@@ -132,6 +149,11 @@ Current behaviours, each has cost a save or preview when missed.
   revealing its top; positive `offsetX` moves it right, revealing its left. The
   offset is a fraction of the cover overhang, so ±1 reaches the full pan on any
   crop; choose a source whose subject survives at that limit.
+- **An unnamed layer reads as its type word.** A compose call without `name`
+  names the object after the id it mints — a tree of "text", "shape" and
+  "icon". Pass a short, content-specific `name` on every add, and name a group
+  for the component its parts form (a clock's face, ticks and hands are
+  "Clock").
 - **A theme language localizes the date, not contextual text.** With `language`
   set, `date.today` renders in that language, but `weather.condition`,
   `weather.location`, media titles and game names stay as the host sends them.
@@ -169,15 +191,15 @@ tokens before composing so objects can reference them by id.
 |---|---|
 | `list_objects` | the draft's ids before updating or removing anything |
 | `add_card` | a starter unit (`group-time-card`, `group-cpu-card`, `group-gpu-card`, `group-ram-card`, `group-vram-card`, `group-trends-card`, `group-storage-card`, `group-network-card`) at left/top, optional scale |
-| `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow |
+| `add_text` | box, runs (literal or `value` with a binding id), palette token, size, align, overflow, `name` |
 | `add_shape` | rect/ellipse/path, box, one palette `token`; radius on a rect, path points and stroke width on a path — other combinations are refused |
-| `add_image` | declared asset id, box |
-| `add_icon` | `icon` from the shared icon set, box, palette token |
-| `add_chart` | family line/bar/gauge, box, binding, optional settings |
+| `add_image` | declared asset id, box, `name` |
+| `add_icon` | `icon` from the shared icon set, box, palette token, `name` |
+| `add_chart` | family line/bar/gauge, box, binding, optional settings, `name` |
 | `add_binding` | replace an object's `bindings` array with one or more semantic keys |
 | `update_object` | validated JSON merge by object id, under the `patch` field |
 | `remove_object` | delete an object by id; not a saved-theme delete |
-| `group_objects` / `ungroup_objects` | group ids / group id |
+| `group_objects` / `ungroup_objects` | group ids under the component's `name` / group id |
 
 Compose tools return the ids they created and any issue the kit reported. Fix
 reported issues before the next call. Never bind a key `list_sensors` did not

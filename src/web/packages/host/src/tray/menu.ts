@@ -7,6 +7,7 @@ export type TrayAction =
   | "editor"
   | "themes"
   | "settings"
+  | "mcp"
   | "lhm"
   | "rtss"
   | "folder"
@@ -25,6 +26,8 @@ export interface TraySnapshot {
   readonly lanAddress?: string;
   readonly autostart: boolean;
   readonly notice?: string;
+  /** True when this package carries the MCP bin and the skill. */
+  readonly mcp?: boolean;
   readonly lhm?: ExternalAppState;
   readonly rtss?: ExternalAppState;
 }
@@ -85,6 +88,15 @@ export function buildTrayMenu(snapshot: TraySnapshot): readonly TrayMenuItem[] {
       { title: "Theme Editor", enabled: true, action: "editor" },
       { title: "Theme Store", enabled: true, action: "themes" },
       { title: "Host Settings", enabled: true, action: "settings" },
+      ...(snapshot.mcp === true
+        ? [
+            {
+              title: "Agent tools (MCP)…",
+              enabled: true,
+              action: "mcp" as const,
+            },
+          ]
+        : []),
     ],
     [
       externalRow("LibreHardwareMonitor", "lhm", snapshot.lhm),

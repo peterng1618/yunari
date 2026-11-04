@@ -53,6 +53,8 @@ function paintOf(
 /** A text box. Its runs decide its readings; bindings travel beside it. */
 export interface AddTextObjectInput {
   readonly id: string;
+  /** The layer name the editor's tree prints; the id when omitted. */
+  readonly name?: string;
   readonly left: number;
   readonly top: number;
   readonly width: number;
@@ -88,7 +90,7 @@ export function addTextObject(input: AddTextObjectInput): {
     input.palette,
   );
   return {
-    object,
+    object: { ...object, name: input.name ?? input.id },
     ...(input.bindings === undefined ? {} : { bindings: input.bindings }),
   };
 }
@@ -98,6 +100,7 @@ export type ShapeObjectKind = "rect" | "ellipse" | "path";
 /** A basic geometry. A path needs its own commands; the others fill their box. */
 export interface AddShapeObjectInput {
   readonly id: string;
+  readonly name?: string;
   readonly kind: ShapeObjectKind;
   readonly left: number;
   readonly top: number;
@@ -129,13 +132,17 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
         input.palette,
       ),
       stroke: paintOf(token, input.width, input.height, input.palette),
+      name: input.name ?? input.id,
     };
   }
   const token = input.token ?? "panel";
   const fill = paintOf(token, input.width, input.height, input.palette);
   const common = {
     id: input.id,
-    name: input.id,
+    name: input.name ?? input.id,
+    // Fabric defaults strokeWidth to 1 even with no stroke, and a fill-only
+    // box then paints its edges short of the authored box.
+    strokeWidth: 0,
     left: input.left,
     top: input.top,
     width: input.width,
@@ -164,6 +171,7 @@ export function addShapeObject(input: AddShapeObjectInput): ObjectJson {
  *  the background's media, and a font has no image bytes to paint. */
 export interface AddImageObjectInput {
   readonly id: string;
+  readonly name?: string;
   readonly assetId: string;
   readonly kind: "image" | "svg";
   readonly left: number;
@@ -177,7 +185,7 @@ export function addImageObject(input: AddImageObjectInput): ObjectJson {
   return {
     type: "Image",
     id: input.id,
-    name: input.id,
+    name: input.name ?? input.id,
     left: input.left,
     top: input.top,
     width: input.width,
@@ -191,6 +199,7 @@ export function addImageObject(input: AddImageObjectInput): ObjectJson {
 /** One glyph from the starter set, as a filled path. */
 export interface AddIconObjectInput {
   readonly id: string;
+  readonly name?: string;
   readonly icon: keyof typeof starterIcons;
   readonly left: number;
   readonly top: number;
@@ -210,7 +219,7 @@ export function addIconObject(input: AddIconObjectInput): ObjectJson {
   return {
     type: "Path",
     id: input.id,
-    name: input.id,
+    name: input.name ?? input.id,
     left: input.left,
     top: input.top,
     path: starterIcons[input.icon](input.size),
@@ -229,6 +238,7 @@ export type AuthoringChartFamily = "line" | "bar" | "gauge";
 /** A chart and the semantic readings its series name. */
 export interface AddChartObjectInput {
   readonly id: string;
+  readonly name?: string;
   readonly left: number;
   readonly top: number;
   readonly width: number;
@@ -280,15 +290,18 @@ export function addChartObject(input: AddChartObjectInput): {
   const settings =
     input.settings ?? defaultChartSettings(input.family, input.palette);
   return {
-    object: chart(
-      input.id,
-      input.left,
-      input.top,
-      input.width,
-      input.height,
-      input.family,
-      settings,
-    ),
+    object: {
+      ...chart(
+        input.id,
+        input.left,
+        input.top,
+        input.width,
+        input.height,
+        input.family,
+        settings,
+      ),
+      name: input.name ?? input.id,
+    },
     bindings: input.bindings,
   };
 }

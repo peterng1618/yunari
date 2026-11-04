@@ -84,8 +84,10 @@ jobs:
     # checked-out repository the package must not be staged in.
     env:
       STAGE: ${{ github.workspace }}/../yunari-package
+      MCP_STAGE: ${{ github.workspace }}/../yunari-mcp-package
       ASSETS: ${{ github.workspace }}/../yunari-assets
       SMOKE: ${{ github.workspace }}/../yunari-smoke
+      MCP_SMOKE: ${{ github.workspace }}/../yunari-mcp-smoke
     steps:
       # The gate dates licence rules by commit history, so a shallow clone
       # would make every rule read as written by its own citing commit.
@@ -125,6 +127,7 @@ jobs:
           npm run build -w @yunari/player
           npm run build -w @yunari/editor
           npm run build -w @yunari/host
+          npm run build -w @yunari/mcp
 
       - name: Resolve version and dist-tag
         id: version
@@ -144,16 +147,19 @@ jobs:
       - name: Stage the package outside the repository
         run: |
           set -euo pipefail
-          rm -rf "$STAGE"
-          node scripts/stage-npm-package.mjs --out "$STAGE" --expect-version "$VERSION"
+          rm -rf "$STAGE" "$MCP_STAGE"
+          node scripts/stage-npm-package.mjs --out "$STAGE" \
+            --mcp-out "$MCP_STAGE" --expect-version "$VERSION"
 
-      - name: Pack the tarball
+      - name: Pack the tarballs
         run: |
           set -euo pipefail
           rm -rf "$ASSETS"
           mkdir -p "$ASSETS"
           (cd "$STAGE" && npm pack --pack-destination "$ASSETS")
+          (cd "$MCP_STAGE" && npm pack --pack-destination "$ASSETS")
           test -f "$ASSETS/yunari-${VERSION}.tgz"
+          test -f "$ASSETS/yunari-mcp-${VERSION}.tgz"
 
       # The tarball is what users install; a missing entry here is a broken
       # release that the install smoke test alone would not explain.
@@ -172,6 +178,9 @@ jobs:
             package/packages/host/public/settings.html \
             package/packages/player/dist/index.html \
             package/packages/editor/dist/index.html \
+            package/packages/mcp/bin/yunari-mcp.js \
+            package/packages/mcp/dist/main.js \
+            package/packages/mcp/skills/yunari-theme-designer/SKILL.md \
             package/packages/host/vendor/weather-icons/clear-day.svg \
             package/schema/theme-document.schema.json; do
             if ! grep -qx "$path" <<< "$entries"; then
@@ -179,6 +188,28 @@ jobs:
               exit 1
             fi
           done
+
+      # The standalone package must carry the same build and skill, and must
+      # name no workspace package: those are bundled into dist/main.js.
+      - name: Verify the standalone MCP tarball
+        run: |
+          set -euo pipefail
+          entries="$(tar -tzf "$ASSETS/yunari-mcp-${VERSION}.tgz")"
+          for path in \
+            package/package.json \
+            package/bin/yunari-mcp.js \
+            package/dist/main.js \
+            package/skills/yunari-theme-designer/SKILL.md; do
+            if ! grep -qx "$path" <<< "$entries"; then
+              echo "missing $path in the MCP tarball" >&2
+              exit 1
+            fi
+          done
+          manifest="$(tar -xzOf "$ASSETS/yunari-mcp-${VERSION}.tgz" package/package.json)"
+          if grep -q '"@yunari/' <<< "$manifest"; then
+            echo "the standalone manifest names a workspace package" >&2
+            exit 1
+          fi
 
       # Install the packed tarball the way a user would, in a directory with no
       # workspace above it, then boot the host and require every page to answer.
@@ -237,6 +268,20 @@ jobs:
           # that omits them answers 404 here rather than in a user's theme.
           check /api/weather/icon/clear-day.svg
 
+          # Both bins must answer; `mcp` routes to the bundled MCP entry.
+          ./node_modules/.bin/yunari-mcp --help > /dev/null
+          ./node_modules/.bin/yunari mcp --help > /dev/null
+
+      - name: Install and smoke-test the standalone MCP tarball
+        run: |
+          set -euo pipefail
+          rm -rf "$MCP_SMOKE"
+          mkdir -p "$MCP_SMOKE"
+          cd "$MCP_SMOKE"
+          npm init --yes > /dev/null
+          npm install --no-audit --no-fund "$ASSETS/yunari-mcp-${VERSION}.tgz"
+          ./node_modules/.bin/yunari-mcp --help > /dev/null
+
       # The zip is a release asset like the tarball, so it is made from the same
       # staged tree rather than rebuilt in the publish job.
       - name: Zip the staged tree
@@ -274,7 +319,7 @@ jobs:
           # older. No cache or install: this job builds nothing.
           node-version: "24"
 
-      - name: Publish the packed tarball to npm
+      - name: Publish the packed tarballs to npm
         run: |
           set -euo pipefail
           args=(--provenance --access public --tag "$DIST_TAG")
@@ -282,6 +327,7 @@ jobs:
             args+=(--dry-run)
           fi
           npm publish "$ASSETS/yunari-${VERSION}.tgz" "${args[@]}"
+          npm publish "$ASSETS/yunari-mcp-${VERSION}.tgz" "${args[@]}"
 
       - name: Attach the release assets
         if: env.DRY_RUN != 'true'
@@ -293,5 +339,6 @@ jobs:
           set -euo pipefail
           gh release upload "$GITHUB_REF_NAME" \
             "$ASSETS/yunari-${VERSION}.tgz" \
+            "$ASSETS/yunari-mcp-${VERSION}.tgz" \
             "$ASSETS/yunari-${VERSION}.zip" \
             --clobber

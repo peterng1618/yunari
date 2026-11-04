@@ -2,13 +2,17 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { InstallResult, RemoveServerResult } from "add-mcp";
 import { afterEach, describe, expect, it } from "vitest";
+import type { InstallChoices } from "./choices.js";
+import { resolveChoices } from "./choices.js";
 import {
   AGENT_TYPE,
   AUTO_APPROVAL_RULE,
@@ -18,15 +22,20 @@ import {
   install,
   nodeCommand,
   removeAutoApprovalRule,
-  SKILL_AGENT,
-  SKILL_NAME,
+  resolveInterpreter,
   serverEntryFor,
-  skillFilePath,
-  skillInstallArgs,
-  skillRemoveArgs,
   status,
   uninstall,
 } from "./install.js";
+import {
+  compareSkill,
+  resolveSkillSourceDir,
+  SKILL_NAME,
+  skillAgentsFor,
+  skillFilePath,
+  skillInstallArgs,
+  skillRemoveArgs,
+} from "./skill.js";
 
 const homes: string[] = [];
 
@@ -44,9 +53,11 @@ afterEach(() => {
 
 interface Calls {
   skills: string[][];
-  upserts: { config: unknown; options: unknown }[];
-  removes: unknown[];
+  upserts: { agent: string; config: unknown; options: unknown }[];
+  removes: { agent: string; options: unknown }[];
   approvals: number;
+  approvalOptions: { local: boolean; cwd?: string }[];
+  checkAgents: string[][];
   probes: number;
   checks: number;
 }
@@ -58,10 +69,16 @@ interface Behaviour {
   readonly installedAlready?: boolean;
   readonly keepsSkillAfterRemove?: boolean;
   readonly upsertFails?: boolean;
+  readonly upsertFailsFor?: string;
   readonly removeFails?: boolean;
   readonly approvalFails?: boolean;
   readonly serverInstalled?: boolean;
   readonly serverEntryMissing?: boolean;
+  readonly serverEntryRecorded?: {
+    readonly command?: string;
+    readonly args: readonly string[];
+  };
+  readonly remainingAgents?: readonly string[];
 }
 
 /**
@@ -83,6 +100,8 @@ function fakePorts(
     upserts: [],
     removes: [],
     approvals: 0,
+    approvalOptions: [],
+    checkAgents: [],
     probes: 0,
     checks: 0,
   };
@@ -98,6 +117,8 @@ function fakePorts(
     home,
     skillSourceDir: join(home, "repo-skills", "yunari-theme-designer"),
     serverEntry,
+    interpreter: process.execPath,
+    bundledSkillDir: join(home, "bundled-skills", SKILL_NAME),
     runSkills: async (args) => {
       calls.skills.push([...args]);
       if (args[0] === "add" && behaviour.skillLocation !== "none") {
@@ -113,9 +134,10 @@ function fakePorts(
           : { error: behaviour.skillsError }),
       };
     },
-    upsert: (config: unknown, options): InstallResult => {
-      calls.upserts.push({ config, options });
-      return behaviour.upsertFails === true
+    upsert: (agent: string, config: unknown, options): InstallResult => {
+      calls.upserts.push({ agent, config, options });
+      return behaviour.upsertFails === true ||
+        behaviour.upsertFailsFor === agent
         ? { success: false, path: "/agent/config.json", error: "refused" }
         : {
             success: true,
@@ -123,8 +145,8 @@ function fakePorts(
             extraPaths: ["/agent/settings.json"],
           };
     },
-    remove: (options): RemoveServerResult => {
-      calls.removes.push(options);
+    remove: (agent: string, options): RemoveServerResult => {
+      calls.removes.push({ agent, options });
       return behaviour.removeFails === true
         ? {
             success: false,
@@ -134,8 +156,9 @@ function fakePorts(
           }
         : { success: true, path: "/agent/config.json", removed: true };
     },
-    removeAutoApproval: () => {
+    removeAutoApproval: (options: { local: boolean; cwd?: string }) => {
       calls.approvals += 1;
+      calls.approvalOptions.push(options);
       return behaviour.approvalFails === true
         ? {
             ok: false,
@@ -149,14 +172,22 @@ function fakePorts(
             path: "/agent/settings.json",
           };
     },
-    isServerInstalled: async () => {
+    isServerInstalled: async (agents) => {
       calls.checks += 1;
+      calls.checkAgents.push([...agents]);
       return behaviour.serverInstalled ?? true;
     },
-    fileExists: (path) =>
-      path === serverEntry
-        ? behaviour.serverEntryMissing !== true
-        : presentAt !== undefined && path === presentAt,
+    installedServer: async () =>
+      behaviour.serverEntryRecorded ??
+      (behaviour.serverInstalled === false
+        ? undefined
+        : { command: process.execPath, args: [serverEntry, "serve"] }),
+    registeredAgents: async () => behaviour.remainingAgents ?? [],
+    fileExists: (path) => {
+      if (path === process.execPath) return true;
+      if (path === serverEntry) return behaviour.serverEntryMissing !== true;
+      return presentAt !== undefined && path === presentAt;
+    },
     probeHost: async () => {
       calls.probes += 1;
       return { reachable: true, url: "http://127.0.0.1:5227" };
@@ -165,6 +196,18 @@ function fakePorts(
 
   return { ports, calls, skillPath: canonicalPath, canonicalPath };
 }
+
+describe("skill agents", () => {
+  it("installs the skill to each chosen agent and the universal path", () => {
+    expect(skillAgentsFor(["claude-code", "vscode"])).toEqual([
+      "codex",
+      "claude-code",
+      "github-copilot",
+    ]);
+    expect(skillAgentsFor(["cursor"])).toEqual(["codex", "cursor"]);
+    expect(skillAgentsFor([])).toEqual(["codex"]);
+  });
+});
 
 describe("install", () => {
   it("writes exactly one server entry and one skill path", async () => {
@@ -176,14 +219,17 @@ describe("install", () => {
     expect(report.ok).toBe(true);
     expect(report.skillPath).toBe(skillPath);
     expect(calls.skills).toEqual([
-      skillInstallArgs(join(home, "repo-skills", "yunari-theme-designer")),
+      skillInstallArgs(join(home, "repo-skills", "yunari-theme-designer"), [
+        "claude-code",
+      ]),
     ]);
     expect(calls.skills[0]).toEqual([
       "add",
       join(home, "repo-skills", "yunari-theme-designer"),
       "-g",
       "-a",
-      SKILL_AGENT,
+      "codex",
+      "claude-code",
       "--copy",
       "-y",
     ]);
@@ -241,7 +287,10 @@ describe("install", () => {
     const home = temporaryHome();
     const { ports, calls } = fakePorts(home);
 
-    const report = await install(ports, "http://127.0.0.1:6000");
+    const report = await install(
+      ports,
+      resolveChoices({ url: "http://127.0.0.1:6000" }, "/work"),
+    );
 
     expect(report.ok).toBe(true);
     expect((calls.upserts[0]?.config as { args: string[] }).args).toEqual([
@@ -288,14 +337,14 @@ describe("uninstall", () => {
     const report = await uninstall(ports);
 
     expect(report.ok).toBe(true);
-    expect(calls.removes).toEqual([{ local: false }]);
+    expect(calls.removes).toEqual([
+      { agent: AGENT_TYPE, options: { local: false } },
+    ]);
     expect(calls.approvals).toBe(1);
     expect(calls.skills).toEqual([[...skillRemoveArgs()]]);
     expect([...skillRemoveArgs()]).toEqual([
       "remove",
       "-g",
-      "-a",
-      SKILL_AGENT,
       "-y",
       "yunari-theme-designer",
     ]);
@@ -384,7 +433,11 @@ describe("status", () => {
     expect(calls.checks).toBe(1);
     expect(report.host.reachable).toBe(true);
     expect(report.server.present).toBe(true);
-    expect(report.skill).toEqual({ present: false, path: skillPath });
+    expect(report.skill).toEqual({
+      present: false,
+      path: skillPath,
+      state: "not-installed",
+    });
   });
 
   it("reports the skill present at the canonical path", async () => {
@@ -394,6 +447,21 @@ describe("status", () => {
     await expect(status(ports)).resolves.toMatchObject({
       skill: { present: true, path: skillFilePath(home) },
     });
+  });
+
+  it("reports an entry whose interpreter vanished as absent with a repair", async () => {
+    const home = temporaryHome();
+    const { ports } = fakePorts(home, {
+      serverEntryRecorded: {
+        command: join(home, "gone", "node.exe"),
+        args: [join(home, "pkg", "bin", "yunari-mcp.js"), "serve"],
+      },
+    });
+
+    const report = await status(ports);
+
+    expect(report.server.present).toBe(false);
+    expect(report.server.detail).toContain("re-run install");
   });
 });
 
@@ -416,12 +484,46 @@ describe("createPorts", () => {
 
   it("points the entry at this Node and the bin shim", () => {
     const entry = serverEntryFor("C:/repo/packages/mcp/bin/yunari-mcp.js");
-    expect(entry.command).toBe(process.execPath);
+    expect(entry.command).toBe(resolveInterpreter(process.execPath));
     expect(entry.args).toEqual([
       "C:/repo/packages/mcp/bin/yunari-mcp.js",
       "serve",
     ]);
     expect(entry.autoApproveTools).toEqual([]);
+  });
+
+  it("records the real interpreter, not a per-session shim", () => {
+    const dir = mkdtempSync(join(tmpdir(), "yunari-interp-"));
+    homes.push(dir);
+    const real = join(dir, "node.exe");
+    writeFileSync(real, "");
+    const shim = join(dir, "shim.exe");
+    symlinkSync(real, shim);
+    expect(resolveInterpreter(shim)).toBe(realpathSync(real));
+  });
+
+  it("leaves an unreadable interpreter path unchanged", () => {
+    const missing = join(tmpdir(), "yunari-no-such-node.exe");
+    expect(resolveInterpreter(missing)).toBe(missing);
+  });
+
+  it("serverEntryFor uses the supplied interpreter and the entry path verbatim", () => {
+    expect(
+      serverEntryFor(
+        "C:/pkg/bin/yunari-mcp.js",
+        "http://127.0.0.1:5227",
+        "C:/node.exe",
+      ),
+    ).toEqual({
+      command: "C:/node.exe",
+      args: [
+        "C:/pkg/bin/yunari-mcp.js",
+        "serve",
+        "--url",
+        "http://127.0.0.1:5227",
+      ],
+      autoApproveTools: [],
+    });
   });
 
   it("honours an injected home without resolving the real one", () => {
@@ -436,6 +538,34 @@ describe("createPorts", () => {
       join(home, ".agents", "skills", "yunari-theme-designer", "SKILL.md"),
     );
     expect(AGENT_TYPE).toBe("claude-code");
+  });
+});
+
+describe("skill source and drift", () => {
+  it("prefers the package-local skill and falls back to the checkout", () => {
+    const packageDir = join(tmpdir(), "yunari-pkg");
+    const bundled = join(packageDir, "skills", SKILL_NAME);
+    expect(resolveSkillSourceDir(packageDir, (path) => path === bundled)).toBe(
+      bundled,
+    );
+    expect(resolveSkillSourceDir(packageDir, () => false)).toBe(
+      join(packageDir, "..", "..", "..", "..", "skills", SKILL_NAME),
+    );
+  });
+
+  it("reports a drifted skill when a reference differs", () => {
+    const bundled = mkdtempSync(join(tmpdir(), "yunari-skill-bundled-"));
+    const installed = mkdtempSync(join(tmpdir(), "yunari-skill-installed-"));
+    homes.push(bundled, installed);
+    for (const dir of [bundled, installed]) {
+      mkdirSync(join(dir, "references"));
+      writeFileSync(join(dir, "SKILL.md"), "a");
+      writeFileSync(join(dir, "references", "design-rules.md"), "b");
+    }
+    expect(compareSkill(installed, bundled)).toBe("current");
+    writeFileSync(join(installed, "references", "design-rules.md"), "changed");
+    expect(compareSkill(installed, bundled)).toBe("drifted");
+    expect(compareSkill(undefined, bundled)).toBe("not-installed");
   });
 });
 
@@ -495,5 +625,140 @@ describe("removeAutoApprovalRule", () => {
       path,
     });
     expect(() => readFileSync(path, "utf8")).toThrow();
+  });
+});
+
+describe("install choices", () => {
+  const choices = (
+    overrides: Partial<InstallChoices> = {},
+  ): InstallChoices => ({
+    agents: ["claude-code"],
+    scope: "global",
+    skill: false,
+    autoApprove: true,
+    cwd: "/work",
+    ...overrides,
+  });
+
+  it("registers the server for each selected agent exactly once", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    const report = await install(
+      ports,
+      choices({ agents: ["claude-code", "cursor"] }),
+    );
+
+    expect(report.ok).toBe(true);
+    expect(calls.upserts.map((call) => call.agent)).toEqual([
+      "claude-code",
+      "cursor",
+    ]);
+    expect(
+      (calls.upserts[0]?.config as { autoApproveTools?: string[] })
+        .autoApproveTools,
+    ).toEqual([]);
+  });
+
+  it("reports failure and keeps the other agent's step when one agent fails", async () => {
+    const home = temporaryHome();
+    const { ports } = fakePorts(home, { upsertFailsFor: "cursor" });
+
+    const report = await install(
+      ports,
+      choices({ agents: ["claude-code", "cursor"] }),
+    );
+
+    expect(report.ok).toBe(false);
+    expect(
+      report.steps.filter((step) => step.step === "server" && step.ok),
+    ).toHaveLength(1);
+  });
+
+  it("keeps auto-approval out of the entry when the user declines it", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    await install(ports, choices({ autoApprove: false }));
+
+    expect(calls.upserts[0]?.config).not.toHaveProperty("autoApproveTools");
+  });
+
+  it("removes exactly the agents and halves it installed", async () => {
+    const home = temporaryHome();
+    const { ports, calls } = fakePorts(home);
+
+    await install(ports, choices({ agents: ["claude-code", "cursor"] }));
+    calls.removes.length = 0;
+    calls.skills.length = 0;
+    await uninstall(ports, choices({ agents: ["claude-code", "cursor"] }));
+
+    expect(calls.removes.map((call) => call.agent)).toEqual([
+      "claude-code",
+      "cursor",
+    ]);
+    expect(calls.skills).toHaveLength(0);
+  });
+});
+
+describe("selected agents and shared resources", () => {
+  const choices = (
+    overrides: Partial<InstallChoices> = {},
+  ): InstallChoices => ({
+    agents: ["claude-code"],
+    scope: "global",
+    skill: true,
+    autoApprove: true,
+    cwd: "/work",
+    ...overrides,
+  });
+
+  it("status checks the selected agents and scope", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await status(ports, choices({ agents: ["cursor"], scope: "local" }));
+    expect(calls.checkAgents).toEqual([["cursor"]]);
+  });
+
+  it("keeps the shared skill while another agent still uses it", async () => {
+    const { ports, calls } = fakePorts(temporaryHome(), {
+      remainingAgents: ["claude-code"],
+    });
+    const report = await uninstall(ports, choices({ agents: ["cursor"] }));
+    expect(calls.skills).toHaveLength(0);
+    expect(
+      report.steps.find((step) => step.step === "skill")?.detail,
+    ).toContain("still used by claude-code");
+  });
+
+  it("touches the approval rule only for a claude-code uninstall", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await uninstall(ports, choices({ agents: ["cursor"] }));
+    expect(calls.approvals).toBe(0);
+  });
+
+  it("removes the project approval file for a local install", async () => {
+    const home = temporaryHome();
+    const cwd = mkdtempSync(join(tmpdir(), "yunari-project-"));
+    homes.push(cwd);
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    writeFileSync(
+      join(cwd, ".claude", "settings.local.json"),
+      `${JSON.stringify({ permissions: { allow: [AUTO_APPROVAL_RULE] } })}\n`,
+    );
+
+    const result = removeAutoApprovalRule(home, { local: true, cwd });
+
+    expect(result.removed).toBe(true);
+    expect(
+      JSON.parse(
+        readFileSync(join(cwd, ".claude", "settings.local.json"), "utf8"),
+      ).permissions.allow,
+    ).toEqual([]);
+  });
+
+  it("passes the project scope to the approval cleanup", async () => {
+    const { ports, calls } = fakePorts(temporaryHome());
+    await uninstall(ports, choices({ scope: "local", cwd: "/project" }));
+    expect(calls.approvalOptions).toEqual([{ local: true, cwd: "/project" }]);
   });
 });

@@ -13,8 +13,10 @@ import { afterEach, expect, it } from "vitest";
 // The script lives at the repository root, four levels above this file:
 // src/web/tests/scripts → ../../../.. = repo root.
 import {
+  MCP_DEPENDENCIES,
   RUNTIME_DEPENDENCIES,
   runtimeDependencies,
+  stageMcpPackage,
   stagePackage,
 } from "../../../../scripts/stage-npm-package.mjs";
 
@@ -64,10 +66,12 @@ function fakeTree({ main = true } = {}): Fake {
     "src/web/package-lock.json",
     JSON.stringify({
       packages: Object.fromEntries(
-        RUNTIME_DEPENDENCIES.map((name, index) => [
-          `node_modules/${name}`,
-          { version: `1.0.${index}` },
-        ]),
+        [...new Set([...RUNTIME_DEPENDENCIES, ...MCP_DEPENDENCIES])].map(
+          (name, index) => [
+            `node_modules/${name}`,
+            { version: `1.0.${index}` },
+          ],
+        ),
       ),
     }),
   );
@@ -81,6 +85,11 @@ function fakeTree({ main = true } = {}): Fake {
     "src/web/packages/host/vendor/weather-icons/clear-day.svg",
     "<svg>clear day</svg>",
   );
+  write("src/web/packages/mcp/bin/yunari-mcp.js", "#!/usr/bin/env node\n");
+  write("src/web/packages/mcp/dist/main.js", "export {};\n");
+  write("src/web/packages/mcp/dist/main.js.map", "{}");
+  write("skills/yunari-theme-designer/SKILL.md", "# skill\n");
+  write("skills/yunari-theme-designer/references/design-rules.md", "# rules\n");
   // Ignored vendor binaries: present on a dev box after `vendor:lhm`.
   write("src/web/packages/host/vendor/lhm/LibreHardwareMonitorLib.dll", "MZ");
   write("src/web/packages/player/dist/index.html", "<!doctype html>");
@@ -236,4 +245,71 @@ it("exits 0 on the CLI and non-zero for a mismatched version or a missing build"
   const missing = run(broken.source, broken.out, VERSION);
   expect(missing.status).not.toBe(0);
   expect(missing.stderr).toContain("packages/host/dist/main.js");
+});
+
+it("carries the MCP server and the skill in the bundle", () => {
+  const tree = fakeTree();
+  expect(stage(tree).ok).toBe(true);
+
+  for (const rel of [
+    "packages/mcp/bin/yunari-mcp.js",
+    "packages/mcp/dist/main.js",
+    "packages/mcp/skills/yunari-theme-designer/SKILL.md",
+    "packages/mcp/skills/yunari-theme-designer/references/design-rules.md",
+  ]) {
+    expect(existsSync(path.join(tree.out, rel)), rel).toBe(true);
+  }
+  const staged = JSON.parse(
+    readFileSync(path.join(tree.out, "package.json"), "utf8"),
+  );
+  expect(staged.bin["yunari-mcp"]).toBe("packages/mcp/bin/yunari-mcp.js");
+});
+
+it("stages a standalone MCP package with no workspace dependency", () => {
+  const tree = fakeTree();
+  const out = path.join(tree.root, "mcp");
+  const result = stageMcpPackage({
+    source: tree.source,
+    out,
+    version: VERSION,
+    dependencies: { "add-mcp": "2.6.1", skills: "1.7.5", zod: "4.6.7" },
+  });
+  expect(result.ok).toBe(true);
+
+  const manifest = JSON.parse(
+    readFileSync(path.join(out, "package.json"), "utf8"),
+  );
+  expect(manifest.name).toBe("yunari-mcp");
+  expect(manifest.bin).toEqual({ "yunari-mcp": "bin/yunari-mcp.js" });
+  expect(
+    Object.keys(manifest.dependencies).some((name) =>
+      name.startsWith("@yunari/"),
+    ),
+  ).toBe(false);
+  expect(
+    existsSync(path.join(out, "skills", "yunari-theme-designer", "SKILL.md")),
+  ).toBe(true);
+});
+
+it("refuses an mcp-out inside the source tree or matching --out", () => {
+  const tree = fakeTree();
+  expect(
+    stageMcpPackage({
+      source: tree.source,
+      out: path.join(tree.source, "mcp"),
+      version: VERSION,
+      dependencies: {},
+    }).ok,
+  ).toBe(false);
+
+  const run = spawnSync(process.execPath, [
+    SCRIPT,
+    "--source",
+    tree.source,
+    "--out",
+    tree.out,
+    "--mcp-out",
+    tree.out,
+  ]);
+  expect(run.status).not.toBe(0);
 });
