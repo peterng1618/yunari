@@ -46,6 +46,9 @@ export interface ThemeChooserOptions {
    *  readable token; a cookie-paired page passes `true`, because its token is
    *  HttpOnly and the player is the one that knows the page is paired. */
   readonly paired?: boolean;
+  /** The strip, once mounted, so the display's controls can reveal and hide it
+   *  on the same schedule as their own bar. */
+  readonly onStrip?: (strip: HTMLElement) => void;
 }
 
 const STRIP_ID = "yunari-theme-chooser";
@@ -147,6 +150,7 @@ export function createThemeChooser(input: ThemeChooserOptions): {
     color: "#e8ecf3",
   });
   strip.dataset["yunariThemeChooser"] = "";
+  input.onStrip?.(strip);
 
   let disposed = false;
 

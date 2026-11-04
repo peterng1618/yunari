@@ -47,6 +47,15 @@ const MAX_DIM = 0.85;
  *  take the bar, the listeners and any wake lock this page is holding. */
 export type DisplayControls = {
   dispose(): void;
+  /**
+   * Puts another chrome element on this bar's reveal and hide.
+   *
+   * The theme chooser is the caller: it is shown on the same display and for
+   * the same reader, so a second lifetime would leave one control up while the
+   * other fades. The element's own removal stays its owner's job; this only
+   * decides when it is visible and operable.
+   */
+  track(element: HTMLElement): void;
 };
 
 /**
@@ -108,6 +117,8 @@ export function mountDisplayControls(): DisplayControls {
 
   let disposed = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Chrome this bar owns the visibility of, beyond its own row. */
+  const tracked = new Set<HTMLElement>();
 
   // ---- the bar's own lifetime ------------------------------------------
 
@@ -125,22 +136,37 @@ export function mountDisplayControls(): DisplayControls {
     }, VISIBLE_MS);
   }
 
+  /** Writes the shown or hidden state of the bar and everything tracking it.
+   *  One writer, so a focus held in either cannot be hidden by the other. */
+  function paintVisible(visible: boolean): void {
+    bar.style.opacity = visible ? "1" : "0";
+    bar.style.pointerEvents = visible ? "auto" : "none";
+
+    for (const element of tracked) {
+      element.style.opacity = visible ? "1" : "0";
+      element.style.pointerEvents = visible ? "auto" : "none";
+    }
+  }
+
   function hide(): void {
     // A keyboard reader is holding the bar open, and hiding it here would take
-    // the control they are on out from under them.
-    if (bar.contains(document.activeElement)) {
+    // the control they are on out from under them. A tracked strip has its own
+    // focusable controls, so the same rule reaches both.
+    const focus = document.activeElement;
+    if (
+      bar.contains(focus) ||
+      [...tracked].some((element) => element.contains(focus))
+    ) {
       armHide();
       return;
     }
-    bar.style.opacity = "0";
-    bar.style.pointerEvents = "none";
+    paintVisible(false);
     say.textContent = "";
   }
 
   function reveal(): void {
     if (!live()) return;
-    bar.style.opacity = "1";
-    bar.style.pointerEvents = "auto";
+    paintVisible(true);
     armHide();
   }
 
@@ -333,6 +359,16 @@ export function mountDisplayControls(): DisplayControls {
   bar.addEventListener("focusin", reveal);
   bar.addEventListener("focusout", armHide);
 
+  function track(element: HTMLElement): void {
+    tracked.add(element);
+    // The bar is hidden before its first tap, and a tracked strip has to start
+    // the same way or the two controls would appear on different schedules.
+    element.style.opacity = "0";
+    element.style.pointerEvents = "none";
+    element.addEventListener("focusin", reveal);
+    element.addEventListener("focusout", armHide);
+  }
+
   paintFullscreen();
   paintAwake();
 
@@ -342,6 +378,11 @@ export function mountDisplayControls(): DisplayControls {
     window.removeEventListener("pointerdown", reveal, { capture: true });
     document.removeEventListener("fullscreenchange", paintFullscreen);
     document.removeEventListener("visibilitychange", onVisibility);
+    for (const element of tracked) {
+      element.removeEventListener("focusin", reveal);
+      element.removeEventListener("focusout", armHide);
+    }
+    tracked.clear();
     // A discarded page must not keep a phone awake, and nothing else releases
     // this lock for us.
     const lock = held;
@@ -352,7 +393,7 @@ export function mountDisplayControls(): DisplayControls {
     bar.remove();
   }
 
-  return { dispose };
+  return { dispose, track };
 }
 
 function control(name: string, label: string): HTMLButtonElement {
