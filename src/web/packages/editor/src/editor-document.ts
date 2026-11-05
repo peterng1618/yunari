@@ -151,6 +151,8 @@ interface EditorDocumentSource {
     envelope: FabricThemeEnvelope,
     assets: Readonly<Record<string, Uint8Array>>,
     base?: string,
+    credits?: readonly ThemeCreditsEntry[],
+    backgroundMedia?: BackgroundMediaMemory,
   ) => Promise<void>;
   /** Per-asset background geometry the stored theme keeps beside its document.
    *  Absent for a document that was not opened from the library. */

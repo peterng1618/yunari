@@ -1027,7 +1027,10 @@ describe("ThemeStore", () => {
       open: async (id) => {
         const stored = await store.read(id);
         if (stored === undefined) throw new Error(`no theme "${id}"`);
-        return stored;
+        // The store keeps the sidecar opaque; the editor's client is what reads
+        // it into the typed map, and this mount is not about that.
+        const { backgroundMedia: _sidecar, ...content } = stored;
+        return content;
       },
       save: async () => "base-after-save",
       // The display map is not what this test is about: it exercises the mount.

@@ -251,6 +251,7 @@ describe("ThemeLibraryManager", () => {
       { "assets/backdrop.png": PNG },
       "base-from-reload",
       undefined,
+      undefined,
     );
   });
 
@@ -285,6 +286,7 @@ describe("ThemeLibraryManager", () => {
       { "assets/backdrop.png": PNG },
       "base-from-open",
       undefined,
+      undefined,
     );
     expect(manager.isStored()).toBe(true);
   });
@@ -297,6 +299,7 @@ describe("ThemeLibraryManager", () => {
       envelope: storedInstalled,
       assets: { "assets/backdrop.png": PNG },
       base: "base-from-open",
+      backgroundMedia: { badge: { bounds: "display" as const } },
     }));
     const { manager, onOpenTheme } = harness({
       base: "stored-base",
@@ -312,7 +315,8 @@ describe("ThemeLibraryManager", () => {
 
     expect(open).toHaveBeenCalledWith("living-room");
     expect(onOpenTheme).toHaveBeenCalledOnce();
-    const [remixed, assets, base] = onOpenTheme.mock.calls[0]!;
+    const [remixed, assets, base, , backgroundMedia] =
+      onOpenTheme.mock.calls[0]!;
     expect(remixed.id).toMatch(UUID);
     expect(remixed.id).not.toBe("living-room");
     expect(remixed.metadata?.remixOf).toEqual(PARENT);
@@ -326,6 +330,7 @@ describe("ThemeLibraryManager", () => {
     expect(remixed.metadata?.themeLanguage).toBe("en");
     expect(assets).toEqual({ "assets/backdrop.png": PNG });
     expect(base).toBeUndefined();
+    expect(backgroundMedia).toEqual({ badge: { bounds: "display" } });
     expect(manager.isStored()).toBe(false);
   });
 
@@ -363,6 +368,7 @@ describe("ThemeLibraryManager", () => {
       envelope: storedInstalled,
       assets: { "assets/backdrop.png": PNG },
       base: "base-from-open",
+      backgroundMedia: { badge: { bounds: "theme" as const } },
     }));
     const { manager, onOpenTheme } = harness({
       base: "stored-base",
@@ -377,7 +383,8 @@ describe("ThemeLibraryManager", () => {
 
     expect(open).toHaveBeenCalledWith("living-room");
     expect(onOpenTheme).toHaveBeenCalledOnce();
-    const [duplicated, assets, base] = onOpenTheme.mock.calls[0]!;
+    const [duplicated, assets, base, , backgroundMedia] =
+      onOpenTheme.mock.calls[0]!;
     expect(duplicated.id).toMatch(UUID);
     expect(duplicated.id).not.toBe("living-room");
     expect(duplicated.metadata?.name).toBe("Primary");
@@ -391,6 +398,7 @@ describe("ThemeLibraryManager", () => {
     expect(duplicated.metadata?.themeLanguage).toBe("en");
     expect(assets).toEqual({ "assets/backdrop.png": PNG });
     expect(base).toBeUndefined();
+    expect(backgroundMedia).toEqual({ badge: { bounds: "theme" } });
     expect(manager.isStored()).toBe(false);
   });
 
@@ -416,16 +424,19 @@ describe("ThemeLibraryManager", () => {
       { "assets/backdrop.png": PNG },
       "base-from-open",
       undefined,
+      undefined,
     );
     expect(manager.isStored()).toBe(true);
   });
 
   it("hands an opened theme's credits to the session that mounts it", async () => {
+    const backgroundMedia = { badge: { bounds: "theme" as const } };
     const open = vi.fn(async () => ({
       envelope,
       assets: {},
       base: "base",
       credits: CREDITS,
+      backgroundMedia,
     }));
     const { manager, onOpenTheme } = harness({ client: { open } });
 
@@ -436,7 +447,17 @@ describe("ThemeLibraryManager", () => {
       {},
       "base",
       CREDITS.entries,
+      backgroundMedia,
     );
+  });
+
+  it("sends the document's background working data with every library save", async () => {
+    const backgroundMedia = { badge: { bounds: "display" as const } };
+    const { manager, save } = harness({ base: "stored-base", backgroundMedia });
+
+    await manager.save();
+
+    expect(save.mock.calls[0]?.[1]).toMatchObject({ backgroundMedia });
   });
 
   it("sends the credits it holds with every library save", async () => {
@@ -534,6 +555,7 @@ describe("ThemeLibraryManager", () => {
       const { manager, save, adoptIdentity, markSaved } = harness({
         assets,
         base: "stored-base",
+        backgroundMedia: { kept: { bounds: "display" } },
         // The document the manager re-identifies is the one its snapshot reads
         // next, which is what makes the rebase observable rather than a claim.
         snapshot: () => current,
@@ -553,6 +575,9 @@ describe("ThemeLibraryManager", () => {
           readonly envelope: FabricThemeEnvelope;
           readonly assets: Readonly<Record<string, Uint8Array>>;
           readonly base?: string;
+          readonly backgroundMedia?: Readonly<
+            Record<string, { readonly bounds: string }>
+          >;
         },
       ][];
       const [id, content] = calls[0]!;
@@ -565,6 +590,7 @@ describe("ThemeLibraryManager", () => {
       // declared byte travels even though the old folder already holds it.
       expect(content.base).toBeUndefined();
       expect(content.assets).toEqual({ "assets/kept.png": PNG });
+      expect(content.backgroundMedia).toEqual({ kept: { bounds: "display" } });
       expect(adoptIdentity).toHaveBeenCalledWith(
         "living-room-copy",
         "Living room copy",
@@ -666,6 +692,7 @@ describe("ThemeLibraryManager", () => {
         envelope,
         {},
         "base-from-open",
+        undefined,
         undefined,
       );
     });

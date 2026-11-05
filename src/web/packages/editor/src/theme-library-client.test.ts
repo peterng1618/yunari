@@ -95,6 +95,7 @@ describe("ThemeLibraryClient", () => {
     // the two are the same value travelling back the way it came.
     await expect(client.open("living-room")).resolves.toEqual({
       ...content,
+      backgroundMedia: {},
       base: "base-as-stored",
     });
   });
@@ -134,6 +135,40 @@ describe("ThemeLibraryClient", () => {
 
     await expect(client.open("living-room")).resolves.toMatchObject({
       credits,
+    });
+  });
+
+  it("carries the background working data both ways under the sidecar version", async () => {
+    const backgroundMedia = { badge: { bounds: "display" as const, scale: 2 } };
+    const mockFetch = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "PUT") {
+          return new Response(JSON.stringify({ base: "next" }), {
+            status: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            envelope,
+            assets: {},
+            backgroundMedia: { version: 1, media: backgroundMedia },
+          }),
+          { status: 200 },
+        );
+      },
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.save("living-room", { envelope, assets: {}, backgroundMedia });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      backgroundMedia: { version: 1, media: backgroundMedia },
+    });
+
+    await expect(client.open("living-room")).resolves.toMatchObject({
+      backgroundMedia,
     });
   });
 

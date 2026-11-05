@@ -5,6 +5,7 @@ import {
   AssetManager,
   type LocalAssetReference,
 } from "../asset-manager/index.js";
+import type { BackgroundMediaMemory } from "../background-media-memory.js";
 import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import type {
@@ -155,12 +156,15 @@ export function harness(options: {
    *  Nothing unused by default, so an existing case is not about it. */
   readonly cleanup?: () => Promise<CleanupAnswer>;
   readonly credits?: () => ThemeCredits | undefined;
+  /** The document's per-asset background working data; empty by default. */
+  readonly backgroundMedia?: BackgroundMediaMemory;
   /** The copy a save stores; by default the envelope being written and the
    *  document's bytes. */
   readonly output?: (envelope: FabricThemeEnvelope) => {
     readonly envelope: FabricThemeEnvelope;
     readonly assets: Readonly<Record<string, Uint8Array>>;
     readonly credits?: ThemeCredits;
+    readonly backgroundMedia: BackgroundMediaMemory;
   };
   readonly adoptIdentity?: (id: string, name: string) => void;
 }): Harness {
@@ -189,6 +193,7 @@ export function harness(options: {
       assets: Readonly<Record<string, Uint8Array>>,
       base?: string,
       credits?: readonly ThemeCreditsEntry[],
+      backgroundMedia?: BackgroundMediaMemory,
     ) => Promise<void>
   >(async () => {});
   const errors: ErrorManager = { error: vi.fn(), warn };
@@ -218,6 +223,7 @@ export function harness(options: {
           envelope: saved,
           assets: assets.assets,
           ...(credits === undefined ? {} : { credits }),
+          backgroundMedia: options.backgroundMedia ?? {},
         };
       }),
     picture: options.picture ?? (async () => undefined),

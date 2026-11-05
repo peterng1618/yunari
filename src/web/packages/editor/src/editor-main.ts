@@ -9,6 +9,7 @@ import {
 } from "@yunari/scene-fabric";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { AssetManager } from "./asset-manager/index.js";
+import type { BackgroundMediaMemory } from "./background-media-memory.js";
 import { EditorSession } from "./editor-session.js";
 import {
   createEditorShellBridge,
@@ -218,6 +219,8 @@ async function start(): Promise<void> {
      *  A new session is built on every mount, so the base has to arrive with
      *  the document rather than be remembered by the one being replaced. */
     readonly base?: string;
+    /** The sidecar's per-asset background geometry, kept beside the document. */
+    readonly backgroundMedia?: BackgroundMediaMemory;
     /** Nothing is saved behind this document — a draft restored after a crash.
      *  It reads as unsaved from its first frame, because it is: the work exists
      *  in the editor and in the draft, and nowhere else. */
@@ -276,6 +279,9 @@ async function start(): Promise<void> {
       ...(next.thumbnail === undefined ? {} : { thumbnail: next.thumbnail }),
       ...(next.credits === undefined ? {} : { credits: next.credits }),
       ...(next.base === undefined ? {} : { libraryBase: next.base }),
+      ...(next.backgroundMedia === undefined
+        ? {}
+        : { backgroundMedia: next.backgroundMedia }),
       ...(next.unsaved === true ? { unsaved: true } : {}),
       assetManager,
       panelHosts: {
@@ -348,6 +354,7 @@ async function start(): Promise<void> {
         assets: Readonly<Record<string, Uint8Array>>,
         base?: string,
         credits?: readonly ThemeCreditsEntry[],
+        backgroundMedia?: BackgroundMediaMemory,
       ) => {
         await mount({
           input: envelopeInputFor(envelope),
@@ -355,6 +362,7 @@ async function start(): Promise<void> {
           assets,
           ...(base === undefined ? {} : { base }),
           ...(credits === undefined ? {} : { credits }),
+          ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
         });
         status.textContent = openedStatusText({
           name: envelope.metadata?.name,
@@ -552,6 +560,9 @@ async function start(): Promise<void> {
           ? {}
           : { credits: content.credits.entries }),
         ...(content.base === undefined ? {} : { base: content.base }),
+        ...(content.backgroundMedia === undefined
+          ? {}
+          : { backgroundMedia: content.backgroundMedia }),
       });
       status.textContent = openedStatusText({
         name: content.envelope.metadata?.name,

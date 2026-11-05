@@ -11,6 +11,11 @@ import {
   type ThemeCredits,
   type ThemeOrigin,
 } from "@yunari/theme-package";
+import {
+  type BackgroundMediaMemory,
+  encodeBackgroundMedia,
+  readBackgroundMediaMemory,
+} from "./background-media-memory.js";
 
 /**
  * The host's library is a folder, so a save carries the document
@@ -72,6 +77,9 @@ export interface ThemeLibraryContent {
   /** The attribution member the host keeps beside the document. Absent when the
    *  stored theme credits nothing, which is not the same as an empty list. */
   readonly credits?: ThemeCredits;
+  /** The editor's per-asset background working data the host keeps beside the
+   *  document. Absent on a host that holds none. */
+  readonly backgroundMedia?: BackgroundMediaMemory;
   /** The stored document this content came from. Sending it back is what lets
    *  the host tell a save made from what it stored from one made from a
    *  document that has since been overtaken. */
@@ -231,6 +239,7 @@ function readContent(json: unknown): ThemeLibraryContent {
     readonly envelope?: unknown;
     readonly assets?: unknown;
     readonly credits?: unknown;
+    readonly backgroundMedia?: unknown;
     readonly base?: unknown;
   };
   // The package reader validates the member at this boundary too. A host that
@@ -250,6 +259,7 @@ function readContent(json: unknown): ThemeLibraryContent {
       ),
     ),
     ...(credits === undefined ? {} : { credits }),
+    backgroundMedia: readBackgroundMediaMemory(body?.backgroundMedia),
     // A host that reports no base leaves the content without one, so the save
     // that follows is ungated rather than refused for a reason it cannot fix.
     ...(typeof body?.base === "string" ? { base: body.base } : {}),
@@ -418,6 +428,13 @@ export function createThemeLibraryClient(options?: {
             ...(content.credits === undefined
               ? {}
               : { credits: content.credits }),
+            ...(content.backgroundMedia === undefined
+              ? {}
+              : {
+                  backgroundMedia: encodeBackgroundMedia(
+                    content.backgroundMedia,
+                  ),
+                }),
             ...(content.base === undefined ? {} : { base: content.base }),
             overwrite: options?.overwrite === true,
           }),

@@ -9,6 +9,7 @@ import {
 import { IText, Rect } from "fabric/es";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BackgroundMediaMemory } from "./background-media-memory.js";
 import { presetLibrary } from "./preset-library/index.js";
 import { installReadableFile } from "./readable-file.fixture.js";
 import type { TextPlacementPort } from "./text-manager/index.js";
@@ -360,6 +361,7 @@ describe("EditorSession", () => {
     expect(onOpenTheme).toHaveBeenCalledWith(
       envelope,
       {},
+      undefined,
       undefined,
       undefined,
     );
@@ -2090,6 +2092,7 @@ describe("a save the host refused", () => {
       {},
       "base-as-stored",
       undefined,
+      undefined,
     );
     // Reloading is taking the stored version, not replacing it: nothing was
     // written a second time.
@@ -2191,6 +2194,7 @@ describe("a save the host refused", () => {
       {},
       "base-as-stored",
       undefined,
+      undefined,
     );
 
     conflictMock.mockResolvedValueOnce("reload");
@@ -2200,6 +2204,47 @@ describe("a save the host refused", () => {
       {},
       "base-as-stored",
       undefined,
+      undefined,
+    );
+    extensions.destroy();
+  });
+
+  it("hands an opened theme's background sidecar to the session that replaces this one", async () => {
+    const backgroundMedia = {
+      backdrop: { bounds: "display" as const, scale: 2 },
+    };
+    const onOpenTheme = vi.fn();
+    const client = {
+      list: vi.fn(async () => []),
+      open: vi.fn(async () => ({
+        envelope: stored,
+        assets: {},
+        base: "base-as-stored",
+        backgroundMedia,
+      })),
+      save: vi.fn(async () => "base"),
+    };
+    const extensions = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: shell() as never,
+      source: {} as never,
+      envelope,
+      panelHosts,
+      libraryClient: client as never,
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+      onOpenTheme,
+    });
+
+    await extensions.actionFacade().openLibraryTheme("stored");
+
+    expect(onOpenTheme).toHaveBeenCalledWith(
+      stored,
+      {},
+      "base-as-stored",
+      undefined,
+      backgroundMedia,
     );
     extensions.destroy();
   });
@@ -3726,7 +3771,10 @@ describe("the Assets pane background action", () => {
     },
   };
 
-  function sessionWith(manager: AssetManager): EditorSession {
+  function sessionWith(
+    manager: AssetManager,
+    backgroundMedia?: BackgroundMediaMemory,
+  ): EditorSession {
     return new EditorSession({
       assetManager: manager,
       shell: {
@@ -3760,6 +3808,7 @@ describe("the Assets pane background action", () => {
       } as never,
       source: {} as never,
       envelope: declared,
+      ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -3812,6 +3861,27 @@ describe("the Assets pane background action", () => {
       offsetX: 0.2,
       scale: 3,
     });
+    extensions.destroy();
+  });
+
+  it("restores geometry a stored sidecar remembers for an asset the document is not showing", async () => {
+    document.body.replaceChildren();
+    const manager = new AssetManager();
+    manager.load({ assets: declared.assets ?? [] }, {});
+    // The sidecar remembers an artboard-framed `b`; the document currently
+    // shows `a`, so the switch must be the map's answer and not a fresh default.
+    const extensions = sessionWith(manager, {
+      b: { bounds: "display", offsetX: 0.4, scale: 2 },
+    });
+
+    await setBackground("b");
+    expect(extensions.envelope.background?.media).toEqual({
+      assetId: "b",
+      bounds: "display",
+      offsetX: 0.4,
+      scale: 2,
+    });
+
     extensions.destroy();
   });
 });

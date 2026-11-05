@@ -9,6 +9,7 @@ import {
   themeIdFromName,
 } from "@yunari/theme-package";
 import type { AssetManager } from "../asset-manager/index.js";
+import type { BackgroundMediaMemory } from "../background-media-memory.js";
 import type { CleanupAnswer } from "../editor-document.js";
 import type { ErrorManager } from "../error-manager/index.js";
 import {
@@ -135,6 +136,7 @@ interface ThemeLibraryManagerOptions {
     readonly envelope: FabricThemeEnvelope;
     readonly assets: Readonly<Record<string, Uint8Array>>;
     readonly credits?: ThemeCredits;
+    readonly backgroundMedia: BackgroundMediaMemory;
   };
   /** The picture a save ships, or the one this document arrived with: a
    *  capture that fails must cost the preview, not the theme. */
@@ -177,6 +179,7 @@ interface ThemeLibraryManagerOptions {
     assets: Readonly<Record<string, Uint8Array>>,
     base?: string,
     credits?: readonly ThemeCreditsEntry[],
+    backgroundMedia?: BackgroundMediaMemory,
   ) => Promise<void>;
 }
 
@@ -496,6 +499,7 @@ export class ThemeLibraryManager {
         opened.assets,
         opened.base,
         opened.credits?.entries,
+        opened.backgroundMedia,
       );
     }
   }
@@ -520,6 +524,7 @@ export class ThemeLibraryManager {
       opened.assets,
       undefined,
       opened.credits?.entries,
+      opened.backgroundMedia,
     );
     // Cleared only once the document has been handed over: a handover that
     // fails leaves the open document where it was, still gated by its base
@@ -542,6 +547,7 @@ export class ThemeLibraryManager {
       opened.assets,
       undefined,
       opened.credits?.entries,
+      opened.backgroundMedia,
     );
     this.#base = undefined;
   }
@@ -588,6 +594,7 @@ export class ThemeLibraryManager {
           envelope: output.envelope,
           assets: this.#payload(base, overwrite, output),
           ...(output.credits === undefined ? {} : { credits: output.credits }),
+          backgroundMedia: output.backgroundMedia,
           ...(base === undefined ? {} : { base: base.id }),
         },
         { overwrite },
@@ -685,6 +692,7 @@ export class ThemeLibraryManager {
         opened.assets,
         opened.base,
         opened.credits?.entries,
+        opened.backgroundMedia,
       );
       return;
     }
