@@ -138,6 +138,13 @@ glass is a landscape strip. The display record's mounting angle decides the turn
 (`panel-video-turn.ts`): the attached 9.2" records 90°, which is the measured
 upright orientation with rotate mode 2.
 
+**A composed advanced background is baked into the same clip.** The clip is the
+whole background picture, not just the media: `panel-video-composition.ts`
+composites the resolved media region, its eased masks and the palette fill in
+the turned box, then the turn goes last. Painting the fill in the page instead
+cannot reach the panel, because the overlay capture hides the background media
+layer by design.
+
 L-Connect does not hand this ffmpeg a theme's MP4: it converts the theme once
 and plays its own output from
 `C:\ProgramData\Lian-Li\L-Connect 3\uploaded\vm-9.2-inch\landscape\*.h264`.
