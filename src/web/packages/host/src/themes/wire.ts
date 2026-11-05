@@ -1,6 +1,6 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { readThemeCredits, type ThemeCredits } from "@yunari/theme-package";
-import type { ThemeContent } from "./store.js";
+import { MAX_BACKGROUND_MEDIA_BYTES, type ThemeContent } from "./store.js";
 
 /**
  * The host's theme library is a folder, so a save carries the
@@ -20,6 +20,10 @@ import type { ThemeContent } from "./store.js";
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
+/** One refusal for every shape the sidecar member is not. */
+export const BACKGROUND_MEDIA_REFUSAL =
+  "A theme's background media is not a sidecar member.";
+
 export function encodeThemeContent(
   content: ThemeContent,
   base?: string,
@@ -27,6 +31,7 @@ export function encodeThemeContent(
   readonly envelope: FabricThemeEnvelope;
   readonly assets: Readonly<Record<string, string>>;
   readonly credits?: ThemeCredits;
+  readonly backgroundMedia?: unknown;
   readonly base?: string;
 } {
   return {
@@ -38,6 +43,9 @@ export function encodeThemeContent(
       ]),
     ),
     ...(content.credits === undefined ? {} : { credits: content.credits }),
+    ...(content.backgroundMedia === undefined
+      ? {}
+      : { backgroundMedia: content.backgroundMedia }),
     ...(base === undefined ? {} : { base }),
   };
 }
@@ -56,13 +64,15 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("That is not a theme.");
   }
-  const { envelope, assets, base, overwrite, credits } = parsed as {
-    readonly envelope?: unknown;
-    readonly assets?: unknown;
-    readonly base?: unknown;
-    readonly overwrite?: unknown;
-    readonly credits?: unknown;
-  };
+  const { envelope, assets, base, overwrite, credits, backgroundMedia } =
+    parsed as {
+      readonly envelope?: unknown;
+      readonly assets?: unknown;
+      readonly base?: unknown;
+      readonly overwrite?: unknown;
+      readonly credits?: unknown;
+      readonly backgroundMedia?: unknown;
+    };
   if (typeof envelope !== "object" || envelope === null) {
     throw new Error("A theme needs its document.");
   }
@@ -93,6 +103,20 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
     }
   }
 
+  // The sidecar is bounded opaque working data: the host writes it back whole,
+  // so anything that is not one object within the store's own ceiling is the
+  // client's bug rather than an absent member.
+  if (
+    backgroundMedia !== undefined &&
+    (typeof backgroundMedia !== "object" ||
+      backgroundMedia === null ||
+      Array.isArray(backgroundMedia) ||
+      Buffer.byteLength(JSON.stringify(backgroundMedia), "utf8") >
+        MAX_BACKGROUND_MEDIA_BYTES)
+  ) {
+    throw new Error(BACKGROUND_MEDIA_REFUSAL);
+  }
+
   const decoded: Record<string, Uint8Array> = {};
   for (const [assetPath, encoded] of Object.entries(
     assets as Record<string, unknown>,
@@ -114,6 +138,7 @@ export function decodeThemeSave(body: string): DecodedThemeSave {
       envelope: envelope as FabricThemeEnvelope,
       assets: decoded,
       ...(decodedCredits === undefined ? {} : { credits: decodedCredits }),
+      ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
     },
     ...(base === undefined ? {} : { base }),
     overwrite: overwrite === true,

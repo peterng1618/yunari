@@ -1554,6 +1554,44 @@ describe("Host theme routes", () => {
     expect(res.text()).toContain("base is not a string");
   });
 
+  it("round-trips the background media sidecar through the whole-theme routes", async () => {
+    const media = {
+      version: 1,
+      media: { badge: { bounds: "display", scale: 2 } },
+    };
+    const put = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody({ ...validEmptyAssetTheme, backgroundMedia: media }),
+    );
+    expect(put.status).toBe(200);
+
+    const open = await request(hosted.server, "GET", "/api/themes/living-room");
+    expect(open.status).toBe(200);
+    expect(open.json()).toMatchObject({ backgroundMedia: media });
+  });
+
+  it("refuses background media that is not a sidecar member", async () => {
+    await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      themeBody(validEmptyAssetTheme),
+    );
+    const res = await request(
+      hosted.server,
+      "PUT",
+      "/api/themes/living-room",
+      JSON.stringify({
+        ...encodeThemeContent(validEmptyAssetTheme),
+        backgroundMedia: [],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.text()).toContain("not a sidecar member");
+  });
+
   it("answers a theme it will not store with the same 413 it already used, and the reason", async () => {
     await request(
       hosted.server,

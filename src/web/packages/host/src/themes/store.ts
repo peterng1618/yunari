@@ -80,6 +80,9 @@ interface ThemeStoreRecord extends ThemeStoreEntry {
    *  theme from the library does not lose what it credits. Absent when the
    *  folder holds none, exactly as an author-less document has no `author`. */
   readonly credits?: ThemeCredits;
+  /** The editor's bounded, opaque per-asset background working data. It is not
+   *  part of the document and no reader interprets it. */
+  readonly backgroundMedia?: unknown;
 }
 
 /** What a theme folder holds: the document, the bytes it declares, and the
@@ -91,6 +94,9 @@ export interface ThemeContent {
    *  stored folder holds none: the staging folder is written whole, so an
    *  omitted member is not carried over from the copy being replaced. */
   readonly credits?: ThemeCredits;
+  /** The editor's bounded, opaque background working data. Absent means the
+   *  caller has none and the stored folder's own member is carried forward. */
+  readonly backgroundMedia?: unknown;
 }
 
 /**
@@ -332,6 +338,9 @@ export interface ThemeStore {
 const NONCE_REGEX = /^[0-9a-z]+$/;
 const THEME_FILE = "theme.json";
 const ASSETS_DIR = "assets";
+/** The editor's per-asset background geometry, kept beside the document as
+ *  working data. It never enters the document, a package or a display's read. */
+export const BACKGROUND_MEDIA_FILE = "background-media.json";
 /** The library picture, written by the editor's canvas capture or the host's
  *  own render. It is a member of the theme folder, so a save carries it
  *  forward rather than replacing the folder without it. */
@@ -351,6 +360,9 @@ const MAX_THEME_FILE_BYTES = 32 * 1024 * 1024;
 /** The attribution member's own ceiling. The reader caps the list at 256
  *  entries; this bounds the bytes a hostile folder can make the host buffer. */
 const MAX_CREDITS_FILE_BYTES = 1024 * 1024;
+/** The background working-data member's ceiling. A sidecar past it is corrupt
+ *  by definition; the theme itself still opens without it. */
+export const MAX_BACKGROUND_MEDIA_BYTES = 256 * 1024;
 
 /** One asset's ceiling, and the trash route's own per-file cap: the bytes an
  *  editor sends it are the bytes this store would have accepted. The value is
@@ -380,7 +392,10 @@ export const MAX_TRASH_UPLOAD_BYTES =
  *  sends beside them. The save route reads this as its body limit, so a theme
  *  this store can persist is refused by neither the transport nor the writer. */
 export const MAX_THEME_WIRE_BYTES =
-  MAX_TRASH_UPLOAD_BYTES + MAX_THEME_FILE_BYTES + MAX_CREDITS_FILE_BYTES;
+  MAX_TRASH_UPLOAD_BYTES +
+  MAX_THEME_FILE_BYTES +
+  MAX_CREDITS_FILE_BYTES +
+  MAX_BACKGROUND_MEDIA_BYTES;
 
 /** Bytes as an author reads them, and the exact bytes behind them. The
  *  platform does both, so there is no size table here to drift from the bounds
@@ -604,6 +619,36 @@ async function readStoredCredits(
 ): Promise<ThemeCredits | undefined> {
   const bytes = await readContainedFile(root, CREDITS, MAX_CREDITS_FILE_BYTES);
   return bytes === undefined ? undefined : readThemeCredits(bytes);
+}
+
+/**
+ * The folder's background working data, or nothing.
+ *
+ * The host never interprets the member; it only holds it between opens. A file
+ * that is absent, unreadable, past the bound, not JSON, or not an object is no
+ * working data rather than an unopenable theme.
+ */
+export async function readStoredBackgroundMedia(
+  root: string,
+): Promise<unknown | undefined> {
+  const bytes = await readContainedFile(
+    root,
+    BACKGROUND_MEDIA_FILE,
+    MAX_BACKGROUND_MEDIA_BYTES,
+  );
+  if (bytes === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(bytes.toString("utf8"));
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** What the document says each path holds, for the assets it says it hashes. */
@@ -1038,6 +1083,9 @@ export function createThemeStore(
         }
 
         const credits = await readStoredCredits(path.join(directory, id));
+        const backgroundMedia = await readStoredBackgroundMedia(
+          path.join(directory, id),
+        );
 
         return {
           ok: true,
@@ -1046,6 +1094,7 @@ export function createThemeStore(
           envelope,
           assets,
           ...(credits === undefined ? {} : { credits }),
+          ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
         };
       } catch {
         return undefined;
@@ -1264,6 +1313,27 @@ export function createThemeStore(
               path.join(staging, CREDITS),
               JSON.stringify(content.credits),
             );
+          }
+          // Working data beside the document: a save from a client that has
+          // none (MCP, install) keeps the folder's own copy, while an editor
+          // save always sends its map and so writes the pruned one.
+          if (content.backgroundMedia !== undefined) {
+            await fs.writeFile(
+              path.join(staging, BACKGROUND_MEDIA_FILE),
+              JSON.stringify(content.backgroundMedia),
+            );
+          } else {
+            const member = path.join(target, BACKGROUND_MEDIA_FILE);
+            if (
+              await fs
+                .stat(member)
+                .then(() => true)
+                .catch(() => false)
+            ) {
+              await fs.cp(member, path.join(staging, BACKGROUND_MEDIA_FILE), {
+                preserveTimestamps: true,
+              });
+            }
           }
           // The declaration, not the payload, is the list: every declared path
           // ends up in the folder, whether the save carried its bytes or the
