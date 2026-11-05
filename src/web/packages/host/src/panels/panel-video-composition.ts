@@ -117,6 +117,9 @@ export function composeFilterGraph(
     `${fillSource(placement.fill, box.width, box.height)}[fill]`,
   ];
 
+  // A centred band has two ramps. `alphamerge` replaces the alpha it is given,
+  // so applying them one after another would keep only the last; multiply the
+  // grayscale masks first, which is the DOM's `intersect`.
   let overlayInput = "media";
   if (composition.masks.length > 0) {
     for (const [index, mask] of composition.masks.entries()) {

@@ -107,7 +107,7 @@ const ENVELOPE_KEYS = {
     "scene",
   ],
   globals: ["palette", "typeTokens"],
-  background: ["mode", "color", "fill", "media"],
+  background: ["mode", "color", "media"],
   backgroundMedia: [
     "assetId",
     "bounds",

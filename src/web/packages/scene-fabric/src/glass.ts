@@ -88,9 +88,6 @@ export interface BackdropMedia {
   /** The display's own surface, painted under the media. Absent when the media
    *  is the whole backdrop, as in the glass tests' stubs. */
   readonly plate?: BackdropPlate;
-  /** The resolved paint behind the media inside its bounds box. Absent paints
-   *  nothing; present only with an authored region. */
-  readonly fill?: unknown;
   /** Where the media sits inside the layer's box, in the same artboard units as
    *  `rect`. Absent means the media covers the whole box. */
   readonly region?: CompositionRect;

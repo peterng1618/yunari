@@ -7,7 +7,6 @@ import {
   type BackgroundMedia,
   blendRampStops,
   type CompositionRect,
-  cssArtboardPaint,
   MAX_BACKGROUND_SCALE,
   MIN_BACKGROUND_SCALE,
   resolveBackgroundComposition,
@@ -34,10 +33,6 @@ export interface BackgroundMediaOptions {
    *  following frames by omitting it. Nothing subscribes unless a video is the
    *  media, so an image background starts no loop at all. */
   readonly onFrame?: () => void;
-  /** The background's fill, already resolved from its `StyleValue`: the paint
-   *  behind the media inside its bounds box, revealed by the composition's
-   *  region. Absent paints nothing. */
-  readonly fill?: unknown;
   /** What a panel's page loads instead of the declared video: the host's still
    *  of the declared frame, or a clip painted into the theme's media box. A
    *  clip already carries the authored pan and zoom, so the page places it
@@ -229,10 +224,6 @@ export interface BackgroundMediaHandle {
    *  different asset (or none) tears it down and mounts afresh, because a
    *  remount is what restarts a video. */
   setBackground(background: Background | undefined): void;
-  /** Replaces the paint behind the media. The value is the caller's resolved
-   *  style, so an unresolved or non-paint value paints nothing rather than
-   *  guessing a colour. */
-  setFill(fill: unknown): void;
   setArtboardSize(size: {
     readonly width: number;
     readonly height: number;
@@ -269,20 +260,14 @@ export function mountBackgroundMedia(
     "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
   options.host.prepend(layer);
   // The whole composition lives inside the one media layer: a TURZX overlay
-  // capture hides `[data-yunari-background-media]`, and a fill outside it would
-  // paint over the device's baked clip.
-  const fillLayer = document.createElement("div");
-  fillLayer.dataset["yunariBackgroundFillLayer"] = "";
+  // capture hides `[data-yunari-background-media]`, and anything outside it
+  // would paint over the device's baked clip.
   const regionLayer = document.createElement("div");
   regionLayer.dataset["yunariBackgroundRegion"] = "";
   regionLayer.style.cssText = "position:absolute;overflow:hidden;";
-  layer.append(fillLayer, regionLayer);
+  layer.append(regionLayer);
   const { assets, resolveAsset, onMediaError, onFrame } = options;
   let background = options.background;
-  /** The paint behind the media inside its bounds box. It is resolved from the
-   *  theme's fill by the caller, so a token edit is a new value rather than a
-   *  remount. */
-  let fill = options.fill;
   let artboardSize = {
     width: options.artboard.width,
     height: options.artboard.height,
@@ -377,8 +362,6 @@ export function mountBackgroundMedia(
       activeBackgroundComposition(background),
       child === undefined ? undefined : intrinsic(child),
     );
-    fillLayer.style.cssText = "position:absolute;inset:0;";
-    fillLayer.style.background = cssArtboardPaint(fill) ?? "transparent";
     const region = composition.region;
     regionLayer.style.left = `${region.left}px`;
     regionLayer.style.top = `${region.top}px`;
@@ -610,10 +593,6 @@ export function mountBackgroundMedia(
   setBackground(options.background);
   return {
     setBackground,
-    setFill(next) {
-      fill = next;
-      place();
-    },
     setArtboardSize(size) {
       artboardSize = { width: size.width, height: size.height };
       place();
@@ -698,7 +677,6 @@ export function mountBackgroundMedia(
         ...(authored === undefined
           ? {}
           : {
-              fill,
               region: composition.region,
               ...(composition.masks.length === 0
                 ? {}

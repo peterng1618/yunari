@@ -127,21 +127,23 @@ provider or display that falls behind is dropped rather than growing memory.
 - `artboard` is `{ width, height, contentFit, shape? }`; `shape` is `rect` or
   `circle`, and absent means `rect`. A circle artboard is square and its glass
   is the inscribed disc; the field is additive, so the schema stays `2.0.0`.
-- `background` is document state: `color` and `fill` are style values, and
-  `media` declares the asset, its bounds and transform. `mode` is `basic` or
-  `advanced` and absent means `basic`: the full-cover media every theme authored
-  before composition has. Only an `advanced` background may carry a `fill` or a
-  media `composition`, and a `fill` needs media to sit behind; the validator and
-  the published schema refuse the wrong combination rather than ignore it. A
+- `background` is document state: `color` is the one style value behind the
+  board and its letterbox, and `media` declares the asset, its bounds and
+  transform. `mode` is `simple` or `advanced` and absent means `simple`: the
+  full-cover media every theme authored before composition has. Only an
+  `advanced` background may carry a media `composition`; the validator and the
+  published schema refuse it under a simple one rather than ignore it. A
   composition anchors the picture to `top`, `right`, `bottom`, `left` or
-  `center`. An edge anchor makes a band whose size along that axis is `extent`,
-  and the fill takes the other side; a centre anchor fits the picture's long
-  edge, so the fill covers exactly the two opposite gaps and never surrounds the
-  media. `fade` is the length of the eased ramp that smooths each seam into the
-  fill. The resolver `resolveBackgroundComposition` is the one geometry: the DOM
+  `center`. An edge anchor makes a band whose size along that axis is `extent`
+  (`0.1`–`1`); `color` shows on the other side, and `1` lets the band cover the
+  box. A centre anchor fits the picture's long edge, so `color` shows in exactly
+  the two opposite gaps and never surrounds the media. `fade` is the length of
+  the eased ramp that smooths each seam into `color`; its length is a fraction
+  of the box, so `1` spans the whole box. The resolver
+  `resolveBackgroundComposition` is the one geometry: the DOM
   media layer, the player's glass backdrop and the device-played clip bake all
   take the region and its masks from it, and all sample the same eased ramp. The
-  bake composites region, fill and mask in the video plane, so a fade never
+  bake composites region, colour and mask in the video plane, so a fade never
   rides the coarse overlay; `panel-video-composition.ts` is the one graph both
   the TURZX and the TUR USB encode.
 - Current schema is `2.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are

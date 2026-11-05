@@ -5,7 +5,6 @@ import type {
   BackgroundMediaComposition,
   FabricPalette,
   PalettePaint,
-  StyleValue,
   TypeToken,
 } from "@yunari/renderer-core";
 import {
@@ -281,8 +280,7 @@ export async function setBackground(
     readonly scale?: number | undefined;
     readonly flipX?: boolean | undefined;
     readonly flipY?: boolean | undefined;
-    readonly mode?: "basic" | "advanced" | undefined;
-    readonly fill?: string | PalettePaint | undefined;
+    readonly mode?: "simple" | "advanced" | undefined;
     /** `full` is the cover: it removes the composition instead of storing one. */
     readonly anchor?: "full" | BackgroundAnchor | undefined;
     readonly extent?: number | undefined;
@@ -305,7 +303,6 @@ export async function setBackground(
     if (
       input.color === undefined &&
       input.mediaAssetId === undefined &&
-      input.fill === undefined &&
       input.mode === undefined &&
       !composing
     ) {
@@ -313,12 +310,12 @@ export async function setBackground(
     }
 
     const existing = draft.envelope.background;
-    // The optional composition is opted into, never inferred: a stray `fill`
-    // under the basic model would be stored and never painted.
+    // The optional composition is opted into, never inferred: a stray
+    // composition key under the simple model would be stored and never painted.
     const advanced = (input.mode ?? existing?.mode) === "advanced";
-    if ((input.fill !== undefined || composing) && !advanced) {
+    if (composing && !advanced) {
       throw new Error(
-        'A background composition needs mode: "advanced"; the basic background covers its box with the media.',
+        'A background composition needs mode: "advanced"; the simple background covers its box with the media.',
       );
     }
     const palette = draft.envelope.globals?.palette ?? {};
@@ -331,24 +328,6 @@ export async function setBackground(
         throw new Error(`There is no palette token "${token}" in this theme.`);
       }
       color = { ref: `palette.${token}` };
-    }
-
-    let fill: StyleValue | undefined;
-    if (input.fill !== undefined) {
-      fill =
-        typeof input.fill === "string"
-          ? (() => {
-              const token = input.fill.startsWith("palette.")
-                ? input.fill.slice("palette.".length)
-                : input.fill;
-              if (palette[token] === undefined) {
-                throw new Error(
-                  `There is no palette token "${token}" in this theme.`,
-                );
-              }
-              return { ref: `palette.${token}` };
-            })()
-          : { value: input.fill };
     }
 
     let media:
@@ -402,27 +381,21 @@ export async function setBackground(
       media = composition === undefined ? plain : { ...media, composition };
     }
 
-    // Returning to basic drops what the basic model cannot store, rather than
+    // Returning to simple drops what the simple model cannot store, rather than
     // leaving keys the validator would refuse on the next read.
-    const returning = input.mode === "basic";
+    const returning = input.mode === "simple";
     let kept = media;
     if (returning && media !== undefined) {
       const { composition: _composition, ...plain } = media;
       kept = plain;
     }
-    const { mode: _mode, fill: _fill, ...basic } = existing ?? {};
+    const { mode: _mode, ...simple } = existing ?? {};
     const background = {
-      ...(returning ? basic : (existing ?? {})),
+      ...(returning ? simple : (existing ?? {})),
       ...(color === undefined ? {} : { color }),
-      ...(returning || fill === undefined ? {} : { fill }),
       ...(kept === undefined ? {} : { media: kept }),
       ...(input.mode === undefined || returning ? {} : { mode: input.mode }),
     };
-    // The fill is the paint behind the media; with none it would be stored and
-    // never painted, which is the dead state the validator refuses too.
-    if (background.fill !== undefined && background.media === undefined) {
-      throw new Error("A fill needs a media background to sit behind.");
-    }
     draft.envelope = kitSetBackground(draft.envelope, background);
     return { themeId: draft.id, background };
   });
@@ -657,7 +630,7 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_background",
     {
       description:
-        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The basic model covers the box with the media. Set mode to "advanced" to compose it: fill paints the gap the anchored media leaves uncovered. anchor places the media at the top, right, bottom, left or centre of its box; extent sets the size of an edge band; fade smooths the seam into the fill. A centre anchor letterboxes the picture to its own aspect. clear removes the background layer.',
+        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The simple model covers the box with the media. Set mode to "advanced" to compose it: the colour fills the gap the anchored media leaves uncovered. anchor places the media at the top, right, bottom, left or centre of its box; extent sets the size of an edge band; fade smooths the seam into the colour. A centre anchor letterboxes the picture to its own aspect. clear removes the background layer.',
       inputSchema: z.object({
         color: z.string().min(1).optional(),
         mediaAssetId: z.string().min(1).optional(),
@@ -669,7 +642,6 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
         scale: z.number().optional(),
         flipX: z.boolean().optional(),
         flipY: z.boolean().optional(),
-        fill: z.union([z.string().min(1), paintSchema]).optional(),
         anchor: z.enum(["full", ...BACKGROUND_ANCHORS]).optional(),
         extent: z
           .number()

@@ -50,6 +50,12 @@ import {
 const MAX_STILL_BYTES = 8 * 1024 * 1024;
 /** A device-sized clip is disposable host data. */
 const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
+/**
+ * The bake's own revision. The name is the invalidation, so a change to the
+ * composed graph that leaves the authored inputs alone still has to move the
+ * name; otherwise a host keeps serving the previous picture from its cache.
+ */
+const PANEL_CLIP_REVISION = 2;
 /** Long asset names keep their frame or size suffix; the rest is hashed. */
 const MAX_ASSET_LENGTH = 96;
 
@@ -97,22 +103,24 @@ export function panelVideoMediaName(
   const geometry = backgroundGeometryOf(envelope);
   // The authored pan and zoom are part of the picture, so a cache written for
   // another offset or scale is a different clip. `o`/`s` also invalidate the
-  // earlier cover-only copies under the same pixel size; `c` is the composition.
+  // earlier cover-only copies under the same pixel size; `c` is the composition
+  // and `v` is the bake graph's revision.
   const placement = panelVideoPlacement(envelope);
   const suffix = `${width}x${height}-o${number(placement.offsetX)}_${number(
     placement.offsetY,
-  )}-s${number(geometry.scale)}${compositionKey(placement)}.mp4`;
+  )}-s${number(geometry.scale)}${compositionKey(placement)}-v${String(
+    PANEL_CLIP_REVISION,
+  )}.mp4`;
   return mediaName(id, video, suffix);
 }
 
 /**
  * The panel video's placement: the authored pan and zoom, plus the composition
- * and resolved fill when the background is advanced.
+ * and its resolved paint when the background is advanced.
  *
- * `fill` is the paint the media fades into; a theme that authors none uses its
- * background colour, which is the same rule the player's backdrop follows. A
- * basic background answers the geometry alone, so the bake keeps its plain
- * cover path.
+ * `fill` is the paint the media fades into, which is the background's `color`
+ * wherever the anchored media leaves the box uncovered. A simple background
+ * answers the geometry alone, so the bake keeps its plain cover path.
  */
 export function panelVideoPlacement(
   envelope: FabricThemeEnvelope | undefined,
@@ -130,7 +138,7 @@ export function panelVideoPlacement(
 
   const fill = paintOf(
     resolveStyleValue(
-      background?.fill ?? background?.color,
+      background?.color,
       (envelope?.globals ?? {}) as Globals,
       "background",
       [],

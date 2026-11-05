@@ -9,8 +9,8 @@ import {
  * Background modes.
  *
  * A theme authored before composition existed declares no mode and must keep
- * the basic background: a hard-edged media cover, a colour behind it. The
- * composition keys are refused rather than ignored while the mode is basic, so
+ * the simple background: a hard-edged media cover, a colour behind it. The
+ * composition keys are refused rather than ignored while the mode is simple, so
  * a document can never claim one model and carry another.
  */
 
@@ -43,19 +43,18 @@ function codes(background: Record<string, unknown>): IssueCode[] {
 const MEDIA = { assetId: "clip", bounds: "theme" } as const;
 
 describe("background modes", () => {
-  it("reads an absent mode as basic", () => {
+  it("reads an absent mode as simple", () => {
     expect(codes({ color: { ref: "palette.ink" }, media: MEDIA })).toEqual([]);
   });
 
-  it("accepts a basic background that says so", () => {
-    expect(codes({ mode: "basic", media: MEDIA })).toEqual([]);
+  it("accepts a simple background that says so", () => {
+    expect(codes({ mode: "simple", media: MEDIA })).toEqual([]);
   });
 
   it("accepts the composition keys under advanced", () => {
     expect(
       codes({
         mode: "advanced",
-        fill: { ref: "palette.ink" },
         media: {
           ...MEDIA,
           composition: { anchor: "left", extent: 0.5, fade: 0.1 },
@@ -64,16 +63,7 @@ describe("background modes", () => {
     ).toEqual([]);
   });
 
-  it("refuses a fill while the mode is basic", () => {
-    expect(codes({ fill: { ref: "palette.ink" } })).toContain(
-      "composition-needs-advanced",
-    );
-    expect(codes({ mode: "basic", fill: { ref: "palette.ink" } })).toContain(
-      "composition-needs-advanced",
-    );
-  });
-
-  it("refuses a composition while the mode is basic", () => {
+  it("refuses a composition while the mode is simple", () => {
     expect(
       codes({ media: { ...MEDIA, composition: { anchor: "left" } } }),
     ).toContain("composition-needs-advanced");
@@ -85,17 +75,11 @@ describe("background modes", () => {
         mode: "advanced",
         media: {
           ...MEDIA,
-          composition: { anchor: "middle", extent: 0.95, fade: 2 },
+          composition: { anchor: "middle", extent: 1.01, fade: 2 },
         },
       }),
     ).toEqual(
       expect.arrayContaining(["invalid-enum", "out-of-range", "out-of-range"]),
-    );
-  });
-
-  it("refuses a fill with no media to sit behind", () => {
-    expect(codes({ mode: "advanced", fill: { ref: "palette.ink" } })).toContain(
-      "fill-needs-media",
     );
   });
 

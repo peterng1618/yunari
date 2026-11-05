@@ -89,7 +89,7 @@ describe("media names", () => {
   it("name a panel clip by its pixel size and baked geometry", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
+    ).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
   });
 
   it("change the clip name when the authored pan or zoom changes", () => {
@@ -157,7 +157,7 @@ describe("panelVideoPlacement", () => {
     },
   };
 
-  it("maps the media's composition and resolved fill", () => {
+  it("maps the media's composition and resolved colour", () => {
     const envelope = {
       id: "theme",
       artboard: { width: 100, height: 100 },
@@ -165,7 +165,7 @@ describe("panelVideoPlacement", () => {
       globals: palette,
       background: {
         mode: "advanced",
-        fill: { ref: "palette.ink" },
+        color: { ref: "palette.ink" },
         media: {
           assetId: "bg",
           bounds: "display",
@@ -180,29 +180,6 @@ describe("panelVideoPlacement", () => {
       scale: 1,
       composition: { anchor: "left", extent: 0.65, fade: 0.12 },
       fill: { kind: "solid", color: "#101418" },
-    });
-  });
-
-  it("uses the colour as the fill when no fill is authored", () => {
-    const envelope = {
-      id: "theme",
-      artboard: { width: 100, height: 100 },
-      assets: [VIDEO_ASSET],
-      globals: palette,
-      background: {
-        mode: "advanced",
-        color: { ref: "palette.ink" },
-        media: {
-          assetId: "bg",
-          bounds: "display",
-          composition: { anchor: "top", extent: 0.5 },
-        },
-      },
-    } as unknown as FabricThemeEnvelope;
-
-    expect(panelVideoPlacement(envelope).fill).toEqual({
-      kind: "solid",
-      color: "#101418",
     });
   });
 
@@ -323,8 +300,8 @@ describe("createThemeMedia", () => {
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-v2.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
     expect(transcode).toHaveBeenLastCalledWith(
       new Uint8Array([9, 9, 9]),

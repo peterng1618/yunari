@@ -1098,56 +1098,6 @@ describe("the background layer", () => {
     shell.destroy();
   });
 
-  it("paints the background fill and re-paints it when the token changes", async () => {
-    const host = document.createElement("div");
-    Object.defineProperties(host, {
-      clientWidth: { value: 400 },
-      clientHeight: { value: 300 },
-    });
-    const assets = [
-      { id: "hero", kind: "image" as const, path: "assets/hero.png" },
-    ];
-    const composed = {
-      mode: "advanced" as const,
-      fill: { ref: "palette.ink" as const },
-      media: {
-        assetId: "hero",
-        bounds: "theme" as const,
-        composition: { anchor: "left" as const, extent: 0.5 },
-      },
-    };
-    const shell = await mount({
-      host,
-      artboard: ARTBOARD,
-      envelope: envelopeWith(composed, assets),
-      resolveAsset: () => ({ url: "blob:hero" }),
-    });
-
-    // The fill is the paint the anchored media reveals; the plate is not painted
-    // while media is declared, so this layer is the only place it can show.
-    const fill = host.querySelector<HTMLElement>(
-      "[data-yunari-background-fill-layer]",
-    );
-    expect(fill?.style.background).toBe("rgb(17, 34, 51)");
-
-    shell.setBackground({
-      ...composed,
-      fill: { value: "#445566" },
-    });
-    expect(fill?.style.background).toBe("rgb(68, 85, 102)");
-
-    // A palette edit moves the resolved paint, not the stored reference.
-    shell.setBackground(composed);
-    shell.setGlobals({
-      palette: {
-        ink: { name: "Ink", value: { kind: "solid", color: "#778899" } },
-      },
-    });
-    expect(fill?.style.background).toBe("rgb(119, 136, 153)");
-
-    shell.destroy();
-  });
-
   it("keeps the media element across a board-size change", async () => {
     // The document used to re-run `refreshBackgroundMedia` on every artboard
     // change, which destroys and remounts the layer — so a background video

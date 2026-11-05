@@ -140,10 +140,10 @@ upright orientation with rotate mode 2.
 
 **A composed advanced background is baked into the same clip.** The clip is the
 whole background picture, not just the media: `panel-video-composition.ts`
-composites the resolved media region, its eased masks and the palette fill in
-the turned box, then the turn goes last. Painting the fill in the page instead
-cannot reach the panel, because the overlay capture hides the background media
-layer by design.
+composites the resolved media region, its eased masks and the resolved
+background colour in the turned box, then the turn goes last. Painting that
+colour in the page instead cannot reach the panel, because the overlay capture
+hides the background media layer by design.
 
 L-Connect does not hand this ffmpeg a theme's MP4: it converts the theme once
 and plays its own output from

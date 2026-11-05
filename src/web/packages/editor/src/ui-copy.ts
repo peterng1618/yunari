@@ -2223,7 +2223,7 @@ export const uiCopy = {
   backgroundBounds: { theme: "Fill theme", display: "Fill display" },
   /** The two background models: the full-cover picture every theme predates,
    *  and the composition a theme opts into. */
-  backgroundModes: { basic: "Basic", advanced: "Advanced" },
+  backgroundModes: { simple: "Simple", advanced: "Advanced" },
   /** The points a background's media may be anchored to. `full` is no
    *  composition at all — the picture covers the box and the fill never shows. */
   backgroundAnchors: {
@@ -2527,8 +2527,7 @@ export const uiCopy = {
     background: "Background color",
     /** Which background model the theme is authored under. */
     backgroundMode: "Mode",
-    /** The paint an anchored media leaves uncovered. */
-    backgroundFill: "Fill",
+
     /** The background column's own rows: the box its media fills, the zoom over
         its cover fit, the one pair that moves both axes, and the two paint-time
         mirrors. */

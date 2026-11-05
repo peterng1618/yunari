@@ -33,7 +33,7 @@ export interface BackgroundComposition {
   readonly masks: readonly BackgroundMask[];
 }
 
-/** The composition a background actually composes. A basic background keeps
+/** The composition a background actually composes. A simple background keeps
  *  the full cover it was authored with, whatever stray keys its media carries;
  *  only an advanced one positions its media and fades it into the fill. */
 export function activeBackgroundComposition(
@@ -82,7 +82,7 @@ export function resolveBackgroundComposition(
   composition: BackgroundMediaComposition | undefined,
   source?: { readonly width: number; readonly height: number },
 ): BackgroundComposition {
-  // No composition is the basic background: the media covers the box. An
+  // No composition is the simple background: the media covers the box. An
   // advanced background always passes one, and only then does an absent anchor
   // mean the centred letterbox.
   if (composition === undefined) {

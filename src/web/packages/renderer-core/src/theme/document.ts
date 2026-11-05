@@ -207,9 +207,10 @@ export const BACKGROUND_ANCHORS = [
 export type BackgroundAnchor = (typeof BACKGROUND_ANCHORS)[number];
 
 /** The fraction of the box an edge-anchored band keeps. Refused outside this
- *  so a band can neither vanish nor take the whole box and leave no fill. */
+ *  so a band can neither vanish nor overflow its box; 1 covers the box, and a
+ *  fade still softens the seam it leaves. */
 export const MIN_BACKGROUND_EXTENT = 0.1;
-export const MAX_BACKGROUND_EXTENT = 0.9;
+export const MAX_BACKGROUND_EXTENT = 1;
 export const DEFAULT_BACKGROUND_EXTENT = 0.5;
 
 /** A fade is a visibility ramp, so its length is a fraction of the box; a zero
@@ -280,31 +281,27 @@ export interface BackgroundMedia {
   readonly composition?: BackgroundMediaComposition;
 }
 
+/** The two background models a theme can be authored under. `simple` is the
+ *  full-cover media with a colour behind it; `advanced` adds the composition
+ *  (the media's anchored region and fade), and is opted into by a theme that
+ *  says so. Absence is `simple`, which is every theme authored before it
+ *  existed. */
+export const BACKGROUND_MODES = ["simple", "advanced"] as const;
+export type BackgroundMode = (typeof BACKGROUND_MODES)[number];
+
 /**
  * The bottom-most layer of the composition.
  *
- * `color` fills the board and the letterbox bars around it under
- * `bounds: "theme"` — one paint, so the two cannot disagree. It sits behind the
- * media, so it shows wherever the media does not cover; with `cover` that is
- * never inside the media's box.
- *
- * `fill` is the paint behind the media inside its bounds box: the colour a
- * region or blend reveals. Absent means `color` is the fill.
+ * `color` fills the board and the letterbox bars around it — one paint, so the
+ * two cannot disagree. It sits behind the media, so it also shows wherever an
+ * anchored media region or fade leaves the box uncovered.
  */
-/** The two background models a theme can be authored under. `basic` is the
- *  full-cover media with a colour behind it; `advanced` adds the composition
- *  (`fill` and the media's `region`), and is opted into by a theme that says
- *  so. Absence is `basic`, which is every theme authored before it existed. */
-export const BACKGROUND_MODES = ["basic", "advanced"] as const;
-export type BackgroundMode = (typeof BACKGROUND_MODES)[number];
-
 export interface Background {
-  /** Absent means basic. An advanced background is the only one allowed to
-   *  carry `fill` or the media's `region`; the validator and the published
-   *  schema refuse either under a basic one rather than ignoring it. */
+  /** Absent means simple. An advanced background is the only one allowed to
+   *  carry the media's `composition`; the validator and the published schema
+   *  refuse it under a simple one rather than ignoring it. */
   readonly mode?: BackgroundMode;
   readonly color?: StyleValue;
-  readonly fill?: StyleValue;
   readonly media?: BackgroundMedia;
 }
 

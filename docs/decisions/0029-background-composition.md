@@ -1,4 +1,4 @@
-# 0029 — Background composition: anchor, fill and fade
+# 0029 — Background composition: anchor, colour and fade
 
 - **Date:** 2026-11-04
 - **Status:** accepted
@@ -27,12 +27,13 @@
 ## Problem
 
 A background media layer is clipped to one box — the artboard or the display —
-and always covers it. An author cannot put the clip in part of the box and fill
-the rest, and a fade authored as a scene scrim is painted through the artboard
-transform. On a display whose ratio differs from the artboard the scrim stops at
-the artboard; on a TURZX panel its ramp enters the 4-bit overlay alpha and bands
-(issue #419). The composition must be display-bounded by construction and, on a
-panel, must stay in the 8-bit video plane.
+and always covers it. An author cannot put the clip in part of the box and show
+the background colour in the rest, and a fade authored as a scene scrim is
+painted through the artboard transform. On a display whose ratio differs from
+the artboard the scrim stops at the artboard; on a TURZX panel its ramp enters
+the 4-bit overlay alpha and bands (issue #419). The composition must be
+display-bounded by construction and, on a panel, must stay in the 8-bit video
+plane.
 
 ## Rung 1 — internal owner
 
@@ -45,8 +46,8 @@ the media layer and `placement()` already bounds pan/zoom against the layer box.
 `artboard-backdrop.ts` samples that layer for glass, and
 `turzx-video.ts` bakes it for the panel clip. `planArtboard` is where a paint is
 resolved from a `StyleValue`, and `cssArtboardPaint` is the existing CSS form of
-a resolved paint. Unsolved: nothing in these owners expresses a sub-box region,
-a fill behind the media, or an alpha ramp at one edge.
+a resolved paint. Unsolved: nothing in these owners expresses a sub-box region
+or an alpha ramp at one edge.
 
 ## Rung 2 — installed dependencies
 
@@ -86,7 +87,7 @@ filter reference for `gradients`, `geq`, `alphamerge`, `maskedmerge` and `color`
 
 Found: CSS masking handles arbitrary gradients and sizes but has no notion of a
 theme's bounds box or palette; ffmpeg can composite a masked video over a
-generated fill but its coordinates are pixels in the turned panel box. Neither
+generated colour but its coordinates are pixels in the turned panel box. Neither
 supplies the mapping from authored fractions to those pixels. Comparable
 implementations all keep the authored geometry in the document and derive each
 surface from it, which is what this decision does.
@@ -105,20 +106,31 @@ Ran the bundled `ffmpeg-static` binary's filter help and confirmed the options
 this graph needs: `gradients` accepts `s`, `c0`–`c7`, `x0/y0/x1/y1` and
 `nb_colors` 2–8; `alphamerge` copies the second input's luma into alpha;
 `maskedmerge` takes base, overlay and mask; `geq` is a source-capable generic
-equation. The spec records an earlier 0→255 linear `gradients` probe.
+equation. The spec records an earlier 0→255 linear `gradients` probe. Two
+further probes fixed the bake's picture: `gradients` animates by default and its
+`speed` floor is `1e-05`, which still moves, so a `loop` on frame zero is the
+still source; and an endpoint exactly on the frame's far edge is out of range
+and paints the whole ramp wrong, so every generated line is clamped to the last
+pixel.
 
 ## Decision
 
-Extend `Background` with an optional `fill` paint and `BackgroundMedia` with an
-optional `composition`: a five-point `anchor`, an edge band's `extent` and a
-`fade`. An edge anchor makes a band whose size along that axis is `extent`; a
-centre anchor fits the picture's long edge, so the fill covers the two opposite
-gaps and never surrounds the media. Values outside the model's ranges are
-refused, never clamped. One pure resolver in `renderer-core` turns the
-composition into a box rect and a list of linear ramps; the DOM layer, the glass
-sampler and the panel bake all read that output rather than re-deriving the
-maths, and all three sample one eased ramp so the seam has no visible ends. The
-fill is painted inside the existing `[data-yunari-background-media]` layer so an
-overlay capture hides the whole composition, and on a panel the composition is
-baked into the 8-bit clip before the turn. No mask primitive, no display-space
-scene object, no separate overlay tint.
+Extend `BackgroundMedia` with an optional `composition`: a five-point `anchor`,
+an edge band's `extent` and a `fade`. An edge anchor makes a band whose size
+along that axis is `extent`; a centre anchor fits the picture's long edge, so
+the background's `color` shows in the two opposite gaps and never surrounds the
+media. Values outside the model's ranges are refused, never clamped. One pure
+resolver in `renderer-core` turns the composition into a box rect and a list of
+linear ramps; the DOM layer, the glass sampler and the panel bake all read that
+output rather than re-deriving the maths, and all three sample one eased ramp so
+the seam has no visible ends. The uncovered area is the board's own `color`
+plate, so a paint authored once paints the letterbox, the gaps and the media's
+fade. The composition is painted inside the existing
+`[data-yunari-background-media]` layer so an overlay capture hides the whole
+composition, and on a panel the composition is baked into the 8-bit clip before
+the turn. Both device-played families read the same graph: the TURZX's MP4 and
+the TUR USB's elementary stream differ in wire geometry, encoder flags and turn,
+not in what a composition looks like. A generated `gradients` fill or mask is
+held on its first frame, because the source rotates by default and no accepted
+`speed` stops it. No mask primitive, no display-space scene object, no separate
+overlay tint.

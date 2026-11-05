@@ -76,6 +76,22 @@ describe("panelH264Args", () => {
     expect(filter).toContain("-464*0");
   });
 
+  it("applies the theme's authored zoom on the plain path too", () => {
+    const filter = filterOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        { offsetX: 0, offsetY: 0, scale: 1.4 },
+        "cw",
+      ),
+    );
+
+    // The device draws the picture, so the owner's zoom has to be in the
+    // conversion or the panel shows an unscaled cover instead.
+    expect(filter).toContain("*1.4");
+  });
+
   it("encodes with the vendor's exact arguments", () => {
     const args = panelH264Args("in.mp4", "out.h264", GEOMETRY);
 
@@ -115,6 +131,28 @@ describe("panelH264Args", () => {
     expect(args).toContain("-filter_complex");
     expect(args[args.indexOf("-map") + 1]).toBe("[out]");
     expect(args).not.toContain("-vf");
+  });
+
+  it("intersects a centred band's two masks instead of replacing one", () => {
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          composition: { anchor: "center", fade: 0.2 },
+        },
+        "none",
+        { width: 1920, height: 1080, durationMs: 2_000 },
+      ),
+    );
+
+    expect(filter.match(/gradients=/g)).toHaveLength(2);
+    expect(filter).toContain("blend=all_mode=multiply");
+    // `alphamerge` replaces alpha; one merge keeps both ramps.
+    expect(filter.match(/alphamerge/g)).toHaveLength(1);
   });
 
   it("holds an authored gradient and the eased mask still", () => {

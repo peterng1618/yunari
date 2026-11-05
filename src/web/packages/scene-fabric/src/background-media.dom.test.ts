@@ -1108,7 +1108,7 @@ describe("background media as a glass backdrop", () => {
     }
   });
 
-  it("paints a fill behind a region and masks the media at its edge", () => {
+  it("places and masks an anchored media band", () => {
     const host = document.createElement("div");
     const handle = mountBackgroundMedia({
       host,
@@ -1123,30 +1123,17 @@ describe("background media as a glass backdrop", () => {
       artboard: ARTBOARD,
       assets: [HERO],
       resolveAsset: () => ({ url: "blob:hero" }),
-      fill: {
-        kind: "gradient",
-        angle: 0,
-        stops: [
-          { offset: 0, color: "#101418" },
-          { offset: 1, color: "#000000" },
-        ],
-      },
     });
     handle.setBounds({
       artboard: { left: 0, top: 0, width: 400, height: 200 },
     });
 
     const layer = host.querySelector("[data-yunari-background-media]");
-    const fill = layer?.querySelector<HTMLElement>(
-      "[data-yunari-background-fill-layer]",
-    );
     const region = layer?.querySelector<HTMLElement>(
       "[data-yunari-background-region]",
     );
     const media = region?.querySelector<HTMLElement>("video, img");
 
-    expect(layer?.contains(fill as Node)).toBe(true);
-    expect(fill?.style.background).toContain("linear-gradient");
     // 400×200 box: a quarter-width right band leaves 100px of media at x 300.
     expect(region?.style.left).toBe("300px");
     expect(region?.style.top).toBe("0px");
@@ -1166,39 +1153,6 @@ describe("background media as a glass backdrop", () => {
     // jsdom decodes no image, so the region itself is the rect.
     expect(media?.style.left).toBe("0px");
     expect(media?.style.width).toBe("100px");
-
-    handle.destroy();
-  });
-
-  it("takes a new fill without remounting the media", () => {
-    const host = document.createElement("div");
-    const handle = mountBackgroundMedia({
-      host,
-      background: {
-        mode: "advanced",
-        media: { assetId: "hero", bounds: "theme" },
-      },
-      artboard: ARTBOARD,
-      assets: [HERO],
-      resolveAsset: () => ({ url: "blob:hero" }),
-      fill: { kind: "solid", color: "#111111" },
-    });
-    handle.setBounds({
-      artboard: { left: 0, top: 0, width: 400, height: 200 },
-    });
-
-    const fill = host.querySelector<HTMLElement>(
-      "[data-yunari-background-fill-layer]",
-    );
-    const media = host.querySelector("[data-yunari-background-region] img");
-    expect(fill?.style.background).toBe("rgb(17, 17, 17)");
-
-    // A token edit repaints the fill; the mounted picture is the same one.
-    handle.setFill({ kind: "solid", color: "#222222" });
-    expect(fill?.style.background).toBe("rgb(34, 34, 34)");
-    expect(host.querySelector("[data-yunari-background-region] img")).toBe(
-      media,
-    );
 
     handle.destroy();
   });
@@ -1257,9 +1211,10 @@ describe("background media as a glass backdrop", () => {
       return region?.style.maskImage ?? "";
     };
 
-    // The fill sits opposite the anchor, so the ramp starts at the media's own
-    // edge: 40px across the 400px box, 20px down the 200px one. The eased stops
-    // are the same ones the glass and the panel bake read.
+    // The uncovered background colour sits opposite the anchor, so the ramp
+    // starts at the media's own edge: 40px across the 400px box, 20px down the
+    // 200px one. The eased stops are the same ones the glass and the panel bake
+    // read.
     const edge = (css: string, angle: number, length: number): void => {
       expect(css.startsWith(`linear-gradient(${String(angle)}deg, `)).toBe(
         true,

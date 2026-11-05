@@ -148,7 +148,11 @@ export function panelH264Args(
  */
 function panelFilter(
   geometry: PanelGeometry,
-  placement: { readonly offsetX: number; readonly offsetY: number },
+  placement: {
+    readonly offsetX: number;
+    readonly offsetY: number;
+    readonly scale?: number;
+  },
   turn: PanelVideoTurn,
 ): string {
   const box = turnedBox(geometry, turn);
@@ -156,11 +160,15 @@ function panelFilter(
   const boxHeight = box.height;
   const offsetX = Number.isFinite(placement.offsetX) ? placement.offsetX : 0;
   const offsetY = Number.isFinite(placement.offsetY) ? placement.offsetY : 0;
+  const zoom =
+    placement.scale !== undefined && Number.isFinite(placement.scale)
+      ? placement.scale
+      : 1;
 
   const floorX = boxWidth * (1 + 2 * Math.abs(offsetX));
   const floorY = boxHeight * (1 + 2 * Math.abs(offsetY));
   // ffmpeg's `max` takes two arguments, so the four-way choice nests.
-  const factor = `max(max(${boxWidth}/iw,${boxHeight}/ih),max(${floorX}/iw,${floorY}/ih))`;
+  const factor = `max(max(${boxWidth}/iw,${boxHeight}/ih),max(${floorX}/iw,${floorY}/ih))*${zoom}`;
 
   return (
     [

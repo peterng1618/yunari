@@ -461,11 +461,10 @@ describe("the background layer", () => {
     ).toContain("unresolved-asset-ref");
   });
 
-  it("accepts an anchored media band with a fade and a fill", () => {
+  it("accepts an anchored media band with a fade", () => {
     const envelope = withBackground({
       mode: "advanced",
       color: { ref: "palette.ink" },
-      fill: { ref: "palette.ink" },
       media: {
         assetId: "clip",
         bounds: "display",
@@ -496,7 +495,7 @@ describe("the background layer", () => {
   it("refuses an extent or fade outside the box's bounds", () => {
     for (const composition of [
       { anchor: "left", extent: 0.05 },
-      { anchor: "left", extent: 0.95 },
+      { anchor: "left", extent: 1.01 },
       { anchor: "left", fade: 0 },
       { anchor: "left", fade: 1.01 },
     ]) {

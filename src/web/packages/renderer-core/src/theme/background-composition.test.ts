@@ -115,6 +115,25 @@ describe("resolveBackgroundComposition", () => {
     });
   });
 
+  it("covers the box at full extent, with a full-box ramp when faded", () => {
+    expect(
+      resolveBackgroundComposition(BOX, { anchor: "left", extent: 1 }),
+    ).toEqual({
+      region: { left: 0, top: 0, width: 800, height: 480 },
+      masks: [],
+    });
+    expect(
+      resolveBackgroundComposition(BOX, {
+        anchor: "left",
+        extent: 1,
+        fade: 1,
+      }),
+    ).toEqual({
+      region: { left: 0, top: 0, width: 800, height: 480 },
+      masks: [{ kind: "linear", x1: 800, y1: 0, x2: 0, y2: 0 }],
+    });
+  });
+
   it("caps a fade longer than the band at the opposite edge", () => {
     expect(
       resolveBackgroundComposition(BOX, {
