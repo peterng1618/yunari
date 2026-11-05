@@ -1398,4 +1398,107 @@ describe("glass composition", () => {
     expect(opaque[0]).toBeLessThan(60);
     s.destroy();
   });
+
+  it("drops a kept media frame when the composition shrinks", () => {
+    const board = { left: 0, top: 0, width: 200, height: 200 };
+    const blue = (
+      ctx: CanvasRenderingContext2D,
+      _region: unknown,
+      _device: unknown,
+    ): boolean => {
+      ctx.fillStyle = "#0000ff";
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      return true;
+    };
+    // The simple background first: the media covers the whole box.
+    let backdrop = artboardBackdrop({
+      background: "#ff0000",
+      width: 200,
+      height: 200,
+      media: { rect: board, paint: blue },
+    });
+    const s = stage({ texture: false, backdrop: () => backdrop });
+    s.canvas.add(
+      panel({
+        left: 40,
+        top: 80,
+        width: 120,
+        height: 40,
+        fill: "transparent",
+        yunariGlass: { blurRadius: 0 },
+      }),
+    );
+    s.canvas.renderAll();
+    expect(
+      s.pixel(60, 100)[2],
+      "the first sample is all media",
+    ).toBeGreaterThan(200);
+
+    // The author narrows the media to the right half. The panel's own sample
+    // region has not moved, but the picture behind it has: the left half is
+    // now the colour, never the frame the previous composition painted there.
+    backdrop = artboardBackdrop({
+      background: "#ff0000",
+      width: 200,
+      height: 200,
+      media: {
+        rect: board,
+        region: { left: 100, top: 0, width: 100, height: 200 },
+        paint: blue,
+      },
+    });
+    s.canvas.renderAll();
+    const colour = s.pixel(60, 100);
+    expect(colour[0], "the uncovered half is the colour").toBeGreaterThan(200);
+    expect(colour[2]).toBeLessThan(60);
+    expect(
+      s.pixel(140, 100)[2],
+      "the media half is still the media",
+    ).toBeGreaterThan(200);
+    s.destroy();
+  });
+
+  it("drops a kept media frame when the background paint changes", () => {
+    const backdrop = (background: string): BackdropMedia =>
+      artboardBackdrop({
+        background,
+        width: 200,
+        height: 200,
+        media: {
+          rect: { left: 0, top: 0, width: 200, height: 200 },
+          region: { left: 100, top: 0, width: 100, height: 200 },
+          paint(ctx) {
+            ctx.fillStyle = "#0000ff";
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            return true;
+          },
+        },
+      });
+    let current = backdrop("#ff0000");
+    const s = stage({ texture: false, backdrop: () => current });
+    s.canvas.add(
+      panel({
+        left: 40,
+        top: 80,
+        width: 120,
+        height: 40,
+        fill: "transparent",
+        yunariGlass: { blurRadius: 0 },
+      }),
+    );
+    s.canvas.renderAll();
+    expect(
+      s.pixel(60, 100)[1],
+      "the first sample is the red paint",
+    ).toBeLessThan(60);
+
+    current = backdrop("#00ff00");
+    s.canvas.renderAll();
+    const colour = s.pixel(60, 100);
+    expect(colour[1], "the new paint replaces the old one").toBeGreaterThan(
+      200,
+    );
+    expect(colour[0]).toBeLessThan(60);
+    s.destroy();
+  });
 });
