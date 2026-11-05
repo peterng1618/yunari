@@ -105,7 +105,12 @@ Ran the bundled `ffmpeg-static` binary's filter help and confirmed the options
 this graph needs: `gradients` accepts `s`, `c0`–`c7`, `x0/y0/x1/y1` and
 `nb_colors` 2–8; `alphamerge` copies the second input's luma into alpha;
 `maskedmerge` takes base, overlay and mask; `geq` is a source-capable generic
-equation. The spec records an earlier 0→255 linear `gradients` probe.
+equation. The spec records an earlier 0→255 linear `gradients` probe. Two
+further probes fixed the bake's picture: `gradients` animates by default and its
+`speed` floor is `1e-05`, which still moves, so a `loop` on frame zero is the
+still source; and an endpoint exactly on the frame's far edge is out of range
+and paints the whole ramp wrong, so every generated line is clamped to the last
+pixel.
 
 ## Decision
 
@@ -120,5 +125,9 @@ sampler and the panel bake all read that output rather than re-deriving the
 maths, and all three sample one eased ramp so the seam has no visible ends. The
 fill is painted inside the existing `[data-yunari-background-media]` layer so an
 overlay capture hides the whole composition, and on a panel the composition is
-baked into the 8-bit clip before the turn. No mask primitive, no display-space
-scene object, no separate overlay tint.
+baked into the 8-bit clip before the turn. Both device-played families read the
+same graph: the TURZX's MP4 and the TUR USB's elementary stream differ in wire
+geometry, encoder flags and turn, not in what a composition looks like. A
+generated `gradients` fill or mask is held on its first frame, because the
+source rotates by default and no accepted `speed` stops it. No mask primitive,
+no display-space scene object, no separate overlay tint.

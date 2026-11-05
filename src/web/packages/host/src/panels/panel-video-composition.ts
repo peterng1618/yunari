@@ -117,15 +117,26 @@ export function composeFilterGraph(
     `${fillSource(placement.fill, box.width, box.height)}[fill]`,
   ];
 
+  // A centred band has two ramps. `alphamerge` replaces the alpha it is given,
+  // so applying them one after another would keep only the last; multiply the
+  // grayscale masks first, which is the DOM's `intersect`.
   let overlayInput = "media";
-  for (const [index, mask] of composition.masks.entries()) {
-    parts.push(
-      `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
-      // The mask never ends; the source does. Without `shortest` the merge
-      // repeats the last frame forever and only `-t` stops the encode.
-      `[${overlayInput}][mask${String(index)}]alphamerge=shortest=1[composed${String(index)}]`,
-    );
-    overlayInput = `composed${String(index)}`;
+  if (composition.masks.length > 0) {
+    const labels = composition.masks.map((mask, index) => {
+      const label = `mask${String(index)}`;
+      parts.push(`${maskSource(mask, x, y, width, height)}[${label}]`);
+      return label;
+    });
+    let combined = labels[0]!;
+    for (const [index, label] of labels.slice(1).entries()) {
+      const next = `mask${String(index + 1)}x`;
+      parts.push(`[${combined}][${label}]blend=all_mode=multiply[${next}]`);
+      combined = next;
+    }
+    // The mask never ends; the source does. Without `shortest` the merge
+    // repeats the last frame forever and only `-t` stops the encode.
+    parts.push(`[media][${combined}]alphamerge=shortest=1[composed]`);
+    overlayInput = "composed";
   }
 
   const turnStep = turnFilter(turn);
