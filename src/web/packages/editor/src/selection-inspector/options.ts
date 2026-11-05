@@ -1,6 +1,7 @@
 import type {
   AssetReference,
   Background,
+  BackgroundMode,
   Binding,
   FabricGlobals,
   SampleSource,
@@ -108,6 +109,12 @@ export interface SelectionInspectorOptions {
   readonly assets?: () => readonly AssetReference[];
   /** Writes a whole background through the document, which owns the envelope. */
   readonly onBackgroundChange?: (next: Background | undefined) => void;
+  /** Changes which declared asset the background shows, through the document's
+   *  one switch seam. Absent means the media field is not written by this
+   *  inspector, rather than a write that resets the asset's geometry. */
+  readonly onBackgroundAssetSelect?: (assetId: string | undefined) => void;
+  /** Enters or leaves the advanced background model, through the document. */
+  readonly onBackgroundModeChange?: (mode: BackgroundMode) => void;
   /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
    *  panel built without the shell's finder. */
   readonly onOpenFontPicker?: () => void;

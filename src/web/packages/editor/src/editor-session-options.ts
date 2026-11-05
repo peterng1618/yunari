@@ -5,6 +5,7 @@ import type {
 } from "@yunari/renderer-core";
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import type { AssetManager } from "./asset-manager/index.js";
+import type { BackgroundMediaMemory } from "./background-media-memory.js";
 import type {
   PresetSelection,
   TokenSelectionStore,
@@ -114,7 +115,13 @@ export interface EditorSessionOptions {
      *  session, so the base has to travel with it or the session replacing
      *  this one would save with no idea what it is based on. */
     base?: string,
+    credits?: readonly ThemeCreditsEntry[],
+    /** The sidecar's per-asset background geometry, kept beside the document. */
+    backgroundMedia?: BackgroundMediaMemory,
   ) => Promise<void>;
+  /** Per-asset background geometry the opened theme keeps beside its document.
+   *  Absent for a document that was not opened from the library. */
+  readonly backgroundMedia?: BackgroundMediaMemory;
   readonly onSaved: (message?: string) => void;
   readonly onError?: (message: string) => void;
   readonly onBindingsChange?: () => void;

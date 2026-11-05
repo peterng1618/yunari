@@ -8,7 +8,6 @@ import {
   type BackgroundAnchor,
   type BackgroundMedia,
   type BackgroundMediaComposition,
-  type BackgroundMode,
   DEFAULT_BACKGROUND_EXTENT,
   type FabricGlobals,
   type GlobalRef,
@@ -361,33 +360,19 @@ export function backgroundColumn(input: {
  * it; `index.ts` routes the id and hands the result to the document.
  *
  * `undefined` is a value the model would refuse: the paired offsets carry no
- * bounds in the view, and a media field has no media to write without a picture.
+ * bounds in the view. Which asset is shown, and which model is in force, are
+ * the document's own seams and are not fields this writer answers.
  */
 export function writeBackgroundField(
   background: Background | undefined,
   fieldId: string,
   value: string | number | boolean,
-  assets: readonly AssetReference[] = [],
 ): Background | undefined {
   const current = background ?? {};
   const media = current.media;
   const advanced = current.mode === "advanced";
 
   switch (fieldId) {
-    case "background.mode": {
-      const mode = BACKGROUND_MODES.find((candidate) => candidate === value);
-      if (mode === undefined) return undefined;
-      if (mode === "advanced") {
-        return { ...current, mode: "advanced" as BackgroundMode };
-      }
-      // Simple has no composition, so returning to it drops the keys it cannot
-      // express rather than leaving a document that fails its own validator.
-      // The media's own geometry stays.
-      const { mode: _mode, ...simple } = current;
-      if (simple.media === undefined) return simple;
-      const { composition: _composition, ...plainMedia } = simple.media;
-      return { ...simple, media: plainMedia };
-    }
     case "background.color": {
       if (typeof value !== "string") return undefined;
       if (value === "") {
@@ -397,29 +382,6 @@ export function writeBackgroundField(
       }
       if (!value.startsWith("palette.")) return undefined;
       return { ...current, color: { ref: value as GlobalRef } };
-    }
-    case "background.media": {
-      if (typeof value !== "string") return undefined;
-      if (value === "") {
-        const { media: _media, ...withoutMedia } = current;
-        return withoutMedia;
-      }
-      // A new picture keeps the box and transform the author set for the last
-      // one: changing which picture is shown is not a reset of how. Its frame
-      // is the one exception — only a video has frames.
-      const carried: BackgroundMedia = media ?? {
-        assetId: value,
-        bounds: "theme",
-      };
-      const { fallbackFrame: _frame, ...withoutFrame } = carried;
-      const nextKind = assets.find((asset) => asset.id === value)?.kind;
-      return {
-        ...current,
-        media: {
-          ...(nextKind === "video" ? carried : withoutFrame),
-          assetId: value,
-        },
-      };
     }
     case "background.bounds": {
       if (media === undefined || typeof value !== "string") return undefined;

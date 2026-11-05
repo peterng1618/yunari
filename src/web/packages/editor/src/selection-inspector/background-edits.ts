@@ -1,4 +1,4 @@
-import type { Background } from "@yunari/renderer-core";
+import { BACKGROUND_MODES, type Background } from "@yunari/renderer-core";
 import { writeBackgroundField } from "./background-column.js";
 import type { SelectionInspectorOptions } from "./options.js";
 
@@ -44,7 +44,11 @@ export interface BackgroundFunnel {
 export function createBackgroundFunnel(
   options: Pick<
     SelectionInspectorOptions,
-    "background" | "assets" | "onBackgroundChange" | "backgroundSelected"
+    | "background"
+    | "onBackgroundChange"
+    | "backgroundSelected"
+    | "onBackgroundAssetSelect"
+    | "onBackgroundModeChange"
   >,
 ): BackgroundFunnel {
   const funnel: BackgroundFunnel = {
@@ -65,11 +69,30 @@ export function createBackgroundFunnel(
         return "stale";
       }
 
+      // The two fields the document owns are routed to its own seams: they
+      // change which asset is shown, so a whole-background replacement here
+      // cannot see the geometry the outgoing asset must keep.
+      if (fieldId === "background.media") {
+        if (typeof value !== "string") return "invalid";
+        const select = options.onBackgroundAssetSelect;
+        if (select === undefined) return "invalid";
+        select(value === "" ? undefined : value);
+        funnel.revision += 1;
+        return "ok";
+      }
+      if (fieldId === "background.mode") {
+        const mode = BACKGROUND_MODES.find((candidate) => candidate === value);
+        const change = options.onBackgroundModeChange;
+        if (mode === undefined || change === undefined) return "invalid";
+        change(mode);
+        funnel.revision += 1;
+        return "ok";
+      }
+
       const next: Background | undefined = writeBackgroundField(
         options.background?.(),
         fieldId,
         value,
-        options.assets?.() ?? [],
       );
       if (next === undefined || options.onBackgroundChange === undefined)
         return "invalid";

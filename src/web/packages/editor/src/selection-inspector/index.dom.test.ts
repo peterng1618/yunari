@@ -127,6 +127,8 @@ function setup(
     readonly background?: () => Background | undefined;
     readonly assets?: () => readonly AssetReference[];
     readonly onBackgroundChange?: (next: Background | undefined) => void;
+    readonly onBackgroundAssetSelect?: (assetId: string | undefined) => void;
+    readonly onBackgroundModeChange?: (mode: string) => void;
     /** The run row's import port, so the selection-moved guard can be driven. */
     readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
     /** Overrides the fixture's globals, which predate the type-token split. */
@@ -273,13 +275,22 @@ describe("the selection inspector", () => {
       },
     ) {
       const onBackgroundChange = vi.fn();
+      const onBackgroundAssetSelect = vi.fn();
+      const onBackgroundModeChange = vi.fn();
       const built = setup(undefined, {
         backgroundSelected: () => true,
         background: () => background,
         assets: () => [],
         onBackgroundChange,
+        onBackgroundAssetSelect,
+        onBackgroundModeChange,
       });
-      return { ...built, onBackgroundChange };
+      return {
+        ...built,
+        onBackgroundChange,
+        onBackgroundAssetSelect,
+        onBackgroundModeChange,
+      };
     }
 
     it("describes the background when the bridge says it is selected", () => {

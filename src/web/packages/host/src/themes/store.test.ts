@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // bare mount's answer is a composition of the two (`vg-363`).
 import { bootTheme } from "../../../editor/src/boot-theme.js";
 import {
+  BACKGROUND_MEDIA_FILE,
   createThemeStore,
   isValidThemeId,
   MAX_ASSET_BYTES,
+  MAX_BACKGROUND_MEDIA_BYTES,
   MAX_THEME_WIRE_BYTES,
   MAX_TRASH_UPLOAD_BYTES,
   storeRefusalMessage,
@@ -388,6 +390,158 @@ describe("ThemeStore", () => {
         .catch(() => false),
     ).toBe(false);
     expect((await store.read("with-credits"))?.credits).toBeUndefined();
+  });
+
+  /**
+   * The sidecar is working data beside the document: the store carries it
+   * through a save and an open, and a file it cannot trust is no working data
+   * rather than an unopenable theme.
+   */
+  it("round-trips background media through save and read", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "with-media",
+      "With media",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    const media = {
+      version: 1,
+      media: { badge: { bounds: "display", scale: 2 } },
+    };
+
+    await store.write("with-media", { ...content, backgroundMedia: media });
+
+    expect(
+      JSON.parse(
+        await fs.readFile(
+          path.join(tmpDir, "with-media", BACKGROUND_MEDIA_FILE),
+          "utf8",
+        ),
+      ),
+    ).toEqual(media);
+    expect((await store.read("with-media"))?.backgroundMedia).toEqual(media);
+  });
+
+  it("reads a corrupt or oversized background media file as absent", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "with-media",
+      "With media",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    await store.write("with-media", {
+      ...content,
+      backgroundMedia: { version: 1, media: {} },
+    });
+    const file = path.join(tmpDir, "with-media", BACKGROUND_MEDIA_FILE);
+
+    await fs.writeFile(file, "{not json");
+    expect((await store.read("with-media"))?.backgroundMedia).toBeUndefined();
+
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        version: 1,
+        media: { badge: { bounds: "x".repeat(MAX_BACKGROUND_MEDIA_BYTES) } },
+      }),
+    );
+    expect((await store.read("with-media"))?.backgroundMedia).toBeUndefined();
+
+    await fs.writeFile(file, JSON.stringify(["not", "an", "object"]));
+    expect((await store.read("with-media"))?.backgroundMedia).toBeUndefined();
+  });
+
+  it("keeps the stored sidecar when a save carries no working data", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "with-media",
+      "With media",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    const media = { version: 1, media: { badge: { bounds: "theme" } } };
+    await store.write("with-media", { ...content, backgroundMedia: media });
+
+    // MCP and install saves carry no map; the folder's own copy is what keeps
+    // the author's framing from being erased by a client that never knew it.
+    await store.write(
+      "with-media",
+      {
+        ...content,
+        envelope: {
+          ...content.envelope,
+          metadata: { ...content.envelope.metadata, name: "Renamed" },
+        },
+      },
+      { overwrite: true },
+    );
+
+    expect((await store.read("with-media"))?.backgroundMedia).toEqual(media);
+  });
+
+  it("clears the stored sidecar when a save sends an empty map", async () => {
+    const store = createThemeStore(tmpDir);
+    const content = withAsset(
+      "with-media",
+      "With media",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    await store.write("with-media", {
+      ...content,
+      backgroundMedia: { version: 1, media: { badge: { bounds: "theme" } } },
+    });
+
+    await store.write(
+      "with-media",
+      { ...content, backgroundMedia: { version: 1, media: {} } },
+      { overwrite: true },
+    );
+
+    expect((await store.read("with-media"))?.backgroundMedia).toEqual({
+      version: 1,
+      media: {},
+    });
+  });
+
+  it("leaves the previous sidecar readable when the folder swap fails", async () => {
+    let fail = false;
+    const store = createThemeStore(tmpDir, {
+      rename: async (from, to) => {
+        // The first of the save's two renames takes the previous folder aside;
+        // failing there leaves it in place, which is the state the reader must
+        // still answer from.
+        if (fail && path.basename(to).startsWith(".retired-")) {
+          throw Object.assign(new Error("operation not permitted"), {
+            code: "EPERM",
+          });
+        }
+        await fs.rename(from, to);
+      },
+    });
+    const content = withAsset(
+      "with-media",
+      "With media",
+      "assets/badge.svg",
+      new TextEncoder().encode("<svg/>"),
+    );
+    const media = { version: 1, media: { badge: { bounds: "display" } } };
+    await store.write("with-media", { ...content, backgroundMedia: media });
+
+    fail = true;
+    await expect(
+      store.write(
+        "with-media",
+        { ...content, backgroundMedia: { version: 1, media: {} } },
+        { overwrite: true },
+      ),
+    ).rejects.toMatchObject({ code: "EPERM" });
+
+    // The failed save's staging folder is gone; the folder the author had is
+    // still the one that answers, sidecar included.
+    expect((await store.read("with-media"))?.backgroundMedia).toEqual(media);
   });
 
   it("refuses a credits member the package reader would not accept", async () => {
@@ -873,7 +1027,10 @@ describe("ThemeStore", () => {
       open: async (id) => {
         const stored = await store.read(id);
         if (stored === undefined) throw new Error(`no theme "${id}"`);
-        return stored;
+        // The store keeps the sidecar opaque; the editor's client is what reads
+        // it into the typed map, and this mount is not about that.
+        const { backgroundMedia: _sidecar, ...content } = stored;
+        return content;
       },
       save: async () => "base-after-save",
       // The display map is not what this test is about: it exercises the mount.
@@ -2825,6 +2982,25 @@ describe("ThemeStore remove", () => {
     expect(trashed).toEqual([path.join(tmpDir, "living-room")]);
     // The author's other work is not collateral.
     expect(await store.read("kitchen")).toBeDefined();
+  });
+
+  it("moves the background media sidecar with the theme folder", async () => {
+    const media = { version: 1, media: { badge: { bounds: "theme" } } };
+    await store.write("living-room", {
+      ...save("living-room", "Living Room"),
+      backgroundMedia: media,
+    });
+
+    await store.remove("living-room");
+
+    expect(
+      JSON.parse(
+        await fs.readFile(
+          path.join(tmpDir, ".trashed", "living-room", BACKGROUND_MEDIA_FILE),
+          "utf8",
+        ),
+      ),
+    ).toEqual(media);
   });
 
   it("takes only the one theme, when the library root holds what is not a theme", async () => {

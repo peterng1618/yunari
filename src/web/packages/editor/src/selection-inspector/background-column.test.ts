@@ -1,8 +1,4 @@
-import type {
-  AssetReference,
-  Background,
-  FabricGlobals,
-} from "@yunari/renderer-core";
+import type { Background, FabricGlobals } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 
@@ -503,37 +499,22 @@ describe("writeBackgroundField", () => {
     ).toBeUndefined();
   });
 
-  it("drops the frame when the picture stops being a video", () => {
-    const assets: readonly AssetReference[] = [
-      { id: "loop", kind: "video", path: "assets/loop.mp4" },
-      { id: "other", kind: "video", path: "assets/other.mp4" },
-      { id: "photo", kind: "image", path: "assets/photo.png" },
-    ];
-    const framed: Background = {
-      media: {
-        assetId: "loop",
-        bounds: "theme",
-        fallbackFrame: 5,
-        offsetX: 0.2,
-      },
+  it("leaves the media and mode ids to the document's switch seam", () => {
+    const background: Background = {
+      media: { assetId: "loop", bounds: "theme" },
     };
-
-    // Both directions of a video change keep the frame and the pan.
+    // Which asset is shown and which model is in force are the document's to
+    // decide: a whole-background replacement here cannot see the geometry the
+    // outgoing asset must keep.
     expect(
-      writeBackgroundField(framed, "background.media", "other", assets),
-    ).toMatchObject({ media: { fallbackFrame: 5, offsetX: 0.2 } });
-
-    const still = writeBackgroundField(
-      framed,
-      "background.media",
-      "photo",
-      assets,
-    )?.media;
-    expect(still, "only a video has frames").toMatchObject({
-      assetId: "photo",
-      offsetX: 0.2,
-    });
-    expect(still).not.toHaveProperty("fallbackFrame");
+      writeBackgroundField(background, "background.media", "photo"),
+    ).toBeUndefined();
+    expect(
+      writeBackgroundField(background, "background.media", ""),
+    ).toBeUndefined();
+    expect(
+      writeBackgroundField(background, "background.mode", "advanced"),
+    ).toBeUndefined();
   });
 });
 
@@ -575,40 +556,6 @@ describe("background modes", () => {
     expect(
       sections[0]?.fields.find((field) => field.id === "background.mode"),
     ).toMatchObject({ control: "segmented", value: "advanced" });
-  });
-
-  it("writes advanced, and returning to simple drops the composition keys", () => {
-    const advanced = writeBackgroundField(
-      { media: { assetId: "a", bounds: "theme" } },
-      "background.mode",
-      "advanced",
-    );
-    expect(advanced).toEqual({
-      mode: "advanced",
-      media: { assetId: "a", bounds: "theme" },
-    });
-
-    const simple = writeBackgroundField(
-      {
-        mode: "advanced",
-        color: { ref: "palette.paper" },
-        media: {
-          assetId: "a",
-          bounds: "theme",
-          scale: 2,
-          composition: { anchor: "left", extent: 0.5 },
-        },
-      },
-      "background.mode",
-      "simple",
-    );
-    expect(simple).toEqual({
-      color: { ref: "palette.paper" },
-      media: { assetId: "a", bounds: "theme", scale: 2 },
-    });
-    expect(
-      writeBackgroundField(advanced, "background.mode", "fancy"),
-    ).toBeUndefined();
   });
 
   it("refuses a composition write while simple", () => {
