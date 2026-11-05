@@ -169,7 +169,13 @@ and the transposition stay.
 6. Wait out the block's own share of the clip's playing time (block bytes over
    total bytes, times ffmpeg's reported `Duration:`), minus the time the block
    above already took, with 30 ms as the floor. **The wait is outside the
-   endpoint lock**, or the UI overlay stalls for a whole block.
+   endpoint lock**, or the UI overlay stalls for a whole block. **Below a ring
+   depth of 2 the wait is skipped** and the next block goes out at once: a feed
+   paced to the play time keeps one block queued, the decoder reads the last
+   bytes it was given, and the picture holds at every block boundary (four
+   small freezes a second on a composed clip's 249 ms blocks, measured
+   2026-11-06). Filling to the vendor's own 2–4 ring and then pacing removes
+   them; the average rate stays realtime, so it does not ghost.
 7. At end of file, rewind and keep sending — playback never stops at EOF.
 
 **The 100 ms read is part of the feed's clock.** A read with the command

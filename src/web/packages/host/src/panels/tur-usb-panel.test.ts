@@ -258,6 +258,60 @@ describe("TurUsbPanel", () => {
     expect(fake.writes).toHaveLength(afterStop);
   });
 
+  it("sends the next block without pacing while the decoder's ring is short", async () => {
+    const fake = fakePanel();
+    // Four blocks over one second: a paced feed waits ~250 ms per block.
+    const h264 = new Uint8Array(H264_BLOCK_BYTES * 4).fill(0x11);
+    const panel = opened(fake, async () => ({ h264, seconds: 1 }));
+    await panel.open();
+    fake.reset();
+    // The decoder holds nothing: a paced feed would leave it reading the last
+    // bytes it was given, and the picture holds at every block boundary.
+    fake.setLevel(0);
+
+    await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 });
+
+    const began = Date.now();
+    const blocks = () => fake.writes.filter((w) => w.length > 512).length;
+    // Start has already written the first two blocks.
+    const queued = blocks();
+    const deadline = Date.now() + 1_000;
+    while (blocks() < queued + 3) {
+      if (Date.now() > deadline) throw new Error("the ring was never filled");
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    // Pacing would cost ~250 ms a block; filling the ring costs the vendor's
+    // 30 ms pause only.
+    expect(Date.now() - began).toBeLessThan(200);
+    await panel.video.stop();
+  });
+
+  it("paces a block once the decoder's ring holds one", async () => {
+    const fake = fakePanel();
+    const h264 = new Uint8Array(H264_BLOCK_BYTES * 4).fill(0x11);
+    const panel = opened(fake, async () => ({ h264, seconds: 1 }));
+    await panel.open();
+    fake.reset();
+    fake.setLevel(2);
+
+    await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 });
+
+    const began = Date.now();
+    const blocks = () => fake.writes.filter((w) => w.length > 512).length;
+    // Start has already written the first two blocks.
+    const queued = blocks();
+    const deadline = Date.now() + 3_000;
+    while (blocks() < queued + 1) {
+      if (Date.now() > deadline) throw new Error("the feed stopped");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // The block's own share of the second is waited out, not sent early.
+    expect(Date.now() - began).toBeGreaterThanOrEqual(200);
+    await panel.video.stop();
+  });
+
   it("hands the display's mounting angle to the encoder", async () => {
     const seen: (number | undefined)[] = [];
     const fake = fakePanel();
