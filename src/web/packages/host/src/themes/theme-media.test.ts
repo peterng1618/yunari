@@ -89,7 +89,7 @@ describe("media names", () => {
   it("name a panel clip by its pixel size and baked geometry", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
+    ).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
   });
 
   it("change the clip name when the authored pan or zoom changes", () => {
@@ -323,8 +323,8 @@ describe("createThemeMedia", () => {
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-v2.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
     expect(transcode).toHaveBeenLastCalledWith(
       new Uint8Array([9, 9, 9]),
