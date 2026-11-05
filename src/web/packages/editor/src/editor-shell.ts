@@ -289,6 +289,17 @@ function syncClip(
   return true;
 }
 
+/** One background paint, resolved against the document's globals. The colour
+ *  and the fill are the same kind of value, so the media layer and the plate
+ *  read a token the same way. */
+function backgroundStylePaint(
+  value: Parameters<typeof resolveStyleValue>[0],
+  globals: Globals | undefined,
+): unknown {
+  const issues: Parameters<typeof resolveStyleValue>[3] = [];
+  return resolveStyleValue(value, globals ?? {}, "background", issues);
+}
+
 function applyArtboardPaint(
   editor: EditorInteraction,
   artboard: Artboard,
@@ -297,9 +308,8 @@ function applyArtboardPaint(
   memo: PaintMemo,
   crop: boolean,
 ): unknown {
-  const issues: Parameters<typeof resolveStyleValue>[3] = [];
   const resolve = (value: Parameters<typeof resolveStyleValue>[0]): unknown => {
-    return resolveStyleValue(value, globals ?? {}, "background", issues);
+    return backgroundStylePaint(value, globals);
   };
   const paint = resolve(documentBackground?.color);
   // A gradient is rebuilt only when the paint or the board's size changes, the
@@ -734,6 +744,10 @@ export async function mountEditorShell({
         artboard: currentArtboard,
         assets: mediaAssets,
         resolveAsset: mediaResolve,
+        // The paint a region or blend reveals. Without it the uncovered area
+        // kept the plate's colour while the player showed the fill — the two
+        // surfaces disagreed about the same theme.
+        fill: backgroundStylePaint(currentBackground?.fill, globals),
         onMediaError: reportMediaError,
         // The video is a DOM sibling, so Fabric never sees a frame change.
         onFrame: () => {
@@ -930,6 +944,7 @@ export async function mountEditorShell({
         currentBackground = nextBackground;
         paintArtboard();
         media?.setBackground(currentBackground);
+        media?.setFill(backgroundStylePaint(currentBackground?.fill, globals));
         placeMedia();
         syncPlaybackKind();
       },
@@ -957,6 +972,9 @@ export async function mountEditorShell({
       setGlobals(nextGlobals) {
         globals = nextGlobals;
         paintArtboard();
+        // A palette edit changes what the fill's token resolves to, and the
+        // layer holds the resolved paint rather than the reference.
+        media?.setFill(backgroundStylePaint(currentBackground?.fill, globals));
       },
       setFitMode() {
         // The authoring view always frames the whole board; `cover` is the

@@ -7,8 +7,7 @@
  */
 
 import type {
-  BackgroundBlend,
-  BackgroundRegion,
+  BackgroundMediaComposition,
   PalettePaint,
 } from "@yunari/renderer-core";
 
@@ -92,10 +91,11 @@ export interface PanelControls {
 export interface PanelVideoPlacement {
   readonly offsetX: number;
   readonly offsetY: number;
-  /** Fractions of the layer's box the media is inset by. Absent covers it. */
-  readonly region?: BackgroundRegion;
-  /** The media's alpha ramp at one region edge. */
-  readonly blend?: BackgroundBlend;
+  /** Zoom over the cover fit; absent means 1. */
+  readonly scale?: number;
+  /** Where the media sits inside its box and how it meets the fill. Present
+   *  only for an advanced background. */
+  readonly composition?: BackgroundMediaComposition;
   /** The resolved paint behind the media inside its box. */
   readonly fill?: PalettePaint;
 }
@@ -112,7 +112,7 @@ export interface PanelVideoSource {
 }
 
 /** Whether two reads describe the same stream: the same bytes, the same
- *  placement (pan, region, fade, fill) and the same display angle. A turned
+ *  placement (pan, anchor, fade, fill) and the same display angle. A turned
  *  glass shows a different stream, and the composition is baked into the
  *  pixels, so any authored change is a different clip. */
 export function samePanelVideo(

@@ -481,7 +481,7 @@ describe("SelectionColumn", () => {
     expect(commit).toHaveBeenCalledWith(1, "background.scale", 2.5);
   });
 
-  it("renders the composition rows and commits the pressed edge", async () => {
+  it("renders the composition rows and commits the pressed anchor", async () => {
     const commit = vi.fn(() => false);
     const port: SelectionEdits = {
       commit,
@@ -499,10 +499,11 @@ describe("SelectionColumn", () => {
       locked: false,
       sections: backgroundColumn({
         background: {
+          mode: "advanced",
           media: {
             assetId: "a",
             bounds: "theme",
-            region: { left: 0.35 },
+            composition: { anchor: "left", extent: 0.65 },
           },
         },
         assets: [],
@@ -522,23 +523,29 @@ describe("SelectionColumn", () => {
       );
     });
 
-    const inset = [
-      ...host.querySelectorAll<HTMLButtonElement>(
-        "[data-yunari-background-inset]",
-      ),
+    // The anchor picker is a select, so the press opens its list first.
+    const trigger = host.querySelector<HTMLElement>(
+      "[data-yunari-background-anchor]",
+    );
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.click();
+    });
+    const anchors = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
     ];
-    expect(inset.length).toBeGreaterThan(1);
-    const right = inset.find((segment) => segment.textContent === "Right edge");
+    expect(anchors.length).toBeGreaterThan(1);
+    const right = anchors.find((option) => option.textContent === "Right edge");
     expect(right).toBeDefined();
-    act(() => {
+    await act(async () => {
       right?.click();
     });
-    expect(commit).toHaveBeenCalledWith(1, "background.inset", "right");
+    expect(commit).toHaveBeenCalledWith(1, "background.anchor", "right");
 
-    const amount = host.querySelector<HTMLInputElement>(
-      "[data-yunari-background-inset-amount]",
+    const extent = host.querySelector<HTMLInputElement>(
+      "[data-yunari-background-extent]",
     )!;
-    expect(amount.value).toBe("65");
+    expect(extent.value).toBe("65");
   });
 
   /**

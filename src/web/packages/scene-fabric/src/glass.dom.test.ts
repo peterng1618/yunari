@@ -1357,7 +1357,7 @@ describe("glass composition", () => {
     s.destroy();
   });
 
-  it("fades the media through the region's mask", () => {
+  it("fades the media through its masks", () => {
     const backdrop = artboardBackdrop({
       background: "#000000",
       width: 200,
@@ -1366,7 +1366,7 @@ describe("glass composition", () => {
         rect: { left: 0, top: 0, width: 200, height: 200 },
         fill: { kind: "solid", color: "#ff0000" },
         region: { left: 0, top: 0, width: 200, height: 200 },
-        mask: { kind: "linear", x1: 0, y1: 0, x2: 100, y2: 0 },
+        masks: [{ kind: "linear", x1: 0, y1: 0, x2: 100, y2: 0 }],
         paint(ctx) {
           ctx.fillStyle = "#0000ff";
           ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);

@@ -41,70 +41,94 @@ async function themeWithClip() {
 }
 
 describe("set_background composition", () => {
-  it("writes a fill, an inset region and a linear blend", async () => {
+  it("writes a fill and an anchored, faded media", async () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       color: "accent",
       mediaAssetId: "clip",
       fill: "surface",
-      inset: { left: 0.35 },
-      blend: { edge: "left", length: 0.12 },
+      anchor: "left",
+      extent: 0.65,
+      fade: 0.12,
     });
     expect(result.isError).toBeUndefined();
 
     const background = ctx.drafts.current().envelope.background;
     expect(background?.fill).toEqual({ ref: "palette.surface" });
-    expect(background?.media?.region).toEqual({
-      left: 0.35,
-      blend: { shape: "linear", edge: "left", length: 0.12 },
+    expect(background?.media?.composition).toEqual({
+      anchor: "left",
+      extent: 0.65,
+      fade: 0.12,
     });
   });
 
   it("keeps the declared media when only composition fields are passed", async () => {
     const { ctx } = await themeWithClip();
     await setBackground(ctx, {
+      mode: "advanced",
       mediaAssetId: "clip",
       bounds: "display",
-      inset: { left: 0.2 },
+      anchor: "left",
+      extent: 0.2,
     });
 
-    await setBackground(ctx, {
-      blend: { shape: "radial", length: 0.3 },
-    });
+    await setBackground(ctx, { fade: 0.3 });
 
     const media = ctx.drafts.current().envelope.background?.media;
     expect(media?.assetId).toBe("clip");
     expect(media?.bounds).toBe("display");
-    expect(media?.region).toEqual({
-      left: 0.2,
-      blend: { shape: "radial", length: 0.3 },
+    expect(media?.composition).toEqual({
+      anchor: "left",
+      extent: 0.2,
+      fade: 0.3,
     });
   });
 
-  it("refuses a blend length outside the model range", async () => {
+  it("removes the composition when the anchor is full", async () => {
     const { ctx } = await themeWithClip();
-    await setBackground(ctx, { mediaAssetId: "clip", inset: { left: 0.2 } });
-    const before = structuredClone(ctx.drafts.current().envelope.background);
-
-    const result = await setBackground(ctx, {
-      blend: { shape: "radial", length: 0 },
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      anchor: "center",
     });
 
+    await setBackground(ctx, { anchor: "full" });
+
+    expect(
+      ctx.drafts.current().envelope.background?.media?.composition,
+    ).toBeUndefined();
+  });
+
+  it("refuses a fade outside the model range", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      anchor: "left",
+    });
+    const before = structuredClone(ctx.drafts.current().envelope.background);
+
+    const result = await setBackground(ctx, { fade: 0 });
+
     expect(result.isError).toBe(true);
-    expect(refusalTextOf(result)).toMatch(/length/i);
+    expect(refusalTextOf(result)).toMatch(/fade/i);
     expect(ctx.drafts.current().envelope.background).toEqual(before);
   });
 
-  it("refuses an inset that leaves no area", async () => {
+  it("refuses an extent that names no edge", async () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       mediaAssetId: "clip",
-      inset: { left: 0.5, right: 0.5 },
+      anchor: "center",
+      extent: 0.5,
     });
 
     expect(result.isError).toBe(true);
+    expect(refusalTextOf(result)).toMatch(/edge/i);
     expect(ctx.drafts.current().envelope.background?.media).toBeUndefined();
   });
 
@@ -112,11 +136,59 @@ describe("set_background composition", () => {
     const { ctx } = await themeWithClip();
 
     const result = await setBackground(ctx, {
+      mode: "advanced",
       fill: "surface",
-      inset: { left: 0.2 },
+      anchor: "left",
     });
 
     expect(result.isError).toBe(true);
     expect(refusalTextOf(result)).toMatch(/media/i);
+  });
+});
+
+describe("set_background modes", () => {
+  it("refuses composition fields until the theme opts into advanced", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, { color: "accent", mediaAssetId: "clip" });
+
+    for (const input of [
+      { fill: "surface" },
+      { anchor: "left" as const },
+      { fade: 0.2 },
+    ]) {
+      const result = await setBackground(ctx, input);
+      expect(result.isError).toBe(true);
+      expect(refusalTextOf(result)).toMatch(/advanced/i);
+    }
+  });
+
+  it("refuses a fill with no media behind it", async () => {
+    const { ctx } = await themeWithClip();
+    const result = await setBackground(ctx, {
+      mode: "advanced",
+      fill: "surface",
+    });
+    expect(result.isError).toBe(true);
+    expect(refusalTextOf(result)).toMatch(/media/i);
+  });
+
+  it("drops the composition keys when the theme returns to basic", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      fill: "surface",
+      anchor: "left",
+      extent: 0.2,
+      fade: 0.2,
+    });
+
+    const result = await setBackground(ctx, { mode: "basic" });
+    expect(result.isError).toBeUndefined();
+
+    const background = ctx.drafts.current().envelope.background;
+    expect(background?.mode).toBeUndefined();
+    expect(background?.fill).toBeUndefined();
+    expect(background?.media?.composition).toBeUndefined();
   });
 });

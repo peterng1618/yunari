@@ -24,13 +24,16 @@ describe("backgroundColumn", () => {
     // first write would refuse, so the section is absent rather than refused.
     expect(bare.map((section) => section.id)).toEqual(["content"]);
     expect(bare[0]?.fields.map((field) => field.id)).toEqual([
+      "background.mode",
       "background.color",
-      "background.fill",
       "background.media",
     ]);
 
     const withMedia = backgroundColumn({
-      background: { media: { assetId: "a", bounds: "theme" } },
+      background: {
+        mode: "advanced",
+        media: { assetId: "a", bounds: "theme" },
+      },
       assets: [],
       globals: undefined,
     });
@@ -169,8 +172,8 @@ describe("backgroundColumn", () => {
       globals: undefined,
     });
     expect(video[0]?.fields.map((field) => field.id)).toEqual([
+      "background.mode",
       "background.color",
-      "background.fill",
       "background.media",
       "background.fallbackFrame",
     ]);
@@ -194,13 +197,11 @@ describe("backgroundColumn", () => {
   it("asks Content for a fill after the colour, and a composition once media exists", () => {
     const sections = backgroundColumn({
       background: {
+        mode: "advanced",
         media: {
           assetId: "a",
           bounds: "theme",
-          region: {
-            left: 0.65,
-            blend: { shape: "linear", edge: "left", length: 0.12 },
-          },
+          composition: { anchor: "left", extent: 0.35, fade: 0.12 },
         },
       },
       assets: [],
@@ -209,6 +210,7 @@ describe("backgroundColumn", () => {
 
     // A fill is content: it is what the uncovered area is painted with.
     expect(sections[0]?.fields.map((field) => field.id)).toEqual([
+      "background.mode",
       "background.color",
       "background.fill",
       "background.media",
@@ -219,19 +221,15 @@ describe("backgroundColumn", () => {
       "composition",
     ]);
     expect(sections[2]?.fields.map((field) => field.id)).toEqual([
-      "background.inset",
-      "background.insetAmount",
-      "background.blendEdges",
-      "background.blendLength",
-      "background.blendShape",
+      "background.anchor",
+      "background.extent",
+      "background.fade",
     ]);
     expect(
-      sections[2]?.fields.find((field) => field.id === "background.inset"),
-    ).toMatchObject({ control: "segmented", value: "left" });
+      sections[2]?.fields.find((field) => field.id === "background.anchor"),
+    ).toMatchObject({ control: "select", value: "left" });
     expect(
-      sections[2]?.fields.find(
-        (field) => field.id === "background.insetAmount",
-      ),
+      sections[2]?.fields.find((field) => field.id === "background.extent"),
     ).toMatchObject({
       control: "slider",
       value: 0.35,
@@ -240,22 +238,14 @@ describe("backgroundColumn", () => {
       percent: true,
     });
     expect(
-      sections[2]?.fields.find((field) => field.id === "background.blendEdges"),
-    ).toMatchObject({ control: "select", value: "left" });
-    expect(
-      sections[2]?.fields.find(
-        (field) => field.id === "background.blendLength",
-      ),
+      sections[2]?.fields.find((field) => field.id === "background.fade"),
     ).toMatchObject({
       control: "slider",
       value: 0.12,
-      min: 0.01,
+      min: 0,
       max: 0.5,
       percent: true,
     });
-    expect(
-      sections[2]?.fields.find((field) => field.id === "background.blendShape"),
-    ).toMatchObject({ control: "segmented", value: "linear" });
 
     // A composition places a picture, so it waits for one.
     expect(
@@ -265,6 +255,48 @@ describe("backgroundColumn", () => {
         globals: undefined,
       }).map((section) => section.id),
     ).toEqual(["content"]);
+  });
+
+  it("reads a full cover as no anchor, and a centred band as no size", () => {
+    const plain = backgroundColumn({
+      background: {
+        mode: "advanced",
+        media: { assetId: "a", bounds: "theme" },
+      },
+      assets: [],
+      globals: undefined,
+    });
+    expect(plain[2]?.fields.map((field) => field.id)).toEqual([
+      "background.anchor",
+    ]);
+    expect(
+      plain[2]?.fields.find((field) => field.id === "background.anchor"),
+    ).toMatchObject({ value: "full" });
+
+    const centred = backgroundColumn({
+      background: {
+        mode: "advanced",
+        media: {
+          assetId: "a",
+          bounds: "theme",
+          composition: { fade: 0.1 },
+        },
+      },
+      assets: [],
+      globals: undefined,
+    });
+    // The picture sizes a centred band, so it has no size row; the absent fade
+    // reads 0 because zero is how the ramp is switched off.
+    expect(centred[2]?.fields.map((field) => field.id)).toEqual([
+      "background.anchor",
+      "background.fade",
+    ]);
+    expect(
+      centred[2]?.fields.find((field) => field.id === "background.anchor"),
+    ).toMatchObject({ value: "center" });
+    expect(
+      centred[2]?.fields.find((field) => field.id === "background.fade"),
+    ).toMatchObject({ value: 0.1 });
   });
 
   it("offers only the assets a background can be", () => {
@@ -294,6 +326,7 @@ describe("backgroundColumn", () => {
 
 describe("writeBackgroundField", () => {
   const background: Background = {
+    mode: "advanced",
     media: { assetId: "photo", bounds: "theme" },
   };
 
@@ -385,136 +418,100 @@ describe("writeBackgroundField", () => {
     ).toMatchObject({ fill: { ref: "palette.ink" } });
     expect(
       writeBackgroundField(
-        { fill: { ref: "palette.ink" } },
+        { mode: "advanced", fill: { ref: "palette.ink" } },
         "background.fill",
         "",
       ),
-    ).toEqual({});
+    ).toEqual({ mode: "advanced" });
     expect(
       writeBackgroundField(background, "background.fill", "not-a-token"),
     ).toBeUndefined();
   });
 
-  it("turns a region mode into insets at the size already authored", () => {
-    // A left inset of 0.65 is an area of 35%, and that size survives a change
-    // of edge: the mode says which edge, the existing region says how much.
-    const edged: Background = {
+  it("writes an anchor, keeping the size and fade already authored", () => {
+    const composed: Background = {
+      mode: "advanced",
       media: {
         assetId: "a",
         bounds: "theme",
-        region: { right: 0.65 },
+        composition: { anchor: "left", extent: 0.35, fade: 0.12 },
       },
     };
     expect(
-      writeBackgroundField(edged, "background.inset", "left"),
-    ).toMatchObject({ media: { region: { left: 0.65 } } });
-    expect(
-      writeBackgroundField(edged, "background.inset", "full")?.media,
-    ).not.toHaveProperty("region");
-    expect(
-      writeBackgroundField(edged, "background.inset", "bogus"),
-    ).toBeUndefined();
-    // A picture with no region keeps half its box when a mode first appears.
-    expect(
-      writeBackgroundField(background, "background.inset", "left"),
-    ).toMatchObject({ media: { region: { left: 0.5 } } });
-    // All four sides split the uncovered half, so each axis keeps the authored
-    // size; a full 0.65 inset on both sides of an axis would leave no area.
-    expect(
-      writeBackgroundField(edged, "background.inset", "inset"),
+      writeBackgroundField(composed, "background.anchor", "right"),
     ).toMatchObject({
-      media: {
-        region: {
-          left: 0.325,
-          right: 0.325,
-          top: 0.325,
-          bottom: 0.325,
-        },
-      },
+      media: { composition: { anchor: "right", extent: 0.35, fade: 0.12 } },
     });
+    // `full` is the cover: no composition at all, so the media maps the whole
+    // box and the fill never shows.
+    expect(
+      writeBackgroundField(composed, "background.anchor", "full")?.media,
+    ).not.toHaveProperty("composition");
+    expect(
+      writeBackgroundField(composed, "background.anchor", "bogus"),
+    ).toBeUndefined();
+    // A picture with no composition yet starts at the centre: an advanced
+    // background always composes once an anchor is chosen.
+    expect(
+      writeBackgroundField(background, "background.anchor", "center"),
+    ).toMatchObject({ media: { composition: { anchor: "center" } } });
   });
 
-  it("writes the area size on the current mode and refuses it out of range", () => {
+  it("writes the size only on an edge anchor and refuses it out of range", () => {
     const edged: Background = {
-      media: { assetId: "a", bounds: "theme", region: { right: 0.65 } },
+      mode: "advanced",
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        composition: { anchor: "right" },
+      },
     };
-    expect(
-      writeBackgroundField(edged, "background.insetAmount", 0.4),
-    ).toMatchObject({ media: { region: { right: 0.6 } } });
+    expect(writeBackgroundField(edged, "background.extent", 0.4)).toMatchObject(
+      { media: { composition: { anchor: "right", extent: 0.4 } } },
+    );
     for (const value of [0.05, 0.95, Number.NaN]) {
       expect(
-        writeBackgroundField(edged, "background.insetAmount", value),
+        writeBackgroundField(edged, "background.extent", value),
       ).toBeUndefined();
     }
-  });
-
-  it("writes the blend's edge, length and shape", () => {
-    const plain: Background = {
-      media: { assetId: "a", bounds: "theme" },
-    };
-    // "Around" is the radial ramp, and a first fade starts at the default
-    // length rather than inventing one per control.
-    expect(
-      writeBackgroundField(plain, "background.blendEdges", "all"),
-    ).toMatchObject({
-      media: { region: { blend: { shape: "radial", length: 0.1 } } },
-    });
-    // Nothing to lengthen until a fade exists.
-    expect(
-      writeBackgroundField(plain, "background.blendLength", 0.2),
-    ).toBeUndefined();
-
-    const blended: Background = {
+    // A centred band is sized by its picture's aspect, so it stores no size.
+    const centred: Background = {
+      mode: "advanced",
       media: {
         assetId: "a",
         bounds: "theme",
-        region: {
-          left: 0.2,
-          blend: { shape: "linear", edge: "top", length: 0.2 },
-        },
+        composition: { anchor: "center" },
       },
     };
     expect(
-      writeBackgroundField(blended, "background.blendLength", 0.4),
-    ).toMatchObject({
+      writeBackgroundField(centred, "background.extent", 0.4),
+    ).toBeUndefined();
+  });
+
+  it("writes the fade, and stores zero as no ramp", () => {
+    const composed: Background = {
+      mode: "advanced",
       media: {
-        region: { blend: { shape: "linear", edge: "top", length: 0.4 } },
+        assetId: "a",
+        bounds: "theme",
+        composition: { anchor: "top" },
       },
-    });
+    };
     expect(
-      writeBackgroundField(blended, "background.blendEdges", "right"),
-    ).toMatchObject({
-      media: {
-        region: { blend: { shape: "linear", edge: "right", length: 0.2 } },
-      },
-    });
+      writeBackgroundField(composed, "background.fade", 0.2),
+    ).toMatchObject({ media: { composition: { anchor: "top", fade: 0.2 } } });
+    const none = writeBackgroundField(composed, "background.fade", 0)?.media;
+    expect(none?.composition).not.toHaveProperty("fade");
+    // The editor stops at half: past it the seam is gone rather than faded.
+    for (const value of [-0.1, 0.6, Number.NaN]) {
+      expect(
+        writeBackgroundField(composed, "background.fade", value),
+      ).toBeUndefined();
+    }
+    // There is no seam without a composition, so there is nothing to fade.
     expect(
-      writeBackgroundField(blended, "background.blendEdges", "none")?.media,
-    ).not.toHaveProperty("blend");
-    expect(
-      writeBackgroundField(blended, "background.blendShape", "radial"),
-    ).toMatchObject({
-      media: { region: { blend: { shape: "radial", length: 0.2 } } },
-    });
-    // A radial ramp has no edge, so going back to linear needs one; the left
-    // edge is the least surprising pick.
-    expect(
-      writeBackgroundField(
-        {
-          media: {
-            assetId: "a",
-            bounds: "theme",
-            region: { blend: { shape: "radial", length: 0.2 } },
-          },
-        },
-        "background.blendShape",
-        "linear",
-      ),
-    ).toMatchObject({
-      media: {
-        region: { blend: { shape: "linear", edge: "left", length: 0.2 } },
-      },
-    });
+      writeBackgroundField(background, "background.fade", 0.2),
+    ).toBeUndefined();
   });
 
   it("drops the frame when the picture stops being a video", () => {
@@ -548,5 +545,135 @@ describe("writeBackgroundField", () => {
       offsetX: 0.2,
     });
     expect(still).not.toHaveProperty("fallbackFrame");
+  });
+});
+
+describe("background modes", () => {
+  it("starts basic: no fill row and no composition section", () => {
+    const sections = backgroundColumn({
+      background: { media: { assetId: "a", bounds: "theme" } },
+      assets: [],
+      globals: undefined,
+    });
+    expect(sections.map((section) => section.id)).toEqual([
+      "content",
+      "position",
+    ]);
+    expect(sections[0]?.fields.map((field) => field.id)).toEqual([
+      "background.mode",
+      "background.color",
+      "background.media",
+    ]);
+    expect(
+      sections[0]?.fields.find((field) => field.id === "background.mode"),
+    ).toMatchObject({ control: "segmented", value: "basic" });
+  });
+
+  it("offers the fill and the composition once advanced", () => {
+    const sections = backgroundColumn({
+      background: {
+        mode: "advanced",
+        media: { assetId: "a", bounds: "theme" },
+      },
+      assets: [],
+      globals: undefined,
+    });
+    expect(sections.map((section) => section.id)).toEqual([
+      "content",
+      "position",
+      "composition",
+    ]);
+    expect(sections[0]?.fields.map((field) => field.id)).toContain(
+      "background.fill",
+    );
+    expect(
+      sections[0]?.fields.find((field) => field.id === "background.mode"),
+    ).toMatchObject({ control: "segmented", value: "advanced" });
+  });
+
+  it("drops the fill when the media it sits behind is cleared", () => {
+    const cleared = writeBackgroundField(
+      {
+        mode: "advanced",
+        fill: { ref: "palette.ink" },
+        media: { assetId: "a", bounds: "theme" },
+      },
+      "background.media",
+      "",
+    );
+    expect(cleared).toEqual({ mode: "advanced" });
+  });
+
+  it("hides the fill until there is media for it to sit behind", () => {
+    const sections = backgroundColumn({
+      background: { mode: "advanced" },
+      assets: [],
+      globals: undefined,
+    });
+    expect(sections[0]?.fields.map((field) => field.id)).not.toContain(
+      "background.fill",
+    );
+  });
+
+  it("writes advanced, and returning to basic drops the composition keys", () => {
+    const advanced = writeBackgroundField(
+      { media: { assetId: "a", bounds: "theme" } },
+      "background.mode",
+      "advanced",
+    );
+    expect(advanced).toEqual({
+      mode: "advanced",
+      media: { assetId: "a", bounds: "theme" },
+    });
+
+    const basic = writeBackgroundField(
+      {
+        mode: "advanced",
+        fill: { ref: "palette.ink" },
+        color: { ref: "palette.paper" },
+        media: {
+          assetId: "a",
+          bounds: "theme",
+          scale: 2,
+          composition: { anchor: "left", extent: 0.5 },
+        },
+      },
+      "background.mode",
+      "basic",
+    );
+    expect(basic).toEqual({
+      color: { ref: "palette.paper" },
+      media: { assetId: "a", bounds: "theme", scale: 2 },
+    });
+    expect(
+      writeBackgroundField(advanced, "background.mode", "fancy"),
+    ).toBeUndefined();
+  });
+
+  it("refuses a fill or a composition write while basic", () => {
+    const plain: Background = {
+      media: { assetId: "a", bounds: "theme" },
+    };
+    expect(
+      writeBackgroundField(plain, "background.fill", "palette.ink"),
+    ).toBeUndefined();
+    expect(
+      writeBackgroundField(plain, "background.anchor", "left"),
+    ).toBeUndefined();
+    expect(writeBackgroundField(plain, "background.fade", 0.2)).toBeUndefined();
+  });
+
+  it("still writes the media's own geometry while basic", () => {
+    const plain: Background = {
+      media: { assetId: "a", bounds: "theme" },
+    };
+    expect(writeBackgroundField(plain, "background.bounds", "display")).toEqual(
+      {
+        media: { assetId: "a", bounds: "display" },
+      },
+    );
+    expect(writeBackgroundField(plain, "background.scale", 2)).toMatchObject({
+      media: { scale: 2 },
+    });
   });
 });

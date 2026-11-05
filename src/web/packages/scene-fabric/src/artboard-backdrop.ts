@@ -1,9 +1,10 @@
-import type {
-  ArtboardShape,
-  BackgroundMask,
-  CompositionRect,
-  DisplayShape,
-  GlassSampling,
+import {
+  type ArtboardShape,
+  type BackgroundMask,
+  blendRampStops,
+  type CompositionRect,
+  type DisplayShape,
+  type GlassSampling,
 } from "@yunari/renderer-core";
 import { fillArtboardPaint } from "./artboard-paint.js";
 import type { MediaBox } from "./background-media.js";
@@ -302,8 +303,11 @@ function paintComposition(
 
   // The media is placed inside the region, exactly as the DOM layer is.
   const painted = media.paint(context, regionDevice, mediaBox, sampling);
-  if (painted && media.mask !== undefined)
-    applyMask(context, media.mask, region, scaleX, scaleY);
+  if (painted && media.masks !== undefined) {
+    for (const mask of media.masks) {
+      applyMask(context, mask, region, scaleX, scaleY);
+    }
+  }
   ctx.drawImage(
     scratch,
     regionDevice.left - surfaceRegion.left,
@@ -312,7 +316,7 @@ function paintComposition(
   return painted;
 }
 
-/** Multiplies the scratch's alpha by the resolved ramp, in region-local pixels. */
+/** Multiplies the scratch's alpha by one resolved ramp, in region-local pixels. */
 function applyMask(
   ctx: CanvasRenderingContext2D,
   mask: BackgroundMask,
@@ -325,30 +329,16 @@ function applyMask(
 
   ctx.save();
   ctx.globalCompositeOperation = "destination-in";
-  if (mask.kind === "linear") {
-    const gradient = ctx.createLinearGradient(
-      x(mask.x1),
-      y(mask.y1),
-      x(mask.x2),
-      y(mask.y2),
-    );
-    gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
-    gradient.addColorStop(1, "rgba(0, 0, 0, 1)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  } else {
-    const rx = mask.rx * scaleX;
-    const ry = mask.ry * scaleY;
-    if (rx > 0 && ry > 0) {
-      ctx.translate(x(mask.cx), y(mask.cy));
-      ctx.scale(rx, ry);
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      gradient.addColorStop(0, "rgba(0, 0, 0, 1)");
-      gradient.addColorStop(mask.opaqueFraction, "rgba(0, 0, 0, 1)");
-      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-2, -2, 4, 4);
-    }
+  const gradient = ctx.createLinearGradient(
+    x(mask.x1),
+    y(mask.y1),
+    x(mask.x2),
+    y(mask.y2),
+  );
+  for (const stop of blendRampStops()) {
+    gradient.addColorStop(stop.offset, `rgba(0, 0, 0, ${stop.alpha})`);
   }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 }

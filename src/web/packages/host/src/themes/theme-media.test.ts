@@ -136,10 +136,11 @@ describe("media names", () => {
   it("invalidate the clip when the composition changes", () => {
     const plain = envelopeWith(BACKGROUND);
     const composed = envelopeWith({
+      mode: "advanced",
       media: {
         assetId: "bg",
         fallbackFrame: 12,
-        region: { left: 0.35 },
+        composition: { anchor: "left", extent: 0.65 },
       },
     });
 
@@ -156,21 +157,19 @@ describe("panelVideoPlacement", () => {
     },
   };
 
-  it("maps the media region, blend and resolved fill", () => {
+  it("maps the media's composition and resolved fill", () => {
     const envelope = {
       id: "theme",
       artboard: { width: 100, height: 100 },
       assets: [VIDEO_ASSET],
       globals: palette,
       background: {
+        mode: "advanced",
         fill: { ref: "palette.ink" },
         media: {
           assetId: "bg",
           bounds: "display",
-          region: {
-            left: 0.35,
-            blend: { shape: "linear", edge: "left", length: 0.12 },
-          },
+          composition: { anchor: "left", extent: 0.65, fade: 0.12 },
         },
       },
     } as unknown as FabricThemeEnvelope;
@@ -178,8 +177,8 @@ describe("panelVideoPlacement", () => {
     expect(panelVideoPlacement(envelope)).toEqual({
       offsetX: 0,
       offsetY: 0,
-      region: { left: 0.35, top: 0, right: 0, bottom: 0 },
-      blend: { shape: "linear", edge: "left", length: 0.12 },
+      scale: 1,
+      composition: { anchor: "left", extent: 0.65, fade: 0.12 },
       fill: { kind: "solid", color: "#101418" },
     });
   });
@@ -191,8 +190,13 @@ describe("panelVideoPlacement", () => {
       assets: [VIDEO_ASSET],
       globals: palette,
       background: {
+        mode: "advanced",
         color: { ref: "palette.ink" },
-        media: { assetId: "bg", bounds: "display", region: { top: 0.5 } },
+        media: {
+          assetId: "bg",
+          bounds: "display",
+          composition: { anchor: "top", extent: 0.5 },
+        },
       },
     } as unknown as FabricThemeEnvelope;
 
@@ -210,6 +214,7 @@ describe("panelVideoPlacement", () => {
     expect(panelVideoPlacement(envelope)).toEqual({
       offsetX: 0.25,
       offsetY: -0.1,
+      scale: 1,
     });
   });
 });
@@ -328,24 +333,25 @@ describe("createThemeMedia", () => {
     );
   });
 
-  it("encodes a composed page clip at the region's box, not the whole layer", async () => {
+  it("encodes a composed page clip at the media's box, not the whole layer", async () => {
     const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
     const service = media({ transcode });
 
     await service.panelVideo(
       "theme",
       envelopeWith({
+        mode: "advanced",
         media: {
           assetId: "bg",
           bounds: "display",
-          region: { left: 0.5 },
+          composition: { anchor: "left", extent: 0.5 },
         },
       }),
       { width: 640, height: 360 },
     );
 
-    // The page lays this clip down inside the region as-is, so its pixels are
-    // the region's cover of the source. Encoding the whole 640×360 layer here
+    // The page lays this clip down inside the media's band as-is, so its pixels
+    // are the band's cover of the source. Encoding the whole 640×360 layer here
     // would make the page crop the source a second time.
     expect(transcode).toHaveBeenCalledWith(
       new Uint8Array([9, 9, 9]),

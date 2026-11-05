@@ -94,8 +94,9 @@ export interface BackdropMedia {
   /** Where the media sits inside the layer's box, in the same artboard units as
    *  `rect`. Absent means the media covers the whole box. */
   readonly region?: CompositionRect;
-  /** The resolved alpha ramp at the region's edge. Absent is a hard edge. */
-  readonly mask?: BackgroundMask;
+  /** The resolved alpha ramps at the sides that meet the fill. Absent is a
+   *  hard edge. */
+  readonly masks?: readonly BackgroundMask[];
   /** Paints the media over `region` of `ctx`, with `device` its rect in `ctx`'s
    *  own pixels, standing on the picture `sampling` names. False when that
    *  picture has no pixels yet — a static panel with no declared still paints

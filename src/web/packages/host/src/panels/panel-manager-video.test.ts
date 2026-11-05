@@ -130,7 +130,7 @@ describe("createPanelManager video refresh", () => {
       placement: {
         offsetX: 0,
         offsetY: 0,
-        region: { left: 0.35 },
+        composition: { anchor: "left", extent: 0.35 },
         fill: { kind: "solid", color: "#101418" },
       },
     };
@@ -155,7 +155,7 @@ describe("createPanelManager video refresh", () => {
       placement: {
         offsetX: 0,
         offsetY: 0,
-        region: { left: 0.5 },
+        composition: { anchor: "left", extent: 0.5 },
         fill: { kind: "solid", color: "#101418" },
       },
     };

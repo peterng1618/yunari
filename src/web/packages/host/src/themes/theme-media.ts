@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   type AssetReference,
+  activeBackgroundComposition,
   artboardSolidColor,
   BACKGROUND_MEDIA_DEFAULTS,
   computeArtboardTransform,
@@ -16,6 +17,7 @@ import {
   resolveBackgroundComposition,
   resolveStyleValue,
 } from "@yunari/renderer-core";
+import { readVideoFacts } from "@yunari/theme-package";
 import type { PanelVideoPlacement } from "../panels/panel-device.js";
 import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
@@ -104,22 +106,26 @@ export function panelVideoMediaName(
 }
 
 /**
- * The panel video's placement: the authored pan, plus the region, blend and
- * resolved fill when the background composes its media.
+ * The panel video's placement: the authored pan and zoom, plus the composition
+ * and resolved fill when the background is advanced.
  *
- * `fill` is the paint a region or fade reveals; a theme that authors none uses
- * its background colour, which is the same rule the player's backdrop follows.
- * A theme with no composition answers the pan alone, so the bake keeps its
- * plain cover path.
+ * `fill` is the paint the media fades into; a theme that authors none uses its
+ * background colour, which is the same rule the player's backdrop follows. A
+ * basic background answers the geometry alone, so the bake keeps its plain
+ * cover path.
  */
 export function panelVideoPlacement(
   envelope: FabricThemeEnvelope | undefined,
 ): PanelVideoPlacement {
   const geometry = backgroundGeometryOf(envelope);
   const background = envelope?.background;
-  const region = background?.media?.region;
-  if (region === undefined) {
-    return { offsetX: geometry.offsetX, offsetY: geometry.offsetY };
+  const composition = activeBackgroundComposition(background);
+  if (composition === undefined) {
+    return {
+      offsetX: geometry.offsetX,
+      offsetY: geometry.offsetY,
+      scale: geometry.scale,
+    };
   }
 
   const fill = paintOf(
@@ -134,13 +140,8 @@ export function panelVideoPlacement(
   return {
     offsetX: geometry.offsetX,
     offsetY: geometry.offsetY,
-    region: {
-      left: region.left ?? 0,
-      top: region.top ?? 0,
-      right: region.right ?? 0,
-      bottom: region.bottom ?? 0,
-    },
-    ...(region.blend === undefined ? {} : { blend: region.blend }),
+    scale: geometry.scale,
+    composition,
     ...(fill === undefined ? {} : { fill }),
   };
 }
@@ -154,16 +155,10 @@ function paintOf(value: unknown): PalettePaint | undefined {
 
 /** The part of a clip name that changes when the composition changes. */
 function compositionKey(placement: PanelVideoPlacement): string {
-  if (
-    placement.region === undefined &&
-    placement.blend === undefined &&
-    placement.fill === undefined
-  ) {
+  if (placement.composition === undefined && placement.fill === undefined) {
     return "";
   }
-  return `-c${digest(
-    JSON.stringify([placement.region, placement.blend, placement.fill]),
-  )}`;
+  return `-c${digest(JSON.stringify([placement.composition, placement.fill]))}`;
 }
 
 /** The authored geometry the page would have applied itself. */
@@ -421,14 +416,21 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
       });
     },
 
-    panelVideo(id, envelope, viewport) {
-      // The page composes the region, fill and fade itself, and lays this clip
-      // down inside the region as-is. Encoding the whole layer here would make
-      // the page cover-fit the clip a second time and crop the source twice.
+    async panelVideo(id, envelope, viewport) {
+      // The page composes the media, fill and fade itself, and lays this clip
+      // down inside the media's box as-is: encoding the whole layer here would
+      // make the page cover-fit the clip a second time and crop the source
+      // twice. A centred band fits the picture's long edge, so the source's
+      // own size decides the box before the clip is encoded.
+      const video = backgroundVideoOf(envelope);
+      if (video === undefined) return undefined;
+      const bytes = await videoBytes(id, video);
+      if (bytes === undefined) return undefined;
       const box = panelMediaBox(envelope, viewport);
       const composition = resolveBackgroundComposition(
         box,
-        envelope.background?.media?.region,
+        activeBackgroundComposition(envelope.background),
+        readVideoFacts(bytes),
       );
       const size = {
         width: Math.max(1, Math.round(composition.region.width)),
@@ -436,11 +438,8 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
       };
       const geometry = backgroundGeometryOf(envelope);
       const name = panelVideoMediaName(id, envelope, size.width, size.height);
+      if (name === undefined) return undefined;
       return cached(name, MAX_VIDEO_BYTES, async () => {
-        const video = backgroundVideoOf(envelope);
-        if (name === undefined || video === undefined) return undefined;
-        const bytes = await videoBytes(id, video);
-        if (bytes === undefined) return undefined;
         const scaled = await transcode(
           bytes,
           { ...size, ...geometry },

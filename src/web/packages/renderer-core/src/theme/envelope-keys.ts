@@ -107,7 +107,7 @@ const ENVELOPE_KEYS = {
     "scene",
   ],
   globals: ["palette", "typeTokens"],
-  background: ["color", "fill", "media"],
+  background: ["mode", "color", "fill", "media"],
   backgroundMedia: [
     "assetId",
     "bounds",
@@ -117,10 +117,9 @@ const ENVELOPE_KEYS = {
     "flipX",
     "flipY",
     "fallbackFrame",
-    "region",
+    "composition",
   ],
-  backgroundRegion: ["left", "top", "right", "bottom", "blend"],
-  backgroundBlend: ["shape", "edge", "length"],
+  backgroundComposition: ["anchor", "extent", "fade"],
 } as const;
 
 export type EnvelopeKeyBag = keyof typeof ENVELOPE_KEYS;

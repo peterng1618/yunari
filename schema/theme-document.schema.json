@@ -65,9 +65,26 @@
       "description": "The bottom-most layer: a colour behind the board, a fill behind the media inside its box, and optional media clipped to its bounds.",
       "type": "object", "additionalProperties": false,
       "properties": {
+        "mode": {
+          "enum": ["basic", "advanced"],
+          "description": "The background model. Absent is basic: full-cover media over a colour. Only an advanced background may carry a fill or a media composition."
+        },
         "color": { "$ref": "#/$defs/paletteReference" },
         "fill": { "$ref": "#/$defs/paletteReference" },
         "media": { "$ref": "#/$defs/backgroundMedia" }
+      },
+      "dependentRequired": { "fill": ["media"] },
+      "if": {
+        "not": {
+          "required": ["mode"],
+          "properties": { "mode": { "const": "advanced" } }
+        }
+      },
+      "then": {
+        "allOf": [
+          { "properties": { "fill": false } },
+          { "properties": { "media": { "properties": { "composition": false } } } }
+        ]
       }
     },
     "backgroundMedia": {
@@ -81,38 +98,20 @@
         "flipX": { "type": "boolean" },
         "flipY": { "type": "boolean" },
         "fallbackFrame": { "type": "integer", "minimum": 0 },
-        "region": { "$ref": "#/$defs/backgroundRegion" }
+        "composition": { "$ref": "#/$defs/backgroundComposition" }
       }
     },
-    "backgroundRegion": {
-      "description": "Where the media sits inside its bounds box, as fractions of that box, and how it fades at one edge into the fill. The runtime refuses each axis whose insets sum to 1 or more; JSON Schema cannot compare two properties.",
+    "backgroundComposition": {
+      "description": "Where the media sits inside its bounds box and how it dissolves into the fill. An edge anchor keeps the full perpendicular axis; center fits the picture's long edge to the box, so the fill never surrounds the media on all four sides.",
       "type": "object", "additionalProperties": false,
       "properties": {
-        "left": { "type": "number", "minimum": 0, "maximum": 0.9 },
-        "top": { "type": "number", "minimum": 0, "maximum": 0.9 },
-        "right": { "type": "number", "minimum": 0, "maximum": 0.9 },
-        "bottom": { "type": "number", "minimum": 0, "maximum": 0.9 },
-        "blend": { "$ref": "#/$defs/backgroundBlend" }
-      }
-    },
-    "backgroundBlend": {
-      "description": "The media's alpha ramp at a region edge. A linear ramp needs an edge and a radial one refuses it; the length is a fraction of the box.",
-      "type": "object", "additionalProperties": false, "required": ["shape", "length"],
-      "properties": {
-        "shape": { "enum": ["linear", "radial"] },
-        "edge": { "enum": ["left", "right", "top", "bottom"] },
-        "length": { "type": "number", "minimum": 0.01, "maximum": 1 }
-      },
-      "allOf": [
-        {
-          "if": { "required": ["shape"], "properties": { "shape": { "const": "linear" } } },
-          "then": { "required": ["edge"] }
+        "anchor": {
+          "enum": ["top", "right", "bottom", "left", "center"],
+          "description": "The five-point grid the media is anchored to. Absent means center."
         },
-        {
-          "if": { "required": ["shape"], "properties": { "shape": { "const": "radial" } } },
-          "then": { "not": { "required": ["edge"] } }
-        }
-      ]
+        "extent": { "type": "number", "minimum": 0.1, "maximum": 0.9 },
+        "fade": { "type": "number", "minimum": 0.01, "maximum": 1 }
+      }
     },
     "globals": {
       "type": "object", "additionalProperties": false,
