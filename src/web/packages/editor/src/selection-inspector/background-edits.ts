@@ -45,7 +45,6 @@ export function createBackgroundFunnel(
   options: Pick<
     SelectionInspectorOptions,
     | "background"
-    | "assets"
     | "onBackgroundChange"
     | "backgroundSelected"
     | "onBackgroundAssetSelect"
@@ -94,7 +93,6 @@ export function createBackgroundFunnel(
         options.background?.(),
         fieldId,
         value,
-        options.assets?.() ?? [],
       );
       if (next === undefined || options.onBackgroundChange === undefined)
         return "invalid";

@@ -27,6 +27,9 @@ editor changes which background asset is shown.
 
 - It captures the outgoing media into per-asset working data, restores the
   incoming asset's entry, and writes once through `setBackground`.
+- Selecting the asset already shown, or the model already in force, is a no-op:
+  it writes nothing. The shown asset's entry holds the geometry captured before
+  its latest edit, so restoring it would undo that edit.
 - An unseen asset starts at defaults: `bounds: "theme"`, zero offsets, scale 1,
   no flips, no composition, no frame.
 - All four surfaces call it. `writeBackgroundField` loses its
@@ -139,7 +142,8 @@ interprets media fields.
 - Memory module: normalize corrupt input to empty, filter undeclared ids,
   capture/restore round-trip, mode-aware composition, video-only frame.
 - `EditorDocument`: A → B → A restores each geometry; unseen B gets defaults;
-  Simple hides composition and Advanced restores it; prune forgets entries.
+  a repeated switch to the shown asset or model changes nothing; Simple hides
+  composition and Advanced restores it; prune forgets entries.
 - Each surface uses the one path: Assets pane, video import, finder placement,
   inspector media field.
 - Store: sidecar round-trips through save/open; corrupt and oversized files

@@ -1199,6 +1199,11 @@ export class EditorDocument {
       return;
     }
 
+    // Selecting the asset already shown changes nothing: its entry holds the
+    // geometry captured before the latest edit, so restoring it would undo
+    // that edit.
+    if (background?.media?.assetId === assetId) return;
+
     const declared = this.#assets.declarations.find(
       (asset) => asset.id === assetId,
     );
@@ -1226,6 +1231,10 @@ export class EditorDocument {
    * deliberately cleared is remembered as absent and stays absent.
    */
   setBackgroundMode(mode: BackgroundMode): void {
+    // Choosing the model already in force changes nothing. Its hidden
+    // composition is only authored by the advanced model, so re-entering
+    // advanced must not read an entry captured before the latest edit.
+    if (backgroundModeOf(this.#envelope.background) === mode) return;
     const background = this.#envelope.background ?? {};
     if (mode === "simple") {
       const { mode: _mode, ...simple } = background;

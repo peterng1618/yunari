@@ -436,6 +436,53 @@ describe("EditorDocument background media memory", () => {
     document.destroy();
   });
 
+  it("keeps an edit when the asset already shown is selected again", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "a", bounds: "display", scale: 3 },
+    });
+
+    document.setBackgroundAsset("a");
+
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "a",
+      bounds: "display",
+      scale: 3,
+    });
+    document.destroy();
+  });
+
+  it("keeps the latest composition when advanced is chosen again", () => {
+    const document = memoryDocument();
+    document.setBackgroundMode("advanced");
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        composition: { anchor: "left" },
+      },
+    });
+    document.setBackground({
+      ...document.envelope.background,
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        composition: { anchor: "right" },
+      },
+    });
+
+    document.setBackgroundMode("advanced");
+
+    expect(document.envelope.background?.media?.composition).toEqual({
+      anchor: "right",
+    });
+    document.destroy();
+  });
+
   it("keeps a composition while simple and restores it in advanced", () => {
     const document = memoryDocument();
     document.setBackgroundMode("advanced");

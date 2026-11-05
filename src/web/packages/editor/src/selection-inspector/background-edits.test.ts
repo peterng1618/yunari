@@ -1,11 +1,7 @@
-import type { AssetReference, Background } from "@yunari/renderer-core";
+import type { Background } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { createBackgroundFunnel } from "./background-edits.js";
 
-const assets: readonly AssetReference[] = [
-  { id: "a", kind: "image", path: "assets/a.png" },
-  { id: "b", kind: "image", path: "assets/b.png" },
-];
 const background: Background = { media: { assetId: "a", bounds: "theme" } };
 
 function funnelWith(
@@ -18,7 +14,6 @@ function funnelWith(
   const funnel = createBackgroundFunnel({
     backgroundSelected: () => true,
     background: () => background,
-    assets: () => assets,
     onBackgroundChange,
     ...overrides,
   });

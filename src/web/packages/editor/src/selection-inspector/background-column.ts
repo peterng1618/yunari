@@ -367,7 +367,6 @@ export function writeBackgroundField(
   background: Background | undefined,
   fieldId: string,
   value: string | number | boolean,
-  _assets: readonly AssetReference[] = [],
 ): Background | undefined {
   const current = background ?? {};
   const media = current.media;

@@ -1,8 +1,4 @@
-import type {
-  AssetReference,
-  Background,
-  FabricGlobals,
-} from "@yunari/renderer-core";
+import type { Background, FabricGlobals } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { backgroundColumn, writeBackgroundField } from "./background-column.js";
 
@@ -504,10 +500,6 @@ describe("writeBackgroundField", () => {
   });
 
   it("leaves the media and mode ids to the document's switch seam", () => {
-    const assets: readonly AssetReference[] = [
-      { id: "loop", kind: "video", path: "assets/loop.mp4" },
-      { id: "photo", kind: "image", path: "assets/photo.png" },
-    ];
     const background: Background = {
       media: { assetId: "loop", bounds: "theme" },
     };
@@ -515,7 +507,7 @@ describe("writeBackgroundField", () => {
     // decide: a whole-background replacement here cannot see the geometry the
     // outgoing asset must keep.
     expect(
-      writeBackgroundField(background, "background.media", "photo", assets),
+      writeBackgroundField(background, "background.media", "photo"),
     ).toBeUndefined();
     expect(
       writeBackgroundField(background, "background.media", ""),
