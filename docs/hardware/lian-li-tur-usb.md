@@ -11,6 +11,9 @@
 - **Driver:** `src/web/packages/host/src/panels/tur-usb-panel.ts`,
   `tur-usb-video.ts`, `panel-protocol.ts`
 - **Last hardware verification:** 2026-10-31
+- **Last known good revision:** `988cda820713` (2026-11-06) — the paced feed
+  keeps a block of lookahead, and the composed clip played smoothly on the
+  attached 9.2". Compare a future playback regression against this revision.
 
 **Update this document with every new fact.** A firmware string, a command the
 driver starts using, a failure and its cause, an opcode's real meaning — record

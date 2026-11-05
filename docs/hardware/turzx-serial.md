@@ -11,6 +11,9 @@
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
 - **Last hardware verification:** 2026-10-30 (probed on `COM5`)
+- **Last known good revision:** `988cda820713` (2026-11-06) — playing well on
+  the attached 5"; this path is unchanged by the Lian Li feed lookahead. Compare
+  a future playback regression against this revision.
 
 **Update this document with every new fact.** Record a firmware string, a command
 the driver starts using, a refused sequence and its cause, a timing constraint —
