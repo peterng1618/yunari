@@ -12,7 +12,7 @@
  *
  * The list alone could say only that a listed file is clean, so a component
  * written with a literal was invisible for ever and "the list only grows" had no
- * finish. `remainderCeiling` answers that (`vg-426`): every run reports how many
+ * finish. `remainderCeiling` answers that: every run reports how many
  * product source files off the list still hold a literal, and refuses a run
  * where that number grew. The ceiling falls in the commit that converts a file,
  * and the run says so when it can.
@@ -21,7 +21,7 @@
  * each conversion named them. The *test* half is derived on every run from the
  * tree (`selectTestFiles`): everything that renders or drives the shell — every
  * `*.dom.test.tsx` under `src/web`, and every Playwright spec under
- * `src/web/tests/e2e/` that opens the editor preview (`vg-228`, `vg-286`). A
+ * `src/web/tests/e2e/` that opens the editor preview. A
  * membership rule rather than a list, because file-by-file membership meant the
  * list said 'whichever task happened to name it', which a reader cannot tell
  * from an omission. Both halves are needed: a rule that selects nothing is the
@@ -29,7 +29,7 @@
  *
  * A second instrument covered the one large surface that was not on that list —
  * `CEILINGS`, which recorded `editor-shell.css`'s whole residual set. It retired
- * with that file's conversion (`vg-274`): the path is in the list above now, so
+ * with that file's conversion: the path is in the list above now, so
  * the file that declares the scales is held to them exactly as the surfaces
  * consuming them are, and one instrument covers it rather than two.
  *
@@ -37,7 +37,7 @@
  * a way that is documented rather than accidental: in a spacing property the
  * design's spacing steps are enforced exactly, because the property is right
  * there to read, and everywhere else only the values DESIGN.md prints are
- * allowed. The real enforcement is the browser assertion in Task 4 — every
+ * allowed. The real enforcement is the browser assertion — every
  * gated element's computed spacing on DESIGN.md's scale — which is what catches
  * a `26px` in a place this text scan cannot reason about.
  *
@@ -344,7 +344,7 @@ export function check(relPath, source, designLanguagePx = []) {
 
 /**
  * The tier-2 allowlist entries that permit nothing: no source the checker reads
- * *writes* that px value where the checker could see it (`vg-340`, `vg-332`).
+ * *writes* that px value where the checker could see it.
  *
  * Two shapes count as no consumer, and both are defects of the list rather than
  * of a file. A value written only inside a definition block is a token's value,
@@ -424,8 +424,8 @@ function posix(path) {
 }
 
 /**
- * The test half of the gated set, derived from the tree on every run (`vg-228`:
- * the criterion is *everything that renders or drives the shell*). Root-relative
+ * The test half of the gated set, derived from the tree on every run: the
+ * criterion is *everything that renders or drives the shell*. Root-relative
  * and sorted, so the selection a run prints is the same list twice in a row.
  *
  * Exported because the self-test proves the rule over a scratch tree rather than
@@ -452,7 +452,7 @@ export async function selectTestFiles(root) {
 }
 
 /**
- * The remainder (`vg-426`): the files the ratchet *could* gate that still hold a
+ * The remainder: the files the ratchet *could* gate that still hold a
  * literal, and so the answer to "how much is left" rather than "the list grew".
  *
  * Without it the ratchet can only say that a listed file is clean, so a new
@@ -745,10 +745,9 @@ async function selfTest() {
     );
   }
 
-  // The tier-2 allowlist's own guard (`vg-340`, `vg-332`): an entry no source
-  // writes permits nothing. Every case is a shape the checker really meets, and
-  // the two that matter are `vg-332`'s — a bare number, and a `px` that only a
-  // comment holds.
+  // The tier-2 allowlist's own guard: an entry no source writes permits
+  // nothing. Every case is a shape the checker really meets, and the two that
+  // matter are a bare number and a `px` that only a comment holds.
   const allowlistCases = [
     [
       "a px value a source writes is consumed",
@@ -812,7 +811,7 @@ async function selfTest() {
     );
   }
 
-  // The test-file rule, over a tree this repo does not own (`vg-228`). The
+  // The test-file rule, over a tree this repo does not own. The
   // rule's firing is proved on files written here, so it does not depend on
   // which `*.dom.test.tsx` files happen to be in the repo today: a selected file
   // is scanned, an unselected one is not, and a rule that selects nothing fails.
@@ -897,7 +896,7 @@ async function selfTest() {
     await rm(bare, { recursive: true, force: true });
   }
 
-  // The remainder (`vg-426`), both directions, over a tree this repo does not
+  // The remainder, both directions, over a tree this repo does not
   // own. Every file that must NOT be counted carries a literal of its own, so a
   // count of two is a fact about the rule rather than about a clean tree, and
   // the out-of-scope files are literal-holding too, so the excluded count is
@@ -1124,7 +1123,7 @@ if (isEntryPoint) {
   const files = [...new Set([...gated.map(String), ...derived])];
 
   // The selection is stated, not inferred — a membership a reader cannot see is
-  // the file-by-file list this replaced (`vg-228`). Printed before the scan
+  // the file-by-file list this replaced. Printed before the scan
   // rather than among the success notices below, because a red run is exactly
   // when a reader asks what the rule took.
   console.log(
@@ -1206,7 +1205,7 @@ if (isEntryPoint) {
   const ceiling = config.remainderCeiling;
   if (!Number.isInteger(ceiling) || ceiling < 0) {
     console.error(
-      `design-tokens: ${gatedPath} needs a "remainderCeiling" — a whole number, the most files off the gated list that may still hold a literal (vg-426)`,
+      `design-tokens: ${gatedPath} needs a "remainderCeiling" — a whole number, the most files off the gated list that may still hold a literal`,
     );
     process.exit(1);
   }

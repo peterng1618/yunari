@@ -727,7 +727,7 @@ function reportUnresolvedChartPaint(
  *
  * The axis is placed by the newest reading, so the source is asked for
  * the chart's own window; it returns the sample before that window as well, so
- * the line still reaches its left edge (`vg-571`).
+ * the line still reaches its left edge.
  */
 export function buildLinePoints(
   bindings: readonly Binding[],

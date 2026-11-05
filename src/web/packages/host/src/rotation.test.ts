@@ -6,7 +6,7 @@ import { snapQuarterTurn } from "../public/rotation.js";
  * The pairing page has no build step, so it carries a browser copy of the
  * quarter-turn rounding. This is what keeps that copy the same rule as
  * renderer-core's owner: a change to either side that moves one angle fails
- * here (`vg-760`).
+ * here.
  */
 describe("the pairing page's quarter-turn helper", () => {
   it("lands every angle where renderer-core's rule does", () => {

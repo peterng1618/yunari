@@ -33,10 +33,9 @@ describe("refindHost", () => {
   });
 
   it("probes the page's own scheme, so an https display re-finds over https", async () => {
-    // `vg-623`: `originFor` built `http://` for every rung, so from a page served
-    // over https every probe was mixed content and the display could never
-    // re-find its host. Hard-code the scheme back to `http` and this is the case
-    // that reddens.
+    // `originFor` builds every rung at the page's own scheme, so from a page
+    // served over https each probe is https and not mixed content. Hard-code
+    // the scheme back to `http` and this is the case that reddens.
     const seen: string[] = [];
     const found = await refindHost(
       pairing,

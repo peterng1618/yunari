@@ -108,7 +108,7 @@ describe("double-click group entry and exit", () => {
   });
 
   it("still leaves on the Escape route", async () => {
-    // vg-022 adds a gesture; it does not replace the conventional one.
+    // The gesture is additive: it does not replace the conventional one.
     const { canvas, shell } = await mountHost();
     const child = new Rect({ width: 10, height: 10 });
     const group = new Group([child]);

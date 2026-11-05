@@ -114,10 +114,12 @@ export default defineConfig({
   // and friends kept Playwright's 5 s default, so a popup that took longer than
   // 5 s to draw failed a 60 s test. Raised with the same ruling (issue #79).
   expect: { timeout: 60_000 },
-  // `workers` is deliberately left to Playwright's default (half the cores).
-  // Hardcoding a count would oversubscribe a small CI runner, and oversubscription
-  // is what turned the long `clock.runFor` waits into 30 s timeouts under load.
-  // The two host projects below pin their own `workers: 1` instead.
+  // `workers` is deliberately left to Playwright's default (half the cores) for
+  // a local run. Hardcoding a count here would oversubscribe a small CI runner,
+  // and oversubscription is what turned the long `clock.runFor` waits into 30 s
+  // timeouts under load; the CI workflow pins its own count and runs the project
+  // groups one at a time instead. The two host projects below pin their own
+  // `workers: 1`.
   // JSON summary feeds dev-status without rerunning the browser suite.
   reporter: [[process.env["CI"] === undefined ? "list" : "github"], ["json"]],
 

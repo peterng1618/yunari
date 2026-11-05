@@ -116,7 +116,7 @@ export function ControlIconButton(
         // reading order. `describedById` is the one route a note the control
         // cannot mint reaches a screen reader by, and this button is the one
         // control that *draws* its reason — so accepting the prop and dropping
-        // it lost a standing note silently (`vg-483`).
+        // it lost a standing note silently.
         aria-describedby={describedBy(
           describedById,
           refused === undefined ? undefined : ids.reason,

@@ -303,7 +303,7 @@ function Section(props: {
   readonly revision: number;
   readonly idPrefix: string;
   /** The section's place in the column: the first one sits under the subject
-      block, whose own hairline is the boundary between them (`vg-466`). */
+      block, whose own hairline is the boundary between them. */
   readonly index: number;
 }): React.JSX.Element {
   const {
@@ -372,7 +372,7 @@ function Section(props: {
             );
           case "fontFace":
             // The text object's face, browsed through the catalogue control the
-            // ruling gave this field (`vg-268`).
+            // ruling gave this field.
             return (
               <FontFaceField
                 key={`${revision}:fontFace`}

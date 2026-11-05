@@ -361,8 +361,8 @@ describe("SnapManager", () => {
 });
 
 /**
- * `vg-123`: which objects one gesture may align to. **RULED 2026-10-14 — parts
- * snap to parts**, so the candidate set is the whole scene rather than its
+ * Which objects one gesture may align to. **Parts snap to parts**, so the
+ * candidate set is the whole scene rather than its
  * roots. The collected set is the pure decision and belongs here; the landing
  * and the guide it draws are browser facts and live in
  * `tests/e2e/snapping.spec.ts`.

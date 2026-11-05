@@ -2,6 +2,7 @@ import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import type {
   Artboard,
   BackgroundAnchor,
+  BackgroundMedia,
   BackgroundMediaComposition,
   FabricPalette,
   PalettePaint,
@@ -12,8 +13,12 @@ import {
   BACKGROUND_MODES,
   MAX_BACKGROUND_EXTENT,
   MAX_BACKGROUND_FADE,
+  MAX_METADATA_NAME_BYTES,
   MIN_BACKGROUND_EXTENT,
   MIN_BACKGROUND_FADE,
+  normalizeThemeMetadata,
+  themeMetadataRefusal,
+  themeTagsRefusal,
 } from "@yunari/renderer-core";
 import {
   createBlankTheme,
@@ -23,7 +28,7 @@ import {
   setTypeTokens as kitSetTypeTokens,
 } from "@yunari/theme-kit";
 import { z } from "zod/v4";
-import type { Draft, ThemeMetadata, ToolContext } from "../types.js";
+import type { Draft, ToolContext } from "../types.js";
 import { jsonAttempt, withRequestedTheme } from "./result.js";
 
 /**
@@ -142,7 +147,7 @@ export async function setThemeMetadata(
 ): Promise<CallToolResult> {
   return await jsonAttempt(() => {
     const draft = draftFor(context, input.themeId);
-    const metadata: ThemeMetadata = {
+    const metadata = normalizeThemeMetadata({
       ...draft.envelope.metadata,
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.author === undefined ? {} : { author: input.author }),
@@ -153,7 +158,9 @@ export async function setThemeMetadata(
         ? {}
         : { themeLanguage: input.language }),
       ...(input.tags === undefined ? {} : { tags: [...input.tags] }),
-    };
+    });
+    const refusal = themeMetadataRefusal(metadata);
+    if (refusal !== undefined) throw new Error(refusal);
     context.drafts.setMetadata(draft.id, metadata);
     return { themeId: draft.id, metadata };
   });
@@ -268,6 +275,50 @@ export async function setTypeTokens(
   });
 }
 
+/**
+ * The media a `set_background` call leaves.
+ *
+ * `base` is the media already on the same asset, or nothing when the caller is
+ * showing a different one. An omitted field keeps the base's value; a field the
+ * caller states replaces it. Defaults (0 offset, 1 scale, no flip) are stored by
+ * omission, as the editor's own controls store them.
+ */
+function backgroundMediaFor(
+  base: BackgroundMedia | undefined,
+  asset: { readonly id: string; readonly kind: string },
+  input: {
+    readonly bounds?: "theme" | "display" | undefined;
+    readonly fallbackFrame?: number | undefined;
+    readonly offsetX?: number | undefined;
+    readonly offsetY?: number | undefined;
+    readonly scale?: number | undefined;
+    readonly flipX?: boolean | undefined;
+    readonly flipY?: boolean | undefined;
+  },
+): BackgroundMedia {
+  const fallbackFrame = input.fallbackFrame ?? base?.fallbackFrame;
+  const offsetX = input.offsetX ?? base?.offsetX;
+  const offsetY = input.offsetY ?? base?.offsetY;
+  const scale = input.scale ?? base?.scale;
+  const flipX = input.flipX ?? base?.flipX;
+  const flipY = input.flipY ?? base?.flipY;
+  return {
+    assetId: asset.id,
+    bounds: input.bounds ?? base?.bounds ?? "theme",
+    ...(fallbackFrame === undefined || asset.kind !== "video"
+      ? {}
+      : { fallbackFrame }),
+    ...(offsetX === undefined ? {} : { offsetX }),
+    ...(offsetY === undefined ? {} : { offsetY }),
+    ...(scale === undefined ? {} : { scale }),
+    ...(flipX === true ? { flipX: true } : {}),
+    ...(flipY === true ? { flipY: true } : {}),
+    ...(base?.composition === undefined
+      ? {}
+      : { composition: base.composition }),
+  };
+}
+
 export async function setBackground(
   context: ToolContext,
   input: {
@@ -352,18 +403,15 @@ export async function setBackground(
           `There is no asset "${input.mediaAssetId}" in this theme.`,
         );
       }
-      media = {
-        assetId: asset.id,
-        bounds: input.bounds ?? "theme",
-        ...(input.fallbackFrame === undefined
-          ? {}
-          : { fallbackFrame: input.fallbackFrame }),
-        ...(input.offsetX === undefined ? {} : { offsetX: input.offsetX }),
-        ...(input.offsetY === undefined ? {} : { offsetY: input.offsetY }),
-        ...(input.scale === undefined ? {} : { scale: input.scale }),
-        ...(input.flipX === undefined ? {} : { flipX: input.flipX }),
-        ...(input.flipY === undefined ? {} : { flipY: input.flipY }),
-      };
+      // The editor's asset switch keeps a field the caller did not restate only
+      // when the asset does not change: geometry belongs to the picture it was
+      // framed for, and a new picture starts at the defaults. `composition`
+      // addresses the same media, so it travels only with the same asset.
+      media = backgroundMediaFor(
+        existing?.media?.assetId === asset.id ? existing.media : undefined,
+        asset,
+        input,
+      );
     } else {
       // Composition fields address the media that is already there; a bare
       // colour edit must not drop it.
@@ -559,11 +607,27 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     {
       description: "Merge name, author, description, language or tags.",
       inputSchema: z.object({
-        name: z.string().min(1).optional(),
+        name: z
+          .string()
+          .min(1)
+          .refine(
+            (value) =>
+              new TextEncoder().encode(value).byteLength <=
+              MAX_METADATA_NAME_BYTES,
+            `A theme name is at most ${MAX_METADATA_NAME_BYTES} bytes.`,
+          )
+          .optional(),
         author: z.string().optional(),
         description: z.string().optional(),
-        language: z.string().optional(),
-        tags: z.array(z.string()).optional(),
+        language: z.string().min(1).optional(),
+        tags: z
+          .array(z.string())
+          .superRefine((tags, ctx) => {
+            const refusal = themeTagsRefusal(tags);
+            if (refusal !== undefined)
+              ctx.addIssue({ code: "custom", message: refusal });
+          })
+          .optional(),
         themeId: z.string().min(1).optional(),
       }),
     },

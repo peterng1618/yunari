@@ -169,7 +169,7 @@ describe("the authored box outlives a token wider than it", () => {
   });
 
   it("carries a height the author dragged through a save and a reload", async () => {
-    // vg-089's fix is a gesture, and a gesture has to survive the file. The
+    // A dragged height is a gesture, and a gesture has to survive the file. The
     // box is the owner, so the height travels in it and comes back at both the
     // object and the clip — with the object's own `height` left out of the save
     // and re-derived by the first pass, which is what stops the reload reading
@@ -281,7 +281,7 @@ describe("a height the author wrote is the height the object has", () => {
   });
 
   it("holds a taller box over a run measured taller than it", () => {
-    // vg-089: the box is 27 and the glyphs are 90, so Fabric's own height is
+    // The box is 27 and the glyphs are 90, so Fabric's own height is
     // ~101 and the authored 27 clips the leading glyph off. The author drags the
     // vertical edge to 140, which is a statement about the box and nothing else.
     const box = { width: BOX.width, height: 140 };

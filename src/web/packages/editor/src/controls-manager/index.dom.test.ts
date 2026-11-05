@@ -10,16 +10,16 @@ const ARTBOARD_HEIGHT = 1080;
 /**
  * A textbox's vertical edge, dragged.
  *
- * vg-089: an author applied a type preset taller than the box they wrote, and
- * the text was clipped with no way to move the box by hand — the two vertical
- * handles were hidden. What the handle writes is the part that decides whether
+ * A type preset taller than the authored box clips the text with no way to
+ * move the box by hand unless the two vertical handles are shown. What the
+ * handle writes is the part that decides whether
  * it works: Fabric's `height` is re-derived from the wrapped text on every
  * `initDimensions` (`fabric/dist/index.mjs:18452`), so a handle that stopped
  * there would be undone by the next text pass. The authored box is what
  * persists, and the object reads it back.
  */
 
-/** A `Textbox` in the vg-089 state: a 90px run in an authored 27-tall box. */
+/** A `Textbox` in the clipped-preset state: a 90px run in an authored 27-tall box. */
 function textbox(height: number): Textbox {
   const object = new Textbox("CPU", { width: 140, height, fontSize: 90 });
   object.set("yunariText", {

@@ -14,7 +14,7 @@ import type { SelectionStore } from "./shell-stores.js";
  * is this surface's reading of that fact, never a second copy of it that could
  * disagree. The word is the status bar's alone — it was the chip's fixed part
  * and the one thing that could not shrink with the name, so at a squeezed width
- * it overflowed the chip and was clipped mid-word (`vg-223`).
+ * it overflowed the chip and was clipped mid-word.
  *
  * Nothing renders while no document is open — `documentName` is `undefined`
  * then — because a chip invented for a document that is not there is a claim

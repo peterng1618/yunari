@@ -10,7 +10,7 @@ import { Glyph, type LucideIcon } from "./icons.js";
  * one duplicates it. Two elements under one name is a strict-mode failure in
  * the specs that browse by it, which is what a second writer would buy.
  *
- * The body is the pane's scroller, to the pane contract and `vg-208`: the title bar
+ * The body is the pane's scroller, to the pane contract: the title bar
  * and the footer sit outside it, so scrolling a long list leaves them still. The
  * shell reads and writes each pane's offset off it through `bodyRef`, which only
  * the showing pane attaches — a `hidden` pane's body is not a scrollable box and

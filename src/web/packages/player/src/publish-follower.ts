@@ -53,10 +53,10 @@ interface PublishFollowerOptions {
   }) => void;
   /** The host did not answer this tick. Reported every time it does not — a
    *  fact, not a policy: how often the caller may act on it is the caller's
-   *  business, because only the caller knows what it costs. Latching here was
-   *  the first shape ruled and it strands a display (R72): the host moves, the
-   *  one sweep misses while the host is still booting, and no tick can succeed
-   *  while the host is at its old address, so the latch never clears. */
+   *  business, because only the caller knows what it costs. Latching here
+   *  strands a display: the host moves, the one sweep misses while the host is
+   *  still booting, and no tick can succeed while the host is at its old
+   *  address, so the latch never clears. */
   readonly onUnreachable?: () => void;
 }
 

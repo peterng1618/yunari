@@ -12,6 +12,7 @@ import {
   YUNARI_ASSET_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import {
   ActiveSelection,
   type Canvas,
@@ -27,6 +28,7 @@ import {
   type ClipboardAsset,
   type ClipboardAssetDeclaration,
   type ClipboardAssets,
+  parsePortableCredits,
 } from "./asset-port.js";
 
 const PASTE_OFFSET = 10;
@@ -58,6 +60,9 @@ interface PortableClipboard {
   readonly objects: readonly Readonly<Record<string, unknown>>[];
   readonly assets: readonly PortableAsset[];
   readonly bindings: Readonly<Record<string, readonly Binding[]>>;
+  /** The attribution each carried file had in the source theme. Absent on a
+   *  payload written before the copy carried credits. */
+  readonly credits?: readonly ThemeCreditsEntry[];
 }
 
 /** The last copy this tab made, kept when the browser refuses the store: same
@@ -205,11 +210,14 @@ function parsePortable(raw: string | null): PortableClipboard | undefined {
   if (held.size !== assets.length) return undefined;
   if (!objects.every((object) => referencesHeldAssets(object, held)))
     return undefined;
+  const credits = parsePortableCredits(parsed["credits"], held);
+  if (credits === undefined) return undefined;
   return {
     version: PORTABLE_VERSION,
     objects: objects as Record<string, unknown>[],
     assets,
     bindings,
+    ...(credits.length === 0 ? {} : { credits }),
   };
 }
 
@@ -294,6 +302,7 @@ function portableOf(
     if (reference !== undefined) assetIds.add(reference.assetId);
   });
   const carried: PortableAsset[] = [];
+  const credits: ThemeCreditsEntry[] = [];
   for (const assetId of assetIds) {
     const asset = assets?.read(assetId);
     if (asset === undefined)
@@ -306,6 +315,8 @@ function portableOf(
       path: asset.path,
       bytes: encodeBase64(asset.bytes),
     });
+    const credit = assets?.readCredit(assetId);
+    if (credit !== undefined) credits.push(credit);
   }
   const held: Record<string, readonly Binding[]> = {};
   for (const [objectId, readings] of Object.entries(bindings?.read() ?? {})) {
@@ -316,6 +327,7 @@ function portableOf(
     objects,
     assets: carried,
     bindings: held,
+    ...(credits.length === 0 ? {} : { credits }),
   };
 }
 
@@ -652,6 +664,13 @@ export function createClipboardManager(
         : carryBindings(roots, ids, payload.bindings, taken, issues);
     addMany(roots);
     if (Object.keys(carried).length > 0) documentBindings?.write(carried);
+    // Re-key each carried credit to the paste's own declaration.
+    for (const entry of payload.credits ?? []) {
+      if (entry.assetId === undefined) continue;
+      const replacement = declared.get(entry.assetId);
+      if (replacement === undefined) continue;
+      clipboardAssets?.addCredit({ ...entry, assetId: replacement.id });
+    }
     for (const issue of issues) {
       errors.error("clipboard", `Pasted copy: ${issue.detail}`);
     }

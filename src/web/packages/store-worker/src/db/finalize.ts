@@ -3,8 +3,8 @@ import type { VersionRow } from "./types.js";
 /**
  * Writes a version row and releases its reservation in one D1 batch, which D1
  * runs as one transaction. Two statements would leave a window in which the
- * version names a key whose upload row is unfinalized; Task 6.4's cleanup
- * guard (`NOT EXISTS item_version.package_key`) deliberately keeps that
+ * version names a key whose upload row is unfinalized; the cleanup guard
+ * (`NOT EXISTS item_version.package_key`) deliberately keeps that
  * object, so the residual cost is a reservation that never finalizes and
  * keeps counting against the author until its hour is up. The batch removes
  * the window rather than relying on that guard. Answers whether this call
@@ -19,13 +19,15 @@ export async function finalizeStoredVersion(
     db
       .prepare(
         `INSERT OR IGNORE INTO item_version (item_id, version, envelope_json,
-           facets_json, package_key, thumbnail_key, bytes, sha256, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           credits_json, facets_json, package_key, thumbnail_key, bytes, sha256,
+           created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         row.item_id,
         row.version,
         row.envelope_json,
+        row.credits_json ?? null,
         row.facets_json,
         row.package_key,
         row.thumbnail_key,

@@ -444,7 +444,7 @@ describe("the selection inspector", () => {
     // Rotating the property alone swings the box about its authored left/top
     // corner, which lands the centre at about (411.5, 394.6) — 54px away.
     // Fabric's own gesture holds the centre (`centeredRotation`), and the two
-    // routes agree only if this one does too (vg-475).
+    // routes agree only if this one does too.
     expect(card.getRelativeCenterPoint().x).toBeCloseTo(561, 6);
     expect(card.getRelativeCenterPoint().y).toBeCloseTo(340.5, 6);
     expect(card.angle).toBe(45);
@@ -814,10 +814,10 @@ describe("the selection inspector", () => {
     expect(host.textContent).toContain("locked");
   });
 
-  it("republishes when the object is locked from the layer row (vg-148)", () => {
-    // vg-148: locking through the layer row sets the flags and fires no
-    // selection event, so the column went on offering writing fields the object
-    // would refuse until something else happened to re-render it. This drives
+  it("republishes when the object is locked from the layer row", () => {
+    // Locking through the layer row sets the flags and fires no
+    // selection event, so the column goes on offering writing fields the object
+    // would refuse until something else re-renders it. This drives
     // the real manager over a real canvas — an event the manager never fires
     // cannot reach the column through a stub that does not route one.
     const canvas = new Canvas(document.createElement("canvas"));
@@ -912,7 +912,7 @@ describe("the selection inspector", () => {
 });
 
 /**
- * The arrange actions the column leads with (`vg-463`).
+ * The arrange actions the column leads with.
  *
  * The dock carried them and no longer does; the inspector is their one home,
  * and it is the panel of the selection they act on. What this file can prove is
@@ -1018,7 +1018,7 @@ describe("the arrange actions the column leads with", () => {
 
     // **The boundary the lead creates is its own.** `inspector.tsx` closes the
     // subject block with a hairline and `column.tsx` suppresses the first
-    // section's rule under it (`vg-466`) — which is right for a column with no
+    // section's rule under it — which is right for a column with no
     // lead, and would leave this block sharing a band with the first section's
     // header once one is here. So the lead closes itself, and the read is that
     // the panel has one rule per boundary: the subject's above the lead, the
@@ -1359,7 +1359,7 @@ describe("the column's sections", () => {
     expect(inSection("layer", '[data-yunari-geometry="width"]')).toBeNull();
     // The deliberate bleed toggle left Position with its mark, and the user
     // ruled it out of every surface rather than only the display
-    // (`vg-578`). Asserted rather than left to the
+    //. Asserted rather than left to the
     // absence of a symbol, because this row is where it used to be.
     expect(inSection("position", "[data-yunari-bleeds]")).toBeNull();
   });
@@ -1580,7 +1580,7 @@ describe("the size of a text object", () => {
       ?.value;
 
   it("reads the object's own edge, not the box it was told", () => {
-    // vg-109, ruled: the Size readout is a probe for what the canvas has, so it
+    // The Size readout is a probe for what the canvas has, so it
     // reads the object's own measured edge — where the object has been placed
     // and what it measures — rather than echoing the `yunariText.box` beside
     // it. Here the box says 300 × 90 and the object measures something else,
@@ -1665,7 +1665,7 @@ describe("the size of a text object", () => {
     // number drawn. Without the divide this was the one arm of the control
     // whose shown number could not be typed back: it read 280, a typed 300 drew
     // 600, and the field then showed 600 — every edit multiplied the object by
-    // its own scale (vg-109).
+    // its own scale.
     const text = scaledCaption();
     const box = (): { readonly width: number; readonly height: number } =>
       (text.get("yunariText") as { box: { width: number; height: number } })
@@ -2113,11 +2113,10 @@ describe("the column a kind gets", () => {
    * The gates are `perKindColumn`'s own: a locked object loses Content's name
    * and all of Position, Layer and Paint.
    *
-   * **The glass control left this shared floor with `vg-465`.** It used to be
-   * offered for every unlocked selection, because its refusal is why it was
-   * never absent; it is now offered only to a subject the treatment reaches, so
-   * it belongs to `shape`'s own row — and the reason a subject that cannot carry
-   * it is given is a subject note (`glass.dom.test.ts`), not a section row.
+   * **The glass control is not on this shared floor.** It is offered only to a
+   * subject the treatment reaches, so it belongs to `shape`'s own row — and a
+   * subject that cannot carry it gets a subject note (`glass.dom.test.ts`), not
+   * a section row.
    *
    * `shape`'s reference is a closed `Path`, so the corner radius is absent on
    * purpose and asserted separately: `rx` is a `Rect`'s property and no other
@@ -2173,7 +2172,7 @@ describe("the column a kind gets", () => {
     shape: [
       ...EVERY_OBJECT,
       // This kind's row alone: a closed `Path` is a region, so the treatment
-      // reaches it (`vg-465`).
+      // reaches it.
       "[data-yunari-glass-enabled]",
       "[data-yunari-panel-fill]",
       "[data-yunari-panel-stroke]",

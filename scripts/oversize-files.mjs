@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The two numbers for a source file — 500 is a signal, 800 is a stop —
- * and nothing in the repo computed either (`vg-536`). This reports the set and
+ * and nothing in the repo computed either. This reports the set and
  * ratchets it: a tracked `src/web` file over the stop that the ceiling does not
  * name fails, and a file that has left the set (a split) is reported and never
  * required to be removed.
@@ -29,6 +29,7 @@
  */
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -86,6 +87,9 @@ function measure(root) {
   let generated = 0;
   let files = 0;
   for (const rel of trackedFiles(root)) {
+    // `git ls-files` still names a file deleted in the working tree until the
+    // deletion is committed; a removal is not a measurement failure.
+    if (!existsSync(join(root, rel))) continue;
     files += 1;
     const text = readFileSync(join(root, rel), "utf8");
     if (isGenerated(text)) {

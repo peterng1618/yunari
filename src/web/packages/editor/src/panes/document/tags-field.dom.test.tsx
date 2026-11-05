@@ -303,7 +303,7 @@ it("holds only tags the format accepts", () => {
 });
 
 /**
- * The draft's keyboard contract, which is `useDraftCommit`'s (`vg-203`). Both
+ * The draft's keyboard contract, which is `useDraftCommit`'s. Both
  * cases fail against a field that handles its own `onKeyDown`: the first
  * measured defect was Escape doing nothing, and the second was a half-typed IME
  * word being committed by the Enter that ends the composition.

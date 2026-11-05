@@ -104,7 +104,7 @@ describe("version requests", () => {
       finalized_at: null,
     });
 
-    // Finalize (Task 2.3) reads this row instead of re-validating the upload.
+    // Finalize reads this row instead of re-validating the upload.
     const event = await env.DB.prepare(
       `SELECT item_id, version, envelope_json FROM presign_event
        WHERE user_id = ? AND item_id = ? ORDER BY id DESC LIMIT 1`,
@@ -293,6 +293,22 @@ describe("version requests", () => {
       .bind(NEW_ID)
       .first<{ name: string }>();
     expect(stored).toEqual({ name: "a".repeat(200) });
+  });
+
+  it("follows a library rename when a later version is submitted", async () => {
+    const headers = await sessionHeaders();
+    await seedItem(ITEM_ID, USER_ID);
+
+    const response = await createVersion(headers, ITEM_ID, {
+      envelope: candidate(ITEM_ID),
+      name: "Renamed theme",
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+
+    const stored = await env.DB.prepare("SELECT name FROM item WHERE id = ?")
+      .bind(ITEM_ID)
+      .first<{ name: string }>();
+    expect(stored).toEqual({ name: "Renamed theme" });
   });
 
   it("accepts a version body of exactly the cap and refuses one byte more", async () => {

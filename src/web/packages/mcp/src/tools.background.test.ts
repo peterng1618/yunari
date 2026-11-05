@@ -62,6 +62,36 @@ describe("set_background composition", () => {
     });
   });
 
+  it("keeps the authored media fields when the same asset is restated", async () => {
+    const { ctx } = await themeWithClip();
+    await setBackground(ctx, {
+      mode: "advanced",
+      mediaAssetId: "clip",
+      bounds: "display",
+      offsetX: 0.25,
+      scale: 2,
+      flipX: true,
+      anchor: "left",
+      extent: 0.4,
+    });
+
+    const result = await setBackground(ctx, {
+      mediaAssetId: "clip",
+      fallbackFrame: 12,
+    });
+    expect(result.isError).toBeUndefined();
+
+    expect(ctx.drafts.current().envelope.background?.media).toEqual({
+      assetId: "clip",
+      bounds: "display",
+      offsetX: 0.25,
+      scale: 2,
+      flipX: true,
+      fallbackFrame: 12,
+      composition: { anchor: "left", extent: 0.4 },
+    });
+  });
+
   it("keeps the declared media when only composition fields are passed", async () => {
     const { ctx } = await themeWithClip();
     await setBackground(ctx, {

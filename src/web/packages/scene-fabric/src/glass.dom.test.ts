@@ -409,16 +409,16 @@ describe("glass composition", () => {
     expect(second?.left ?? 0).toBeGreaterThan(first.left ?? 0);
     expect(second?.top ?? 0).toBeLessThan(first.top ?? 0);
     // The sample followed the panel by exactly the distance it moved, padding
-    // included; a stale bound would leave it where the panel used to be.
+    // included; a stale bound would leave it where the panel was before the move.
     expect((second?.left ?? 0) - (first.left ?? 0)).toBe(40);
     expect((first.top ?? 0) - (second?.top ?? 0)).toBe(20);
   });
 
   it("hands the media the artboard rect in device pixels, not the camera zoom", () => {
-    // The media layer is positioned in CSS pixels, so the plane scale used to
-    // convert its bounds would apply the camera zoom a second time. Carrying the
-    // artboard rect instead makes it right at any zoom, and the zoom is what
-    // this case exists to vary: a fit camera is not 1:1.
+    // The media layer is positioned in CSS pixels, so converting its bounds
+    // through the plane scale would apply the camera zoom a second time.
+    // Carrying the artboard rect instead makes it right at any zoom, and the
+    // zoom is what this case exists to vary: a fit camera is not 1:1.
     const s = stage({ artboard: { width: 200, height: 200 } });
     s.canvas.setViewportTransform([0.5, 0, 0, 0.5, 40, 20]);
     s.canvas.add(panel({ yunariGlass: { blurRadius: 8 } }));
@@ -910,9 +910,9 @@ describe("glass composition", () => {
     scaled.canvas.renderAll();
     expect(scaled.draws[0]?.filter).toBe("blur(48px) saturate(1.6)");
     // **A non-uniform scale takes the equal-area factor of the two axes**, not
-    // `scaleX` (`vg-515`). These two panels cover the same area — one
-    // stretched horizontally, one vertically — so they must blur by the same
-    // amount; before the ruling the first read 96 device px and the second 24.
+    // `scaleX`. These two panels cover the same area — one stretched
+    // horizontally, one vertically — so they must blur by the same amount;
+    // reading one axis alone makes the first 96 device px and the second 24.
     const wide = stage({});
     wide.canvas.add(panel({ scaleX: 4, scaleY: 1, left: 60, top: 60 }));
     wide.canvas.renderAll();

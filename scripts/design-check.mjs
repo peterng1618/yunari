@@ -3,10 +3,10 @@
  * `npm run design:check`: every design check runs, whatever the previous one
  * answered.
  *
- * The steps used to be an npm `&&` chain, so a red token audit hid the
- * DESIGN.md citation half entirely — the check was invisible in exactly the run
- * that needed it (`vg-643`). A step's failure is remembered and the next step
- * still runs; the exit code is red if any step was.
+ * No step is an `&&` chain: a red token audit cannot hide the DESIGN.md
+ * citation half, which is exactly the run that needs it. A step's failure is
+ * remembered and the next step still runs; the exit code is red if any step
+ * failed.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

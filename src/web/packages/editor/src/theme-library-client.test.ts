@@ -380,7 +380,7 @@ describe("ThemeLibraryClient", () => {
   });
 
   it("carries a stored theme that does not validate as its own error, with the issues", async () => {
-    // vg-110: the host answers 422 for a theme that is there and does not
+    // The host answers 422 for a theme that is there and does not
     // validate, where the 404 stays for one that is not — and the client has to
     // keep the two apart, because `openQuietly` cannot tell a document worth
     // reporting from a dead bookmark otherwise.
@@ -426,7 +426,7 @@ describe("ThemeLibraryClient", () => {
   });
 
   it("carries a stored theme past the size bound as its own error, not a validation failure", async () => {
-    // vg-409: the host answers 413 for a theme that is there and too large to
+    // The host answers 413 for a theme that is there and too large to
     // read, where the 404 stays for one that is not. Its own error rather than
     // the validation one above, because nothing about the document is invalid —
     // the validator never sees it.

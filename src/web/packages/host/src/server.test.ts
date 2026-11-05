@@ -110,13 +110,10 @@ import {
 } from "./tls/authority.js";
 import type { WallpaperEngineSource } from "./wallpaper-engine/source.js";
 
-// `vg-637` (issue #45) is the bound-port case below reddening once in a full
-// run and green alone and on re-run. Its cost is not the trigger: the case ran
-// 49ms inside a full idle suite (2026-11-02 report), and three repetitions
-// under twenty CPU-saturating processes did not redden it either. The file's
-// own slowest case is the 5.7s video import, which a starved worker start can
-// push past the global 20s. Sixty seconds keeps a genuinely hung case red while
-// surviving the gate's own contention; the cases keep their internal budgets.
+// Sixty seconds, not the global twenty: this file's slowest case is the 5.7s
+// video import, which a starved worker start can push past 20s under the gate's
+// own contention. Sixty keeps a genuinely hung case red while letting that
+// start finish; the cases keep their internal budgets.
 vi.setConfig({ testTimeout: 60_000 });
 
 /**
@@ -384,8 +381,8 @@ function request(
         text: () => buffer.toString("utf8"),
       });
       // A real response emits `finish` once its bytes are with the OS, and the
-      // hosting route starts a binding move only then (vg-173). Without this
-      // the fake response is one the route never moves after.
+      // hosting route starts a binding move only then. Without this the fake
+      // response is one the route never moves after.
       res.emit("finish");
       return res;
     }) as unknown as typeof res.end;
@@ -931,11 +928,10 @@ describe("Host theme routes", () => {
   });
 
   it("answers a stored theme that does not validate with 422, and an absent one with 404", async () => {
-    // vg-110: the store answered the same `undefined` for a theme that is not
-    // there and one that is there and does not validate, so both were a 404 and
-    // the author was told a theme they can see on disk does not exist. The two
-    // facts are different answers now — 422 carrying the validator's issues,
-    // 404 for the id that is not there.
+    // A theme that is on disk and does not validate and one that is absent are
+    // different answers: 422 carrying the validator's issues, 404 for the id
+    // that is not there. Answering both with 404 tells the author a theme they
+    // can see on disk does not exist.
     await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
     await fs.writeFile(
       path.join(tmpDir, "broken", "theme.json"),
@@ -1269,11 +1265,11 @@ describe("Host theme routes", () => {
   });
 
   it("answers a stored theme past the size bound with 413, and keeps 404 for an absent one", async () => {
-    // vg-409: an over-large `theme.json` was answered as absence, so the author
-    // was told a theme they can see on disk does not exist and the editor
-    // reported success over it. The size refusal is its own answer now — 413,
-    // the status every other themes route gives an over-large thing — while
-    // every reader that can serve neither still sees the absence.
+    // An over-large `theme.json` is its own answer, not an absence: 413, the
+    // status every other themes route gives an over-large thing, while every
+    // reader that can serve neither still sees the absence. Answering it as
+    // absence would tell the author a theme they can see on disk does not
+    // exist, and the editor would report success over it.
     const document = JSON.stringify(validEmptyAssetTheme.envelope);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     await fs.writeFile(
@@ -5341,7 +5337,7 @@ describe("A local monitor is specified rather than paired", () => {
     expect(refused.status).toBe(400);
     expect(refused.text()).toMatch(/monitor/);
     // Written only if the next read would find it: a record the file drops is a
-    // display that disappears, which is `vg-616`'s class of bug.
+    // display that disappears — a value where absence was meant.
     expect(await listed()).toEqual([]);
   });
 
@@ -9050,7 +9046,7 @@ describe("A theme's own device answers", () => {
     // than re-spelling the union, so a group added to the owner must reach the
     // providers without this server changing. Driving the owner's own list is
     // what catches the drift a second copy of the union could not: a group the
-    // host stopped picking leaves its chosen id out of the assignment (vg-189).
+    // host stopped picking leaves its chosen id out of the assignment.
     //
     // Read at each group's **own key** (`system-disk` → `systemDisk`, the
     // payload's `DeviceAssignment` convention) rather than across every string
@@ -9696,11 +9692,11 @@ describe("One tick at a time", () => {
 });
 
 it("keeps the assignable-device vocabulary in the one module that owns it", async () => {
-  // vg-189: the groups are `ASSIGNABLE_GROUPS`'s (renderer-core), so
-  // server.ts must not spell the union a second time — a copy is a second owner,
-  // and a group added to the real owner would silently never reach it. The
-  // runtime is identical whether the union is derived or copied, so the source is
-  // the only place this can be seen.
+  // The groups are `ASSIGNABLE_GROUPS`'s (renderer-core), so server.ts must not
+  // spell the union a second time — a copy is a second owner, and a group added
+  // to the real owner would silently never reach it. The runtime is identical
+  // whether the union is derived or copied, so the source is the only place
+  // this can be seen.
   //
   // Resolving `pick`'s parameter **annotation** to the owner's own type, rather
   // than matching a member list, is what catches a re-spelling of a different
@@ -10688,9 +10684,9 @@ describe("The hosting route answers where a phone should point (§145)", () => {
       JSON.stringify({ lan: true }),
     );
 
-    // The answer predates the move and carries no verdict on it, which is the
-    // whole of vg-173: the host's own words about a socket it would not take
-    // cannot be in the response that asked it to take one.
+    // The answer predates the move and carries no verdict on it: the host's own
+    // words about a socket it would not take cannot be in the response that
+    // asked it to take one.
     expect(answered.status).toBe(200);
     expect(answered.json()).toMatchObject({ lan: false, refusal: null });
 
@@ -10743,13 +10739,13 @@ describe("The hosting route answers where a phone should point (§145)", () => {
 });
 
 /**
- * `vg-173`. The defect is a real socket: the response is owed on the connection
- * the move destroys, and none of that reproduces against the fake
- * request/response the rest of this file drives the handler with — an emitted
- * `request` event has no connection to lose. So this is a listening server and
- * a real `createHostBinding`, reached with `fetch`.
+ * A LAN move's response is owed on the connection the move destroys, and none
+ * of that reproduces against the fake request/response the rest of this file
+ * drives the handler with — an emitted `request` event has no connection to
+ * lose. So these cases use a listening server and a real
+ * `createHostBinding`, reached with `fetch`.
  */
-describe("A LAN move answers before the socket it moves (vg-173)", () => {
+describe("A LAN move answers before the socket it moves", () => {
   let moveDir: string;
   let hosted: ReturnType<typeof createHostServer>;
 
@@ -10803,7 +10799,7 @@ describe("A LAN move answers before the socket it moves (vg-173)", () => {
 
     // The response is owed on the connection the move destroys, so a host that
     // tears down first answers nothing at all: `fetch` rejects with an empty
-    // reply rather than returning a status. This is vg-173.
+    // reply rather than returning a status.
     const answered = await fetch(`http://127.0.0.1:${port}/api/hosting`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -10823,7 +10819,7 @@ describe("A LAN move answers before the socket it moves (vg-173)", () => {
     expect(after).toMatchObject({ lan: true, refusal: null });
   });
 
-  it("does not leave a request parked on a socket it spared (vg-174)", async () => {
+  it("does not leave a request parked on a socket it spared", async () => {
     const port = await listeningHost();
 
     // The row's own mechanism, which has to be constructed because one client
@@ -10881,8 +10877,8 @@ describe("A LAN move answers before the socket it moves (vg-173)", () => {
     await arrived;
 
     // The move runs while that request is still in flight. Its own answer is
-    // owed on a connection the move takes with it — that trade is `vg-173`,
-    // measured and green.
+    // owed on a connection the move takes with it — the move spends that one
+    // unlucky request, and the editor's bounded re-read recovers.
     //
     // **This 200 is not the discriminating assertion**: the move starts on
     // `finish`, so these bytes are already with the operating system before any
@@ -10895,11 +10891,11 @@ describe("A LAN move answers before the socket it moves (vg-173)", () => {
     });
     expect(answered.status).toBe(200);
 
-    // The held body frees the socket, and the two reads that follow are the
-    // shape the row describes. Asserted as an object rather than a boolean so a
-    // red run says which half it saw: with the fix absent this socket is still
-    // alive and still dispatching — the health read beside it answers — while
-    // the hosting read never does.
+    // The held body frees the socket, and the two reads that follow exercise
+    // it. Asserted as an object rather than a boolean so a red run says which
+    // half it saw: with the fix absent this socket is still alive and still
+    // dispatching — the health read beside it answers — while the hosting read
+    // never does.
     held.write('{"lan":0}');
     held.write("GET /api/health HTTP/1.1\r\nHost: h\r\n\r\n");
     held.write("GET /api/hosting HTTP/1.1\r\nHost: h\r\n\r\n");

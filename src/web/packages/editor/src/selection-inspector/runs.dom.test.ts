@@ -258,7 +258,7 @@ describe("binding a text run to a sensor", () => {
   it("reads the clock in the zone the author pinned to it", async () => {
     // The preview reads Date.now() at render, so two reads straddle a minute
     // boundary about once in sixty runs. Pin the clock so the render and the
-    // assertion share one instant; a single read cannot race itself (vg-383).
+    // assertion share one instant; a single read cannot race itself.
     const pinned = Date.parse("2026-10-13T04:24:30Z");
     vi.spyOn(Date, "now").mockReturnValue(pinned);
     const box = mountRunEditor({ runs: literalClock });

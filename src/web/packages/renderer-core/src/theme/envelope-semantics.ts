@@ -12,6 +12,7 @@ import {
   MAX_BACKGROUND_FADE,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
+  MAX_METADATA_NAME_BYTES,
   MIN_BACKGROUND_EXTENT,
   MIN_BACKGROUND_FADE,
   MIN_BACKGROUND_OFFSET,
@@ -30,9 +31,6 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
  * layer and its media. The keys those checks read are declared in
  * `envelope-keys.ts`, which is the vocabulary the published schema is held to.
  */
-
-/** The published schema's bound on a theme's name (`schema/theme-document.schema.json`). */
-const MAX_METADATA_NAME_LENGTH = 200;
 
 export type IssueCode =
   | "not-an-object"
@@ -169,7 +167,7 @@ export function validateEnvelopeSemantics(
 /**
  * The envelope with a name supplied, for a document that carries none.
  *
- * The published schema refuses an empty `metadata.name` (`vg-221`), so a
+ * The published schema refuses an empty `metadata.name`, so a
  * document that validated under the previous contract would stop loading the
  * moment that bound landed — which is why the refusal and this migration are
  * one change rather than two. **The document's own `id` is the label**: it is
@@ -225,11 +223,14 @@ function validateMetadata(issues: Issues, value: unknown): void {
   // longer than the published bound is input some writer chose, so it is
   // refused rather than truncated.
   const name = value["name"];
-  if (typeof name === "string" && name.length > MAX_METADATA_NAME_LENGTH) {
+  if (
+    typeof name === "string" &&
+    new TextEncoder().encode(name).byteLength > MAX_METADATA_NAME_BYTES
+  ) {
     issues.add(
       "out-of-range",
       "/metadata/name",
-      `name must be at most ${MAX_METADATA_NAME_LENGTH} characters.`,
+      `name must be at most ${MAX_METADATA_NAME_BYTES} bytes.`,
     );
   }
 }

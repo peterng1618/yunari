@@ -3,11 +3,11 @@
 /**
  * Every reference into `docs/superpowers/plans/` resolves, or this refuses.
  *
- * `archive/` exists so a moved plan stays readable. Nothing resolved a reference
- * to one, so a reference pointing at the right name in the wrong place made a
- * reader conclude the document was deleted — and the next six-plan move
- * re-broke the same references silently. `vg-434` is this check, and it is a
- * script rather than a dependency so it needs no install to run.
+ * `archive/` exists so a moved plan stays readable. A reference pointing at the
+ * right name in the wrong place otherwise makes a reader conclude the document
+ * was deleted, and the same references re-break silently on the next plan
+ * move. This check is a script rather than a dependency so it needs no install
+ * to run.
  *
  * Three parts a generic link checker does not carry, and they are the whole
  * rule: the reference may sit in a code span or in prose rather than in a link;
@@ -166,8 +166,8 @@ let broken = 0;
 let scanned = 0;
 for (const file of scannedFiles()) {
   // `git ls-files --cached` lists a tracked path the worktree no longer holds — a file deleted and
-  // not yet staged, which is the normal state mid-refactor and was `Task 15.4`'s first gate run.
-  // It carries no reference to check, and reading it threw ENOENT out of this loop.
+  // not yet staged, which is the normal state mid-refactor.
+  // It carries no reference to check, and reading it would throw ENOENT out of this loop.
   if (!existsSync(join(ROOT, file))) continue;
   scanned += 1;
   for (const { line, token } of brokenIn(

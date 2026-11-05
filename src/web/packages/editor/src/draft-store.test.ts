@@ -232,7 +232,7 @@ describe("the draft's autosave", () => {
     store.write(DRAFT);
 
     // The fallback's own ticks leave it alone, because it never adopted the
-    // draft — the transition rule `vg-040`'s R2 put on the clear.
+    // draft — the transition rule the clear obeys.
     vi.advanceTimersByTime(30_000);
     expect(store.read(), "untouched while the fallback is clean").toEqual(
       DRAFT,
@@ -240,7 +240,7 @@ describe("the draft's autosave", () => {
 
     // **The first edit is what supersedes it**, and this is the moment the
     // boot's report named: one slot, so the document the author is working in
-    // takes it and the draft the build cannot render is gone (`vg-512`).
+    // takes it and the draft the build cannot render is gone.
     dirty = true;
     vi.advanceTimersByTime(30_000);
     expect(store.read(), "the fallback document's own draft").toEqual(FALLBACK);

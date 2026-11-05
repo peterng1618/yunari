@@ -55,7 +55,7 @@ function createStore(): InspectorStore {
  * binding reads at `--text-xs` in `--muted`. The block is closed by a hairline
  * edge rather than a chrome label, and that edge is the column's
  * *one* boundary below the header: the first section draws none of its own
- * (`vg-466`).
+ *.
  */
 function Inspector({
   store,

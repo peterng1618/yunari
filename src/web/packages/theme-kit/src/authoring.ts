@@ -1,5 +1,6 @@
 import {
   type Binding,
+  chartBindingCountRefusal,
   defaultBarSettings,
   defaultGaugeSettings,
   defaultLineSettings,
@@ -287,6 +288,8 @@ export function addChartObject(input: AddChartObjectInput): {
   readonly object: ObjectJson;
   readonly bindings: readonly Binding[];
 } {
+  const refusal = chartBindingCountRefusal(input.family, input.bindings.length);
+  if (refusal !== undefined) throw new Error(refusal);
   const settings = chartSettingsFor(input);
   return {
     object: {

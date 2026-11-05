@@ -119,7 +119,7 @@ export function createSelectionInspector(
   // about what the document contained.
   editor.canvas.on("object:removed", rerender);
   editor.canvas.on("object:added", rerender);
-  // A lock change writes the object and fires no other event (vg-148), so the
+  // A lock change writes the object and fires no other event, so the
   // lock manager notifies and the column follows it rather than offering the
   // writing fields it will refuse.
   editor.canvas.on(OBJECT_LOCK_CHANGED_EVENT as never, rerender);

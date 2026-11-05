@@ -43,9 +43,6 @@ interface GeneratedTrio {
   readonly faces: readonly [GeneratedFace, GeneratedFace, GeneratedFace];
 }
 
-export const GENERATED_SOURCE_REVISION =
-  "8af7098ada0b90f076fbfe260244d11b05dd2403";
-
 export const GENERATED_TRIOS: readonly GeneratedTrio[] = [
   {
     id: "yaldevi-libre-franklin",

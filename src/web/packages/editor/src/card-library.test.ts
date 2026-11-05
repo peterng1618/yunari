@@ -167,7 +167,7 @@ describe("the card library", () => {
 
     // The stamp the library offers is the stamp the starter's own card carries: the
     // row on the reference composition and the row a copy makes are the same fact.
-    // The word is not compared — both sides read `uiCopy.cardLibrary` (vg-168).
+    // The word is not compared — both sides read `uiCopy.cardLibrary`.
     for (const card of cards) {
       const id = String(card["id"]);
       const unit = CARD_LIBRARY.find((entry) => entry.id === id);
@@ -341,15 +341,15 @@ describe("a global this theme cannot supply", () => {
 /**
  * A theme whose vocabulary is not the starter's.
  *
- * `vg-128`, and the finding that made it a design question rather than a bug:
- * the old answer was to refuse, which is safe — an unresolved reference reaches
- * `snapshot`, validates and throws — and unusable, because **on the host's
- * default two-token palette every card refused and on a blank theme seven of the
- * eight did**. The library was dead exactly where an author meets it first.
+ * This is the design question the library has to answer: refusing is safe — an
+ * unresolved reference reaches `snapshot`, validates and throws — and unusable,
+ * because **on the host's default two-token palette every card would refuse and
+ * on a blank theme seven of the eight would**. The library would be dead exactly
+ * where an author meets it first.
  *
- * These are the pins for the replacement. The card is inserted, it carries
- * nothing the validator will refuse, the author is told what changed, and a
- * theme that genuinely cannot express the card is still refused.
+ * These are the pins for what the library does instead. The card is inserted, it
+ * carries nothing the validator will refuse, the author is told what changed, and
+ * a theme that genuinely cannot express the card is still refused.
  */
 describe("a theme whose vocabulary is not the starter's", () => {
   /**

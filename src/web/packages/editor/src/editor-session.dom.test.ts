@@ -1300,11 +1300,11 @@ describe("EditorSession", () => {
   });
 
   it("reaches every globals consumer when a type token's face changes, so the inspector follows", () => {
-    // vg-232. The receivers were listed inline once per setter and the lists
-    // disagreed: `setTypes` told three, never the inspector. The inspector
+    // The receivers are one list: a per-setter list can disagree — `setTypes`
+    // telling three, never the inspector. The inspector
     // reads a token's computed name out of `context.globals`, and `setGlobals`
-    // is the only thing that updates it, so a face edit left the surface
-    // printing the old name until an unrelated `object:modified` re-rendered
+    // is the only thing that updates it, so a face edit leaves the surface
+    // printing the old name until an unrelated `object:modified` re-renders
     // it. This reads the surface the author reads rather than counting calls.
     //
     // **It read the Spends line until 2026-10-15.** Item 17 removed that
@@ -1565,12 +1565,11 @@ describe("EditorSession", () => {
   });
 
   it("falls back to the shipped thumbnail when a capture fails, on both save paths", async () => {
-    // vg-239. The fallback — "a capture that fails must cost the preview, not
-    // the theme" — was spelled twice: inline at `#save` and named in `#picture`,
-    // which the library's save calls. The two spellings are equivalent today, so
-    // this case passing on either proves nothing; it closes the row only because
-    // it fails when either copy drops its fallback. Both entry points are taken
-    // so each copy has a path of its own to red on.
+    // The fallback — "a capture that fails must cost the preview, not
+    // the theme" — has one owner in `#picture`, which both `#save` and the
+    // library's save call. A case that passes on one spelling proves nothing;
+    // this fails when either entry point drops the fallback. Both entry points
+    // are taken so each has a path of its own to red on.
     const thumbnail = new TextEncoder().encode("shipped-thumbnail");
     const client = {
       list: vi.fn(async () => []),

@@ -28,9 +28,9 @@ export function InspectorSection(props: {
   /**
    * The section sits directly under an owner that already drew the boundary
    * between them — the column's subject block, whose `border-b` is it — so this
-   * one draws none of its own. Two adjacent owners drawing one hairline is what
-   * `vg-466` records: the author saw two lines under the header and none between
-   * the sections below. The default draws the rule, because every other surface
+   * one draws none of its own. Two adjacent owners drawing one hairline doubles
+   * it under the header and leaves none between the sections below. The default
+   * draws the rule, because every other surface
    * this composes into (the document panes) has nothing
    * above it that does.
    */

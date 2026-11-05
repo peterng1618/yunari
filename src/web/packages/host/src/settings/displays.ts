@@ -241,7 +241,7 @@ export function mintedDisplayId(label: unknown): string {
 /**
  * A serial that is blank is no serial: `MonitorHint.serial` is optional, and a
  * hint carrying `""` matches nothing, so the display would read as detached for
- * ever — `vg-616`'s class, a value where absence was meant. One owner, because
+ * ever — a value where absence was meant. One owner, because
  * the reader below and the probe's own `hintFor` must agree about it.
  */
 export function reportedSerial(serial: string | undefined): string | undefined {
@@ -330,7 +330,7 @@ export function normalizePanelIdentity(
  * Refused rather than repaired: an id of zero, a model name nothing knows and a
  * fractional or out-of-range id are all values where absence was meant, and a
  * record carrying one would be a panel the manager cannot open and cannot
- * explain (`vg-616`'s class).
+ * explain.
  */
 export function normalizePanel(input: unknown): PanelHardware | undefined {
   const identity = normalizePanelIdentity(input);

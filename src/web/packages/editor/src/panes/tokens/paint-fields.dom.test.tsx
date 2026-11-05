@@ -15,7 +15,7 @@
  * **This file's colour literals are document fixtures** — the values a case
  * asserts an author typed — not styling, and they live in
  * `paint-list-fixture.ts` beside this file for exactly that reason. The ratchet
- * reads this file by rule (`vg-228`), so the fixture is where a document value
+ * reads this file by rule, so the fixture is where a document value
  * belongs and this file is where the behaviour does.
  *
  * `Harness` is the session's half of that contract: a commit comes back as a new
@@ -507,7 +507,7 @@ it("refuses a value that is not a colour, and associates the reason with the fie
 
   expect(change).not.toHaveBeenCalled();
   expect(settled).not.toHaveBeenCalled();
-  // The control set's editable-invalid channel (`vg-263`): the refusal is
+  // The control set's editable-invalid channel: the refusal is
   // announced — `aria-invalid` plus a described-by reason — and the field stays
   // editable, so the author can type a different colour. Before this the pane
   // drew a sibling `<p>` associated with nothing.
@@ -657,7 +657,7 @@ it("edits a gradient's angle, its stops and an added stop through its one editor
 });
 
 it("keeps the fraction the stop's own percent well types", async () => {
-  // `vg-494`: a percentage projection that rounds would show 38 for a stored
+  // A percentage projection that rounds would show 38 for a stored
   // 0.375 and write 0.38 back. The well is a percent, and the fraction behind
   // it is the document's own value.
   const { host, change } = await mount(GLOW_GRADIENT, "glow");

@@ -32,8 +32,8 @@ const BODY = "typeTokens.body" as const;
  *
  * Each describe calls the owner directly rather than building a whole plan:
  * `planArtboard`, `resolveStyleValue`, `resolveTextSegments` and
- * `buildChartPlan` are what a document's authoring turns into, and the docless
- * entry point that used to assemble them is gone with schema v1.
+ * `buildChartPlan` are what a document's authoring turns into; there is no
+ * docless entry point above them.
  */
 
 const NOW = Date.parse("2026-01-01T00:00:10Z");
@@ -1125,7 +1125,7 @@ describe("charts", () => {
    * window at its own cadence, so the oldest sample it returns sits inside the
    * first cadence above the cutoff it was handed. The axis is placed by the
    * newest reading, so every frame between two batches must draw exactly
-   * the same picture — and still reach its window's left edge (`vg-571`).
+   * the same picture — and still reach its window's left edge.
    */
   it.each([700, 950, 1_018])(
     "draws the same line at every frame of a %i ms cadence",

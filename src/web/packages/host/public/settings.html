@@ -108,9 +108,9 @@
 
       /** What a group's dropdown is asking, where one question is not enough
        * for the whole page. The two disk keys are `disk.*` and `disk.data.*` —
-       * the same reading read twice, on two drives — and both fieldsets used to
-       * ask the one question, so the legend was the only thing telling them
-       * apart, and a legend scrolls out of view. */
+       * the same reading read twice, on two drives — so they ask different
+       * questions: a shared question would leave the legend as the only thing
+       * telling them apart, and a legend scrolls out of view. */
       const DEVICE_QUESTION = {
         "system-disk": "Which drive does the Host run from?",
         "data-disk": "Which second drive should dashboards show?",
@@ -122,10 +122,9 @@
       let defaultTheme = null;
       // The display this page answers a theme's questions for. The default is
       // what every display with no choice of its own already gets, and it is
-      // the only one this page can answer for: the column that moved it lived
-      // inside the theme list, and that listing is the chooser's now (`vg-649`).
-      // So the page answers for the default and says so, rather than answering
-      // for one silently.
+      // the only one this page can answer for: choosing a display belongs to
+      // the theme chooser, which owns that listing. So the page answers for the
+      // default and says so, rather than answering for one silently.
       const DEFAULT_DISPLAY = "default";
       // The device slots the chosen theme reads; empty means "ask about none".
       let requiredDevices = [];

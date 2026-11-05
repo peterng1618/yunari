@@ -111,7 +111,7 @@ describe("the chart paint declaration", () => {
  * This replaces `NON_SCALAR_SETTINGS`, an allowlist whose doc comment said it
  * existed so the declared list and the excluded list "together account for every
  * property" — which was true and useless, because `animation` and `total` sat in
- * the excluded list and had no control at all (`vg-122`).
+ * the excluded list and had no control at all.
  */
 const GAUGE_COVERAGE: Record<keyof GaugeSettings, "setting" | "paint"> = {
   startAngle: "setting",
@@ -416,10 +416,8 @@ describe("every descriptor carries a hint that earns it", () => {
 });
 
 describe("descriptor order is the likelihood order", () => {
-  // Written from the table as it stood before sections and hints were added,
-  // with the two nested settings appended where Task 3 put them. A re-sort would
-  // silently change which settings surface first, so the order is pinned here
-  // rather than re-derived from the table it guards.
+  // A re-sort would silently change which settings surface first, so the order
+  // is pinned here rather than re-derived from the table it guards.
   const ANIMATION_PROPERTIES = [
     "animation.durationMs",
     "animation.easing",

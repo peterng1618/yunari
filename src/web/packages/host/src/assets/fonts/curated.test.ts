@@ -73,8 +73,8 @@ describe("curated font catalogue", () => {
     // `playfair-display-roboto` twice — once titled for Inter, once for
     // Roboto — and both entries point at one pairing document, which names
     // Roboto. The document is the authority on which entry is true, so the
-    // generator keeps the entry whose title matches it and the other never
-    // reaches the catalogue. vg-116 is the upstream half of this.
+    // generator keeps the entry whose title matches it and drops the other;
+    // the duplicated index entry itself is upstream's.
     expect(CURATED_TRIOS).toHaveLength(379);
     expect(CURATED_SOURCE_REVISION).toMatch(/^[0-9a-f]{40}$/);
   });

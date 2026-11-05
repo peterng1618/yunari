@@ -36,7 +36,6 @@ import {
   gridSourcesOf,
   type KindFilter,
   type PreviewTarget,
-  SEARCH_DEBOUNCE_MS,
   sourceIdOf,
   storedDisabled,
 } from "./finder-model.js";
@@ -52,7 +51,6 @@ import { useWallpaperTab } from "./use-wallpaper-tab.js";
 import { type WallpaperActions, WallpaperTools } from "./wallpaper.js";
 
 export type { ActionOutcome };
-export { SEARCH_DEBOUNCE_MS };
 
 export interface FinderProps {
   readonly open: boolean;

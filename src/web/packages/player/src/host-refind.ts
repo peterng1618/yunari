@@ -111,7 +111,7 @@ export type PageScheme = "http" | "https";
  * The scheme is the caller's, from `location.protocol`, and it is not optional:
  * a probe built as `http://` from a page served over https is mixed content the
  * browser blocks, so every rung of the ladder fails and a display can never
- * re-find its host (`vg-623`). A default here would reintroduce exactly that.
+ * re-find its host. A default here would reintroduce exactly that.
  */
 export function originFor(
   address: string,

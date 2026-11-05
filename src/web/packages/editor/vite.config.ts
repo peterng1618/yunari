@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 
 /** The product's version, read from the workspace manifest — the one place a
  *  release writes it — and injected as a constant so the About tab can name it
- *  with no module to import it from and no second copy to forget (`vg-279`).
+ *  with no module to import it from and no second copy to forget.
  *  `vitest.config.ts` injects the same constant for the unit suite, which does
  *  not build through this file. */
 const { version } = JSON.parse(
@@ -17,9 +17,6 @@ export default defineConfig({
   plugins: [tailwindcss()],
   resolve: {
     alias: {
-      // shadcn's own convention, and the reason a components.json can point at
-      // this package's source without every generated import being rewritten.
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
       "@yunari/renderer-core": fileURLToPath(
         new URL("../renderer-core/src/index.ts", import.meta.url),
       ),

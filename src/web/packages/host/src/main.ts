@@ -92,8 +92,8 @@ function packageRoot(): string {
 const VERSION = productVersion();
 
 /** The product's version, read from the workspace manifest — the one place a
- *  release writes it (`vg-279`). The editor bundle reads the same field through
- *  Vite's `define`, so neither reader carries a copy of the number. */
+ *  release writes it. The editor bundle reads the same field through Vite's
+ *  `define`, so neither reader carries a copy of the number. */
 function productVersion(): string {
   const manifest = path.join(here, "..", "..", "..", "package.json");
   return (JSON.parse(readFileSync(manifest, "utf8")) as { version: string })
@@ -332,8 +332,8 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   // The certificate is the whole reason the host serves https: a phone at
   // `http://<lan-ip>:<port>` is not a secure context, so it can neither hold a
-  // screen wake lock nor register the service worker an installable app needs
-  // (`vg-580`). A machine with no OS key protector has nowhere to keep the
+  // screen wake lock nor register the service worker an installable app needs.
+  // A machine with no OS key protector has nowhere to keep the
   // root's private key, and there https is not a choice the host can make at
   // all — it starts http-only and says what the display loses. Any other
   // failure to prepare the certificate is a directory the host could not write,
@@ -610,7 +610,10 @@ export async function run(argv: readonly string[]): Promise<number> {
 
       return {
         bytes: asset.bytes,
-        placement: panelVideoPlacement(envelope),
+        placement: {
+          ...panelVideoPlacement(envelope),
+          ...(display === undefined ? {} : { shape: display.shape }),
+        },
         rotation: display?.rotation ?? 0,
       };
     },

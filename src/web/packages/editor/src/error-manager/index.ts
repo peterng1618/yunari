@@ -1,9 +1,8 @@
 import type { Canvas } from "fabric/es";
 
-/** Named for Yunari's own managers, not the retired fork's subsystems. */
+/** Groups a diagnostic by the editor surface that raised it. */
 type EditorErrorCategory =
   | "clipboard"
-  | "deletion"
   | "grouping"
   | "controls"
   | "toolbar"
@@ -17,7 +16,7 @@ type EditorErrorCategory =
   /** A text object that could not be frozen into vector paths. */
   | "outline"
   /** The unsaved document the browser kept, and the boot that could not read
-   *  it (`draft-store.ts`, `vg-511`). */
+   *  it (`draft-store.ts`). */
   | "draft";
 
 export interface EditorDiagnostic {

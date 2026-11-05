@@ -279,7 +279,7 @@ describe("published Fabric theme schema", () => {
   });
 
   it("refuses an empty theme name, which the loader migrates rather than relaxing", () => {
-    // `vg-221`. The schema is the only refusal, and deliberately so: the
+    // The schema is the only refusal, and deliberately so: the
     // Document pane drops an emptied name rather than writing `""` (`compact`),
     // and the envelope validator never read the name — so this is the half a
     // tool outside this repo sees, and the loader's `namedEnvelope` is the half

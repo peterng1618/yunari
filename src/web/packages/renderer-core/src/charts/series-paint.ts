@@ -7,12 +7,12 @@ import { chartPaintFieldsFor } from "./settings-fields.js";
  * `buildChartPlan` makes a line series, a bar and a slice one binding each, and
  * `chartPaintFieldsFor` declares the paint that repeats as `multiple` — so the
  * two are the same length by definition and this module keeps them so. It lives
- * beside the descriptor that declares the invariant rather than in the editor,
- * because the guard sitting in a different module from its declaration was
- * exactly what the map's own test reads as a wrong owner, and what cost `vg-139`
- * (vg-242, RULED 2026-10-12). A new entry repeats the last one, which is what an
- * author extending a chart means: the same look, once more, until they choose
- * otherwise. A gauge's paints are not per-series and are left alone.
+ * beside the descriptor that declares the invariant rather than in the editor;
+ * a guard in a different module from its declaration is a wrong owner, and a
+ * consumer could change the invariant without it. A new entry repeats the last
+ * one, which is what an author extending a chart means: the same look, once
+ * more, until they choose otherwise. A gauge's paints are not per-series and
+ * are left alone.
  */
 export function seriesPaintFor(
   family: ChartFamily,

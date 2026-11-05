@@ -41,17 +41,17 @@ window.PointerEvent ??= MouseEvent as never;
  * tests; what is checked here is the invariant, so a new field added without
  * one fails here.
  *
- * The audit grew from three panels to four when vg-103's fix reached the chart
- * settings section and the very next control written beside it — the vertical
- * text alignment select — shipped with no `id` at all. vg-103's own test walked
- * one section's controls, so the shape of the fix was "a section", and a
- * control written tomorrow in a different section was nobody's red test.
+ * The audit spans the whole editor rather than one section: a test that walks
+ * one section's controls makes "a section" the shape of the fix, and a control
+ * written tomorrow in a different section is nobody's red test. The vertical
+ * text alignment select beside the chart settings section is why the walk is
+ * not per section.
  *
  * **Adding a panel to the editor means adding it to `mountPanels` below.** That
- * is the whole limit of this file, and it was invisible until vg-114: the asset
- * pane and the new-theme chooser had gone years without appearing here, so a
- * control written in either was nobody's red test. The list is the contract —
- * an unmounted panel is not audited, not "audited and clean".
+ * is the whole limit of this file: the asset pane and the new-theme chooser
+ * have each gone without appearing here, and a control written in an unmounted
+ * panel is nobody's red test. The list is the contract — an unmounted panel is
+ * not audited, not "audited and clean".
  */
 
 /** The elements a person can focus, so the audit is over what they can reach. */
@@ -192,10 +192,9 @@ describe("editor panels", () => {
   it("gives every form control an id, so no field here is reachable only by position", () => {
     // Form controls, not buttons: a button is named by its own text and is
     // found by role and name, while a field is the thing a `<label for>` and an
-    // `aria-labelledby` have to point at. vg-103 fixed one section and the
-    // vertical text alignment select written beside it a moment later still
-    // shipped with none, because the test walked the section rather than the
-    // editor.
+    // `aria-labelledby` have to point at. A section-scoped walk misses the
+    // vertical text alignment select written beside the section it audited,
+    // because the test walked the section rather than the editor.
     const { root } = mountPanels();
     const anonymous = Array.from(
       root.querySelectorAll<
@@ -212,9 +211,8 @@ describe("editor panels", () => {
     // `reached` is the one place this file looks away, and a carve-out nobody
     // can see is how an audit rots. Enumerating them keeps it honest in both
     // directions: one more skipped control is a decision someone has to take,
-    // and an empty list means a panel stopped being mounted — the exact failure
-    // vg-114 recorded, where the asset pane and the chooser had never been here
-    // at all.
+    // and an empty list means a panel stopped being mounted — the failure where
+    // the asset pane and the chooser are never mounted at all.
     //
     // Both shapes are in here, and the list is longer than it was for two
     // reasons: the run editor's converted selects (its swatch included) and the
@@ -237,11 +235,11 @@ describe("editor panels", () => {
       );
     expect(skipped).toEqual([
       // The Document pane's five, and it leads the list because it is the first
-      // thing in `root` that renders one. The artboard panel was imperative
-      // until Task 8, so its natives were not skipped at all; every control on it
-      // is `ControlSelect` now, and each is a Base UI value carrier. It held
-      // three more until the background's colour, media and fit moved to the
-      // inspector's own column.
+      // thing in `root` that renders one. Every artboard-panel control is a
+      // `ControlSelect`, and each is a Base UI value carrier; an imperative
+      // build had natives that skipped the audit. It holds three fewer now that
+      // the background's colour, media and fit live in the inspector's own
+      // column.
       "INPUT[type=][aria-hidden]", // Theme language
       "INPUT[type=][aria-hidden]", // Shape
       "INPUT[type=][aria-hidden]", // Ratio
@@ -286,17 +284,14 @@ describe("editor panels", () => {
       "INPUT[type=][aria-hidden]", // Fill
       "INPUT[type=][aria-hidden]", // Stroke
       "INPUT[type=][aria-hidden]", // Shadow
-      // The inspector's one toggle: the shape's frosted glass. Frost was three:
-      // deliberate bleed on both mounts, which went with its mark, and frosted
-      // glass on the shape alone. The flips are toolbar actions now and write no
-      // switch. The text run has no frost: a `Textbox` cannot be frosted, so
-      // `vg-465` offers it no glass section at all rather than a switch that
-      // writes nothing.
+      // The inspector's one toggle: the shape's frosted glass. The other frost
+      // controls are toolbar actions and write no switch. The text run has no
+      // frost: a `Textbox` cannot be frosted, so it is offered no glass section
+      // at all rather than a switch that writes nothing.
       "INPUT[type=checkbox][aria-hidden]", // Frosted glass, shape
       // The Assets pane's two file pickers, `[hidden]` and driven by the Import
-      // and Replace controls. The declared-asset chooser that used to sit ahead
-      // of them was a `ControlSelect`; the list is a card per file now, so it
-      // renders no value carrier.
+      // and Replace controls. The declared-asset chooser is a `ControlSelect`;
+      // the list is a card per file, so it renders no value carrier.
       "INPUT[type=file]", // Import
       "INPUT[type=file]", // Replace
       // The new-theme chooser, mounted as the session opens it: a `Dialog`, and
@@ -358,7 +353,7 @@ describe("editor panels", () => {
     // — a drag handle draws no glyph — so this audit is the only place their
     // names are read, and only for as long as the token inspector mounts the
     // editor for its gradient paint. Pinned so the mount going quiet is a red
-    // case rather than the gap `vg-333` found.
+    // case rather than an unnoticed gap.
     const { root } = mountPanels();
     const handles = Array.from(
       root.querySelectorAll<HTMLElement>("[data-testid^='gradient-stop-']"),
@@ -393,8 +388,8 @@ describe("editor panels", () => {
  * The panels this file audits, mounted at once: the artboard panel, the palette
  * panel, the type preset panel, the token inspector's two sections (a preset and
  * a paint), the selection inspector on two disjoint field
- * sets, the Add pane, the new-theme chooser and the Settings modal — and, since
- * plan 6 Task 4, the shell's own React chrome: the rail, the pane's chrome with
+ * sets, the Add pane, the new-theme chooser and the Settings modal — and
+ * the shell's own React chrome: the rail, the pane's chrome with
  * its action footer, and the canvas dock (`mountShellChrome`, which is also
  * where the reason the Composition tree is *not* among them is written down).
  *
@@ -405,14 +400,14 @@ describe("editor panels", () => {
  *
  * The gradient with stops is `components/ui/gradient-editor.tsx`, and the
  * palette panel is what reaches it: selecting the `glow` token below renders the
- * editor, so its two stop handles are controls this audit names (`vg-333`). It
+ * editor, so its two stop handles are controls this audit names. It
  * is not mounted a second time here — a duplicate would be one more control
  * with the same name, not wider coverage.
  *
  * **This list is the coverage.** An editor panel that is not mounted here is
  * not audited, and the assertions below pass on it by never seeing it — which
- * is how two file inputs and three dropdowns went unaudited until vg-114 named
- * them. Mount a panel when it is written; do not read a green run here as
+ * is how two file inputs and three dropdowns can go unaudited. Mount a panel
+ * when it is written; do not read a green run here as
  * "the editor is clean".
  *
  * The returned root is `document.body` rather than the mounting, because the
@@ -632,7 +627,7 @@ let settingsRoot: Root | undefined;
  *
  * The page is where the arm buttons and the twenty reference rows live, and
  * the surface has no modal to open: mounting the page puts every row in the
- * tree at once, which is exactly the audit gap vg-114's comment describes. The
+ * tree at once, which is exactly the audit gap described above. The
  * Appearance page's palette rows and follow toggle are driven by
  * `editor-pages.dom.test.tsx`; this mount is the Keyboard page because that is
  * where the controls nothing else names live.

@@ -77,7 +77,7 @@ const BLANK = createBlankFabricTheme(
   artboardSize("16:9", "1080p", "landscape"),
 );
 
-/** The same theme with no palette at all: the bare case `vg-484` names, where
+/** The same theme with no palette at all: the bare case where
  *  every construction refuses before it builds anything. */
 const BARE = { ...BLANK, globals: { ...BLANK.globals, palette: {} } };
 
@@ -185,12 +185,11 @@ beforeEach(() => {
 /**
  * A theme whose palette is not the starter's.
  *
- * `vg-128`, and the finding that made it a design question rather than a bug.
  * This is the **blank theme** — `File > New`, ten tokens, none of them a
- * device's colour — and it is where the ruling bites hardest: **seven of the
- * eight cards used to be refused here**, because refusing is what kept an
+ * device's colour — and it is where the rule bites hardest: **seven of the
+ * eight cards cannot be refused here**, because refusing is what keeps an
  * unresolved reference out of a document that `snapshot` validates and throws
- * on. The refusal was safe and it was unusable, and the library was dead exactly
+ * on. A refusal is safe and it is unusable, and the library is dead exactly
  * where an author meets it first.
  *
  * So a blank theme now *inserts*, and says what it mapped. The refusal survives
@@ -309,10 +308,10 @@ describe("an insert the Add pane cannot reach its owner for", () => {
 /* ---- choosing another tile while a text placement is armed ---- */
 
 /**
- * `vg-714`: the Add pane's text tile arms a one-shot placement, and choosing a
- * different tile afterwards used to leave that arm on the canvas — target
- * finding stayed off and the next press placed a text instead of selecting the
- * object the author had just made.
+ * The Add pane's text tile arms a one-shot placement, and choosing a
+ * different tile afterwards must cancel that arm — otherwise target
+ * finding stays off and the next press places a text instead of selecting the
+ * object the author has just made.
  */
 describe("choosing another tile while a text placement is armed", () => {
   it("cancels the arm before constructing", async () => {
@@ -342,8 +341,9 @@ describe("choosing another tile while a text placement is armed", () => {
 /* ---- a construction the theme cannot express ---- */
 
 /**
- * `vg-484`: a construction dispatched through `bridge.run` reaches the session
- * façade unwrapped, so a refusal was silent from the footer. The row's own bare
+ * A construction dispatched through `bridge.run` reaches the session
+ * façade unwrapped, so a refusal has to be reported there rather than left
+ * silent from the footer. The row's own bare
  * case is a theme with no usable token — `firstPalette` throws "New objects
  * require a palette token." before any object is built.
  */

@@ -225,12 +225,12 @@ function artboardPlate(artboard: Artboard, background: unknown): Rect {
  * editor shows is what the display shows.
  *
  * Fabric's `clipPath` on the *canvas* is scene-level and is not a per-object
- * property, which is what `vg-046` requires of a repair here: the crop
- * manager's authored image clip and the derived text-box clip are both
- * `FabricObject.clipPath` and neither is read, replaced or serialised by this,
- * and `canvas.getObjects()` still returns the scene root itself rather than a
- * wrapper group. `absolutePositioned` puts the rect in artboard units, so the
- * camera's zoom and pan clip at the board's edge rather than at the canvas'.
+ * property, so a repair here must leave the crop manager's authored image clip
+ * and the derived text-box clip alone: both are `FabricObject.clipPath` and
+ * neither is read, replaced or serialised by this, and `canvas.getObjects()`
+ * still returns the scene root itself rather than a wrapper group.
+ * `absolutePositioned` puts the rect in artboard units, so the camera's zoom and
+ * pan clip at the board's edge rather than at the canvas'.
  *
  * `excludeFromExport` keeps it out of the persisted document, on the same
  * reasoning as the plate: the boundary belongs to the envelope's artboard, so

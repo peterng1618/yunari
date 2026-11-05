@@ -7,11 +7,10 @@ import * as core from "./index.js";
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * The legacy DOM mount path is retired, and the line clamp goes with it
- * (vg-343, RULED 2026-10-12). `mountScene` was the only consumer of
- * `PlanTextLayout`, so the public arithmetic had no reason to outlive the
- * consumer: the export, the barrel entry and `plan.test.ts`'s cases go in the
- * same change as the path. The ruling is a **public-surface** decision, so the
+ * The legacy DOM mount path is retired, and the line clamp went with it.
+ * `PlanTextLayout` has no consumer now that `mountScene` is gone, so the
+ * public arithmetic is not exported: the export, the barrel entry and
+ * `plan.test.ts`'s cases go together. This is a **public-surface** rule, so the
  * case reads the surface — the barrel and the retired file — rather than a
  * behaviour. `SceneHandle` survives: `scene-fabric`'s `FabricSceneHandle`
  * extends it and the player types against it.

@@ -14,11 +14,14 @@ import {
   type VideoSourceFacts,
 } from "./panel-video-composition.js";
 import {
+  angleFilter,
+  flipFilter,
+  type PanelVideoRotation,
   type PanelVideoTurn,
-  turnedBox,
+  rotationBox,
   turnFilter,
   turnRefusal,
-  videoTurn,
+  videoRotation,
 } from "./panel-video-turn.js";
 
 /**
@@ -78,25 +81,29 @@ export function panelH264Args(
     offsetX: 0,
     offsetY: 0,
   },
-  turn: PanelVideoTurn = "none",
+  turnOrAngle: PanelVideoTurn | PanelVideoRotation = "none",
   source?: VideoSourceFacts,
 ): string[] {
+  const rotation: PanelVideoRotation =
+    typeof turnOrAngle === "string"
+      ? { kind: "turn", turn: turnOrAngle }
+      : turnOrAngle;
   const composed =
     placement.composition !== undefined || placement.fill !== undefined;
   const filter = composed
     ? {
         complex: true,
         text: composeFilterGraph(
-          turnedBox(geometry, turn),
+          rotationBox(geometry, rotation),
           placement,
           source,
-          turn,
+          rotation,
         ),
         seconds: composedSeconds(source),
       }
     : {
         complex: false,
-        text: panelFilter(geometry, placement, turn),
+        text: panelFilter(geometry, placement, rotation),
         seconds: undefined,
       };
 
@@ -152,10 +159,12 @@ function panelFilter(
     readonly offsetX: number;
     readonly offsetY: number;
     readonly scale?: number;
+    readonly flipX?: boolean;
+    readonly flipY?: boolean;
   },
-  turn: PanelVideoTurn,
+  rotation: PanelVideoRotation,
 ): string {
-  const box = turnedBox(geometry, turn);
+  const box = rotationBox(geometry, rotation);
   const boxWidth = box.width;
   const boxHeight = box.height;
   const offsetX = Number.isFinite(placement.offsetX) ? placement.offsetX : 0;
@@ -176,7 +185,11 @@ function panelFilter(
       `crop=${boxWidth}:${boxHeight}:` +
         `x='clip((in_w-${boxWidth})/2-${boxWidth}*${offsetX},0,in_w-${boxWidth})':` +
         `y='clip((in_h-${boxHeight})/2-${boxHeight}*${offsetY},0,in_h-${boxHeight})'`,
-    ].join(",") + turnFilter(turn)
+    ].join(",") +
+    flipFilter(placement) +
+    (rotation.kind === "turn"
+      ? turnFilter(rotation.turn)
+      : angleFilter(rotation.degrees, box))
   );
 }
 
@@ -196,8 +209,12 @@ export async function encodePanelH264(
   geometry: PanelGeometry,
   options: EncodeOptions = {},
 ): Promise<PanelClip> {
-  const turn = videoTurn(options.rotation ?? 0);
-  if (turn === undefined) {
+  const placement = options.placement ?? { offsetX: 0, offsetY: 0 };
+  const rotation = videoRotation(
+    options.rotation ?? 0,
+    placement.shape ?? "rect",
+  );
+  if (rotation === undefined) {
     throw new Error(turnRefusal(options.rotation ?? 0));
   }
 
@@ -233,7 +250,14 @@ export async function encodePanelH264(
 
     const facts = readVideoFacts(mp4);
     const outcome = await (options.run ?? encoderRun(executable))(
-      panelH264Args(input, output, geometry, options.placement, turn, facts),
+      panelH264Args(
+        input,
+        output,
+        geometry,
+        options.placement,
+        rotation,
+        facts,
+      ),
     );
 
     if (outcome.code !== 0) {

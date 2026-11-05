@@ -27,11 +27,13 @@ import {
   panelCrop,
 } from "./panel-video-composition.js";
 import {
-  type PanelVideoTurn,
+  angleFilter,
+  flipFilter,
+  type PanelVideoRotation,
   turnedBox,
   turnFilter,
   turnRefusal,
-  videoTurn,
+  videoRotation,
 } from "./panel-video-turn.js";
 
 /**
@@ -93,12 +95,15 @@ export async function transcodeForPanel(
 ): Promise<TranscodeResult> {
   const placement = options.placement ?? { offsetX: 0, offsetY: 0 };
   const cacheDirectory = options.cacheDir ?? DEFAULT_CACHE_DIRECTORY;
-  const turn = videoTurn(options.rotation ?? 0);
-  if (turn === undefined) {
+  const rotation = videoRotation(
+    options.rotation ?? 0,
+    placement.shape ?? "rect",
+  );
+  if (rotation === undefined) {
     return { ok: false, message: turnRefusal(options.rotation ?? 0) };
   }
 
-  const cachePath = cached(cacheDirectory, sha256(bytes, placement, turn));
+  const cachePath = cached(cacheDirectory, sha256(bytes, placement, rotation));
 
   // The pan and the turn change the pixels, so both are part of the key: the
   // same source authored at another offset or played on another mount is a
@@ -140,7 +145,7 @@ export async function transcodeForPanel(
     await writeFile(input, bytes);
 
     const outcome = await (options.run ?? runFfmpeg(executable))(
-      encodeArgs(input, output, panelFilter(bytes, placement, turn)),
+      encodeArgs(input, output, panelFilter(bytes, placement, rotation)),
     );
     if (outcome.code !== 0) {
       return {
@@ -268,11 +273,11 @@ async function evict(directory: string, keep: string): Promise<void> {
 function sha256(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
-  turn: PanelVideoTurn,
+  rotation: PanelVideoRotation,
 ): string {
   return createHash("sha256")
     .update(bytes)
-    .update(`\0${turn}\0${JSON.stringify(placement)}`)
+    .update(`\0${JSON.stringify(rotation)}\0${JSON.stringify(placement)}`)
     .digest("hex");
 }
 
@@ -312,23 +317,23 @@ interface EncodeFilter {
 function panelFilter(
   bytes: Uint8Array,
   placement: PanelVideoPlacement,
-  turn: PanelVideoTurn,
+  rotation: PanelVideoRotation,
 ): EncodeFilter {
-  const box = turnedBox(BOX, turn);
+  const box = rotation.kind === "turn" ? turnedBox(BOX, rotation.turn) : BOX;
   const facts = readVideoFacts(bytes);
   const composed =
     placement.composition !== undefined || placement.fill !== undefined;
 
   if (!composed) {
     return {
-      filter: plainFilter(facts, placement, box, turn),
+      filter: plainFilter(facts, placement, box, rotation),
       complex: false,
     };
   }
 
   const seconds = composedSeconds(facts);
   return {
-    filter: composeFilterGraph(box, placement, facts, turn),
+    filter: composeFilterGraph(box, placement, facts, rotation),
     complex: true,
     ...(seconds === undefined ? {} : { durationSeconds: seconds }),
   };
@@ -338,14 +343,18 @@ function plainFilter(
   facts: { readonly width: number; readonly height: number } | undefined,
   placement: PanelVideoPlacement,
   box: { readonly width: number; readonly height: number },
-  turn: PanelVideoTurn,
+  rotation: PanelVideoRotation,
 ): string {
-  const turnSuffix = turnFilter(turn);
+  const rotationSuffix =
+    rotation.kind === "turn"
+      ? turnFilter(rotation.turn)
+      : angleFilter(rotation.degrees, box);
+  const flipSuffix = flipFilter(placement);
 
   if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
     return (
       `scale=${box.width}:${box.height}:force_original_aspect_ratio=increase` +
-      `:force_divisible_by=2,crop=${box.width}:${box.height}${turnSuffix}`
+      `:force_divisible_by=2,crop=${box.width}:${box.height}${flipSuffix}${rotationSuffix}`
     );
   }
 
@@ -357,7 +366,7 @@ function plainFilter(
     placement.scale,
   );
 
-  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnSuffix}`;
+  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${flipSuffix}${rotationSuffix}`;
 }
 
 function encodeArgs(

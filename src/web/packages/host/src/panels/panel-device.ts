@@ -93,11 +93,18 @@ export interface PanelVideoPlacement {
   readonly offsetY: number;
   /** Zoom over the cover fit; absent means 1. */
   readonly scale?: number;
+  /** Paint-time mirrors about the placed rect's centre; absent means false. The
+   *  device draws the media itself, so the flip has to be in the pixels. */
+  readonly flipX?: boolean;
+  readonly flipY?: boolean;
   /** Where the media sits inside its box and how it meets the fill. Present
    *  only for an advanced background. */
   readonly composition?: BackgroundMediaComposition;
   /** The resolved paint behind the media inside its box. */
   readonly fill?: PalettePaint;
+  /** The display's shape, which decides whether a non-quarter angle can be
+   *  composed. Absent means the rectangle rule. */
+  readonly shape?: "rect" | "circle";
 }
 
 /** A video background, the placement it was authored with, and the display it

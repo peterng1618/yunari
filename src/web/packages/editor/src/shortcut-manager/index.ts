@@ -225,14 +225,14 @@ export class ShortcutManager {
     // Two listeners on one owner, split by phase: the modal state is *sampled*
     // at `window` capture and *consulted* at `window` bubble. **The split is
     // what makes the guard independent of *when* the library unmounts**, which
-    // is a library's business and has already changed once. Radix's dismissable
+    // is a library's business, not this guard's. Radix's dismissable
     // layer bound `keydown` on `document` with `{ capture: true }` and its
     // `Presence` unmounted from a layout effect the moment
     // `getComputedStyle(node).animationName === "none"` — synchronously, inside
-    // the same dispatch, which is `vg-187`. Base UI binds the same document
+    // the same dispatch. Base UI binds the same document
     // capture (`floating-ui-react/hooks/useDismiss`) but keeps its popup in the
     // DOM behind a `hidden` attribute until the close settles, so the hazard is
-    // not necessarily reachable now. **Window capture precedes document capture,
+    // not necessarily reachable. **Window capture precedes document capture,
     // so the sample is the state at the start of the dispatch either way**, and
     // the browser proof `tests/e2e/keyboard.spec.ts` asserts covers both.
     //
@@ -311,7 +311,7 @@ const RANGE_CONSUMED_KEYS: ReadonlySet<string> = new Set([
  * table binds — printable characters are its own, and Delete, the arrows and
  * Escape are its editing keys — while a range owns only the keys it moves on.
  * Asking the coarse question instead is what swallowed `Ctrl+Z` over a focused
- * slider (`vg-252`): a range is not a text field, and a modifier chord is not a
+ * slider: a range is not a text field, and a modifier chord is not a
  * key it has any use for.
  */
 function consumesKey(

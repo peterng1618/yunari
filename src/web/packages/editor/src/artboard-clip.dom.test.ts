@@ -18,7 +18,7 @@ import { mountEditorShell } from "./editor-shell.js";
 /**
  * The artboard clips the object layer, and the handles do not.
  *
- * `vg-046`: Fabric has no scene-level clip that is free — `clipPath` on an
+ * Fabric has no scene-level clip that is free — `clipPath` on an
  * *object* collides with the crop manager's authored image clip and with the
  * derived text-box clip, and wrapping the scene in a Group changes what
  * `canvas.getObjects()` means, which is the layer tree's and every walk's. So
@@ -27,9 +27,9 @@ import { mountEditorShell } from "./editor-shell.js";
  * is a canvas property, so no object owns it, no object serialises it, and the
  * scene root is still the scene root.
  *
- * Measured on Fabric 7.4.0 (the version this repo pins), which is what decided
- * the shape of this change and corrects one premise in the task brief: Fabric
- * 7 draws selection controls onto the *lower* canvas, not `upperCanvasEl`.
+ * Measured on Fabric 7.4.0 (the version this repo pins): Fabric 7 draws
+ * selection controls onto the *lower* canvas, not `upperCanvasEl`, which is why
+ * the gates below read that canvas.
  * `upperCanvasEl` exists but carries only text selection and free drawing. So a
  * DOM clip of the lower canvas — the brief's route — would take the handles
  * with it, which is the one outcome the brief says must not happen. The
@@ -287,7 +287,7 @@ describe("the stage clips the object layer to the artboard", () => {
 
 describe("the clip does not change what the scene root means", () => {
   it("leaves canvas.getObjects() identical in length and ids", async () => {
-    // Review Focus 1, and `vg-046`'s stated cost of the Group-wrapper repair:
+    // The stated cost of the Group-wrapper repair:
     // a scene wrapped in a group is one object where the document had many, so
     // the layer tree, `sceneBoxesOf`, `snap-manager` and every walk over the
     // root would read a different document. This fails if the clip is built by
@@ -459,7 +459,7 @@ describe("the stage's artboard paint", () => {
 
 describe("the two clips that already exist still behave", () => {
   it("keeps the crop manager's authored per-image clip", async () => {
-    // `vg-046` names this as the collision: a crop clip is an *object* clipPath,
+    // The collision: a crop clip is an *object* clipPath,
     // so a repair that also wrote one would either overwrite it or be
     // overwritten by it. Asserted by name, because "the clip still works" is
     // exactly what a silent overwrite looks like.
@@ -505,7 +505,7 @@ describe("the two clips that already exist still behave", () => {
   });
 
   it("keeps the derived text-box clip", async () => {
-    // The other half of `vg-046`'s named pair, and the one with the sharper
+    // The other half of the named pair, and the one with the sharper
     // failure: `persist.ts` deletes a text object's serialised clipPath and
     // rebuilds it from `yunariText.box`, so a repair that adopted the object's
     // clipPath would put a stale or artboard-sized rect where a text box's own
@@ -557,7 +557,7 @@ describe("the two clips that already exist still behave", () => {
 
 describe("a clipped selection stays grabbable", () => {
   it("keeps the handle's box inside the stage, not merely non-zero", async () => {
-    // The user's own requirement in the report `vg-046` came from. Asserted as
+    // The report's own requirement. Asserted as
     // a bounding box inside the stage: "the handle exists" is exactly what a
     // clipped handle satisfies while being unusable.
     const host = stageHost();

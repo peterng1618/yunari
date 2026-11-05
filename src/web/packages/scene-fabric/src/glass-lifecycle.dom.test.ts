@@ -288,7 +288,7 @@ describe("glass lifecycle", () => {
         const scratch = created.slice(before).filter((e) => e !== mine);
         perCycle.push(scratch.length);
         // Backing store still allocated by this cycle's scratch surfaces.
-        // Task 1 measured this growing without an explicit release.
+        // Without an explicit release this grows every cycle.
         stillHolding.push(scratch.filter((e) => e.width > 0).length);
 
         // Disposal must stop the panels compositing, not just release memory.

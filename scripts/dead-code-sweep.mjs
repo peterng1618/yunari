@@ -6,11 +6,10 @@
  * that no product code mounts but that stay green because their own test file
  * imports them. That class is invisible to both obvious questions — it is not
  * "no importer" (a test imports it) and not "no file" (the file is right there)
- * — and it is the class this repo actually produces: `font-picker.tsx` was kept
- * alive by a 984-line test and no mount for long enough to be filed twice as
- * `vg-268` and `vg-283`, until Phase 19's Task 19.1 mounted it and both closed.
- * `ui-copy-readers.ts` is the same class today, and permanently so — a test
- * reader is supposed to have no production importer.
+ * — and it is the class this repo actually produces: a large test can keep a
+ * module alive with no production mount. `ui-copy-readers.ts` is the same
+ * class, and permanently so — a test reader is supposed to have no production
+ * importer.
  *
  * What this is NOT: a verdict. Every hit is a candidate, printed with the search
  * that found it, and a human or an agent has to say whether the code is dead.
@@ -620,7 +619,7 @@ const usesIn = (text, name) =>
   (text.match(new RegExp(`\\b${escapeRe(name)}\\b`, "g")) ?? []).length;
 
 /**
- * A declaration is not a use (`vg-382`). These are the shapes
+ * A declaration is not a use. These are the shapes
  * that NAME a symbol without reaching it: its own declaration site, a specifier
  * in an import or an export list — `declaredExports` reads `export { x }` as a
  * declared export, so counting that line made a re-export evidence that the name
@@ -663,7 +662,7 @@ function declares(before, after) {
  * Occurrences of `name` in its own file that read it rather than declare it. This
  * is the tier's liveness test AND the number its evidence sentence reports, so
  * the number means what the sentence says: `instantiateCard` is declared once and
- * called once, and a row reporting 2 sends a Phase 2 reader hunting a second call
+ * called once, and a row reporting 2 sends a reader hunting a second call
  * site that does not exist.
  */
 function readsOutsideDeclaration(text, name) {
@@ -871,7 +870,7 @@ for (const file of all) {
 
     // `default` has no name to search for, so it is forced to 0 and always lands
     // in the dead tier — an `export default function foo()` whose `foo` is used in
-    // its own module would be tiered dead-export. No default row exists at HEAD.
+    // its own module would be tiered dead-export. No default row exists.
     // The two tiers take opposite actions, so they are two kinds, not one.
     const ownReads =
       name === "default" ? 0 : readsOutsideDeclaration(selfUse.get(file), name);
@@ -946,7 +945,7 @@ function bucketOf(file) {
 }
 
 /**
- * Every kind is printed even at zero: "this kind found nothing at HEAD" is an
+ * Every kind is printed even at zero: "this kind found nothing" is an
  * answer, and a kind that silently disappears reads as one that was never run.
  */
 const KINDS = [
@@ -1094,12 +1093,9 @@ if (!SELF_TEST) process.stdout.write(renderReport(report));
 if (SELF_TEST) {
   /**
    * The kind-fires checks run against a fixture tree this self-test writes, not
-   * against live source files (`vg-550`). Two of the four files
-   * they used to name were invalidated by work the product wanted:
-   * `font-picker.tsx` by the mount that closed `vg-268`/`vg-283`, and
-   * `boot-theme.ts`, the *negative* fixture, by an export that reddened the whole
-   * of Phase 6. A check naming a live file is a check the product can break by
-   * improving, so the fixture is the contract instead.
+   * against live source files. A check naming a live file is a check the
+   * product can break by improving — a module gains a mount, or a negative
+   * fixture gains an export — so the fixture is the contract instead.
    *
    * It is analysed by **this script, run again** (`--root`) rather than by a
    * second classifier in this process: the child is the same program over a
@@ -1188,8 +1184,8 @@ if (SELF_TEST) {
       fixtureExit === 0 && fixtureCandidates.length > 0,
     ],
     [
-      // A module only a test file imports. The real file this named held it only
-      // until the product mounted it, which is `vg-550`'s whole point.
+      // A module only a test file imports. A real file holds this only until
+      // the product mounts it, which is the class this check exists to find.
       "test-only-consumer fires on the fixture (a module only a test file imports)",
       fixtureAt("test-only-consumer", `${FIXTURE_PKG}/reader.ts`),
     ],
@@ -1222,7 +1218,7 @@ if (SELF_TEST) {
       ),
     ],
     /**
-     * The number in a redundant row is evidence a Phase 2 reader acts on, so it
+     * The number in a redundant row is evidence a reader acts on, so it
      * must mean what its sentence says. The fixture's `instantiateCard` is
      * declared once and called once: the raw occurrence count is 2, and a row
      * reporting 2 says a second call site exists when it does not. This fails the
@@ -1249,14 +1245,13 @@ if (SELF_TEST) {
       })(),
     ],
     /**
-     * `vg-382` widened the number this pins: it is a count of *reads*, so it
-     * excludes the declaration site, an object key and an import or export
-     * specifier. It asserted `claimed === usesIn(…) - 1` before the widening,
-     * which is false for any row whose own file names the symbol as a key as
-     * well — and that assertion was the wrong one, because `usesIn - 1` counts a
-     * declaration-shaped occurrence as a use. `claimed < raw` is the half that
-     * does not restate the emitter: no row may claim as many reads as it has
-     * occurrences, and no row may claim none.
+     * The number this pins is a count of *reads*, so it excludes the
+     * declaration site, an object key and an import or export specifier.
+     * `claimed === usesIn(…) - 1` is false for any row whose own file names the
+     * symbol as a key as well, because `usesIn - 1` counts a declaration-shaped
+     * occurrence as a use. `claimed < raw` is the half that does not restate the
+     * emitter: no row may claim as many reads as it has occurrences, and no row
+     * may claim none.
      */
     [
       "every redundant row's number is its read count, not its occurrence count",
@@ -1279,7 +1274,7 @@ if (SELF_TEST) {
         }),
     ],
     /**
-     * A declaration is not a use (`vg-382`), on fixtures: the repo's own contents
+     * A declaration is not a use, on fixtures: the repo's own contents
      * change, the shape does not. The first two are the red proof — reverted to
      * the pre-widening `usesIn - 1` they claim 2 and 1 where the answer is 0. The
      * third is the other direction, and the one that matters: an exclusion that
@@ -1321,10 +1316,10 @@ if (SELF_TEST) {
     ],
     [
       // The fixture's `live.ts` is imported by `reader.ts`, a production file, so
-      // it is live and no kind may report it. Its real counterpart held this
-      // check until `BootThemeOutcome` was exported from `boot-theme.ts` with no
-      // production importer — a *negative* fixture that is a real file is the
-      // same defect wearing the opposite sign, and it reddened all of Phase 6.
+      // it is live and no kind may report it. A negative fixture that is a real
+      // file is the same defect wearing the opposite sign: it goes live whenever
+      // the product changes, and reddens the check for a reason unrelated to the
+      // check itself.
       "the negative case is absent from every kind (the fixture's live.ts is imported by a production file)",
       fixtureCandidates.every(
         (candidate) => candidate.file !== `${FIXTURE_PKG}/live.ts`,
@@ -1376,10 +1371,10 @@ if (SELF_TEST) {
     ],
     /**
      * The tier's reachability, asserted directly rather than through a pinned
-     * file: before this guard this was zero and could never be anything else, and the
-     * only way to reach zero again is to count the file's own barrel as a
-     * production consumer. A count rather than a file, so Task 21.8 can move the
-     * kind-fires checks to a fixture tree without this one going stale.
+     * file: the count would otherwise be zero and could never be anything else,
+     * and the only way to reach zero again is to count the file's own barrel as
+     * a production consumer. A count rather than a file, so the kind-fires
+     * checks can move to a fixture tree without this one going stale.
      */
     [
       "barrel-only-export fires (the production-consumer gate looks past the file's own barrel)",
@@ -1488,8 +1483,7 @@ if (SELF_TEST) {
    * The guardian for the mechanism above, pushed after the in-progress write so
    * it reads the artefact a later phase reads rather than the in-memory object.
    *
-   * Three properties, and the third is the one three earlier rounds missed by
-   * asserting only the first two:
+   * Three properties, and asserting only the first two misses the third:
    *
    *   1. the marker writes really landed — `markerOnDisk` and
    *      `candidateMarkerOnDisk`, which the shapes alone cannot show;

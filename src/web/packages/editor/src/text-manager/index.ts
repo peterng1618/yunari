@@ -185,8 +185,7 @@ function adoptResizedBox(object: object): void {
   // stored number is `width` itself. Writing `width * scaleX` handed the next
   // pass a box that many units too large, which the pass wrote straight onto the
   // width -- every resize of a scaled text left it `scaleX` times the size the
-  // author dragged to (240 units dragged at `scaleX` 0.7432, 177.6 landed:
-  // `vg-233`).
+  // author dragged to (240 units dragged at `scaleX` 0.7432, 177.6 landed).
   writeAuthoredBoxDimension(target, "width", target.width);
 }
 
@@ -716,7 +715,7 @@ export function createTextManager(
     //
     // Only at the commit: `adoptResizedBox` runs on every step of the drag and
     // writes the unscaled `width`, so baking there would multiply the box once
-    // per step (`vg-233`). Written with the scale still on the object, and reset
+    // per step. Written with the scale still on the object, and reset
     // in the same synchronous step, so the stored box is unscaled from the
     // moment the next pass reads it.
     if (target instanceof Textbox) {

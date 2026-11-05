@@ -338,7 +338,7 @@ describe("ThemeLibraryManager", () => {
     // The base belongs to the document on screen. Clearing it before the new
     // document is mounted would leave a failed handover ungated — the document
     // was never replaced, so its next save must still be checked against what
-    // the library holds (`vg-642`).
+    // the library holds.
     const open = vi.fn(async () => ({
       envelope: storedInstalled,
       assets: {},
@@ -405,7 +405,7 @@ describe("ThemeLibraryManager", () => {
   it("opens one stored theme by id, under the base its own read came from", async () => {
     // The store's own route: the theme is already named, so there is no chooser
     // to draw — and the base still travels with the document, or the save that
-    // follows the open is ungated and replaces what the library holds (`vg-642`).
+    // follows the open is ungated and replaces what the library holds.
     const open = vi.fn(async () => ({
       envelope,
       assets: { "assets/backdrop.png": PNG },

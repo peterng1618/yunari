@@ -234,7 +234,7 @@ describe("a chart's bounded settings, as the owner hands them over", () => {
       max: 360,
     });
     // A pixel measure's ceiling is the chart's own drawn box, and a radius
-    // takes half of it — the finding `vg-478` met in the selection column.
+    // takes half of it, as in the selection column.
     expect(rowOf(charts[0]!, "thickness")).toMatchObject({
       control: "slider",
       min: 0,

@@ -686,7 +686,7 @@ function ownPropertyOf(kind: ShapeInsertion): string {
     case "rect":
       return "rx";
     // No circle and no triangle: a circle is an ellipse that nothing kept
-    // round, and a triangle is a 3-sided polygon. See vg-078.
+    // round, and a triangle is a 3-sided polygon.
     case "ellipse":
       return "ry";
     case "polygon":

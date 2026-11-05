@@ -259,6 +259,17 @@ describe("transcodeForPanel", () => {
     expect(recorded.calls).toHaveLength(0);
   });
 
+  it("rotates a circle's non-quarter angle and crops back to the frame", async () => {
+    const filter = await filterFor(
+      { offsetX: 0, offsetY: 0, shape: "circle" },
+      45,
+    );
+
+    expect(filter).toContain("rotate=45*PI/180");
+    expect(filter).toContain("crop=800:480");
+    expect(filter).not.toContain("transpose");
+  });
+
   it("encodes again when only the mounting angle changed", async () => {
     const bytes = randomBytes(16);
     const directory = await cacheDir();
@@ -335,7 +346,7 @@ describe("the composed panel clip", () => {
     expect(filter).toContain("scale=520:480");
   });
 
-  it("renders a gradient fill with gradients=", async () => {
+  it("renders an authored gradient fill with an offset-aware geq=", async () => {
     const filter = await filterFor({
       offsetX: 0,
       offsetY: 0,
@@ -350,8 +361,8 @@ describe("the composed panel clip", () => {
       },
     });
 
-    expect(filter).toContain("gradients=");
-    expect(filter).toContain("loop=loop=-1:size=1:start=0");
+    expect(filter).toContain("geq=");
+    expect(filter).not.toContain("gradients=");
   });
 
   it("keeps every gradient endpoint inside its source", async () => {
@@ -370,7 +381,8 @@ describe("the composed panel clip", () => {
     });
 
     // `gradients` reads pixels, not fractions: an endpoint on the far edge is
-    // outside the frame and paints the whole ramp wrong.
+    // outside the frame and paints the whole ramp wrong. Only the mask ramp
+    // still uses that source; the fill is a `geq` expression.
     const lines = filter.matchAll(
       /gradients=s=(\d+)x(\d+):[^[]*?:x0=(\d+):y0=(\d+):x1=(\d+):y1=(\d+)/g,
     );
@@ -385,7 +397,7 @@ describe("the composed panel clip", () => {
       expect(y1).toBeLessThan(height);
       checked += 1;
     }
-    expect(checked).toBe(2);
+    expect(checked).toBeGreaterThan(0);
   });
 
   it("draws the shared eased ramp, not a straight one", async () => {

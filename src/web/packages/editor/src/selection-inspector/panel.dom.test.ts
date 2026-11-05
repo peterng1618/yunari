@@ -185,7 +185,7 @@ describe("panel fields in the selection inspector", () => {
     expect(host.querySelector("[data-yunari-panel-stroke]")).not.toBeNull();
     // A bounded pixel measure is a slider whose bound is the panel's own drawn
     // box — a border can be as wide as the object's smaller edge, a corner no
-    // more than half of it (vg-478) — and the well beside the track is the
+    // more than half of it — and the well beside the track is the
     // typed route, a text input that takes a decimal rather than a
     // native `<input type=number>`.
     const border = field<HTMLInputElement>("[data-yunari-panel-border]");
@@ -333,7 +333,7 @@ describe("panel fields in the selection inspector", () => {
   });
 
   it("bounds the corner radius by half the box Fabric draws it in", async () => {
-    // `vg-478`: Fabric draws `Math.min(rx, w / 2)` (`Rect.ts`), so a stored
+    // Fabric draws `Math.min(rx, w / 2)` (`Rect.ts`), so a stored
     // radius past half the smaller drawn dimension is a field claiming a corner
     // the canvas never draws — which is what the author saw as a radius that
     // stopped having any effect. The bound is read from the object's own drawn
@@ -681,7 +681,7 @@ describe("shape material and a shape's own fields", () => {
       //
       // Every shape owns these, except the glass switch: a shape the treatment
       // cannot reach — an open path, a line, an arc — is offered no glass
-      // section at all (`vg-465`), and the same gate that decides that is asked
+      // section at all, and the same gate that decides that is asked
       // here rather than hand-listed, so this census cannot drift into a second
       // copy of it. `stroke` is absent on an open path — its one paint field
       // already writes the stroke and is labelled `Ink` — and the corner radius

@@ -77,8 +77,8 @@ export function normalizeUnitPreferences(input: unknown): UnitPreferences {
   const normalized: Record<string, unknown> = {};
 
   for (const [field, value] of Object.entries(input)) {
-    // A `fan` preference existed before RPM was ruled unconvertible. It is
-    // ignored rather than refused, so an old display.json keeps its other units.
+    // `fan` is not a convertible unit preference. It is ignored rather than
+    // refused, so an old display.json keeps its other units.
     if (field === "fan") {
       continue;
     }

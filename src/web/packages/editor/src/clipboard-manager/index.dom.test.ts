@@ -6,6 +6,7 @@ import {
   YUNARI_ASSET_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
+import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import {
   ActiveSelection,
   Canvas,
@@ -54,15 +55,21 @@ function theme() {
   const save = vi.fn();
   const assets = new AssetManager();
   const declarationsChanged = vi.fn();
+  const credits = new Map<string, ThemeCreditsEntry>();
   const clipboard = createClipboardManager({
     canvas,
     save,
     errors: createErrorManager(canvas),
     deletion: createDeletionManager(canvas, save),
     importImage: vi.fn(async () => null),
-    assets: createClipboardAssets(assets, declarationsChanged),
+    assets: createClipboardAssets(assets, declarationsChanged, {
+      readCredit: (assetId) => credits.get(assetId),
+      addCredit: (entry) => {
+        if (entry.assetId !== undefined) credits.set(entry.assetId, entry);
+      },
+    }),
   });
-  return { canvas, assets, clipboard, save, declarationsChanged };
+  return { canvas, assets, clipboard, save, declarationsChanged, credits };
 }
 
 beforeEach(() => {
@@ -152,6 +159,39 @@ describe("ClipboardManager", () => {
     expect(canvas.getObjects()).toHaveLength(4);
     const ids = canvas.getObjects().map((object) => object.get("id"));
     expect(new Set(ids).size).toBe(4);
+  });
+
+  it("carries a pasted file's credit to the destination's own asset id", async () => {
+    const source = theme();
+    const declared = await source.assets.import(pngFile());
+    source.credits.set(declared.id, {
+      kind: "image",
+      title: "Photo",
+      author: { name: "A Photographer" },
+      license: "CC0",
+      changes: "Imported unchanged",
+      assetId: declared.id,
+    });
+    const object = new Rect({ id: "photo-object", width: 10, height: 10 });
+    setObjectAssetReference(object, {
+      assetId: declared.id,
+      kind: "image",
+    });
+    source.canvas.add(object);
+    source.canvas.setActiveObject(object);
+
+    expect(await source.clipboard.copy()).toBe(true);
+    const destination = theme();
+    expect(await destination.clipboard.paste()).toBe(true);
+
+    const pasted = destination.canvas.getObjects()[0]!;
+    const reference = objectAssetReference(pasted);
+    expect(reference).toBeDefined();
+    expect(destination.credits.get(reference!.assetId)).toMatchObject({
+      title: "Photo",
+      author: { name: "A Photographer" },
+      assetId: reference!.assetId,
+    });
   });
 
   it("re-declares a referenced file when pasting into another theme", async () => {

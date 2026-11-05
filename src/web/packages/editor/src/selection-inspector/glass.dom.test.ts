@@ -455,8 +455,8 @@ describe("the glass control in the selection inspector", () => {
   });
 
   it("offers no glass section on a subject that cannot carry it, and takes nothing else with it", () => {
-    // `vg-465`: the section is **withheld** from a kind the treatment cannot
-    // reach, which reverses `vg-006` — and no reason is printed for it either:
+    // The section is **withheld** from a kind the treatment cannot
+    // reach — and no reason is printed for it either:
     // the subject's inability is a fact about its kind, not a question the
     // column has to answer. The fields the editor does serve stay untouched.
     const text = new Textbox("Hi", { left: 0, top: 0, width: 40 });
@@ -558,7 +558,7 @@ describe("the glass control in the selection inspector", () => {
     }
     // And no Paint section stands over the group at all: the glass row was the
     // only thing left in it, and a section whose whole body is one refusal is
-    // not a question a group is asked (`vg-465`).
+    // not a question a group is asked.
     expect(absence.querySelector('[data-yunari-section="paint"]')).toBeNull();
     expect(absence.querySelector("[data-yunari-glass-refusal]")).toBeNull();
   });

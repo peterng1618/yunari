@@ -57,7 +57,7 @@ const MAX_PRECISION = 6;
  * the author is in is tellable from the one they left: dragging `0 → 2 → 0` to
  * put the number back writes `precision: 0` and switches the chart from "at most
  * one decimal" to whole numbers, and the `0` that lands in the field is what says
- * so. The empty draft is still the route back to absent (`vg-497`).
+ * so. The empty draft is still the route back to absent.
  */
 const PRECISION_FLOOR = MIN_PRECISION;
 
@@ -100,7 +100,7 @@ export type ChartSettingView =
        * empty state, so an unauthored setting shows the family's own default
        * rather than nothing. The setting rows keep that fallback in the well too
        * — a series' precision does not, because its fallback is not what the
-       * renderer draws (`vg-497`).
+       * renderer draws.
        */
       readonly value: number;
       readonly min: number;
@@ -330,7 +330,7 @@ function ChartSeriesRow(props: {
           the document format's own — `schema/theme-document.schema.json` and
           `fabric-envelope-validate.ts` both state 0–6 for a binding's precision
           — and seven whole steps is a range an author drags, which is what
-          separates it from the artboard's 16384 validity ceiling (`vg-493`). */}
+          separates it from the artboard's 16384 validity ceiling. */}
       <ControlSlider
         label="Precision"
         id={`yunari-chart-binding-${binding.id}-precision`}

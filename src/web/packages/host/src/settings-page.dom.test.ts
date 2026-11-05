@@ -67,8 +67,8 @@ const json = (body: unknown): Response =>
   }) as unknown as Response;
 
 /** What `/api/themes/active` answers: one saved theme, and the map the page
- *  reads its `default` out of. The rows that map once drew are the chooser's
- *  now, so this page draws no display column at all. */
+ *  reads its `default` out of. The display column belongs to the theme chooser,
+ *  so this page draws none. */
 const THEME_MAP = {
   themes: [{ id: "living-room", name: "Living Room" }],
   templates: [],
@@ -88,8 +88,8 @@ const stubFetch = (hardware: Hardware, map: unknown = THEME_MAP): void => {
         return json(map);
       // The display the page answers for rides the request, because the answers
       // belong to a screen rather than to the machine. It is the default and
-      // only the default: the column that moved it lived in the theme list, and
-      // the listing is the chooser's now (`vg-649`).
+      // only the default: choosing a display belongs to the theme chooser,
+      // which owns that listing.
       case "/api/themes/living-room/answers?display=default":
         return json({ required: ["data-disk"], answers: {} });
       case "/api/devices":
@@ -203,11 +203,11 @@ describe("no two fieldsets on the page carry the same prompt", () => {
 
 /**
  * A theme's answers belong to a display, and this page has no selector for one:
- * the column that named a display lived inside the theme list, and the listing
- * is the chooser's now (`vg-649`). So the page answers for the default, and the
- * URL is still the assertion — it is the only thing that fails when the display
- * is dropped from it, because a page that read the wrong key would still draw
- * the same form and the host would still store what it was sent.
+ * choosing a display belongs to the theme chooser, which owns that listing. So
+ * the page answers for the default, and the URL is still the assertion — it is
+ * the only thing that fails when the display is dropped from it, because a page
+ * that read the wrong key would still draw the same form and the host would
+ * still store what it was sent.
  */
 describe("the display the answers are read and written for", () => {
   it("is the default, which is the only one the page can answer for", async () => {

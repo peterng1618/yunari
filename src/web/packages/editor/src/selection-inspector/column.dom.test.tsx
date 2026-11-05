@@ -218,8 +218,8 @@ describe("SelectionColumn", () => {
   });
 
   it("renders no header at all for a section with nothing in it", () => {
-    // A text object has no Paint row of its own: `vg-465` moved the glass
-    // refusal into the lead block above the sections, and this rule takes the
+    // A text object has no Paint row of its own: the glass refusal lives in the
+    // lead block above the sections, and this rule takes the
     // whole section away rather than standing a header over one sentence. A
     // locked object drops every section at once, which is the case asserted
     // beside this one (`index.dom.test.ts`).
@@ -251,7 +251,7 @@ describe("SelectionColumn", () => {
       expect(isOpen(section.id), section.id).toBe(true);
   });
 
-  /** `vg-466`: the subject block's `border-b` is the boundary between the
+  /** The subject block's `border-b` is the boundary between the
    *  header and the first section, so a `border-t` here drew one hairline twice.
    *  Every later section keeps its own top rule — that boundary is between two
    *  sections, and nothing above draws it. */
@@ -346,7 +346,7 @@ describe("SelectionColumn", () => {
   });
 
   /**
-   * `vg-254`: the slider is the one row that reaches all three write routes — a
+   * The slider is the one row that reaches all three write routes — a
    * preview while the gesture moves, one commit when it ends, and a cancel that
    * puts the value the press started from back. A pointer *drag* is a gesture
    * jsdom has no layout to resolve (see `ControlSlider`), so this pins the
@@ -549,13 +549,11 @@ describe("SelectionColumn", () => {
   });
 
   /**
-   * `vg-268`/`vg-283`: the face picker the font catalogue plan shipped is
-   * mounted on the field the ruling named as its owner, and the face it picks is
-   * applied to the preset the object is set in — a text object has no face of
-   * its own, a run names a preset and the preset carries the face. This pins the
-   * mount and the write, which is the whole of what the two rows asked for.
-   * The face field is a button now: the catalogue browser it used to mount
-   * lives in the finder's Fonts body (task 12), so the field's whole job is to
+   * The face picker is mounted on the field that owns faces, and the face it
+   * picks is applied to the preset the object is set in — a text object has no
+   * face of its own, a run names a preset and the preset carries the face. This
+   * pins the mount and the write. The face field is a button: the catalogue
+   * browser lives in the finder's Fonts body, so the field's whole job is to
    * ask for that surface. The preset a face applies to is read where the write
    * happens, because only the session still holds the selected object.
    */

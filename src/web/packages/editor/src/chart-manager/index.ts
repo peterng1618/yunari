@@ -133,7 +133,7 @@ function aspectOf(
  * renderer draws into is sized from these two numbers, so a thickness or a
  * radius past them is a value nothing on screen can show. Absent when the object
  * measures nothing: a field with no readable box keeps a typed box rather than a
- * guessed ceiling (`vg-469`).
+ * guessed ceiling.
  */
 function drawnEdgeOf(
   chart: YunariChart,
@@ -187,7 +187,7 @@ export class ChartManager {
    * the ceiling on how often a chart *may* re-apply — not a promise that every
    * tick draws every chart. Re-applying an option the chart already has made
    * ECharts repaint, and Fabric redraw the whole document, thirty times a second
-   * for an identical picture (vg-107). A chart absent from this map has never
+   * for an identical picture. A chart absent from this map has never
    * been drawn by this manager and is drawn.
    */
   readonly #drawnReading = new Map<string, string>();

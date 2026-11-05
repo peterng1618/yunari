@@ -6,10 +6,15 @@ import type {
 import {
   DASHBOARD_THEME_KIND,
   facetRecordOf,
+  MAX_METADATA_NAME_BYTES,
   migrateFabricThemeEnvelope,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
-import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
+import {
+  MAX_ARCHIVE_BYTES,
+  normalizeCredits,
+  type ThemeCredits,
+} from "@yunari/theme-package";
 import { type Session, sessionOf } from "../auth/session.js";
 import { entryOf } from "../catalogue/entry.js";
 import { favoriteCount, toggleFavorite } from "../db/favorites.js";
@@ -23,6 +28,7 @@ import {
   latestVersion,
   markFinalized,
   presignEventOf,
+  renameItem,
   setStatus,
   versionOf,
 } from "../db/items.js";
@@ -56,8 +62,6 @@ export const MAX_THUMBNAIL_BASE64 =
   Math.ceil((MAX_THUMBNAIL_BYTES * 4) / 3) + 4;
 /** One cap per route: a finalize body carries the base64 thumbnail too. */
 export const MAX_FINALIZE_BODY = MAX_THUMBNAIL_BASE64 + MAX_JSON_BODY;
-/** UTF-8 bytes, not UTF-16 units: a 200-character CJK name is 600 bytes. */
-const MAX_ITEM_NAME_BYTES = 200;
 /** A report's optional note; the admin verdict reason uses the same bound. */
 const MAX_REPORT_NOTE_LENGTH = 1000;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -323,10 +327,12 @@ async function baseline(
   const version = await latestVersion(env.DB, itemId);
   if (version === undefined) return notFound();
 
+  const credits = parseCredits(version.credits_json);
   return Response.json({
     version: version.version,
     createdAt: version.created_at,
     envelope: parseEnvelope(version),
+    ...(credits === undefined ? {} : { credits }),
     status: item.status,
   });
 }
@@ -349,6 +355,14 @@ async function requestVersion(
     return badRequest(validated.issues.map((issue) => issue.message).join(" "));
   const envelope = validated.envelope;
 
+  // Attribution is a package member, not part of the document, so it travels
+  // beside the envelope. A body that names one must carry a readable member.
+  const rawCredits = body["credits"];
+  const credits =
+    rawCredits === undefined ? undefined : normalizeCredits(rawCredits);
+  if (rawCredits !== undefined && credits === undefined)
+    return badRequest("The submitted credits are not a credits member.");
+
   // The path is not authority: a mismatch would let a client sign one item's
   // key while naming another item in the request.
   if (envelope.id !== itemId) {
@@ -369,14 +383,27 @@ async function requestVersion(
 
   const name = body["name"];
   let newItemName: string | undefined;
+  // A version request carries the theme's current name on every submission.
+  // A new item takes it as its name; an existing item follows it, so renaming
+  // the library theme is not the one field a published item ignores forever.
+  let renamedTo: string | undefined;
   if (item === undefined) {
     if (!isNonEmptyString(name))
       return badRequest("A name is required for a new item.");
     // Checked before the draft exists: `.length` is UTF-16 units, so a
     // 200-character CJK name would pass at 600 UTF-8 bytes.
-    if (new TextEncoder().encode(name).byteLength > MAX_ITEM_NAME_BYTES)
-      return badRequest("An item name may be at most 200 bytes.");
+    if (new TextEncoder().encode(name).byteLength > MAX_METADATA_NAME_BYTES)
+      return badRequest(
+        `An item name may be at most ${MAX_METADATA_NAME_BYTES} bytes.`,
+      );
     newItemName = name;
+  } else if (typeof name === "string" && name !== item.name) {
+    if (!isNonEmptyString(name)) return badRequest("A name cannot be empty.");
+    if (new TextEncoder().encode(name).byteLength > MAX_METADATA_NAME_BYTES)
+      return badRequest(
+        `An item name may be at most ${MAX_METADATA_NAME_BYTES} bytes.`,
+      );
+    renamedTo = name;
   }
 
   const now = new Date();
@@ -384,6 +411,7 @@ async function requestVersion(
   const plan = planVersion({
     previous: await previousEnvelope(env, envelope.id),
     candidate: envelope,
+    ...(credits === undefined ? {} : { credits }),
     now: nowIso,
   });
   if (!plan.ok) return badRequest(plan.message);
@@ -430,6 +458,9 @@ async function requestVersion(
     );
   }
 
+  if (renamedTo !== undefined)
+    await renameItem(env.DB, itemId, renamedTo, nowIso);
+
   // A parallel first submission may win the insert; that loser is ignored
   // rather than failing on the PRIMARY KEY, then reads the row it shares. An
   // item another account created in the race is not ours to write.
@@ -472,8 +503,9 @@ async function requestVersion(
     const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
 
     await env.DB.prepare(
-      `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json,
+         credits_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         session.userId,
@@ -481,6 +513,7 @@ async function requestVersion(
         envelope.id,
         plan.version,
         JSON.stringify(envelope),
+        credits === undefined ? null : JSON.stringify(credits),
       )
       .run();
 
@@ -848,6 +881,7 @@ async function finalizeVersion(
       item_id: itemId,
       version,
       envelope_json: presign.envelope_json,
+      credits_json: presign.credits_json ?? null,
       facets_json: JSON.stringify(
         facetRecordOf(parseEnvelope(presign), luminance.value),
       ),
@@ -1030,13 +1064,33 @@ async function previousEnvelope(
   env: Env,
   itemId: string,
 ): Promise<
-  | { readonly version: string; readonly envelope: FabricThemeEnvelope }
+  | {
+      readonly version: string;
+      readonly envelope: FabricThemeEnvelope;
+      readonly credits?: ThemeCredits;
+    }
   | undefined
 > {
   const row = await latestVersion(env.DB, itemId);
-  return row === undefined
-    ? undefined
-    : { version: row.version, envelope: parseEnvelope(row) };
+  if (row === undefined) return undefined;
+  const credits = parseCredits(row.credits_json);
+  return {
+    version: row.version,
+    envelope: parseEnvelope(row),
+    ...(credits === undefined ? {} : { credits }),
+  };
+}
+
+/** The stored attribution member, or nothing when the version carries none. */
+function parseCredits(
+  json: string | null | undefined,
+): ThemeCredits | undefined {
+  if (json === null || json === undefined) return undefined;
+  try {
+    return normalizeCredits(JSON.parse(json));
+  } catch {
+    return undefined;
+  }
 }
 
 /**

@@ -21,25 +21,21 @@ import {
 } from "./host-refind.js";
 import type { PageNavigation } from "./main.js";
 
-// The display-replacement case below was filed twice (`vg-532`, `vg-585`) for
-// timing out at the global 20s while green alone. The cost is the box, not the
-// case: the case ran 99ms inside a full idle suite (2026-11-02 report) and the
-// file 4.27s alone when the rows were filed, so a starved worker start is what
-// crosses 20s. Sixty seconds keeps a genuinely hung case red while surviving a
-// gate run that carries other work; every wait inside the cases keeps its own
-// budget.
+// The display-replacement case below needs a longer timeout than the global
+// 20s: a starved worker start is what crosses 20s, and the case runs under
+// 100ms inside a full idle suite. Sixty seconds keeps a genuinely hung case
+// red while surviving a gate run that carries other work; every wait inside
+// the cases keeps its own budget.
 vi.setConfig({ testTimeout: 60_000 });
 
 /**
- * `vg-190`: a rejection arriving after the scene mounted calls
- * `showLoadFailure`, which replaces the whole document and discards a display
- * that was already drawn. Ruled 2026-10-14: the replacement is intended — a
- * display that says it is broken beats one showing stale art — so what this
- * case pins is the behaviour, not a fix to it.
+ * A rejection arriving after the scene mounted calls `showLoadFailure`, which
+ * replaces the whole document and discards a display that was already drawn.
+ * The replacement is intended — a display that says it is broken beats one
+ * showing stale art — so what this case pins is the behaviour, not a fix to it.
  *
- * The row stayed open on its own measurement debt: of the three calls
- * `startHostedTheme` makes after `mountFabricScene`, which can actually reject
- * was unmeasured. Read, they are:
+ * Of the three calls `startHostedTheme` makes after `mountFabricScene`, only
+ * one can reject. Read, they are:
  *
  * - `loadFontAssets` cannot. `font-assets.ts` routes every failure — no
  *   `FontFace` API, missing bytes, missing metadata, a face that will not load —
@@ -1401,8 +1397,8 @@ function textOnlyEnvelope(): unknown {
  * mounted there would write the map and then reload onto the link's theme —
  * the control appearing to do nothing. The hop from a chosen id to
  * `reResolveUrl` is not asserted here: jsdom does not navigate, `reResolveUrl`
- * is unit-tested in `publish-follower.test.ts`, and the hop itself is the
- * Phase 4 gate's browser run.
+ * is unit-tested in `publish-follower.test.ts`, and the hop itself is covered
+ * by a browser run.
  */
 describe("the theme chooser's mount condition", () => {
   beforeEach(() => {
@@ -1904,8 +1900,8 @@ describe("the work one refresh frame does", () => {
 
   it("reports a line's paint that names no global", async () => {
     // The other half of the diagnostics: the line body's own paint resolution,
-    // which also lives in `collectChartIssues` and used to be reported by
-    // `buildChartPlan` for every family.
+    // which also lives in `collectChartIssues` rather than in `buildChartPlan`
+    // per family.
     //
     // **The fault is put on the revived chart, not on the served document.** A
     // hosted document cannot carry a dangling paint — `readFabricThemeEnvelope`

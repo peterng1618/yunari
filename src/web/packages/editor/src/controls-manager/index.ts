@@ -93,14 +93,14 @@ let applied = false;
  *
  * `createTextboxDefaultControls` already replaces `ml`/`mr` with Fabric's
  * `changeWidth`, because a textbox's width *is* its box. The vertical half is
- * the same statement, and it was not made here for a reason that turned out to
- * be half true: `Textbox.initDimensions` does end in
+ * the same statement, and the naive one does not hold: `Textbox.initDimensions`
+ * ends in
  * `this.height = this.calcTextHeight()` (`fabric/dist/index.mjs:18452`), so
  * Fabric's height is a measurement of the rendered text and a handle that
  * stopped there would be overwritten by the next text pass — and until that
  * pass, `placeInBox` would put the glyphs at a vertical alignment the clip does
- * not have. That is the disagreement vg-089 records, produced by the handle
- * rather than by a type preset.
+ * not have. That is the disagreement the handle produces rather than a type
+ * preset.
  *
  * So the edge is an ordinary handle while the pointer is down — `changeHeight`,
  * the exact mirror of the width path — and on release it records the box, which

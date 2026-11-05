@@ -195,7 +195,7 @@ it("reports selection changes and removes its canvas listeners", () => {
 it("carries the library key the selection's own first run is set in", () => {
   // The Tokens pane's chooser opens on this rather than on
   // `Object.keys(presets)[0]`, which is a default masquerading as an answer
-  // (`vg-094`). The reference is `typeTokenOf`'s — the pane's keys are its
+  //. The reference is `typeTokenOf`'s — the pane's keys are its
   // tail — so the field is the key, not the `typeTokens.` reference.
   const text = new IText("Hi", { left: 0, top: 0 });
   text.set({
@@ -280,7 +280,7 @@ it("names a document that reports no name by its id, never by nothing", () => {
   // an empty name is the nameless claim the refusal rule forbids, and `DocumentIdentity`
   // hides only on `undefined`, so `""` would render one. An envelope can still
   // hold one: the schema refuses an empty `metadata.name` and the loader
-  // supplies the id (`vg-221`), but this reads whatever the document holds,
+  // supplies the id, but this reads whatever the document holds,
   // while the `stableId` behind it requires 1–64 characters. `??` alone would
   // pass the empty string straight through, which is the defect this pins.
   const { bridge } = bridgeFor(
@@ -312,13 +312,11 @@ it("names a document that reports no name by its id, never by nothing", () => {
 });
 
 it("names the document once, so the status line and the chip cannot disagree", () => {
-  // vg-218. The reading was spelled three times — twice in `editor-main.ts` for
-  // the status line and once in the bridge's projection — and the two spellings
-  // had already drifted: the chip took the fallback on an empty
-  // `metadata.name` and the status line did not, so an unnamed theme showed its
-  // id in the chip and a blank `Opened ` in the status line. Both callers take
-  // this one reading now, and the status line's own wording had no test at all
-  // — which is what the second half pins.
+  // The reading is one owner: spelled in three places it drifts — the chip
+  // taking the fallback on an empty `metadata.name` while the status line does
+  // not shows an unnamed theme's id in the chip and a blank `Opened ` in the
+  // status line. Both callers take this one reading, and the second half pins
+  // the status line's own wording, which had no test at all.
   expect(documentNameOf({ name: undefined, id: "theme-id" })).toBe("theme-id");
   expect(documentNameOf({ name: "", id: "theme-id" })).toBe("theme-id");
   expect(documentNameOf({ name: "Kitchen", id: "theme-id" })).toBe("Kitchen");
@@ -415,12 +413,12 @@ it("gates ungroup on a real Group selection", () => {
 });
 
 it("offers its constructions with nothing selected, and runs them through the façade", () => {
-  // vg-460: the footer was present and empty until a layer was, because every
-  // object command needs a subject. A construction does not, so `can` answers
-  // true with no active object at all — the one exemption from the selection
-  // gate — and the dispatch is the façade's own route, which pulls the
-  // document's theme. A second, editor-only construction here would build a
-  // poorer object than the Add pane one gesture away.
+  // The footer is present with nothing selected because a construction is not
+  // an object command: every object command needs a subject, a construction
+  // does not, so `can` answers true with no active object — the one exemption
+  // from the selection gate — and the dispatch is the façade's own route, which
+  // pulls the document's theme. A second, editor-only construction here would
+  // build a poorer object than the Add pane one gesture away.
   const { bridge, session } = bridgeFor(undefined);
   expect(bridge.snapshot().activeKind).toBe("none");
   expect(bridge.can("new-text")).toBe(true);
@@ -1065,11 +1063,10 @@ it("reorders within one parent and reports the move", () => {
 });
 
 it("moves a layer across a group boundary, in and out", () => {
-  // vg-461: the refusal was by construction rather than by a rule. The anchor
-  // names the container — its own parent — so one operation covers both
-  // directions, and what the author gets is the object in a different place in
-  // the tree: rung 6 measured that nothing moves on the screen either
-  // way, because the transform bake is Fabric's own.
+  // Nothing refuses a cross-boundary move: the anchor names the container — its
+  // own parent — so one operation covers both directions, and what the author
+  // gets is the object in a different place in the tree. Nothing moves on the
+  // screen either way, because the transform bake is Fabric's own.
   const canvas = new Canvas(document.createElement("canvas"));
   const child = new Rect({ left: 0, top: 0, width: 10, height: 10 });
   const loose = new Rect({ left: 60, top: 0, width: 10, height: 10 });
@@ -1251,8 +1248,8 @@ it("leaves the canvas in the state a removal leaves, except the object itself", 
     // whatever the pointer last hovered. All three fields, because that is what
     // a real hover writes (`fabric/src/canvas/Canvas.ts:1236`) — and leaving
     // `_hoveredActualTarget` out of the fixture is what made this case blind to
-    // the one field the removal hook does *not* clear (`vg-487`, Fabric's side,
-    // not fixed here).
+    // the one field the removal hook does *not* clear (Fabric's side, not fixed
+    // here).
     canvas.setActiveObject(chart);
     canvas._hoveredTarget = chart;
     canvas._hoveredTargets = [chart];
@@ -1307,11 +1304,10 @@ it("leaves the canvas in the state a removal leaves, except the object itself", 
       .filter((key) => JSON.stringify(left[key]) !== JSON.stringify(right[key]))
       .sort();
 
-  // The reference: what a deletion leaves, which is the path `moveLayer` took
-  // before `detachFromRoot` existed. The dispose is the remover's own since
-  // `vg-486` — the scene adapter used to dispose whatever anyone
-  // removed, and no longer does — so a bare `canvas.remove` is now the *detach*
-  // half of a deletion and the deleting owner says the other half.
+  // The reference: what a deletion leaves, which a bare `canvas.remove` does
+  // not. The dispose belongs to the remover — the scene adapter disposes
+  // nothing anyone removed — so a bare `canvas.remove` is the *detach* half of
+  // a deletion and the deleting owner says the other half.
   const removed = build();
   removed.canvas.remove(removed.chart);
   removed.chart.dispose();

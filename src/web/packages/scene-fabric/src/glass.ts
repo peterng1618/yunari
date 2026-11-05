@@ -141,9 +141,9 @@ export interface GlassHandle {
 /**
  * The ceiling on the **sample region**, per panel, not a scene-wide total. It
  * bounds the scratch surface and the blurred area; it does not bound blur cost,
- * which Task 1 measured as flat across a radius sweep at a fixed size. Task 1
- * measured a 1672x941 artboard peaking near 0.9 Mpx for one panel, and the
- * browser accepted far more, so this is our own ceiling, not a platform one.
+ * which is flat across a radius sweep at a fixed size. A 1672x941 artboard
+ * peaks near 0.9 Mpx for one panel, and the browser accepts far more, so this
+ * is our own ceiling, not a platform one.
  *
  * The radius cap is a different thing and lives in `renderer-core`, in artboard
  * units. Its cost argument was measured in *device* pixels at DPR 1, where the
@@ -469,8 +469,8 @@ export function createGlass(options: GlassOptions): GlassHandle {
     // filter takes one length and this draw is at identity, so the panel's two
     // scales have to become one number here; the determinant's root is the only
     // rotation-independent one that is unchanged whenever the scale is uniform.
-    // It followed the matrix's x row alone, which is `scaleX`: a 4x1 panel
-    // blurred 4x a 1x4 one at one authored value (vg-515).
+    // Following the matrix's x row alone would be `scaleX`, blurring a 4x1
+    // panel 4x a 1x4 one at one authored value.
     const blurRadius =
       treatment.blurRadius *
       Math.sqrt(Math.abs(own[0] * own[3] - own[1] * own[2]));
@@ -874,7 +874,7 @@ function sampleRegion(
   blurRadius: number,
   target: { readonly width: number; readonly height: number },
 ): DeviceRect | undefined {
-  // `getBoundingRect` memoises, and a moving panel would sample where it used to be.
+  // `getBoundingRect` memoises, and a moving panel would sample where it was before the move.
   object.setCoords();
   const bounds = object.getBoundingRect();
   const corners: readonly (readonly [number, number])[] = [

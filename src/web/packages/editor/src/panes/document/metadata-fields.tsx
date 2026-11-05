@@ -1,6 +1,8 @@
 import {
   formatInstant,
   instantIn,
+  MAX_METADATA_NAME_BYTES,
+  normalizeThemeMetadata,
   type ThemeMetadata,
 } from "@yunari/renderer-core";
 import { ControlSelect } from "../../components/ui/control-select.js";
@@ -17,12 +19,13 @@ import { TagsField } from "./tags-field.js";
  *
  * **Every field commits on its own and the record is rebuilt whole**, because
  * the metadata is one object with one optional key per field: a commit that sent
- * only the typed value would drop the other four on the floor. `compact` is the
- * panel's long-standing rule — an emptied field loses its key rather than being
- * written as `""`, which the envelope's own validator reads as a present name,
- * and an emptied tag list loses it rather than being written as `[]` — and
- * `themeLanguage` always leaves with a value, because a v2 envelope requires
- * one and the control's blank reading is not a language.
+ * only the typed value would drop the other four on the floor. `normalizeThemeMetadata`
+ * is that rule and it lives in renderer-core, so the MCP tools write the same shape
+ * — an emptied field loses its key rather than being written as `""`, which the
+ * envelope's own validator reads as a present name, and an emptied tag list loses
+ * it rather than being written as `[]` — and `themeLanguage` always leaves with a
+ * value, because a v2 envelope requires one and the control's blank reading is not
+ * a language.
  */
 interface MetadataFieldsProps {
   readonly metadata: ThemeMetadata | undefined;
@@ -36,7 +39,13 @@ export function MetadataFields(props: MetadataFieldsProps): React.JSX.Element {
   const language = metadata?.themeLanguage ?? "en";
 
   const put = (patch: Partial<ThemeMetadata>): void => {
-    onCommit(compact({ themeLanguage: language, ...metadata, ...patch }));
+    onCommit(
+      normalizeThemeMetadata({
+        themeLanguage: language,
+        ...metadata,
+        ...patch,
+      }),
+    );
   };
 
   return (
@@ -45,6 +54,9 @@ export function MetadataFields(props: MetadataFieldsProps): React.JSX.Element {
         label={uiCopy.panels.name}
         data={{ "data-yunari-theme-name": "" }}
         value={metadata?.name ?? ""}
+        // The same bound publishing enforces, in the same unit: the store's
+        // item name is measured in UTF-8 bytes.
+        hint={`At most ${MAX_METADATA_NAME_BYTES} bytes.`}
         onCommit={(value) => put({ name: value })}
       />
       <ControlText
@@ -137,18 +149,4 @@ function sample(themeLanguage: string): string {
       themeLanguage,
     ) ?? ""
   );
-}
-
-/**
- * An emptied field loses its key rather than being written as `""`: the
- * envelope's own validator reads a present empty string as a value, and a theme
- * that declares no tags carries no `tags` key at all — which is the shape the
- * validator and the facet both expect.
- */
-function compact(metadata: ThemeMetadata): ThemeMetadata {
-  return Object.fromEntries(
-    Object.entries(metadata).filter(([, value]) =>
-      Array.isArray(value) ? value.length > 0 : value !== "",
-    ),
-  ) as ThemeMetadata;
 }

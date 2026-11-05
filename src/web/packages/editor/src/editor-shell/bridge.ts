@@ -84,7 +84,7 @@ export interface EditorShellSnapshot {
    *  name, or its id where the theme carries no name. `undefined` only while no
    *  document is open — never `""`, because a chip that named nothing is a
    *  claim the product does not have. The reading is `documentNameOf`, the same
-   *  one the status line takes, so the two cannot disagree (vg-218). */
+   *  one the status line takes, so the two cannot disagree. */
   readonly documentName: string | undefined;
   /** The open document's release version (`ThemeMetadata.version`), or
    *  `undefined` where it carries none. The same fact the Document pane's
@@ -97,7 +97,7 @@ export interface EditorShellSnapshot {
    *  it carries no preset — a shape, a group, a run with no reference — which
    *  is a different answer from `""` and from the first declared preset. The
    *  Tokens pane reads this so its chooser opens on what the selection is
-   *  actually set in rather than on `Object.keys(presets)[0]` (`vg-094`). */
+   *  actually set in rather than on `Object.keys(presets)[0]`. */
   readonly selectionPresetId: string | undefined;
 }
 
@@ -196,7 +196,7 @@ function activeKindOf(active: FabricObject | undefined): ActiveKind {
  * an empty name and the status line did not, so an unnamed theme showed its id
  * in the chip and a blank `Opened ` in the status line — and the publish
  * control's `Showing …` line kept the empty name too. Every reader in
- * `packages/editor/src` calls this one (vg-218). `||`, not `??`: an empty stored
+ * `packages/editor/src` calls this one. `||`, not `??`: an empty stored
  * name is a name the document does not have, and the id behind it is what the
  * schema guarantees is there.
  */
@@ -325,7 +325,7 @@ export function createEditorShellBridge(input: {
         : active !== undefined && isLocked(active),
       activeKind: backgroundSelected ? "background" : activeKindOf(active),
       // The fallback is taken on `""` as well as on an absent name: the schema
-      // now refuses an empty one and the loader supplies a name (`vg-221`), but
+      // now refuses an empty one and the loader supplies a name, but
       // this is a reading of whatever the document holds, by the one reading the
       // status line takes as well.
       documentName:
@@ -379,9 +379,9 @@ export function createEditorShellBridge(input: {
   const gate = { target, canArrange: canArrangeAction };
   /** Eligibility is owned by the registry; all this adds is the selection gate —
    * and its two exemptions. A construction needs no subject, so it is available
-   * with nothing selected, which is the whole of what `vg-460` asks for. Paste
-   * needs no subject either: its subject is the clipboard, and an empty canvas
-   * is where it is most useful. Every other action still has to have one. */
+   * with nothing selected. Paste needs no subject either: its subject is the
+   * clipboard, and an empty canvas is where it is most useful. Every other
+   * action still has to have one. */
   const can = (action: ShellAction): boolean =>
     isConstructionAction(action) ||
     action === "paste" ||
@@ -604,7 +604,7 @@ export function createEditorShellBridge(input: {
    * The structural shape of a drop, or `undefined` when it cannot land — one
    * owner for the question, because two askers have to agree: the panel marks
    * only what `layerDrop` answers for, and a plan that said "slot" to one and
-   * "refusal" to the other is the failure `vg-099` is about.
+   * "refusal" to the other is the failure this owner prevents.
    *
    * `anchorId` names both the container (its own parent) and the position
    * (directly above it), which is what lets one anchor express entering a
@@ -621,7 +621,7 @@ export function createEditorShellBridge(input: {
    *
    * The cycle is refused here, in the tree's own terms, rather than left to
    * Fabric: its `canEnterGroup` *logs* a circular tree and drops the add, so an
-   * author would get a move that silently did nothing (`vg-461`).
+   * author would get a move that silently did nothing.
    */
   const layerMove = (
     id: string,
@@ -801,7 +801,7 @@ export function createEditorShellBridge(input: {
         // than the pane one gesture away. The new object's own `object:added` is
         // what republishes the tree, so this closes without a second notify.
         //
-        // **A refusal is reported by the façade, not here** (`vg-484`): both
+        // **A refusal is reported by the façade, not here**: both
         // routes are wrapped in `new-object-panel.ts`'s `constructing`, the one
         // owner of a construction's refusal, so a theme with no usable token
         // says why instead of throwing out of this arm into a click handler.

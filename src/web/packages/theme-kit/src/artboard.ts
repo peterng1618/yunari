@@ -139,12 +139,10 @@ export function artboardPresetFor(
  * **One predicate, in the one place that has to know.** `nearestArtboardPreset`
  * and the display lens's grouping both answer "is this document portrait", and
  * two `height > width` tests are two answers that can drift — a portrait theme
- * offered landscape previews is exactly the failure the owner ruled a square
- * acceptable to avoid.
+ * offered landscape previews is the failure a single predicate prevents.
  *
- * A square is not taller, so it reads landscape. The owner's ruling: it keeps
- * this one comparison rather than a second one for the case neither half of
- * the table names.
+ * A square is not taller, so it reads landscape. Keeping this one comparison
+ * rather than a second one covers the case neither half of the table names.
  */
 export function artboardOrientation(size: ArtboardSize): ArtboardOrientation {
   return size.height > size.width ? "portrait" : "landscape";

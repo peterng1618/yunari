@@ -119,7 +119,7 @@ describe("the Add pane's insert surface", () => {
   it("scopes each group by its id, and the scope is not the heading", () => {
     const { pane } = mount();
 
-    // The e2e locators reach a tile through this hook (`vg-211`), and the
+    // The e2e locators reach a tile through this hook, and the
     // heading above a group is copy. A hook derived from the heading would move
     // the day an author's copy did — which is the one thing it exists to stop.
     const scopes = [...pane.querySelectorAll("fieldset")].map((group) =>
@@ -212,7 +212,7 @@ describe("the Add pane's insert surface", () => {
 
     // The hover arm of the same registration. Hover waits rather than opening at
     // once, so the clock is controlled instead of waited on — 600 is a wait
-    // longer than the delay, not a reading of it (`vg-450`).
+    // longer than the delay, not a reading of it.
     vi.useFakeTimers();
     try {
       tile.dispatchEvent(new Event("pointerenter"));

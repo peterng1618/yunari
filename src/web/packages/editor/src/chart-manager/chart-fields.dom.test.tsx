@@ -640,7 +640,7 @@ describe("a chart's series", () => {
     // The renderer's rule for an absent precision is "at most one decimal",
     // which is not a member of this integer range: a track has to sit somewhere,
     // so it takes the range's own floor — and the *well*, the half that reads
-    // the document, reads empty, because the document holds nothing (`vg-497`).
+    // the document, reads empty, because the document holds nothing.
     // An authored `0` and an unauthored one are different documents and must not
     // read alike: the hazard is an author who drags `0 → 2 → 0` to put the number
     // back and writes a whole-number precision nobody meant.

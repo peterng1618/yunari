@@ -117,11 +117,10 @@ describe("the editor on a URL that names a theme", () => {
   });
 
   it("names the validation problem instead of reporting a blank success", async () => {
-    // THE DEFECT this row closes (vg-110): a theme on disk that fails
-    // validation was answered as though it were not there, so the editor
-    // mounted the template and said "Fabric editor ready" over a document it
-    // never opened. The outcome is `invalid`, carrying the validator's own
-    // issues, and never `undefined`.
+    // A theme on disk that fails validation must not be answered as though it
+    // were not there: the editor would mount the template and say "Fabric
+    // editor ready" over a document it never opened. The outcome is `invalid`,
+    // carrying the validator's own issues, and never `undefined`.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),
       open: vi.fn(async () => {
@@ -149,10 +148,10 @@ describe("the editor on a URL that names a theme", () => {
   });
 
   it("names an over-large saved theme instead of reporting a blank success", async () => {
-    // vg-409: the same defect as the case above, one trigger over. A stored
-    // `theme.json` past the host's size bound was answered as absence, so the
-    // editor mounted the template and wrote "Editor ready" over a document the
-    // author has on disk. The outcome is its own kind, not `none` — the caller
+    // The same rule as the case above, one trigger over: a stored
+    // `theme.json` past the host's size bound must not be answered as absence,
+    // or the editor mounts the template and writes "Editor ready" over a
+    // document the author has on disk. The outcome is its own kind, not `none` — the caller
     // must say the theme is too large rather than that nothing was asked for.
     const client: ThemeLibraryClient = {
       list: vi.fn(async () => []),

@@ -18,7 +18,7 @@ import {
  * The certificates a secure origin needs: one root this machine keeps, and a
  * leaf signed by it for the addresses the machine has now.
  *
- * **Why a CA and not a self-signed leaf** (`vg-580`): a browser will not
+ * **Why a CA and not a self-signed leaf**: a browser will not
  * register a service worker on a certificate it had to warn about, and a
  * self-signed certificate is warned about on every device until it is trusted
  * by hand — where a root is trusted once and every later leaf is free. That is

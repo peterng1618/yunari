@@ -1,6 +1,7 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import {
   classifyThemeChange,
+  type ThemeCredits,
   type VersionLevel,
   versionFor,
 } from "@yunari/theme-package";
@@ -15,9 +16,16 @@ import {
  */
 export function planVersion(input: {
   readonly previous:
-    | { readonly version: string; readonly envelope: FabricThemeEnvelope }
+    | {
+        readonly version: string;
+        readonly envelope: FabricThemeEnvelope;
+        readonly credits?: ThemeCredits;
+      }
     | undefined;
   readonly candidate: FabricThemeEnvelope;
+  /** The attribution the submitted package carries, compared with the stored
+   *  version's. Absent means the submission carries none. */
+  readonly credits?: ThemeCredits;
   readonly now: string;
 }):
   | {
@@ -26,7 +34,14 @@ export function planVersion(input: {
       readonly level: VersionLevel;
     }
   | { readonly ok: false; readonly message: string } {
-  const change = classifyThemeChange(input.previous?.envelope, input.candidate);
+  const change = classifyThemeChange(
+    input.previous?.envelope,
+    input.candidate,
+    {
+      previous: input.previous?.credits,
+      next: input.credits,
+    },
+  );
   if (change.level === "none" && input.previous !== undefined) {
     return {
       ok: false,

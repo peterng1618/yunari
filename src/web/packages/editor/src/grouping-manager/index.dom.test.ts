@@ -310,10 +310,10 @@ describe("GroupingManager announces its context", () => {
 });
 
 /**
- * `vg-486`: `group()` takes each member off the root with the same
- * `canvas.remove` that a genuine deletion uses, and the scene adapter used to
- * dispose **any** `object:removed` target — so a grouped chart was disposed
- * exactly as a deleted one was. The symptom is invisible: the grouping is
+ * `group()` takes each member off the root with the same
+ * `canvas.remove` that a genuine deletion uses, and the scene adapter must not
+ * dispose **any** `object:removed` target — otherwise a grouped chart is
+ * disposed exactly as a deleted one is. The symptom is invisible: the grouping is
  * correct, the serialized scene is correct, and only the rendered backing canvas
  * is gone. So the probe is the row's own measurement, `{grouped, disposed}`.
  */

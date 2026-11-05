@@ -145,7 +145,7 @@ describe("the capture's view state", () => {
   };
 
   it("takes the shot with the view state lifted and puts it back", () => {
-    // The capture reads the document, not the screen (`vg-527`): the
+    // The capture reads the document, not the screen: the
     // entered-group dim is lifted for the shot itself and never longer.
     const { canvas, order } = recording({ shoot: () => undefined });
     captureCanvas(canvas, undefined, 640, suspend(order));

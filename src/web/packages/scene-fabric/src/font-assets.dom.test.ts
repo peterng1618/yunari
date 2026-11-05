@@ -260,10 +260,10 @@ describe("packaged font assets", () => {
   });
 
   it("shares one rangeless face across load calls, until the last release", async () => {
-    // The per-call filter used to let a later import register a second
-    // rangeless face for the same family, weight and style, which shadowed the
-    // first; a plain skip would instead lose the face when the earlier mount
-    // released. Sharing keeps one face and both mounts' claims.
+    // A per-call filter would let a later import register a second rangeless
+    // face for the same family, weight and style, which shadows the first; a
+    // plain skip would instead lose the face when the earlier mount released.
+    // Sharing keeps one face and both mounts' claims.
     const first = rangelessAsset("inter-local");
     const second = rangelessAsset("inter-other");
     const face = { load: vi.fn().mockResolvedValue(undefined) };

@@ -65,8 +65,8 @@ describe("createInspectorRoot", () => {
     root.destroy();
   });
 
-  /** `vg-466`: the kind was a word under the name and is now the kind's own
-   *  glyph, before the name, drawn from the vocabulary's one per-kind map. */
+  /** The kind is its own glyph before the name, drawn from the vocabulary's
+   *  one per-kind map, not a word under the name. */
   it("draws the kind's glyph before the name, and not the kind's word", () => {
     const host = document.createElement("div");
     const root = createInspectorRoot(host);
@@ -165,7 +165,7 @@ describe("createInspectorRoot", () => {
 
     root.publish(view({ locked: true }), edits);
 
-    // The hook is the locator contract (vg-148): the e2e spec finds the note by
+    // The hook is the locator contract: the e2e spec finds the note by
     // `[data-yunari-locked]`, so losing it would leave that spec passing on a
     // stale locator while the column stopped saying anything.
     expect(host.querySelector("[data-yunari-locked]")?.textContent).toBe(

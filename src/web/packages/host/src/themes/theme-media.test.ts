@@ -89,7 +89,7 @@ describe("media names", () => {
   it("name a panel clip by its pixel size and baked geometry", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
+    ).toBe("theme~4K_loop~320x320-o0_0-s1-f-v2.mp4");
   });
 
   it("change the clip name when the authored pan or zoom changes", () => {
@@ -105,6 +105,8 @@ describe("media names", () => {
 
     expect(panel({ offsetX: 0.25 })).not.toBe(panel({}));
     expect(panel({ scale: 2 })).not.toBe(panel({}));
+    expect(panel({ flipX: true })).not.toBe(panel({}));
+    expect(panel({ flipY: true })).not.toBe(panel({}));
   });
 
   it("keep the suffix and stay distinct for a long asset name", () => {
@@ -180,6 +182,20 @@ describe("panelVideoPlacement", () => {
       scale: 1,
       composition: { anchor: "left", extent: 0.65, fade: 0.12 },
       fill: { kind: "solid", color: "#101418" },
+    });
+  });
+
+  it("carries the authored mirrors into the bake", () => {
+    const envelope = envelopeWith({
+      media: { assetId: "bg", flipX: true, flipY: true },
+    });
+
+    expect(panelVideoPlacement(envelope)).toEqual({
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      flipX: true,
+      flipY: true,
     });
   });
 
@@ -300,8 +316,8 @@ describe("createThemeMedia", () => {
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-v2.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-v2.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-f-v2.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-f-v2.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
     expect(transcode).toHaveBeenLastCalledWith(
       new Uint8Array([9, 9, 9]),

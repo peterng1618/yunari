@@ -73,7 +73,7 @@ function replaceRuns(target: RunTarget, runs: readonly TextRun[]): void {
  *
  * The replacement takes the run's row identity with it: a row keyed by the run
  * object would otherwise be remounted by every edit, and `ControlText` commits
- * on Enter — the field would lose the caret on the common path (`vg-249`). */
+ * on Enter — the field would lose the caret on the common path. */
 function rewriteRun(
   target: RunTarget,
   index: number,

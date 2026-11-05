@@ -73,7 +73,7 @@ export function createEditPorts(args: {
     // does, and so does dropping run zero — and the object-level face is
     // `object-type.ts`'s to write. The authored pass deliberately leaves
     // `fontFamily`/`fontWeight` alone, so the face is refreshed here or not at
-    // all (`vg-766`).
+    // all.
     applyObjectTypeTokens(editor.canvas, state.globals);
     commit();
     rerender();

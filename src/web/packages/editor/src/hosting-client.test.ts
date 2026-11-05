@@ -49,7 +49,7 @@ describe("readHosting", () => {
 
   it("reads a refusal the host recorded against its last move", async () => {
     // A refused move cannot come back in the answer to the PUT that asked for
-    // it — the host answers first and moves afterwards (vg-173) — so the
+    // it — the host answers first and moves afterwards — so the
     // refusal is state the next read carries, in the host's own words.
     const read = await readHosting(
       answer("/api/hosting", {

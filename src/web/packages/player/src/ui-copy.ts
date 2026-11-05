@@ -96,9 +96,9 @@ export const uiCopy = {
    * can act on rather than a mechanism: the wake lock's sentence names the
    * *origin* the display was served from, because that is what a phone at
    * `http://<lan-ip>:<port>` lacks and no setting on the phone can change it.
-   * The host now serves https beside http on the same port, from a certificate
-   * it issues itself (`vg-580`), so a reader has two
-   * things to act on — the scheme and the root — and both are named.
+   * The host serves https beside http on the same port, from a certificate it
+   * issues itself, so a reader has two things to act on — the scheme and the
+   * root — and both are named.
    * The dimmer's label names the overlay and says outright that it is not the
    * screen's own brightness — a browser cannot set that, and a control that
    * implied otherwise would be lying to the reader in front of it.
@@ -108,8 +108,8 @@ export const uiCopy = {
     group: "Display controls",
     fullscreen: {
       label: "Fullscreen",
-      /** iPhone Safari has no `Element.requestFullscreen`; Task 25.6's
-       *  standalone mode is what that client gets instead, so it is named. */
+      /** iPhone Safari has no `Element.requestFullscreen`; standalone mode is
+       *  what that client gets instead, so it is named. */
       unavailable:
         "This browser cannot show a page fullscreen. Adding the display to the home screen is how the browser's own chrome is hidden here.",
       refused: "Fullscreen was refused. Try again.",

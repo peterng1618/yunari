@@ -195,9 +195,9 @@ it("gives every kind a mark no other kind wears", () => {
     { kind: "group" },
     { kind: "shape", shape: undefined },
     ...SHAPE_KINDS.map((shape) => ({ kind: "shape", shape }) as const),
-    // The unnamed family, in the set rather than after it: `vg-489` was this
-    // mark colliding with `bar`'s, and a pair compared outside the loop could
-    // still collide with a third mark the loop never saw.
+    // The unnamed family, in the set rather than after it: its mark must not
+    // collide with `bar`'s, and a pair compared outside the loop could still
+    // collide with a third mark the loop never sees.
     { kind: "chart", family: undefined },
     ...CHART_FAMILIES.map((family) => ({ kind: "chart", family }) as const),
   ];
@@ -223,14 +223,14 @@ it("gives every kind a mark no other kind wears", () => {
     }
   }
 
-  // `vg-489` was here, asserted as a collision: a chart whose family this build
-  // cannot name wore `bar`'s mark, because `chartFamilyGlyph`'s fallback *was*
-  // `CHART_BAR_GLYPH` — and `KIND_GLYPHS.chart` was the same constant, so the
-  // kind's generic mark and the unknown family's mark were one glyph. Nothing
-  // else on the row corrected it: the role abstains and reads the kind word
-  // ("Chart", `ui-copy.ts`), so the row claimed `bar` through the mark alone.
-  // The unnamed chart now wears the *kind's* generic mark, which is what the
-  // shape arm above already does for a shape kind it cannot name.
+  // The unnamed chart wears the *kind's* generic mark, which is what the
+  // shape arm above already does for a shape kind it cannot name. A chart whose
+  // family this build cannot name must not wear `bar`'s mark: `chartFamilyGlyph`'s
+  // fallback would be `CHART_BAR_GLYPH`, and `KIND_GLYPHS.chart` would be the
+  // same constant, so the kind's generic mark and the unknown family's mark
+  // would be one glyph. Nothing else on the row corrects it: the role abstains
+  // and reads the kind word ("Chart", `ui-copy.ts`), so the row would claim
+  // `bar` through the mark alone.
   expect(armGlyph({ kind: "chart", family: undefined })).toBe(
     lucideClass(KIND_GLYPHS.chart),
   );

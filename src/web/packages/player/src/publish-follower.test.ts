@@ -340,11 +340,10 @@ describe("followPublished's unreachable report", () => {
   });
 
   it("reports every unreachable tick, and leaves the pacing to its caller", async () => {
-    // A latch here was the first shape ruled and it strands the display: the one
-    // sweep misses while the host is still booting, no tick can succeed while
-    // the host is at its old address, so the latch never clears and nothing is
-    // tried again (R72). The follower reports a fact; the player owns the
-    // cooldown.
+    // A latch here strands the display: the one sweep misses while the host is
+    // still booting, no tick can succeed while the host is at its old address,
+    // so the latch never clears and nothing is tried again. The follower
+    // reports a fact; the player owns the cooldown.
     const onUnreachable = vi.fn();
     const stop = followPublished(
       {

@@ -9,7 +9,7 @@ import { uiCopy } from "./ui-copy.js";
 
 /**
  * The controls a reader operates on a phone display: fullscreen, keep-awake and
- * a dimmer (`vg-568`, `vg-576`).
+ * a dimmer.
  *
  * jsdom has none of the three APIs and applies none of the injected stylesheet,
  * so what is pinned here is the *decisions*: when the bar is up, what a control
@@ -187,8 +187,8 @@ describe("the fullscreen control", () => {
   it("says why not where the client has no arbitrary-element fullscreen", () => {
     // iPhone Safari's shape: no `Element.requestFullscreen` at all. The
     // control is drawn as unavailable and explains itself when pressed, and the
-    // sentence names the path that client does have (Task 25.6's standalone
-    // mode) rather than leaving the reader with a control that does nothing.
+    // sentence names the path that client does have (standalone mode) rather
+    // than leaving the reader with a control that does nothing.
     controls = mountDisplayControls();
     const button = part<HTMLButtonElement>(FULLSCREEN);
     expect(button.dataset["yunariUnavailable"]).toBeDefined();
@@ -300,10 +300,9 @@ describe("the keep-awake control", () => {
 
   it("reports nothing held, and says why, when the browser refused the request", async () => {
     // **The API exists and the client said no.** Reachable on a secure origin —
-    // headless Chromium answers `NotAllowedError` — and the case where the
-    // control used to tell assistive tech something untrue: it read
-    // `aria-pressed` from the reader's intent rather than from the lock it held,
-    // so a reader was given "Awake, pressed" over an unlabelled amber.
+    // headless Chromium answers `NotAllowedError`. The button reads
+    // `aria-pressed` from the lock it actually holds, never from the reader's
+    // intent, so a refused request is not announced as "Awake, pressed".
     const lock = fakeWakeLock({ refuse: true });
     controls = mountDisplayControls();
     const button = part<HTMLButtonElement>(AWAKE);
@@ -337,7 +336,7 @@ describe("the keep-awake control", () => {
   it("says why not where the origin has no wake lock, and names the origin", () => {
     // The shape a phone gets when it opens the address the console prints:
     // plain http on a LAN port, where `navigator.wakeLock` is absent. The host
-    // serves https beside it on that port (`vg-580`),
+    // serves https beside it on that port,
     // and this is the other half of what the copy has to say. jsdom has no such
     // API either, which is why this is the default state in this file.
     controls = mountDisplayControls();
@@ -367,9 +366,8 @@ describe("the dimmer", () => {
     expect(shade.style.opacity).toBe("0");
 
     // The track is the light level, so the resting position is the bright end
-    // and dragging towards the near end is what shades the picture. The mapping
-    // used to run the other way, and a reader who pushed the slider right got a
-    // darker screen.
+    // and dragging away from it is what shades the picture; the slider's value
+    // and the shade move in opposite directions.
     expect(slider.value, "the resting position is full light").toBe("100");
 
     slider.value = "50";

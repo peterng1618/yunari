@@ -76,7 +76,7 @@ describe("the editor's shared tooltip", () => {
     other.dispatchEvent(new Event("pointerenter"));
     // The wait is a literal rather than the constant read back, so this case
     // fails when the constant moves. 220 is measured, in the dock as it ships
-    // (`vg-450`): crossing its 296px row of 26px controls in the 0.4–1.6s a hand
+    //: crossing its 296px row of 26px controls in the 0.4–1.6s a hand
     // takes dwells at most 195ms on any one of them — so the label stays down for
     // the whole of a crossing, and is up well inside a deliberate hover's 400ms.
     vi.advanceTimersByTime(219);

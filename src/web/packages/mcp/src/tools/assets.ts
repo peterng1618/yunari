@@ -11,6 +11,7 @@ import {
   MAX_ASSET_BYTES,
   removeAsset,
 } from "@yunari/theme-kit";
+import { MAX_CREDITS_ENTRIES } from "@yunari/theme-package";
 import { z } from "zod/v4";
 import type { ThemeCredits, ToolContext, VideoTrim } from "../types.js";
 import { draftFor } from "./draft.js";
@@ -34,6 +35,8 @@ export interface AssetRef {
   readonly preview: string;
   readonly licence: string;
   readonly sourceUrl: string;
+  /** The row's own subtitle; on an image it is the photographer. */
+  readonly subtitle?: string;
   /** Present for a font row: the lead face's metadata. */
   readonly font?: AssetRefFont;
 }
@@ -107,6 +110,10 @@ function decodeRef(value: string): AssetRef {
     throw new Error(`That assetRef has no "licence". Its keys are ${keys}.`);
   }
   const font = fontOf(record["font"]);
+  const subtitle = record["subtitle"];
+  if (subtitle !== undefined && typeof subtitle !== "string") {
+    throw new Error('That assetRef has a malformed "subtitle".');
+  }
   return {
     source: text("source"),
     id: text("id"),
@@ -115,6 +122,7 @@ function decodeRef(value: string): AssetRef {
     preview: text("preview"),
     licence,
     sourceUrl: text("sourceUrl"),
+    ...(subtitle === undefined ? {} : { subtitle }),
     ...(font === undefined ? {} : { font }),
   };
 }
@@ -261,6 +269,9 @@ export async function searchAssets(
                   : result.preview,
               licence: result.licence,
               sourceUrl: result.sourceUrl,
+              ...(result.subtitle === undefined
+                ? {}
+                : { subtitle: result.subtitle }),
               ...(font === undefined ? {} : { font }),
             }),
             name: result.name,
@@ -425,10 +436,18 @@ function mergedCredits(
   const kept = (existing?.entries ?? []).filter(
     (candidate) => candidate.assetId !== entry.assetId,
   );
+  const entries = [...kept, entry];
+  // The package writer refuses an over-cap list, so the import that would cross
+  // the cap is refused here rather than leaving a draft that cannot be saved.
+  if (entries.length > MAX_CREDITS_ENTRIES) {
+    throw new Error(
+      `A theme carries at most ${MAX_CREDITS_ENTRIES} credits; this import would add one more.`,
+    );
+  }
   return {
     format: "yunari-theme-credits",
     version: 1,
-    entries: [...kept, entry],
+    entries,
   };
 }
 
@@ -465,6 +484,13 @@ export async function importAsset(
     }
 
     const draft = draftFor(context, input.themeId);
+    // The same cap the editor checks before it declares bytes, so a draft cannot
+    // accept an import its own package writer would later refuse.
+    if ((draft.credits?.entries.length ?? 0) >= MAX_CREDITS_ENTRIES) {
+      throw new Error(
+        `A theme carries at most ${MAX_CREDITS_ENTRIES} credits; this import would add one more.`,
+      );
+    }
     let bytes: Uint8Array;
     let declarationPath: string;
     let title: string | undefined;
@@ -501,6 +527,14 @@ export async function importAsset(
       title = ref.name;
       license = ref.licence === "" ? "Unknown" : ref.licence;
       sourceUrl = ref.sourceUrl === "" ? undefined : ref.sourceUrl;
+      // An image row's subtitle is its photographer, the same mapping the
+      // editor's finder makes; an icon row's subtitle is a style, not a person.
+      author =
+        ref.kind === "image" &&
+        ref.subtitle !== undefined &&
+        ref.subtitle !== ""
+          ? ref.subtitle
+          : undefined;
     } else {
       const path = input.path as string;
       if (input.license === undefined || input.license === "") {
@@ -580,8 +614,8 @@ const assetRefSchema = z
 /**
  * Drops a declared asset the draft no longer uses.
  *
- * Replacing a media asset used to leave the old declaration, its bytes and its
- * credit in the package. A referenced asset is refused rather than silently
+ * Replacing a media asset drops the old declaration, its bytes and its credit
+ * from the package. A referenced asset is refused rather than silently
  * breaking the object that names it.
  */
 export async function removeDraftAsset(

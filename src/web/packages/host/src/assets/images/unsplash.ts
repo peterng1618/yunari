@@ -6,8 +6,6 @@ import type {
   SourceContext,
 } from "../source.js";
 
-export const UNSPLASH_VERSION = "v1";
-
 const API = `https://api.unsplash.com/`;
 /** The API's documented `per_page` ceiling; a larger ask is a 400. */
 const PER_PAGE = 30;

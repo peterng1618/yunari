@@ -124,9 +124,9 @@ describe("the artboard backdrop", () => {
   });
 
   it("paints the board's colour when the theme declares no media", () => {
-    // The case the canvas used to cover: a colour-only theme has no media layer
-    // for a panel to sample, so without this the panel composites over
-    // transparency — alpha 130, measured, which is the defect this prevents.
+    // A colour-only theme has no media layer for a panel to sample, so without
+    // this the panel composites over transparency — alpha 130, measured, which
+    // is the defect this prevents.
     const context = scratch();
     const painted = artboardBackdrop({
       background: COLOUR,

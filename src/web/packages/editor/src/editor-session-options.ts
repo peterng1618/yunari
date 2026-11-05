@@ -94,7 +94,7 @@ export interface EditorSessionOptions {
   readonly onPublishSurface?: () => void;
   /** The shell's own projection of the selection, handed to the preset list so
    *  it says what the canvas selection is set in rather than showing the first
-   *  declared preset (`vg-094`). Optional for the same reason as above. */
+   *  declared preset. Optional for the same reason as above. */
   readonly selection?: PresetSelection;
   /** The shell's token selection, handed to the preset list so a row press
    *  reaches the store the inspector reads. Optional, like `selection`. */

@@ -2,8 +2,7 @@ import { fileURLToPath } from "node:url";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
-// `cloudflareTest` is the Vite plugin this suite runs on; it was renamed from
-// `@cloudflare/vitest-pool-workers` (vg-728). The plugin reads the same
+// `cloudflareTest` is the Vite plugin this suite runs on. The plugin reads the same
 // wrangler config and Miniflare bindings, and peers on the workspace's vitest 5.
 export default defineConfig(async () => {
   // Resolve from this file, not process.cwd(): the config is also loaded from

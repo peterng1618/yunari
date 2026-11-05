@@ -28,8 +28,9 @@ function envelope(paint: { readonly kind: "solid"; readonly color: string }) {
 }
 
 describe("hosted envelope plan", () => {
-  // vg-176: the phone showed the page behind the artboard, because the plan
-  // carried `{ ref: "palette.paper" }` and no renderer draws a reference.
+  // The plan resolves the artboard's palette references before the renderer
+  // sees them: no renderer draws a `{ ref: "palette.paper" }`, so a plan that
+  // carried one leaves the page showing behind the artboard.
   it("paints the artboard from its palette references", () => {
     const { artboard } = envelopePlan(
       envelope({ kind: "solid", color: "#e8e4da" }),

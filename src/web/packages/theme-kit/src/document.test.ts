@@ -212,6 +212,32 @@ describe("envelope setters", () => {
     );
   });
 
+  it("refuses more readings than the chart family draws", () => {
+    const base = blank();
+    const charted = (family: string) => ({
+      ...base,
+      scene: {
+        ...base.scene,
+        objects: [{ id: "chart", type: "YunariChart", family }],
+      },
+    });
+    const readings = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: `r${index}`,
+        semanticKey: "cpu.load",
+      }));
+
+    expect(() => setBindings(charted("gauge"), "chart", readings(2))).toThrow(
+      /one binding/,
+    );
+    expect(() => setBindings(charted("radar"), "chart", readings(13))).toThrow(
+      /at most 12/,
+    );
+    expect(() =>
+      setBindings(charted("radar"), "chart", readings(12)),
+    ).not.toThrow();
+  });
+
   it("replaces the palette and type tokens without mutating either input", () => {
     const original = blank();
     const palette = { text: original.globals?.palette?.text as never };

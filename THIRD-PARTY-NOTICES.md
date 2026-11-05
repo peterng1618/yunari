@@ -44,9 +44,6 @@ are provenance, not notice rows.
 | `node-hid` | 3.4.0 | MIT OR X11 | host: writes the 64-byte control reports a Kraken Z's LCD takes; MIT is the one taken. The Lian Li panels use `usb` alone; this one is only for the HID interface Windows owns, which libusb cannot claim. Native module, prebuilt per platform |
 | `serialport` | 13.0.0 | MIT | host: the TURZX 5" panel's serial transport. Native binding, prebuilt per platform |
 | `qr` | 0.7.2 | MIT OR Apache-2.0 | QR symbol for the display link (no dependencies of its own) |
-| `class-variance-authority` | 0.7.1 | Apache-2.0 | editor component variants |
-| `clsx` | 2.1.1 | MIT | editor class-name joins |
-| `tailwind-merge` | 3.7.0 | MIT | editor class-name overrides |
 | `better-auth` | 1.7.12 | MIT | store worker: OAuth sign-in, sessions and its own `user`/`session`/`account` tables |
 | `culori` | 4.0.2 | MIT | colour parsing and conversion (no dependencies of its own) |
 | `@modelcontextprotocol/server` | 2.4.0 | Apache-2.0 | MCP stdio server for the theme-designer tools |
@@ -150,14 +147,11 @@ its own nested copy of a name already listed above.
 | `vitest` | 5.0.5 | MIT | tests |
 | `wrangler` | 4.156.0 | MIT OR Apache-2.0 | Worker build/deploy |
 
-Four entries were added on 2026-10-13 — `class-variance-authority`, `clsx` and
-`tailwind-merge` to the runtime/editor table and `@playwright/mcp` to this
-section. CI's `licences` job derives every non-`@yunari/` name from the
-workspace manifests and fails on one absent from this file, and these four had
-been declared without an entry. Their licences were read from each installed
-package's own `package.json` (`.license`), which is also why they sit in two
-sections: the three the editor declares in `dependencies` ship with it, and
-`@playwright/mcp` is a `devDependency`.
+CI's `licences` job derives every non-`@yunari/` name from the workspace
+manifests and fails on one absent from this file. Each row's licence is read
+from the installed package's own `package.json` (`.license`); a package the
+editor declares in `dependencies` sits in the runtime table, and one it declares
+in `devDependencies` sits with the build tools.
 
 ## Vendored source
 

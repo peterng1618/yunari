@@ -93,7 +93,7 @@ function mount(): { readonly layout: ShellLayout; readonly root: HTMLElement } {
  * the Starter's 52 rows — more in a theme an author has built — finding your
  * place again is the whole cost of glancing at the assets.
  *
- * The offset lives on the showing pane's **body** (the overflow rule, `vg-208`), so each
+ * The offset lives on the showing pane's **body** (the overflow rule), so each
  * case reads and writes it there rather than on the column around it.
  */
 describe("the rail keeps each pane where you left it", () => {

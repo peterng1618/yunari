@@ -361,7 +361,7 @@ export function createThemeWrites(
         // A stored document past the size the store will read is understood
         // and too large to serve, which is the same 413 every other themes
         // route answers an over-large thing with — and the author is told the
-        // theme is there, which is the half a 404 got wrong (vg-409).
+        // theme is there, which is the half a 404 got wrong.
         // RFC 9110 §15.5.14 frames 413 around *request*
         // content and this is a stored document on a GET; the stretch is
         // taken deliberately, because inventing a second size-ish status

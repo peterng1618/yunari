@@ -36,7 +36,7 @@ import { uiCopy } from "../../ui-copy.js";
  *
  * **The draft's keyboard contract is `useDraftCommit`'s, not this field's** —
  * Escape, the Enter/IME guard and the composing ref are the one owner's
- * (`vg-203`), which is what the guard in `control.dom.test.tsx` requires of
+ *, which is what the guard in `control.dom.test.tsx` requires of
  * every file that holds an input.
  */
 interface TagsFieldProps {

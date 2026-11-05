@@ -124,7 +124,7 @@ function frostTheSurface(
  * one that cannot.
  *
  * **The section is withheld rather than rendered refused**, which reverses the
- * decision recorded here before (`vg-006`): the control used to appear on every
+ * decision recorded here before: the control used to appear on every
  * subject with the shape's own reason in the row, because withholding it "left
  * nothing anywhere saying so". The author has since ruled the other way — the
  * subject's inability is a fact about its kind, and a section that exists only

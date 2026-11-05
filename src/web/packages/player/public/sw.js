@@ -14,7 +14,7 @@
  * page says the theme could not be loaded — which is what it says, and it is
  * true.
  *
- * **The cache is keyed by the build it holds** (`vg-589`). A display runs for
+ * **The cache is keyed by the build it holds**. A display runs for
  * months and is redeployed repeatedly, and each build adds a content-hashed
  * copy of the bundle; one fixed cache name would hold every build it ever ran.
  * The name comes from the document's own bytes — the document names the

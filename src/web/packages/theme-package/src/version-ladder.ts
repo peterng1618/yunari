@@ -1,4 +1,5 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import { sameThemeCredits, type ThemeCredits } from "./credits.js";
 
 /**
  * The document's own version shape: three integers, with no prefix,
@@ -574,6 +575,10 @@ const REASON_ORDER: readonly ChangeReason[] = [
 export function classifyThemeChange(
   previous: FabricThemeEnvelope | undefined,
   next: FabricThemeEnvelope,
+  credits?: {
+    readonly previous: ThemeCredits | undefined;
+    readonly next: ThemeCredits | undefined;
+  },
 ): ThemeChange {
   if (previous === undefined) return { level: "initial", reasons: [] };
   const before = previous as unknown as Readonly<Record<string, unknown>>;
@@ -592,5 +597,19 @@ export function classifyThemeChange(
     if (LEVEL_ORDER[result.level] > LEVEL_ORDER[level]) level = result.level;
     for (const reason of result.reasons) fired.add(reason);
   }
-  return { level, reasons: REASON_ORDER.filter((reason) => fired.has(reason)) };
+  const change = {
+    level,
+    reasons: REASON_ORDER.filter((reason) => fired.has(reason)),
+  };
+  // Attribution travels in the package, not the document, so the envelope
+  // comparison cannot see a credits-only correction. It is still a change the
+  // store can publish, and a patch is the release a correction earns.
+  if (
+    change.level === "none" &&
+    credits !== undefined &&
+    !sameThemeCredits(credits.previous, credits.next)
+  ) {
+    return { level: "patch", reasons: ["metadata"] };
+  }
+  return change;
 }

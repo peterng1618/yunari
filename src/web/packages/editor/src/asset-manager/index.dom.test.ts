@@ -792,7 +792,7 @@ describe("AssetManager.placeImage", () => {
 });
 
 describe("assetReferencedBy", () => {
-  /** `vg-367`: the same depth `dropDanglingBindings` reads. A re-spelled walk
+  /** The same depth `dropDanglingBindings` reads. A re-spelled walk
    *  that stops at the canvas, or at the first group, reports a grouped image as
    *  unused and takes its declaration out from under a live object — so this
    *  pins the answer two groups down, where a shallow spelling diverges. */

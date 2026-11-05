@@ -270,7 +270,7 @@ export class YunariChart extends FabricObject {
    * **The canvas render is asked for by the call that changed the pixels, not
    * here.** Requesting one from this event made every engine repaint redraw the
    * whole document — including repaints this object did not cause — and with a
-   * refresh loop driving `setOption` that was every chart, every frame (vg-107).
+   * refresh loop driving `setOption` that is every chart, every frame.
    * `set` is what propagates the invalidation to an enclosing group's cache.
    *
    * The one exception is a transition the reader should see: while one

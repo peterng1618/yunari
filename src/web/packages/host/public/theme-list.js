@@ -345,8 +345,8 @@ export function themeList(
     row.setAttribute("aria-pressed", String(theme.id === showing));
 
     // The listing says whether a picture exists, so a theme without one draws
-    // the fallback directly: requesting an image that is not there logged a 404
-    // per theme on every clean load (`vg-655`). No picture is a normal state,
+    // the fallback directly: requesting an image that is not there would log a
+    // 404 per theme on every clean load. No picture is a normal state,
     // not a broken one — and an `<img>` whose source failed keeps drawing the
     // browser's own broken-image glyph over the space, which is why the
     // fallback is the element rather than an error handler.

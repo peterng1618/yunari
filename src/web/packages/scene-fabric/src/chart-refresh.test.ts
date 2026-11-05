@@ -89,9 +89,9 @@ describe("startSceneRefresh", () => {
     fake.run(0);
     expect(refresh).toHaveBeenCalledTimes(1);
 
-    // The page is going away: the editor's own `pagehide`. At HEAD this was
-    // `dispose`, which is one-way — and a page restored from the back/forward
-    // cache came back to a loop that could never run again (vg-510).
+    // The page is going away: the editor's own `pagehide`. Stopping is
+    // reversible, so a page restored from the back/forward cache gets a loop
+    // that can run again.
     scheduler.stop();
     expect(fake.cancelFrame).toHaveBeenCalledTimes(1);
     expect(fake.pendingFrames()).toBe(0);

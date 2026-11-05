@@ -96,11 +96,6 @@ export interface AssetImportMetadata {
   readonly sourceUrl?: string;
   readonly license?: AssetLicense;
 }
-/** The kinds a canvas image can be bound to; a video or a font is packaged
-    without ever becoming an object. */
-export type PlacedAssetReference = AssetReference & {
-  readonly kind: "image" | "svg";
-};
 
 /** Owns declared package bytes and the disposable browser previews derived from them. */
 export class AssetManager {

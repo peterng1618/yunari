@@ -9,8 +9,8 @@
  * **Nothing here subscribes to the host.** Every call below is one `fetch`
  * request and one answer — `readHosting`, `readPairingCode`, `setLan` — so a
  * hosting change made outside the editor is invisible until something asks
- * again, and the store that owns the answer says what that costs (`vg-214`,
- * `HostingStore`). The host's only stream *to* the editor is the sample stream
+ * again, and the store that owns the answer says what that costs
+ * (`HostingStore`). The host's only stream *to* the editor is the sample stream
  * at `/ws`, which carries telemetry batches and is open only in live mode — so a
  * hosting announcement would ride it where it is open rather than a channel this
  * layer opens, and the editor never polls.

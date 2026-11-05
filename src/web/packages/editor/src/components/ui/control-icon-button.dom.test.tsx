@@ -244,11 +244,11 @@ describe("the control set's own icon button", () => {
   });
 
   it("describes itself by the pane's standing note, and by its refusal beside it", () => {
-    // `vg-483`. `ControlProps.describedById` is the one route a note whose id
+    // `ControlProps.describedById` is the one route a note whose id
     // the control cannot mint reaches a screen reader by, and this control —
-    // the one that also *draws* its refusal — accepted the prop and never read
-    // it, so an icon button handed a pane's standing note was announced without
-    // it and nothing failed.
+    // the one that also *draws* its refusal — must read it: an icon button
+    // handed a pane's standing note that ignores the prop is announced without
+    // it and nothing fails.
     const container = mount(
       <ControlIconButton
         label="Delete layer"

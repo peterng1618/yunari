@@ -120,7 +120,7 @@ describe("object action registry", () => {
     // `actionEnabled` asks the gate for arrange ids, and `canArrange` reads the
     // live selection's members. The projection's `locked` is the selection's own
     // flag rather than "any member locked", so a count/lock rule here answered a
-    // second question rather than the same one (issue #94, `vg-411`).
+    // second question rather than the same one.
     const subject = target({ kind: "group", memberCount: 1, locked: true });
     for (const action of arrangeActions())
       expect(action.eligible(subject)).toBe(true);
@@ -186,7 +186,7 @@ describe("the constructions", () => {
     // primitive the Add pane offers and the registry cannot name. Read off
     // `insertGroups` — the Add pane's one owner of the list — rather than written
     // out here, so a primitive added to the pane fails this until the registry's
-    // ids carry it too. No surface draws the registry (`vg-570`); the agreement is
+    // ids carry it too. No surface draws the registry; the agreement is
     // what makes a construction id's word the pane's own.
     const primitives = insertGroups()
       .flatMap((group) => group.objects)

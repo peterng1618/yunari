@@ -5,7 +5,7 @@ import { mountFabricScene, reviveThemeEnvelope } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 
 /**
- * The artboard is a clip, and revival used to take it away.
+ * The artboard is a clip, and revival must leave it in place.
  *
  * `mountFabricScene` installs a `clipPath` sized to the artboard and paints
  * the artboard's own background. `reviveThemeEnvelope` then calls Fabric's

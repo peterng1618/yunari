@@ -7,7 +7,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The editor package cannot type-check `node:fs`, so this is the one suite where
 // the store's listing and the mount's pick are in the same program — and the
-// bare mount's answer is a composition of the two (`vg-363`).
+// bare mount's answer is a composition of the two.
 import { bootTheme } from "../../../editor/src/boot-theme.js";
 import {
   BACKGROUND_MEDIA_FILE,
@@ -1182,10 +1182,10 @@ describe("ThemeStore", () => {
   });
 
   it("throws the validation error for a theme on disk that does not validate", async () => {
-    // vg-110: a `theme.json` that exists and fails validation answered the same
-    // `undefined` a missing file gets, so the store threw the validator's own
-    // diagnosis away one layer below the reader. It is the typed error now,
-    // carrying the issues — the read-side sibling of the `409`/`413`
+    // A `theme.json` that exists and fails validation throws the typed error
+    // carrying the validator's issues, not the `undefined` a missing file gets:
+    // answering both as absence discards the validator's own diagnosis one
+    // layer below the reader. It is the read-side sibling of the `409`/`413`
     // refusals, not a sentence flattened into a bare failure.
     const store = createThemeStore(tmpDir);
     await fs.mkdir(path.join(tmpDir, "broken"), { recursive: true });
@@ -1217,12 +1217,12 @@ describe("ThemeStore", () => {
   });
 
   it("throws the too-large error for a stored theme past the size bound", async () => {
-    // vg-409: an over-large `theme.json` answered the same `undefined` a missing
-    // file gets, so the open route said 404, `bootTheme` returned `none` and the
-    // editor mounted the template under "Editor ready" — over a document the
-    // author has on disk. It is the typed error now, its own member of the
-    // family above rather than a validation failure: the validator never sees
-    // this document, and the bound is the store's own.
+    // An over-large `theme.json` throws its own typed error rather than the
+    // `undefined` a missing file gets: answering it as absence would make the
+    // open route say 404 and the editor mount the template over a document the
+    // author has on disk. It is its own member of the family above rather than
+    // a validation failure: the validator never sees this document, and the
+    // bound is the store's own.
     const store = createThemeStore(tmpDir);
     await fs.mkdir(path.join(tmpDir, "oversized"), { recursive: true });
     const document = JSON.stringify(envelopeFor("oversized", "Oversized"));
@@ -1377,11 +1377,11 @@ describe("ThemeStore", () => {
   });
 
   /**
-   * `vg-221`. The published schema refuses an empty `metadata.name`, and this
-   * is the document that would have become unloadable because of it: written
-   * before the bound, read after it. The case is a real folder on disk rather
-   * than an object handed to the validator, because "a stored document that
-   * validates today must not become unloadable" is the whole claim.
+   * The published schema refuses an empty `metadata.name`, but a stored
+   * document may carry one: the bound applies to new documents, and one already
+   * on disk must still load. The case is a real folder on disk rather than an
+   * object handed to the validator, because "a stored document that validates
+   * today must not become unloadable" is the whole claim.
    */
   it("names a stored document whose own name is empty", async () => {
     const store = createThemeStore(tmpDir);
@@ -1614,7 +1614,7 @@ describe("ThemeStore", () => {
   /**
    * The free-id claim (`expectFree`), which an import makes so that its id
    * decision and its write are one step. It is deliberately **not** the general
-   * write's guard: a base-less save onto a taken id still replaces (vg-642), and
+   * write's guard: a base-less save onto a taken id still replaces, and
    * nothing here widens that.
    */
   describe("free-id claims", () => {

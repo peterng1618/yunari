@@ -12,7 +12,7 @@
     <title>Yunari</title>
     <!-- What makes this display installable, and `display: standalone` in it
          is what draws without browser chrome on a client with no fullscreen
-         API (vg-577). The worker it points at is registered from
+         API. The worker it points at is registered from
          `src/service-worker.ts`. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <!-- The display is its own document, so it needs its own copy of the mark:
@@ -33,7 +33,7 @@
          one: every strip is `position:fixed` (`chrome.ts`), so an empty band is
          zero tall and the artboard gets the whole viewport. A strip in flow
          would take room from the artboard, re-fit the scene and move the whole
-         picture (vg-028). */
+         picture. */
       body {
         display: flex;
         flex-direction: column;
@@ -51,8 +51,8 @@
       }
       /* The dimmer and the controls (`display-controls.ts`). Both are fixed, so
          neither is a row of the column above and neither can re-fit the scene:
-         a control in flow takes its room from the artboard, which is what
-         moved the whole picture in vg-028. They are drawn here rather than
+         a control in flow takes its room from the artboard, which would move
+         the whole picture. They are drawn here rather than
          injected by the module because a stylesheet belongs to the document
          that declares the layout, and because the module is then a script with
          no colours in it. */

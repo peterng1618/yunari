@@ -129,7 +129,7 @@ export function glyphStrokeWidth(size: number): number {
  * `filled` carries **two** things the icon set separates, and neither is a stroke weight:
  * Its own escape where a stroke would be illegible at 12px (the record dot, the
  * live check), and the **on/off channel of a binary state** — the font
- * picker's favourited star, the layer row's locked lock (`vg-024`, "locked is a
+ * picker's favourited star, the layer row's locked lock ("locked is a
  * filled lock"). The second is not a licence to fill a glyph for looks; it is
  * the one place a two-valued control can say which of the two it is without a
  * second glyph or a second weight.
@@ -243,13 +243,7 @@ export const PANEL_STATUS_GLYPHS: Readonly<
   disconnected: CircleX,
 };
 
-/** The Wallpaper Engine cards' one action per kind, and the states it wears
- *  (R5). `FolderInput` says the scene is taken into a local project, which
- *  is an import rather than the store's plain `Folder` for opening one. */
-export const CONVERT_SCENE_GLYPH: LucideIcon = FolderInput;
-export const SET_BACKGROUND_GLYPH: LucideIcon = Wallpaper;
-export const CONVERTED_GLYPH: LucideIcon = Check;
-export const SETTING_GLYPH: LucideIcon = LoaderCircle;
+/** A Wallpaper Engine card's failure mark. */
 export const ACTION_FAILED_GLYPH: LucideIcon = TriangleAlert;
 /** A card's work in flight: the one sweep the finder spins while it waits. */
 export const BUSY_GLYPH: LucideIcon = LoaderCircle;
@@ -439,7 +433,7 @@ export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
  * mark rather than the one the family rows wear.
  *
  * **`chart` is `ChartNoAxesCombined`, and it used to be `CHART_BAR_GLYPH`**
- * (`vg-489`). A chart whose family this build cannot name falls back here, and
+ *. A chart whose family this build cannot name falls back here, and
  * while this entry *was* bar's glyph the fallback claimed a family the document
  * never named — `chartMark` reports an unrecognised family as `undefined`
  * precisely so the row cannot do that, and the role abstains to the word
@@ -477,12 +471,6 @@ export const TWISTY_GLYPHS: Readonly<
   collapsed: ChevronRight,
   expanded: ChevronDown,
 };
-
-/** The pager's two steps, from its own chevrons: each points the way
- *  the press goes, and the step that would leave the listing is the disabled
- *  one rather than a missing glyph. */
-export const PREVIOUS_PAGE_GLYPH: LucideIcon = ChevronLeft;
-export const NEXT_PAGE_GLYPH: LucideIcon = ChevronRight;
 
 /** Locked is a filled lock, unlocked an outline one: at this size the outlines
  *  differ only by a gap in the shackle, so the state rides the fill rather

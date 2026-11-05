@@ -1,9 +1,11 @@
+import { MAX_CREDITS_ENTRIES } from "@yunari/theme-package";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   closeHosts,
   context,
   hostHandler,
   payload,
+  refusalTextOf,
   sceneObjects,
   startHost,
 } from "./testing/tool-fixtures.js";
@@ -492,5 +494,89 @@ describe("grouping", () => {
     expect((card.ids as string[]).length).toBeGreaterThan(1);
     expect(card.issues).toEqual(expect.any(Array));
     expect((await validateTheme(ctx)).isError).toBeUndefined();
+  });
+});
+
+describe("asset attribution and the credits cap", () => {
+  /** A finder that answers one image row with a photographer subtitle. */
+  async function imageHost() {
+    return await startHost((request) => {
+      const url = new URL(request.path, "http://127.0.0.1");
+      if (url.pathname === "/api/assets/search") {
+        return {
+          body: {
+            pages: [
+              {
+                source: "pexels",
+                results: [
+                  {
+                    id: "pexels:photo",
+                    name: "Photo",
+                    kind: "image",
+                    subtitle: "A Photographer",
+                    preview: "https://example.test/photo.jpg",
+                    licence: "CC0",
+                    sourceUrl: "https://example.test/photo",
+                  },
+                ],
+                totalPages: 1,
+              },
+            ],
+          },
+        };
+      }
+      if (url.pathname === "/api/assets/bytes") {
+        return {
+          headers: { "x-yunari-filename": "photo.png" },
+          body: Buffer.from([137, 80, 78, 71]),
+        };
+      }
+      return hostHandler()(request);
+    });
+  }
+
+  it("credits an image with the photographer its finder row names", async () => {
+    const host = await imageHost();
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const found = payload(await searchAssets(ctx, "photo", ["pexels"], 1));
+    const ref = (found.results as { assetRef: string }[])[0]
+      ?.assetRef as string;
+
+    const imported = payload(await importAsset(ctx, { assetRef: ref }));
+
+    expect(imported.credit).toMatchObject({
+      kind: "image",
+      title: "Photo",
+      author: { name: "A Photographer" },
+    });
+  });
+
+  it("refuses an import that would cross the credits cap", async () => {
+    const host = await imageHost();
+    const ctx = context(host);
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+    const draft = ctx.drafts.current();
+    draft.credits = {
+      format: "yunari-theme-credits",
+      version: 1,
+      entries: Array.from({ length: MAX_CREDITS_ENTRIES }, (_, index) => ({
+        kind: "image",
+        title: `Photo ${index}`,
+        license: "CC0",
+        changes: "Imported unchanged",
+        assetId: `asset-${index}`,
+      })),
+    };
+    const before = structuredClone(draft.envelope.assets);
+    const found = payload(await searchAssets(ctx, "photo", ["pexels"], 1));
+    const ref = (found.results as { assetRef: string }[])[0]
+      ?.assetRef as string;
+
+    const result = await importAsset(ctx, { assetRef: ref });
+
+    expect(result.isError).toBe(true);
+    expect(refusalTextOf(result)).toMatch(/at most 256/);
+    expect(draft.envelope.assets).toEqual(before);
   });
 });

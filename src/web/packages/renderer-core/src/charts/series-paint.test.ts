@@ -12,10 +12,9 @@ const paletteOf = (settings: ChartContent["settings"]): unknown =>
 /**
  * The one-paint-per-chart-series rule, tested where it is declared.
  *
- * These cases moved here from `editor/src/chart-manager/index.dom.test.ts`
- * with the code (vg-242, RULED 2026-10-12): a declared invariant whose guard
- * sat in one consumer was the wrong owner by the map's own test, and `vg-139`
- * is what the split cost.
+ * These cases sit beside the code they guard: a declared invariant whose guard
+ * sat in one consumer was the wrong owner by the map's own test, and that
+ * consumer could change the invariant without the guard noticing.
  */
 describe("the one-paint-per-chart-series rule", () => {
   it("keeps each series its own colour when a middle one is removed", () => {

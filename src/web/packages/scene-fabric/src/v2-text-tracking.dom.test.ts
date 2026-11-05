@@ -206,8 +206,8 @@ describe("the object-level face has one owner", () => {
     const globals = globalsWith();
 
     // The run's token resolves to Inter, but the authored pass paints only the
-    // run's size, leading and tracking. `applyObjectTypeTokens` writes the
-    // face; a second writer is how one field got two homes (`vg-766`).
+    // run's size, leading and tracking. `applyObjectTypeTokens` is the one
+    // writer of the face; a second writer would give one field two homes.
     applyAuthoredText(canvas, globals, { bindings: {} });
     expect(object.fontFamily).toBe("Old");
 

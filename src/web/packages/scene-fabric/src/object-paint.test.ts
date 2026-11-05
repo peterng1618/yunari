@@ -5,8 +5,8 @@
  *
  * The pixels are proved in the editor's own selection-inspector suite; this is
  * the unit side — which property each object writes, and that the reference
- * survives a save and comes back as paint, since the panel now files it under
- * a different key than it used to.
+ * survives a save and comes back as paint under the property key the panel
+ * writes.
  */
 
 import type { Globals } from "@yunari/renderer-core";

@@ -10,7 +10,7 @@ const read = (rel: string): string => readFileSync(resolve(here, rel), "utf8");
  * `importImage` carried a `scale` option nothing read: the body decoded and
  * fitted the image by its own rule, while `asset-manager` passed
  * `scale: "image-contain"` as if it had chosen the fit. The fix is the option's
- * **removal** (vg-381), so the case that observes it is the absence of the three
+ * **removal**, so the case that observes it is the absence of the three
  * literals — in the declaration, in the `EditorInteraction` type, and at every
  * call site. It fails while any of them is still there.
  *

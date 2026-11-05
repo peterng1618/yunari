@@ -98,8 +98,8 @@ describe("loadHostedTheme", () => {
   it("loads a validated hosted envelope, named by its own id", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => Response.json(envelope));
 
-    // The fixture carries no name, and the loader names what it finds unnamed
-    // (`vg-221`): the published schema refuses an empty `metadata.name`, so a
+    // The fixture carries no name, and the loader names what it finds unnamed:
+    // the published schema refuses an empty `metadata.name`, so a
     // document read through here gains the id it is already identified by.
     await expect(loadHostedTheme("living-room", fetcher)).resolves.toEqual({
       ...envelope,

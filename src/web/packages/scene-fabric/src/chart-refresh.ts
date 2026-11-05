@@ -45,7 +45,7 @@ export function startSceneRefresh(
   let frame: number | undefined;
   // Three lifetimes, not two. The page's own (`stop`/`start`) is separate from
   // the editor's, because a page frozen into the back/forward cache comes back
-  // — and a loop that could only be stopped came back dead (vg-510).
+  // and its loop has to run again.
   let state: "running" | "stopped" | "disposed" = "running";
   // Deduped, because a failing chart would otherwise report every frame.
   const reported = new Set<string>();

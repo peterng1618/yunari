@@ -206,13 +206,10 @@ describe("the serialised object", () => {
   });
 
   it("omits the origin when defaults are stripped, like every other class", () => {
-    // **This assertion inverted on 2026-09-15**, and it is not a regression.
-    // It used to require the origin to survive stripping, which needed a
-    // `toObject` override — §134's explicit-origin condition. That condition
-    // was replaced: defaults are stripped everywhere, so a persisted key means
-    // an authored deviation and an absent one means the default of the Fabric
-    // major the envelope records and refuses to load across. The override was
-    // withdrawn with it.
+    // **This is the rule, not a regression.** Defaults are stripped everywhere,
+    // so a persisted key means an authored deviation and an absent one means the
+    // default of the Fabric major the envelope records and refuses to load
+    // across. The origin is no exception and needs no `toObject` override.
     //
     // What makes this worth asserting rather than deleting is that the chart
     // must behave like `Rect` and `Group` here. A single class still writing
@@ -320,9 +317,10 @@ describe("an engine repaint reaches the canvas", () => {
   });
 
   it("asks the canvas to redraw for its own repaint, and not for the engine's", () => {
-    // The second half of `vg-107`. The canvas render used to ride the engine's
-    // `rendered` event, so every engine repaint — an animation frame, a group's
-    // re-render, anything the engine did on its own — asked Fabric to redraw the
+    // The canvas render is asked for where the chart changes its own pixels,
+    // not from the engine's `rendered` event. Riding that event means every
+    // engine repaint — an animation frame, a group's
+    // re-render, anything the engine did on its own — asks Fabric to redraw the
     // **whole document**. The chart asks for the blit where it changes its own
     // pixels instead, so a repaint it did not ask for invalidates the object
     // (which is what an enclosing group's cache reads) without redrawing the

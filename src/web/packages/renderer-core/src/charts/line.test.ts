@@ -159,10 +159,10 @@ describe("the axis is placed by the data", () => {
   });
 
   it("smooths only when the author asks for it", () => {
-    // The choice was removed because a wall-clock edge kept extending the last
-    // segment, so a held stretch bent while the reader was looking at it. That
-    // edge is gone: the line moves only when a sample arrives, so the
-    // remaining cost is one reshape per sample — the authored curve's own.
+    // The choice is the author's because a wall-clock edge would extend the
+    // last segment, bending a held stretch while the reader was looking at it.
+    // The line moves only when a sample arrives, so the remaining cost is one
+    // reshape per sample — the authored curve's own.
     const samples = Array.from({ length: 5 }, (_, index) =>
       at(index, 40 + index),
     );
@@ -684,9 +684,10 @@ describe("toEngineColor", () => {
 
 describe("multi-series strokes", () => {
   /**
-   * §81 calls for multi-series line charts. Before the palette, every series
-   * drew in `stroke` — two traces in one colour, which a rendered screenshot
-   * showed is not a multi-series chart in any useful sense.
+   * §81 calls for multi-series line charts, and each series draws in its own
+   * palette colour. One `stroke` for every series is two traces in one colour,
+   * which a rendered screenshot shows is not a multi-series chart in any
+   * useful sense.
    */
   const seriesOf = (count: number): SeriesInput[] =>
     Array.from({ length: count }, (_, i) => ({

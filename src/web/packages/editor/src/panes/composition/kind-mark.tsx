@@ -40,7 +40,7 @@ const CHART_ICONS: Readonly<Record<string, LucideIcon>> = {
  * both.
  *
  * **A family this build does not know wears the kind's generic mark, not bar's**
- * (`vg-489`). The fallback used to be `CHART_BAR_GLYPH`, which named a family the
+ *. The fallback used to be `CHART_BAR_GLYPH`, which named a family the
  * document never named — and because `KIND_GLYPHS.chart` was the same constant,
  * the generic kind mark and the unknown-family mark were one glyph. This is the
  * rule the shape arm below already follows: an unnamed kind gets the kind's own

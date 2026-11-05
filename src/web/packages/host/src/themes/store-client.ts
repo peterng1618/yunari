@@ -3,6 +3,7 @@ import type {
   FabricThemeEnvelope,
   MineEntry,
 } from "@yunari/renderer-core";
+import type { ThemeCredits } from "@yunari/theme-package";
 
 /**
  * The author's half of the store, as the host calls it.
@@ -28,6 +29,8 @@ export interface StoreBaseline {
   readonly version: string;
   readonly createdAt: string;
   readonly envelope: FabricThemeEnvelope;
+  /** The attribution the stored package carries, when it has any. */
+  readonly credits?: ThemeCredits;
   readonly status: CatalogueStatus;
 }
 
@@ -54,7 +57,11 @@ export interface StoreClient {
   baseline(id: string): Promise<StoreBaseline | undefined>;
   createVersion(
     id: string,
-    input: { readonly envelope: FabricThemeEnvelope; readonly name: string },
+    input: {
+      readonly envelope: FabricThemeEnvelope;
+      readonly name: string;
+      readonly credits?: ThemeCredits;
+    },
   ): Promise<VersionPlan>;
   /** PUT the package through the Worker's authenticated upload route. */
   upload(url: string, bytes: Uint8Array): Promise<void>;

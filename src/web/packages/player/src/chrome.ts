@@ -5,13 +5,13 @@ import { uiCopy } from "./ui-copy.js";
 /**
  * The display's own chrome: what a reader is told, and where it sits.
  *
- * One owner, because the defect this module fixes was two. Every strip used to
- * position itself (`position:fixed`, `top:0` or `bottom:0`) and every one of
- * them covered the artboard whenever the artboard filled the viewport's height
- * — which is the landscape phone the editor frames by default, and any display
- * whose artboard matches its own aspect. Measured on the built player at
- * 844x390: the crop strip and the scaffold banner together covered the top and
- * bottom 28.8px of a 390px artboard, 14.8% of the authored composition.
+ * One owner, so several strips cannot position themselves independently. A
+ * strip that positions itself ad hoc (`top:0` or `bottom:0`) covers the
+ * artboard whenever the artboard fills the viewport's height — which is the
+ * landscape phone the editor frames by default, and any display whose artboard
+ * matches its own aspect. Measured on the built player at 844x390: the crop
+ * strip and the scaffold banner together cover the top and bottom 28.8px of a
+ * 390px artboard, 14.8% of the authored composition.
  *
  * The bands are the strips' anchors (`index.html` is the column that places
  * them), but nothing is laid out in them: an empty band is zero tall, so a
@@ -24,11 +24,10 @@ import { uiCopy } from "./ui-copy.js";
  * **Every strip overlays.** Taking room re-fits the scene, and a re-fit moves
  * the whole picture: measured on the built player at 1920×1080, a 29px strip
  * takes the artboard from 1051 to 1022 and moves the ink 16–25px, right when
- * the notice arrives and left when it leaves (vg-028, measured and ruled
- * 2026-10-14). A transport strip flashes on any reconnect and the theme chooser
- * hides and returns with the display controls, so either in flow would move a
- * dashboard nobody touched. A turned strip rides the composition's edge
- * (`setChromeFrame`) and the composition stays put.
+ * the notice arrives and left when it leaves. A transport strip flashes on any
+ * reconnect and the theme chooser hides and returns with the display controls,
+ * so either in flow would move a dashboard nobody touched. A turned strip rides
+ * the composition's edge (`setChromeFrame`) and the composition stays put.
  */
 
 export type ChromeSide = "top" | "bottom";
@@ -128,9 +127,9 @@ export function chromeBand(side: ChromeSide): HTMLElement {
  *
  * Every caller here is re-said rather than said once: the availability strip is
  * rebuilt on every refresh cadence and the transport strip changes as the
- * connection moves. Replacing by id is what keeps one kind of notice one strip
- * — which each writer used to arrange by hand, by removing the element it had
- * found and reusing it in place.
+ * connection moves. Replacing by id is what keeps one kind of notice one strip,
+ * rather than each writer finding the old element, removing it and reusing it
+ * in place.
  *
  * A strip is either a line of `text` or `children` a reader operates. The
  * theme chooser needs the second form, and it comes through here so the inset,
@@ -175,7 +174,7 @@ export function removeStrip(id: string): void {
 }
 
 /** How long the availability warning is up before it clears itself. Five
- *  seconds, ruled by the user on 2026-11-04: three was too short to read. It
+ *  seconds leaves time to read it without holding the strip up. It
  *  clears for every cause — an unplaceable sensor included — because a strip
  *  nobody can dismiss must never be the reason a theme cannot be used. The
  *  strip overlays, so clearing it is not a re-fit. */

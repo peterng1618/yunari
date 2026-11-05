@@ -98,6 +98,23 @@ describe("the compose vocabulary", () => {
     ).toBe("CPU load history");
   });
 
+  it("refuses a gauge with more than one reading", () => {
+    expect(() =>
+      addChartObject({
+        id: "chart",
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        family: "gauge",
+        bindings: [
+          { id: "cpu", semanticKey: "cpu.load" },
+          { id: "gpu", semanticKey: "gpu.load" },
+        ],
+      }),
+    ).toThrow(/one binding/);
+  });
+
   it("builds a text box whose value run names its binding", () => {
     const { object, bindings } = addTextObject({
       id: "load",

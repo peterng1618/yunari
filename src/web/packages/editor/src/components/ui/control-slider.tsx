@@ -25,7 +25,7 @@ import {
  * `SelectionEdits` has no preview route — so with nothing feeding the moving
  * value back the thumb could not move until the gesture ended and the value
  * landed, which is what the author saw as a slider that updates half a second
- * late (vg-449). `onPreview` stays for a caller that also wants a live preview
+ * late. `onPreview` stays for a caller that also wants a live preview
  * elsewhere; the pointer no longer depends on one being supplied.
  *
  * **The well is the slider's other edit route, and it is not a second one.** It
@@ -78,7 +78,7 @@ export function ControlSlider(
      * reporting an absence, so the owner hands it what a first edit would write —
      * and **the well reads the document alone**, rendering empty until something
      * is stored. An unauthored `0` and an authored one are different documents
-     * and must not read alike (`vg-497`); the well's empty draft is the route
+     * and must not read alike; the well's empty draft is the route
      * back, as it is for every other optional field.
      */
     readonly unauthored?: boolean;
@@ -180,9 +180,9 @@ export function ControlSlider(
   const valueAt = (position: number): number =>
     values === undefined ? position : (values[position] ?? value);
   // The well reads the document, so a value the document does not hold leaves it
-  // empty — the track's fallback is not something the author wrote (`vg-497`).
+  // empty — the track's fallback is not something the author wrote.
   // The gesture is the one exception: while a drag is in flight the moving value
-  // is this control's own state (`vg-449`), and a blank field beside a moving
+  // is this control's own state, and a blank field beside a moving
   // thumb would read as a broken control rather than as an empty document.
   const wellEmpty = unauthored === true && dragging === null;
   // Base UI's slider is not the accessible element: the nested `input[type=range]`
@@ -368,13 +368,12 @@ export function ControlSlider(
         </Slider.Control>
         {/* The row wraps, so a refused draft's own words take a line under the
             track instead of being squeezed into the fixed width the well is.
-            That width is 40px and not the 36px the readout used, because **the
-            well's own input is a target** and `hitTargetClasses` cannot widen a
+            That width is 40px rather than 36px, because **the well's own input
+            is a target** and `hitTargetClasses` cannot widen a
             replaced element: `well − 2(--space-6) − 2(1px border)` is the input's
             box, which the control set asks to be 24×24 — a floor of 38px, with a pixel either
             side of the box the design-language case samples at ±11. The narrow
-            well gave a 22px field, which that case hit-tests and fails; `vg-469`'s
-            item 10 is what put a field where a readout used to be. */}
+            well gave a 22px field, which that case hit-tests and fails. */}
         <ControlNumber
           inline
           {...(id === undefined ? {} : { id })}

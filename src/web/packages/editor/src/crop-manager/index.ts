@@ -375,7 +375,7 @@ export function createCropManager(options: CropManagerOptions): CropManager {
       canvas.remove(frame);
       // A locally-constructed transient that was never a document object, so
       // disposing it is correct — and with the scene adapter no longer
-      // disposing whatever anyone removes (`vg-486`), it has to be
+      // disposing whatever anyone removes, it has to be
       // said here or nothing says it.
       frame.dispose();
     }

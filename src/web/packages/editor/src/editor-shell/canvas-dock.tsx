@@ -64,11 +64,9 @@ function Action({
  * can run, and nothing it cannot.
  *
  * **The eight arrange actions are not here.** They are the selection
- * inspector's now (`vg-463`) — the author's own ruling, and the reversal of
- * `vg-016`'s: the Arrange *menu* went because this toolbar already had all
- * eight, and a toolbar that no longer carries them would make that sentence
- * false. One surface owns them, and it is the column that names the selection
- * they act on: `selection-inspector/selection-lead.tsx`.
+ * inspector's: the Arrange *menu* went because this toolbar already had all
+ * eight, and one surface owns them — the column that names the selection they
+ * act on: `selection-inspector/selection-lead.tsx`.
  *
  * What is left renders from the registry and asks it the same way, so the
  * surface never re-decides eligibility: an action this selection cannot run is
@@ -82,7 +80,7 @@ export function CanvasDock({
   // Every read below goes through the bridge, which projects the live selection
   // on demand — so the notification only has to force a render, and the set it
   // draws follows the selection without holding a copy of it. There is no greyed
-  // half here: `vg-463` moved the arrange actions to the inspector, which greys
+  // half here: the arrange actions live in the inspector, which greys
   // them, and this surface filters.
   const [, setRevision] = useState(0);
   // And the chords the tooltips print follow the live binding table, for the

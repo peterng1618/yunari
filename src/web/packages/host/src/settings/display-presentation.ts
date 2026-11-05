@@ -73,7 +73,7 @@ export function normalizePresentation(
 
   // The rectangle's set is exact, checked before any wrap: 360 is a full turn,
   // not a quarter, and normalising it to 0 first would silently store upright.
-  // `rotationAllowed` is the one owner of that set (`vg-760`).
+  // `rotationAllowed` is the one owner of that set.
   if (resolved === "rect" && !rotationAllowed(resolved, degrees)) {
     throw new DisplaySettingError(
       `A rectangular display turns in quarter turns, not ${String(rotation)} degrees.`,

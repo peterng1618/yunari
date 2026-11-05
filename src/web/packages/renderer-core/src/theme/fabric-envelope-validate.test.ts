@@ -1349,9 +1349,9 @@ describe("Fabric theme envelope validation", () => {
   });
 
   it("refuses font-only keys on a non-font asset", () => {
-    // The schema splits a font reference from every other kind. The decider
-    // used to be one bag for all kinds, so an image could carry a family and
-    // validate in code while every published tool refused it.
+    // The schema splits a font reference from every other kind. One bag for all
+    // kinds would let an image carry a family and validate in code while every
+    // published tool refused it.
     const result = validateFabricThemeEnvelope({
       ...envelope(),
       assets: [
