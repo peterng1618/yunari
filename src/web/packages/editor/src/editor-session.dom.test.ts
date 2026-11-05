@@ -1721,7 +1721,19 @@ describe("opening a theme over a document that has unsaved changes", () => {
       ),
       filename: "house.svg",
     });
-    const extensions = sessionWith();
+    const extensions = sessionWith({
+      envelope: {
+        ...envelope,
+        background: {
+          media: {
+            assetId: "previous",
+            bounds: "display",
+            offsetX: 0.4,
+            scale: 3,
+          },
+        },
+      } satisfies FabricThemeEnvelope,
+    });
 
     const outcome = await extensions.actionFacade().importAsset?.(
       { source: "lucide", results: [], totalPages: 1, failure: undefined },
@@ -1739,14 +1751,12 @@ describe("opening a theme over a document that has unsaved changes", () => {
     expect(outcome?.ok === true ? "imported" : outcome?.message).toBe(
       "imported",
     );
-    // An image becomes the background layer's picture, in the box the media
-    // already filled. (The Document pane kept this list when main wrote the
-    // case; the Add pane's list owns it now.)
-    expect(
-      (shells.last as { setBackground: ReturnType<typeof vi.fn> })
-        .setBackground,
-    ).toHaveBeenCalledWith({
-      media: expect.objectContaining({ bounds: "theme" }),
+    // An image becomes the background layer's picture at the defaults: how the
+    // previous picture was framed is not a statement about this one.
+    const written = (shells.last as { setBackground: ReturnType<typeof vi.fn> })
+      .setBackground;
+    expect(written.mock.calls.at(-1)?.[0]).toEqual({
+      media: { assetId: expect.any(String), bounds: "theme" },
     });
     extensions.destroy();
   });
@@ -2518,6 +2528,7 @@ describe("the Wallpaper Engine import transaction", () => {
   function wallpaperSession(
     manager: AssetManager,
     setBackgroundMedia: ReturnType<typeof vi.fn>,
+    initial: FabricThemeEnvelope = envelope,
   ): EditorSession {
     return new EditorSession({
       assetManager: manager,
@@ -2545,12 +2556,12 @@ describe("the Wallpaper Engine import transaction", () => {
           historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
         },
         scene: {},
-        snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+        snapshot: vi.fn((input) => ({ ...initial, ...input })),
         setBackground: vi.fn(),
         setBackgroundMedia,
       } as never,
       source: {} as never,
-      envelope,
+      envelope: initial,
       panelHosts: {
         add: document.body,
         assets: document.body,
@@ -2634,6 +2645,57 @@ describe("the Wallpaper Engine import transaction", () => {
       }),
     );
     extensions.destroy();
+  });
+
+  it("starts an imported video at the default box rather than the previous asset's", async () => {
+    const manager = new AssetManager();
+    const prior: FabricThemeEnvelope = {
+      ...envelope,
+      background: {
+        media: {
+          assetId: "old",
+          bounds: "display",
+          offsetX: 0.4,
+          scale: 3,
+        },
+      },
+    };
+    const extensions = wallpaperSession(manager, vi.fn(), prior);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/asset"))
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: {
+              "content-type": "video/mp4",
+              "x-yunari-filename": "Neon city.mp4",
+            },
+          });
+        if (url === "/api/themes/normalize-video")
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              bytesBase64: base64Of(new Uint8Array([4, 5, 6])),
+              reencoded: false,
+            }),
+            { status: 200 },
+          );
+        return new Response("", { status: 404 });
+      }),
+    );
+
+    expect(await extensions.importWallpaperItem(videoItem)).toMatchObject({
+      ok: true,
+    });
+    expect(extensions.envelope.background?.media).toEqual({
+      assetId: expect.any(String),
+      bounds: "theme",
+    });
+    extensions.destroy();
+    vi.unstubAllGlobals();
   });
 
   it("copies a conforming video unchanged and credits it as copied", async () => {
@@ -3645,6 +3707,112 @@ describe("the session's disposal", () => {
     ).toHaveLength(1);
     second.destroy();
     assets.remove();
+  });
+});
+
+/**
+ * The Assets pane's own background action reaches the same switch seam as the
+ * inspector and the import paths: the entry point differs, the restore cannot.
+ */
+describe("the Assets pane background action", () => {
+  const declared: FabricThemeEnvelope = {
+    ...envelope,
+    assets: [
+      { id: "a", kind: "image", path: "assets/a.png", sha256: "a".repeat(64) },
+      { id: "b", kind: "image", path: "assets/b.png", sha256: "b".repeat(64) },
+    ],
+    background: {
+      media: { assetId: "a", bounds: "display", offsetX: 0.2, scale: 3 },
+    },
+  };
+
+  function sessionWith(manager: AssetManager): EditorSession {
+    return new EditorSession({
+      assetManager: manager,
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => undefined,
+            getObjects: () => [],
+            requestRenderAll: vi.fn(),
+          },
+          clipboardManager: {
+            setImageImporter: vi.fn(),
+            setBindings: vi.fn(),
+            setAssets: vi.fn(),
+          },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+            setMentions: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: { attachEnvelope: () => {}, saveState: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn((input) => ({ ...declared, ...input })),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+        setGlobals: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope: declared,
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: document.body,
+      },
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+  }
+
+  const backgroundButtons = (): readonly HTMLButtonElement[] => [
+    ...document.body.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="Set as background"]',
+    ),
+  ];
+
+  /** Chooses one card, then presses the action its actions row offers. */
+  async function setBackground(assetId: string): Promise<void> {
+    await act(async () => {
+      document.body
+        .querySelector<HTMLButtonElement>(
+          `[data-yunari-asset-card="${assetId}"] [data-yunari-asset-select]`,
+        )
+        ?.click();
+    });
+    await act(async () => {
+      backgroundButtons()[0]?.click();
+    });
+  }
+
+  it("restores each asset's own geometry after a round trip", async () => {
+    document.body.replaceChildren();
+    const manager = new AssetManager();
+    manager.load({ assets: declared.assets ?? [] }, {});
+    const extensions = sessionWith(manager);
+
+    await setBackground("b");
+    expect(extensions.envelope.background?.media).toEqual({
+      assetId: "b",
+      bounds: "theme",
+    });
+
+    await setBackground("a");
+    expect(extensions.envelope.background?.media).toEqual({
+      assetId: "a",
+      bounds: "display",
+      offsetX: 0.2,
+      scale: 3,
+    });
+    extensions.destroy();
   });
 });
 

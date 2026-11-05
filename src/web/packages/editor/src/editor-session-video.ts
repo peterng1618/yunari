@@ -168,14 +168,7 @@ async function declareVideo(
     const reference = await host.assets.import(file, options.metadata);
     if (credit !== undefined)
       host.document.addCredit({ ...credit, assetId: reference.id });
-    const background = host.document.envelope.background;
-    host.document.setBackground({
-      ...background,
-      media: {
-        assetId: reference.id,
-        bounds: background?.media?.bounds ?? "theme",
-      },
-    });
+    host.document.setBackgroundAsset(reference.id);
     host.declarationsChanged();
     return { ok: true };
   } catch (error) {

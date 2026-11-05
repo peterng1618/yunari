@@ -342,6 +342,12 @@ export class EditorSession {
       background: () => this.#document.envelope.background,
       assets: () => this.#assets.declarations,
       onBackgroundChange: (next) => this.#document.setBackground(next),
+      // Which asset is shown and which model is in force are the document's
+      // switches, not whole-background replacements: only the document can
+      // capture the outgoing asset's geometry and restore the incoming one's.
+      onBackgroundAssetSelect: (assetId) =>
+        this.#document.setBackgroundAsset(assetId),
+      onBackgroundModeChange: (mode) => this.#document.setBackgroundMode(mode),
       // The face field's writes are the catalogue's own, above; the favourites
       // it browses by are the host's, so the client travels rather than a list.
       fontActions,
@@ -516,14 +522,7 @@ export class EditorSession {
           ...(trim === undefined ? {} : { trim }),
         }),
       onBackground: (asset) => {
-        const background = this.#document.envelope.background;
-        this.#document.setBackground({
-          ...background,
-          media: {
-            assetId: asset.id,
-            bounds: background?.media?.bounds ?? "theme",
-          },
-        });
+        this.#document.setBackgroundAsset(asset.id);
         this.#document.refreshBackgroundMedia();
       },
     });

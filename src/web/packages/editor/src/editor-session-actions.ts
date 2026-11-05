@@ -223,16 +223,10 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
           // for the canvas, which is the second press the finder offers.
           if (result.kind === "image" && placement !== "place") {
             // The background is a layer now, and its media carries the box it
-            // fills. A newly placed picture keeps the box it was fitted to and
-            // starts unmirrored and centred.
-            const background = document.envelope.background;
-            document.setBackground({
-              ...background,
-              media: {
-                assetId,
-                bounds: background?.media?.bounds ?? "theme",
-              },
-            });
+            // fills. The switch seam starts a newly placed picture at the
+            // defaults: how the previous picture was framed is not a statement
+            // about this one.
+            document.setBackgroundAsset(assetId);
             return;
           }
           // Every other declared picture is placed through the Add pane's own
