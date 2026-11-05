@@ -6,9 +6,10 @@ import { blendRampStops } from "@yunari/renderer-core";
 import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice, PanelVideoPlacement } from "./panel-device.js";
+import { panelCrop } from "./panel-video-composition.js";
 import type { SerialTransport } from "./serial-transport.js";
 import { openTurzxPanel, type TurzxOptions } from "./turzx-panel.js";
-import { panelCrop, transcodeForPanel } from "./turzx-video.js";
+import { transcodeForPanel } from "./turzx-video.js";
 
 /**
  * A transport whose every read answers the next scripted reply, then nothing.
@@ -350,6 +351,41 @@ describe("the composed panel clip", () => {
     });
 
     expect(filter).toContain("gradients=");
+    expect(filter).toContain("loop=loop=-1:size=1:start=0");
+  });
+
+  it("keeps every gradient endpoint inside its source", async () => {
+    const filter = await filterFor({
+      offsetX: 0,
+      offsetY: 0,
+      composition: { anchor: "top", extent: 0.5, fade: 0.3 },
+      fill: {
+        kind: "gradient",
+        angle: 90,
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+    });
+
+    // `gradients` reads pixels, not fractions: an endpoint on the far edge is
+    // outside the frame and paints the whole ramp wrong.
+    const lines = filter.matchAll(
+      /gradients=s=(\d+)x(\d+):[^[]*?:x0=(\d+):y0=(\d+):x1=(\d+):y1=(\d+)/g,
+    );
+    let checked = 0;
+    for (const line of lines) {
+      const [width = 0, height = 0, x0 = 0, y0 = 0, x1 = 0, y1 = 0] = line
+        .slice(1)
+        .map((value) => Number(value));
+      expect(x0).toBeLessThan(width);
+      expect(x1).toBeLessThan(width);
+      expect(y0).toBeLessThan(height);
+      expect(y1).toBeLessThan(height);
+      checked += 1;
+    }
+    expect(checked).toBe(2);
   });
 
   it("draws the shared eased ramp, not a straight one", async () => {
@@ -361,6 +397,9 @@ describe("the composed panel clip", () => {
     // Eight grayscale stops from the one ramp the DOM and the glass paint.
     expect(filter).toMatch(/gradients=/);
     expect(filter).toContain("nb_colors=8");
+    expect(filter).toContain("alphamerge=shortest=1");
+    // The gradient source turns by default; the bake must hold it still.
+    expect(filter).toContain("loop=loop=-1:size=1:start=0");
     const stops = blendRampStops()
       .map((stop) =>
         Math.round(stop.alpha * 255)
@@ -429,17 +468,19 @@ describe("the composed panel clip", () => {
 });
 
 describe("panelCrop", () => {
+  const box = { width: 800, height: 480 };
+
   it("crops to the same edge the player places", () => {
     // An ultrawide source leaves an overhang the offset pans through without
     // the pan floor taking over, so the placed rect's edge is not the box edge.
     const source = { width: 2560, height: 1080 };
     const rect = placement({
-      box: { width: 800, height: 480 },
+      box,
       source,
       offsetX: 0.1,
       offsetY: 0,
     });
-    const crop = panelCrop(source, 0.1, 0);
+    const crop = panelCrop(source, 0.1, 0, box);
 
     // The scaled crop edge is the placed rect's left edge, expressed in source
     // pixels; the same pan the player composes is what the panel encodes.
@@ -463,9 +504,9 @@ describe("panelCrop", () => {
 
   it("treats a non-finite offset as centred", () => {
     const source = { width: 1920, height: 1080 };
-    expect(panelCrop(source, Number.NaN, Number.POSITIVE_INFINITY)).toEqual(
-      panelCrop(source, 0, 0),
-    );
+    expect(
+      panelCrop(source, Number.NaN, Number.POSITIVE_INFINITY, box),
+    ).toEqual(panelCrop(source, 0, 0, box));
   });
 });
 

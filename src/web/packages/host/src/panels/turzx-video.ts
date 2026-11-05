@@ -16,19 +16,16 @@ import {
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import {
-  artboardGradientLine,
-  type BackgroundMask,
-  blendRampStops,
-  type PalettePaint,
-  resolveBackgroundComposition,
-} from "@yunari/renderer-core";
-import { placement } from "@yunari/scene-fabric";
 import { readVideoFacts } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelVideoPlacement } from "./panel-device.js";
+import {
+  composedSeconds,
+  composeFilterGraph,
+  panelCrop,
+} from "./panel-video-composition.js";
 import {
   type PanelVideoTurn,
   turnedBox,
@@ -61,7 +58,7 @@ const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
 /** Moves whenever the ffmpeg arguments or filter change: an output encoded by
  *  an older transform is not this clip, so it must not be served. */
-const TRANSCODE_VERSION = "v2";
+const TRANSCODE_VERSION = "v3";
 /**
  * The cache's byte bound. Theme clips are multi-megabyte, so a count cap alone
  * could hold gigabytes; 256 MiB keeps dozens of distinct clips and evicts by
@@ -288,54 +285,7 @@ function sha256(
  * picture. Deriving it here rather than re-stating the pan formula is what keeps
  * the panel and the player on the same edge.
  */
-export interface PanelCrop {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
 const BOX = { width: 800, height: 480 } as const;
-
-export function panelCrop(
-  source: { readonly width: number; readonly height: number },
-  offsetX: number,
-  offsetY: number,
-  box: { readonly width: number; readonly height: number } = BOX,
-  scale?: number,
-): PanelCrop {
-  const rect = placement({
-    box,
-    source,
-    offsetX: Number.isFinite(offsetX) ? offsetX : 0,
-    offsetY: Number.isFinite(offsetY) ? offsetY : 0,
-    ...(scale === undefined ? {} : { scale }),
-  });
-
-  const scaleX = rect.width / source.width;
-  const scaleY = rect.height / source.height;
-  const width = Math.max(1, Math.round(box.width / scaleX));
-  const height = Math.max(1, Math.round(box.height / scaleY));
-
-  return {
-    x: clamp(
-      Math.round(-rect.left / scaleX),
-      0,
-      Math.max(0, source.width - width),
-    ),
-    y: clamp(
-      Math.round(-rect.top / scaleY),
-      0,
-      Math.max(0, source.height - height),
-    ),
-    width,
-    height,
-  };
-}
-
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(high, value));
-}
 
 /**
  * The decode-and-fit filter: the authored pan when the source size is known,
@@ -376,12 +326,11 @@ function panelFilter(
     };
   }
 
+  const seconds = composedSeconds(facts);
   return {
-    filter: composedFilter(facts, placement, box, turn),
+    filter: composeFilterGraph(box, placement, facts, turn),
     complex: true,
-    ...(facts === undefined || !(facts.durationMs > 0)
-      ? {}
-      : { durationSeconds: facts.durationMs / 1000 }),
+    ...(seconds === undefined ? {} : { durationSeconds: seconds }),
   };
 }
 
@@ -409,135 +358,6 @@ function plainFilter(
   );
 
   return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${turnSuffix}`;
-}
-
-/**
- * The composed graph, in the turned box and with the turn applied last.
- *
- * One mask line decides every surface, so the host reads the resolver's own
- * geometry rather than re-deriving the ramp. The fill covers the whole box; the
- * media is cropped to the region's cover, scaled to the region, masked, and laid
- * over the fill at the region's offset.
- */
-function composedFilter(
-  facts: { readonly width: number; readonly height: number } | undefined,
-  placement: PanelVideoPlacement,
-  box: { readonly width: number; readonly height: number },
-  turn: PanelVideoTurn,
-): string {
-  const composition = resolveBackgroundComposition(
-    { width: box.width, height: box.height },
-    placement.composition,
-    facts,
-  );
-  const region = composition.region;
-  const width = Math.max(1, Math.round(region.width));
-  const height = Math.max(1, Math.round(region.height));
-  const x = Math.max(0, Math.round(region.left));
-  const y = Math.max(0, Math.round(region.top));
-
-  const media =
-    facts === undefined || facts.width <= 0 || facts.height <= 0
-      ? `scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${width}:${height}`
-      : (() => {
-          const crop = panelCrop(
-            { width: facts.width, height: facts.height },
-            placement.offsetX,
-            placement.offsetY,
-            { width: region.width, height: region.height },
-            placement.scale,
-          );
-          return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:${height}`;
-        })();
-
-  const parts = [
-    `[0:v]${media}[media]`,
-    `${fillSource(placement.fill, box.width, box.height)}[fill]`,
-  ];
-
-  let overlayInput = "media";
-  for (const [index, mask] of composition.masks.entries()) {
-    parts.push(
-      `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
-      `[${overlayInput}][mask${String(index)}]alphamerge[composed${String(index)}]`,
-    );
-    overlayInput = `composed${String(index)}`;
-  }
-
-  const turnStep = turnFilter(turn);
-  parts.push(
-    `[fill][${overlayInput}]overlay=x=${x}:y=${y}:shortest=1[turned]`,
-    `[turned]${turnStep === "" ? "null" : turnStep.slice(1)}[out]`,
-  );
-  return parts.join(";");
-}
-
-/** A solid or linear-gradient source covering the whole box. */
-function fillSource(
-  fill: PalettePaint | undefined,
-  width: number,
-  height: number,
-): string {
-  if (fill === undefined) return `color=c=0x000000:s=${width}x${height}`;
-  if (fill.kind === "solid")
-    return `color=c=${ffmpegColor(fill.color)}:s=${width}x${height}`;
-
-  const colors = gradientColors(fill.stops);
-  const line = artboardGradientLine(fill, width, height);
-  const stops = colors.map((color, index) => `c${index}=${color}`).join(":");
-  return (
-    `gradients=s=${width}x${height}:${stops}:nb_colors=${colors.length}` +
-    `:x0=${Math.round(line.x1)}:y0=${Math.round(line.y1)}` +
-    `:x1=${Math.round(line.x2)}:y1=${Math.round(line.y2)}`
-  );
-}
-
-/**
- * ffmpeg's `gradients` spaces its colours evenly and holds at most eight. A
- * longer authored ramp is sampled at eight even positions; a palette gradient
- * with more stops than that is rare and the shape is kept.
- */
-function gradientColors(
-  stops: readonly { readonly offset: number; readonly color: string }[],
-): readonly string[] {
-  const ordered = [...stops].sort((a, b) => a.offset - b.offset);
-  if (ordered.length <= 8)
-    return ordered.map((stop) => ffmpegColor(stop.color));
-  return Array.from({ length: 8 }, (_, index) =>
-    ffmpegColor(ordered[Math.round((index * (ordered.length - 1)) / 7)]!.color),
-  );
-}
-
-function ffmpegColor(color: string): string {
-  return color.startsWith("#") ? `0x${color.slice(1)}` : color;
-}
-
-/**
- * One alpha ramp, sized to the region and shifted by the region's own offset.
- * The stops are the shared eased ramp in grayscale, so the bake draws the same
- * curve as the DOM and the glass instead of a linear ramp with visible ends.
- */
-function maskSource(
-  mask: BackgroundMask,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-): string {
-  const stops = blendRampStops();
-  const colors = stops
-    .map((stop, index) => {
-      const value = Math.round(stop.alpha * 255)
-        .toString(16)
-        .padStart(2, "0");
-      return `c${String(index)}=0x${value}${value}${value}`;
-    })
-    .join(":");
-  return (
-    `gradients=s=${width}x${height}:${colors}:nb_colors=${String(stops.length)}` +
-    `:x0=${Math.round(mask.x1 - x)}:y0=${Math.round(mask.y1 - y)}` +
-    `:x1=${Math.round(mask.x2 - x)}:y1=${Math.round(mask.y2 - y)}`
-  );
 }
 
 function encodeArgs(

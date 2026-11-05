@@ -14,6 +14,11 @@ function filterOf(args: readonly string[]): string {
   return args[args.indexOf("-vf") + 1] ?? "";
 }
 
+/** The composed graph, which replaces `-vf` when the background is advanced. */
+function complexOf(args: readonly string[]): string {
+  return args[args.indexOf("-filter_complex") + 1] ?? "";
+}
+
 describe("panelH264Args", () => {
   it("crops the box the mount puts the layer in, then turns it", () => {
     // The attached 9.2" is upright with a 90° record: the composition is laid
@@ -84,6 +89,93 @@ describe("panelH264Args", () => {
     expect(args).not.toContain("-r");
     expect(args[args.indexOf("-f") + 1]).toBe("h264");
     expect(args).not.toContain("-movflags");
+  });
+
+  it("bakes the advanced composition into the turned box", () => {
+    const args = panelH264Args(
+      "in.mp4",
+      "out.h264",
+      GEOMETRY,
+      {
+        offsetX: 0,
+        offsetY: 0,
+        composition: { anchor: "left", extent: 0.65, fade: 0.12 },
+        fill: { kind: "solid", color: "#101418" },
+      },
+      "cw",
+    );
+    const filter = complexOf(args);
+
+    // A 90° mount lays the layer out in 1920×464 first; a left band keeping
+    // 65% of it is 1248px wide, and the turn comes after the composite.
+    expect(filter).toContain("crop=");
+    expect(filter).toContain("color=c=0x101418");
+    expect(filter).toContain("scale=1248:464");
+    expect(filter.endsWith("[turned]transpose=1[out]")).toBe(true);
+    expect(args).toContain("-filter_complex");
+    expect(args[args.indexOf("-map") + 1]).toBe("[out]");
+    expect(args).not.toContain("-vf");
+  });
+
+  it("holds an authored gradient and the eased mask still", () => {
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          composition: { anchor: "left", extent: 0.5, fade: 0.3 },
+          fill: {
+            kind: "gradient",
+            angle: 90,
+            stops: [
+              { offset: 0, color: "#000000" },
+              { offset: 1, color: "#ffffff" },
+            ],
+          },
+        },
+        "none",
+      ),
+    );
+
+    // The fill and the mask are both `gradients` sources, and both turn by
+    // default; every one of them has to be pinned still.
+    const sources = filter.match(/gradients=/g) ?? [];
+    expect(sources).toHaveLength(2);
+    expect(filter.match(/loop=loop=-1:size=1:start=0/g)).toHaveLength(2);
+  });
+
+  it("bounds the composed stream by the source's own length", () => {
+    const args = panelH264Args(
+      "in.mp4",
+      "out.h264",
+      GEOMETRY,
+      {
+        offsetX: 0,
+        offsetY: 0,
+        composition: { anchor: "left", extent: 0.5 },
+      },
+      "none",
+      { width: 1920, height: 1080, durationMs: 2_500 },
+    );
+
+    expect(args[args.indexOf("-t") + 1]).toBe("2.5");
+  });
+
+  it("keeps the plain -vf path when there is no composition", () => {
+    const args = panelH264Args(
+      "in.mp4",
+      "out.h264",
+      GEOMETRY,
+      { offsetX: 0.25, offsetY: 0 },
+      "cw",
+    );
+
+    expect(args).toContain("-vf");
+    expect(args).not.toContain("-filter_complex");
+    expect(filterOf(args)).not.toContain("gradients=");
   });
 
   it("uses the vendor's block size only as a fallback", () => {

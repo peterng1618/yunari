@@ -139,10 +139,11 @@ provider or display that falls behind is dropped rather than growing memory.
   edge, so the fill covers exactly the two opposite gaps and never surrounds the
   media. `fade` is the length of the eased ramp that smooths each seam into the
   fill. The resolver `resolveBackgroundComposition` is the one geometry: the DOM
-  media layer, the player's glass backdrop and the TURZX clip bake all take the
-  region and its masks from it, and all three sample the same eased ramp. The
+  media layer, the player's glass backdrop and the device-played clip bake all
+  take the region and its masks from it, and all sample the same eased ramp. The
   bake composites region, fill and mask in the video plane, so a fade never
-  rides the coarse overlay.
+  rides the coarse overlay; `panel-video-composition.ts` is the one graph both
+  the TURZX and the TUR USB encode.
 - Current schema is `2.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are
   keyed by the major they migrate from. Missing migration or newer major is a
   refusal, never a best-effort read.

@@ -16,7 +16,9 @@
   `src/web/packages/scene-fabric/src/glass.ts`
   `src/web/packages/scene-fabric/src/artboard-backdrop.ts`
   `src/web/packages/host/src/panels/panel-device.ts`
+  `src/web/packages/host/src/panels/panel-video-composition.ts`
   `src/web/packages/host/src/panels/turzx-video.ts`
+  `src/web/packages/host/src/panels/tur-usb-video.ts`
   `src/web/packages/host/src/themes/theme-media.ts`
   `src/web/packages/mcp/src/tools/draft.ts`
   `src/web/packages/editor/src/selection-inspector/background-column.ts`

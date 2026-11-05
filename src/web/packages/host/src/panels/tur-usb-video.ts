@@ -3,10 +3,16 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { readVideoFacts } from "@yunari/theme-package";
 import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
-import type { PanelGeometry } from "./panel-device.js";
+import type { PanelGeometry, PanelVideoPlacement } from "./panel-device.js";
+import {
+  composedSeconds,
+  composeFilterGraph,
+  type VideoSourceFacts,
+} from "./panel-video-composition.js";
 import {
   type PanelVideoTurn,
   turnedBox,
@@ -54,11 +60,9 @@ export type Run = (
 
 export interface EncodeOptions {
   readonly ffmpegPath?: string;
-  /** The theme's authored pan; centred cover when absent. */
-  readonly placement?: {
-    readonly offsetX: number;
-    readonly offsetY: number;
-  };
+  /** The theme's authored pan and zoom, plus the advanced background's
+   *  composition and fill when it has one. */
+  readonly placement?: PanelVideoPlacement;
   /** Whole degrees clockwise the display turns the composition. */
   readonly rotation?: number;
   /** Test seam for the spawn; production uses `encoderRun`. */
@@ -70,12 +74,32 @@ export function panelH264Args(
   input: string,
   output: string,
   geometry: PanelGeometry,
-  placement: { readonly offsetX: number; readonly offsetY: number } = {
+  placement: PanelVideoPlacement = {
     offsetX: 0,
     offsetY: 0,
   },
   turn: PanelVideoTurn = "none",
+  source?: VideoSourceFacts,
 ): string[] {
+  const composed =
+    placement.composition !== undefined || placement.fill !== undefined;
+  const filter = composed
+    ? {
+        complex: true,
+        text: composeFilterGraph(
+          turnedBox(geometry, turn),
+          placement,
+          source,
+          turn,
+        ),
+        seconds: composedSeconds(source),
+      }
+    : {
+        complex: false,
+        text: panelFilter(geometry, placement, turn),
+        seconds: undefined,
+      };
+
   return [
     "-hide_banner",
     "-nostdin",
@@ -85,8 +109,11 @@ export function panelH264Args(
     "-an",
     // Formatting the panel's own picture: cover the glass, pan the way the
     // theme authored it, then turn onto the wire's portrait frame.
-    "-vf",
-    panelFilter(geometry, placement, turn),
+    ...(filter.complex
+      ? ["-filter_complex", filter.text, "-map", "[out]"]
+      : ["-vf", filter.text]),
+    // The fill source never ends; the source's own length bounds the output.
+    ...(filter.seconds === undefined ? [] : ["-t", String(filter.seconds)]),
     // The vendor's encode, verbatim. It fixes no frame rate, no bitrate and
     // no keyframe interval: the panel takes the stream's own pacing.
     "-c:v",
@@ -196,8 +223,9 @@ export async function encodePanelH264(
     const output = path.join(directory, "out.h264");
     await writeFile(input, mp4);
 
+    const facts = readVideoFacts(mp4);
     const outcome = await (options.run ?? encoderRun(executable))(
-      panelH264Args(input, output, geometry, options.placement, turn),
+      panelH264Args(input, output, geometry, options.placement, turn, facts),
     );
 
     if (outcome.code !== 0) {
