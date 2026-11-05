@@ -58,7 +58,7 @@ const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
 /** Moves whenever the ffmpeg arguments or filter change: an output encoded by
  *  an older transform is not this clip, so it must not be served. */
-const TRANSCODE_VERSION = "v3";
+const TRANSCODE_VERSION = "v4";
 /**
  * The cache's byte bound. Theme clips are multi-megabyte, so a count cap alone
  * could hold gigabytes; 256 MiB keeps dozens of distinct clips and evicts by

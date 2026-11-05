@@ -147,6 +147,31 @@ describe("panelH264Args", () => {
     expect(filter.match(/loop=loop=-1:size=1:start=0/g)).toHaveLength(2);
   });
 
+  it("multiplies a centre composition's two masks, not replaces one", () => {
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          composition: { anchor: "center", fade: 0.14 },
+          fill: { kind: "solid", color: "#101418" },
+        },
+        "none",
+        { width: 3840, height: 2160, durationMs: 2_000 },
+      ),
+    );
+
+    // A portrait box around a landscape source leaves two gaps. `alphamerge`
+    // replaces the alpha channel, so a second one would drop the first ramp and
+    // leave one edge hard; the masks have to be multiplied before one merge.
+    expect(filter.match(/gradients=/g)).toHaveLength(2);
+    expect(filter).toContain("blend=all_mode=multiply");
+    expect(filter.match(/alphamerge/g)).toHaveLength(1);
+  });
+
   it("bounds the composed stream by the source's own length", () => {
     const args = panelH264Args(
       "in.mp4",

@@ -145,8 +145,11 @@ re-encodes.
 media a region and fades it into a fill, the encode switches to
 `-filter_complex`: the media is cropped and scaled into the region, the fill is
 painted with `color` or `gradients`, the eased ramp is a `gradients` mask, and
-`alphamerge` + `overlay` put the masked media over the fill. The turn is applied
-last, and `-t` bounds the generated fill and mask sources. **A `gradients`
+`alphamerge` + `overlay` put the masked media over the fill. A centred box has
+two opposite ramps: they are multiplied together before one `alphamerge`,
+because that filter replaces the alpha channel and merging twice would keep
+only the last edge. The turn is applied last, and `-t` bounds the generated fill
+and mask sources. **A `gradients`
 source turns by default** (`speed=0.01`), and zero is outside its accepted
 range; the bake loops the source's first frame
 (`loop=loop=-1:size=1:start=0`) so an authored gradient stays the gradient the

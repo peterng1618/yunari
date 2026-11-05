@@ -118,14 +118,31 @@ export function composeFilterGraph(
   ];
 
   let overlayInput = "media";
-  for (const [index, mask] of composition.masks.entries()) {
+  if (composition.masks.length > 0) {
+    for (const [index, mask] of composition.masks.entries()) {
+      parts.push(
+        `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
+      );
+    }
+
+    // `alphamerge` copies luma into the alpha channel, so merging one mask per
+    // source would leave only the last ramp. Multiply the grayscale masks into
+    // one first: a centred box fades into the fill on both opposite gaps.
+    let maskInput = "mask0";
+    for (let index = 1; index < composition.masks.length; index += 1) {
+      const combined = `masks${String(index)}`;
+      parts.push(
+        `[${maskInput}][mask${String(index)}]blend=all_mode=multiply[${combined}]`,
+      );
+      maskInput = combined;
+    }
+
     parts.push(
-      `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
       // The mask never ends; the source does. Without `shortest` the merge
       // repeats the last frame forever and only `-t` stops the encode.
-      `[${overlayInput}][mask${String(index)}]alphamerge=shortest=1[composed${String(index)}]`,
+      `[${overlayInput}][${maskInput}]alphamerge=shortest=1[composed]`,
     );
-    overlayInput = `composed${String(index)}`;
+    overlayInput = "composed";
   }
 
   const turnStep = turnFilter(turn);
