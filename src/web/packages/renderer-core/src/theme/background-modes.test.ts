@@ -55,22 +55,12 @@ describe("background modes", () => {
     expect(
       codes({
         mode: "advanced",
-        fill: { ref: "palette.ink" },
         media: {
           ...MEDIA,
           composition: { anchor: "left", extent: 0.5, fade: 0.1 },
         },
       }),
     ).toEqual([]);
-  });
-
-  it("refuses a fill while the mode is simple", () => {
-    expect(codes({ fill: { ref: "palette.ink" } })).toContain(
-      "composition-needs-advanced",
-    );
-    expect(codes({ mode: "simple", fill: { ref: "palette.ink" } })).toContain(
-      "composition-needs-advanced",
-    );
   });
 
   it("refuses a composition while the mode is simple", () => {
@@ -90,12 +80,6 @@ describe("background modes", () => {
       }),
     ).toEqual(
       expect.arrayContaining(["invalid-enum", "out-of-range", "out-of-range"]),
-    );
-  });
-
-  it("refuses a fill with no media to sit behind", () => {
-    expect(codes({ mode: "advanced", fill: { ref: "palette.ink" } })).toContain(
-      "fill-needs-media",
     );
   });
 

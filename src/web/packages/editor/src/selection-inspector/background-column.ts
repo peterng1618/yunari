@@ -57,9 +57,9 @@ function colourRef(background: Background | undefined): string {
     : "";
 }
 
-/** The model the background is authored under. Basic is the full-cover media
+/** The model the background is authored under. Simple is the full-cover media
  *  every theme predates composition; advanced is the opt-in that unlocks the
- *  fill and the media's anchor. */
+ *  media's anchor. */
 function modeField(background: Background | undefined): FieldView {
   return {
     id: "background.mode",
@@ -256,31 +256,9 @@ function replaceComposition(
   return { ...media, composition };
 }
 
-function fillField(
-  background: Background | undefined,
-  globals: FabricGlobals | undefined,
-): FieldView {
-  const fill = background?.fill;
-  const ref =
-    fill !== undefined && "ref" in fill && fill.ref.startsWith("palette.")
-      ? fill.ref
-      : "";
-  return {
-    id: "background.fill",
-    control: "swatch",
-    label: uiCopy.panels.backgroundFill,
-    value: ref,
-    options: [
-      { id: "", name: uiCopy.inspectorFields.notSet },
-      ...paletteTokenOptions(globals?.palette),
-    ],
-    colour: resolveToken(globals, ref) ?? "transparent",
-    data: { "data-yunari-background-fill": "" },
-  };
-}
-
 /** The anchor, size and fade rows. They describe where a picture sits inside
-    its box and how it meets the fill, so they exist only with a picture. */
+    its box and how it meets the background colour, so they exist only with a
+    picture. */
 function compositionFields(media: BackgroundMedia): readonly FieldView[] {
   const composition = media.composition;
   const anchor = anchorReading(composition);
@@ -347,11 +325,6 @@ export function backgroundColumn(input: {
     sectionView("content", [
       modeField(input.background),
       colourField(input.background, input.globals),
-      // The fill is the paint behind the media, so it waits for one: with no
-      // media it would be stored and never paint.
-      ...(advanced && media !== undefined
-        ? [fillField(input.background, input.globals)]
-        : []),
       mediaField(media, input.assets),
       ...(mediaKind(media, input.assets) === "video"
         ? [fallbackFrameField(media)]
@@ -370,8 +343,8 @@ export function backgroundColumn(input: {
             flipField(media, "flipX"),
             flipField(media, "flipY"),
           ]),
-          // The anchor and fade describe how the media composes with the fill,
-          // which only an advanced background has.
+          // The anchor and fade describe how the media composes over the
+          // background colour, which only an advanced background has.
           ...(advanced
             ? [sectionView("composition", compositionFields(media))]
             : []),
@@ -407,10 +380,10 @@ export function writeBackgroundField(
       if (mode === "advanced") {
         return { ...current, mode: "advanced" as BackgroundMode };
       }
-      // Simple has no fill and no composition, so returning to it drops the
-      // keys it cannot express rather than leaving a document that fails its
-      // own validator. The media's own geometry stays.
-      const { mode: _mode, fill: _fill, ...simple } = current;
+      // Simple has no composition, so returning to it drops the keys it cannot
+      // express rather than leaving a document that fails its own validator.
+      // The media's own geometry stays.
+      const { mode: _mode, ...simple } = current;
       if (simple.media === undefined) return simple;
       const { composition: _composition, ...plainMedia } = simple.media;
       return { ...simple, media: plainMedia };
@@ -428,9 +401,7 @@ export function writeBackgroundField(
     case "background.media": {
       if (typeof value !== "string") return undefined;
       if (value === "") {
-        // The fill sits behind the media, so clearing the media clears it too
-        // rather than leaving a document its own validator refuses.
-        const { media: _media, fill: _fill, ...withoutMedia } = current;
+        const { media: _media, ...withoutMedia } = current;
         return withoutMedia;
       }
       // A new picture keeps the box and transform the author set for the last
@@ -449,18 +420,6 @@ export function writeBackgroundField(
           assetId: value,
         },
       };
-    }
-    case "background.fill": {
-      if (typeof value !== "string") return undefined;
-      if (value === "") {
-        const { fill: _fill, ...withoutFill } = current;
-        return withoutFill;
-      }
-      // A fill is composition, so a simple background refuses it at the write
-      // boundary even though the row is not drawn.
-      if (!advanced) return undefined;
-      if (!value.startsWith("palette.")) return undefined;
-      return { ...current, fill: { ref: value as GlobalRef } };
     }
     case "background.bounds": {
       if (media === undefined || typeof value !== "string") return undefined;

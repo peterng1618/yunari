@@ -77,7 +77,6 @@ function mount() {
         height: ARTBOARD.height,
         contentFit: "contain",
         background: "#112233",
-        fill: undefined,
       },
       nodes: [],
       issues: [],

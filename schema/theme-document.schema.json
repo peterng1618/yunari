@@ -62,18 +62,16 @@
       }
     },
     "background": {
-      "description": "The bottom-most layer: a colour behind the board, a fill behind the media inside its box, and optional media clipped to its bounds.",
+      "description": "The bottom-most layer: one colour behind the board and the media clipped to its bounds.",
       "type": "object", "additionalProperties": false,
       "properties": {
         "mode": {
           "enum": ["simple", "advanced"],
-          "description": "The background model. Absent is simple: full-cover media over a colour. Only an advanced background may carry a fill or a media composition."
+          "description": "The background model. Absent is simple: full-cover media over a colour. Only an advanced background may carry a media composition."
         },
         "color": { "$ref": "#/$defs/paletteReference" },
-        "fill": { "$ref": "#/$defs/paletteReference" },
         "media": { "$ref": "#/$defs/backgroundMedia" }
       },
-      "dependentRequired": { "fill": ["media"] },
       "if": {
         "not": {
           "required": ["mode"],
@@ -81,10 +79,7 @@
         }
       },
       "then": {
-        "allOf": [
-          { "properties": { "fill": false } },
-          { "properties": { "media": { "properties": { "composition": false } } } }
-        ]
+        "properties": { "media": { "properties": { "composition": false } } }
       }
     },
     "backgroundMedia": {

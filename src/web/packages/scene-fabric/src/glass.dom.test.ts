@@ -1317,14 +1317,13 @@ describe("glass composition", () => {
     expect(s.errors).toEqual([]);
   });
 
-  it("samples the fill outside a media region and the media inside it", () => {
+  it("samples the colour outside a media region and the media inside it", () => {
     const backdrop = artboardBackdrop({
-      background: "#000000",
+      background: "#ff0000",
       width: 200,
       height: 200,
       media: {
         rect: { left: 0, top: 0, width: 200, height: 200 },
-        fill: { kind: "solid", color: "#ff0000" },
         region: { left: 100, top: 0, width: 100, height: 200 },
         paint(ctx) {
           ctx.fillStyle = "#0000ff";
@@ -1334,7 +1333,7 @@ describe("glass composition", () => {
       },
     });
     const s = stage({ texture: false, backdrop: () => backdrop });
-    // Two probes: one over the fill, one over the media half.
+    // Two probes: one over the background colour, one over the media half.
     for (const left of [40, 120])
       s.canvas.add(
         panel({
@@ -1350,7 +1349,9 @@ describe("glass composition", () => {
 
     const fill = s.pixel(60, 100);
     const media = s.pixel(140, 100);
-    expect(fill[0], "the left half is the authored fill").toBeGreaterThan(200);
+    expect(fill[0], "the left half is the background colour").toBeGreaterThan(
+      200,
+    );
     expect(fill[2]).toBeLessThan(60);
     expect(media[2], "the right half is the media").toBeGreaterThan(200);
     expect(media[0]).toBeLessThan(60);
@@ -1359,12 +1360,11 @@ describe("glass composition", () => {
 
   it("fades the media through its masks", () => {
     const backdrop = artboardBackdrop({
-      background: "#000000",
+      background: "#ff0000",
       width: 200,
       height: 200,
       media: {
         rect: { left: 0, top: 0, width: 200, height: 200 },
-        fill: { kind: "solid", color: "#ff0000" },
         region: { left: 0, top: 0, width: 200, height: 200 },
         masks: [{ kind: "linear", x1: 0, y1: 0, x2: 100, y2: 0 }],
         paint(ctx) {
@@ -1391,7 +1391,7 @@ describe("glass composition", () => {
     // The ramp runs from transparent at x=0 to opaque at x=100.
     const faded = s.pixel(20, 100);
     const opaque = s.pixel(140, 100);
-    expect(faded[0], "the fill shows through the ramp").toBeGreaterThan(
+    expect(faded[0], "the colour shows through the ramp").toBeGreaterThan(
       faded[2],
     );
     expect(opaque[2], "past the ramp the media is opaque").toBeGreaterThan(200);

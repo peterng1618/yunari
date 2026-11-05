@@ -2527,8 +2527,7 @@ export const uiCopy = {
     background: "Background color",
     /** Which background model the theme is authored under. */
     backgroundMode: "Mode",
-    /** The paint an anchored media leaves uncovered. */
-    backgroundFill: "Fill",
+
     /** The background column's own rows: the box its media fills, the zoom over
         its cover fit, the one pair that moves both axes, and the two paint-time
         mirrors. */

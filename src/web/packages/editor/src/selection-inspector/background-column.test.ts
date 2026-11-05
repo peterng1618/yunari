@@ -194,7 +194,7 @@ describe("backgroundColumn", () => {
     );
   });
 
-  it("asks Content for a fill after the colour, and a composition once media exists", () => {
+  it("asks Content for the colour, and a composition once media exists", () => {
     const sections = backgroundColumn({
       background: {
         mode: "advanced",
@@ -208,11 +208,10 @@ describe("backgroundColumn", () => {
       globals: undefined,
     });
 
-    // A fill is content: it is what the uncovered area is painted with.
+    // The colour is content: it is what the uncovered area is painted with.
     expect(sections[0]?.fields.map((field) => field.id)).toEqual([
       "background.mode",
       "background.color",
-      "background.fill",
       "background.media",
     ]);
     expect(sections.map((section) => section.id)).toEqual([
@@ -412,22 +411,6 @@ describe("writeBackgroundField", () => {
     ).toBeUndefined();
   });
 
-  it("writes a fill as a palette reference and clears it", () => {
-    expect(
-      writeBackgroundField(background, "background.fill", "palette.ink"),
-    ).toMatchObject({ fill: { ref: "palette.ink" } });
-    expect(
-      writeBackgroundField(
-        { mode: "advanced", fill: { ref: "palette.ink" } },
-        "background.fill",
-        "",
-      ),
-    ).toEqual({ mode: "advanced" });
-    expect(
-      writeBackgroundField(background, "background.fill", "not-a-token"),
-    ).toBeUndefined();
-  });
-
   it("writes an anchor, keeping the size and fade already authored", () => {
     const composed: Background = {
       mode: "advanced",
@@ -575,7 +558,7 @@ describe("background modes", () => {
     ).toMatchObject({ control: "segmented", value: "simple" });
   });
 
-  it("offers the fill and the composition once advanced", () => {
+  it("offers the composition once advanced", () => {
     const sections = backgroundColumn({
       background: {
         mode: "advanced",
@@ -589,36 +572,9 @@ describe("background modes", () => {
       "position",
       "composition",
     ]);
-    expect(sections[0]?.fields.map((field) => field.id)).toContain(
-      "background.fill",
-    );
     expect(
       sections[0]?.fields.find((field) => field.id === "background.mode"),
     ).toMatchObject({ control: "segmented", value: "advanced" });
-  });
-
-  it("drops the fill when the media it sits behind is cleared", () => {
-    const cleared = writeBackgroundField(
-      {
-        mode: "advanced",
-        fill: { ref: "palette.ink" },
-        media: { assetId: "a", bounds: "theme" },
-      },
-      "background.media",
-      "",
-    );
-    expect(cleared).toEqual({ mode: "advanced" });
-  });
-
-  it("hides the fill until there is media for it to sit behind", () => {
-    const sections = backgroundColumn({
-      background: { mode: "advanced" },
-      assets: [],
-      globals: undefined,
-    });
-    expect(sections[0]?.fields.map((field) => field.id)).not.toContain(
-      "background.fill",
-    );
   });
 
   it("writes advanced, and returning to simple drops the composition keys", () => {
@@ -635,7 +591,6 @@ describe("background modes", () => {
     const simple = writeBackgroundField(
       {
         mode: "advanced",
-        fill: { ref: "palette.ink" },
         color: { ref: "palette.paper" },
         media: {
           assetId: "a",
@@ -656,13 +611,10 @@ describe("background modes", () => {
     ).toBeUndefined();
   });
 
-  it("refuses a fill or a composition write while simple", () => {
+  it("refuses a composition write while simple", () => {
     const plain: Background = {
       media: { assetId: "a", bounds: "theme" },
     };
-    expect(
-      writeBackgroundField(plain, "background.fill", "palette.ink"),
-    ).toBeUndefined();
     expect(
       writeBackgroundField(plain, "background.anchor", "left"),
     ).toBeUndefined();

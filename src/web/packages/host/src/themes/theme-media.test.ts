@@ -157,7 +157,7 @@ describe("panelVideoPlacement", () => {
     },
   };
 
-  it("maps the media's composition and resolved fill", () => {
+  it("maps the media's composition and resolved colour", () => {
     const envelope = {
       id: "theme",
       artboard: { width: 100, height: 100 },
@@ -165,7 +165,7 @@ describe("panelVideoPlacement", () => {
       globals: palette,
       background: {
         mode: "advanced",
-        fill: { ref: "palette.ink" },
+        color: { ref: "palette.ink" },
         media: {
           assetId: "bg",
           bounds: "display",
@@ -180,29 +180,6 @@ describe("panelVideoPlacement", () => {
       scale: 1,
       composition: { anchor: "left", extent: 0.65, fade: 0.12 },
       fill: { kind: "solid", color: "#101418" },
-    });
-  });
-
-  it("uses the colour as the fill when no fill is authored", () => {
-    const envelope = {
-      id: "theme",
-      artboard: { width: 100, height: 100 },
-      assets: [VIDEO_ASSET],
-      globals: palette,
-      background: {
-        mode: "advanced",
-        color: { ref: "palette.ink" },
-        media: {
-          assetId: "bg",
-          bounds: "display",
-          composition: { anchor: "top", extent: 0.5 },
-        },
-      },
-    } as unknown as FabricThemeEnvelope;
-
-    expect(panelVideoPlacement(envelope).fill).toEqual({
-      kind: "solid",
-      color: "#101418",
     });
   });
 

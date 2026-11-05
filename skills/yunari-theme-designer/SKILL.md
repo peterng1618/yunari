@@ -72,13 +72,14 @@ override a preference for a nicer picture.
   reports that this host measures it. A missing reading stays absent; never
   write zero, a dash or a default for a sensor the host did not measure.
 - **A fade is a background composition.** An edge that fades into a colour is
-  `set_background` with `mode: "advanced"`, `fill`, `anchor`, `extent` and
-  `fade`: the media sits in its anchored band and fades into the fill. A
-  `center` anchor letterboxes the picture to its own aspect, and the fill covers
-  only the two opposite gaps. A theme without `mode: "advanced"` has the simple
-  full-cover background. Never build the fade from a scene scrim
-  rectangle. On a TURZX target the host bakes the composition into the clip, so
-  the ramp keeps its precision instead of banding through the overlay.
+  `set_background` with `mode: "advanced"`, a `color`, `anchor`, `extent` and
+  `fade`: the media sits in its anchored band and fades into the background
+  colour. A `center` anchor letterboxes the picture to its own aspect, and the
+  colour shows in only the two opposite gaps. A theme without
+  `mode: "advanced"` has the simple full-cover background. Never build the fade
+  from a scene scrim rectangle. On a TURZX target the host bakes the composition
+  into the clip, so the ramp keeps its precision instead of banding through the
+  overlay.
 - **Legibility outranks expressiveness.** A decorative heading, angled type or
   full-bleed video never shrinks a reading below its minimum or breaks contrast.
 - **Name every layer for what it is.** Every object and group carries a short

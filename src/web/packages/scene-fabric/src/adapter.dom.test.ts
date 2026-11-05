@@ -140,7 +140,6 @@ function plan(
       height: 1080,
       contentFit: "contain",
       background: "#101216",
-      fill: undefined,
       ...artboard,
     },
     nodes,

@@ -53,8 +53,7 @@ export type IssueCode =
   | "too-deep"
   | "too-many-nodes"
   | "invalid-fabric-scene"
-  | "composition-needs-advanced"
-  | "fill-needs-media";
+  | "composition-needs-advanced";
 
 export interface ValidationIssue {
   readonly code: IssueCode;
@@ -398,7 +397,6 @@ function validateBackground(
     "The background",
   );
   validateStyleValue(issues, value["color"], "/background/color", globalKeys);
-  validateStyleValue(issues, value["fill"], "/background/fill", globalKeys);
 
   // The composition keys belong to the advanced model only. Refused rather
   // than ignored: a simple document carrying one would draw a hard-edged cover
@@ -412,29 +410,14 @@ function validateBackground(
     );
   }
   if (value["mode"] !== "advanced") {
-    const refusal =
-      'Add mode: "advanced" to the background to compose its media.';
-    if (value["fill"] !== undefined) {
-      issues.add("composition-needs-advanced", "/background/fill", refusal);
-    }
     const media = value["media"];
     if (isRecord(media) && media["composition"] !== undefined) {
       issues.add(
         "composition-needs-advanced",
         "/background/media/composition",
-        refusal,
+        'Add mode: "advanced" to the background to compose its media.',
       );
     }
-  }
-
-  // A fill is the paint the anchored media leaves uncovered, so with no media
-  // it has nothing to sit behind and would never paint.
-  if (value["fill"] !== undefined && value["media"] === undefined) {
-    issues.add(
-      "fill-needs-media",
-      "/background/fill",
-      "The fill is the paint behind the media; add media or remove the fill.",
-    );
   }
 
   const media = value["media"];

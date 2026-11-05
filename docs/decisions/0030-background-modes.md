@@ -25,7 +25,7 @@ has no reader that will honour them.
 Searched: CodeGraph and source for `Background`, `BACKGROUND_MEDIA_BOUNDS`,
 `envelopeKeysFor("background")`, `validateBackground`.
 
-Found: `Background` in `document.ts` owns `color`, `fill`, `media`; the key bag
+Found: `Background` in `document.ts` owns `color` and `media`; the key bag
 in `envelope-keys.ts` and the published schema are held equal by
 `envelope-keys-disagreement.test.ts`; `validateBackground` already refuses
 unknown keys, so the mode is a bag entry plus two cross-field refusals. No
@@ -69,19 +69,19 @@ presence cannot tell a stray key from an authored one.
 
 ## Rung 6 — smallest probe
 
-The existing validator harness accepts a background with `fill` and reports no
-issue; adding `mode` and probing a simple document carrying `fill` is the test
-that fails first, so no separate probe was needed.
+The existing validator harness accepts a background with a media composition and
+reports no issue; adding `mode` and probing a simple document carrying a
+composition is the test that fails first, so no separate probe was needed.
 
 ## Rung 7 — decision
 
 `Background.mode` is `"simple" | "advanced"` and is written only when advanced:
 absence is simple, which is the model every existing theme holds and the one a
-new theme starts in. In simple, `background.fill` and `background.media.composition`
-are refused by the validator and the schema rather than ignored, so a document
-can never claim one model and carry another. An advanced composition anchors the
-picture to one of five points, sizes an edge band and fades the seam into the
-fill; `resolveBackgroundComposition` turns that into the one region and mask
-list every surface reads. Switching a theme to simple in the editor or the MCP
+new theme starts in. In simple, `background.media.composition` is refused by the
+validator and the schema rather than ignored, so a document can never claim one
+model and carry another. An advanced composition anchors the picture to one of
+five points, sizes an edge band and fades the seam into the background `color`;
+`resolveBackgroundComposition` turns that into the one region and mask list
+every surface reads. Switching a theme to simple in the editor or the MCP
 drops the keys it can no longer express; nothing is migrated and no converter
 exists.

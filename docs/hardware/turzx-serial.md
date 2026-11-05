@@ -142,11 +142,12 @@ cached under the temp directory keyed by source hash, pan and angle, so a reboot
 re-encodes.
 
 **A composed background is baked into the same clip.** When the theme gives its
-media a region and fades it into a fill, the encode switches to
-`-filter_complex`: the media is cropped and scaled into the region, the fill is
-painted with `color` or `gradients`, the eased ramp is a `gradients` mask, and
-`alphamerge` + `overlay` put the masked media over the fill. The turn is applied
-last, and `-t` bounds the generated fill and mask sources. **A `gradients`
+media a region and fades it into its background colour, the encode switches to
+`-filter_complex`: the media is cropped and scaled into the region, the
+uncovered area is painted with `color` or `gradients`, the eased ramp is a
+`gradients` mask, and `alphamerge` + `overlay` put the masked media over that
+colour. The turn is applied last, and `-t` bounds the generated colour and mask
+sources. **A `gradients`
 source turns by default** (`speed=0.01`), and zero is outside its accepted
 range; the bake loops the source's first frame
 (`loop=loop=-1:size=1:start=0`) so an authored gradient stays the gradient the

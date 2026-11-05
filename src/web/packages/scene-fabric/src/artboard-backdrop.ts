@@ -255,8 +255,9 @@ function mediaDevice(
 }
 
 /**
- * The composed media: the fill across its box, then the media clipped to the
- * authored region and faded by its mask.
+ * The composed media: the media clipped to the authored region and faded by
+ * its mask. Where the mask thins it, the board's paint underneath is what the
+ * panel sees.
  *
  * The masked media is built on a scratch surface the size of the region and
  * drawn once, so `destination-in` never touches the sampler's own context: a
@@ -281,14 +282,6 @@ function paintComposition(
     width: region.width * scaleX,
     height: region.height * scaleY,
   };
-
-  if (media.fill !== undefined)
-    fillArtboardPaint(
-      ctx,
-      regionLocal(mediaBox, surfaceRegion),
-      regionLocal(mediaBox, surfaceRegion),
-      media.fill,
-    );
 
   const width = Math.round(regionDevice.width);
   const height = Math.round(regionDevice.height);

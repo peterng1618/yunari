@@ -116,12 +116,11 @@ export function panelVideoMediaName(
 
 /**
  * The panel video's placement: the authored pan and zoom, plus the composition
- * and resolved fill when the background is advanced.
+ * and its resolved paint when the background is advanced.
  *
- * `fill` is the paint the media fades into; a theme that authors none uses its
- * background colour, which is the same rule the player's backdrop follows. A
- * simple background answers the geometry alone, so the bake keeps its plain
- * cover path.
+ * `fill` is the paint the media fades into, which is the background's `color`
+ * wherever the anchored media leaves the box uncovered. A simple background
+ * answers the geometry alone, so the bake keeps its plain cover path.
  */
 export function panelVideoPlacement(
   envelope: FabricThemeEnvelope | undefined,
@@ -139,7 +138,7 @@ export function panelVideoPlacement(
 
   const fill = paintOf(
     resolveStyleValue(
-      background?.fill ?? background?.color,
+      background?.color,
       (envelope?.globals ?? {}) as Globals,
       "background",
       [],

@@ -153,14 +153,14 @@ Current behaviours, each has cost a save or preview when missed.
 - **A composition is authored inside the media's bounds box.** `anchor` picks
   the point the picture sits at: `top`, `right`, `bottom`, `left` or `center`.
   An edge anchor makes a full-width or full-height band whose size along that
-  axis is `extent` (0.1–0.9); `center` letterboxes the picture to its own aspect,
-  so the fill covers the two opposite gaps and never surrounds it. `fade`
-  (0.01–1) smooths each seam into `fill` — the palette colour the uncovered
-  area is painted with — and the ramp is eased, so its ends are not visible.
-  `anchor: "full"` removes the composition and covers the box with the media
-  again. On a panel overlay the media and its fill are one picture, so the
-  overlay layer hides with them rather than painting background pixels over the
-  UI.
+  axis is `extent` (0.1–1); `center` letterboxes the picture to its own aspect,
+  so the background colour shows in the two opposite gaps and never surrounds
+  it. `fade` (0.01–1) smooths each seam into the background `color` — the
+  palette paint the uncovered area shows — and the ramp is eased, so its ends
+  are not visible. `anchor: "full"` removes the composition and covers the box
+  with the media again. On a panel overlay the media and its background colour
+  are one picture, so the overlay layer hides with them rather than painting
+  background pixels over the UI.
 - **An unnamed layer reads as its type word.** A compose call without `name`
   names the object after the id it mints — a tree of "text", "shape" and
   "icon". Pass a short, content-specific `name` on every add, and name a group
@@ -189,7 +189,7 @@ Current behaviours, each has cost a save or preview when missed.
 | `set_artboard` | width, height, shape, contentFit |
 | `set_palette` | entries `{id, name, value}`; a value may be a solid colour or a gradient paint, so a scrim can be a palette token |
 | `set_type_tokens` | heading/body/mono family and weight, plus the imported face's `assetId` as `face` (a string; the envelope stores `{ assetId }`); a text run carries its own size |
-| `set_background` | palette colour and optional media asset, bounds, fallback frame; `mode: "advanced"` opts into composition, where `fill` paints the gap the anchored media leaves, `anchor`/`extent` place the media and `fade` smooths the seam into the fill |
+| `set_background` | palette colour and optional media asset, bounds, fallback frame; `mode: "advanced"` opts into composition, where the background colour shows in the gap the anchored media leaves, `anchor`/`extent` place the media and `fade` smooths the seam into that colour |
 | `open_theme` | an existing theme, only with `confirmExisting: true` after consent |
 | `discard_draft` | drop the in-memory draft; never touches the host |
 
