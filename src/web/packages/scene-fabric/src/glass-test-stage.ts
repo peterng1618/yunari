@@ -119,6 +119,8 @@ export function stage(options: {
   readonly backdrop?: () =>
     | {
         readonly rect?: ArtboardRect;
+        /** Identity of the composed picture, as `BackdropMedia` carries it. */
+        readonly key?: string;
         /** Whole degrees the composition is turned, as `BackdropMedia` carries it. */
         readonly angle?: number;
         /** A display-bounded media's own box in host pixels. */
@@ -209,6 +211,7 @@ export function stage(options: {
             return {
               rect: stub?.rect ??
                 options.backdropRect ?? { left: 0, top: 0, ...artboard },
+              ...(stub?.key === undefined ? {} : { key: stub.key }),
               ...(stub?.angle === undefined ? {} : { angle: stub.angle }),
               ...(stub?.screenRect === undefined
                 ? {}

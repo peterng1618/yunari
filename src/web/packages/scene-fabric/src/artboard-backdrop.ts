@@ -3,6 +3,7 @@ import {
   type BackgroundMask,
   blendRampStops,
   type CompositionRect,
+  cssArtboardPaint,
   type DisplayShape,
   type GlassSampling,
 } from "@yunari/renderer-core";
@@ -84,6 +85,7 @@ export function artboardBackdrop(
     // The board's own rect, so the `device` the sampler passes is the board in
     // the context's pixels — which is the box the paint's gradient is mapped to.
     rect: board,
+    key: compositionKey(options, board),
     angle: media?.angle ?? options.angle ?? 0,
     ...(screenRect === undefined ? {} : { screenRect }),
     ...(surface === undefined
@@ -158,6 +160,34 @@ export function artboardBackdrop(
       return true;
     },
   };
+}
+
+/**
+ * What the composed picture is made of. A panel keeps its last sample while
+ * that sample's region holds still, which is how a video survives a loop wrap;
+ * the key is what tells it the *picture* still holds still too. A repaint is
+ * `destination-over` and cannot replace opaque pixels an older, larger media
+ * region or an older paint left behind, so a changed key must start from
+ * nothing. The video's own frames are not part of it: they are repainted over
+ * the same composition every frame.
+ */
+function compositionKey(
+  options: ArtboardBackdropOptions,
+  board: ArtboardRect,
+): string {
+  const { media } = options;
+  return JSON.stringify([
+    cssArtboardPaint(options.background) ?? null,
+    board,
+    options.angle,
+    options.artboardShape ?? null,
+    options.surface === undefined
+      ? null
+      : [options.surface.shape, options.surface.box],
+    media === undefined
+      ? null
+      : [media.rect, media.angle, media.screenRect, media.region, media.masks],
+  ]);
 }
 
 /**

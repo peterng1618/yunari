@@ -77,6 +77,11 @@ export interface BackdropPlate {
 export interface BackdropMedia {
   /** The media layer's rect, in artboard units. */
   readonly rect: ArtboardRect;
+  /** Identity of the picture this backdrop composes. A sampler keeps its last
+   *  frame while the region it samples has not moved, so a picture that changed
+   *  under it — a narrower region, a new paint — must change this key or the
+   *  kept pixels outlive the composition. Absent keeps the previous behaviour. */
+  readonly key?: string;
   /** Whole degrees clockwise the media is turned: the composition's angle for a
    *  theme-bounded layer, the display's mount angle for a display-bounded one.
    *  Omitted is upright. */
@@ -202,6 +207,8 @@ interface Panel {
   /** The region `backdrop` was painted for. A region that has moved puts the
    *  backdrop at the wrong offset, which is worse than having none. */
   backdropRegion: DeviceRect | undefined;
+  /** The picture `backdrop` was painted for; see `BackdropMedia.key`. */
+  backdropKey: string | undefined;
 }
 
 export function createGlass(options: GlassOptions): GlassHandle {
@@ -279,6 +286,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     panel.backdrop = undefined;
     panel.backdropContext = undefined;
     panel.backdropRegion = undefined;
+    panel.backdropKey = undefined;
   };
 
   /** The panel itself and every group above it, nearest first. */
@@ -340,6 +348,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
       backdrop: undefined,
       backdropContext: undefined,
       backdropRegion: undefined,
+      backdropKey: undefined,
       onBeforeRender: ({ ctx }) => {
         render(panel, ctx);
       },
@@ -618,6 +627,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     // from a previous layer would be a picture of something no longer there.
     if (media === undefined) {
       panel.backdropRegion = undefined;
+      panel.backdropKey = undefined;
       return undefined;
     }
     const element = panel.backdrop ?? document.createElement("canvas");
@@ -630,10 +640,14 @@ export function createGlass(options: GlassOptions): GlassHandle {
     panel.backdrop = element;
     panel.backdropContext = context;
 
-    // A region that moved is the one case where the kept pixels sit at the
-    // wrong offset, so it is the one case that has to start from nothing.
+    // The kept pixels are only this backdrop while both the region and the
+    // picture are unchanged. A moved region puts them at the wrong offset; a
+    // changed picture is composited `destination-over`, which cannot replace
+    // opaque pixels an earlier composition left where the new one has only
+    // colour, so it has to start from nothing too.
     const unmoved = sameRegion(panel.backdropRegion, region);
-    if (!unmoved) context.clearRect(0, 0, region.width, region.height);
+    const kept = unmoved && panel.backdropKey === media.key;
+    if (!kept) context.clearRect(0, 0, region.width, region.height);
 
     const screenRect = media.screenRect;
     // A theme-bounded layer turns with the composition and a display-bounded
@@ -682,6 +696,7 @@ export function createGlass(options: GlassOptions): GlassHandle {
     if (!painted && sampling === "static") {
       context.clearRect(0, 0, region.width, region.height);
       panel.backdropRegion = undefined;
+      panel.backdropKey = undefined;
     }
     // **The plate is a different surface from the media**. A media-less
     // theme, or a transparent frame, shows the host's background on a rect
@@ -697,9 +712,10 @@ export function createGlass(options: GlassOptions): GlassHandle {
     }
     if (painted || plate !== undefined) {
       panel.backdropRegion = region;
+      panel.backdropKey = media.key;
       return element;
     }
-    return unmoved ? element : undefined;
+    return kept ? element : undefined;
   }
 
   function surfaceFor(
