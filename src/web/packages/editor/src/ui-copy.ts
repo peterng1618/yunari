@@ -2223,7 +2223,7 @@ export const uiCopy = {
   backgroundBounds: { theme: "Fill theme", display: "Fill display" },
   /** The two background models: the full-cover picture every theme predates,
    *  and the composition a theme opts into. */
-  backgroundModes: { basic: "Basic", advanced: "Advanced" },
+  backgroundModes: { simple: "Simple", advanced: "Advanced" },
   /** The points a background's media may be anchored to. `full` is no
    *  composition at all — the picture covers the box and the fill never shows. */
   backgroundAnchors: {

@@ -401,7 +401,7 @@ function validateBackground(
   validateStyleValue(issues, value["fill"], "/background/fill", globalKeys);
 
   // The composition keys belong to the advanced model only. Refused rather
-  // than ignored: a basic document carrying one would draw a hard-edged cover
+  // than ignored: a simple document carrying one would draw a hard-edged cover
   // and leave the author's fade stored but unpainted.
   if (value["mode"] !== undefined) {
     issues.enumValue(

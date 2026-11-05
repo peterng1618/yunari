@@ -172,7 +172,7 @@ describe("set_background modes", () => {
     expect(refusalTextOf(result)).toMatch(/media/i);
   });
 
-  it("drops the composition keys when the theme returns to basic", async () => {
+  it("drops the composition keys when the theme returns to simple", async () => {
     const { ctx } = await themeWithClip();
     await setBackground(ctx, {
       mode: "advanced",
@@ -183,7 +183,7 @@ describe("set_background modes", () => {
       fade: 0.2,
     });
 
-    const result = await setBackground(ctx, { mode: "basic" });
+    const result = await setBackground(ctx, { mode: "simple" });
     expect(result.isError).toBeUndefined();
 
     const background = ctx.drafts.current().envelope.background;

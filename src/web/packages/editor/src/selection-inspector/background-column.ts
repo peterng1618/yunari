@@ -32,10 +32,6 @@ import type {
   PairHalfView,
 } from "./view.js";
 
-/** The longest fade the editor offers. The model accepts a longer ramp, but
- *  past half the box the seam is gone rather than faded. */
-const MAX_FADE_AMOUNT = Math.min(MAX_BACKGROUND_FADE, 0.5);
-
 /** The anchor control's reading: the stored point, or `full` for no
  *  composition at all (the picture covers the box). */
 type AnchorMode = "full" | BackgroundAnchor;
@@ -69,7 +65,7 @@ function modeField(background: Background | undefined): FieldView {
     id: "background.mode",
     control: "segmented",
     label: uiCopy.panels.backgroundMode,
-    value: background?.mode ?? "basic",
+    value: background?.mode ?? "simple",
     options: BACKGROUND_MODES.map((mode) => ({
       id: mode,
       name: uiCopy.backgroundModes[mode],
@@ -332,7 +328,7 @@ function compositionFields(media: BackgroundMedia): readonly FieldView[] {
             // Zero is the stored absence of a ramp.
             value: composition.fade ?? 0,
             min: 0,
-            max: MAX_FADE_AMOUNT,
+            max: MAX_BACKGROUND_FADE,
             percent: true,
             data: { "data-yunari-background-fade": "" },
           } satisfies FieldView,
@@ -411,13 +407,13 @@ export function writeBackgroundField(
       if (mode === "advanced") {
         return { ...current, mode: "advanced" as BackgroundMode };
       }
-      // Basic has no fill and no composition, so returning to it drops the keys
-      // it cannot express rather than leaving a document that fails its own
-      // validator. The media's own geometry stays.
-      const { mode: _mode, fill: _fill, ...basic } = current;
-      if (basic.media === undefined) return basic;
-      const { composition: _composition, ...plainMedia } = basic.media;
-      return { ...basic, media: plainMedia };
+      // Simple has no fill and no composition, so returning to it drops the
+      // keys it cannot express rather than leaving a document that fails its
+      // own validator. The media's own geometry stays.
+      const { mode: _mode, fill: _fill, ...simple } = current;
+      if (simple.media === undefined) return simple;
+      const { composition: _composition, ...plainMedia } = simple.media;
+      return { ...simple, media: plainMedia };
     }
     case "background.color": {
       if (typeof value !== "string") return undefined;
@@ -460,7 +456,7 @@ export function writeBackgroundField(
         const { fill: _fill, ...withoutFill } = current;
         return withoutFill;
       }
-      // A fill is composition, so a basic background refuses it at the write
+      // A fill is composition, so a simple background refuses it at the write
       // boundary even though the row is not drawn.
       if (!advanced) return undefined;
       if (!value.startsWith("palette.")) return undefined;
@@ -514,7 +510,7 @@ export function writeBackgroundField(
         typeof value !== "number" ||
         !Number.isFinite(value) ||
         value < 0 ||
-        value > MAX_FADE_AMOUNT
+        value > MAX_BACKGROUND_FADE
       )
         return undefined;
       if (!advanced) return undefined;

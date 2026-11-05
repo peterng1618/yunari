@@ -120,7 +120,7 @@ export function panelVideoMediaName(
  *
  * `fill` is the paint the media fades into; a theme that authors none uses its
  * background colour, which is the same rule the player's backdrop follows. A
- * basic background answers the geometry alone, so the bake keeps its plain
+ * simple background answers the geometry alone, so the bake keeps its plain
  * cover path.
  */
 export function panelVideoPlacement(

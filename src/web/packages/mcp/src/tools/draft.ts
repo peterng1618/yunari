@@ -281,7 +281,7 @@ export async function setBackground(
     readonly scale?: number | undefined;
     readonly flipX?: boolean | undefined;
     readonly flipY?: boolean | undefined;
-    readonly mode?: "basic" | "advanced" | undefined;
+    readonly mode?: "simple" | "advanced" | undefined;
     readonly fill?: string | PalettePaint | undefined;
     /** `full` is the cover: it removes the composition instead of storing one. */
     readonly anchor?: "full" | BackgroundAnchor | undefined;
@@ -314,11 +314,11 @@ export async function setBackground(
 
     const existing = draft.envelope.background;
     // The optional composition is opted into, never inferred: a stray `fill`
-    // under the basic model would be stored and never painted.
+    // under the simple model would be stored and never painted.
     const advanced = (input.mode ?? existing?.mode) === "advanced";
     if ((input.fill !== undefined || composing) && !advanced) {
       throw new Error(
-        'A background composition needs mode: "advanced"; the basic background covers its box with the media.',
+        'A background composition needs mode: "advanced"; the simple background covers its box with the media.',
       );
     }
     const palette = draft.envelope.globals?.palette ?? {};
@@ -402,17 +402,17 @@ export async function setBackground(
       media = composition === undefined ? plain : { ...media, composition };
     }
 
-    // Returning to basic drops what the basic model cannot store, rather than
+    // Returning to simple drops what the simple model cannot store, rather than
     // leaving keys the validator would refuse on the next read.
-    const returning = input.mode === "basic";
+    const returning = input.mode === "simple";
     let kept = media;
     if (returning && media !== undefined) {
       const { composition: _composition, ...plain } = media;
       kept = plain;
     }
-    const { mode: _mode, fill: _fill, ...basic } = existing ?? {};
+    const { mode: _mode, fill: _fill, ...simple } = existing ?? {};
     const background = {
-      ...(returning ? basic : (existing ?? {})),
+      ...(returning ? simple : (existing ?? {})),
       ...(color === undefined ? {} : { color }),
       ...(returning || fill === undefined ? {} : { fill }),
       ...(kept === undefined ? {} : { media: kept }),
@@ -657,7 +657,7 @@ export function registerDraftTools(server: McpServer, context: ToolContext) {
     "set_background",
     {
       description:
-        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The basic model covers the box with the media. Set mode to "advanced" to compose it: fill paints the gap the anchored media leaves uncovered. anchor places the media at the top, right, bottom, left or centre of its box; extent sets the size of an edge band; fade smooths the seam into the fill. A centre anchor letterboxes the picture to its own aspect. clear removes the background layer.',
+        'Set the draft background\'s colour token and optional declared media asset, bounds and fallback frame. The simple model covers the box with the media. Set mode to "advanced" to compose it: fill paints the gap the anchored media leaves uncovered. anchor places the media at the top, right, bottom, left or centre of its box; extent sets the size of an edge band; fade smooths the seam into the fill. A centre anchor letterboxes the picture to its own aspect. clear removes the background layer.',
       inputSchema: z.object({
         color: z.string().min(1).optional(),
         mediaAssetId: z.string().min(1).optional(),

@@ -234,7 +234,7 @@ describe("backgroundColumn", () => {
       control: "slider",
       value: 0.35,
       min: 0.1,
-      max: 0.9,
+      max: 1,
       percent: true,
     });
     expect(
@@ -243,7 +243,7 @@ describe("backgroundColumn", () => {
       control: "slider",
       value: 0.12,
       min: 0,
-      max: 0.5,
+      max: 1,
       percent: true,
     });
 
@@ -469,7 +469,10 @@ describe("writeBackgroundField", () => {
     expect(writeBackgroundField(edged, "background.extent", 0.4)).toMatchObject(
       { media: { composition: { anchor: "right", extent: 0.4 } } },
     );
-    for (const value of [0.05, 0.95, Number.NaN]) {
+    expect(writeBackgroundField(edged, "background.extent", 1)).toMatchObject({
+      media: { composition: { anchor: "right", extent: 1 } },
+    });
+    for (const value of [0.05, 1.01, Number.NaN]) {
       expect(
         writeBackgroundField(edged, "background.extent", value),
       ).toBeUndefined();
@@ -502,8 +505,11 @@ describe("writeBackgroundField", () => {
     ).toMatchObject({ media: { composition: { anchor: "top", fade: 0.2 } } });
     const none = writeBackgroundField(composed, "background.fade", 0)?.media;
     expect(none?.composition).not.toHaveProperty("fade");
-    // The editor stops at half: past it the seam is gone rather than faded.
-    for (const value of [-0.1, 0.6, Number.NaN]) {
+    // The ramp may span the whole box; the model's range is the only limit.
+    expect(writeBackgroundField(composed, "background.fade", 1)).toMatchObject({
+      media: { composition: { anchor: "top", fade: 1 } },
+    });
+    for (const value of [-0.1, 1.01, Number.NaN]) {
       expect(
         writeBackgroundField(composed, "background.fade", value),
       ).toBeUndefined();
@@ -549,7 +555,7 @@ describe("writeBackgroundField", () => {
 });
 
 describe("background modes", () => {
-  it("starts basic: no fill row and no composition section", () => {
+  it("starts simple: no fill row and no composition section", () => {
     const sections = backgroundColumn({
       background: { media: { assetId: "a", bounds: "theme" } },
       assets: [],
@@ -566,7 +572,7 @@ describe("background modes", () => {
     ]);
     expect(
       sections[0]?.fields.find((field) => field.id === "background.mode"),
-    ).toMatchObject({ control: "segmented", value: "basic" });
+    ).toMatchObject({ control: "segmented", value: "simple" });
   });
 
   it("offers the fill and the composition once advanced", () => {
@@ -615,7 +621,7 @@ describe("background modes", () => {
     );
   });
 
-  it("writes advanced, and returning to basic drops the composition keys", () => {
+  it("writes advanced, and returning to simple drops the composition keys", () => {
     const advanced = writeBackgroundField(
       { media: { assetId: "a", bounds: "theme" } },
       "background.mode",
@@ -626,7 +632,7 @@ describe("background modes", () => {
       media: { assetId: "a", bounds: "theme" },
     });
 
-    const basic = writeBackgroundField(
+    const simple = writeBackgroundField(
       {
         mode: "advanced",
         fill: { ref: "palette.ink" },
@@ -639,9 +645,9 @@ describe("background modes", () => {
         },
       },
       "background.mode",
-      "basic",
+      "simple",
     );
-    expect(basic).toEqual({
+    expect(simple).toEqual({
       color: { ref: "palette.paper" },
       media: { assetId: "a", bounds: "theme", scale: 2 },
     });
@@ -650,7 +656,7 @@ describe("background modes", () => {
     ).toBeUndefined();
   });
 
-  it("refuses a fill or a composition write while basic", () => {
+  it("refuses a fill or a composition write while simple", () => {
     const plain: Background = {
       media: { assetId: "a", bounds: "theme" },
     };
@@ -663,7 +669,7 @@ describe("background modes", () => {
     expect(writeBackgroundField(plain, "background.fade", 0.2)).toBeUndefined();
   });
 
-  it("still writes the media's own geometry while basic", () => {
+  it("still writes the media's own geometry while simple", () => {
     const plain: Background = {
       media: { assetId: "a", bounds: "theme" },
     };

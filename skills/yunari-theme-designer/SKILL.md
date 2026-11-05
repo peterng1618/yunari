@@ -75,7 +75,7 @@ override a preference for a nicer picture.
   `set_background` with `mode: "advanced"`, `fill`, `anchor`, `extent` and
   `fade`: the media sits in its anchored band and fades into the fill. A
   `center` anchor letterboxes the picture to its own aspect, and the fill covers
-  only the two opposite gaps. A theme without `mode: "advanced"` has the basic
+  only the two opposite gaps. A theme without `mode: "advanced"` has the simple
   full-cover background. Never build the fade from a scene scrim
   rectangle. On a TURZX target the host bakes the composition into the clip, so
   the ramp keeps its precision instead of banding through the overlay.

@@ -496,7 +496,7 @@ describe("the background layer", () => {
   it("refuses an extent or fade outside the box's bounds", () => {
     for (const composition of [
       { anchor: "left", extent: 0.05 },
-      { anchor: "left", extent: 0.95 },
+      { anchor: "left", extent: 1.01 },
       { anchor: "left", fade: 0 },
       { anchor: "left", fade: 1.01 },
     ]) {

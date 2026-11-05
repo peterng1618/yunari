@@ -1,4 +1,4 @@
-# 0030 — Background modes: basic, and advanced composition
+# 0030 — Background modes: simple, and advanced composition
 
 - **Date:** 2026-11-05
 - **Status:** accepted
@@ -16,8 +16,8 @@ The composition added in 0029 is a new background model, and every theme that
 exists today predates it. A theme must say which model it is authored under, or
 an old author learns a vocabulary they did not ask for and every new theme
 carries an opt-in the product never offered. The mode is a theme-format fact,
-so a wrong choice fails quietly: an advanced theme read by a basic tool keeps
-drawing a hard-edged full cover, and a basic theme that carries composition keys
+so a wrong choice fails quietly: an advanced theme read by a simple tool keeps
+drawing a hard-edged full cover, and a simple theme that carries composition keys
 has no reader that will honour them.
 
 ## Rung 1 — internal owner
@@ -65,23 +65,23 @@ presence cannot tell a stray key from an authored one.
 |---|---|---|---|
 | Infer mode from keys being present | no | a stray key silently changes the model | rejected |
 | New schema major version | heavy | every reader and package version moves for one flag | rejected |
-| Stored `mode` key, absent = basic | fits | validator, schema, editor and MCP each refuse the wrong combination | chosen |
+| Stored `mode` key, absent = simple | fits | validator, schema, editor and MCP each refuse the wrong combination | chosen |
 
 ## Rung 6 — smallest probe
 
 The existing validator harness accepts a background with `fill` and reports no
-issue; adding `mode` and probing a basic document carrying `fill` is the test
+issue; adding `mode` and probing a simple document carrying `fill` is the test
 that fails first, so no separate probe was needed.
 
 ## Rung 7 — decision
 
-`Background.mode` is `"basic" | "advanced"` and is written only when advanced:
-absence is basic, which is the model every existing theme holds and the one a
-new theme starts in. In basic, `background.fill` and `background.media.composition`
+`Background.mode` is `"simple" | "advanced"` and is written only when advanced:
+absence is simple, which is the model every existing theme holds and the one a
+new theme starts in. In simple, `background.fill` and `background.media.composition`
 are refused by the validator and the schema rather than ignored, so a document
 can never claim one model and carry another. An advanced composition anchors the
 picture to one of five points, sizes an edge band and fades the seam into the
 fill; `resolveBackgroundComposition` turns that into the one region and mask
-list every surface reads. Switching a theme to basic in the editor or the MCP
+list every surface reads. Switching a theme to simple in the editor or the MCP
 drops the keys it can no longer express; nothing is migrated and no converter
 exists.
