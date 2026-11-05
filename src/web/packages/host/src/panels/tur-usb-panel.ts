@@ -70,6 +70,13 @@ const VENDOR_READ_TIMEOUT_MS = 100;
 const ACK_DEPTH = 3;
 /** The depth it drains to (`waitBuffer(2)`). */
 const DRAIN_DEPTH = 2;
+/**
+ * Blocks the feed keeps queued ahead of the decoder. The vendor's loop holds
+ * 2–4 in its ring; a feed that only matches the play time leaves one, and the
+ * picture then holds at each block boundary. Stopping short of `ACK_DEPTH`
+ * keeps the buffer without ever reaching the overrun the vendor drains.
+ */
+const LOOKAHEAD_DEPTH = 2;
 const DRAIN_POLL_MS = 50;
 /** Bounded so a silent panel cannot hold the feed forever; the vendor waits
  *  until playback is cancelled. */
@@ -419,10 +426,12 @@ export class TurUsbPanel implements PanelDevice {
 
       const blockBytes = Math.min(this.blockBytes, h264.length - at);
       const started = performance.now();
+      let depth: number | undefined;
 
       try {
-        await this.exclusive(async () => {
-          if (!loop.stopped) await this.writeVideoBlock(h264, at, loop);
+        depth = await this.exclusive(async () => {
+          if (!loop.stopped) return await this.writeVideoBlock(h264, at, loop);
+          return undefined;
         });
         at += this.blockBytes;
       } catch (error) {
@@ -450,12 +459,21 @@ export class TurUsbPanel implements PanelDevice {
       // ghost trails of moving parts (measured 2026-10-31: clean at realtime,
       // ghosting from 1.1×). Sleeping under the lock would hold the overlay
       // push for a whole block instead.
+      //
+      // **Except while the ring is short.** A feed paced to the decoder's own
+      // play time keeps exactly one block buffered, so the decoder is always
+      // reading the last bytes it was given and holds the picture at every
+      // block boundary. The vendor's loop leaves 2–4 blocks queued; below
+      // `LOOKAHEAD_DEPTH` the next block is sent without waiting, which fills
+      // that buffer and then paces as before.
       const playMs =
         this.clipBytes > 0 ? (blockBytes / this.clipBytes) * this.clipMs : 0;
       const spent = performance.now() - started;
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.max(BLOCK_PAUSE_MS, playMs - spent)),
-      );
+      const wait =
+        depth !== undefined && depth < LOOKAHEAD_DEPTH
+          ? 0
+          : Math.max(BLOCK_PAUSE_MS, playMs - spent);
+      await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
 
@@ -475,11 +493,12 @@ export class TurUsbPanel implements PanelDevice {
     });
   }
 
+  /** One block onto the wire; answers the decoder's ring depth it reported. */
   private async writeVideoBlock(
     h264: Uint8Array,
     at: number,
     loop: { stopped: boolean },
-  ): Promise<void> {
+  ): Promise<number | undefined> {
     const end = Math.min(at + this.blockBytes, h264.length);
     const block = h264.subarray(at, end);
 
@@ -510,6 +529,7 @@ export class TurUsbPanel implements PanelDevice {
     const ack = await this.read(VENDOR_READ_TIMEOUT_MS);
     const depth = ack?.[8];
     if (depth !== undefined && depth > ACK_DEPTH) await this.drain(loop);
+    return depth;
   }
 
   /** Waits until the decoder has room, polling the way `waitBuffer(2)` does.

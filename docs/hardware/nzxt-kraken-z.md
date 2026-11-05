@@ -7,6 +7,10 @@
   64-byte reports; **bulk** data on interface 0, endpoint `0x02`
 - **Driver:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`
 - **Last hardware verification:** 2026-10-31
+- **Last known good revision:** `988cda820713` (2026-11-06) — playing well on
+  the attached Z73; its frame rate still trails NZXT CAM, which is a known gap
+  rather than a regression. Compare a future playback regression against this
+  revision.
 
 **Update this document with every new fact.** Record a firmware string, a
 command the driver starts using, a refusal and its cause, a timing constraint —
