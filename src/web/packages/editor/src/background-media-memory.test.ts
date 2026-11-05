@@ -1,8 +1,8 @@
 import type { BackgroundMedia } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
-  type BackgroundMediaMemory,
   BACKGROUND_MEDIA_MEMORY_VERSION,
+  type BackgroundMediaMemory,
   encodeBackgroundMedia,
   filterBackgroundMedia,
   readBackgroundMediaMemory,
@@ -156,31 +156,33 @@ describe("restoreBackgroundMedia", () => {
   });
 
   it("restores the remembered composition only in advanced", () => {
-    expect(restoreBackgroundMedia(entry, "a", "image", "advanced")).toMatchObject(
-      { composition: { anchor: "left" } },
-    );
+    expect(
+      restoreBackgroundMedia(entry, "a", "image", "advanced"),
+    ).toMatchObject({ composition: { anchor: "left" } });
     expect(
       restoreBackgroundMedia(entry, "a", "image", "simple"),
     ).not.toHaveProperty("composition");
   });
 
   it("restores a fallback frame only for a video", () => {
-    expect(
-      restoreBackgroundMedia(entry, "a", "video", "simple"),
-    ).toMatchObject({ fallbackFrame: 42 });
+    expect(restoreBackgroundMedia(entry, "a", "video", "simple")).toMatchObject(
+      { fallbackFrame: 42 },
+    );
     expect(
       restoreBackgroundMedia(entry, "a", "image", "simple"),
     ).not.toHaveProperty("fallbackFrame");
   });
 
   it("keeps the geometry in every mode", () => {
-    expect(restoreBackgroundMedia(entry, "a", "image", "simple")).toMatchObject({
-      assetId: "a",
-      bounds: "display",
-      offsetX: 0.2,
-      scale: 3,
-      flipX: true,
-    });
+    expect(restoreBackgroundMedia(entry, "a", "image", "simple")).toMatchObject(
+      {
+        assetId: "a",
+        bounds: "display",
+        offsetX: 0.2,
+        scale: 3,
+        flipX: true,
+      },
+    );
   });
 });
 

@@ -1,7 +1,4 @@
-import {
-  BACKGROUND_MODES,
-  type Background,
-} from "@yunari/renderer-core";
+import { BACKGROUND_MODES, type Background } from "@yunari/renderer-core";
 import { writeBackgroundField } from "./background-column.js";
 import type { SelectionInspectorOptions } from "./options.js";
 

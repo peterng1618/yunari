@@ -1,7 +1,7 @@
 import {
+  type AssetKind,
   BACKGROUND_ANCHORS,
   BACKGROUND_MEDIA_BOUNDS,
-  type AssetKind,
   type BackgroundAnchor,
   type BackgroundMedia,
   type BackgroundMediaBounds,
@@ -133,7 +133,11 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
     MIN_BACKGROUND_OFFSET,
     MAX_BACKGROUND_OFFSET,
   );
-  const scale = numberIn(value["scale"], MIN_BACKGROUND_SCALE, MAX_BACKGROUND_SCALE);
+  const scale = numberIn(
+    value["scale"],
+    MIN_BACKGROUND_SCALE,
+    MAX_BACKGROUND_SCALE,
+  );
   const composition = readComposition(value["composition"]);
 
   const flipX = value["flipX"];
@@ -148,9 +152,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
     (flipX !== undefined && typeof flipX !== "boolean") ||
     (flipY !== undefined && typeof flipY !== "boolean") ||
     (frame !== undefined &&
-      (typeof frame !== "number" ||
-        !Number.isInteger(frame) ||
-        frame < 0))
+      (typeof frame !== "number" || !Number.isInteger(frame) || frame < 0))
   ) {
     return undefined;
   }
@@ -174,7 +176,9 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
  * sidecar is bookkeeping, so it may never cost an author the theme it belongs
  * to.
  */
-export function readBackgroundMediaMemory(value: unknown): BackgroundMediaMemory {
+export function readBackgroundMediaMemory(
+  value: unknown,
+): BackgroundMediaMemory {
   if (!isRecord(value)) return {};
   if (value["version"] !== BACKGROUND_MEDIA_MEMORY_VERSION) return {};
   const media = value["media"];
@@ -216,7 +220,10 @@ export function rememberBackgroundMedia(
   const next: BackgroundMediaMemoryEntry =
     mode === "advanced"
       ? { ...geometry, ...(composition === undefined ? {} : { composition }) }
-      : { ...geometry, ...(previous === undefined ? {} : { composition: previous }) };
+      : {
+          ...geometry,
+          ...(previous === undefined ? {} : { composition: previous }),
+        };
 
   return { ...memory, [assetId]: next };
 }

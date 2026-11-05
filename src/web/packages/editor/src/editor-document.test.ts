@@ -453,9 +453,7 @@ describe("EditorDocument background media memory", () => {
     document.setBackgroundMode("simple");
     document.setBackgroundAsset("b");
     document.setBackgroundAsset("a");
-    expect(
-      document.envelope.background?.media?.composition,
-    ).toBeUndefined();
+    expect(document.envelope.background?.media?.composition).toBeUndefined();
 
     document.setBackgroundMode("advanced");
     expect(document.envelope.background?.media?.composition).toEqual({
@@ -473,9 +471,7 @@ describe("EditorDocument background media memory", () => {
     });
 
     document.setBackgroundAsset("a");
-    expect(
-      document.envelope.background?.media?.fallbackFrame,
-    ).toBeUndefined();
+    expect(document.envelope.background?.media?.fallbackFrame).toBeUndefined();
 
     document.setBackgroundAsset("video");
     expect(document.envelope.background?.media?.fallbackFrame).toBe(42);
