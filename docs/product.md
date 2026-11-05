@@ -65,7 +65,10 @@ support.
 - **The theme is portable.** A saved theme is a versioned JSON envelope; an
   exported theme is a `.yunari-theme` ZIP containing `manifest.json`,
   `theme.json`, an optional `thumbnail.png`, declared `assets/` and optional
-  credits. Import validates before writing.
+  credits. Import validates before writing. Each background asset's framing is
+  editor working data, not authored state: it lives in the library folder's
+  `background-media.json`, is not exported or imported, and is dropped when the
+  theme is deleted.
 - **The previous major is the compatibility floor.** Schema `2.0.0` is current.
   The reader accepts major `2`; an older document with no migration, or any
   newer major, is refused rather than guessed at.

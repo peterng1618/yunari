@@ -1,6 +1,6 @@
 # Background media memory — one switch path and a sidecar
 
-**Status:** proposed (2026-11-05)
+**Status:** approved and implemented (2026-11-05)
 
 ## Problem
 
