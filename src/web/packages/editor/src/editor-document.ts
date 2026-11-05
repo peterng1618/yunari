@@ -2,6 +2,7 @@ import {
   type Artboard,
   type ArtboardShape,
   type Background,
+  type BackgroundMode,
   type Binding,
   bumpSemanticVersion,
   type FabricGlobals,
@@ -31,6 +32,12 @@ import {
   assetReferencedBy,
   type LocalAssetReference,
 } from "./asset-manager/index.js";
+import {
+  type BackgroundMediaMemory,
+  filterBackgroundMedia,
+  rememberBackgroundMedia,
+  restoreBackgroundMedia,
+} from "./background-media-memory.js";
 import { insertCard } from "./card-library.js";
 import type { ChartManager } from "./chart-manager/index.js";
 import { confirmOutputBake } from "./components/output-bake-dialog.js";
@@ -145,6 +152,9 @@ interface EditorDocumentSource {
     assets: Readonly<Record<string, Uint8Array>>,
     base?: string,
   ) => Promise<void>;
+  /** Per-asset background geometry the stored theme keeps beside its document.
+   *  Absent for a document that was not opened from the library. */
+  readonly backgroundMedia?: BackgroundMediaMemory;
 }
 
 /**
@@ -204,6 +214,14 @@ function faceOfCut(cut: FontCut, role: FontTrioRole): CuratedFontFace {
 }
 
 /**
+ * The mode the background's media is read under. Absence is the simple model,
+ * which is every theme authored before modes existed.
+ */
+function backgroundModeOf(background: Background | undefined): BackgroundMode {
+  return background?.mode === "advanced" ? "advanced" : "simple";
+}
+
+/**
  * The theme this editor is authoring: what it says now, every write that
  * changes it, and the file protocol that opens, saves and releases it.
  *
@@ -224,6 +242,9 @@ export class EditorDocument {
   readonly #source: EditorDocumentSource;
   readonly #shell: EditorShell;
   readonly #assets: AssetManager;
+  /** Per-asset background geometry, the working data a switch restores from.
+   *  Never part of the envelope; a save writes it beside the document. */
+  #backgroundMedia: BackgroundMediaMemory;
   readonly #persistence: PersistenceManager;
   readonly #consumers: EditorDocumentConsumers;
   /** The host's library, which owns this document's stored base. */
@@ -280,6 +301,16 @@ export class EditorDocument {
     this.#assets = source.assetManager;
     this.#onBindingsChange = source.onBindingsChange;
     this.#consumers = options.consumers;
+    // The document that was just opened wins over a stale entry for the asset
+    // it shows; undeclared entries are not working data this document can use.
+    this.#backgroundMedia = filterBackgroundMedia(
+      rememberBackgroundMedia(
+        source.backgroundMedia ?? {},
+        this.#envelope.background?.media,
+        backgroundModeOf(this.#envelope.background),
+      ),
+      new Set(this.#assets.declarations.map((asset) => asset.id)),
+    );
     // What was last saved, which the unsaved marker is compared against. A
     // restored draft has nothing saved behind it, so there is nothing to
     // compare against: it reads as unsaved until a save gives it a baseline.
@@ -466,6 +497,7 @@ export class EditorDocument {
     readonly envelope: FabricThemeEnvelope;
     readonly assets: Readonly<Record<string, Uint8Array>>;
     readonly credits?: ThemeCredits;
+    readonly backgroundMedia: BackgroundMediaMemory;
   } {
     const dropped = new Set(this.unusedAssets().map((asset) => asset.id));
     const declared = (envelope.assets ?? []).filter(
@@ -479,6 +511,10 @@ export class EditorDocument {
         Object.entries(this.#assets.assets).filter(([path]) => paths.has(path)),
       ),
       ...(credits === undefined ? {} : { credits }),
+      backgroundMedia: filterBackgroundMedia(
+        this.#backgroundMedia,
+        new Set(declared.map((asset) => asset.id)),
+      ),
     };
   }
 
@@ -914,6 +950,10 @@ export class EditorDocument {
       if (assetId !== undefined && removed.has(assetId))
         this.#credits.splice(index, 1);
     }
+    this.#backgroundMedia = filterBackgroundMedia(
+      this.#backgroundMedia,
+      new Set(this.#assets.declarations.map((asset) => asset.id)),
+    );
     // Not a history write: the manager's own Remove is not undoable either,
     // and this only announces so the unsaved marker and panels re-read.
     this.announceChange();
@@ -1120,8 +1160,16 @@ export class EditorDocument {
    * Writes the background layer: the envelope section the shell paints from and
    * a save ships. A whole value, because the layer has one owner — a field
    * writes the bag it read back, and nothing here keeps a second copy of it.
+   *
+   * The media leaving the document is remembered first, so every field write
+   * keeps the working data current without a second write path.
    */
   setBackground(background: Background | undefined): void {
+    this.#backgroundMedia = rememberBackgroundMedia(
+      this.#backgroundMedia,
+      this.#envelope.background?.media,
+      backgroundModeOf(this.#envelope.background),
+    );
     if (background === undefined) {
       // Omitted rather than stored undefined, for `exactOptionalPropertyTypes`.
       const { background: _background, ...withoutBackground } = this.#envelope;
@@ -1130,6 +1178,77 @@ export class EditorDocument {
       this.#writeEnvelope({ ...this.#envelope, background });
     }
     this.#shell.setBackground(background);
+  }
+
+  /**
+   * The one way the editor changes which declared asset the background shows.
+   *
+   * The outgoing media is captured by `setBackground`, the incoming asset's own
+   * memory is restored, or it starts at the defaults. Every surface that used to
+   * build a fresh media bag itself calls this instead, so pan, zoom, flips,
+   * bounds, composition and frame cannot depend on which control was pressed.
+   */
+  setBackgroundAsset(assetId: string | undefined): void {
+    const background = this.#envelope.background;
+    if (assetId === undefined) {
+      if (background?.media === undefined) return;
+      const { media: _media, ...withoutMedia } = background;
+      this.setBackground(withoutMedia);
+      return;
+    }
+
+    const declared = this.#assets.declarations.find(
+      (asset) => asset.id === assetId,
+    );
+    // An id the document does not declare has nothing to show and no geometry
+    // to restore; writing it would be a document that fails its own validator.
+    if (declared === undefined) return;
+
+    this.setBackground({
+      ...background,
+      media: restoreBackgroundMedia(
+        this.#backgroundMedia[assetId],
+        assetId,
+        declared.kind,
+        backgroundModeOf(background),
+      ),
+    });
+  }
+
+  /**
+   * Enters or leaves the advanced background model.
+   *
+   * The simple model cannot express a composition, so leaving it strips the
+   * key rather than writing a document the validator refuses. Entering it puts
+   * back the one the last advanced write remembered; a composition the author
+   * deliberately cleared is remembered as absent and stays absent.
+   */
+  setBackgroundMode(mode: BackgroundMode): void {
+    const background = this.#envelope.background ?? {};
+    if (mode === "simple") {
+      const { mode: _mode, ...simple } = background;
+      const media = simple.media;
+      if (media === undefined) {
+        this.setBackground(simple);
+        return;
+      }
+      const { composition: _composition, ...plain } = media;
+      this.setBackground({ ...simple, media: plain });
+      return;
+    }
+
+    const media = background.media;
+    const composition =
+      media === undefined
+        ? undefined
+        : this.#backgroundMedia[media.assetId]?.composition;
+    this.setBackground({
+      ...background,
+      mode: "advanced",
+      ...(media === undefined || composition === undefined
+        ? {}
+        : { media: { ...media, composition } }),
+    });
   }
 
   setMetadata(metadata: FabricThemeEnvelopeInput["metadata"]): void {

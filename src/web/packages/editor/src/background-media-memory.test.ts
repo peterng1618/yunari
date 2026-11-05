@@ -1,6 +1,7 @@
 import type { BackgroundMedia } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
+  type BackgroundMediaMemory,
   BACKGROUND_MEDIA_MEMORY_VERSION,
   encodeBackgroundMedia,
   filterBackgroundMedia,
@@ -100,7 +101,9 @@ describe("rememberBackgroundMedia", () => {
   });
 
   it("keeps the hidden composition while simple", () => {
-    const memory = { a: { bounds: "theme", composition: { anchor: "left" } } };
+    const memory: BackgroundMediaMemory = {
+      a: { bounds: "theme", composition: { anchor: "left" } },
+    };
     const next = rememberBackgroundMedia(
       memory,
       { assetId: "a", bounds: "theme", scale: 2 },
@@ -114,7 +117,9 @@ describe("rememberBackgroundMedia", () => {
   });
 
   it("lets advanced clear a composition", () => {
-    const memory = { a: { bounds: "theme", composition: { anchor: "left" } } };
+    const memory: BackgroundMediaMemory = {
+      a: { bounds: "theme", composition: { anchor: "left" } },
+    };
     const next = rememberBackgroundMedia(
       memory,
       { assetId: "a", bounds: "theme" },
@@ -124,7 +129,7 @@ describe("rememberBackgroundMedia", () => {
   });
 
   it("keeps the rest of the map", () => {
-    const memory = { b: { bounds: "display" } };
+    const memory: BackgroundMediaMemory = { b: { bounds: "display" } };
     const next = rememberBackgroundMedia(
       memory,
       { assetId: "a", bounds: "theme" },

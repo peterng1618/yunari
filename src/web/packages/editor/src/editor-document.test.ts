@@ -1,6 +1,7 @@
 import type { FabricThemeEnvelopeInput } from "@yunari/renderer-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssetManager } from "./asset-manager/index.js";
+import type { BackgroundMediaMemory } from "./background-media-memory.js";
 import { EditorDocument } from "./editor-document.js";
 import type { EditorShell } from "./editor-shell.js";
 import {
@@ -27,6 +28,7 @@ function documentWith(
     readonly sceneObjects?: unknown[];
     readonly libraryClient?: ThemeLibraryClient;
     readonly libraryBase?: string;
+    readonly backgroundMedia?: BackgroundMediaMemory;
   } = {},
 ): EditorDocument {
   const sceneObjects = options.sceneObjects;
@@ -40,6 +42,7 @@ function documentWith(
                 ...(value as object),
                 scene: { version: "7.4.0", objects: [...sceneObjects] },
               },
+        setBackground: () => {},
         editor: {
           errorManager: { report: () => {} },
           historyManager: { attachEnvelope: () => {} },
@@ -61,6 +64,9 @@ function documentWith(
       ...(options.libraryBase === undefined
         ? {}
         : { libraryBase: options.libraryBase }),
+      ...(options.backgroundMedia === undefined
+        ? {}
+        : { backgroundMedia: options.backgroundMedia }),
     },
     consumers: {
       runtime: () => ({ setThemeLanguage: () => undefined }),
@@ -367,6 +373,182 @@ describe("EditorDocument change notification", () => {
     await Promise.resolve();
 
     expect(heard).not.toHaveBeenCalled();
+    document.destroy();
+  });
+});
+
+describe("EditorDocument background media memory", () => {
+  function memoryDocument(
+    backgroundMedia?: BackgroundMediaMemory,
+  ): EditorDocument {
+    const assets = new AssetManager();
+    assets.load(
+      {
+        assets: [
+          { id: "a", kind: "image", path: "assets/a.png" },
+          { id: "b", kind: "image", path: "assets/b.png" },
+          { id: "video", kind: "video", path: "assets/video.mp4" },
+        ],
+      },
+      {},
+    );
+    return documentWith({
+      assets,
+      ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
+    });
+  }
+
+  it("restores each asset's own geometry after a round trip", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "a", bounds: "display", offsetX: 0.2, scale: 3 },
+    });
+
+    document.setBackgroundAsset("b");
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "b",
+      bounds: "theme",
+    });
+
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "a",
+      bounds: "display",
+      offsetX: 0.2,
+      scale: 3,
+    });
+    document.destroy();
+  });
+
+  it("captures a geometry edit made after a switch", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "a", bounds: "theme", scale: 2 },
+    });
+    document.setBackgroundAsset("b");
+    document.setBackgroundAsset("a");
+
+    expect(document.envelope.background?.media?.scale).toBe(2);
+    document.destroy();
+  });
+
+  it("keeps a composition while simple and restores it in advanced", () => {
+    const document = memoryDocument();
+    document.setBackgroundMode("advanced");
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      mode: "advanced",
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        composition: { anchor: "left" },
+      },
+    });
+
+    document.setBackgroundMode("simple");
+    document.setBackgroundAsset("b");
+    document.setBackgroundAsset("a");
+    expect(
+      document.envelope.background?.media?.composition,
+    ).toBeUndefined();
+
+    document.setBackgroundMode("advanced");
+    expect(document.envelope.background?.media?.composition).toEqual({
+      anchor: "left",
+    });
+    document.destroy();
+  });
+
+  it("restores a fallback frame only for a video", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("video");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "video", bounds: "theme", fallbackFrame: 42 },
+    });
+
+    document.setBackgroundAsset("a");
+    expect(
+      document.envelope.background?.media?.fallbackFrame,
+    ).toBeUndefined();
+
+    document.setBackgroundAsset("video");
+    expect(document.envelope.background?.media?.fallbackFrame).toBe(42);
+    document.destroy();
+  });
+
+  it("captures the media it removes", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "a", bounds: "display", scale: 2 },
+    });
+
+    document.setBackground(undefined);
+    expect(document.envelope.background).toBeUndefined();
+
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "a",
+      bounds: "display",
+      scale: 2,
+    });
+    document.destroy();
+  });
+
+  it("never restores or writes an asset the document does not declare", () => {
+    const document = memoryDocument();
+    const before = document.envelope.background;
+    document.setBackgroundAsset("missing");
+    expect(document.envelope.background).toBe(before);
+
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: { assetId: "a", bounds: "display", scale: 2 },
+    });
+    document.setBackgroundAsset("b");
+    document.pruneAssets(["a"]);
+
+    // The switched-away entry is forgotten with the declaration, so naming the
+    // pruned id again writes nothing and the shown asset stays.
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "b",
+      bounds: "theme",
+    });
+    document.destroy();
+  });
+
+  it("lets the opened document beat a stale sidecar entry", () => {
+    const assets = new AssetManager();
+    assets.load(
+      { assets: [{ id: "a", kind: "image", path: "assets/a.png" }] },
+      {},
+    );
+    const document = documentWith({
+      assets,
+      envelope: {
+        ...createNewFabricTheme(),
+        background: {
+          media: { assetId: "a", bounds: "display", scale: 2 },
+        },
+      } as FabricThemeEnvelopeInput,
+      backgroundMedia: { a: { bounds: "theme", scale: 5 } },
+    });
+
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media).toEqual({
+      assetId: "a",
+      bounds: "display",
+      scale: 2,
+    });
     document.destroy();
   });
 });
