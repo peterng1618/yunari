@@ -34,6 +34,10 @@ export const MAX_PATH_PRESET_DATA_LENGTH = 200_000;
 const FORMAT = "yunari-path-preset-pack";
 const VERSION = 1;
 
+/** A pack or preset id is one segment of a stored row (`pack:<pack>:<preset>`),
+ *  so no `:` — or any separator a removal prefix could be confused by. */
+const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
+
 /**
  * The shapes every editor ships, in the order the Add pane offers them.
  *
@@ -41,7 +45,7 @@ const VERSION = 1;
  * catalogue and `uiCopy` from here, and the host passes the same list to its
  * store. A second spelling would let the two drift apart silently.
  */
-export const BUILTIN_PATH_PRESETS: readonly PathPreset[] = [
+export const BUILTIN_PATH_PRESETS = [
   {
     id: "line",
     label: "Horizontal line",
@@ -60,7 +64,7 @@ export const BUILTIN_PATH_PRESETS: readonly PathPreset[] = [
     data: "M 0 0 L 200 0 A 200 200 0 0 1 0 200 Z",
     paint: "fill",
   },
-];
+] as const satisfies readonly PathPreset[];
 
 export type PathPresetPackResult =
   | { readonly ok: true; readonly pack: PathPresetPack }
@@ -93,9 +97,11 @@ export function readPathPresetPack(value: unknown): PathPresetPackResult {
     return fail("Unsupported path preset pack version.");
   }
 
-  const id = readName(value["id"]);
+  const id = readId(value["id"]);
   if (id === undefined) {
-    return fail("A path preset pack needs an id of at most 200 characters.");
+    return fail(
+      "A path preset pack needs an id of 1-200 letters, digits, - or _.",
+    );
   }
   const name = readName(value["name"]);
   if (name === undefined) {
@@ -118,9 +124,11 @@ export function readPathPresetPack(value: unknown): PathPresetPackResult {
     if (!isRecord(entry)) {
       return fail("A path preset must be an object.");
     }
-    const presetId = readName(entry["id"]);
+    const presetId = readId(entry["id"]);
     if (presetId === undefined) {
-      return fail("A path preset needs an id of at most 200 characters.");
+      return fail(
+        "A path preset needs an id of 1-200 letters, digits, - or _.",
+      );
     }
     if (seen.has(presetId)) {
       return fail(
@@ -164,4 +172,11 @@ function readName(value: unknown): string | undefined {
   return trimmed === "" || trimmed.length > MAX_PATH_PRESET_NAME_LENGTH
     ? undefined
     : trimmed;
+}
+
+/** An id that is one safe segment of a stored row id. */
+function readId(value: unknown): string | undefined {
+  return typeof value === "string" && ID_PATTERN.test(value)
+    ? value
+    : undefined;
 }

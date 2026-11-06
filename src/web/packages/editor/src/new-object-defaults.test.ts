@@ -8,6 +8,7 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
+import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
 import { classRegistry, type FabricObject, Path } from "fabric/es";
 import { describe, expect, it } from "vitest";
 import {
@@ -37,6 +38,14 @@ const ALL_SHAPES: readonly ShapeInsertion[] = [
   ...SHAPE_KINDS,
   ...PATH_PRESET_IDS,
 ];
+
+it("offers exactly the path presets the owner declares, in its order", () => {
+  // A fourth builtin added to `BUILTIN_PATH_PRESETS` must reach the Add pane.
+  expect(PATH_PRESET_IDS).toEqual(
+    BUILTIN_PATH_PRESETS.map((preset) => preset.id),
+  );
+  expect(Object.keys(PATH_PRESETS)).toEqual([...PATH_PRESET_IDS]);
+});
 
 /** The word the Add pane and the layer list give a shape. */
 function labelOf(kind: ShapeInsertion): string {

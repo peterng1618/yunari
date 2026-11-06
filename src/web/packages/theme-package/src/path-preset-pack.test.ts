@@ -52,11 +52,10 @@ describe("reading a path preset pack", () => {
   it("accepts the declared format and trims every authored string", () => {
     const result = readPathPresetPack(
       pack({
-        id: " acme ",
         name: " Acme shapes ",
         presets: [
           {
-            id: " wave ",
+            id: "wave",
             label: " Wave ",
             data: " M 0 0 L 10 10 Z ",
             paint: "fill",
@@ -83,11 +82,23 @@ describe("reading a path preset pack", () => {
     ["another format", pack({ format: "yunari-widget-package" })],
     ["another version", pack({ version: 2 })],
     ["a blank id", pack({ id: "   " })],
+    ["an id with a colon", pack({ id: "acme:evil" })],
+    ["an id with a dot", pack({ id: "acme.evil" })],
+    ["an id with a slash", pack({ id: "acme/evil" })],
+    ["an id with a backslash", pack({ id: "acme\\evil" })],
     ["a blank name", pack({ name: "   " })],
     ["a presets value that is not a list", pack({ presets: {} })],
     [
       "a preset that is not an object",
       pack({ presets: [{ id: "wave" }, null, "x"] }),
+    ],
+    [
+      "a preset id with a colon",
+      pack({
+        presets: [
+          { id: "wave:2", label: "Wave", data: "M 0 0 L 1 1", paint: "stroke" },
+        ],
+      }),
     ],
     [
       "a blank preset id",

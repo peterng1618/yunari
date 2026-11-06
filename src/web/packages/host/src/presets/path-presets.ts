@@ -10,6 +10,10 @@ import {
 } from "@yunari/theme-package";
 import { createJsonFile } from "../settings/json-file.js";
 
+/** Pack bytes are refused before decoding, so a hostile body never reaches
+ *  `JSON.parse`. Ten mebibytes is far above a real pack's list of path data. */
+export const MAX_PATH_PRESET_PACK_BYTES = 10 * 1024 * 1024;
+
 /** The one file this store owns beside the other settings. */
 const STATE_FILE = "path-presets.json";
 const VERSION = 1;
@@ -76,8 +80,26 @@ function storedPreset(value: unknown): PathPreset {
   return { id: id.trim(), label: label.trim(), data: data.trim(), paint };
 }
 
-/** The file holds stored rows only: built-ins live in code, not on disk. */
-function normalizeState(value: unknown): PathPresetState {
+/** A row this file cannot read is dropped, not fatal: the rest still serves. */
+function tryStoredPreset(value: unknown): PathPreset | undefined {
+  try {
+    return storedPreset(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The file holds stored rows only: built-ins live in code, not on disk.
+ *
+ * A hand-edited row that cannot be read, or that repeats a built-in or an
+ * earlier row, is dropped so the merged view can never show one id twice. The
+ * file's own shape stays a refusal, so `read()` fails closed to the built-ins.
+ */
+function normalizeState(
+  value: unknown,
+  builtinIds: ReadonlySet<string>,
+): PathPresetState {
   if (!isRecord(value)) {
     throw new Error("The path preset file is not an object.");
   }
@@ -88,13 +110,13 @@ function normalizeState(value: unknown): PathPresetState {
   if (!Array.isArray(declared)) {
     throw new Error("The path preset file has no preset list.");
   }
-  const presets = declared.map(storedPreset);
-  const seen = new Set<string>();
-  for (const preset of presets) {
-    if (seen.has(preset.id)) {
-      throw new Error(`The path preset id "${preset.id}" is stored twice.`);
-    }
+  const presets: PathPreset[] = [];
+  const seen = new Set<string>(builtinIds);
+  for (const entry of declared) {
+    const preset = tryStoredPreset(entry);
+    if (preset === undefined || seen.has(preset.id)) continue;
     seen.add(preset.id);
+    presets.push(preset);
   }
 
   const removed = value["removedBuiltins"];
@@ -130,6 +152,9 @@ function freshUserId(base: string, taken: ReadonlySet<string>): string {
 }
 
 function readPack(bytes: Uint8Array): PathPresetPack {
+  if (bytes.byteLength > MAX_PATH_PRESET_PACK_BYTES) {
+    throw new Error("That path preset pack is too large.");
+  }
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -171,11 +196,11 @@ export function createPathPresetStore(
   directory: string,
   builtins: readonly PathPreset[] = [],
 ): PathPresetStore {
+  const builtinIds = new Set(builtins.map((preset) => preset.id));
   const file = createJsonFile<PathPresetState>(directory, STATE_FILE, {
-    normalize: normalizeState,
+    normalize: (value) => normalizeState(value, builtinIds),
     empty: emptyState,
   });
-  const builtinIds = new Set(builtins.map((preset) => preset.id));
 
   const merged = (state: PathPresetState): PathPresetState => {
     const removed = new Set(state.removedBuiltins);
@@ -227,7 +252,14 @@ export function createPathPresetStore(
     async addPack(bytes) {
       const pack = readPack(bytes);
       for (const preset of pack.presets) {
-        requireGeometry(preset.data, preset.id);
+        const paint = requireGeometry(preset.data, preset.id);
+        // Paint follows geometry, the same rule `userPathPresetFrom` applies;
+        // a declared value that disagrees would draw a filled path as a line.
+        if (paint !== preset.paint) {
+          throw new Error(
+            `The path preset "${preset.id}" declares ${preset.paint} paint, but its data is ${paint}.`,
+          );
+        }
       }
       const prefix = `pack:${pack.id}:`;
 
@@ -360,8 +392,11 @@ function readMigratedPresets(value: readonly PathPreset[]): PathPreset[] {
       throw new Error(`The migrated id "${preset.id}" appears twice.`);
     }
     seen.add(preset.id);
-    requireGeometry(preset.data, preset.id);
-    presets.push(preset);
+    // Browser rows were written by an older editor rule; geometry owns paint.
+    presets.push({
+      ...preset,
+      paint: requireGeometry(preset.data, preset.id),
+    });
   }
   return presets;
 }

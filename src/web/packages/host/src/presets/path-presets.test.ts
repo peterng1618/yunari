@@ -1,9 +1,13 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { BUILTIN_PATH_PRESETS, type PathPreset } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createPathPresetStore, type PathPresetStore } from "./path-presets.js";
+import {
+  createPathPresetStore,
+  MAX_PATH_PRESET_PACK_BYTES,
+  type PathPresetStore,
+} from "./path-presets.js";
 
 const encoder = new TextEncoder();
 
@@ -99,6 +103,103 @@ describe("the path preset store", () => {
       migrated: false,
     });
   });
+
+  it("installs a pack whose declared paint matches its geometry", async () => {
+    const installed = await store.addPack(
+      pathPackBytes("good", [
+        { id: "wave", label: "Wave", data: "M 0 0 L 10 10 Z", paint: "fill" },
+      ]),
+    );
+
+    expect(installed.presets[0]?.paint).toBe("fill");
+  });
+
+  it("refuses a declared paint that disagrees with the geometry", async () => {
+    await store.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
+    const before = await readFile(stateFile(directory), "utf8");
+
+    await expect(
+      store.addPack(
+        pathPackBytes("bad", [
+          // Closed data, so geometry says fill.
+          {
+            id: "wedge",
+            label: "Wedge",
+            data: "M 0 0 L 10 10 Z",
+            paint: "stroke",
+          },
+        ]),
+      ),
+    ).rejects.toThrow(/wedge/);
+
+    expect(await readFile(stateFile(directory), "utf8")).toBe(before);
+  });
+
+  it.each<[string, Uint8Array]>([
+    ["malformed JSON", encoder.encode("{not json")],
+    ["invalid UTF-8", new Uint8Array([0xff, 0xfe, 0x00])],
+    [
+      "another format",
+      pathPackBytes("bad", [shape("wave")], {
+        format: "yunari-widget-package",
+      }),
+    ],
+    ["another version", pathPackBytes("bad", [shape("wave")], { version: 2 })],
+    [
+      "a duplicate preset id",
+      pathPackBytes("bad", [shape("wave"), shape("wave")]),
+    ],
+    [
+      "a blank label",
+      pathPackBytes("bad", [
+        { id: "wave", label: " ", data: "M 0 0 L 1 1", paint: "stroke" },
+      ]),
+    ],
+    [
+      "oversize data",
+      pathPackBytes("bad", [
+        {
+          id: "wave",
+          label: "Wave",
+          data: `M 0 0 L 1 1${" ".repeat(200_001)}`,
+          paint: "stroke",
+        },
+      ]),
+    ],
+    [
+      "1001 presets",
+      pathPackBytes(
+        "bad",
+        Array.from({ length: 1001 }, (_unused, index) => ({
+          id: `shape-${index}`,
+          label: `Shape ${index}`,
+          data: "M 0 0 L 1 1",
+          paint: "stroke",
+        })),
+      ),
+    ],
+  ])(
+    "refuses %s and leaves the state file byte-for-byte unchanged",
+    async (_name, bytes) => {
+      await store.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
+      const before = await readFile(stateFile(directory), "utf8");
+
+      await expect(store.addPack(bytes)).rejects.toThrow();
+
+      expect(await readFile(stateFile(directory), "utf8")).toBe(before);
+    },
+  );
+
+  it("refuses pack bytes over the input bound before decoding them", async () => {
+    await store.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
+    const before = await readFile(stateFile(directory), "utf8");
+
+    await expect(
+      store.addPack(new Uint8Array(MAX_PATH_PRESET_PACK_BYTES + 1)),
+    ).rejects.toThrow(/too large/);
+
+    expect(await readFile(stateFile(directory), "utf8")).toBe(before);
+  });
 });
 
 describe("user presets", () => {
@@ -151,9 +252,11 @@ describe("user presets", () => {
     ).rejects.toThrow("draws nothing");
   });
 
-  it("removes one user row and ignores a built-in id", async () => {
+  it("removes exactly one row and ignores a built-in id", async () => {
     const builtins = createPathPresetStore(directory, BUILTIN_PATH_PRESETS);
     await builtins.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
+    await builtins.addUser({ label: "Other", data: "M 0 0 L 20 20" });
+    await builtins.addPack(pathPackBytes("acme", [shape("wave")]));
 
     await builtins.remove("line");
     expect((await builtins.read()).presets.map((preset) => preset.id)).toEqual([
@@ -161,6 +264,8 @@ describe("user presets", () => {
       "arc",
       "wedge",
       "user:mine",
+      "user:other",
+      "pack:acme:wave",
     ]);
 
     await builtins.remove("user:mine");
@@ -168,6 +273,8 @@ describe("user presets", () => {
       "line",
       "arc",
       "wedge",
+      "user:other",
+      "pack:acme:wave",
     ]);
   });
 });
@@ -232,6 +339,34 @@ describe("built-in presets", () => {
 
     expect(stored.presets.map((preset) => preset.id)).toEqual(["user:mine"]);
   });
+
+  it("drops a hand-edited row that is blank, repeated, or malformed", async () => {
+    await store.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
+    await store.addPack(pathPackBytes("acme", [shape("wave")]));
+
+    const stored = JSON.parse(await readFile(stateFile(directory), "utf8")) as {
+      presets: unknown[];
+    };
+    stored.presets.push(
+      { id: "line", label: "Impostor", data: "M 0 0 L 1 1", paint: "stroke" },
+      { id: "", label: "Blank", data: "M 0 0 L 1 1", paint: "stroke" },
+      { id: "user:mine", label: "Again", data: "M 0 0 L 1 1", paint: "stroke" },
+      { id: "user:bad", label: "Bad", data: "M 0 0 L 1 1", paint: "nope" },
+    );
+    await writeFile(
+      stateFile(directory),
+      `${JSON.stringify(stored, null, 2)}\n`,
+      "utf8",
+    );
+
+    expect((await store.read()).presets.map((preset) => preset.id)).toEqual([
+      "line",
+      "arc",
+      "wedge",
+      "user:mine",
+      "pack:acme:wave",
+    ]);
+  });
 });
 
 describe("pack replacement", () => {
@@ -251,12 +386,14 @@ describe("pack replacement", () => {
     await store.addUser({ label: "Mine", data: "M 0 0 L 10 10" });
     await store.addPack(pathPackBytes("acme", [shape("wave"), shape("star")]));
     await store.addPack(pathPackBytes("other", [shape("dot")]));
+    await store.addPack(pathPackBytes("acme-extra", [shape("wave")]));
 
     await store.addPack(pathPackBytes("acme", [shape("square")]));
 
     expect((await store.read()).presets.map((preset) => preset.id)).toEqual([
       "user:mine",
       "pack:other:dot",
+      "pack:acme-extra:wave",
       "pack:acme:square",
     ]);
   });
@@ -321,6 +458,25 @@ describe("migrating browser presets", () => {
 
     expect(again).toEqual(state);
     expect(await readFile(stateFile(directory), "utf8")).toBe(before);
+  });
+
+  it("stores the paint geometry derives, not the browser row's stale value", async () => {
+    const state = await store.migrate({
+      presets: [
+        // Closed data, declared stroke by an older editor rule.
+        {
+          id: "user:closed",
+          label: "Closed",
+          data: "M 0 0 L 10 10 Z",
+          paint: "stroke",
+        },
+      ],
+      removedBuiltins: [],
+    });
+
+    expect(
+      state.presets.find((preset) => preset.id === "user:closed")?.paint,
+    ).toBe("fill");
   });
 
   it("refuses an invalid migration whole", async () => {

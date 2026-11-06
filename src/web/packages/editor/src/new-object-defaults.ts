@@ -291,10 +291,13 @@ export type ShapeKind = (typeof SHAPE_KINDS)[number];
 /**
  * The custom shapes the Add pane offers, in the order it offers them. Each is a
  * preset of `Path`: a data string plus which property its paint belongs on.
+ * Both the ids and the rows come from `BUILTIN_PATH_PRESETS`, so a builtin the
+ * owner gains cannot be silently absent here.
  */
-export const PATH_PRESET_IDS = ["line", "arc", "wedge"] as const;
+export type PathPresetId = (typeof BUILTIN_PATH_PRESETS)[number]["id"];
 
-export type PathPresetId = (typeof PATH_PRESET_IDS)[number];
+export const PATH_PRESET_IDS: readonly PathPresetId[] =
+  BUILTIN_PATH_PRESETS.map((preset) => preset.id);
 
 /** A preset the author added in Settings. Its label and data live in the
  *  author's own list rather than in this module. */
