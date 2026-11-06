@@ -95,13 +95,13 @@ const ADDRESS =
  * that reached a display through the net reads the same as one the host has
  * already cleaned. One wording, two layers.
  */
-export function redactForBrowser(reason: string): string {
+export function redactForBrowser(reason: string, limit = 120): string {
   return (
     reason
       .replace(ADDRESS, "its configured address")
       // A reason is a line on a fixed strip, not a log. An unbounded third-party
       // string is how one line becomes a paragraph nobody reads.
-      .slice(0, 120)
+      .slice(0, limit)
       .replace(/\s+/g, " ")
       .trim()
   );

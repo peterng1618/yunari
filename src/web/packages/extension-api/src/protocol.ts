@@ -68,7 +68,10 @@ const PLUGIN_RESULT_KEYS = ["type", "id", "ok", "value", "reason"] as const;
 const PLUGIN_READY_KEYS = ["type", "pluginApi"] as const;
 const PLUGIN_LOG_KEYS = ["type", "level", "message"] as const;
 
-const PLUGIN_METHODS: ReadonlySet<string> = new Set<PluginMethod>([
+/** The plugin-to-host calls the worker protocol accepts. Host-facing methods
+ *  (`init`, `describe`, `sample`, `health`, `stop`) are not in this set, so a
+ *  plugin naming one is refused rather than forwarded. */
+export const PLUGIN_METHODS: ReadonlySet<PluginMethod> = new Set<PluginMethod>([
   "network.fetch",
   "storage.get",
   "storage.set",
@@ -103,7 +106,10 @@ export function readPluginMessage(value: unknown): PluginMessage | undefined {
     const id = value["id"];
     const method = value["method"];
     if (typeof id !== "string") return undefined;
-    if (typeof method !== "string" || !PLUGIN_METHODS.has(method))
+    if (
+      typeof method !== "string" ||
+      !PLUGIN_METHODS.has(method as PluginMethod)
+    )
       return undefined;
     if (!("params" in value)) return undefined;
     return {
