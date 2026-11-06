@@ -106,15 +106,16 @@ panel when it changes.
 - **Mode B** is CAM's stream: `toPalettedFrame` builds a per-frame 256-entry
   palette and diffs the quantization error with Floyd–Steinberg; the driver
   sends mode `0x03` into 101-slot buckets across all 16, deletes twice, sends no
-  settle, and runs at **100 ms**.
+  settle, and runs at CAM's **110 ms**.
 
-**100 ms rather than CAM's 110 ms, for even sampling of video sources.** The
-page plays a video and the panel is fed screenshots of it: at 30 fps every
-110 ms advances the source by 3.3 frames, so motion moves 3, 3, 4, 3, 3, 4
-frames — a beat that reads as micro-judder on heavy motion. At 100 ms the
-advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps, so the sampled
-motion is even. The theme's clip is 30.0 fps (ffprobe). Whether this closes the
-gap is the user's visual verdict, not this note's claim.
+**CAM's 110 ms, not a faster even-sample cadence.** A 30 fps page sampled every
+110 ms advances 3, 3, 4 source frames; a 100 ms tick makes that advance exactly
+3. That was shipped and watched: the owner judged it **worse** on heavy motion
+than 110 ms (2026-11-06). The glass cannot retire a paletted switch much faster
+than 110 ms, so the extra ticks are answered status 1 and never shown, and the
+dropped-switch judder they buy is larger than the sampling beat they remove. The
+theme's clip is 30.0 fps (ffprobe). The device's ceiling is spent evenly, not
+exceeded.
 
 The palette is built from exact channel sums per 5-bit bin, not from the bin
 centre. A flat colour is otherwise not exactly representable, and because
@@ -149,11 +150,12 @@ frames and counting accepted frames (any refused command throws):
 |---|---|---|
 | Mode A | 9.09 | 110 ms |
 | Mode B, back to back | 9.99 | 98 ms (including PNG generation) |
-| Mode B, paced | 10.08 | 75 ms of host work per frame |
+| Mode B, paced at 100 ms | 10.08 | 75 ms of host work per frame |
 
-A paced 100 ms run sent 121 of 121 frames with no refused command. Mode A's
-110 ms is the driver's own send cost, which is why its cadence stays at 140 ms
-for the glass.
+The paced run sent 121 of 121 frames with no refused command — but a dropped
+switch also answers success, so wire acceptance never proved the glass showed
+them; the visual verdict rejected that cadence. Mode A's 110 ms is the driver's
+own send cost, which is why its cadence stays at 140 ms for the glass.
 
 Quality is CAM's own target: a 256-colour dithered picture. 0020 rejected that
 against a 24-bit ideal; the user's target is CAM's output, which is this format,
