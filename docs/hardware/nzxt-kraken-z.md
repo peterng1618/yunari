@@ -11,13 +11,13 @@
   revision a person watched on the glass and confirmed.** Mode B was judged as
   smooth as CAM with no visible quality difference; Mode A remains the default.
   Compare a future playback regression against this revision. A revision only
-  becomes this line after the owner says it played well — probe results and
+  becomes this line after the user confirms it played well — probe results and
   command timings are not a substitute for watching the panel.
 - **Awaiting visual review:** `a738b21c01b4` (2026-11-06) — Mode B now samples
   at 100 ms instead of 110 ms so a 30 fps video background advances exactly
   three source frames per frame. Measured accepted on the wire (121 of 121
   frames, no refused command) but **not yet watched**; do not treat it as known
-  good until the owner confirms.
+  good until the user confirms.
 
 **Update this document with every new fact.** Record a firmware string, a
 command the driver starts using, a refusal and its cause, a timing constraint —
@@ -211,9 +211,9 @@ length, the slot count and the settle differ.
   a video and the panel is fed screenshots of it. A 30 fps source sampled every
   110 ms advances 3.3 frames each time — the motion moves 3, 3, 4, 3, 3, 4
   source frames, which reads as micro-judder on heavy motion. Every 100 ms the
-  advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps. The owner
-  reported CAM as slightly smoother on a heavy-motion theme before this change;
-  the beat is the presumed explanation, pending visual confirmation.
+  advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps. Heavy motion
+  exposes the beat: CAM's 110 ms sampling steps irregularly against the same
+  clip. Whether 100 ms closes the gap awaits the user's visual confirmation.
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host

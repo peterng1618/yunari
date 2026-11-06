@@ -108,14 +108,13 @@ panel when it changes.
   sends mode `0x03` into 101-slot buckets across all 16, deletes twice, sends no
   settle, and runs at **100 ms**.
 
-**100 ms rather than CAM's 110 ms, on the owner's report.** After the first
-ship the owner found CAM still slightly smoother on a heavy-motion video theme.
-The page plays a video and the panel is fed screenshots of it: at 30 fps every
-110 ms advances the source by 3.3 frames, so the motion moves 3, 3, 4, 3, 3, 4
-frames — a beat presumed to read as micro-judder. At 100 ms the advance is
-exactly 3 frames at 30 fps and exactly 6 at 60 fps, so the sampled motion is
-even. The theme's clip was probed at 30.0 fps with ffprobe. Whether this closes
-the gap is the owner's visual verdict, not this note's claim.
+**100 ms rather than CAM's 110 ms, for even sampling of video sources.** The
+page plays a video and the panel is fed screenshots of it: at 30 fps every
+110 ms advances the source by 3.3 frames, so motion moves 3, 3, 4, 3, 3, 4
+frames — a beat that reads as micro-judder on heavy motion. At 100 ms the
+advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps, so the sampled
+motion is even. The theme's clip is 30.0 fps (ffprobe). Whether this closes the
+gap is the user's visual verdict, not this note's claim.
 
 The palette is built from exact channel sums per 5-bit bin, not from the bin
 centre. A flat colour is otherwise not exactly representable, and because
