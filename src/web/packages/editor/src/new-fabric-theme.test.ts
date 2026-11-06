@@ -7,7 +7,7 @@ import {
   bundledStarterEnvelope,
   loadBundledStarter,
 } from "./bundled/starter.js";
-import { createNewFabricTheme } from "./new-fabric-theme.js";
+import { createNewFabricTheme, STARTER_TEMPLATE } from "./new-fabric-theme.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -69,5 +69,20 @@ describe("createNewFabricTheme", () => {
       assetId: "starter-backdrop",
       bounds: "theme",
     });
+  });
+
+  it("mints a fresh document id for every template open", async () => {
+    await loadBundledStarter(fetchZip("starter.theme.zip"));
+
+    const first = createNewFabricTheme();
+    const second = createNewFabricTheme();
+    expect(first.id).not.toBe(second.id);
+    expect(first.id).not.toBe(STARTER_TEMPLATE.id);
+    expect(second.id).not.toBe(STARTER_TEMPLATE.id);
+
+    // The template keeps its stable id; only the opened document's id changes.
+    const bundled = bundledStarterEnvelope();
+    expect(bundled.id).toBe(STARTER_TEMPLATE.id);
+    expect({ ...first, id: bundled.id }).toEqual(bundled);
   });
 });

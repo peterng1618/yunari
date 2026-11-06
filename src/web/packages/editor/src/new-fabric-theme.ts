@@ -1,4 +1,8 @@
-import type { Artboard, FabricThemeEnvelope } from "@yunari/renderer-core";
+import {
+  type Artboard,
+  type FabricThemeEnvelope,
+  newThemeId,
+} from "@yunari/renderer-core";
 import { createBlankTheme } from "@yunari/theme-kit";
 import { bundledStarterEnvelope } from "./bundled/starter.js";
 
@@ -19,9 +23,13 @@ export const STARTER_TEMPLATE = {
  * The reference composition, kept whole so it can be reached as what it now is
  * — a template, offered by `New from template` and listed in the library as one.
  * It is not what `New` means; see `createBlankFabricTheme`.
+ *
+ * The document is the bundled template with a **fresh** id: opening a template
+ * makes the author's own theme, and keeping the template's stable id would
+ * overwrite the template row on the first save or report a false conflict.
  */
 export function createNewFabricTheme(): FabricThemeEnvelope {
-  return bundledStarterEnvelope();
+  return { ...bundledStarterEnvelope(), id: newThemeId() };
 }
 
 /**

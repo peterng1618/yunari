@@ -36,7 +36,20 @@ export async function loadBundledStarter(
       `The starter template could not be read (${response.status} ${starterUrl}).`,
     );
   }
-  const result = readThemePackage(new Uint8Array(await response.arrayBuffer()));
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let result: ReturnType<typeof readThemePackage>;
+  try {
+    result = readThemePackage(bytes);
+  } catch (error) {
+    // A malformed member (a `theme.json` that is not JSON) surfaces as a raw
+    // `SyntaxError`. The caller gets the same sentence every other refusal uses,
+    // and the module stays unloaded.
+    throw new Error(
+      `The bundled starter template is not readable: ${
+        error instanceof Error ? error.message : String(error)
+      }.`,
+    );
+  }
   if (!result.ok) {
     throw new Error(
       `The bundled starter template is not readable: ${result.message}.`,
