@@ -14,6 +14,9 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import { createConsentStore } from "./extensions/consent-store.js";
+import { createPluginInstaller } from "./extensions/install.js";
+import { createExtensionService } from "./extensions/service.js";
 import {
   createPanelManager,
   type PanelManager,
@@ -446,6 +449,13 @@ export async function run(argv: readonly string[]): Promise<number> {
       admin: path.join(packagesDir, "host", "public"),
     },
     themeStore,
+    // Local plugin trees live beside the settings that admit them; the consent
+    // file records the grants, and the browser only ever sees the listed shape.
+    extensions: createExtensionService({
+      installer: createPluginInstaller(path.join(settingsDir, "extensions")),
+      consent: createConsentStore(settingsDir),
+      now: () => new Date().toISOString(),
+    }),
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open. The scan
     // is cached beside the other disposable host data so a rebuild does not

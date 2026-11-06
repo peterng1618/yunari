@@ -1,6 +1,7 @@
 import type { AssetRouteOptions } from "../assets/routes.js";
 import type { HostBinding } from "../cli/hosting.js";
 import type { ListenableServer } from "../cli/net.js";
+import type { ExtensionService } from "../extensions/service.js";
 import type { PanelHint } from "../panels/panel-device.js";
 import type { PanelManager } from "../panels/panel-manager.js";
 import type {
@@ -75,6 +76,9 @@ export interface HostServerOptions {
    *  the claim route accepts; a caller with no launcher gets a store of its
    *  own, which is what the unit suite wants. */
   readonly pairingCodes?: PairingCodeStore;
+  /** Installed plugins and their grants. Omitted when this host manages none:
+   *  the extension routes then say so rather than serving an empty list. */
+  readonly extensions?: ExtensionService;
   /** Device assignments (§145). Omit to keep defaults with no configuration. */
   readonly devices?: DeviceSettingsStore;
   /** Per-theme answers. Omitted when the host stores none. */
