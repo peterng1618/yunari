@@ -5,3 +5,4 @@ export * from "./host-api.js";
 export * from "./installed";
 export * from "./manifest";
 export * from "./package";
+export * from "./protocol";

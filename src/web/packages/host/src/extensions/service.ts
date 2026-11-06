@@ -73,6 +73,7 @@ function bindingFor(plugin: InstalledPlugin): ConsentBinding {
     capabilities: plugin.manifest.capabilities,
     contributions: contributionIdentities(plugin.manifest.contributes),
     devices: [],
+    hosts: plugin.manifest.networkHosts ?? [],
   };
 }
 

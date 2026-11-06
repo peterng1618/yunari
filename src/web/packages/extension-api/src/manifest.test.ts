@@ -223,6 +223,80 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("reads the declared network hosts", () => {
+    const manifest = {
+      ...validManifest(),
+      networkHosts: ["api.acme.test", "10.0.0.7"],
+    };
+    expect(readPluginManifest(manifest)).toEqual({ ok: true, manifest });
+  });
+
+  it("refuses a network host with a scheme or path", () => {
+    expect(
+      readPluginManifest({
+        ...validManifest(),
+        networkHosts: ["https://api.acme.test/v1"],
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        'The network host "https://api.acme.test/v1" must be a bare DNS name.',
+    });
+  });
+
+  it("refuses an uppercase, wildcard, port or trailing-dot host", () => {
+    for (const host of [
+      "API.acme.test",
+      "*.acme.test",
+      "api.acme.test:443",
+      "api.acme.test.",
+    ]) {
+      expect(
+        readPluginManifest({ ...validManifest(), networkHosts: [host] }),
+      ).toEqual({
+        ok: false,
+        reason: `The network host ${JSON.stringify(host)} must be a bare DNS name.`,
+      });
+    }
+  });
+
+  it("refuses a host longer than 63 characters", () => {
+    const host = `${"a".repeat(63)}.test`;
+    expect(
+      readPluginManifest({ ...validManifest(), networkHosts: [host] }),
+    ).toEqual({
+      ok: false,
+      reason: `The network host ${JSON.stringify(host)} must be a bare DNS name.`,
+    });
+  });
+
+  it("refuses more than 16 network hosts", () => {
+    expect(
+      readPluginManifest({
+        ...validManifest(),
+        networkHosts: Array.from(
+          { length: 17 },
+          (_, index) => `h${index}.test`,
+        ),
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "A plugin declares at most 16 network hosts.",
+    });
+  });
+
+  it("refuses a duplicate network host", () => {
+    expect(
+      readPluginManifest({
+        ...validManifest(),
+        networkHosts: ["api.acme.test", "api.acme.test"],
+      }),
+    ).toEqual({
+      ok: false,
+      reason: 'Network host "api.acme.test" is listed twice.',
+    });
+  });
+
   it("refuses a non-positive geometry dimension", () => {
     expect(
       readPluginManifest({

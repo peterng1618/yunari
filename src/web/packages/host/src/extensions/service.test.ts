@@ -70,6 +70,7 @@ function expectedFingerprint(
     capabilities: [],
     contributions: [],
     devices: [],
+    hosts: [],
   });
 }
 

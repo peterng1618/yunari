@@ -21,6 +21,7 @@ function binding(overrides: Partial<ConsentBinding> = {}): ConsentBinding {
     capabilities: ["network:fetch"],
     contributions: ["sensorProviders/acme"],
     devices: [],
+    hosts: [],
     ...overrides,
   };
 }
@@ -65,6 +66,7 @@ describe("consent fingerprint", () => {
       { capabilities: ["network:fetch", "storage:own"] },
       { contributions: ["sensorProviders/acme", "assetCategories/acme-cat"] },
       { devices: ["usb:1cbe:a092"] },
+      { hosts: ["api.acme.test"] },
     ];
 
     for (const change of changes) {
@@ -135,6 +137,15 @@ describe("access growth", () => {
       "contribution:assetCategories/acme-cat",
       "device:usb:1cbe:a092",
     ]);
+  });
+
+  it("reports a newly declared host", () => {
+    expect(
+      accessGrowth(binding(), {
+        ...binding(),
+        hosts: ["api.acme.test"],
+      }),
+    ).toEqual(["host:api.acme.test"]);
   });
 
   it("reports publisher only when the publisher segment changes", () => {
