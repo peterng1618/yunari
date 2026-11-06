@@ -516,6 +516,11 @@ export async function handleAssetRoutes(
     "content-type": bytes.contentType,
     "content-length": bytes.bytes.byteLength,
     "cache-control": "no-store",
+    // A source may answer `text/html`; served on this origin, opening the
+    // bytes route would run script as the host. No source's bytes may be
+    // sniffed or execute a document.
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "sandbox; default-src 'none'",
     "x-yunari-filename": bytes.filename,
   });
   response.end(Buffer.from(bytes.bytes));

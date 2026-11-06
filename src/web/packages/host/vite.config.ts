@@ -30,8 +30,10 @@ export default defineConfig({
     },
   },
   build: {
-    /** SSR keeps `node:` builtins external and avoids browser shims. */
-    ssr: "src/main.ts",
+    /** SSR keeps `node:` builtins external and avoids browser shims. Two
+     *  entries: the host itself and the forked plugin child, which
+     *  `main.ts` resolves as its sibling. */
+    ssr: true,
     target: "node22",
     outDir: "dist",
     emptyOutDir: true,
@@ -39,9 +41,13 @@ export default defineConfig({
     /** Keep server stack traces readable. */
     minify: false,
     rollupOptions: {
+      input: {
+        main: "src/main.ts",
+        "plugin-host": "src/extensions/runtime/plugin-host.ts",
+      },
       output: {
         format: "esm",
-        entryFileNames: "main.js",
+        entryFileNames: "[name].js",
       },
     },
   },

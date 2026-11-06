@@ -1,4 +1,5 @@
 import type http from "node:http";
+import type { ProviderOrder } from "../extensions/provider-order.js";
 import type { ExtensionService } from "../extensions/service.js";
 import { readBody, readBytes, sendJson, sendText } from "./http.js";
 import { isForeignOrigin, isLoopbackRemote } from "./identity.js";
@@ -9,6 +10,7 @@ const PREFIX = "/api/extensions";
  *  is the package cap. */
 export const MAX_EXTENSION_INSTALL_BYTES = 64 * 1024 * 1024;
 const MAX_CONSENT_BYTES = 64 * 1024;
+const MAX_PROVIDER_ORDER_BYTES = 64 * 1024;
 
 export interface ExtensionRouteDeps {
   readonly extensions: ExtensionService | undefined;
@@ -82,6 +84,58 @@ export function createExtensionRoutes(
         return true;
       }
       sendJson(response, 200, { extensions: await extensions.list() });
+      return true;
+    }
+
+    if (url.pathname === `${PREFIX}/provider-order`) {
+      if (request.method === "GET") {
+        sendJson(response, 200, await extensions.readProviderOrder());
+        return true;
+      }
+
+      if (request.method !== "PUT") {
+        sendText(response, 405, "Only GET and PUT are supported.");
+        return true;
+      }
+
+      const declared = declaredLength(request);
+      if (declared !== undefined && declared > MAX_PROVIDER_ORDER_BYTES) {
+        sendText(response, 413, "That provider order is too large.");
+        return true;
+      }
+
+      let body: string;
+      try {
+        body = await readBody(request, MAX_PROVIDER_ORDER_BYTES);
+      } catch (error) {
+        // A chunked body carries no content-length, so the cap is enforced
+        // while it arrives; that refusal is a size refusal, not a bad shape.
+        if (error instanceof Error && error.message.includes("too large")) {
+          sendText(response, 413, "That provider order is too large.");
+          return true;
+        }
+        sendJson(response, 400, {
+          ok: false,
+          message: "That provider order is not readable.",
+        });
+        return true;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        sendJson(response, 400, {
+          ok: false,
+          message: "That provider order is not readable.",
+        });
+        return true;
+      }
+
+      const result = await extensions.writeProviderOrder(
+        parsed as ProviderOrder,
+      );
+      sendJson(response, result.ok ? 200 : 400, result);
       return true;
     }
 

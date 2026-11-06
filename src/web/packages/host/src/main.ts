@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { InstalledExtension } from "@yunari/extension-api";
 import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
+import { ASSET_SOURCES, createAssetSources } from "./assets/sources.js";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
@@ -15,10 +17,22 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import { createPluginAssetSources } from "./extensions/asset-sources.js";
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
+import { declarativeAssetSources } from "./extensions/declarative-contributions.js";
+import { DeclarativeAssetSourceAdapter } from "./extensions/declarative-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
 import { createKillListStore } from "./extensions/kill-list.js";
+import {
+  createProviderOrderStore,
+  orderProviders,
+} from "./extensions/provider-order.js";
+import {
+  createPluginProviders,
+  startPluginSupervisors,
+} from "./extensions/providers.js";
+import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { createExtensionService } from "./extensions/service.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
@@ -214,6 +228,13 @@ export async function run(argv: readonly string[]): Promise<number> {
   const customSources = createSourceStore(settingsDir);
   // Plugins may declare custom sources, and an install, grant or remove can
   // change the rows the provider should hold.
+  const pluginInstaller = createPluginInstaller(
+    path.join(settingsDir, "extensions"),
+  );
+  // Which plugin provider answers a shared key first, kept beside the plugins.
+  const providerOrder = createProviderOrderStore(
+    path.join(settingsDir, "extensions", "provider-order.json"),
+  );
   let extensions: ReturnType<typeof createExtensionService>;
   let pluginSources: readonly CustomSource[] = [];
   const refreshPluginSources = async (): Promise<void> => {
@@ -238,10 +259,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   // cannot answer leaves the cached list in force.
   await killList.refresh();
   extensions = createExtensionService({
-    installer: createPluginInstaller(path.join(settingsDir, "extensions")),
+    installer: pluginInstaller,
     consent: createConsentStore(settingsDir),
     killList,
     now: () => new Date().toISOString(),
+    providerOrder,
     onChange: async () => {
       await refreshPluginSources();
       await customProvider.reload();
@@ -249,6 +271,65 @@ export async function run(argv: readonly string[]): Promise<number> {
   });
   await refreshPluginSources();
   await customProvider.reload();
+  // One forked worker per loadable plugin that needs code. A plugin that will
+  // not start is reported and left out; the machine's own providers still
+  // answer, and a plugin contributing both providers and asset sources is one
+  // process. The supervisors are started once and shared by both adapters.
+  const pluginHostApi = createHostApiDispatcher({ settingsDir });
+  const onPluginFailure = (pluginKey: string, reason: string): void => {
+    console.error(`Plugin worker ${pluginKey}: ${reason}`);
+  };
+  const pluginSupervisors = await startPluginSupervisors({
+    installer: pluginInstaller,
+    extensions,
+    hostApi: pluginHostApi,
+    onFailure: onPluginFailure,
+  });
+  const pluginRuntime = await createPluginProviders({
+    installer: pluginInstaller,
+    extensions,
+    hostApi: pluginHostApi,
+    supervisors: pluginSupervisors.supervisors,
+    onFailure: onPluginFailure,
+  });
+  const pluginAssetSources = await createPluginAssetSources({
+    installer: pluginInstaller,
+    supervisors: pluginSupervisors.supervisors,
+    taken: ASSET_SOURCES.map((source) => source.id),
+    onFailure: onPluginFailure,
+  });
+  // A declarative source needs no worker: its manifest says where to search
+  // and how to read the answer. A row that collides with a built-in or a code
+  // source is refused here rather than reaching `createAssetSources`, whose
+  // duplicate check throws and would take the host down at startup.
+  const installedExtensions = await extensions.list();
+  const declaredAssetSources = declarativeAssetSources(installedExtensions);
+  const declarativeOwners = new Map<string, InstalledExtension>();
+  for (const extension of installedExtensions) {
+    for (const row of extension.contributions.assetSources ?? []) {
+      const id = row["id"];
+      if (typeof id === "string") declarativeOwners.set(id, extension);
+    }
+  }
+  const assetSourceIds = new Set([
+    ...ASSET_SOURCES.map((source) => source.id),
+    ...pluginAssetSources.map((source) => source.id),
+  ]);
+  const declarativeAssetAdapters: DeclarativeAssetSourceAdapter[] = [];
+  for (const contribution of declaredAssetSources) {
+    const owner = declarativeOwners.get(contribution.id);
+    if (owner === undefined) continue;
+    if (assetSourceIds.has(contribution.id)) {
+      console.warn(
+        `Declarative asset source ${owner.key}: "${contribution.id}" is already an asset source.`,
+      );
+      continue;
+    }
+    assetSourceIds.add(contribution.id);
+    declarativeAssetAdapters.push(
+      new DeclarativeAssetSourceAdapter({ plugin: owner, contribution }),
+    );
+  }
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle.
@@ -327,16 +408,22 @@ export async function run(argv: readonly string[]): Promise<number> {
           productName: () => Promise.resolve(undefined),
         }),
   });
-  const registry = new ProviderRegistry([
-    clockProvider,
-    lhmProvider,
-    libraryProvider,
-    weatherProvider,
-    mediaProvider,
-    frameProvider,
-    gameProvider,
-    customProvider,
-  ]);
+  const registry = new ProviderRegistry(
+    orderProviders(
+      [
+        clockProvider,
+        lhmProvider,
+        libraryProvider,
+        weatherProvider,
+        mediaProvider,
+        frameProvider,
+        gameProvider,
+        customProvider,
+      ],
+      pluginRuntime.providers,
+      await extensions.readProviderOrder(),
+    ),
+  );
   const packagesDir = path.resolve(here, "..", "..");
 
   // Displays and their credentials exist whether or not the LAN is on, because
@@ -548,7 +635,13 @@ export async function run(argv: readonly string[]): Promise<number> {
     fontFavorites,
     credentials,
     sources: { store: customSources, provider: customProvider },
-    assets: { credentials },
+    assets: {
+      credentials,
+      sources: createAssetSources(ASSET_SOURCES, [
+        ...pluginAssetSources,
+        ...declarativeAssetAdapters,
+      ]),
+    },
     artwork: mediaArtwork,
     gameArtwork: createGameArtwork({
       ...(steamRoot === undefined ? {} : { steamRoot }),
@@ -909,6 +1002,17 @@ export async function run(argv: readonly string[]): Promise<number> {
       } finally {
         // A throwing stop must not leave the server listening with no tray.
         void (async () => {
+          // Plugin workers stop before the panels: a child left polling would
+          // outlive the host that owned it. The supervisors are shared by the
+          // provider and asset-source adapters, so they are stopped once here.
+          try {
+            await pluginSupervisors.stop();
+          } catch (error) {
+            console.error(
+              `The plugin workers could not stop: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
           // The panels before the server: a runner still opening has to be
           // awaited, or its device and STOP_VIDEO outlive the host that owned
           // them. A refusal is logged and the close continues.

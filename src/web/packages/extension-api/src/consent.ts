@@ -6,8 +6,9 @@ import { type ExecutionProfile, publisherOf } from "./manifest";
  * manifest so a hand-edited or re-published plugin cannot ride an old grant.
  *
  * The binding names every input that can widen what the plugin does: its
- * content, the profile it executes at, the capabilities, contributions and
- * devices it asks for, and the publisher segment of its qualified key.
+ * content, the profile it executes at, the capabilities, contributions,
+ * devices and network hosts it asks for, and the publisher segment of its
+ * qualified key.
  */
 export const CONSENT_SCHEMA_TAG = "yunari-extension-consent-v1";
 
@@ -21,6 +22,7 @@ export interface ConsentBinding {
   readonly capabilities: readonly Capability[];
   readonly contributions: readonly string[];
   readonly devices: readonly string[];
+  readonly hosts: readonly string[];
 }
 
 export interface ConsentRecord {
@@ -94,6 +96,7 @@ export async function consentFingerprint(
     capabilities: sorted(binding.capabilities),
     contributions: sorted(binding.contributions),
     devices: sorted(binding.devices),
+    hosts: sorted(binding.hosts),
   });
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -135,9 +138,9 @@ function added(
 
 /**
  * What the next binding adds to the previous one, in the order a consent
- * prompt reads it: the profile, then each capability, contribution and device,
- * then the publisher that now signs the plugin. Removed access is not growth,
- * and an unchanged binding grows nothing.
+ * prompt reads it: the profile, then each capability, contribution, device and
+ * host, then the publisher that now signs the plugin. Removed access is not
+ * growth, and an unchanged binding grows nothing.
  */
 export function accessGrowth(
   previous: ConsentBinding,
@@ -153,6 +156,7 @@ export function accessGrowth(
     ...added(previous.contributions, next.contributions, "contribution:"),
   );
   growth.push(...added(previous.devices, next.devices, "device:"));
+  growth.push(...added(previous.hosts, next.hosts, "host:"));
   if (publisherOf(previous.pluginKey) !== publisherOf(next.pluginKey))
     growth.push("publisher");
 

@@ -1,6 +1,7 @@
 /** Bounds keep a hostile manifest small enough to validate in one pass. */
 export const MAX_CAPABILITIES = 32;
 export const MAX_CONTRIBUTIONS = 64;
+export const MAX_NETWORK_HOSTS = 16;
 
 export const MAX_IDENTIFIER = 64;
 export const MAX_NAME = 200;

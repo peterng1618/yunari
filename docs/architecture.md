@@ -195,7 +195,71 @@ Declarative contributions join the registries they extend; no manager learns
 plugin details. An installed `assetCategories` entry is drawn by the finder's
 generic grid, and `customSources` rows from a declarative extension join the
 custom source provider. A declarative profile needs no consent; executable
-profiles are gated. No plugin code runs in this phase.
+profiles are gated.
+
+`trusted-worker` is the only profile that executes plugin code. The host forks
+one Node child per loadable plugin from `plugin-host.js`, a second Vite SSR
+entry beside the host bundle, and speaks to it over IPC. The child imports the
+manifest's `main` only after the parent's `init` handshake, and inherits no
+environment beyond `PATH`. Its method allowlist refuses a call before IPC; the
+parent rechecks every plugin call through `gateExtensionCall` against the
+manifest's capabilities and the grant the worker started with, so the allowlist
+is early refusal, not the authority. A running worker keeps the grant it was
+started with: installing, revoking consent or removing the extension affects
+that worker only at the next host start.
+
+The fork is a consent boundary, not a sandbox: the child is ordinary Node code
+with this account's privileges, and the gate and guarded fetch constrain what
+it does through the host API, not what its own code can do. The profile is
+consent-gated for that reason.
+
+The parent bounds the child. Startup and the `init` answer have 5 s, a request
+has a 35 s default (above the 30 s host API deadline, so a slow fetch does not
+kill the worker), a host API call has a 30 s deadline, and `stop` gets 2 s
+before the parent kills the process. At most the last 2 KiB of stderr is kept,
+redacted for machine addresses, and that text is the crash detail. A start
+failure, an unexpected exit and an unanswered request are the same one crash
+report: pending calls settle as failures, and stopping is idempotent.
+
+A plugin's calls land in `runtime/host-api.ts`, which rebuilds the gate context
+from the manifest and the grant captured when the worker started on every call;
+a caller cannot widen what the gate sees. Parameters are checked against a closed key
+set per method, denials name the method and the gate's reason only, and no
+method returns a host credential. `network.fetch` is `https` only and reaches
+only the hosts the manifest declares. Every hop re-checks the host, refuses
+link-local and metadata addresses, re-checks a redirect and refuses a scheme
+change, caps the body at 1 MiB, and pins the checked address through
+`createPinnedFetch` so a second DNS answer cannot redirect the socket. A plugin
+uses its own secrets for its own requests; the host adds no credential, and a
+plugin-contributed asset source declaring `requires` or `request.auth` is
+refused.
+
+A code asset source answers through the same supervised child with
+`asset.search` and `asset.bytes`; a bytes answer is capped at 32 MiB and its
+content type and filename are validated before use. A declarative asset source
+takes the same guarded JSON and byte paths as its search and artwork fetches.
+A plugin requesting a network call takes one of the host's four shared fetch
+slots, which bounds how many plugin connections run at once; a stalled call
+holds its slot until its deadline.
+
+Each plugin owns three scopes under `settings/extensions/`:
+`data/<publisher>/<id>/` for keyed values (1 MiB per value, 1,000 keys),
+`secrets/<publisher>/<id>/` in the OS-protected secret store, and
+`settings/<publisher>/<id>.json` (64 KiB). File names are derived from the key,
+and publisher and id are revalidated as path segments, so neither a key nor a
+manifest can steer a path.
+
+Sensor providers and code asset sources from a loadable plugin register through
+the existing `ProviderRegistry` and `AssetSource` registry: one provider per
+plugin using its first sensor-provider contribution, and one adapter per code
+asset entry; they never reach a manager. A plugin that fails to start
+contributes no rows. A plugin that crashes keeps its registered adapters: its
+providers and sources report failures, every other provider and source keeps
+answering, and its keys arrive as gaps with a reason, not as zero or a
+placeholder. Built-in providers keep their own precedence and
+plugin rows follow, ordered by `settings/extensions/provider-order.json`. The
+order is read and written at `GET`/`PUT /api/extensions/provider-order`,
+loopback-only and origin-checked like the rest of `/api/extensions`.
 
 ## Data packs
 

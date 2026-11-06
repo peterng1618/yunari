@@ -7,6 +7,7 @@ import {
   MAX_CAPABILITIES,
   MAX_DESCRIPTION,
   MAX_NAME,
+  MAX_NETWORK_HOSTS,
   MAX_VERSION,
   type ObjectValue,
   readIdentifier,
@@ -15,7 +16,12 @@ import {
   refuse,
 } from "./manifest-values";
 
-export { MAX_CAPABILITIES, MAX_CONTRIBUTIONS } from "./manifest-values";
+export {
+  IDENTIFIER_PATTERN,
+  isWindowsReservedName,
+  MAX_CAPABILITIES,
+  MAX_CONTRIBUTIONS,
+} from "./manifest-values";
 
 export const MANIFEST_VERSION = 1;
 export const PLUGIN_API_MAJOR = 1;
@@ -76,6 +82,7 @@ export interface PluginManifest {
   readonly execution: ExecutionProfile;
   readonly capabilities: readonly Capability[];
   readonly contributes: PluginContributions;
+  readonly networkHosts?: readonly string[];
   readonly main?: string;
   readonly ui?: string;
   readonly publisher?: string;
@@ -110,6 +117,7 @@ const MANIFEST_KEYS = [
   "execution",
   "capabilities",
   "contributes",
+  "networkHosts",
   "main",
   "ui",
   "publisher",
@@ -125,11 +133,49 @@ const VERSION_PATTERN = new RegExp(
 const ENGINE_RANGE_PATTERN = /^>=(\d+)\.(\d+)\.(\d+)$/;
 /** The bodies the editor renders itself. Any other body is plugin UI and needs
  *  the sandboxed profile; an `entry` is code and needs the trusted one. */
-const BUILT_IN_ASSET_BODIES: ReadonlySet<string> = new Set([
+export const BUILT_IN_ASSET_BODIES: ReadonlySet<string> = new Set([
   "grid",
   "font-picker",
   "wallpaper-engine",
 ]);
+
+/** A host is a DNS label sequence or an IPv4 literal: no scheme, path, port,
+ *  wildcard or trailing dot, and no uppercase (the URL layer lowercases too,
+ *  but the declaration must be canonical before consent fingerprints it). */
+const MAX_HOST_LENGTH = 63;
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const IPV4_ADDRESS =
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+function isNetworkHost(host: string): boolean {
+  if (host.length > MAX_HOST_LENGTH) return false;
+  if (IPV4_ADDRESS.test(host)) return true;
+  return host.split(".").every((label) => DNS_LABEL.test(label));
+}
+
+function readNetworkHosts(
+  value: unknown,
+): Check<readonly string[] | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!Array.isArray(value)) return refuse('"networkHosts" must be an array.');
+  if (value.length > MAX_NETWORK_HOSTS)
+    return refuse(
+      `A plugin declares at most ${MAX_NETWORK_HOSTS} network hosts.`,
+    );
+  const seen = new Set<string>();
+  const hosts: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !isNetworkHost(entry))
+      return refuse(
+        `The network host ${JSON.stringify(entry)} must be a bare DNS name.`,
+      );
+    if (seen.has(entry))
+      return refuse(`Network host ${JSON.stringify(entry)} is listed twice.`);
+    seen.add(entry);
+    hosts.push(entry);
+  }
+  return { ok: true, value: hosts };
+}
 
 function readExecution(value: unknown): Check<ExecutionProfile> {
   if (
@@ -265,6 +311,9 @@ export function readPluginManifest(value: unknown): ManifestResult {
     publisher = read.value;
   }
 
+  const networkHosts = readNetworkHosts(value["networkHosts"]);
+  if (!networkHosts.ok) return refuse(networkHosts.reason);
+
   return {
     ok: true,
     manifest: {
@@ -278,6 +327,9 @@ export function readPluginManifest(value: unknown): ManifestResult {
       execution: execution.value,
       capabilities: capabilities.value,
       contributes: contributes.value,
+      ...(networkHosts.value === undefined
+        ? {}
+        : { networkHosts: networkHosts.value }),
       ...(main === undefined ? {} : { main }),
       ...(ui === undefined ? {} : { ui }),
       ...(publisher === undefined ? {} : { publisher }),
@@ -290,8 +342,15 @@ interface Requirement {
   readonly profile: ExecutionProfile;
 }
 
+/** A string `entry` is code the host runs, so it needs the trusted profile. One
+ *  definition for the manifest's profile rule and every adapter that loads a
+ *  code contribution. */
+export function isCodeAssetSourceEntry(source: ObjectValue): boolean {
+  return typeof source["entry"] === "string";
+}
+
 function assetSourceProfile(source: ObjectValue): ExecutionProfile {
-  if (typeof source["entry"] === "string") return "trusted-worker";
+  if (isCodeAssetSourceEntry(source)) return "trusted-worker";
   if (
     typeof source["body"] === "string" &&
     !BUILT_IN_ASSET_BODIES.has(source["body"])

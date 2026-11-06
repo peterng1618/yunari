@@ -51,8 +51,11 @@ async function pageOf(
       results: page.results.map((entry) => ({
         ...entry,
         // Namespaced here, once: two sources cannot collide, and a row names its
-        // origin without a lookup.
-        id: `${source.id}:${entry.id}`,
+        // origin without a lookup. A source that already namespaced its own rows
+        // (a plugin adapter does) keeps the id it returned.
+        id: entry.id.startsWith(`${source.id}:`)
+          ? entry.id
+          : `${source.id}:${entry.id}`,
       })),
       totalPages: page.totalPages,
       failure: undefined,

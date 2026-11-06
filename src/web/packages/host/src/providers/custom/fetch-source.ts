@@ -15,10 +15,10 @@ export type FetchOutcome =
   | { readonly ok: false; readonly status?: number; readonly reason: string };
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_REDIRECTS = 3;
+export const MAX_REDIRECTS = 3;
 const MAX_IN_FLIGHT = 4;
-const TIMEOUT_REASON = "the source did not answer within its timeout";
-const REDIRECT_STATUSES: ReadonlySet<number> = new Set([
+export const TIMEOUT_REASON = "the source did not answer within its timeout";
+export const REDIRECT_STATUSES: ReadonlySet<number> = new Set([
   301, 302, 303, 307, 308,
 ]);
 
@@ -44,6 +44,17 @@ function releaseSlot(): void {
     return;
   }
   inFlight -= 1;
+}
+
+/** One of the host's four fetch slots, held for the duration of `work`. */
+export function withFetchSlot<T>(work: () => Promise<T>): Promise<T> {
+  return acquireSlot().then(async (): Promise<T> => {
+    try {
+      return await work();
+    } finally {
+      releaseSlot();
+    }
+  });
 }
 
 /** One tail per source id, so a second call queues rather than overlaps. */
@@ -249,7 +260,7 @@ type Resolved =
   | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
   | { readonly ok: false; readonly reason: string };
 
-async function resolveDestination(
+export async function resolveDestination(
   destination: URL,
   resolve: HostLookup,
 ): Promise<Resolved> {
@@ -280,7 +291,7 @@ async function resolveDestination(
   return { ok: true, addresses: resolved };
 }
 
-function refusalOf(
+export function refusalOf(
   addresses: readonly string[],
   allowPrivate: boolean,
 ): string | undefined {
@@ -297,7 +308,7 @@ type CheckedDestination =
   | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
   | { readonly ok: false; readonly reason: string };
 
-async function checkDestination(
+export async function checkDestination(
   destination: URL,
   options: { readonly allowPrivate: boolean },
   resolve: HostLookup,
@@ -378,23 +389,24 @@ function buildRequest(
   return { url, headers };
 }
 
-function isJsonContentType(value: string | null): boolean {
+export function isJsonContentType(value: string | null): boolean {
   if (value === null) return false;
   const type = value.split(";")[0]?.trim().toLowerCase() ?? "";
   return /^application\/(?:json|[\w.+-]+\+json)$/.test(type);
 }
 
-async function discard(response: Response): Promise<void> {
+export async function discard(response: Response): Promise<void> {
   await response.body?.cancel().catch(() => undefined);
 }
 
 /** Counts bytes as they arrive and races the deadline, so neither an upstream
  *  that ignores `content-length` nor a stalled body can outlast the cap. */
-async function readBody(
+export async function readBodyBytes(
   response: Response,
   signal: AbortSignal,
-): Promise<string> {
-  if (response.body === null) return "";
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array();
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -414,10 +426,8 @@ async function readBody(
       const { done, value } = await Promise.race([reader.read(), aborted]);
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_BODY_BYTES) {
-        throw new Error(
-          `the source answered more than ${MAX_BODY_BYTES} bytes`,
-        );
+      if (total > maxBytes) {
+        throw new Error(`the source answered more than ${maxBytes} bytes`);
       }
       chunks.push(value);
     }
@@ -425,10 +435,19 @@ async function readBody(
     await reader.cancel().catch(() => undefined);
   }
 
-  return Buffer.concat(chunks).toString("utf8");
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
-function messageOf(error: unknown): string {
+export async function readBody(
+  response: Response,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<string> {
+  const bytes = await readBodyBytes(response, signal, maxBytes);
+  return Buffer.from(bytes).toString("utf8");
+}
+
+export function messageOf(error: unknown): string {
   return error instanceof Error && error.message !== ""
     ? error.message
     : "the source could not be fetched";
@@ -578,7 +597,7 @@ async function run(
 
     let text: string;
     try {
-      text = await readBody(response, signal);
+      text = await readBody(response, signal, MAX_BODY_BYTES);
     } catch (error) {
       return fail(
         signal.aborted ? TIMEOUT_REASON : messageOf(error),
@@ -619,9 +638,8 @@ export async function fetchSource(
       : { ok: false, status, reason: clean };
   };
 
-  return withSourceLock(source.id, async () => {
-    await acquireSlot();
-    try {
+  return withSourceLock(source.id, () =>
+    withFetchSlot(async (): Promise<FetchOutcome> => {
       const startedAt = nowMs();
       const paging = source.paging;
 
@@ -671,10 +689,6 @@ export async function fetchSource(
       }
 
       return { ok: true, body: merged, elapsedMs: nowMs() - startedAt };
-    } catch (error) {
-      return fail(messageOf(error));
-    } finally {
-      releaseSlot();
-    }
-  });
+    }).catch((error: unknown) => fail(messageOf(error))),
+  );
 }

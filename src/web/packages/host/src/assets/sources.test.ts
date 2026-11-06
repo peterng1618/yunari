@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ASSET_SOURCES } from "./sources.js";
+import type { AssetSource } from "./source.js";
+import { ASSET_SOURCES, createAssetSources } from "./sources.js";
 
 /** The registry's four colour adapters, each named by the preset it yields:
  *  a source whose `presetKind` drifted would be asked for the wrong kind by the
@@ -35,5 +36,25 @@ describe("ASSET_SOURCES", () => {
     ]) {
       expect(ids).toContain(id);
     }
+  });
+});
+
+describe("createAssetSources", () => {
+  const pluginSource: AssetSource = {
+    id: "acme",
+    label: "Acme",
+    category: "image",
+    body: "grid",
+    requires: undefined,
+    configurable: false,
+    search: async () => ({ results: [], totalPages: undefined }),
+    bytesOf: async () => undefined,
+  };
+
+  it("appends plugin sources after every built-in", () => {
+    const sources = createAssetSources(ASSET_SOURCES, [pluginSource]);
+
+    expect(sources.slice(0, ASSET_SOURCES.length)).toEqual(ASSET_SOURCES);
+    expect(sources.at(-1)).toBe(pluginSource);
   });
 });
