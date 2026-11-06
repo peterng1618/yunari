@@ -14,6 +14,7 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import { createWidgetPackStore } from "./packs/widget-packs.js";
 import {
   createPanelManager,
   type PanelManager,
@@ -330,6 +331,12 @@ export async function run(argv: readonly string[]): Promise<number> {
   // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
+  // Installed widget packs, one folder each under the settings directory. This
+  // task adds none of the app's own: a bundled default pack is Task 7's (R10).
+  const widgetPacks = createWidgetPackStore(
+    path.join(settingsDir, "widget-packs"),
+  );
+
   // The certificate is the whole reason the host serves https: a phone at
   // `http://<lan-ip>:<port>` is not a secure context, so it can neither hold a
   // screen wake lock nor register the service worker an installable app needs.
@@ -415,6 +422,9 @@ export async function run(argv: readonly string[]): Promise<number> {
         }),
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
+    // The installed widget packs the insert surface offers. The store is built
+    // here so the settings folder's subtree is the one place they live.
+    widgetPacks,
     // The host's own windows on its local monitors.
     get launcher() {
       return launcher;

@@ -1,0 +1,195 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { type WidgetDocument, writeWidgetPackage } from "@yunari/theme-package";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  createWidgetPackStore,
+  type WidgetPackStore,
+} from "../packs/widget-packs.js";
+import { createLargeBodyGate } from "./http.js";
+import { handlePackRoutes, MAX_WIDGET_PACK_BYTES } from "./pack-routes.js";
+
+function widgetPackageBytes(): Uint8Array {
+  const document: WidgetDocument = {
+    schemaVersion: "2.0.0",
+    fabricVersion: "7.4.0",
+    id: "pack-one",
+    metadata: { name: "Pack One", version: "1.0.0", themeLanguage: "en" },
+    scene: {
+      version: "7.4.0",
+      objects: [
+        {
+          type: "Group",
+          id: "card",
+          objects: [{ type: "Rect", id: "card-value" }],
+          provenance: { widgetId: "card", widgetName: "Card" },
+        },
+      ],
+    },
+    bindings: { card: [{ id: "card-binding", semanticKey: "cpu.load" }] },
+  };
+  const written = writeWidgetPackage({ document, assets: {} });
+  if (!written.ok) throw new Error(written.message);
+  return written.bytes;
+}
+
+let running: http.Server | undefined;
+let directory: string;
+let store: WidgetPackStore | undefined;
+
+async function start(withStore = true): Promise<string> {
+  store = withStore ? createWidgetPackStore(directory) : undefined;
+  const largeBody = createLargeBodyGate();
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    void handlePackRoutes({
+      request,
+      response,
+      url,
+      store,
+      largeBody,
+    }).then((handled) => {
+      if (handled) return;
+      response.writeHead(404);
+      response.end();
+    });
+  });
+  running = server;
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${address.port}`;
+}
+
+beforeEach(async () => {
+  directory = await mkdtemp(path.join(os.tmpdir(), "yunari-pack-routes-"));
+});
+
+afterEach(async () => {
+  const server = running;
+  running = undefined;
+  store = undefined;
+  if (server !== undefined) {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  await rm(directory, { recursive: true, force: true });
+});
+
+describe("the widget pack routes", () => {
+  it("lists, imports, reads and removes a pack", async () => {
+    const base = await start();
+    const bytes = widgetPackageBytes();
+
+    const empty = await fetch(`${base}/api/widget-packs`);
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual({ packs: [] });
+
+    const imported = await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: bytes.buffer as ArrayBuffer,
+    });
+    expect(imported.status).toBe(200);
+    expect(await imported.json()).toEqual({
+      ok: true,
+      pack: {
+        id: "pack-one",
+        name: "Pack One",
+        version: "1.0.0",
+        units: [{ id: "card", label: "Card" }],
+      },
+    });
+
+    const listed = await fetch(`${base}/api/widget-packs`);
+    expect(await listed.json()).toEqual({
+      packs: [
+        {
+          id: "pack-one",
+          name: "Pack One",
+          version: "1.0.0",
+          units: [{ id: "card", label: "Card" }],
+        },
+      ],
+    });
+
+    const fetched = await fetch(`${base}/api/widget-packs/pack-one`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.headers.get("content-type")).toBe("application/zip");
+    expect(new Uint8Array(await fetched.arrayBuffer())).toEqual(bytes);
+
+    const removed = await fetch(`${base}/api/widget-packs/pack-one`, {
+      method: "DELETE",
+    });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ ok: true });
+
+    expect(await (await fetch(`${base}/api/widget-packs`)).json()).toEqual({
+      packs: [],
+    });
+    expect((await fetch(`${base}/api/widget-packs/pack-one`)).status).toBe(404);
+  });
+
+  it("refuses an invalid package with the reader's message", async () => {
+    const base = await start();
+    const response = await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: new Uint8Array([1, 2, 3]),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe(
+      "That file is not a readable widget package.",
+    );
+  });
+
+  it("refuses a body over 64 MiB before reading it as a zip", async () => {
+    const base = await start();
+    const response = await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: new Uint8Array(MAX_WIDGET_PACK_BYTES + 1).buffer,
+    });
+
+    expect(response.status).toBe(413);
+  });
+
+  it("refuses an import from another origin", async () => {
+    const base = await start();
+    const response = await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      headers: { origin: "http://evil.example" },
+      body: widgetPackageBytes().buffer as ArrayBuffer,
+    });
+
+    expect(response.status).toBe(403);
+    expect(await (await fetch(`${base}/api/widget-packs`)).json()).toEqual({
+      packs: [],
+    });
+  });
+
+  it("refuses a non-loopback caller", async () => {
+    // The real socket is loopback; the module's decision is exercised in
+    // isolation by calling the handler with a foreign address.
+    const response = {
+      writeHead: () => response,
+      end: () => response,
+    };
+    const handled = await handlePackRoutes({
+      request: {
+        method: "GET",
+        headers: { host: "127.0.0.1:5173" },
+        socket: { remoteAddress: "192.168.1.4" },
+      } as unknown as http.IncomingMessage,
+      response: response as unknown as http.ServerResponse,
+      url: new URL("http://127.0.0.1/api/widget-packs"),
+      store,
+    });
+    expect(handled).toBe(true);
+  });
+
+  it("answers 404 when the host serves no pack store", async () => {
+    const base = await start(false);
+    expect((await fetch(`${base}/api/widget-packs`)).status).toBe(404);
+  });
+});
