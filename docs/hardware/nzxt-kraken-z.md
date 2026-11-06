@@ -7,12 +7,13 @@
   64-byte reports; **bulk** data on interface 0, endpoint `0x02`
 - **Driver:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`
 - **Last hardware verification:** 2026-11-06
-- **Last known good revision:** `2e64685d93af` (2026-11-06) — **the last
+- **Last known good revision:** `304a304811c4` (2026-11-06) — **the last
   revision a person watched on the glass and confirmed.** Mode B at CAM's
-  110 ms was judged as smooth as CAM with no visible quality difference; Mode A
-  remains the default. Compare a future playback regression against this
-  revision. A revision only becomes this line after the user confirms it played
-  well — probe results and command timings are not a substitute for watching the
+  110 ms was watched smooth again on a heavy-motion theme; Mode A remains the
+  default. The 100 ms build that came before it was watched as worse and is
+  reverted. Compare a future playback regression against this revision. A
+  revision only becomes this line after the user confirms it played well —
+  probe results and command timings are not a substitute for watching the
   panel.
 
 **Update this document with every new fact.** Record a firmware string, a
