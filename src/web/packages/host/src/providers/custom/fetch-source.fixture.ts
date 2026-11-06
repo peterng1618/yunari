@@ -16,6 +16,7 @@ export interface SourcePatch {
   readonly query?: Readonly<Record<string, string>>;
   readonly headers?: Readonly<Record<string, string>>;
   readonly auth?: NonNullable<CustomSource["auth"]>;
+  readonly paging?: NonNullable<CustomSource["paging"]>;
 }
 
 export function sourceOf(patch: SourcePatch = {}): CustomSource {
@@ -28,6 +29,7 @@ export function sourceOf(patch: SourcePatch = {}): CustomSource {
     ...(patch.query === undefined ? {} : { query: patch.query }),
     ...(patch.headers === undefined ? {} : { headers: patch.headers }),
     ...(patch.auth === undefined ? {} : { auth: patch.auth }),
+    ...(patch.paging === undefined ? {} : { paging: patch.paging }),
     fields: [],
   };
 }

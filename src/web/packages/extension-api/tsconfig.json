@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../..",
+    "paths": {
+      "@yunari/theme-package": ["../theme-package/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

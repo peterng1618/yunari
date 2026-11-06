@@ -1,5 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { parseAssetSearchRequest } from "./wire.js";
+import { declarativeCategories, parseAssetSearchRequest } from "./wire.js";
+
+function category(id: string): {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly resultKind: string;
+  readonly body: "grid";
+} {
+  return { id, label: id, icon: "Shapes", resultKind: id, body: "grid" };
+}
+
+describe("declarativeCategories", () => {
+  it("collects the categories installed extensions declare", () => {
+    expect(
+      declarativeCategories([
+        {
+          contributions: {
+            assetCategories: [category("brand"), category("logo")],
+          },
+        },
+        { contributions: {} },
+      ]).map((entry) => entry.id),
+    ).toEqual(["brand", "logo"]);
+  });
+
+  it("drops a declared id that collides with a built-in listing category", () => {
+    // The built-in tab keeps its own label and place; a plugin cannot rename or
+    // reorder a category the finder already draws.
+    expect(
+      declarativeCategories([
+        { contributions: { assetCategories: [category("font")] } },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("lists one entry per id when two extensions declare the same one", () => {
+    expect(
+      declarativeCategories([
+        { contributions: { assetCategories: [category("brand")] } },
+        { contributions: { assetCategories: [category("brand")] } },
+      ]).map((entry) => entry.id),
+    ).toEqual(["brand"]);
+  });
+});
 
 describe("parseAssetSearchRequest", () => {
   it("parses a well-formed search", () => {

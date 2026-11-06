@@ -1,9 +1,13 @@
-import type {
-  AssetResult,
-  AssetSourceListing,
-  ListingCategory,
-  PresetKind,
+import {
+  type AssetResult,
+  type AssetSourceListing,
+  BUILTIN_LISTING_CATEGORIES,
+  type BuiltinListingCategory,
+  type DeclarativeCategory,
+  type ListingCategory,
+  type PresetKind,
 } from "@yunari/renderer-core";
+import { uiCopy } from "../ui-copy.js";
 import type { WallpaperEngineItem } from "../wallpaper-engine/client.js";
 import { EMPTY_TAB, type FinderRow, type TabData } from "./tab-data.js";
 
@@ -15,17 +19,54 @@ export const DISABLED_KEY = "yunari.asset-finder.disabled";
 /** The kind filter's own value: every source, or one preset kind. */
 export type KindFilter = "all" | PresetKind;
 
-/** The rail's order, alphabetical by the tab's own label. A category the
- *  registry adds later that this list does not name appends alphabetically
- *  rather than disappearing. */
-export const CATEGORY_ORDER: readonly ListingCategory[] = [
-  "colour",
-  "font",
-  "icon",
-  "image",
-  "video",
-  "local",
-];
+/** The rail's order: the built-in categories, in the order the product ships
+ *  them. A category the registry adds later that this list does not name
+ *  appends alphabetically rather than disappearing. */
+export const CATEGORY_ORDER: readonly ListingCategory[] =
+  BUILTIN_LISTING_CATEGORIES;
+
+/**
+ * The open tab list: every built-in category in its own order, then the ids
+ * this build does not name — declared by a plugin or listed by a source —
+ * sorted. A built-in id keeps its place however it was reached.
+ */
+export function categoryTabs(
+  declared: readonly DeclarativeCategory[],
+  listing: readonly { readonly category: ListingCategory }[],
+): readonly ListingCategory[] {
+  const builtin = new Set<string>(BUILTIN_LISTING_CATEGORIES);
+  const appendix = new Set<string>();
+
+  for (const entry of declared) {
+    if (!builtin.has(entry.id)) appendix.add(entry.id);
+  }
+  for (const source of listing) {
+    if (!builtin.has(source.category)) appendix.add(source.category);
+  }
+
+  return [...BUILTIN_LISTING_CATEGORIES, ...[...appendix].sort()];
+}
+
+/** A built-in copy table's word for an open category, or `undefined` when the
+ *  table does not name it. The cast is the one doorway an open key needs: the
+ *  tables stay keyed by `BuiltinListingCategory`, so a missing built-in word is
+ *  still a compile error. */
+export function categoryWord(
+  table: Readonly<Record<BuiltinListingCategory, string>>,
+  category: ListingCategory,
+): string | undefined {
+  // A plugin id may be `constructor`, which is inherited from `Object` rather
+  // than named by the table. Only an own key is the table's word.
+  return Object.hasOwn(table, category)
+    ? (table as Readonly<Record<string, string | undefined>>)[category]
+    : undefined;
+}
+
+/** The word a tab shows: the copy table's own word for a built-in category,
+ *  and the id itself for one this build does not name. */
+export function categoryLabel(category: ListingCategory): string {
+  return categoryWord(uiCopy.assets.category, category) ?? category;
+}
 
 /** A sentence a write left for one result; `failedId` names the result the
  *  sentence answers, so a later choice does not inherit its mark. */
@@ -53,10 +94,24 @@ export const EMPTY_VIEW: TabView = {
   message: undefined,
 };
 
-export function emptyViews(): Record<ListingCategory, TabView> {
-  const views = {} as Record<ListingCategory, TabView>;
+/** Only the built-in tabs start with a view; a declared category is read
+ *  through `viewOf` rather than pre-populated for an id nothing knows. */
+export function emptyViews(): Record<string, TabView> {
+  const views: Record<string, TabView> = {};
   for (const category of CATEGORY_ORDER) views[category] = EMPTY_VIEW;
   return views;
+}
+
+/** A tab's own view, or the empty one for a category nothing has drawn yet. A
+ *  plugin id may be `constructor` or `toString`; an inherited `Object` key is
+ *  not a view, so only an own key is returned. */
+export function viewOf(
+  views: Readonly<Record<string, TabView>>,
+  category: ListingCategory,
+): TabView {
+  return Object.hasOwn(views, category)
+    ? (views[category] as TabView)
+    : EMPTY_VIEW;
 }
 
 export type ActionOutcome =

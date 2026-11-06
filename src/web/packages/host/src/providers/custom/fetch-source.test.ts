@@ -123,6 +123,122 @@ describe("fetchSource", () => {
     });
   });
 
+  describe("paging", () => {
+    const paging = {
+      pageParam: "page",
+      firstPage: 1,
+      maxPages: 2,
+      itemsPath: "/items",
+    } as const;
+
+    it("follows two pages in order and merges the array at itemsPath", async () => {
+      const { fetchImpl, calls } = serve((call) =>
+        json({
+          items:
+            call.url.searchParams.get("page") === "1"
+              ? [{ temp: 1 }]
+              : [{ temp: 2 }],
+        }),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome).toMatchObject({
+        ok: true,
+        body: [{ temp: 1 }, { temp: 2 }],
+      });
+      expect(calls.map((call) => call.url.searchParams.get("page"))).toEqual([
+        "1",
+        "2",
+      ]);
+    });
+
+    it("concatenates page bodies when no itemsPath is set", async () => {
+      const { fetchImpl } = serve((call) =>
+        json(
+          call.url.searchParams.get("page") === "1" ? [{ a: 1 }] : [{ a: 2 }],
+        ),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { pageParam: "page", firstPage: 1, maxPages: 2 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome).toMatchObject({ ok: true, body: [{ a: 1 }, { a: 2 }] });
+    });
+
+    it("fails the whole source when a later page fails", async () => {
+      const { fetchImpl, calls } = serve((call) =>
+        call.url.searchParams.get("page") === "1"
+          ? json([{ a: 1 }])
+          : new Response("no", { status: 500 }),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { pageParam: "page", firstPage: 1, maxPages: 2 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome).not.toHaveProperty("body");
+      expect(calls).toHaveLength(2);
+    });
+
+    it("checks every page destination before dialling it", async () => {
+      const { fetchImpl, calls } = serve(() => json([{ a: 1 }]));
+      let resolutions = 0;
+      const resolve = async () => {
+        resolutions += 1;
+        return resolutions === 1
+          ? [{ address: "127.0.0.1", family: 4 }]
+          : [{ address: "169.254.169.254", family: 4 }];
+      };
+
+      const outcome = await fetchSource(
+        sourceOf({
+          url: "http://pager.example/data",
+          paging: { pageParam: "page", firstPage: 1, maxPages: 2 },
+        }),
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+      );
+
+      // The first page dialled; the second resolution was refused before any
+      // request for it left the host.
+      expect(resolutions).toBe(2);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.reason).toContain("link-local");
+      expect(calls).toHaveLength(1);
+    });
+
+    it("refuses an itemsPath that does not resolve to an array", async () => {
+      const { fetchImpl, calls } = serve(() => json({ items: { a: 1 } }));
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { ...paging, maxPages: 1 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.reason).toContain("array");
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   describe("the answer", () => {
     it("reports a non-2xx status instead of a value", async () => {
       const { fetchImpl } = serve(
@@ -393,6 +509,62 @@ describe("fetchSource", () => {
       if (outcome.ok) return;
       expect(outcome.reason).not.toContain("sekrit");
       expect(outcome.reason).toContain("its configured address");
+    });
+  });
+
+  describe("plugin-contributed rows", () => {
+    it("refuses a loopback destination the user's own row may reach", async () => {
+      const { fetchImpl, calls } = serve(() => json({}));
+      const source = sourceOf({ url: "http://127.0.0.1:8080/data" });
+
+      const plugin = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        undefined,
+        {
+          pluginContributed: true,
+        },
+      );
+      expect(plugin.ok).toBe(false);
+      if (!plugin.ok)
+        expect(plugin.reason).toContain("private or loopback address");
+      expect(calls).toHaveLength(0);
+
+      // The same address is still the user's to type in sources.json.
+      const user = await fetchSource(source, undefined, fetchImpl, () => 0);
+      expect(user.ok).toBe(true);
+      expect(calls).toHaveLength(1);
+    });
+
+    it("refuses a private hostname a user row may reach", async () => {
+      const { fetchImpl, calls } = serve(() => json({}));
+      const source = sourceOf({ url: "http://lan.example/data" });
+      const resolve = async () => [{ address: "192.168.1.20", family: 4 }];
+
+      const plugin = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+        { pluginContributed: true },
+      );
+      expect(plugin.ok).toBe(false);
+      if (!plugin.ok)
+        expect(plugin.reason).toContain("private or loopback address");
+      expect(calls).toHaveLength(0);
+
+      const user = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+      );
+      expect(user.ok).toBe(true);
+      expect(calls).toHaveLength(1);
     });
   });
 

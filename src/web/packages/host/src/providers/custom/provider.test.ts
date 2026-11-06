@@ -38,6 +38,15 @@ function sourceOf(
   };
 }
 
+/** A row as a plugin contribution would hand it to the provider. */
+function pluginSource(): CustomSource {
+  return sourceOf({
+    id: "acme.weather",
+    name: "Acme weather",
+    fields: [fieldOf({ id: "temp" })],
+  });
+}
+
 function storeOf(
   file: SourceFile = { sources: [], issues: [] },
 ): SourceStore & { set(next: SourceFile): void } {
@@ -250,6 +259,144 @@ describe("CustomSourceProvider", () => {
       valueKind: "boolean",
       tier: "extended",
     });
+  });
+
+  it("merges a plugin custom source after the user rows", async () => {
+    const store = storeOf({
+      sources: [sourceOf({ id: "local", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      extraSources: () => [pluginSource()],
+    });
+    await provider.reload();
+
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "local",
+      "acme.weather",
+    ]);
+  });
+
+  it("skips a duplicate plugin id so the user row wins", async () => {
+    const store = storeOf({
+      sources: [
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "user" })],
+        }),
+      ],
+      issues: [],
+    });
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      extraSources: () => [
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "plugin" })],
+        }),
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "later" })],
+        }),
+      ],
+    });
+    await provider.reload();
+
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "acme.weather",
+    ]);
+    expect(
+      (await provider.describe()).map((entry) => entry.semanticKey),
+    ).toEqual(["custom.acme.weather.user"]);
+  });
+
+  it("marks a plugin row so its loopback destination is refused", async () => {
+    const store = storeOf({
+      sources: [sourceOf({ id: "mine", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      fetcher,
+      extraSources: () => [pluginSource()],
+    });
+    await provider.reload();
+
+    await provider.sample(
+      ["custom.mine.x", "custom.acme.weather.temp"],
+      Date.now(),
+    );
+    await settle();
+
+    // The user's own row dialled its loopback address; the plugin row did not.
+    expect(calls.map((call) => call.url)).toEqual(["http://127.0.0.1:9/mine"]);
+    const plugin = provider
+      .status()
+      .find((row) => row.sourceId === "acme.weather");
+    expect(plugin?.lastError).toMatch(/private or loopback address/i);
+    const mine = provider.status().find((row) => row.sourceId === "mine");
+    expect(mine?.lastError).toBeUndefined();
+  });
+
+  it("reads extraSources again on every reload", async () => {
+    let extras: readonly CustomSource[] = [pluginSource()];
+    const provider = new CustomSourceProvider({
+      sources: storeOf(),
+      credentials: credentialsOf(),
+      extraSources: () => extras,
+    });
+
+    await provider.reload();
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "acme.weather",
+    ]);
+
+    extras = [sourceOf({ id: "other_plugin", fields: [fieldOf({ id: "x" })] })];
+    await provider.reload();
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "other_plugin",
+    ]);
+  });
+
+  it("keeps a user row's credential when a plugin reuses its id", async () => {
+    const store = storeOf({
+      sources: [
+        sourceOf({
+          id: "shared",
+          auth: { kind: "bearer", credentialId: "user_token" },
+          fields: [fieldOf({ id: "x" })],
+        }),
+      ],
+      issues: [],
+    });
+    const credentials = credentialsOf({ user_token: "s3cret" });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials,
+      fetcher,
+      extraSources: () => [
+        sourceOf({
+          id: "shared",
+          auth: { kind: "bearer", credentialId: "plugin_token" },
+          fields: [fieldOf({ id: "y" })],
+        }),
+      ],
+    });
+    await provider.reload();
+
+    await provider.sample(["custom.shared.x"], Date.now());
+    await settle();
+
+    expect(
+      (await provider.describe()).map((entry) => entry.semanticKey),
+    ).toEqual(["custom.shared.x"]);
+    expect(calls[0]?.headers.get("authorization")).toBe("Bearer s3cret");
   });
 
   it("waits for a first reading when the catalogue asks for one", async () => {

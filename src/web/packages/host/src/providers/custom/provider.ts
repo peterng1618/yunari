@@ -61,6 +61,9 @@ interface CachedReading {
 
 interface SourceRuntime {
   readonly source: CustomSource;
+  /** True for a row a plugin declared: it may not reach private addresses,
+   *  because the user did not type it. */
+  readonly pluginContributed: boolean;
   /** Keyed by semantic key, so a sample maps straight to its field. */
   readonly fields: ReadonlyMap<string, CustomField>;
   readonly descriptors: readonly SensorDescriptor[];
@@ -79,6 +82,8 @@ interface SourceRuntime {
 export interface CustomSourceProviderOptions {
   readonly sources: SourceStore;
   readonly credentials: CredentialStore;
+  /** Plugin-contributed rows, read on every reload. */
+  readonly extraSources?: () => readonly CustomSource[];
   readonly fetcher?: typeof fetch;
   readonly now?: () => number;
 }
@@ -238,6 +243,7 @@ export class CustomSourceProvider implements SensorProvider {
 
   readonly #store: SourceStore;
   readonly #credentials: CredentialStore;
+  readonly #extraSources: () => readonly CustomSource[];
   readonly #fetcher: typeof fetch;
   readonly #now: () => number;
 
@@ -252,6 +258,7 @@ export class CustomSourceProvider implements SensorProvider {
   constructor(options: CustomSourceProviderOptions) {
     this.#store = options.sources;
     this.#credentials = options.credentials;
+    this.#extraSources = options.extraSources ?? (() => []);
     this.#fetcher = options.fetcher ?? createPinnedFetch();
     this.#now = options.now ?? (() => Date.now());
   }
@@ -271,9 +278,21 @@ export class CustomSourceProvider implements SensorProvider {
     for (const runtime of this.#runtimes.values()) this.#retire(runtime);
     this.#runtimes = new Map();
     this.#issues = file.issues;
-    this.#sourceCount = file.sources.length;
 
-    for (const source of file.sources) {
+    // User rows first: a plugin row may add an id, never replace or shadow one
+    // the store already authored.
+    const sources = [...file.sources];
+    const ids = new Set(sources.map((source) => source.id));
+    const pluginIds = new Set<string>();
+    for (const source of this.#extraSources()) {
+      if (ids.has(source.id)) continue;
+      ids.add(source.id);
+      pluginIds.add(source.id);
+      sources.push(source);
+    }
+    this.#sourceCount = sources.length;
+
+    for (const source of sources) {
       const fields = new Map<string, CustomField>();
       const descriptors = source.fields.map((field) => {
         const descriptor = descriptorOf(source, field);
@@ -283,6 +302,7 @@ export class CustomSourceProvider implements SensorProvider {
 
       this.#runtimes.set(source.id, {
         source,
+        pluginContributed: pluginIds.has(source.id),
         fields,
         descriptors,
         active: true,
@@ -406,6 +426,8 @@ export class CustomSourceProvider implements SensorProvider {
       credential.value,
       this.#fetcher,
       this.#now,
+      undefined,
+      { pluginContributed: runtime.pluginContributed },
     );
     // A reload or stop retired this runtime while the fetch was in flight; its
     // answer belongs to a source the store no longer holds.
@@ -510,6 +532,8 @@ export class CustomSourceProvider implements SensorProvider {
         credential.value,
         this.#fetcherFor(abort),
         this.#now,
+        undefined,
+        { pluginContributed: runtime.pluginContributed },
       );
 
       // A reload or stop retired this runtime while the request was in flight.

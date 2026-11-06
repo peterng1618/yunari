@@ -50,7 +50,10 @@ import {
   CHECK_GLYPH,
   ENTER_GLYPH,
   ERROR_GLYPH,
+  FINDER_TAB_FALLBACK_GLYPH,
+  FINDER_TAB_GLYPHS,
   FIT_GLYPH,
+  finderTabGlyph,
   Glyph,
   glyphStrokeWidth,
   HIDDEN_GLYPH,
@@ -345,6 +348,22 @@ it("draws a group with the generic glyph rather than a diagram of it", () => {
   // the *constant* the row's group arm reads, so the two cannot grow two marks
   // for one kind.
   expect(KIND_GLYPHS.group).toBe(STACK_GLYPH);
+});
+
+it("falls back to the image glyph for a category the build does not name", () => {
+  // A plugin declares categories the finder has no glyph for; the tab still
+  // draws a real mark rather than an empty button. `constructor`, `toString`
+  // and `valueOf` pass the id grammar, so they are the inherited keys the
+  // lookup must not return as a glyph.
+  for (const category of [
+    "brand",
+    "constructor",
+    "toString",
+    "valueOf",
+  ] as const) {
+    expect(finderTabGlyph(category)).toBe(FINDER_TAB_FALLBACK_GLYPH);
+  }
+  expect(FINDER_TAB_FALLBACK_GLYPH).toBe(FINDER_TAB_GLYPHS.image);
 });
 
 it("gives every card unit its own glyph, so a mark identifies one unit", () => {

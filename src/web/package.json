@@ -9,6 +9,7 @@
   "workspaces": [
     "packages/renderer-core",
     "packages/theme-package",
+    "packages/extension-api",
     "packages/scene-fabric",
     "packages/player",
     "packages/editor",

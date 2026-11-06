@@ -1,3 +1,4 @@
+import type { InstalledExtension } from "@yunari/extension-api";
 import type {
   AssetPage,
   AssetSearchAnswer,
@@ -67,6 +68,32 @@ export async function listSources(
     const sources = (body as { sources?: unknown }).sources;
     return Array.isArray(sources)
       ? { ok: true, sources: sources as readonly AssetSourceListing[] }
+      : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The installed extensions, or a host this build cannot read. A failure is
+ *  not a finder failure: the finder then shows only the categories it ships,
+ *  exactly as it did before extensions could declare one. */
+export type ExtensionListing =
+  | { readonly ok: true; readonly extensions: readonly InstalledExtension[] }
+  | { readonly ok: false };
+
+export async function listExtensions(
+  options?: ClientOptions,
+): Promise<ExtensionListing> {
+  const { fetcher, url } = request(options);
+
+  try {
+    const response = await fetcher(url("/api/extensions"));
+    if (!response.ok) return { ok: false };
+
+    const body = (await response.json()) as unknown;
+    const extensions = (body as { extensions?: unknown }).extensions;
+    return Array.isArray(extensions)
+      ? { ok: true, extensions: extensions as readonly InstalledExtension[] }
       : { ok: false };
   } catch {
     return { ok: false };

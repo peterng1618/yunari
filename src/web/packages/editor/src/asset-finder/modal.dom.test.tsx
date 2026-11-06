@@ -18,6 +18,7 @@ import { AssetFinder } from "./modal.js";
 
 vi.mock("./client.js", () => ({
   listSources: vi.fn(),
+  listExtensions: vi.fn(),
   searchAssets: vi.fn(),
   assetBytes: vi.fn(),
 }));
@@ -27,6 +28,7 @@ vi.mock("./client.js", () => ({
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const listSources = vi.mocked(client.listSources);
+const listExtensions = vi.mocked(client.listExtensions);
 const searchAssets = vi.mocked(client.searchAssets);
 
 const lucide: AssetSourceListing = {
@@ -373,6 +375,8 @@ beforeEach(() => {
   localStorage.clear();
   vi.useFakeTimers();
   listSources.mockReset();
+  listExtensions.mockReset();
+  listExtensions.mockResolvedValue({ ok: false });
   searchAssets.mockReset();
   searchAssets.mockResolvedValue({ pages: [] });
 });
@@ -411,6 +415,40 @@ describe("AssetFinder tabs", () => {
     )) {
       expect(element.querySelector("svg")).not.toBeNull();
     }
+  });
+
+  it("draws a declared category's own label and opens on it when asked", async () => {
+    listExtensions.mockResolvedValue({
+      ok: true,
+      extensions: [
+        {
+          key: "local/acme",
+          name: "Acme",
+          version: "1.0.0",
+          execution: "declarative",
+          capabilities: ["asset:provide"],
+          contributions: {
+            assetCategories: [
+              {
+                id: "brand",
+                label: "Brand assets",
+                icon: "Shapes",
+                resultKind: "logo",
+                body: "grid",
+              },
+            ],
+          },
+          consent: "not-required",
+          fingerprint: "yc1-test",
+        } as const,
+      ],
+    });
+
+    await render([lucide], { initialCategory: "brand" });
+    await settle();
+
+    expect(tab("brand").textContent).toContain("Brand assets");
+    expect(tab("brand").getAttribute("aria-selected")).toBe("true");
   });
 
   it("opens on the category a caller asked for", async () => {

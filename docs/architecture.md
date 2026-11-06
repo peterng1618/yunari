@@ -25,6 +25,7 @@ the product version lives once in `src/web/package.json`.
 | `@yunari/renderer-core` | Shared semantics: sample/theme types, protocol codecs, envelope validation and migration, scene planning | none |
 | `@yunari/scene-fabric` | Renders a scene plan onto Fabric; persistence and Fabric revival | renderer-core |
 | `@yunari/theme-package` | `.yunari-theme` ZIP read/write, validation, credits | renderer-core |
+| `@yunari/extension-api` | Pure extension ABI: plugin manifest, execution profiles, capabilities, host API table, capability gate, consent digest, package reader | theme-package |
 | `@yunari/theme-kit` | Pure, Node-safe theme authoring: cards, objects, tokens, starter themes; no DOM and no Fabric construction | renderer-core, scene-fabric, theme-package |
 | `@yunari/mcp` | stdio MCP server that designs themes against the loopback host; also owns `install`, `uninstall` and `status` | renderer-core, theme-kit, theme-package |
 | `@yunari/player` | Display-only bundle; live samples and theme rendering | renderer-core, scene-fabric |
@@ -156,6 +157,46 @@ provider or display that falls behind is dropped rather than growing memory.
   archive, 80 MiB per entry, 180 MiB expanded, 2 MiB thumbnail. The exporter
   writes only declared assets.
 
+## Extensions
+
+`@yunari/extension-api` owns the extension ABI as one pure surface the host and
+the editor share: the manifest schema with strict unknown-key refusal, the four
+execution profiles, the closed capability list, the host API method table, the
+deny-by-default gate and the consent binding digest. No surface re-spells a
+subset of that vocabulary.
+
+A plugin is a zip whose root carries `yunari-plugin.json`. The manifest names a
+kebab-case `id`, a semver `version`, the host range in `engines.yunari`, the
+host API major, an `execution` profile, capabilities and contributions. The
+profiles are `data`, `declarative`, `sandboxed-ui` and `trusted-worker`; a
+manifest may ask for a higher profile than its contributions require, never a
+lower one. Unknown keys, capabilities and profiles are refused, not ignored.
+
+The host validates package paths, size, declared file set and manifest before
+it writes anything. An install lands under `settings/extensions/` as
+`local/<id>/<version>/`, and `installed.json` is what makes it live. Consent is
+required and recorded only for the executable profiles, `sandboxed-ui` and
+`trusted-worker`; a data or declarative plugin needs no record. A record lives
+in `settings/extension-consent.json`, keyed by the qualified plugin key
+`publisher/id`, and its fingerprint is a SHA-256 binding digest over the schema
+tag, host API major, key, version, install-tree content hash, profile, sorted
+capabilities, authority-bearing contribution identities and device allowlists.
+It binds rather than signs: a changed file set, version or access yields a new
+fingerprint, and stale consent reads as missing.
+
+`/api/extensions` and its children are loopback-only and origin-checked. `GET`
+lists installs, `POST /api/extensions/install` takes a package, and `DELETE
+/api/extensions/<publisher>/<id>` removes the tree and its grant. `POST
+/api/extensions/<publisher>/<id>/consent` recomputes the install's fingerprint
+and records a grant only when it matches; a profile that needs no consent is
+answered without a record.
+
+Declarative contributions join the registries they extend; no manager learns
+plugin details. An installed `assetCategories` entry is drawn by the finder's
+generic grid, and `customSources` rows from a declarative extension join the
+custom source provider. A declarative profile needs no consent; executable
+profiles are gated. No plugin code runs in this phase.
+
 ## Host serving and gates
 
 The host serves HTTP and HTTPS on the same port. HTTPS uses a locally issued
@@ -187,6 +228,8 @@ The default app folder is `%USERPROFILE%\.yunari` (`~/.yunari` elsewhere):
 - `settings/` — host state: displays, devices, hosting preference, active theme,
   credentials, provider settings, `tls/` (root certificate and encrypted root
   key).
+- `settings/extensions/` — installed plugin trees, one directory per
+  `local/<id>/<version>`, with `installed.json` as the live index.
 - `cache/` — downloaded media artwork and game metadata, beside `settings/`.
 
 `--app-dir` moves both; `--themes-dir` moves only the library. Settings are kept

@@ -1,18 +1,20 @@
-import type {
-  AssetPage,
-  AssetResult,
-  AssetSourceListing,
-  ListingCategory,
-  PresetKind,
+import {
+  type AssetPage,
+  type AssetResult,
+  type AssetSourceListing,
+  type DeclarativeCategory,
+  declarativeCategories,
+  type ListingCategory,
+  type PresetKind,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useState } from "react";
-import { FINDER_TAB_GLYPHS, Glyph } from "../editor-shell/icons.js";
+import { useEffect, useRef, useState } from "react";
+import { finderTabGlyph, Glyph } from "../editor-shell/icons.js";
 import { VideoTrimModal } from "../panes/assets/video-trim-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import { itemAssetPath } from "../wallpaper-engine/client.js";
 import { type AssetPlacement } from "./actions.js";
-import { type ClientOptions, listSources } from "./client.js";
+import { type ClientOptions, listExtensions, listSources } from "./client.js";
 import { assetActionsFor } from "./finder-asset-actions.js";
 import { FinderBody } from "./finder-body.js";
 import {
@@ -30,7 +32,9 @@ import { FinderFooterActions } from "./finder-footer.js";
 import { FinderFrame } from "./finder-frame.js";
 import {
   type ActionOutcome,
-  CATEGORY_ORDER,
+  categoryLabel,
+  categoryTabs,
+  categoryWord,
   DISABLED_KEY,
   EMPTY_VIEW,
   gridSourcesOf,
@@ -38,6 +42,7 @@ import {
   type PreviewTarget,
   sourceIdOf,
   storedDisabled,
+  viewOf,
 } from "./finder-model.js";
 import { previewModel } from "./finder-preview.js";
 import { FinderFilters, FinderSourceChips } from "./finder-toolbar.js";
@@ -102,6 +107,12 @@ export function AssetFinder({
   client,
 }: FinderProps): React.JSX.Element {
   const [sources, setSources] = useState<readonly AssetSourceListing[]>([]);
+  /** The categories the installed extensions declare. A host that cannot list
+   *  extensions leaves this empty, so the finder keeps its built-in tabs. */
+  const [declared, setDeclared] = useState<readonly DeclarativeCategory[]>([]);
+  /** The declared ids, readable from an effect callback that may have started
+   *  before the extension listing arrived. */
+  const declaredIdsRef = useRef<ReadonlySet<string>>(new Set());
   const [listing, setListing] = useState<"loading" | "ok" | "failed">(
     "loading",
   );
@@ -120,12 +131,13 @@ export function AssetFinder({
   const [previewing, setPreviewing] = useState<PreviewTarget | undefined>();
   const [runningAsset, setRunningAsset] = useState<string | undefined>();
 
-  /** A category exists when the registry lists one, or when the session offers
-   *  the writes a pane needs. */
+  /** A category exists when an extension declares it, the registry lists one,
+   *  or the session offers the writes a pane needs. */
   const present = (
     category: ListingCategory,
     listing: readonly AssetSourceListing[],
   ): boolean =>
+    declaredIdsRef.current.has(category) ||
     listing.some((source) => source.category === category) ||
     (category === "font" && font !== undefined) ||
     (category === "local" && wallpaper !== undefined);
@@ -134,6 +146,9 @@ export function AssetFinder({
     if (!open) return;
 
     let live = true;
+    // The sources decide the dialog and are the only answer that can fail it;
+    // the extension listing only adds tabs, so it never gates the finder and a
+    // refused or slow extensions route leaves the built-in categories drawn.
     void listSources(client).then((next) => {
       if (!live) return;
       // A host that cannot be reached is a sentence, not an empty dialog: a
@@ -157,6 +172,30 @@ export function AssetFinder({
         return listed[0]?.category ?? (font !== undefined ? "font" : "local");
       });
     });
+
+    void listExtensions(client)
+      .then((extensions) => {
+        if (!live) return;
+        const categories = extensions.ok
+          ? declarativeCategories(extensions.extensions)
+          : [];
+        declaredIdsRef.current = new Set(
+          categories.map((category) => category.id),
+        );
+        setDeclared(categories);
+        // The caller's named tab may be one only an extension declares, and
+        // the sources answer may already have picked another.
+        if (
+          initialCategory !== undefined &&
+          declaredIdsRef.current.has(initialCategory)
+        ) {
+          setActive(initialCategory);
+        }
+      })
+      .catch(() => {
+        if (live) setDeclared([]);
+      });
+
     return () => {
       live = false;
     };
@@ -174,27 +213,15 @@ export function AssetFinder({
     }
   }, [disabled]);
 
-  const presentCategories: ListingCategory[] = [];
-  for (const source of sources) {
-    if (!presentCategories.includes(source.category)) {
-      presentCategories.push(source.category);
-    }
-  }
-  for (const category of ["font", "local"] as const) {
-    const offered =
-      category === "font" ? font !== undefined : wallpaper !== undefined;
-    if (offered && !presentCategories.includes(category)) {
-      presentCategories.push(category);
-    }
-  }
-  const categories: ListingCategory[] = [
-    ...CATEGORY_ORDER.filter((category) =>
-      presentCategories.includes(category),
-    ),
-    ...presentCategories
-      .filter((category) => !CATEGORY_ORDER.includes(category))
-      .sort(),
-  ];
+  /** A declared category is a tab even before a source serves it: the
+   *  extension registered the place, and its grid says it has nothing yet. */
+  const declaredIds = new Set(declared.map((category) => category.id));
+  const declaredLabels = new Map(
+    declared.map((category) => [category.id, category.label]),
+  );
+  const categories = categoryTabs(declared, sources).filter(
+    (category) => present(category, sources) || declaredIds.has(category),
+  );
 
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
@@ -226,7 +253,7 @@ export function AssetFinder({
     client,
     onNotice: setNotice,
   });
-  const view = active === undefined ? EMPTY_VIEW : views[active];
+  const view = active === undefined ? EMPTY_VIEW : viewOf(views, active);
   const fontTab = useFontTab({
     open,
     active,
@@ -256,7 +283,10 @@ export function AssetFinder({
     patch(category, (current) => ({
       ...current,
       message: {
-        text: outcome.message ?? uiCopy.assets.done[category],
+        text:
+          outcome.message ??
+          categoryWord(uiCopy.assets.done, category) ??
+          uiCopy.assets.done.icon,
         tone: outcome.ok ? "ok" : "failed",
         ...(outcome.ok ? {} : { failedId: row.result.id }),
       },
@@ -439,8 +469,8 @@ export function AssetFinder({
         className="editor-shell-dialog--finder"
         tabs={categories.map((category) => ({
           id: category,
-          label: uiCopy.assets.category[category],
-          icon: <Glyph icon={FINDER_TAB_GLYPHS[category]} size={13} />,
+          label: declaredLabels.get(category) ?? categoryLabel(category),
+          icon: <Glyph icon={finderTabGlyph(category)} size={13} />,
         }))}
         active={active}
         onTabChange={(category) => {
@@ -449,7 +479,7 @@ export function AssetFinder({
           // narrower question than the chip will show on the way back.
           if (presetFilter !== "all") {
             setPresetFilter("all");
-            askNew("colour", views.colour.data.query);
+            askNew("colour", views.colour?.data.query ?? "");
           }
           setActive(category);
         }}
@@ -457,12 +487,16 @@ export function AssetFinder({
           ? isLocal
             ? {
                 query: wallpaperTab.local.query,
-                searchPlaceholder: uiCopy.assets.search[active],
+                searchPlaceholder:
+                  categoryWord(uiCopy.assets.search, active) ??
+                  uiCopy.assets.searchPlaceholder,
                 onQueryChange: wallpaperTab.setQuery,
               }
             : {
                 query: view.data.query,
-                searchPlaceholder: uiCopy.assets.search[active],
+                searchPlaceholder:
+                  categoryWord(uiCopy.assets.search, active) ??
+                  uiCopy.assets.searchPlaceholder,
                 onQueryChange: (value: string) => askNew(active, value),
               }
           : {})}

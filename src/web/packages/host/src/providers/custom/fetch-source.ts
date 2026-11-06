@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import type { CustomSource } from "../../settings/sources.js";
 import { redactForBrowser } from "../provider.js";
+import { resolvePointer } from "./pointer.js";
 
 /**
  * The one request a user-authored source makes. A destination typed by a user
@@ -442,15 +443,22 @@ function reasonOf(message: string, credential: string | undefined): string {
   return redactForBrowser(withoutSecret);
 }
 
+type PageOutcome =
+  | { readonly ok: true; readonly body: unknown }
+  | { readonly ok: false; readonly status?: number; readonly reason: string };
+
+/** One request for one page. Every page repeats the whole policy: resolve and
+ *  refuse before dialling, re-check every hop, drop a credential on a
+ *  cross-origin redirect, and count the body as it arrives. */
 async function run(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
   resolve: HostLookup,
-  nowMs: () => number,
+  page: number | undefined,
+  allowPrivateOrigin: boolean,
   fail: Fail,
-): Promise<FetchOutcome> {
-  const startedAt = nowMs();
+): Promise<PageOutcome> {
   let destination: URL;
   try {
     destination = new URL(source.url);
@@ -459,6 +467,9 @@ async function run(
   }
   for (const [name, value] of Object.entries(source.query ?? {})) {
     destination.searchParams.set(name, value);
+  }
+  if (page !== undefined && source.paging !== undefined) {
+    destination.searchParams.set(source.paging.pageParam, String(page));
   }
 
   const origin = destination.origin;
@@ -471,13 +482,15 @@ async function run(
 
   for (;;) {
     if (firstHop) {
-      // The user typed the first URL, so its private ranges are allowed; a
-      // redirect may only reach them when that first URL already did.
+      // A row the user typed may reach its own private ranges; a redirect may
+      // only reach them when that first URL already did. A plugin-contributed
+      // row is not the user typing it, so its first hop is checked exactly as a
+      // redirected hop is, and its private ranges stay closed.
       const resolved = await resolveDestination(destination, resolve);
       if (!resolved.ok) return fail(resolved.reason);
       const addresses = resolved.addresses.map((entry) => entry.address);
-      allowPrivate = addresses.every(isPrivateAddress);
-      const refused = refusalOf(addresses, true);
+      allowPrivate = allowPrivateOrigin && addresses.every(isPrivateAddress);
+      const refused = refusalOf(addresses, allowPrivateOrigin);
       if (refused !== undefined) return fail(refused);
       pinned = resolved.addresses;
       firstHop = false;
@@ -574,11 +587,7 @@ async function run(
     }
 
     try {
-      return {
-        ok: true,
-        body: JSON.parse(text),
-        elapsedMs: nowMs() - startedAt,
-      };
+      return { ok: true, body: JSON.parse(text) };
     } catch {
       return fail(
         "the source answered something that is not JSON",
@@ -588,13 +597,21 @@ async function run(
   }
 }
 
+/** `pluginContributed` names who authored the row: a `sources.json` row is the
+ *  user's own and may reach private ranges; a plugin row may not. */
+export interface FetchSourceOptions {
+  readonly pluginContributed?: boolean;
+}
+
 export async function fetchSource(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
   nowMs: () => number,
   resolve: HostLookup = dnsLookup,
+  options: FetchSourceOptions = {},
 ): Promise<FetchOutcome> {
+  const allowPrivateOrigin = options.pluginContributed !== true;
   const fail: Fail = (reason, status) => {
     const clean = reasonOf(reason, credential);
     return status === undefined
@@ -605,7 +622,55 @@ export async function fetchSource(
   return withSourceLock(source.id, async () => {
     await acquireSlot();
     try {
-      return await run(source, credential, fetchImpl, resolve, nowMs, fail);
+      const startedAt = nowMs();
+      const paging = source.paging;
+
+      if (paging === undefined) {
+        const outcome = await run(
+          source,
+          credential,
+          fetchImpl,
+          resolve,
+          undefined,
+          allowPrivateOrigin,
+          fail,
+        );
+        return outcome.ok
+          ? { ok: true, body: outcome.body, elapsedMs: nowMs() - startedAt }
+          : outcome;
+      }
+
+      // Pages are fetched in order and merged only after every one succeeds: a
+      // partial body is not a complete reading.
+      const merged: unknown[] = [];
+      for (let offset = 0; offset < paging.maxPages; offset += 1) {
+        const outcome = await run(
+          source,
+          credential,
+          fetchImpl,
+          resolve,
+          paging.firstPage + offset,
+          allowPrivateOrigin,
+          fail,
+        );
+        if (!outcome.ok) return outcome;
+
+        if (paging.itemsPath === undefined) {
+          if (!Array.isArray(outcome.body)) {
+            return fail("the source's page was not an array");
+          }
+          merged.push(...outcome.body);
+          continue;
+        }
+
+        const resolved = resolvePointer(outcome.body, paging.itemsPath);
+        if (!resolved.found || !Array.isArray(resolved.value)) {
+          return fail("the source's items path did not resolve to an array");
+        }
+        merged.push(...resolved.value);
+      }
+
+      return { ok: true, body: merged, elapsedMs: nowMs() - startedAt };
     } catch (error) {
       return fail(messageOf(error));
     } finally {

@@ -20,6 +20,10 @@ const WATCHLIST = [
   "src/web/packages/renderer-core/src/theme/",
   "src/web/packages/renderer-core/src/charts/",
   "src/web/packages/renderer-core/src/data/protocol.ts",
+  "src/web/packages/renderer-core/src/assets/wire.ts",
+  "src/web/packages/extension-api/src/",
+  "src/web/packages/host/src/extensions/",
+  "src/web/packages/host/src/server/extension-routes.ts",
   "src/web/packages/host/src/providers/",
   "src/web/packages/host/src/panels/",
   "src/web/packages/host/src/serve/static-path.ts",
@@ -29,6 +33,7 @@ const WATCHLIST = [
   "src/web/packages/editor/src/editor-shell/shell-layout.tsx",
   "src/web/packages/editor/src/editor-session.ts",
   "src/web/packages/editor/src/components/ui/",
+  "src/web/packages/editor/src/asset-finder/finder-model.ts",
   "src/web/packages/editor/src/selection-inspector/view.ts",
   "scripts/",
 ];

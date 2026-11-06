@@ -16,6 +16,7 @@ import { attachedDevices } from "./panels/panel-families.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createPublishedStore } from "./serve/published.js";
 import { createDisplayRoutes } from "./server/displays-routes.js";
+import { createExtensionRoutes } from "./server/extension-routes.js";
 import {
   createLargeBodyGate,
   readBody,
@@ -168,6 +169,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const monitors = options.monitors ?? listMonitors;
   const panelsAttached = options.attachedPanels ?? attachedDevices;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
+  const extensions = options.extensions;
   const saved = options.rememberLan;
   const devices = options.devices;
   const display = options.display;
@@ -344,6 +346,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     server,
   });
   const pairingRoutes = createPairingRoutes({ displays, pairingCodes });
+  const extensionRoutes = createExtensionRoutes({ extensions });
   const settingsRoutes = createSettingsRoutes({
     options,
     devices,
@@ -472,6 +475,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // The submission and the stored theme's open/save/remove. The submission
     // is a module of its own for the reason the store sign-in routes are.
     if (await themeWrites(request, response, url)) return;
+
+    if (await extensionRoutes(request, response, url)) return;
 
     if (request.method !== "GET") {
       sendText(response, 405, "Only GET is supported.");

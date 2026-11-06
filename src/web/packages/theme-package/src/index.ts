@@ -183,34 +183,51 @@ export function writeThemePackage(input: {
   };
 }
 
-type ReadArchiveResult =
+export type ReadArchiveResult =
   | {
       readonly ok: true;
       readonly files: Readonly<Record<string, Uint8Array>>;
     }
   | { readonly ok: false; readonly message: string };
 
+/** A caller's own bounds. Every field defaults to this package's cap, so a
+ *  reader that names none is bounded exactly as the theme readers are. */
+export interface PackageArchiveLimits {
+  readonly maxArchiveBytes?: number;
+  readonly maxEntries?: number;
+  readonly maxExpandedBytes?: number;
+  readonly maxEntryBytes?: number;
+}
+
 /**
  * The one entry gate both package readers pass: size cap, the declared
  * directory's own caps, and the member-name halves the caller owns. The theme
  * and the widget share it because the danger is the archive, not the manifest
  * it names.
+ *
+ * Exported because the plugin reader opens the same archive under tighter
+ * bounds; a caller that supplies none gets the theme package's own caps.
  */
-function readPackageArchive(
+export function readPackageArchive(
   bytes: Uint8Array,
   allowed: (name: string) => boolean,
   unreadable: string,
+  limits: PackageArchiveLimits = {},
 ): ReadArchiveResult {
-  if (bytes.byteLength > MAX_ARCHIVE_BYTES)
+  const maxArchiveBytes = limits.maxArchiveBytes ?? MAX_ARCHIVE_BYTES;
+  const maxEntries = limits.maxEntries ?? ZIP_MAX_ENTRIES;
+  const maxExpandedBytes = limits.maxExpandedBytes ?? MAX_EXPANDED_BYTES;
+  const maxEntryBytes = limits.maxEntryBytes ?? MAX_ENTRY_BYTES;
+  if (bytes.byteLength > maxArchiveBytes)
     return fail("That package is too large to open.");
   // Extraction allocates per declared entry, so a crafted end record is refused
   // before it can be walked. The filter below still counts what it is given:
   // the declaration is what extraction trusts, not what the directory holds.
   const declaration = readZipDeclaration(bytes);
   if (declaration !== undefined) {
-    if (declaration.entries > ZIP_MAX_ENTRIES)
+    if (declaration.entries > maxEntries)
       return fail(
-        `That package declares more than ${ZIP_MAX_ENTRIES} archive entries.`,
+        `That package declares more than ${maxEntries} archive entries.`,
       );
     if (declaration.centralDirectoryBytes > ZIP_MAX_CENTRAL_DIRECTORY_BYTES)
       return fail("That package declares an oversized archive directory.");
@@ -225,9 +242,9 @@ function readPackageArchive(
         entries += 1;
         expanded += file.originalSize;
         if (
-          entries > ZIP_MAX_ENTRIES ||
-          expanded > MAX_EXPANDED_BYTES ||
-          file.originalSize > MAX_ENTRY_BYTES ||
+          entries > maxEntries ||
+          expanded > maxExpandedBytes ||
+          file.originalSize > maxEntryBytes ||
           (file.compression !== 0 && file.compression !== 8) ||
           names.has(file.name) ||
           !allowed(file.name)

@@ -1,4 +1,3 @@
-import type { ListingCategory } from "@yunari/renderer-core";
 import type { CardDiagram } from "@yunari/theme-kit";
 import {
   Activity,
@@ -450,18 +449,31 @@ export const KIND_GLYPHS = {
   background: BACKGROUND_GLYPH,
 } satisfies Readonly<Record<LayerKind, LucideIcon>>;
 
-/** The asset finder's six tabs, one glyph per category. The tab is a place,
- *  not a layer: `Type` for fonts, `Shapes` for icons, the picture and film for
- *  media, `Palette` for presets, and `Wallpaper` for this PC's own library. */
-export const FINDER_TAB_GLYPHS: Readonly<Record<ListingCategory, LucideIcon>> =
-  {
-    font: Type,
-    icon: Shapes,
-    image: ImageIcon,
-    video: Video,
-    colour: Palette,
-    local: Wallpaper,
-  };
+/** The asset finder's six built-in tabs, one glyph per category. The tab is a
+ *  place, not a layer: `Type` for fonts, `Shapes` for icons, the picture and
+ *  film for media, `Palette` for presets, and `Wallpaper` for this PC's own
+ *  library. A category a plugin declares has no entry, so the lookup falls
+ *  back to the picture rather than drawing no mark at all. */
+export const FINDER_TAB_GLYPHS: Readonly<Record<string, LucideIcon>> = {
+  font: Type,
+  icon: Shapes,
+  image: ImageIcon,
+  video: Video,
+  colour: Palette,
+  local: Wallpaper,
+};
+
+/** A category this build does not name still wears a real mark. */
+export const FINDER_TAB_FALLBACK_GLYPH: LucideIcon = ImageIcon;
+
+/** The one glyph lookup, so the fallback is decided here rather than at each
+ *  call site. A plugin id may be `constructor` or `toString`, which the map
+ *  inherits from `Object`; only its own keys are glyphs. */
+export function finderTabGlyph(category: string): LucideIcon {
+  return Object.hasOwn(FINDER_TAB_GLYPHS, category)
+    ? (FINDER_TAB_GLYPHS[category] as LucideIcon)
+    : FINDER_TAB_FALLBACK_GLYPH;
+}
 
 /** The tree's open/closed chevrons. Each points the way the press goes, and the
  *  state itself stays on `aria-expanded`. */

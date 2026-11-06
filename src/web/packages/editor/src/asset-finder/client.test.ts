@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   assetBytes,
   familyCuts,
+  listExtensions,
   listSources,
   searchAssets,
   trashAssets,
@@ -71,6 +72,35 @@ describe("listSources", () => {
     }) as typeof fetch;
 
     expect(await listSources({ fetch: fetcher })).toEqual({ ok: false });
+  });
+});
+
+describe("listExtensions", () => {
+  it("reads the installed extensions route", async () => {
+    const extensions = [{ key: "local/acme", name: "Acme" }];
+    const { fetcher, calls } = stub(
+      () => new Response(JSON.stringify({ extensions }), { status: 200 }),
+    );
+
+    expect(await listExtensions({ fetch: fetcher })).toEqual({
+      ok: true,
+      extensions,
+    });
+    expect(calls[0]?.url).toBe("/api/extensions");
+  });
+
+  it("answers not-ok so the finder keeps its built-in categories", async () => {
+    const { fetcher } = stub(() => new Response("", { status: 503 }));
+
+    expect(await listExtensions({ fetch: fetcher })).toEqual({ ok: false });
+  });
+
+  it("answers not-ok when the host is unreachable", async () => {
+    const fetcher = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+
+    expect(await listExtensions({ fetch: fetcher })).toEqual({ ok: false });
   });
 });
 
