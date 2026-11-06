@@ -1,15 +1,22 @@
-import { hasClosedPath } from "@yunari/scene-fabric";
-import { Path } from "fabric/es";
+import { pathPresetGeometry } from "@yunari/scene-fabric";
+import {
+  BUILTIN_PATH_PRESETS,
+  type PathPreset,
+  type PathPresetPaint,
+  type PathPresetState,
+} from "@yunari/theme-package";
 
-/** Which property a path preset's paint belongs on. An open curve is stroked;
- *  a closed path encloses a region and is filled. */
-export type PathPresetPaint = "stroke" | "fill";
+export type { PathPresetPaint } from "@yunari/theme-package";
 
-/** A custom shape the author added in Settings. Built-in presets are data in
- *  `new-object-defaults`; this is the one list the author owns. */
+/** A stored row is either the author's or an installed pack's. */
+export type StoredPathPresetId = `user:${string}` | `pack:${string}`;
+
+/** A custom shape the author added in Settings, or one an installed pack
+ *  carries. Built-in presets are data in `new-object-defaults`; this is the
+ *  one list the author and the host's packs own. */
 export interface UserPathPreset {
-  /** Prefixed so it can never collide with a built-in id. */
-  readonly id: `user:${string}`;
+  /** `user:` or `pack:` prefixed, so it can never collide with a built-in id. */
+  readonly id: StoredPathPresetId;
   readonly label: string;
   /** SVG path data, the same field the inspector edits. */
   readonly data: string;
@@ -120,23 +127,6 @@ export function readRemovedPathPresetIds(
   }
 }
 
-/** Writes the removals, and answers whether they will survive the reload. */
-export function writeRemovedPathPresetIds(
-  storage: Storage | undefined,
-  ids: readonly string[],
-): boolean {
-  if (storage === undefined) return false;
-  try {
-    storage.setItem(
-      REMOVED_PATH_PRESETS_STORAGE_KEY,
-      JSON.stringify([...new Set(ids)]),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Removing the key is "every built-in back", the same absence-means-defaults
  *  rule the preview catalogue uses. */
 export function clearRemovedPathPresetIds(
@@ -175,22 +165,14 @@ export function userPathPresetFrom(
   if (trimmedLabel === "") return { reason: "name" };
   if (trimmedData === "") return { reason: "data" };
 
-  let path: Path;
-  try {
-    path = new Path(trimmedData);
-  } catch {
-    return { reason: "unreadable" };
-  }
-  // Either axis may be zero — a horizontal or vertical line is still a
-  // drawing; only a path with no extent on both, or a NaN measured from
-  // malformed data, is refused.
-  if (!(path.width > 0) && !(path.height > 0)) return { reason: "empty" };
+  const geometry = pathPresetGeometry(trimmedData);
+  if (!geometry.ok) return { reason: geometry.reason };
 
   return {
     id: `user:${crypto.randomUUID()}`,
     label: trimmedLabel,
     data: trimmedData,
-    paint: hasClosedPath(path) ? "fill" : "stroke",
+    paint: geometry.paint,
   };
 }
 
@@ -257,5 +239,303 @@ function samePresets(
         preset.data === right[index]?.data &&
         preset.paint === right[index]?.paint,
     )
+  );
+}
+
+const LIST_PATH = "/api/path-presets";
+
+/** The fetcher this page's later writes use. `loadPathPresets` sets it from the
+ *  one it was given, so a caller that injects a host into the boot keeps it. */
+let clientFetcher: typeof fetch = (input, init) => fetch(input, init);
+
+/** The store the migration reads and writes. Set by the boot beside the
+ *  fetcher, so a mutation can tell whether local rows are still retained. */
+let clientStorage: Storage | undefined;
+
+function defaultStorage(): Storage | undefined {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPresetRow(value: unknown): value is PathPreset {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value["id"] === "string" &&
+    value["id"].trim() !== "" &&
+    typeof value["label"] === "string" &&
+    value["label"].trim() !== "" &&
+    typeof value["data"] === "string" &&
+    value["data"].trim() !== "" &&
+    (value["paint"] === "stroke" || value["paint"] === "fill")
+  );
+}
+
+/** A row the live list holds: the built-ins stay in their own catalogue. */
+function isStoredPreset(preset: PathPreset): preset is UserPathPreset {
+  return preset.id.startsWith("user:") || preset.id.startsWith("pack:");
+}
+
+/** The host's answer, refused rather than read as an empty list: "the host
+ *  answered garbage" and "no presets are installed" are different facts. */
+function stateOf(value: unknown): PathPresetState {
+  if (!isRecord(value) || value["version"] !== 1) {
+    throw new Error("The host did not answer a path preset list.");
+  }
+  const presets = value["presets"];
+  const removed = value["removedBuiltins"];
+  const migrated = value["migrated"];
+  if (
+    !Array.isArray(presets) ||
+    !Array.isArray(removed) ||
+    typeof migrated !== "boolean" ||
+    !presets.every(isPresetRow) ||
+    removed.some((id) => typeof id !== "string")
+  ) {
+    throw new Error("The host did not answer a path preset list.");
+  }
+  return {
+    version: 1,
+    presets: presets as PathPreset[],
+    removedBuiltins: [...new Set(removed as string[])],
+    migrated,
+  };
+}
+
+/** The built-in ids live in code; the live list holds only stored rows. */
+const BUILTIN_IDS = new Set<string>(
+  BUILTIN_PATH_PRESETS.map((preset) => preset.id),
+);
+
+function applyState(state: PathPresetState): void {
+  setActiveUserPathPresets(
+    state.presets.filter(
+      (preset): preset is UserPathPreset =>
+        !BUILTIN_IDS.has(preset.id) && isStoredPreset(preset),
+    ),
+  );
+  setActiveRemovedPathPresetIds(state.removedBuiltins);
+}
+
+function mergedFallback(
+  host: PathPresetState | undefined,
+  localPresets: readonly UserPathPreset[],
+  localRemoved: readonly string[],
+): PathPresetState {
+  const presets = [...(host?.presets ?? [])];
+  const seen = new Set(presets.map((preset) => preset.id));
+  for (const preset of localPresets) {
+    if (seen.has(preset.id)) continue;
+    seen.add(preset.id);
+    presets.push(preset);
+  }
+  return {
+    version: 1,
+    presets,
+    removedBuiltins: [
+      ...new Set([...(host?.removedBuiltins ?? []), ...localRemoved]),
+    ],
+    migrated: false,
+  };
+}
+
+function clearBrowserPresets(storage: Storage | undefined): void {
+  try {
+    storage?.removeItem(USER_PATH_PRESETS_STORAGE_KEY);
+    storage?.removeItem(REMOVED_PATH_PRESETS_STORAGE_KEY);
+  } catch {
+    // A store that refuses the removal keeps the rows for the next boot.
+  }
+}
+
+/**
+ * Reads the host's preset list at boot, migrating this browser's keys once.
+ *
+ * The browser's list is the migration source, never a second owner: a host
+ * that answers `migrated` is the whole list, and the local keys are cleared
+ * only after the host has accepted them. A host that cannot be reached keeps
+ * the local rows — they are the only list this editor has — and the next boot
+ * tries the same migration again.
+ */
+export async function loadPathPresets(
+  fetcher: typeof fetch = fetch,
+  storage: Storage | undefined = defaultStorage(),
+): Promise<PathPresetState> {
+  clientFetcher = fetcher;
+  clientStorage = storage;
+  const localPresets = readUserPathPresets(storage);
+  const localRemoved = readRemovedPathPresetIds(storage);
+  const pending = localPresets.length > 0 || localRemoved.length > 0;
+
+  let host: PathPresetState | undefined;
+  try {
+    const response = await fetcher(LIST_PATH);
+    if (!response.ok) throw new Error("The host refused the preset list.");
+    host = stateOf(await response.json());
+  } catch {
+    host = undefined;
+  }
+
+  if (host !== undefined && pending && !host.migrated) {
+    try {
+      const response = await fetcher(`${LIST_PATH}/migrate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          presets: localPresets,
+          removedBuiltins: localRemoved,
+        }),
+      });
+      if (!response.ok) throw new Error("The host refused the migration.");
+      const migrated = stateOf(await response.json());
+      clearBrowserPresets(storage);
+      applyState(migrated);
+      return migrated;
+    } catch {
+      // Fall through: the local rows stay and the merged list below is served.
+    }
+  }
+
+  if (host !== undefined && (!pending || host.migrated)) {
+    applyState(host);
+    return host;
+  }
+
+  const fallback = mergedFallback(host, localPresets, localRemoved);
+  applyState(fallback);
+  return fallback;
+}
+
+async function requireOk(response: Response, what: string): Promise<void> {
+  if (response.ok) return;
+  let detail = "";
+  try {
+    detail = (await response.text()).trim();
+  } catch {
+    detail = "";
+  }
+  throw new Error(detail === "" ? `${what} (${response.status}).` : detail);
+}
+
+async function refreshPathPresets(): Promise<PathPresetState> {
+  const response = await clientFetcher(LIST_PATH);
+  await requireOk(response, "The path presets could not be read");
+  const state = stateOf(await response.json());
+  // A host that has not migrated yet is not the whole list: the local keys are
+  // retained until it does, and the live view must keep their rows so a
+  // mutation does not hide — or resurrect — one for the session.
+  const localPresets = readUserPathPresets(clientStorage);
+  const localRemoved = readRemovedPathPresetIds(clientStorage);
+  const answer =
+    !state.migrated && (localPresets.length > 0 || localRemoved.length > 0)
+      ? mergedFallback(state, localPresets, localRemoved)
+      : state;
+  applyState(answer);
+  return answer;
+}
+
+export async function addPathPreset(
+  label: string,
+  data: string,
+): Promise<UserPathPreset> {
+  const response = await clientFetcher(LIST_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ label, data }),
+  });
+  await requireOk(response, "The path preset could not be added");
+  const preset: unknown = await response.json();
+  if (!isPresetRow(preset) || !isStoredPreset(preset)) {
+    throw new Error("The host did not answer a path preset.");
+  }
+  await refreshPathPresets();
+  return preset;
+}
+
+async function mutatePathPresets(
+  path: string,
+  method: "POST" | "DELETE",
+  what: string,
+): Promise<void> {
+  const response = await clientFetcher(path, { method });
+  await requireOk(response, what);
+  await refreshPathPresets();
+}
+
+export async function removePathPreset(id: string): Promise<void> {
+  const response = await clientFetcher(
+    `${LIST_PATH}/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  await requireOk(response, "The path preset could not be removed");
+  // A row still held only in this browser's retained key is a no-op on the
+  // host; removing it from that key is what makes the removal stick rather
+  // than return on the next boot.
+  const local = readUserPathPresets(clientStorage);
+  if (local.some((preset) => preset.id === id)) {
+    if (
+      !writeUserPathPresets(
+        clientStorage,
+        local.filter((preset) => preset.id !== id),
+      )
+    ) {
+      throw new Error(
+        "The path preset could not be removed from this browser.",
+      );
+    }
+  }
+  await refreshPathPresets();
+}
+
+export async function removeBuiltinPathPreset(id: string): Promise<void> {
+  await mutatePathPresets(
+    `${LIST_PATH}/builtins/${encodeURIComponent(id)}/remove`,
+    "POST",
+    "The shipped path preset could not be removed",
+  );
+}
+
+export async function restoreBuiltinPathPresets(): Promise<void> {
+  const response = await clientFetcher(`${LIST_PATH}/builtins/restore`, {
+    method: "POST",
+  });
+  await requireOk(response, "The shipped path presets could not be restored");
+  // A retained removal is unioned back into the live list by the refresh, so
+  // the host's accepted restore only becomes visible once this browser's
+  // pending removals are gone too.
+  if (
+    readRemovedPathPresetIds(clientStorage).length > 0 &&
+    !clearRemovedPathPresetIds(clientStorage)
+  ) {
+    throw new Error(
+      "The shipped path presets were restored, but this browser's removed list could not be updated.",
+    );
+  }
+  await refreshPathPresets();
+}
+
+export async function installPathPresetPack(bytes: Uint8Array): Promise<void> {
+  const response = await clientFetcher(`${LIST_PATH}/packs`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: bytes as unknown as BodyInit,
+  });
+  await requireOk(response, "The path preset pack could not be installed");
+  await refreshPathPresets();
+}
+
+export async function removePathPresetPack(packId: string): Promise<void> {
+  await mutatePathPresets(
+    `${LIST_PATH}/packs/${encodeURIComponent(packId)}`,
+    "DELETE",
+    "The path preset pack could not be removed",
   );
 }

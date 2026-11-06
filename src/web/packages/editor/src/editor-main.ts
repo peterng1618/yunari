@@ -10,6 +10,7 @@ import {
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { AssetManager } from "./asset-manager/index.js";
 import type { BackgroundMediaMemory } from "./background-media-memory.js";
+import { bundledStarterAssets, loadBundledStarter } from "./bundled/starter.js";
 import { EditorSession } from "./editor-session.js";
 import {
   createEditorShellBridge,
@@ -37,12 +38,13 @@ import {
   createBlankFabricTheme,
   createNewFabricTheme,
 } from "./new-fabric-theme.js";
+import { loadPathPresets } from "./path-presets.js";
 import { createSensorCatalogue } from "./sensor-catalogue.js";
-import { loadStarterBackdrop } from "./starter-backdrop.js";
 import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
 import { captureCanvas } from "./thumbnail-capture.js";
 import { uiCopy } from "./ui-copy.js";
+import { loadWidgetUnits } from "./widget-packs.js";
 
 type EditorSource = ReturnType<typeof createEditorSource>;
 type ActiveEditor = {
@@ -61,6 +63,11 @@ async function start(): Promise<void> {
   if (root === null) {
     throw new Error("Editor shell is missing #app.");
   }
+
+  // The host's preset list, read once before the shell can render the Add
+  // pane. A host that cannot be reached keeps the browser's list, so an
+  // unavailable host costs the rows rather than the boot.
+  await loadPathPresets();
 
   const libraryClient = createThemeLibraryClient();
   // The author's favourite font trios, which the host keeps in its settings
@@ -92,6 +99,30 @@ async function start(): Promise<void> {
   });
   const host = layout.hosts.canvas;
   const status = layout.hosts.status;
+  // The template every boot path that builds a document reaches for. Loaded
+  // before anything is mounted: a broken bundle is reported on the status line
+  // and stops the boot rather than opening an empty document in its place.
+  try {
+    await loadBundledStarter();
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    return;
+  }
+  /** The installed packs could not be read. Held until a shell exists to report
+   *  through; the store keeps its (empty) list, so the Add pane offers no card
+   *  tiles rather than a fabricated library. */
+  let widgetUnitsError: string | undefined;
+  const reportWidgetUnitsFailure = (error: unknown): void => {
+    const message = `The installed widget packs could not be read: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    const manager = active?.shell.editor.errorManager;
+    if (manager === undefined) widgetUnitsError = message;
+    else manager.warn("controls", message);
+  };
+  // Once, at boot. A later pack import calls `loadWidgetUnits()` again. A
+  // failure leaves the live list untouched.
+  void loadWidgetUnits().catch(reportWidgetUnitsFailure);
   // The draft: the unsaved document, kept in browser storage so a crash costs
   // the last half-minute of work rather than all of it. One slot for
   // the whole editor, because the author has one editor, and a browser that
@@ -319,7 +350,7 @@ async function start(): Promise<void> {
         await mount({
           input: envelopeInputFor(fresh),
           envelope: fresh,
-          assets: await starterAssets(),
+          assets: bundledStarterAssets(),
         });
         status.textContent = "New theme from the starter";
       },
@@ -456,6 +487,11 @@ async function start(): Promise<void> {
       refusedDraftRestore = undefined;
       shell.editor.errorManager.warn("draft", message);
     }
+    if (widgetUnitsError !== undefined) {
+      const message = widgetUnitsError;
+      widgetUnitsError = undefined;
+      shell.editor.errorManager.warn("controls", message);
+    }
     // Bound per document, because the canvas is torn down and rebuilt with it.
     const canvas = shell.editor.canvas;
     canvas.on(
@@ -578,7 +614,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent = `Could not open the saved theme: ${requested.issues
         .map((issue) => issue.message)
@@ -594,7 +630,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent =
         "Could not open the saved theme: it is too large to open.";
@@ -605,7 +641,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent = "Editor ready";
       return;
@@ -618,21 +654,6 @@ async function start(): Promise<void> {
       throw new Error(`Unhandled boot outcome: ${String(unhandled)}`);
     }
   }
-}
-
-/**
- * The starter's own declared bytes, read once.
- *
- * A new theme declares a packaged backdrop, and a declaration without bytes is
- * a broken theme: the media layer would report it unreadable and the artboard
- * would show nothing behind the glass. A package opened from disk brings its
- * own, which is why this is only wired into the two paths that *build* the
- * starter.
- */
-let starterBytes: Promise<Readonly<Record<string, Uint8Array>>> | undefined;
-function starterAssets(): Promise<Readonly<Record<string, Uint8Array>>> {
-  starterBytes ??= loadStarterBackdrop();
-  return starterBytes;
 }
 
 void start();

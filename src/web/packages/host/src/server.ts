@@ -34,6 +34,7 @@ import {
 import { DEFAULT_SAMPLE_INTERVAL_MS } from "./server/limits.js";
 import { createMediaRoutes } from "./server/media-routes.js";
 import type { HostServer, HostServerOptions } from "./server/options.js";
+import { handlePackRoutes } from "./server/pack-routes.js";
 import { createPageRoutes } from "./server/pages-routes.js";
 import { createPairingRoutes } from "./server/pairing-routes.js";
 import { createSecretRoutes } from "./server/secrets-routes.js";
@@ -190,6 +191,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeSettings = options.themeSettings;
   const themeOrigins = options.themeOrigins;
   const published = options.published ?? createPublishedStore();
+  const widgetPacks = options.widgetPacks;
+  const pathPresets = options.pathPresets;
   const caCertificate = options.caCertificate;
   /** Hashed from the bytes being served, once per server: a value passed
    *  alongside them could describe a different certificate. */
@@ -471,6 +474,19 @@ export function createHostServer(options: HostServerOptions): HostServer {
 
     if (await themeRoutes(request, response, url)) return;
     if (await wallpaperRoutes(request, response, url)) return;
+
+    // Installed widget packs: the library listing, import, download and remove.
+    if (
+      await handlePackRoutes({
+        request,
+        response,
+        url,
+        store: widgetPacks,
+        pathPresets,
+        largeBody,
+      })
+    )
+      return;
 
     // The submission and the stored theme's open/save/remove. The submission
     // is a module of its own for the reason the store sign-in routes are.

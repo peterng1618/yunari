@@ -34,3 +34,6 @@ export const VIDEO_OVER_ASSET_BOUND = `That video is larger than the ${
 } MB one theme asset may carry; re-encode it and try again.`;
 /** A dashboard screenshot; the store enforces the same bound. */
 export const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+/** A widget package is a zip posted whole; the reader only sees bytes that are
+ *  already in memory, so the transport refuses one over this first. */
+export const MAX_WIDGET_PACK_BYTES = 64 * 1024 * 1024;

@@ -5,6 +5,7 @@ import {
   FONT_ASSET_FORMATS,
   type FontAssetFormat,
   type FontAssetReference,
+  isSafeAssetPath,
   themeAssetContentType,
 } from "@yunari/renderer-core";
 import {
@@ -12,6 +13,10 @@ import {
   sceneObjects,
   setObjectAssetReference,
 } from "@yunari/scene-fabric";
+import {
+  adoptPackagedAssets,
+  type PackagedAssetAdoption,
+} from "@yunari/theme-kit";
 import { FabricImage, type FabricObject, type StaticCanvas } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
@@ -95,6 +100,13 @@ export type LocalAssetReference =
 export interface AssetImportMetadata {
   readonly sourceUrl?: string;
   readonly license?: AssetLicense;
+}
+
+/** Everything an adoption changes, as a value a caller can put back. */
+export interface AssetManagerState {
+  readonly declarations: readonly LocalAssetReference[];
+  readonly assets: Readonly<Record<string, Uint8Array>>;
+  readonly mutationCount: number;
 }
 
 /** Owns declared package bytes and the disposable browser previews derived from them. */
@@ -217,6 +229,93 @@ export class AssetManager {
     }
     this.#mutated();
     return reference;
+  }
+
+  /**
+   * Declares the assets a widget pack carries, without letting the pack
+   * overwrite this document's.
+   *
+   * The document owns its ids and paths, so a collision in either renames the
+   * arrival rather than the resident. Every declaration is verified before the
+   * first write — a pack whose bytes disagree with its digests is refused
+   * whole, because a half-adopted set is a scene whose references are missing.
+   */
+  async adoptPackaged(
+    declarations: readonly AssetReference[],
+    assets: Readonly<Record<string, Uint8Array>>,
+  ): Promise<ReadonlyMap<string, string>> {
+    return this.commitPackaged(await this.planPackaged(declarations, assets));
+  }
+
+  /**
+   * Drafts an adoption without touching the document.
+   *
+   * A caller that must build something with the adopted ids — a card copy that
+   * may refuse — plans first and commits only once the build succeeded, so a
+   * refusal leaves no declaration or byte nothing draws.
+   */
+  async planPackaged(
+    declarations: readonly AssetReference[],
+    assets: Readonly<Record<string, Uint8Array>>,
+  ): Promise<PackagedAssetAdoption> {
+    // The editor's own policy is checked before the shared adoption runs: an
+    // extension this editor does not package is refused rather than guessed
+    // into a neighbouring kind. None of this mutates, and a refusal here means
+    // the shared helper never saw the declaration.
+    for (const declaration of declarations) {
+      if (!isSafeAssetPath(declaration.path))
+        throw new Error(
+          `Package asset path is not package-relative: ${declaration.path}.`,
+        );
+      const extension = extensionOf(declaration.path);
+      if (extension === undefined)
+        throw new Error(`Unsupported asset file type: ${declaration.path}.`);
+      const type = typeOf(extension);
+      if (type.kind !== declaration.kind)
+        throw new Error(
+          `Package asset ${declaration.path} declares kind "${declaration.kind}" but its extension is a ${type.kind}.`,
+        );
+      if (type.kind === "font") fontFactsOf(declaration, extension);
+    }
+
+    return await adoptPackagedAssets(
+      { declarations: this.#declarations, assets: this.#assets },
+      { declarations, assets },
+    );
+  }
+
+  /** Applies a plan `planPackaged` made; one insertion is one mutation. */
+  commitPackaged(adopted: PackagedAssetAdoption): ReadonlyMap<string, string> {
+    if (adopted.assetIds.size === 0) return adopted.assetIds;
+    this.#declarations = [...adopted.declarations] as LocalAssetReference[];
+    this.#assets = { ...adopted.assets };
+    this.#mutated();
+    return adopted.assetIds;
+  }
+
+  /** The declarations, bytes and mutation count an adoption replaced. */
+  captureAssetState(): AssetManagerState {
+    return {
+      declarations: this.#declarations,
+      assets: this.#assets,
+      mutationCount: this.#mutationCount,
+    };
+  }
+
+  /**
+   * Puts back a state captured before an adoption.
+   *
+   * A caller that had to commit before it could build the copy — because the
+   * preview URL lives here — restores this when the build fails: the adoption
+   * never happened, so the declaration list, its bytes and the mutation count
+   * the panes memoise all read as they did before.
+   */
+  restoreAssetState(state: AssetManagerState): void {
+    this.#declarations = [...state.declarations];
+    this.#assets = { ...state.assets };
+    this.#mutationCount = state.mutationCount;
+    // Panes saw the adoption land; the undo is a change they must redraw for.
+    for (const listener of this.#changeListeners) listener();
   }
 
   async adoptFont(
@@ -652,6 +751,41 @@ function assertFileFormat(
     signature.every((byte, index) => bytes[index] === byte),
   );
   if (!matches) throw new Error("The file's bytes do not match its extension.");
+}
+
+/** A packaged face's facts, refused rather than guessed when any is missing:
+ *  registration reads the family and format, and a declaration that lacks them
+ *  cannot become a `FontAssetReference`. The path's extension and the declared
+ *  format are the same rule the envelope validator holds. */
+function fontFactsOf(
+  declaration: AssetReference,
+  extension: AssetExtension,
+): Pick<
+  FontAssetReference,
+  "family" | "weight" | "style" | "format" | "subset"
+> {
+  const font = declaration as FontAssetReference;
+  if (
+    typeof font.family !== "string" ||
+    font.family.trim() === "" ||
+    (typeof font.weight !== "string" && typeof font.weight !== "number") ||
+    (font.style !== "normal" && font.style !== "italic") ||
+    !(FONT_ASSET_FORMATS as readonly string[]).includes(font.format)
+  )
+    throw new Error(
+      `Package font ${declaration.path} is missing its family, weight, style or format.`,
+    );
+  if (font.format !== extension)
+    throw new Error(
+      `Package font ${declaration.path} declares format "${String(font.format)}" but its path is a .${extension} file.`,
+    );
+  return {
+    family: font.family,
+    weight: font.weight,
+    style: font.style,
+    format: font.format,
+    ...(font.subset === undefined ? {} : { subset: font.subset }),
+  };
 }
 
 /** The form's values, trimmed and refused where unusable — never coerced. An

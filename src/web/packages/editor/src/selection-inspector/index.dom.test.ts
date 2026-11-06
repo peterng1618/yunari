@@ -13,7 +13,6 @@ import {
   MAX_OBJECT_NAME_LENGTH,
 } from "@yunari/renderer-core";
 import { YunariChart } from "@yunari/scene-fabric";
-import { CARD_LIBRARY } from "@yunari/theme-kit";
 import {
   ActiveSelection,
   Canvas,
@@ -29,7 +28,15 @@ import {
   util,
 } from "fabric/es";
 import { act } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   type ChartFieldTarget,
   chartContentView,
@@ -37,7 +44,9 @@ import {
 } from "../chart-manager/panel.js";
 import { createNewTextDefaults } from "../new-object-defaults.js";
 import { createObjectLockManager } from "../object-lock-manager/index.js";
+import { installStarterUnits } from "../testing/widget-units.js";
 import { uiCopy } from "../ui-copy.js";
+import { activeWidgetUnits } from "../widget-packs.js";
 import { idleCrop } from "./idle-crop.test-stage.js";
 import { createSelectionInspector } from "./index.js";
 import {
@@ -72,6 +81,10 @@ afterEach(async () => {
     requestAnimationFrame(() => resolve());
   });
   document.body.replaceChildren();
+});
+
+beforeAll(async () => {
+  await installStarterUnits();
 });
 
 /** A chart with settings but no live ECharts behind it: what the inspector
@@ -226,15 +239,14 @@ async function beginRename(host: HTMLElement): Promise<HTMLInputElement> {
   return input!;
 }
 
-/** The starter's CPU card, revived from `CARD_LIBRARY`'s own authored JSON
+/** The starter's CPU card, revived from the installed unit's authored JSON
  *  through Fabric's enliven utility — so the case starts from the document the
- *  product ships rather than from numbers re-typed into this file. Its panel is
- *  `frostedCard("cpu-card", 421, 187, 280, 307)`, so the card's centre is
- *  (561, 340.5). */
+ *  product ships rather than from numbers re-typed into this file. Its panel
+ *  occupies 421, 187 at 280×307, so the card's centre is (561, 340.5). */
 async function starterCpuCard(): Promise<Group> {
-  const unit = CARD_LIBRARY.find(
+  const unit = activeWidgetUnits().find(
     (candidate) => candidate.id === "group-cpu-card",
-  );
+  )?.unit;
   if (unit === undefined) throw new Error("no group-cpu-card unit");
   const [object] = await util.enlivenObjects<FabricObject>([unit.build()]);
   if (!(object instanceof Group)) {

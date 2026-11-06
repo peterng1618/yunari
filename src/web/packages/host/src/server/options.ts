@@ -2,8 +2,10 @@ import type { AssetRouteOptions } from "../assets/routes.js";
 import type { HostBinding } from "../cli/hosting.js";
 import type { ListenableServer } from "../cli/net.js";
 import type { ExtensionService } from "../extensions/service.js";
+import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { PanelHint } from "../panels/panel-device.js";
 import type { PanelManager } from "../panels/panel-manager.js";
+import type { PathPresetStore } from "../presets/path-presets.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -208,6 +210,14 @@ export interface HostServerOptions {
    *  because an id minted to fill the answer is one no display could have
    *  stored. */
   readonly host?: HostRecord;
+  /** Installed widget packs, one directory each under the settings folder.
+   *  Omitted when this host serves none; the routes then say so rather than
+   *  falling through to the static 404. */
+  readonly widgetPacks?: WidgetPackStore;
+  /** The author's path presets, one settings file. Omitted when this host
+   *  serves none; the routes then say so rather than falling through to the
+   *  static 404. */
+  readonly pathPresets?: PathPresetStore;
 }
 
 export interface HostingState {

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
@@ -18,11 +19,14 @@ import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
 import { createExtensionService } from "./extensions/service.js";
+import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
+import { createWidgetPackStore } from "./packs/widget-packs.js";
 import {
   createPanelManager,
   type PanelManager,
 } from "./panels/panel-manager.js";
 import { panelPageUrl, themePageUrl } from "./panels/panel-page.js";
+import { createPathPresetStore } from "./presets/path-presets.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
 import { presentMonAdapter } from "./providers/frame/presentmon.js";
@@ -356,6 +360,19 @@ export async function run(argv: readonly string[]): Promise<number> {
   // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
+  // Installed widget packs, one folder each under the settings directory. The
+  // app's own eight cards travel as a bundled package, read from the build and
+  // never written: they are the product's, not this machine's files.
+  const widgetPacks = createWidgetPackStore(
+    path.join(settingsDir, "widget-packs"),
+    { bundled: [defaultWidgetPackBytes()] },
+  );
+
+  // The author's path presets, one file beside the other settings. The
+  // built-ins are passed from the package's catalogue, so the host and the
+  // Add pane list the same shipped shapes.
+  const pathPresets = createPathPresetStore(settingsDir, BUILTIN_PATH_PRESETS);
+
   // The certificate is the whole reason the host serves https: a phone at
   // `http://<lan-ip>:<port>` is not a secure context, so it can neither hold a
   // screen wake lock nor register the service worker an installable app needs.
@@ -441,6 +458,10 @@ export async function run(argv: readonly string[]): Promise<number> {
         }),
     // Who this host is, so a display that has lost its address can ask.
     host: hostRecord,
+    // The installed widget packs the insert surface offers. The store is built
+    // here so the settings folder's subtree is the one place they live.
+    widgetPacks,
+    pathPresets,
     // The host's own windows on its local monitors.
     get launcher() {
       return launcher;

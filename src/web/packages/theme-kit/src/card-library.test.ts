@@ -4,9 +4,7 @@ import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
-  CARD_LIBRARY,
   type CardUnit,
-  cpuCard,
   instantiateCard,
   type ObjectJson,
   starterPalette,
@@ -21,10 +19,211 @@ const STARTER_GLOBALS = {
   typeTokens: starterTypeTokens,
 } as FabricGlobals;
 
+/**
+ * A card's readings, keyed by the authored object ids inside its group.
+ *
+ * A test fixture, not the shipped composition: the shipped cards live in the
+ * committed packages now, and this file checks the copier, which must work for
+ * any unit an author installs.
+ */
+const TEST_BINDINGS = {
+  "cpu-card-value": [
+    { id: "cpu-card-load", semanticKey: "cpu.load", precision: 0 },
+  ],
+  "cpu-card-sparkline": [{ id: "cpu-card-spark", semanticKey: "cpu.load" }],
+  "cpu-card-caption": [{ id: "cpu-card-model", semanticKey: "cpu.brand" }],
+  "cpu-card-freq": [
+    {
+      id: "cpu-card-clock",
+      semanticKey: "cpu.clock",
+      scale: 0.001,
+      precision: 1,
+    },
+  ],
+} as const satisfies Readonly<Record<string, readonly Binding[]>>;
+
+/** A value run in a role the theme always carries, at the card's own size. */
+function boundText(
+  id: string,
+  bindingId: string,
+  typeToken: "typeTokens.heading" | "typeTokens.body",
+): ObjectJson {
+  return {
+    type: "Textbox",
+    id,
+    left: 0,
+    top: 0,
+    yunariText: {
+      runs: [
+        {
+          kind: "value",
+          bindingId,
+          typeToken,
+          style: {
+            color: { ref: "palette.text" },
+            fontSize: { value: 90 },
+          },
+        },
+      ],
+    },
+  };
+}
+
+/** A literal run, so the fixture's title is text a validator accepts. */
+function literalText(id: string, text: string): ObjectJson {
+  return {
+    type: "Textbox",
+    id,
+    left: 0,
+    top: 0,
+    yunariText: {
+      runs: [
+        {
+          kind: "literal",
+          text,
+          typeToken: "typeTokens.heading",
+          style: {
+            color: { ref: "palette.text" },
+            fontSize: { value: 24 },
+          },
+        },
+      ],
+    },
+  };
+}
+
+/** The CPU card's shape: a painted group over bound parts, with the ids the
+ *  collision tests rename. */
+function cpuCard(): ObjectJson {
+  return {
+    type: "Group",
+    id: CPU_CARD,
+    left: 0,
+    top: 0,
+    width: 280,
+    height: 307,
+    objects: [
+      {
+        type: "Rect",
+        id: "cpu-card",
+        left: 0,
+        top: 0,
+        width: 280,
+        height: 307,
+        yunariPaint: { fill: "palette.frost", stroke: "palette.panelStroke" },
+      },
+      {
+        type: "Path",
+        id: "cpu-card-icon",
+        left: 0,
+        top: 0,
+        path: [
+          ["M", 0, 0],
+          ["L", 1, 1],
+        ],
+        strokeWidth: 1,
+      },
+      literalText("cpu-card-title", "CPU"),
+      boundText("cpu-card-value", "cpu-card-load", "typeTokens.heading"),
+      boundText("cpu-card-caption", "cpu-card-model", "typeTokens.body"),
+      {
+        type: "YunariChart",
+        id: "cpu-card-sparkline",
+        family: "line",
+        left: 0,
+        top: 0,
+        width: 10,
+        height: 10,
+      },
+      boundText("cpu-card-freq", "cpu-card-clock", "typeTokens.body"),
+    ],
+  };
+}
+
+/** One group over one bound part, for the seven cards whose shape the copier
+ *  does not inspect beyond the group. */
+function simpleCard(id: string, bindingId: string): ObjectJson {
+  return {
+    type: "Group",
+    id,
+    left: 0,
+    top: 0,
+    width: 10,
+    height: 10,
+    objects: [boundText(`${id}-value`, bindingId, "typeTokens.body")],
+  };
+}
+
+/** The eight cards as insertion units, with the readings they carry. */
+const CARD_UNITS: readonly CardUnit[] = [
+  {
+    id: "group-time-card",
+    label: "Clock",
+    diagram: "time",
+    build: () => simpleCard("group-time-card", "time"),
+  },
+  {
+    id: CPU_CARD,
+    label: "CPU",
+    diagram: "cpu",
+    build: cpuCard,
+    bindings: TEST_BINDINGS,
+  },
+  {
+    id: "group-gpu-card",
+    label: "GPU",
+    diagram: "gpu",
+    build: () => simpleCard("group-gpu-card", "gpu"),
+  },
+  {
+    id: "group-ram-card",
+    label: "RAM",
+    diagram: "ram",
+    build: () => simpleCard("group-ram-card", "ram"),
+  },
+  {
+    id: "group-vram-card",
+    label: "VRAM",
+    diagram: "vram",
+    build: () => simpleCard("group-vram-card", "vram"),
+  },
+  {
+    id: "group-trends-card",
+    label: "Performance trends",
+    diagram: "trends",
+    build: () => simpleCard("group-trends-card", "trends"),
+  },
+  {
+    id: "group-storage-card",
+    label: "Storage",
+    diagram: "storage",
+    build: () => simpleCard("group-storage-card", "storage"),
+  },
+  {
+    id: "group-network-card",
+    label: "Network",
+    diagram: "network",
+    build: () => simpleCard("group-network-card", "network"),
+  },
+];
+
 function unit(cardId: string): CardUnit {
-  const found = CARD_LIBRARY.find((candidate) => candidate.id === cardId);
+  const found = CARD_UNITS.find((candidate) => candidate.id === cardId);
   if (found === undefined) throw new Error(`no ${cardId} unit`);
   return found;
+}
+
+/** The smallest card the copier accepts: one group over one bound text part. */
+function group(id: string, semanticKey: string): ObjectJson {
+  return {
+    id,
+    type: "group",
+    left: 0,
+    top: 0,
+    objects: [
+      { id: `${id}-value`, type: "text", text: semanticKey, left: 0, top: 0 },
+    ],
+  };
 }
 
 function partsOf(card: ObjectJson): readonly ObjectJson[] {
@@ -65,30 +264,25 @@ function runsOf(card: ObjectJson): readonly ObjectJson[] {
   return runs;
 }
 
-describe("the card library", () => {
-  it("offers one unit per card the starter itself draws", () => {
-    expect(CARD_LIBRARY.map((entry) => entry.id)).toEqual([
-      "group-time-card",
-      "group-cpu-card",
-      "group-gpu-card",
-      "group-ram-card",
-      "group-vram-card",
-      "group-trends-card",
-      "group-storage-card",
-      "group-network-card",
-    ]);
-    expect(CARD_LIBRARY.map((entry) => entry.diagram)).toEqual([
-      "time",
-      "cpu",
-      "gpu",
-      "ram",
-      "vram",
-      "trends",
-      "storage",
-      "network",
-    ]);
-    expect(new Set(CARD_LIBRARY.map((entry) => entry.diagram)).size).toBe(
-      CARD_LIBRARY.length,
+describe("a card unit", () => {
+  it("carries the unit's own bindings", () => {
+    const unit: CardUnit = {
+      id: "group-cpu-card",
+      label: "CPU",
+      diagram: "cpu",
+      build: () => group("group-cpu-card", "cpu.load"),
+      bindings: {
+        "group-cpu-card": [{ id: "cpu-binding", semanticKey: "cpu.load" }],
+      },
+    };
+    const copy = instantiateCard({
+      unit,
+      globals: undefined,
+      existingIds: [],
+      origin: { left: 0, top: 0 },
+    });
+    expect(copy.bindings["card-group-cpu-card"]?.[0]?.semanticKey).toBe(
+      "cpu.load",
     );
   });
 
@@ -303,6 +497,7 @@ describe("a card that declares one id twice", () => {
         ),
       };
     },
+    bindings: TEST_BINDINGS,
   };
 
   const copied = () =>
@@ -342,7 +537,7 @@ describe("a card that declares one id twice", () => {
 describe("the type tokens a shipped card names", () => {
   it("is a role the theme always carries, for every card", () => {
     const refs: string[] = [];
-    for (const entry of CARD_LIBRARY) {
+    for (const entry of CARD_UNITS) {
       const copied = instantiateCard({
         unit: entry,
         globals: STARTER_GLOBALS,
@@ -397,6 +592,7 @@ describe("a card whose repeat mints the suffix a genuine part already holds", ()
         objects: [...renamed, { ...icon, id: "cpu-card-value-2" }],
       };
     },
+    bindings: TEST_BINDINGS,
   };
 
   const copied = () =>

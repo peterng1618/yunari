@@ -1,246 +1,14 @@
 import {
   type Artboard,
-  type AssetReference,
-  type Binding,
   type FabricThemeEnvelope,
   newThemeId,
   SUPPORTED_SCHEMA_VERSION,
 } from "@yunari/renderer-core";
 import {
-  clockCard,
-  cpuCard,
-  gpuCard,
-  networkCard,
-  ramCard,
-  storageCard,
-  trendsCard,
-  vramCard,
-} from "./cards.js";
-import {
   type StarterPaletteId,
   starterPalette,
-  starterTracking,
   starterTypeTokens,
 } from "./globals.js";
-import { label } from "./objects.js";
-
-/**
- * The starter as the library offers it: a template the product ships.
- *
- * The composition lives here, in the shared kit, so the editor and the MCP
- * server author the same document. The editor supplies the packaged backdrop
- * bytes; a caller with no media passes none and the theme declares no media
- * layer.
- */
-
-/**
- * The readings the reference composition carries, keyed by the object that
- * shows each one.
- *
- * Exported because a card copy reads its own slice from this one table: a
- * second list of semantic keys would be a place for the starter and a copy to
- * drift apart, and a drifted key is a reading that quietly stops being the one
- * the author meant.
- */
-export const STARTER_BINDINGS = {
-  time: [{ id: "clock-time", semanticKey: "time.now", format: "hh:mm" }],
-  "time-period": [{ id: "clock-period", semanticKey: "time.now", format: "A" }],
-  date: [
-    {
-      id: "clock-date",
-      semanticKey: "date.today",
-      format: "ddd, MMM DD, YYYY",
-    },
-  ],
-  "cpu-card-value": [
-    { id: "cpu-card-load", semanticKey: "cpu.load", precision: 0 },
-  ],
-  "cpu-card-sparkline": [{ id: "cpu-card-spark", semanticKey: "cpu.load" }],
-  // Three captions, each bound to the device the card's figures describe.
-  // `cpu.brand` rather than `cpu.model`: the library reports all three and
-  // the brand is the one that reads as a product name on a caption.
-  "cpu-card-caption": [{ id: "cpu-card-model", semanticKey: "cpu.brand" }],
-  // The reference writes GHz; the key reports MHz, so the binding scales and
-  // the author writes the unit. A conversion of a real reading, not a unit
-  // the provider cannot produce.
-  "cpu-card-freq": [
-    {
-      id: "cpu-card-clock",
-      semanticKey: "cpu.clock",
-      scale: 0.001,
-      precision: 1,
-    },
-  ],
-  "gpu-card-value": [
-    { id: "gpu-card-load", semanticKey: "gpu.load", precision: 0 },
-  ],
-  "gpu-card-sparkline": [{ id: "gpu-card-spark", semanticKey: "gpu.load" }],
-  "gpu-card-caption": [{ id: "gpu-card-model", semanticKey: "gpu.name" }],
-  "gpu-card-freq": [
-    {
-      id: "gpu-card-clock",
-      semanticKey: "gpu.clock",
-      scale: 0.001,
-      precision: 1,
-    },
-  ],
-  "gpu-card-temp": [
-    { id: "gpu-card-temp", semanticKey: "gpu.temp", precision: 0 },
-  ],
-  "ram-gauge": [{ id: "ram-gauge-percent", semanticKey: "ram.used.percent" }],
-  "ram-value": [{ id: "ram-percent", semanticKey: "ram.used.percent" }],
-  "ram-capacity": [
-    {
-      id: "ram-used",
-      semanticKey: "ram.used",
-      precision: 1,
-      unitDisplay: "none",
-    },
-    {
-      id: "ram-total",
-      semanticKey: "ram.total",
-      precision: 0,
-      unitDisplay: "none",
-    },
-  ],
-  "vram-gauge": [
-    { id: "vram-gauge-percent", semanticKey: "vram.used.percent" },
-  ],
-  "vram-value": [{ id: "vram-percent", semanticKey: "vram.used.percent" }],
-  "vram-capacity": [
-    {
-      id: "vram-used",
-      semanticKey: "vram.used",
-      precision: 1,
-      unitDisplay: "none",
-    },
-    {
-      id: "vram-total",
-      semanticKey: "vram.total",
-      precision: 0,
-      unitDisplay: "none",
-    },
-  ],
-  "trends-chart": [
-    { id: "trends-cpu", semanticKey: "cpu.load" },
-    { id: "trends-gpu", semanticKey: "gpu.load" },
-    { id: "trends-ram", semanticKey: "ram.used.percent" },
-  ],
-  "storage-card-value": [
-    { id: "storage-percent", semanticKey: "disk.used.percent" },
-  ],
-  "storage-bar": [{ id: "storage-used", semanticKey: "disk.used.percent" }],
-  "storage-card-name": [
-    { id: "storage-card-volume", semanticKey: "disk.name" },
-  ],
-  "network-down": [
-    {
-      id: "network-download-label",
-      semanticKey: "network.download",
-      precision: 1,
-    },
-  ],
-  "network-up": [
-    {
-      id: "network-upload-label",
-      semanticKey: "network.upload",
-      precision: 1,
-    },
-  ],
-  "network-chart": [
-    { id: "net-download", semanticKey: "network.download" },
-    { id: "net-upload", semanticKey: "network.upload" },
-  ],
-} as const satisfies Readonly<Record<string, readonly Binding[]>>;
-
-/** The starter's backdrop is the editor's packaged photograph. A caller that
- *  has the reference passes it and the starter declares the media layer; a
- *  caller without media gets the same composition with no backdrop. */
-export function createStarterTheme(
-  options: { readonly backdrop?: AssetReference } = {},
-): FabricThemeEnvelope {
-  const backdrop = options.backdrop;
-  return {
-    schemaVersion: SUPPORTED_SCHEMA_VERSION,
-    fabricVersion: "7.4.0",
-    id: newThemeId(),
-    metadata: {
-      name: "System dashboard",
-      author: "Yunari",
-      description:
-        "The reference composition: a clock, two usage cards, two memory rings, a performance chart and stacked storage and network panels.",
-      // The editor's own copy is English, so a new theme starts where its
-      // author does rather than guessing from the browser.
-      themeLanguage: "en",
-    },
-    artboard: {
-      width: 1672,
-      height: 941,
-    },
-    // The backdrop is a media layer mounted *below* the canvas: an opaque
-    // artboard paint is exactly what would hide it. The colour is transparent
-    // because the letterbox is this same paint, so the bars are not painted
-    // either and the stage shows through them.
-    background: {
-      color: { ref: "palette.none" },
-      ...(backdrop === undefined
-        ? {}
-        : { media: { assetId: backdrop.id, bounds: "theme" as const } }),
-    },
-    globals: {
-      palette: starterPalette,
-      typeTokens: starterTypeTokens,
-    },
-    assets: backdrop === undefined ? [] : [backdrop],
-    bindings: STARTER_BINDINGS,
-    scene: {
-      version: "7.4.0",
-      objects: [
-        // The wordmark is tracked by its run's own style, not by spaces between
-        // the letters: a space is a fixed width the font chooses, and it
-        // survives into the text the author edits and the reading a screen
-        // reader gets. Neither is a card, and making everything a group would
-        // be the cage this document is written to avoid.
-        label(
-          "wordmark",
-          118,
-          56,
-          460,
-          40.68,
-          "YUNARI",
-          36,
-          "text",
-          starterPalette,
-          {
-            letterSpacing: starterTracking[36],
-          },
-        ),
-        label(
-          "strapline",
-          120,
-          100,
-          460,
-          19.21,
-          "SYSTEM INSIGHTS",
-          17,
-          "dim",
-          starterPalette,
-          {
-            letterSpacing: starterTracking[17],
-          },
-        ),
-        clockCard(),
-        cpuCard(),
-        gpuCard(),
-        ramCard(),
-        vramCard(),
-        trendsCard(),
-        storageCard(),
-        networkCard(),
-      ],
-    },
-  };
-}
 
 /**
  * The tokens a blank theme starts from: the ink, the panel materials and the
@@ -266,19 +34,19 @@ const BLANK_PALETTE_IDS = [
 ] as const satisfies readonly StarterPaletteId[];
 
 /**
- * A new document: the starter's envelope with the composition taken out, at the
- * artboard the author chose.
+ * A new document: the ink, the panel materials and the two chart surfaces, at
+ * the artboard the author chose.
  *
- * Built **from** `createStarterTheme` rather than beside it, so the parts a
- * blank document still has — the type tokens, the `schemaVersion`, the envelope
- * shape — are one author's decision in one place. A second hand-built envelope
- * would be a second place the schema version and the token vocabulary are
- * decided, and the two would drift.
+ * Written as a literal rather than derived from a starter composition: the
+ * composition is committed data now (`bundled/starter.theme.zip` in the
+ * editor), and a blank document is not that document with parts removed. The
+ * envelope shape and the schema version are still stated here, once, because
+ * this is the only place a new document is authored.
  *
  * The palette is narrowed **by token id**, never by restating a colour. A
  * second copy of `#ecf5ff` is how the frosted tint once reached three literals;
- * taking the starter's own entry means a change to the starter's palette
- * reaches a blank theme and there is no copy left to forget.
+ * taking the starter's own entry means a change to the palette reaches a blank
+ * theme and there is no copy left to forget.
  */
 export function createBlankTheme(input: {
   readonly artboard: Artboard;
@@ -286,15 +54,15 @@ export function createBlankTheme(input: {
   readonly author?: string;
   readonly themeLanguage?: string;
 }): FabricThemeEnvelope {
-  const starter = createStarterTheme();
   const palette = Object.fromEntries(
     BLANK_PALETTE_IDS.map((id) => [id, starterPalette[id]]),
   ) as NonNullable<NonNullable<FabricThemeEnvelope["globals"]>["palette"]>;
 
   return {
-    ...starter,
-    // A blank theme is its own document, not the starter it was built from:
-    // keeping that id would overwrite the reference the first time this saved.
+    schemaVersion: SUPPORTED_SCHEMA_VERSION,
+    fabricVersion: "7.4.0",
+    // A new document is its own document, not a template: keeping a template's
+    // id would overwrite that template the first time this saved.
     id: newThemeId(),
     metadata: {
       name: input.name ?? "New theme",
@@ -325,20 +93,17 @@ export function createBlankTheme(input: {
     // 10.9:1. `panel` is a card material and makes a card on the page 1.02:1 —
     // invisible; `dim` puts `text` on the page at 1.74:1, unreadable.
     //
-    // This one paint is also the letterbox around the board. The starter's
-    // media is dropped with the assets: a declaration pointing at bytes this
-    // document does not carry is a theme the validator refuses and the player
-    // renders nothing behind. Replacing the whole `background` is also what
-    // keeps the starter's backdrop from leaking through the spread.
+    // This one paint is also the letterbox around the board. There is no media
+    // declaration here: a declaration pointing at bytes this document does not
+    // carry is a theme the validator refuses and the player renders nothing
+    // behind.
     background: { color: { ref: "palette.chartTrack" } },
     globals: {
       palette,
-      ...(starter.globals?.typeTokens === undefined
-        ? {}
-        : { typeTokens: starter.globals.typeTokens }),
+      typeTokens: starterTypeTokens,
     },
     assets: [],
     bindings: {},
-    scene: { version: starter.scene["version"] ?? "7.4.0", objects: [] },
+    scene: { version: "7.4.0", objects: [] },
   };
 }

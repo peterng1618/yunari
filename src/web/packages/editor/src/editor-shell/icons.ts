@@ -1,4 +1,4 @@
-import type { CardDiagram } from "@yunari/theme-kit";
+import type { ListingCategory } from "@yunari/renderer-core";
 import {
   Activity,
   ArrowDown,
@@ -292,29 +292,30 @@ export const SHAPE_GLYPHS: Readonly<
 };
 
 /**
- * One glyph per card unit, keyed by the library's own `CardDiagram`, so a ninth
- * card fails to compile here until it wears a mark.
+ * One glyph per known unit, keyed by the unit's own id.
+ *
+ * **Open, because the set is installed rather than shipped.** A pack names its
+ * own units, so a map closed over a build-time union would refuse a pack this
+ * build did not anticipate. Any id not listed here wears
+ * `CARD_UNIT_FALLBACK_GLYPH`, whose one rule is that it identifies no known
+ * unit.
  *
  * **The Add pane's card tiles draw these, the same vocabulary every other tile
  * in that pane draws**, so a unit tile is not a second icon family.
- *
- * **No two units share a glyph**, because a mark two units share identifies
- * neither. Lucide has no `vram`, so that unit takes the nearest drawing of the
- * video adapter's memory: `CircuitBoard`, its board and components. `ram` is
- * `MemoryStick`, the physical module, so the pair stay distinct; `storage` is
- * `HardDrive`, the drive rather than the memory; and `network` is `Network`, the
- * nodes and links the reading describes.
  */
-export const CARD_UNIT_GLYPHS: Readonly<Record<CardDiagram, LucideIcon>> = {
-  time: Clock,
-  cpu: Cpu,
-  gpu: Gpu,
-  ram: MemoryStick,
-  vram: CircuitBoard,
-  trends: TrendingUp,
-  storage: HardDrive,
-  network: Network,
+export const CARD_UNIT_GLYPHS: Readonly<Record<string, LucideIcon>> = {
+  "group-time-card": Clock,
+  "group-cpu-card": Cpu,
+  "group-gpu-card": Gpu,
+  "group-ram-card": MemoryStick,
+  "group-vram-card": CircuitBoard,
+  "group-trends-card": TrendingUp,
+  "group-storage-card": HardDrive,
+  "group-network-card": Network,
 };
+
+/** The mark an installed unit this build does not know wears. */
+export const CARD_UNIT_FALLBACK_GLYPH: LucideIcon = LayoutTemplate;
 
 /** The settings column's other tabs. */
 export const KEYBOARD_GLYPH: LucideIcon = Keyboard;

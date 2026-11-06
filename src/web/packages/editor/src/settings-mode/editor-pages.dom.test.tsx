@@ -14,6 +14,7 @@
  * `settings-keyboard.dom.test.tsx`'s.
  */
 import { SUPPORTED_SCHEMA_VERSION } from "@yunari/renderer-core";
+import type { PathPresetState } from "@yunari/theme-package";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -35,8 +36,9 @@ import {
 import { PATH_PRESET_IDS } from "../new-object-defaults.js";
 import {
   activeRemovedPathPresetIds,
+  activeUserPathPresets,
+  loadPathPresets,
   REMOVED_PATH_PRESETS_STORAGE_KEY,
-  readUserPathPresets,
   setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
 } from "../path-presets.js";
@@ -127,6 +129,97 @@ async function typeInto(
     setter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+/** Click a control and let the page's host round-trip settle before reading. */
+async function pressAndSettle(target: HTMLElement): Promise<void> {
+  await act(async () => {
+    target.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+function jsonAnswer(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+type PresetRow = {
+  readonly id: string;
+  readonly label: string;
+  readonly data: string;
+  readonly paint: "stroke" | "fill";
+};
+
+/** A minimal host: the two lists plus the routes this page calls. */
+function pathPresetHost(initial: {
+  readonly presets: readonly PresetRow[];
+  readonly removedBuiltins?: readonly string[];
+}): { fetcher: typeof fetch; state: () => PathPresetState } {
+  let presets = [...initial.presets];
+  let removedBuiltins = [...(initial.removedBuiltins ?? [])];
+  const state = (): PathPresetState => ({
+    version: 1,
+    presets,
+    removedBuiltins,
+    migrated: true,
+  });
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/path-presets" && method === "GET") {
+        return jsonAnswer(state());
+      }
+      if (url === "/api/path-presets" && method === "POST") {
+        const body = JSON.parse(String(init?.body)) as {
+          label: string;
+          data: string;
+        };
+        const preset: PresetRow = {
+          id: `user:${body.label.toLowerCase().replace(/\s+/g, "-")}`,
+          label: body.label,
+          data: body.data,
+          paint: body.data.includes("Z") ? "fill" : "stroke",
+        };
+        presets = [...presets, preset];
+        return jsonAnswer(preset);
+      }
+      if (url === "/api/path-presets/builtins/restore" && method === "POST") {
+        removedBuiltins = [];
+        return jsonAnswer({ ok: true });
+      }
+      const builtin = url.match(
+        /^\/api\/path-presets\/builtins\/([^/]+)\/remove$/,
+      );
+      if (builtin !== null && method === "POST") {
+        removedBuiltins = [
+          ...removedBuiltins,
+          decodeURIComponent(builtin[1] ?? ""),
+        ];
+        return jsonAnswer({ ok: true });
+      }
+      const pack = url.match(/^\/api\/path-presets\/packs\/([^/]+)$/);
+      if (pack !== null && method === "DELETE") {
+        const prefix = `pack:${decodeURIComponent(pack[1] ?? "")}:`;
+        presets = presets.filter((preset) => !preset.id.startsWith(prefix));
+        return jsonAnswer({ ok: true });
+      }
+      const remove = url.match(/^\/api\/path-presets\/(.+)$/);
+      if (remove !== null && method === "DELETE") {
+        const id = decodeURIComponent(remove[1] ?? "");
+        presets = presets.filter((preset) => preset.id !== id);
+        return jsonAnswer({ ok: true });
+      }
+      return jsonAnswer({ error: "unexpected request" }, 500);
+    },
+  );
+  return {
+    fetcher: fetcher as unknown as typeof fetch,
+    state,
+  };
 }
 
 const rowOf = (
@@ -285,8 +378,40 @@ it("restores a removed ratio without dropping one the author added", async () =>
   expect(localStorage.getItem(PREVIEW_RATIO_STORAGE_KEY)).toContain("7:3");
 });
 
+it("lists the host's stored presets, including a pack row", async () => {
+  const host = pathPresetHost({
+    presets: [
+      {
+        id: "user:mine",
+        label: "Mine",
+        data: "M 0 0 L 10 0",
+        paint: "stroke",
+      },
+      {
+        id: "pack:pack-one:star",
+        label: "Pack star",
+        data: "M 0 0 L 10 0 L 5 10 Z",
+        paint: "fill",
+      },
+    ],
+  });
+  await loadPathPresets(host.fetcher, localStorage);
+
+  const container = await mount(<PathPresetsPage />);
+
+  expect(
+    container.querySelector('[data-yunari-path-preset="user:mine"]')
+      ?.textContent,
+  ).toContain("Mine");
+  expect(
+    container.querySelector('[data-yunari-path-preset="pack:pack-one:star"]')
+      ?.textContent,
+  ).toContain("Pack star");
+});
+
 it("adds a custom path preset, draws its own data, and removes it", async () => {
-  const container = await mount(<PathPresetsPage storage={localStorage} />);
+  await loadPathPresets(pathPresetHost({ presets: [] }).fetcher, localStorage);
+  const container = await mount(<PathPresetsPage />);
   const name = must(
     container.querySelector<HTMLInputElement>("[data-yunari-path-preset-name]"),
     "preset name field",
@@ -301,7 +426,7 @@ it("adds a custom path preset, draws its own data, and removes it", async () => 
 
   await typeInto(name, "Star");
   await typeInto(data, pathData);
-  await press(
+  await pressAndSettle(
     must(
       container.querySelector<HTMLElement>("[data-yunari-path-preset-add]"),
       "Add control",
@@ -316,11 +441,11 @@ it("adds a custom path preset, draws its own data, and removes it", async () => 
   // The tile draws the preset itself rather than a vocabulary stand-in, which
   // is what lets an authored figure read as the shape it inserts.
   expect(row.querySelector("path")?.getAttribute("d")).toBe(pathData);
-  expect(readUserPathPresets(localStorage)).toMatchObject([
+  expect(activeUserPathPresets()).toMatchObject([
     { label: "Star", data: pathData, paint: "fill" },
   ]);
 
-  await press(
+  await pressAndSettle(
     must(
       container.querySelector<HTMLElement>("[data-yunari-path-preset-remove]"),
       "Remove control",
@@ -329,11 +454,10 @@ it("adds a custom path preset, draws its own data, and removes it", async () => 
   expect(container.querySelectorAll("[data-yunari-path-preset]")).toHaveLength(
     0,
   );
-  expect(readUserPathPresets(localStorage)).toEqual([]);
 });
 
 it("lists the shipped custom shapes and gives the add form its examples", async () => {
-  const container = await mount(<PathPresetsPage storage={localStorage} />);
+  const container = await mount(<PathPresetsPage />);
 
   expect(
     Array.from(
@@ -355,7 +479,8 @@ it("lists the shipped custom shapes and gives the add form its examples", async 
 });
 
 it("removes a shipped shape and restores it without touching the author's", async () => {
-  const container = await mount(<PathPresetsPage storage={localStorage} />);
+  await loadPathPresets(pathPresetHost({ presets: [] }).fetcher, localStorage);
+  const container = await mount(<PathPresetsPage />);
 
   await typeInto(
     must(
@@ -375,14 +500,14 @@ it("removes a shipped shape and restores it without touching the author's", asyn
     ),
     "M 0 0 L 10 0 L 10 10 Z",
   );
-  await press(
+  await pressAndSettle(
     must(
       container.querySelector<HTMLElement>("[data-yunari-path-preset-add]"),
       "Add control",
     ),
   );
 
-  await press(
+  await pressAndSettle(
     must(
       container.querySelector<HTMLElement>(
         '[data-yunari-path-preset-builtin-remove="arc"]',
@@ -394,9 +519,9 @@ it("removes a shipped shape and restores it without touching the author's", asyn
     container.querySelector('[data-yunari-path-preset-builtin="arc"]'),
   ).toBeNull();
   expect(activeRemovedPathPresetIds()).toEqual(["arc"]);
-  expect(readUserPathPresets(localStorage)).toHaveLength(1);
+  expect(activeUserPathPresets()).toHaveLength(1);
 
-  await press(
+  await pressAndSettle(
     must(
       container.querySelector<HTMLElement>("[data-yunari-path-preset-restore]"),
       "Restore defaults control",
@@ -408,11 +533,11 @@ it("removes a shipped shape and restores it without touching the author's", asyn
   expect(activeRemovedPathPresetIds()).toEqual([]);
   expect(localStorage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).toBeNull();
   // Restoring the catalogue is not a reset of the author's own shapes.
-  expect(readUserPathPresets(localStorage)).toHaveLength(1);
+  expect(activeUserPathPresets()).toHaveLength(1);
 });
 
 it("names what a path preset is missing rather than storing an invisible one", async () => {
-  const container = await mount(<PathPresetsPage storage={localStorage} />);
+  const container = await mount(<PathPresetsPage />);
 
   await press(
     must(
@@ -424,7 +549,7 @@ it("names what a path preset is missing rather than storing an invisible one", a
   expect(
     container.querySelector("[data-yunari-path-preset-reason]")?.textContent,
   ).toBe(uiCopy.settings.pathPresetNameRequired);
-  expect(readUserPathPresets(localStorage)).toEqual([]);
+  expect(activeUserPathPresets()).toEqual([]);
 });
 
 it("names an equivalent ratio that is already listed", async () => {

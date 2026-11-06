@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { CARD_LIBRARY } from "@yunari/theme-kit";
 import { Canvas } from "fabric/es";
 import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -14,8 +13,10 @@ import { arrangeActions } from "../object-actions.js";
 import { setActiveShortcuts } from "../shortcut-manager/bindings.js";
 import { PRODUCT_SHORTCUTS } from "../shortcut-manager/index.js";
 import { DARK_GROUND, fixtureEntry } from "../store-mode/item-fixture.js";
+import { installStarterUnits } from "../testing/widget-units.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
+import { activeWidgetUnits } from "../widget-packs.js";
 import type { EditorShellBridge } from "./bridge.js";
 import type { LayerRow } from "./layer-tree.js";
 import type { RailSlot } from "./rail.js";
@@ -25,6 +26,10 @@ import type {
 } from "./session-facade.js";
 import { createShellLayout } from "./shell-layout.js";
 import { THEME_TOOLBAR_ACTIONS } from "./shell-menu-bar.js";
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
 
 // Base UI's popup needs two browser APIs jsdom has none of: floating-ui observes
 // its anchor, and the popup waits for its own open transition before reporting
@@ -449,8 +454,8 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * snapshot-fed counts draw none either**: `0 objects` over a canvas that has not
  * mounted its document is a claim the product does not have. The
  * Add pane's count is the exception, and it proves the rule rather than
- * breaking it: `CARD_LIBRARY` is a module constant, so eight units is a reading
- * at every moment the pane exists, never a default standing in for one.
+ * breaking it: the installed units are the host's own list, so the count is a
+ * reading rather than a default standing in for one.
  */
 it("prints each pane's own count, and no count where a pane has no list", async () => {
   const root = document.createElement("div");
@@ -460,7 +465,9 @@ it("prints each pane's own count, and no count where a pane has no list", async 
     root.querySelector(`[data-yunari-panel="${pane}"] .editor-shell-pane-count`)
       ?.textContent ?? null;
 
-  expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
+  expect(countOf("add")).toBe(
+    uiCopy.paneCounts.units(activeWidgetUnits().length),
+  );
   expect(countOf("layers")).toBeNull();
   expect(countOf("assets")).toBeNull();
   expect(countOf("tokens")).toBeNull();
@@ -485,7 +492,9 @@ it("prints each pane's own count, and no count where a pane has no list", async 
   // The Tokens pane prints no title-bar total: its two libraries are separate
   // lists, and each section heading carries its own count.
   expect(countOf("tokens")).toBeNull();
-  expect(countOf("add")).toBe(uiCopy.paneCounts.units(CARD_LIBRARY.length));
+  expect(countOf("add")).toBe(
+    uiCopy.paneCounts.units(activeWidgetUnits().length),
+  );
   expect(countOf("document")).toBeNull();
   expect(countOf("assets")).toBeNull();
   // Two spans, not five: Tokens, Document and Assets print none.

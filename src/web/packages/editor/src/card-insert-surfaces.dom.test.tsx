@@ -37,8 +37,12 @@ import { createErrorManager } from "./error-manager/index.js";
 import { createBlankFabricTheme } from "./new-fabric-theme.js";
 import { createNewObjectPanel } from "./new-object-panel.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
+import { installStarterUnits } from "./testing/widget-units.js";
 import type { TextPlacementPort } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
+
+/** The starter CPU unit's label, as the installed pack declares it. */
+const CPU_LABEL = "CPU";
 
 // Base UI's popup needs two browser APIs jsdom has none of: floating-ui observes
 // its anchor, and the popup waits for its own open transition before reporting
@@ -71,6 +75,10 @@ beforeAll(() => {
  * this reads the real message rather than a stub's return value.
  */
 const told: string[] = [];
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
 
 /** The palette of `File > New`: ten tokens, none of them a device's colour. */
 const BLANK = createBlankFabricTheme(
@@ -215,7 +223,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
     );
 
     const cpu = [...panel.root.querySelectorAll("button")].find(
-      (button) => button.textContent === uiCopy.cardLibrary.cpu,
+      (button) => button.textContent === CPU_LABEL,
     );
     cpu?.click();
     await flush();
@@ -225,7 +233,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
     // sparkline are painted with the content token it does have. Naming the
     // substituted token is what makes that editable rather than surprising.
     expect(canvas.getObjects()).toHaveLength(1);
-    expect(told.join(" ")).toContain(uiCopy.cardLibrary.cpu);
+    expect(told.join(" ")).toContain(CPU_LABEL);
     expect(told.join(" ")).toContain("palette.cpu");
     session.destroy();
   });
@@ -252,7 +260,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
     );
     await flush();
 
-    const entry = menuItem(uiCopy.panels.cards, uiCopy.cardLibrary.cpu);
+    const entry = menuItem(uiCopy.panels.cards, CPU_LABEL);
     expect(entry).toBeDefined();
     entry?.click();
     await flush();

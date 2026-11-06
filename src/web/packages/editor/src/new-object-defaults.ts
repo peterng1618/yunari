@@ -22,6 +22,7 @@ import {
   SURFACE_TOKENS,
   surfacePaletteToken,
 } from "@yunari/theme-kit";
+import { BUILTIN_PATH_PRESETS, type PathPreset } from "@yunari/theme-package";
 import {
   Ellipse,
   type FabricObject,
@@ -30,7 +31,7 @@ import {
   Polygon,
   Rect,
 } from "fabric/es";
-import { type PathPresetPaint, userPathPreset } from "./path-presets.js";
+import { userPathPreset } from "./path-presets.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** Semantic defaults for a new object; generic construction remains editor-owned. */
@@ -111,7 +112,7 @@ export function newObjectName(
  *  chart family `newObjectName` resolves it to. */
 export function newShapeName(kind: ShapeInsertion): string {
   if (isPathPreset(kind)) {
-    if (kind.startsWith("user:")) {
+    if (kind.startsWith("user:") || kind.startsWith("pack:")) {
       return userPathPreset(kind)?.label ?? uiCopy.shapeKinds.path;
     }
     return uiCopy.pathPresets[kind as PathPresetId];
@@ -290,16 +291,23 @@ export type ShapeKind = (typeof SHAPE_KINDS)[number];
 /**
  * The custom shapes the Add pane offers, in the order it offers them. Each is a
  * preset of `Path`: a data string plus which property its paint belongs on.
+ * Both the ids and the rows come from `BUILTIN_PATH_PRESETS`, so a builtin the
+ * owner gains cannot be silently absent here.
  */
-export const PATH_PRESET_IDS = ["line", "arc", "wedge"] as const;
+export type PathPresetId = (typeof BUILTIN_PATH_PRESETS)[number]["id"];
 
-export type PathPresetId = (typeof PATH_PRESET_IDS)[number];
+export const PATH_PRESET_IDS: readonly PathPresetId[] =
+  BUILTIN_PATH_PRESETS.map((preset) => preset.id);
 
-/** A preset the author added in Settings. Its label and data live in the
- *  author's own list rather than in this module. */
+/** A preset the author added in Settings, or one an installed pack carries.
+ *  Its label and data live in the live list rather than in this module. */
 export type UserPathPresetId = `user:${string}`;
 
-export type CustomShapeId = PathPresetId | UserPathPresetId;
+/** A preset an installed pack carries. The prefix keeps one pack's ids from
+ *  colliding with another's or with the author's own rows. */
+export type PackPathPresetId = `pack:${string}`;
+
+export type CustomShapeId = PathPresetId | UserPathPresetId | PackPathPresetId;
 
 /** Everything that inserts a shape — a basic kind or a custom preset. */
 export type ShapeInsertion = ShapeKind | CustomShapeId;
@@ -308,7 +316,8 @@ export type ShapeInsertion = ShapeKind | CustomShapeId;
 export function isPathPreset(value: string): value is CustomShapeId {
   return (
     (PATH_PRESET_IDS as readonly string[]).includes(value) ||
-    value.startsWith("user:")
+    value.startsWith("user:") ||
+    value.startsWith("pack:")
   );
 }
 
@@ -401,38 +410,27 @@ export function cornersForSides(
  */
 const NEW_PATH = `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 4} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${(NEW_PANEL_SIZE.height * 3) / 4} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height} L 0 ${NEW_PANEL_SIZE.height / 2} Z`;
 
-/** The radius a custom arc and wedge are drawn at: the new-shape box's height,
- *  so the quarter turn fits the box's shorter side. */
-const PRESET_RADIUS = NEW_PANEL_SIZE.height;
-
-export interface PathPreset {
-  /** SVG path data, the same authored field a basic path edits. */
-  readonly data: string;
-  /** Which property the preset's paint belongs on. A line and an arc are open
-   *  curves, so their token is ink; a sector encloses a region, so it takes the
-   *  card surface. */
-  readonly paint: PathPresetPaint;
-}
-
 /**
  * The custom shapes, as data. **Nothing here is a class**: each preset
  * constructs Fabric's `Path`, whose SVG data is the only geometry a scene
  * stores, so a future custom shape is another entry rather than a type.
+ *
+ * The rows come from `BUILTIN_PATH_PRESETS`, the same owner the host stores and
+ * the Settings page read; this module only names which ids the Add pane offers.
  */
 export const PATH_PRESETS: Readonly<Record<PathPresetId, PathPreset>> = {
-  line: {
-    data: `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2}`,
-    paint: "stroke",
-  },
-  arc: {
-    data: `M ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS}`,
-    paint: "stroke",
-  },
-  wedge: {
-    data: `M 0 0 L ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS} Z`,
-    paint: "fill",
-  },
+  line: builtinPreset("line"),
+  arc: builtinPreset("arc"),
+  wedge: builtinPreset("wedge"),
 };
+
+function builtinPreset(id: PathPresetId): PathPreset {
+  const preset = BUILTIN_PATH_PRESETS.find((candidate) => candidate.id === id);
+  if (preset === undefined) {
+    throw new Error(`The built-in path preset "${id}" is missing.`);
+  }
+  return preset;
+}
 
 /**
  * Constructs one new shape.

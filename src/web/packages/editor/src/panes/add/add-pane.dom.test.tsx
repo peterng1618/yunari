@@ -12,9 +12,27 @@
  * it inserts, and no two units share one; a shape's is its kind and nothing
  * more.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
+import {
+  installStarterUnits,
+  installThermalUnit,
+  THERMAL_UNIT_ID,
+  THERMAL_UNIT_LABEL,
+} from "../../testing/widget-units.js";
 import { uiCopy } from "../../ui-copy.js";
+import { activeWidgetUnits } from "../../widget-packs.js";
+
+/** A unit's label, as the installed pack declares it. */
+function unitLabel(id: string): string {
+  const unit = activeWidgetUnits().find((candidate) => candidate.id === id);
+  if (unit === undefined) throw new Error(`no installed unit "${id}"`);
+  return unit.label;
+}
+
+beforeEach(async () => {
+  await installStarterUnits();
+});
 
 /** The CPU unit, whose label is the one the hard-coded-label red proof moves. */
 const CPU_CARD = "group-cpu-card";
@@ -148,9 +166,23 @@ describe("the Add pane's insert surface", () => {
   it("names a card unit with the library's own label, never a literal", () => {
     const { pane } = mount();
 
-    // Change `uiCopy.cardLibrary.cpu` and this fails: a tile that hard-codes
-    // "CPU" agrees with the copy until the copy moves.
-    expect(cardTile(pane, CPU_CARD).textContent).toBe(uiCopy.cardLibrary.cpu);
+    // Change the installed pack's label and this fails: a tile that hard-codes
+    // "CPU" agrees with the pack until the pack moves.
+    expect(cardTile(pane, CPU_CARD).textContent).toBe(unitLabel(CPU_CARD));
+  });
+
+  it("wears a label no build-time card word could have produced", async () => {
+    // "Thermal rig" comes from the installed pack, so no build-time card word
+    // could have drawn this tile.
+    await installThermalUnit();
+    const { pane } = mount();
+
+    expect(cardTile(pane, THERMAL_UNIT_ID).textContent).toBe(
+      THERMAL_UNIT_LABEL,
+    );
+    expect(cardTile(pane, THERMAL_UNIT_ID).getAttribute("aria-label")).toBe(
+      THERMAL_UNIT_LABEL,
+    );
   });
 
   it("draws a card unit and a primitive with the one icon vocabulary", () => {
@@ -201,11 +233,11 @@ describe("the Add pane's insert surface", () => {
     // whole name even though it also draws it. `aria-label` covers the
     // programmatic half; focus and hover cover the other two, and all three read
     // one string.
-    expect(tile.getAttribute("aria-label")).toBe(uiCopy.cardLibrary.trends);
+    expect(tile.getAttribute("aria-label")).toBe(unitLabel(TRENDS_CARD));
 
     tile.focus();
     expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
-      uiCopy.cardLibrary.trends,
+      unitLabel(TRENDS_CARD),
     );
     tile.blur();
     expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
@@ -218,7 +250,7 @@ describe("the Add pane's insert surface", () => {
       tile.dispatchEvent(new Event("pointerenter"));
       vi.advanceTimersByTime(600);
       expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
-        uiCopy.cardLibrary.trends,
+        unitLabel(TRENDS_CARD),
       );
     } finally {
       vi.useRealTimers();
@@ -279,6 +311,57 @@ describe("the Add pane's insert surface", () => {
     } finally {
       addSpy.mockRestore();
       removeSpy.mockRestore();
+    }
+  });
+
+  it("inserts a pack preset the host installed", async () => {
+    const { setActiveUserPathPresets } = await import("../../path-presets.js");
+    setActiveUserPathPresets([
+      {
+        id: "pack:pack-one:star",
+        label: "Pack star",
+        data: "M 0 0 L 10 0 L 5 10 Z",
+        paint: "fill",
+      },
+    ]);
+    const editor = editorStub();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const globals = {
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        background: {
+          name: "Background",
+          value: { kind: "solid", color: "black" },
+        },
+        panel: { name: "Panel", value: { kind: "solid", color: "black" } },
+        text: { name: "Text", value: { kind: "solid", color: "white" } },
+      },
+      typeTokens: {
+        body: { family: "Inter", weight: 500 },
+        heading: { family: "Inter", weight: 600 },
+        mono: { family: "Consolas, monospace", weight: 400 },
+      },
+    };
+    const panel = createNewObjectPanel(host, editor as never, globals as never);
+    try {
+      panel.root
+        .querySelector<HTMLButtonElement>(
+          '[data-yunari-panel-add="pack:pack-one:star"]',
+        )
+        ?.click();
+      expect(editor.errorManager.warn).not.toHaveBeenCalled();
+      const inserted = editor.canvas.add.mock.calls[0]?.[0] as {
+        readonly id?: string;
+        readonly type?: string;
+        get(property: string): unknown;
+      };
+      expect(inserted.type).toBe("path");
+      expect(inserted.get("name")).toBe("Pack star");
+      expect(inserted.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    } finally {
+      panel.destroy();
+      setActiveUserPathPresets([]);
     }
   });
 

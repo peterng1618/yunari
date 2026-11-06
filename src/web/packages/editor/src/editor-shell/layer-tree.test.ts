@@ -7,7 +7,7 @@ import {
   defaultLineSettings,
 } from "@yunari/renderer-core";
 import { reviveThemeEnvelope, YunariChart } from "@yunari/scene-fabric";
-import { CARD_LIBRARY, instantiateCard } from "@yunari/theme-kit";
+import { instantiateCard } from "@yunari/theme-kit";
 import {
   Ellipse,
   FabricImage,
@@ -20,9 +20,16 @@ import {
   Textbox,
   util,
 } from "fabric/es";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createNewFabricTheme } from "../new-fabric-theme.js";
+import { installStarterUnits } from "../testing/widget-units.js";
 import { uiCopy } from "../ui-copy.js";
+import { activeWidgetUnits } from "../widget-packs.js";
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
+
 import {
   BACKGROUND_LAYER_ID,
   backgroundRow,
@@ -846,7 +853,9 @@ describe("the starter theme", () => {
         ]),
     );
     expect(named).toEqual(
-      Object.fromEntries(CARD_LIBRARY.map((unit) => [unit.id, unit.label])),
+      Object.fromEntries(
+        activeWidgetUnits().map((unit) => [unit.id, unit.label]),
+      ),
     );
 
     // The two loose labels are not units and must not borrow one: their rows are
@@ -861,7 +870,9 @@ describe("the starter theme", () => {
   it("tells two copies of one unit apart, and neither loses its stamp", async () => {
     // Review Focus 4. Both cards come off the real copy path, so the pair they
     // share is the one a second insertion of the same unit actually writes.
-    const built = CARD_LIBRARY.find((unit) => unit.id === "group-cpu-card");
+    const built = activeWidgetUnits().find(
+      (unit) => unit.id === "group-cpu-card",
+    )?.unit;
     if (built === undefined) throw new Error("the library has no CPU unit");
     const globals = createNewFabricTheme().globals;
     const first = instantiateCard({
@@ -1033,7 +1044,7 @@ describe("the row's role, in the document's own terms", () => {
     const at = (id: string): LayerRole | undefined =>
       rows.find((row) => row.id === id)?.role;
     // Review Focus 2, and load-bearing since the starter gained stamps of its
-    // own: `cpu-card` names a unit no `CARD_LIBRARY` entry has, and the row
+    // own: `cpu-card` names a unit no installed pack carries, and the row
     // still says CPU. Resolving a name through the library would make a document
     // another version wrote read as one this build recognises. The unstamped
     // case is every group the author makes, which `Ctrl+G` writes with no stamp.

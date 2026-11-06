@@ -93,6 +93,11 @@ export {
   type PaletteReference,
   reassignObjectPaletteReferences,
 } from "./palette-references.js";
+export {
+  type PathPresetGeometry,
+  type PathPresetGeometryResult,
+  pathPresetGeometry,
+} from "./path-preset.js";
 export type { ReviveSceneOptions, SerialisedScene } from "./persist.js";
 export {
   assertFabricThemeEnvelopeCompatible,

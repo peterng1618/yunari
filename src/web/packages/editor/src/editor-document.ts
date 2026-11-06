@@ -1369,6 +1369,9 @@ export class EditorDocument {
         ? {}
         : { bindings: this.#envelope.bindings }),
       onBindings: (bindings) => this.addBindings(bindings),
+      // A packaged unit may declare pictures or faces; the copy's references
+      // are remapped onto the ids this document adopted.
+      assetManager: this.#assets,
     }).catch((error: unknown) => {
       this.#shell.editor.errorManager.warn(
         "controls",

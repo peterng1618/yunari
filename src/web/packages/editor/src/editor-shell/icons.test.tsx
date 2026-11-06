@@ -32,16 +32,18 @@ import { fileURLToPath } from "node:url";
 import type * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it } from "vitest";
 import { insertGroups } from "../new-object-panel.js";
 import { AddPane } from "../panes/add/add-pane.js";
 import { KindMark } from "../panes/composition/kind-mark.js";
 import { RowAffordances } from "../panes/composition/row-affordances.js";
+import { installStarterUnits } from "../testing/widget-units.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { DisplaySwitch } from "./display-switch.js";
 import {
   BACKGROUND_GLYPH,
+  CARD_UNIT_FALLBACK_GLYPH,
   CARD_UNIT_GLYPHS,
   CHART_BAR_GLYPH,
   CHART_GAUGE_GLYPH,
@@ -272,6 +274,9 @@ function Fleet(): React.JSX.Element {
 }
 
 const mounted: Root[] = [];
+beforeAll(async () => {
+  await installStarterUnits();
+});
 afterEach(async () => {
   while (mounted.length > 0) {
     const root = mounted.pop();
@@ -366,13 +371,14 @@ it("falls back to the image glyph for a category the build does not name", () =>
   expect(FINDER_TAB_FALLBACK_GLYPH).toBe(FINDER_TAB_GLYPHS.image);
 });
 
-it("gives every card unit its own glyph, so a mark identifies one unit", () => {
-  // The type closes the set at `CardDiagram`, so the count is also the library's
-  // eight; the distinctness is the rule a second keyed map cannot enforce — two
-  // units wearing one glyph would identify neither.
+it("gives every known card unit its own glyph, and an unknown id a fallback", () => {
+  // The map is open because the unit set is installed rather than shipped; the
+  // distinctness is still the rule a keyed map enforces for the units it knows,
+  // and the fallback must identify no known unit.
   const glyphs = Object.values(CARD_UNIT_GLYPHS);
   expect(glyphs).toHaveLength(8);
   expect(new Set(glyphs).size).toBe(8);
+  expect(glyphs).not.toContain(CARD_UNIT_FALLBACK_GLYPH);
 });
 
 it("draws every object the Add pane offers, so an insertable kind cannot arrive unmarked", () => {

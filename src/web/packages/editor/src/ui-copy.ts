@@ -15,8 +15,7 @@ import {
   type Orientation,
   type SemanticFamily,
 } from "@yunari/renderer-core";
-import { CARD_LABELS } from "@yunari/theme-kit";
-import type { VersionLevel } from "@yunari/theme-package";
+import { BUILTIN_PATH_PRESETS, type VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
 import type { InstallState } from "./store-mode/install-state.js";
@@ -98,6 +97,15 @@ const clipDuration = (milliseconds: number): string => {
   const total = Math.max(0, Math.round(milliseconds / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
+
+/**
+ * One label per built-in custom shape, derived from the same list the host
+ * stores and the editor's catalogue reads. A fourth builtin gains its word
+ * here without a second spelling, and the map stays total for a `PathPresetId`.
+ */
+const pathPresetLabels = Object.fromEntries(
+  BUILTIN_PATH_PRESETS.map((preset) => [preset.id, preset.label]),
+) as Record<(typeof BUILTIN_PATH_PRESETS)[number]["id"], string>;
 
 export const uiCopy = {
   brand: "Yunari",
@@ -272,8 +280,6 @@ export const uiCopy = {
     pathPresetDataRequired: "A custom shape needs path data.",
     pathPresetUnreadable: "That path data cannot be read.",
     pathPresetDrawsNothing: "That path data draws nothing.",
-    pathPresetsSessionOnly:
-      "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
     /** The Keyboard tab: the reference with editing. One word for one act —
      *  the arm button's `aria-label` and its tooltip are this string. */
     keyboardRebind: "Change chord",
@@ -2191,18 +2197,7 @@ export const uiCopy = {
   /** One label per custom shape. Each is a `Path` preset, so its name is a
    *  drawing rather than a class: "Horizontal line" says what the tile inserts,
    *  where "Line" would collide with the chart family. */
-  pathPresets: {
-    line: "Horizontal line",
-    arc: "Arc",
-    wedge: "Wedge",
-  },
-  /**
-   * What each card in the library is called, in the Add pane and on the copy an
-   * insertion leaves in the layer tree. Named for the reading rather than for
-   * where the card sits: two CPU cards are two CPU cards, and the id beside the
-   * name is what tells them apart.
-   */
-  cardLibrary: CARD_LABELS,
+  pathPresets: pathPresetLabels,
   /**
    * Artboard preset labels, shared by the inspector's controls and the
    * new-document chooser. A ratio labels itself; an orientation and a

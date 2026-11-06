@@ -24,13 +24,27 @@ The host also serves a settings page and a `/pair` page for displays.
 ## What it does
 
 - **Authoring.** Shapes, text, images/SVG, groups, layers, undo, snapping and
-  reusable card widgets on a Fabric canvas. Six chart families (gauge, line, bar,
-  pie, radar and polar bar), rich text and typography presets, paints and type
-  tokens, and a frosted-glass treatment for shapes. A theme's artboard is
-  rectangular or circular. A circular theme is a square artboard whose glass is
-  the disc inscribed in it: the four corners fall outside the glass and are
-  cropped on output. A rectangular theme shown on a round panel keeps its
-  artboard inscribed in the disc, corners on the ring.
+  reusable card widgets from the installed widget packs on a Fabric canvas. Six
+  chart families (gauge, line, bar, pie, radar and polar bar), rich text and
+  typography presets, paints and type tokens, and a frosted-glass treatment for
+  shapes. A theme's artboard is rectangular or circular. A circular theme is a
+  square artboard whose glass is the disc inscribed in it: the four corners fall
+  outside the glass and are cropped on output. A rectangular theme shown on a
+  round panel keeps its artboard inscribed in the disc, corners on the ring. A
+  new theme starts blank or from the bundled starter template; a selection can
+  be exported as a `yunari-widget-package`.
+- **Widget packs and path presets.** The host owns the installed widget packs
+  and the one path-preset list under its settings folder. The editor reads both
+  and the MCP server reads the same installed widget-pack rows, so neither keeps
+  an independent library once a browser's list has migrated. Widget packs keep the
+  `yunari-widget-package` container and add insertable units with their
+  bindings and assets; path-preset packs are `yunari-path-preset-pack` JSON v1.
+  Built-in path shapes stay bundled data, and a stored preset is `user:<id>` or
+  `pack:<packId>:<presetId>`. A browser's old preset list is migrated to the
+  host once and kept locally until the host accepts it. The starter theme and
+  the default widget pack are committed packages; no runtime generator builds
+  them. Installing a pack is a host API call in this phase: no import control
+  ships yet.
 - **Theme library and store.** Themes are local first. The editor can browse a
   Cloudflare-hosted catalogue, install a package, sign in to submit a theme and
   see its own submissions.
@@ -103,6 +117,10 @@ are not in this release.
 - **The previous major is the compatibility floor.** Schema `2.0.0` is current.
   The reader accepts major `2`; an older document with no migration, or any
   newer major, is refused rather than guessed at.
+- **Data packs are host state.** Installed widget packs and the path-preset
+  list live in the host's settings folder, and every surface that offers them
+  reads them through the host. A pack adds widgets or shapes; it never adds a
+  scene format or changes the schema.
 - **Local by default.** The host binds loopback. LAN exposure requires
   `--host 0.0.0.0`, and plain HTTP on the LAN has no confidentiality.
 - **Secure origin is mandatory for install and wake lock.** The host issues a

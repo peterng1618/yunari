@@ -1,8 +1,24 @@
+import { copyFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 /** Bundles the host for Node so the published package needs no workspace source tree. */
 export default defineConfig({
+  plugins: [
+    {
+      name: "copy-default-widget-pack",
+      /** `bundled-default-pack.ts` reads this beside `main.js`, so the archive
+       *  has to travel with the bundle rather than stay in `src/`. */
+      closeBundle() {
+        copyFileSync(
+          fileURLToPath(
+            new URL("./src/packs/default.widgets.zip", import.meta.url),
+          ),
+          fileURLToPath(new URL("./dist/default.widgets.zip", import.meta.url)),
+        );
+      },
+    },
+  ],
   resolve: {
     alias: {
       "@yunari/renderer-core": fileURLToPath(

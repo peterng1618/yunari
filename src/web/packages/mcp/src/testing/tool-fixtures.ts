@@ -1,4 +1,11 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CallToolResult } from "@modelcontextprotocol/server";
+import {
+  readWidgetPackage,
+  type WidgetPackSummary,
+} from "@yunari/theme-package";
 import { InMemoryDraftStore } from "../drafts.js";
 import { HttpHostClient } from "../host-client.js";
 import type { ToolContext } from "../types.js";
@@ -72,11 +79,49 @@ export const localDisplay = {
   rotation: 0,
 };
 
+/** The pack the app ships: the units every existing add_card case names. */
+const STARTER_PACK_ID = "yunari-default-widgets";
+const DEFAULT_PACK_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../host/src/packs/default.widgets.zip",
+);
+let starterPack: { readonly bytes: Uint8Array } | undefined;
+
+function starterPackOf(): {
+  readonly bytes: Uint8Array;
+  readonly summary: WidgetPackSummary;
+} {
+  starterPack ??= { bytes: new Uint8Array(readFileSync(DEFAULT_PACK_PATH)) };
+  const read = readWidgetPackage(starterPack.bytes);
+  if (!read.ok) throw new Error(read.message);
+  return {
+    bytes: starterPack.bytes,
+    summary: {
+      id: STARTER_PACK_ID,
+      name: read.name ?? STARTER_PACK_ID,
+      version: read.version,
+      units: read.units.map((unit) => ({ id: unit.id, label: unit.label })),
+    },
+  };
+}
+
 /** The routes every save/preview test needs, with the panel opt-in. */
 export function hostHandler(options: { readonly panel?: boolean } = {}) {
   const png = Buffer.from([137, 80, 78, 71]);
   return (request: { readonly method: string; readonly path: string }) => {
     const url = new URL(request.path, "http://127.0.0.1");
+    if (url.pathname === "/api/widget-packs" && request.method === "GET") {
+      return { body: { packs: [starterPackOf().summary] } };
+    }
+    if (
+      url.pathname === `/api/widget-packs/${STARTER_PACK_ID}` &&
+      request.method === "GET"
+    ) {
+      return {
+        headers: { "content-type": "application/zip" },
+        body: Buffer.from(starterPackOf().bytes),
+      };
+    }
     if (url.pathname === "/api/themes/active" && request.method === "GET") {
       return {
         body: {

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef } from "react";
 import { tooltip } from "../../editor-shell/controls/tooltip.js";
 import {
+  CARD_UNIT_FALLBACK_GLYPH,
   CARD_UNIT_GLYPHS,
   Glyph,
   KIND_GLYPHS,
@@ -23,8 +24,8 @@ import { PathGlyph } from "./path-glyph.js";
  *
  * **Every tile wears the chrome vocabulary's own glyph** (`icons.ts`), so there
  * is no second drawing anywhere for a tile and a row to drift apart in. A card
- * unit's glyph is keyed by the library's `CardDiagram` name (`CARD_UNIT_GLYPHS`);
- * a primitive's is its kind. A card on the canvas is still arbitrary, so nothing
+ * unit's glyph is keyed by its own id (`CARD_UNIT_GLYPHS`), with one fallback
+ * mark for an id this build does not know; a primitive's is its kind. A card on the canvas is still arbitrary, so nothing
  * here licenses a diagram in the layer tree.
  *
  * The element contracts the imperative panel carried are on the tile's own
@@ -136,7 +137,12 @@ function InsertTile({
 function tileMark(object: InsertableObject): React.JSX.Element {
   switch (object.kind) {
     case "card":
-      return <Glyph icon={CARD_UNIT_GLYPHS[object.diagram]} size={20} />;
+      return (
+        <Glyph
+          icon={CARD_UNIT_GLYPHS[object.diagram] ?? CARD_UNIT_FALLBACK_GLYPH}
+          size={20}
+        />
+      );
     case "shape":
       return object.path === undefined ? (
         <Glyph

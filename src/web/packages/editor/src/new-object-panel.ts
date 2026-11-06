@@ -3,7 +3,6 @@ import {
   type ChartFamily,
   type FabricGlobals,
 } from "@yunari/renderer-core";
-import { CARD_LIBRARY, type CardDiagram } from "@yunari/theme-kit";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -27,6 +26,7 @@ import {
 } from "./path-presets.js";
 import type { TextPlacement } from "./text-manager/index.js";
 import { uiCopy } from "./ui-copy.js";
+import { activeWidgetUnits, subscribeWidgetUnits } from "./widget-packs.js";
 
 export interface NewObjectPanel {
   readonly root: HTMLElement;
@@ -88,8 +88,9 @@ export type InsertableObject =
       readonly kind: "card";
       readonly label: string;
       readonly card: string;
-      /** Which mark the Add pane's tile draws, read from the unit. */
-      readonly diagram: CardDiagram;
+      /** Which mark the Add pane's tile draws. The unit's own id; the pane's
+       *  glyph map holds a fallback for an id it does not know. */
+      readonly diagram: string;
     };
 
 /** One heading's worth of them. A heading is what makes "Line" unambiguous. */
@@ -123,7 +124,7 @@ export interface InsertGroup {
 export function insertGroups(): readonly InsertGroup[] {
   const removed = activeRemovedPathPresetIds();
   const objects: readonly InsertableObject[] = [
-    ...CARD_LIBRARY.map((unit) => ({
+    ...activeWidgetUnits().map((unit) => ({
       kind: "card" as const,
       label: unit.label,
       card: unit.id,
@@ -245,11 +246,15 @@ export function insertNewShape(
   // name and an author never sees the id, which is exactly why a circle keyed
   // `panel-…` survived: nobody reading the screen sees it.
   //
-  // An author preset's id is `user:<uuid>`, and the colon is not in the
-  // envelope's object-id alphabet. The prefix is therefore the insertion's own
-  // safe word rather than the preset id; the preset still supplies the data and
-  // the display name.
-  const prefix = kind.startsWith("user:") ? "custom-shape" : kind;
+  // An author or pack preset's id carries colons (`user:<uuid>`,
+  // `pack:<packId>:<presetId>`), and the colon is not in the envelope's
+  // object-id alphabet. The prefix is therefore the insertion's own safe word
+  // rather than the preset id; the preset still supplies the data and the
+  // display name.
+  const prefix =
+    kind.startsWith("user:") || kind.startsWith("pack:")
+      ? "custom-shape"
+      : kind;
   const inserted = createNewShape(
     `${prefix}-${crypto.randomUUID()}`,
     globals,
@@ -397,6 +402,9 @@ export function createNewObjectPanel(
   // rebuilding the session.
   const unsubscribe = subscribeUserPathPresets(render);
   const unsubscribeRemoved = subscribeRemovedPathPresetIds(render);
+  // The host's pack list arrives after boot and changes on import or removal,
+  // so the pane follows it rather than rendering the list it was built with.
+  const unsubscribeUnits = subscribeWidgetUnits(render);
 
   return {
     root,
@@ -406,6 +414,7 @@ export function createNewObjectPanel(
     destroy() {
       unsubscribe();
       unsubscribeRemoved();
+      unsubscribeUnits();
       reactRoot.unmount();
       root.remove();
     },

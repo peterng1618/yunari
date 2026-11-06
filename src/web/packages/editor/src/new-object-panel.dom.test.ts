@@ -5,12 +5,17 @@ import {
   YUNARI_PAINT_PROPERTY,
   YUNARI_TEXT_PROPERTY,
 } from "@yunari/scene-fabric";
-import { CARD_LIBRARY } from "@yunari/theme-kit";
 import { Ellipse, Path, Polygon, Rect } from "fabric/es";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { PATH_PRESET_IDS, SHAPE_KINDS } from "./new-object-defaults.js";
 import { createNewObjectPanel, insertNewText } from "./new-object-panel.js";
+import { installStarterUnits } from "./testing/widget-units.js";
 import { uiCopy } from "./ui-copy.js";
+import { activeWidgetUnits } from "./widget-packs.js";
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
 
 /** The smallest globals an insertion needs: one palette token to paint with. */
 const GLOBALS = {
@@ -654,7 +659,7 @@ describe("the chooser offers units and primitives", () => {
     const shapes = buttonsIn(root, uiCopy.panels.shapes);
     const charts = buttonsIn(root, uiCopy.panels.charts);
 
-    expect(cards).toHaveLength(CARD_LIBRARY.length);
+    expect(cards).toHaveLength(activeWidgetUnits().length);
     expect(shapes).toHaveLength(SHAPE_KINDS.length);
     expect(charts).toHaveLength(CHART_FAMILIES.length);
     // Text stands on its own outside any fieldset, and is still offered.
@@ -692,7 +697,7 @@ describe("the chooser offers units and primitives", () => {
 
     buttonsIn(root, uiCopy.panels.cards)[0]?.click();
 
-    expect(insertCard).toHaveBeenCalledWith(CARD_LIBRARY[0]?.id);
+    expect(insertCard).toHaveBeenCalledWith(activeWidgetUnits()[0]?.id);
   });
 
   it("refuses a card button rather than doing nothing when there is no session", () => {
@@ -719,7 +724,7 @@ describe("the chooser offers units and primitives", () => {
 
     expect(
       buttonsIn(root, uiCopy.panels.cards).map((b) => b.textContent),
-    ).toEqual(CARD_LIBRARY.map((unit) => unit.label));
+    ).toEqual(activeWidgetUnits().map((unit) => unit.label));
   });
 });
 

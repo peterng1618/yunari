@@ -227,9 +227,7 @@ function Settings(props: {
                   {page.id === "previews" ? (
                     <PreviewsPage storage={props.storage} />
                   ) : null}
-                  {page.id === "path-presets" ? (
-                    <PathPresetsPage storage={props.storage} />
-                  ) : null}
+                  {page.id === "path-presets" ? <PathPresetsPage /> : null}
                   {page.id === "keyboard" ? (
                     <KeyboardPage
                       storage={props.storage}

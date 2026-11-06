@@ -24,9 +24,9 @@ the product version lives once in `src/web/package.json`.
 |---|---|---|
 | `@yunari/renderer-core` | Shared semantics: sample/theme types, protocol codecs, envelope validation and migration, scene planning | none |
 | `@yunari/scene-fabric` | Renders a scene plan onto Fabric; persistence and Fabric revival | renderer-core |
-| `@yunari/theme-package` | `.yunari-theme` ZIP read/write, validation, credits | renderer-core |
+| `@yunari/theme-package` | `.yunari-theme` ZIP read/write, widget and path-preset pack readers, validation, credits | renderer-core |
 | `@yunari/extension-api` | Pure extension ABI: plugin manifest, execution profiles, capabilities, host API table, capability gate, consent digest, package reader | theme-package |
-| `@yunari/theme-kit` | Pure, Node-safe theme authoring: cards, objects, tokens, starter themes; no DOM and no Fabric construction | renderer-core, scene-fabric, theme-package |
+| `@yunari/theme-kit` | Pure, Node-safe theme authoring: packaged widget units, objects and tokens; no DOM and no Fabric construction | renderer-core, scene-fabric, theme-package |
 | `@yunari/mcp` | stdio MCP server that designs themes against the loopback host; also owns `install`, `uninstall` and `status` | renderer-core, theme-kit, theme-package |
 | `@yunari/player` | Display-only bundle; live samples and theme rendering | renderer-core, scene-fabric |
 | `@yunari/editor` | Authoring shell, inspectors, panes, Fabric canvas | renderer-core, scene-fabric, theme-package; fake-source as a devDependency |
@@ -197,6 +197,47 @@ generic grid, and `customSources` rows from a declarative extension join the
 custom source provider. A declarative profile needs no consent; executable
 profiles are gated. No plugin code runs in this phase.
 
+## Data packs
+
+Widget packs and path presets are installable data, and the host owns what is
+installed. One widget pack is one directory under
+`settings/widget-packs/<packId>/package.zip`; the path-preset list is
+`settings/path-presets.json`. The editor reads both surfaces and the MCP server
+the widget packs, through the same loopback routes — `/api/widget-packs` and
+`/api/path-presets` — so no surface keeps an independent library once a
+browser's list has migrated. Both surfaces are
+loopback admin, and every write also refuses a foreign origin. Installing a
+pack is a host API call in this phase; no import control ships yet.
+
+- A widget pack keeps the `yunari-widget-package` container (`manifest.json`,
+  `widget.json`, declared assets) and adds unit derivation: the package's scene
+  is read as insertable units, each with its own bindings and assets. A package
+  is read before it is written, and the bytes are written to a temporary
+  directory and renamed into place, so an install is never half a pack. A unit
+  id is unique across installed packs; two packs claiming one is refused rather
+  than settled by listing order.
+- A path-preset pack is one JSON document: `format: "yunari-path-preset-pack"`,
+  `version: 1`, an id, a name and its presets. The reader is structural and
+  bounded; drawability and paint are the canvas geometry rule, applied before
+  anything is stored.
+- Built-in path presets stay bundled data in `BUILTIN_PATH_PRESETS`. The host
+  merges them ahead of the stored rows, minus the ids the author removed. A
+  stored row's id is `user:<id>` for one the author added and
+  `pack:<packId>:<presetId>` for one a pack carries, so neither can collide
+  with a built-in id.
+- The starter theme is a bundled `yunari-theme-package` committed at
+  `packages/editor/src/bundled/starter.theme.zip` and read once at boot. The
+  default widget pack is the bundled
+  `packages/host/src/packs/default.widgets.zip`. No runtime generator composes
+  either.
+- A browser's stored preset list is migration source only. At boot the editor
+  posts it once; the local rows are kept until the host accepts them and cleared
+  after, so a host that cannot be reached still has the only list that browser
+  knows.
+- Packs are not scene state. The theme envelope and its schema (`2.0.0`) are
+  unchanged, and Fabric JSON in the envelope remains the only persisted scene
+  model.
+
 ## Host serving and gates
 
 The host serves HTTP and HTTPS on the same port. HTTPS uses a locally issued
@@ -226,8 +267,10 @@ The default app folder is `%USERPROFILE%\.yunari` (`~/.yunari` elsewhere):
 
 - `themes/` — one directory per local theme.
 - `settings/` — host state: displays, devices, hosting preference, active theme,
-  credentials, provider settings, `tls/` (root certificate and encrypted root
-  key).
+- `settings/` — host state: displays, devices, hosting preference, active theme,
+  credentials, provider settings, installed widget packs (`widget-packs/`), the
+  path-preset list (`path-presets.json`), `tls/` (root certificate and encrypted
+  root key).
 - `settings/extensions/` — installed plugin trees, one directory per
   `local/<id>/<version>`, with `installed.json` as the live index.
 - `cache/` — downloaded media artwork and game metadata, beside `settings/`.

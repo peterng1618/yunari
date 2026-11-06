@@ -6,7 +6,7 @@ import type {
   FabricThemeEnvelope,
   ThemeMetadata,
 } from "@yunari/renderer-core";
-import type { ThemeCredits } from "@yunari/theme-package";
+import type { ThemeCredits, WidgetPackSummary } from "@yunari/theme-package";
 
 export type {
   AssetSearchAnswer,
@@ -15,6 +15,7 @@ export type {
   FabricThemeEnvelope,
   ThemeCredits,
   ThemeMetadata,
+  WidgetPackSummary,
 };
 
 /** The display kinds the host's active-theme map answers. */
@@ -185,6 +186,9 @@ export interface HostClient {
   }>;
   normalizeVideo(bytes: Uint8Array, trim?: VideoTrim): Promise<Uint8Array>;
   panelPreview(id: string, display: string, clip: boolean): Promise<Uint8Array>;
+  /** The packs the host has installed, and one pack's zip by id. */
+  listWidgetPacks(): Promise<readonly WidgetPackSummary[]>;
+  readWidgetPack(id: string): Promise<Uint8Array>;
 }
 
 /** A theme being authored in this process. Never persisted by a draft call. */

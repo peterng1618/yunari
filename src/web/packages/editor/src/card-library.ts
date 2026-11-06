@@ -1,14 +1,21 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
-import { visitSceneObjects } from "@yunari/scene-fabric";
 import {
-  CARD_LIBRARY,
-  type CardUnit,
+  isFabricAssetReference,
+  visitSceneObjects,
+  YUNARI_ASSET_PROPERTY,
+} from "@yunari/scene-fabric";
+import {
   instantiateCard,
+  type ObjectJson,
+  type PackagedAssetAdoption,
   type TokenSubstitution,
+  unitAssetDeclarations,
 } from "@yunari/theme-kit";
 import { type FabricObject, util } from "fabric/es";
+import type { AssetManager } from "./asset-manager/index.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { nextNewObjectPlacement } from "./new-object-defaults.js";
+import { activeWidgetUnits, type InstalledWidgetUnit } from "./widget-packs.js";
 
 /**
  * The card library's editor half: inserting one unit onto the live canvas.
@@ -50,9 +57,25 @@ export async function insertCard(
     readonly onBindings: (
       bindings: Readonly<Record<string, readonly Binding[]>>,
     ) => void;
+    /**
+     * Adopts a packaged unit's declared assets before its copy is built. The
+     * manager owns ids, paths and collision renames, so the copy is handed its
+     * map rather than resolving bytes itself.
+     */
+    readonly assetManager?: Pick<
+      AssetManager,
+      | "planPackaged"
+      | "commitPackaged"
+      | "captureAssetState"
+      | "restoreAssetState"
+      | "previewUrl"
+    >;
   },
 ): Promise<FabricObject> {
-  const unit = cardUnit(cardId);
+  const installed = installedUnit(cardId);
+  const manager = options.assetManager;
+  const adopted = await adoptedAssets(installed, manager);
+  const unit = installed.unit;
   const copy = instantiateCard({
     unit,
     globals: options.globals,
@@ -60,6 +83,7 @@ export async function insertCard(
     existingBindingIds: Object.values(options.bindings ?? {}).flatMap(
       (bindings) => bindings.map((binding) => binding.id),
     ),
+    ...(adopted === undefined ? {} : { assetIds: adopted.assetIds }),
     // The one place a new object's position is decided — the same cascade every
     // other insertion takes, rather than a corner this module invented.
     origin: nextNewObjectPlacement(editor),
@@ -72,9 +96,40 @@ export async function insertCard(
     throw new Error(unresolved.map((issue) => issue.detail).join(" "));
   }
 
-  const [object] = await util.enlivenObjects<FabricObject>([copy.card]);
-  if (object === undefined) {
-    throw new Error(`The ${unit.label} card could not be built.`);
+  // The copy can be built, so the package's declarations and bytes may land.
+  // Adopting before this point would leave an orphan on a refused insert.
+  const before =
+    adopted !== undefined && manager !== undefined
+      ? manager.captureAssetState()
+      : undefined;
+  if (adopted !== undefined && manager !== undefined) {
+    manager.commitPackaged(adopted);
+  }
+
+  // The preview URL resolves through the manager, so the adoption has to be in
+  // place first. It is undone if revival discovers, say, an object type this
+  // build does not register — the validator only requires a non-empty string.
+  let object: FabricObject;
+  try {
+    // Fabric enlivens an image from `src` alone, and a persisted asset
+    // reference carries none: without this the copy paints blank until a
+    // reload hydrates it. Set on the plain object, before enlivening.
+    const card =
+      manager === undefined
+        ? copy.card
+        : withPreviewSources(copy.card, unit.label, (assetId) =>
+            manager.previewUrl(assetId),
+          );
+    const [revived] = await util.enlivenObjects<FabricObject>([card]);
+    if (revived === undefined) {
+      throw new Error(`The ${unit.label} card could not be built.`);
+    }
+    object = revived;
+  } catch (error) {
+    if (before !== undefined && manager !== undefined) {
+      manager.restoreAssetState(before);
+    }
+    throw error;
   }
 
   // Added before its readings are recorded: every pass that resolves them walks
@@ -119,12 +174,81 @@ function reportSubstitutions(
   );
 }
 
-function cardUnit(cardId: string): CardUnit {
-  const unit = CARD_LIBRARY.find((candidate) => candidate.id === cardId);
+/** The unit an insertion names, from the packs the host has installed. */
+function installedUnit(cardId: string): InstalledWidgetUnit {
+  const unit = activeWidgetUnits().find((candidate) => candidate.id === cardId);
   if (unit === undefined) {
-    throw new Error(`There is no "${cardId}" card in the library.`);
+    throw new Error(`There is no "${cardId}" card installed.`);
   }
   return unit;
+}
+
+/** Plans the unit's scene assets, refusing a surface that cannot carry them.
+ *
+ * **Only what the unit's own subtree names is adopted**, through the one
+ * selector the MCP server also uses. A unit document also carries its globals'
+ * font faces, which a card may not draw; adopting those would leave an orphan
+ * declaration behind on every copy. */
+async function adoptedAssets(
+  installed: InstalledWidgetUnit,
+  manager: Pick<AssetManager, "planPackaged"> | undefined,
+): Promise<PackagedAssetAdoption | undefined> {
+  const declarations = unitAssetDeclarations(
+    installed.unit,
+    installed.declarations,
+  );
+  if (declarations.length === 0) return undefined;
+  if (manager === undefined) {
+    throw new Error(
+      `The ${installed.label} card carries packaged assets, and this surface cannot adopt them.`,
+    );
+  }
+  const assets: Record<string, Uint8Array> = {};
+  for (const declaration of declarations) {
+    const bytes = installed.assets[declaration.path];
+    if (bytes !== undefined) assets[declaration.path] = bytes;
+  }
+  return await manager.planPackaged(declarations, assets);
+}
+
+/**
+ * The copy with every asset-bearing node pointed at its adopted preview URL.
+ *
+ * A reference may sit at any depth, so the walk descends through groups. A
+ * missing URL is a refusal, not a blank picture: an image nothing can decode
+ * would look inserted and never paint.
+ */
+function withPreviewSources(
+  object: ObjectJson,
+  label: string,
+  previewUrl: (assetId: string) => string | undefined,
+): ObjectJson {
+  const reference = object[YUNARI_ASSET_PROPERTY];
+  const asset = isFabricAssetReference(reference) ? reference : undefined;
+  const src = asset === undefined ? undefined : previewUrl(asset.assetId);
+  if (asset !== undefined && src === undefined) {
+    throw new Error(
+      `The ${label} card's asset "${asset.assetId}" has no preview to show.`,
+    );
+  }
+  const children = object["objects"];
+  return {
+    ...object,
+    ...(src === undefined ? {} : { src }),
+    ...(Array.isArray(children)
+      ? {
+          objects: children.map((child) =>
+            isRecord(child)
+              ? withPreviewSources(child, label, previewUrl)
+              : child,
+          ),
+        }
+      : {}),
+  };
+}
+
+function isRecord(value: unknown): value is ObjectJson {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Every id the canvas already holds, descending into groups. */

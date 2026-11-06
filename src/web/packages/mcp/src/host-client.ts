@@ -12,6 +12,7 @@ import type {
   ThemeSummary,
   VideoTrim,
   WallpaperListing,
+  WidgetPackSummary,
 } from "./types.js";
 
 /** The ports a host started without an explicit URL is probed on, in order. */
@@ -378,6 +379,28 @@ export class HttpHostClient implements HostClient {
     );
     return new Uint8Array(await response.arrayBuffer());
   }
+
+  async listWidgetPacks(): Promise<readonly WidgetPackSummary[]> {
+    const body = await this.json<unknown>("/api/widget-packs");
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body) ||
+      !Array.isArray((body as { readonly packs?: unknown }).packs)
+    ) {
+      // An unreadable listing is not an empty library: reporting "nothing
+      // installed" would hide every unit behind a host that answered garbage.
+      throw new Error("The Yunari host did not answer a widget-pack listing.");
+    }
+    return (body as { readonly packs: readonly WidgetPackSummary[] }).packs;
+  }
+
+  async readWidgetPack(id: string): Promise<Uint8Array> {
+    const response = await this.request(
+      `/api/widget-packs/${encodeURIComponent(id)}`,
+    );
+    return new Uint8Array(await response.arrayBuffer());
+  }
 }
 
 /**
@@ -496,5 +519,13 @@ export class LazyHostClient implements HostClient {
     clip: boolean,
   ): Promise<Uint8Array> {
     return await (await this.client()).panelPreview(id, display, clip);
+  }
+
+  async listWidgetPacks(): Promise<readonly WidgetPackSummary[]> {
+    return await (await this.client()).listWidgetPacks();
+  }
+
+  async readWidgetPack(id: string): Promise<Uint8Array> {
+    return await (await this.client()).readWidgetPack(id);
   }
 }

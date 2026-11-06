@@ -3,11 +3,9 @@ import {
   artboardSolidColor,
   type FabricPalette,
   isArtboardGradient,
-  type WidgetProvenance,
 } from "@yunari/renderer-core";
 import {
   charSpacingPx,
-  frost,
   STARTER_LINE_HEIGHT,
   type StarterTypeRole,
   starterPalette,
@@ -75,146 +73,6 @@ export type ObjectJson = Readonly<Record<string, unknown>>;
 
 // Authored positions are artboard top-left coordinates, never Fabric's centred defaults.
 const positioned = { originX: "left", originY: "top" } as const;
-function rect(
-  id: string,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-  fill: unknown,
-  radius: number,
-  interaction: ObjectJson = positioned,
-  token?: string,
-): ObjectJson {
-  return {
-    type: "Rect",
-    id,
-    // The id is already a readable label and the layer list falls back to it,
-    // so promoting it here is what turns the fallback into authored state.
-    name: id,
-    left,
-    top,
-    width,
-    height,
-    fill,
-    rx: radius,
-    ry: radius,
-    yunariPaint: { fill: `palette.${token ?? "panel"}` },
-    ...interaction,
-  };
-}
-
-/**
- * The card, and the only place that says a panel is made of glass.
- *
- * The box and the outline are the starter theme's own: its card border occupies
- * two pixels and first appears ten pixels in from the top-left corner on both
- * axes. The outline token is already the right value — a translucent cool line
- * of that alpha composites to about that border.
- *
- * The fill is `frost` and the treatment is what makes the panel transmit what
- * is behind it, because at `panel`'s 85 % alpha a blur is a blur of nothing.
- * The authored radius is the one the theme's cards share, and it is inside both
- * the published bound of 48 and the theme's flat-blur band (0-64 px).
- */
-const FROST_RADIUS = 40;
-
-export function frostedCard(
-  id: string,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-): ObjectJson {
-  return {
-    ...rect(id, left, top, width, height, frost, 10),
-    stroke: "#9fc7e52b",
-    strokeWidth: 2,
-    yunariPaint: { fill: "palette.frost", stroke: "palette.panelStroke" },
-    yunariGlass: { blurRadius: FROST_RADIUS },
-  };
-}
-
-/**
- * A card as one Fabric group: the frosted panel and the parts that sit on it.
- *
- * Fabric puts a child's `left`/`top` in its parent's plane and composes the
- * parent's transform on top (§57), so a part authored in artboard coordinates
- * has to be measured from the group's own centre before it goes in. Wrapping
- * without that step double-applies the group the first time the card moves,
- * and again the first time it is inserted from the card library — which is the
- * whole reason a card is a group rather than a naming convention.
- *
- * The panel's box is the group's box: the frosted rectangle *is* the card, and
- * reading it from there is what keeps the two from being stated twice and
- * drifting apart.
- *
- * The card's own identity is stamped on the group and nowhere else: the unit's
- * word arrives as a parameter so its one owner stays `CARD_LABELS` in
- * `cards.ts` (which the editor's `uiCopy.cardLibrary` aliases), and
- * `provenance` is the document's own authored key for it — the same pair a copy
- * carries (`card-library.ts` `instantiateCard`), written where the card's other
- * authored state is written.
- */
-export function cardGroup(
-  id: string,
-  unit: string,
-  panel: ObjectJson,
-  parts: readonly ObjectJson[],
-): ObjectJson {
-  const left = authored(panel, "left");
-  const top = authored(panel, "top");
-  const width = authored(panel, "width");
-  const height = authored(panel, "height");
-  const centre = { x: left + width / 2, y: top + height / 2 };
-  const provenance: WidgetProvenance = { widgetId: id, widgetName: unit };
-  return {
-    type: "Group",
-    id,
-    name: id,
-    provenance,
-    left,
-    top,
-    width,
-    height,
-    // The same top-left anchoring every other object here uses, so the group's
-    // own `left`/`top` in the document are the card's measured corner.
-    ...positioned,
-    objects: [panel, ...parts].map((part) => toGroupPlane(part, centre)),
-  };
-}
-
-/** One authored number, or a refusal: a card part with no box has no place. */
-function authored(
-  object: ObjectJson,
-  key: "left" | "top" | "width" | "height",
-): number {
-  const value = object[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(
-      `Card part "${String(object["id"])}" has no authored ${key}.`,
-    );
-  }
-  return value;
-}
-
-/**
- * A part's position measured from the group's centre.
- *
- * The same subtraction for every part whatever its own `originX`/`originY`,
- * because Fabric resolves an origin against the box on both sides of the
- * move — the offset cancels and only the anchor point travels.
- */
-function toGroupPlane(
-  part: ObjectJson,
-  centre: { readonly x: number; readonly y: number },
-): ObjectJson {
-  return {
-    ...part,
-    left: authored(part, "left") - centre.x,
-    top: authored(part, "top") - centre.y,
-  };
-}
 
 /** One run's palette token and size; the type token defaults from its size. */
 export interface Run {
