@@ -78,16 +78,16 @@ Searched:
   `https://developer.chrome.com/docs/extensions/reference/permissions`.
 - Node `fs.rename` and `fsync`: `https://nodejs.org/api/fs.html`.
 
-Found: the spec is the parity target. VS Code records `engines` and
-`activationEvents` as declared metadata and refuses an unknown contribution
-point, but its key is a bare marketplace id and it has no content-binding
-digest. Chrome refuses an unknown permission at load and gates API access at
-call time, but its key is the extension id from the store and its manifest is
-versioned by Chrome's own engine, not a separate `pluginApi` major. Neither
-supplies Yunari's qualified plugin key (store account plus id), its binding
-digest over the install tree, or host-mediated execution for a trusted worker.
-Node's rename/fsync underpin the atomic consent store but carry no plugin
-semantics.
+Found: the spec is the parity target. VS Code and Chrome both tolerate what
+they do not understand — an unknown contribution point is warned about and the
+extension still loads, and an unrecognised permission or manifest key is warned
+about and ignored. They invalidate only what they depend on, so an unknown key
+does not stop the extension. Neither supplies Yunari's qualified plugin key
+(store account plus id), its binding digest over the install tree, or
+host-mediated execution for a trusted worker. Yunari instead refuses unknown
+manifest keys, unknown capabilities and unknown contribution points at the
+boundary, which is this note's decision. Node's rename/fsync underpin the atomic
+consent store but carry no plugin semantics.
 
 ## Rung 5 — integration comparison
 
