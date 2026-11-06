@@ -95,11 +95,37 @@ plugin loading. The fingerprint is a binding digest, not a signature. Local
 installs use publisher `local`; `yunari`, `official` and `yunari`-prefixed names
 are reserved. Extension management is available on this PC only.
 
-Today an extension is installed from a package on this PC; the store does not
-yet carry plugin items. Declarative asset categories and custom sources take
+Today an extension is installed from a package on this PC or from the store's
+`plugin` kind. Declarative asset categories and custom sources take
 effect without editor code, and a declarative plugin records no consent. No
 plugin code runs yet: executable providers, sandboxed UI and USB panel drivers
 are not in this release.
+
+## Store distribution
+
+The store carries five kinds: `dashboard-theme`, `editor-theme`,
+`widget-pack`, `path-preset-pack` and `plugin`. All five share one listing and
+one version ladder; a package's bytes are validated by the store when the
+version is finalized and again by the host after download.
+
+The publisher is the store account's slug, derived from the account when an item
+is first submitted. A manifest's own `publisher` field is ignored, and reserved
+slugs — `yunari`, `official` and anything starting with `yunari` — cannot be
+claimed. A hardware plugin, one contributing a panel family or asking for
+`usb:device` or `serial:device`, is submitted as `pending` and published only by
+an owner verdict.
+
+An install downloads only over https from the configured store origin, verifies
+the store's exact size and SHA-256, and then hands the bytes to the kind's own
+owner. Its refusals are staged as `address`, `download`, `integrity`, `package`
+or `store`; a plugin install also reports whether the package's execution
+profile requires consent. An update that adds a capability, contribution,
+device, execution profile or store publisher is held for the owner's review
+instead of installing.
+
+`GET /kill-list.json` is the store's revoke list. The host caches the last good
+list and checks it before consent, so a revoked plugin does not load whatever its
+grant says; a failed fetch keeps the cached list and no cache kills nothing.
 
 ## Product rules
 
