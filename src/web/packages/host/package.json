@@ -22,6 +22,7 @@
     "vendor:weather-icons": "node ./scripts/vendor-weather-icons.mjs"
   },
   "dependencies": {
+    "@yunari/extension-api": "*",
     "@yunari/renderer-core": "*",
     "@yunari/scene-fabric": "*",
     "@yunari/theme-kit": "*",
