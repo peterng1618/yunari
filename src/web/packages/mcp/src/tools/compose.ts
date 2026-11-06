@@ -23,6 +23,7 @@ import {
   type SceneStackMove,
   setBindings,
   starterIcons,
+  unitAssetDeclarations,
   updateSceneObject,
 } from "@yunari/theme-kit";
 import {
@@ -193,9 +194,17 @@ export async function addCard(
 
     // Pure: every declaration is verified before anything is returned, and the
     // draft is not touched until the copy has been built on the next envelope.
+    // Only what the unit's own subtree draws is adopted; the rest of the
+    // package's declarations are globals faces a copy cannot reference.
     const adopted = await adoptPackagedAssets(
       { declarations: existing, assets: draft.assets },
-      { declarations: installed.declarations, assets: installed.assets },
+      {
+        declarations: unitAssetDeclarations(
+          installed.unit,
+          installed.declarations,
+        ),
+        assets: installed.assets,
+      },
     );
     const next = { ...draft.envelope, assets: adopted.declarations };
     const copy = instantiateCard({

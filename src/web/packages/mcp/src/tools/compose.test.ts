@@ -1,4 +1,8 @@
-import type { AssetReference, Binding } from "@yunari/renderer-core";
+import type {
+  AssetReference,
+  Binding,
+  FontAssetReference,
+} from "@yunari/renderer-core";
 import {
   addImageObject,
   createBlankTheme,
@@ -151,6 +155,48 @@ function twoImageUnit(
   };
 }
 
+/**
+ * A pack whose unit draws one picture, beside a body face its globals name but
+ * the unit's own subtree never references. The face survives unit derivation
+ * because a unit document keeps the globals it was authored against.
+ */
+function packWithFace(unit: FixtureUnit): Uint8Array {
+  const { artboard: _artboard, ...document } = createBlankTheme({
+    artboard: { width: 1, height: 1 },
+  });
+  const globals = document.globals as Record<string, unknown>;
+  const face: FontAssetReference = {
+    id: "package-face",
+    kind: "font",
+    path: "assets/face.woff2",
+    sha256: PNG_SHA,
+    family: "Inter",
+    weight: 400,
+    style: "normal",
+    format: "woff2",
+  };
+  const written = writeWidgetPackage({
+    document: {
+      ...document,
+      scene: { version: "7.4.0", objects: unit.objects },
+      bindings: unit.bindings ?? {},
+      globals: {
+        ...globals,
+        typeTokens: {
+          ...(globals["typeTokens"] as Record<string, unknown>),
+          body: { family: "Inter", face: { assetId: face.id } },
+        },
+      },
+      assets: [...(unit.declarations ?? []), face],
+    },
+    // The face's bytes are the picture's, so the digest the fixture declares
+    // verifies whether or not the face is the declaration under test.
+    assets: { ...(unit.assets ?? {}), "assets/face.woff2": PNG_BYTES },
+  });
+  if (!written.ok) throw new Error(written.message);
+  return written.bytes;
+}
+
 function summaryOf(id: string, bytes: Uint8Array): WidgetPackSummary {
   const read = readWidgetPackage(bytes);
   if (!read.ok) throw new Error(read.message);
@@ -278,6 +324,32 @@ describe("add_card", () => {
     });
     expect(new Set(references).size).toBe(2);
     expect(ctx.drafts.current().assets["assets/pack-2.png"]).toEqual(PNG_BYTES);
+  });
+
+  it("adopts only the declaration the inserted unit draws, not its globals face", async () => {
+    const declaration: AssetReference = {
+      id: "pack-image",
+      kind: "image",
+      path: "assets/pack.png",
+      sha256: PNG_SHA,
+    };
+    const unit = imageUnit("picture", [declaration], {
+      "assets/pack.png": PNG_BYTES,
+    });
+    const ctx = context(
+      await packHost([{ id: PACK_ID, bytes: packWithFace(unit) }]),
+    );
+    await createTheme(ctx, { name: "Mine", width: 800, height: 480 });
+
+    await addCard(ctx, { unit: "picture", left: 0, top: 0 });
+
+    const declared = ctx.drafts.current().envelope.assets ?? [];
+    expect(declared.map((asset) => asset.path)).toEqual(["assets/pack.png"]);
+    // Bytes are written only for what was adopted: the face's copy would be an
+    // orphan nothing in the scene draws.
+    expect(Object.keys(ctx.drafts.current().assets)).toEqual([
+      "assets/pack.png",
+    ]);
   });
 
   it("refuses bytes that disagree with the digest and leaves the draft untouched", async () => {

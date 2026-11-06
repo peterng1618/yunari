@@ -1,4 +1,5 @@
 import type { AssetReference } from "@yunari/renderer-core";
+import { YUNARI_ASSET_PROPERTY } from "@yunari/scene-fabric";
 import type { WidgetPackageResult, WidgetUnit } from "@yunari/theme-package";
 import type { CardUnit } from "./card-library.js";
 import type { ObjectJson } from "./objects.js";
@@ -91,6 +92,44 @@ export function cardUnitFromWidget(unit: WidgetUnit): CardUnit {
       ? {}
       : { bindings: unit.document.bindings }),
   };
+}
+
+/**
+ * The declarations a unit's authored subtree actually draws.
+ *
+ * A unit document also carries the font faces its globals name, which a copy
+ * can never reference: an insertion keeps the destination theme's globals, not
+ * the package's. Adopting those would leave an orphan declaration and its bytes
+ * in the document on every insert, so both surfaces select through here rather
+ * than each keeping a private copy of the walk.
+ */
+export function unitAssetDeclarations(
+  unit: CardUnit,
+  declarations: readonly AssetReference[],
+): readonly AssetReference[] {
+  const referenced = sceneAssetIds(unit.build());
+  return declarations.filter((declaration) => referenced.has(declaration.id));
+}
+
+/** Every asset id the authored subtree references through `yunariAsset`. */
+function sceneAssetIds(value: ObjectJson): Set<string> {
+  const ids = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (typeof node !== "object" || node === null) return;
+    const record = node as Readonly<Record<string, unknown>>;
+    const asset = record[YUNARI_ASSET_PROPERTY];
+    if (typeof asset === "object" && asset !== null) {
+      const id = (asset as Readonly<Record<string, unknown>>)["assetId"];
+      if (typeof id === "string") ids.add(id);
+    }
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(value);
+  return ids;
 }
 
 function isRecord(value: unknown): value is ObjectJson {
