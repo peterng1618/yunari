@@ -38,6 +38,15 @@ function sourceOf(
   };
 }
 
+/** A row as a plugin contribution would hand it to the provider. */
+function pluginSource(): CustomSource {
+  return sourceOf({
+    id: "acme.weather",
+    name: "Acme weather",
+    fields: [fieldOf({ id: "temp" })],
+  });
+}
+
 function storeOf(
   file: SourceFile = { sources: [], issues: [] },
 ): SourceStore & { set(next: SourceFile): void } {
@@ -250,6 +259,58 @@ describe("CustomSourceProvider", () => {
       valueKind: "boolean",
       tier: "extended",
     });
+  });
+
+  it("merges a plugin custom source after the user rows", async () => {
+    const store = storeOf({
+      sources: [sourceOf({ id: "local", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      extraSources: () => [pluginSource()],
+    });
+    await provider.reload();
+
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "local",
+      "acme.weather",
+    ]);
+  });
+
+  it("skips a duplicate plugin id so the user row wins", async () => {
+    const store = storeOf({
+      sources: [
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "user" })],
+        }),
+      ],
+      issues: [],
+    });
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      extraSources: () => [
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "plugin" })],
+        }),
+        sourceOf({
+          id: "acme.weather",
+          fields: [fieldOf({ id: "later" })],
+        }),
+      ],
+    });
+    await provider.reload();
+
+    expect(provider.status().map((row) => row.sourceId)).toEqual([
+      "acme.weather",
+    ]);
+    expect(
+      (await provider.describe()).map((entry) => entry.semanticKey),
+    ).toEqual(["custom.acme.weather.user"]);
   });
 
   it("waits for a first reading when the catalogue asks for one", async () => {

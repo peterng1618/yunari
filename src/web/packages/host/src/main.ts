@@ -59,7 +59,11 @@ import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
 import { KeyProtectorUnavailable } from "./settings/secret-store.js";
-import { createSourceStore } from "./settings/sources.js";
+import {
+  type CustomSource,
+  createSourceStore,
+  readCustomSource,
+} from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
@@ -205,9 +209,34 @@ export async function run(argv: readonly string[]): Promise<number> {
   // reads and writes them through the host's loopback routes, which report a
   // malformed entry rather than starting the host silently.
   const customSources = createSourceStore(settingsDir);
+  // Plugins may declare custom sources. The service is created here, before the
+  // provider, so `extraSources` can read the installed list on every reload.
+  const extensions = createExtensionService({
+    installer: createPluginInstaller(path.join(settingsDir, "extensions")),
+    consent: createConsentStore(settingsDir),
+    now: () => new Date().toISOString(),
+  });
+  let pluginSources: readonly CustomSource[] = [];
+  const refreshPluginSources = async (): Promise<void> => {
+    try {
+      const rows: CustomSource[] = [];
+      for (const extension of await extensions.list()) {
+        for (const raw of extension.contributions.customSources ?? []) {
+          const read = readCustomSource(raw);
+          // A malformed contribution costs its own row, never the host.
+          if (read.ok) rows.push(read.source);
+        }
+      }
+      pluginSources = rows;
+    } catch {
+      pluginSources = [];
+    }
+  };
+  await refreshPluginSources();
   const customProvider = new CustomSourceProvider({
     sources: customSources,
     credentials,
+    extraSources: () => pluginSources,
   });
   await customProvider.reload();
   // Weather's place, backend and cadence are this PC's own settings, and the
@@ -451,11 +480,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     themeStore,
     // Local plugin trees live beside the settings that admit them; the consent
     // file records the grants, and the browser only ever sees the listed shape.
-    extensions: createExtensionService({
-      installer: createPluginInstaller(path.join(settingsDir, "extensions")),
-      consent: createConsentStore(settingsDir),
-      now: () => new Date().toISOString(),
-    }),
+    extensions,
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open. The scan
     // is cached beside the other disposable host data so a rebuild does not

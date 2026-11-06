@@ -26,6 +26,14 @@ export interface CustomField {
   readonly expectedTier?: SensorTier;
 }
 
+export interface CustomSourcePaging {
+  readonly pageParam: string;
+  readonly firstPage: number;
+  readonly maxPages: number;
+  /** A JSON pointer to the array on each page, merged before field pointers run. */
+  readonly itemsPath?: string;
+}
+
 export interface CustomSource {
   readonly id: string;
   readonly name: string;
@@ -40,6 +48,7 @@ export interface CustomSource {
     readonly headerName?: string;
     readonly queryName?: string;
   };
+  readonly paging?: CustomSourcePaging;
   readonly fields: readonly CustomField[];
 }
 
@@ -103,7 +112,15 @@ const SOURCE_KEYS: ReadonlySet<string> = new Set([
   "intervalMs",
   "timeoutMs",
   "auth",
+  "paging",
   "fields",
+]);
+
+const PAGING_KEYS: ReadonlySet<string> = new Set([
+  "pageParam",
+  "firstPage",
+  "maxPages",
+  "itemsPath",
 ]);
 
 const FIELD_KEYS: ReadonlySet<string> = new Set([
@@ -351,7 +368,71 @@ function asField(
   };
 }
 
+function asPaging(value: unknown, owner: string): Checked<CustomSourcePaging> {
+  if (!isObject(value)) return fail(`${owner} paging must be an object`);
+
+  const unknown = unknownKey(value, PAGING_KEYS, `${owner} paging`);
+  if (unknown !== undefined) return fail(unknown);
+
+  const pageParam = value.pageParam;
+  if (typeof pageParam !== "string" || pageParam === "") {
+    return fail(`${owner} paging.pageParam must be a non-empty string`);
+  }
+
+  const firstPage = value.firstPage;
+  if (typeof firstPage !== "number" || !Number.isInteger(firstPage)) {
+    return fail(`${owner} paging.firstPage must be an integer`);
+  }
+
+  const maxPages = value.maxPages;
+  if (
+    typeof maxPages !== "number" ||
+    !Number.isInteger(maxPages) ||
+    maxPages < 1 ||
+    maxPages > 10
+  ) {
+    return fail("A custom source may fetch at most 10 pages.");
+  }
+
+  const itemsPath = value.itemsPath;
+  if (itemsPath !== undefined && typeof itemsPath !== "string") {
+    return fail(`${owner} paging.itemsPath must be a string`);
+  }
+
+  return {
+    ok: true,
+    value: {
+      pageParam,
+      firstPage,
+      maxPages,
+      ...(itemsPath === undefined ? {} : { itemsPath }),
+    },
+  };
+}
+
+/** Delegates to the one public validator, so the store and a plugin row refuse
+ *  exactly the same input. */
 function asSource(value: unknown): Checked<CustomSource> {
+  const read = readCustomSource(value);
+  return read.ok ? { ok: true, value: read.source } : fail(read.message);
+}
+
+/**
+ * The one validator for a custom source, used by `sources.json` and by a
+ * plugin's declarative contribution.
+ */
+export function readCustomSource(
+  value: unknown,
+):
+  | { readonly ok: true; readonly source: CustomSource }
+  | { readonly ok: false; readonly message: string } {
+  const checked = asSourceValue(value);
+  return checked.ok
+    ? { ok: true, source: checked.value }
+    : { ok: false, message: checked.reason };
+}
+
+function asSourceValue(value: unknown): Checked<CustomSource> {
   if (!isObject(value)) return fail("source is not an object");
 
   const rawId = value.id;
@@ -425,6 +506,13 @@ function asSource(value: unknown): Checked<CustomSource> {
     auth = checked.value;
   }
 
+  let paging: CustomSourcePaging | undefined;
+  if (value.paging !== undefined) {
+    const checked = asPaging(value.paging, owner);
+    if (!checked.ok) return checked;
+    paging = checked.value;
+  }
+
   if (!Array.isArray(value.fields))
     return fail(`${owner} fields must be an array`);
   if (value.fields.length > MAX_FIELDS) {
@@ -455,6 +543,7 @@ function asSource(value: unknown): Checked<CustomSource> {
       intervalMs: interval.value,
       timeoutMs: timeout.value,
       ...(auth === undefined ? {} : { auth }),
+      ...(paging === undefined ? {} : { paging }),
       fields,
     },
   };

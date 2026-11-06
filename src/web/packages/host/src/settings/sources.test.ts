@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createSourceStore,
   normalizeSources,
+  readCustomSource,
   sourceEntryId,
   withoutSourceEntry,
   withSourceEntry,
@@ -47,6 +48,67 @@ function field(id: string) {
 }
 
 const sourcesFile = (dir: string) => path.join(dir, "sources.json");
+
+describe("readCustomSource", () => {
+  it("accepts a source with paging", () => {
+    const read = readCustomSource(
+      source({
+        paging: {
+          pageParam: "page",
+          firstPage: 1,
+          maxPages: 2,
+          itemsPath: "/items",
+        },
+      }),
+    );
+
+    expect(read).toMatchObject({
+      ok: true,
+      source: {
+        id: "local",
+        paging: {
+          pageParam: "page",
+          firstPage: 1,
+          maxPages: 2,
+          itemsPath: "/items",
+        },
+      },
+    });
+  });
+
+  it("refuses a paging bound above ten", () => {
+    expect(
+      readCustomSource(
+        source({
+          paging: { pageParam: "page", firstPage: 1, maxPages: 11 },
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      message: "A custom source may fetch at most 10 pages.",
+    });
+  });
+
+  it("refuses a paging bound of zero", () => {
+    expect(
+      readCustomSource(
+        source({ paging: { pageParam: "page", firstPage: 1, maxPages: 0 } }),
+      ),
+    ).toEqual({
+      ok: false,
+      message: "A custom source may fetch at most 10 pages.",
+    });
+  });
+
+  it("refuses an empty page parameter name", () => {
+    const read = readCustomSource(
+      source({ paging: { pageParam: "", firstPage: 1, maxPages: 2 } }),
+    );
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.message).toContain("pageParam");
+  });
+});
 
 describe("normalizeSources", () => {
   it("accepts a valid source and defaults intervalMs to one minute", () => {

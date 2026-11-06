@@ -123,6 +123,93 @@ describe("fetchSource", () => {
     });
   });
 
+  describe("paging", () => {
+    const paging = {
+      pageParam: "page",
+      firstPage: 1,
+      maxPages: 2,
+      itemsPath: "/items",
+    } as const;
+
+    it("follows two pages in order and merges the array at itemsPath", async () => {
+      const { fetchImpl, calls } = serve((call) =>
+        json({
+          items:
+            call.url.searchParams.get("page") === "1"
+              ? [{ temp: 1 }]
+              : [{ temp: 2 }],
+        }),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome).toMatchObject({
+        ok: true,
+        body: [{ temp: 1 }, { temp: 2 }],
+      });
+      expect(calls.map((call) => call.url.searchParams.get("page"))).toEqual([
+        "1",
+        "2",
+      ]);
+    });
+
+    it("concatenates page bodies when no itemsPath is set", async () => {
+      const { fetchImpl } = serve((call) =>
+        json(
+          call.url.searchParams.get("page") === "1" ? [{ a: 1 }] : [{ a: 2 }],
+        ),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { pageParam: "page", firstPage: 1, maxPages: 2 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome).toMatchObject({ ok: true, body: [{ a: 1 }, { a: 2 }] });
+    });
+
+    it("fails the whole source when a later page fails", async () => {
+      const { fetchImpl, calls } = serve((call) =>
+        call.url.searchParams.get("page") === "1"
+          ? json([{ a: 1 }])
+          : new Response("no", { status: 500 }),
+      );
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { pageParam: "page", firstPage: 1, maxPages: 2 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome).not.toHaveProperty("body");
+      expect(calls).toHaveLength(2);
+    });
+
+    it("refuses an itemsPath that does not resolve to an array", async () => {
+      const { fetchImpl, calls } = serve(() => json({ items: { a: 1 } }));
+
+      const outcome = await fetchSource(
+        sourceOf({ paging: { ...paging, maxPages: 1 } }),
+        undefined,
+        fetchImpl,
+        () => 0,
+      );
+
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.reason).toContain("array");
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   describe("the answer", () => {
     it("reports a non-2xx status instead of a value", async () => {
       const { fetchImpl } = serve(

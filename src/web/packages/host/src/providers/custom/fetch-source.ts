@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import type { CustomSource } from "../../settings/sources.js";
 import { redactForBrowser } from "../provider.js";
+import { resolvePointer } from "./pointer.js";
 
 /**
  * The one request a user-authored source makes. A destination typed by a user
@@ -442,15 +443,21 @@ function reasonOf(message: string, credential: string | undefined): string {
   return redactForBrowser(withoutSecret);
 }
 
+type PageOutcome =
+  | { readonly ok: true; readonly body: unknown }
+  | { readonly ok: false; readonly status?: number; readonly reason: string };
+
+/** One request for one page. Every page repeats the whole policy: resolve and
+ *  refuse before dialling, re-check every hop, drop a credential on a
+ *  cross-origin redirect, and count the body as it arrives. */
 async function run(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
   resolve: HostLookup,
-  nowMs: () => number,
+  page: number | undefined,
   fail: Fail,
-): Promise<FetchOutcome> {
-  const startedAt = nowMs();
+): Promise<PageOutcome> {
   let destination: URL;
   try {
     destination = new URL(source.url);
@@ -459,6 +466,9 @@ async function run(
   }
   for (const [name, value] of Object.entries(source.query ?? {})) {
     destination.searchParams.set(name, value);
+  }
+  if (page !== undefined && source.paging !== undefined) {
+    destination.searchParams.set(source.paging.pageParam, String(page));
   }
 
   const origin = destination.origin;
@@ -574,11 +584,7 @@ async function run(
     }
 
     try {
-      return {
-        ok: true,
-        body: JSON.parse(text),
-        elapsedMs: nowMs() - startedAt,
-      };
+      return { ok: true, body: JSON.parse(text) };
     } catch {
       return fail(
         "the source answered something that is not JSON",
@@ -605,7 +611,53 @@ export async function fetchSource(
   return withSourceLock(source.id, async () => {
     await acquireSlot();
     try {
-      return await run(source, credential, fetchImpl, resolve, nowMs, fail);
+      const startedAt = nowMs();
+      const paging = source.paging;
+
+      if (paging === undefined) {
+        const outcome = await run(
+          source,
+          credential,
+          fetchImpl,
+          resolve,
+          undefined,
+          fail,
+        );
+        return outcome.ok
+          ? { ok: true, body: outcome.body, elapsedMs: nowMs() - startedAt }
+          : outcome;
+      }
+
+      // Pages are fetched in order and merged only after every one succeeds: a
+      // partial body is not a complete reading.
+      const merged: unknown[] = [];
+      for (let offset = 0; offset < paging.maxPages; offset += 1) {
+        const outcome = await run(
+          source,
+          credential,
+          fetchImpl,
+          resolve,
+          paging.firstPage + offset,
+          fail,
+        );
+        if (!outcome.ok) return outcome;
+
+        if (paging.itemsPath === undefined) {
+          if (!Array.isArray(outcome.body)) {
+            return fail("the source's page was not an array");
+          }
+          merged.push(...outcome.body);
+          continue;
+        }
+
+        const resolved = resolvePointer(outcome.body, paging.itemsPath);
+        if (!resolved.found || !Array.isArray(resolved.value)) {
+          return fail("the source's items path did not resolve to an array");
+        }
+        merged.push(...resolved.value);
+      }
+
+      return { ok: true, body: merged, elapsedMs: nowMs() - startedAt };
     } catch (error) {
       return fail(messageOf(error));
     } finally {
