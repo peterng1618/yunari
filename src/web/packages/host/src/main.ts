@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { InstalledExtension } from "@yunari/extension-api";
 import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
 import { ASSET_SOURCES, createAssetSources } from "./assets/sources.js";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
@@ -19,6 +20,10 @@ import {
 import { createPluginAssetSources } from "./extensions/asset-sources.js";
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
+import {
+  DeclarativeAssetSourceAdapter,
+  declarativeAssetSources,
+} from "./extensions/declarative-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
 import {
   createProviderOrderStore,
@@ -282,6 +287,38 @@ export async function run(argv: readonly string[]): Promise<number> {
     supervisors: pluginSupervisors.supervisors,
     onFailure: onPluginFailure,
   });
+  // A declarative source needs no worker: its manifest says where to search
+  // and how to read the answer. A row that collides with a built-in or a code
+  // source is refused here rather than reaching `createAssetSources`, whose
+  // duplicate check throws and would take the host down at startup.
+  const installedExtensions = await extensions.list();
+  const declaredAssetSources = declarativeAssetSources(installedExtensions);
+  const declarativeOwners = new Map<string, InstalledExtension>();
+  for (const extension of installedExtensions) {
+    for (const row of extension.contributions.assetSources ?? []) {
+      const id = row["id"];
+      if (typeof id === "string") declarativeOwners.set(id, extension);
+    }
+  }
+  const assetSourceIds = new Set([
+    ...ASSET_SOURCES.map((source) => source.id),
+    ...pluginAssetSources.map((source) => source.id),
+  ]);
+  const declarativeAssetAdapters: DeclarativeAssetSourceAdapter[] = [];
+  for (const contribution of declaredAssetSources) {
+    const owner = declarativeOwners.get(contribution.id);
+    if (owner === undefined) continue;
+    if (assetSourceIds.has(contribution.id)) {
+      console.warn(
+        `Declarative asset source ${owner.key}: "${contribution.id}" is already an asset source.`,
+      );
+      continue;
+    }
+    assetSourceIds.add(contribution.id);
+    declarativeAssetAdapters.push(
+      new DeclarativeAssetSourceAdapter({ plugin: owner, contribution }),
+    );
+  }
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle.
@@ -586,7 +623,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     sources: { store: customSources, provider: customProvider },
     assets: {
       credentials,
-      sources: createAssetSources(ASSET_SOURCES, pluginAssetSources),
+      sources: createAssetSources(ASSET_SOURCES, [
+        ...pluginAssetSources,
+        ...declarativeAssetAdapters,
+      ]),
     },
     artwork: mediaArtwork,
     gameArtwork: createGameArtwork({
