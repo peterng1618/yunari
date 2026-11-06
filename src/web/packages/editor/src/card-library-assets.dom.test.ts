@@ -14,6 +14,27 @@ import {
   installWidgetPack,
 } from "./testing/widget-units.js";
 
+/** Holds one insertion inside enlivening, so a concurrent import can land. */
+const enlivenHold = vi.hoisted(() => ({
+  wait: undefined as undefined | (() => Promise<void>),
+}));
+
+// The namespace export is not configurable, so the module is mocked and every
+// other case falls through to the real enlivener.
+vi.mock("fabric/es", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fabric/es")>();
+  return {
+    ...actual,
+    util: {
+      ...actual.util,
+      enlivenObjects: async (objects: unknown, options?: unknown) => {
+        await enlivenHold.wait?.();
+        return actual.util.enlivenObjects(objects as never, options as never);
+      },
+    },
+  };
+});
+
 // jsdom's `crypto` has no SubtleCrypto, and adoption verifies digests through
 // it exactly as a browser does.
 if (globalThis.crypto?.subtle === undefined) {
@@ -133,6 +154,23 @@ function picturePack(
   return written.bytes;
 }
 
+/** A chosen file, as the assets pane hands one to `import`. */
+function chosenFile(path: string, bytes: Uint8Array): File {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return Object.assign(
+    new File([bytes as unknown as BlobPart], name, {
+      type: "image/png",
+    }),
+    {
+      arrayBuffer: async () =>
+        bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ),
+    },
+  );
+}
+
 function stage(): Canvas {
   const element = document.createElement("canvas");
   element.width = 1672;
@@ -190,6 +228,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  enlivenHold.wait = undefined;
   vi.restoreAllMocks();
 });
 
@@ -248,5 +287,54 @@ describe("an inserted unit that carries an image", () => {
     expect(assets.declarations).toEqual([]);
     expect(assets.assets).toEqual({});
     expect(assets.mutationCount).toBe(0);
+  });
+
+  it("keeps an asset imported while the insert is enlivening", async () => {
+    await installWidgetPack("picture-pack", picturePack());
+    const create = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation(() => `blob:preview-${create.mock.calls.length}`);
+    const revoke = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => {});
+    const assets = new AssetManager();
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const enlivening = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    enlivenHold.wait = async () => {
+      entered();
+      await gate;
+      throw new Error("enliven failed");
+    };
+    const insertion = insertCard(editorStub(stage()) as never, "picture", {
+      globals: STARTER_GLOBALS,
+      onBindings: vi.fn(),
+      assetManager: assets,
+    });
+    // The adoption is committed before enlivening starts, so the import below
+    // lands exactly in the window the rollback used to erase.
+    await enlivening;
+    const adoptedUrl = assets.previewUrl("pack-image");
+    const late = await assets.import(
+      chosenFile("assets/late.png", PICTURE_BYTES),
+    );
+    const lateUrl = assets.previewUrl(late.id);
+    release();
+
+    await expect(insertion).rejects.toThrow("enliven failed");
+
+    expect(assets.declarations.map((entry) => entry.id)).toEqual([late.id]);
+    expect(assets.assets["assets/late.png"]).toEqual(PICTURE_BYTES);
+    expect(assets.assets["assets/pack.png"]).toBeUndefined();
+    expect(adoptedUrl).toBeDefined();
+    expect(revoke).toHaveBeenCalledWith(adoptedUrl);
+    expect(revoke).not.toHaveBeenCalledWith(lateUrl);
+    expect(assets.previewUrl(late.id)).toBe(lateUrl);
   });
 });

@@ -102,18 +102,14 @@ export interface AssetImportMetadata {
   readonly license?: AssetLicense;
 }
 
-/** Everything an adoption changes, as a value a caller can put back. */
-export interface AssetManagerState {
-  readonly declarations: readonly LocalAssetReference[];
-  readonly assets: Readonly<Record<string, Uint8Array>>;
-  readonly mutationCount: number;
-}
-
 /** Owns declared package bytes and the disposable browser previews derived from them. */
 export class AssetManager {
   #assets: Record<string, Uint8Array> = {};
   #declarations: LocalAssetReference[] = [];
   #previewUrls = new Map<string, string>();
+  /** The mutation count each committed adoption landed at, so its undo can tell
+   *  whether anything else has changed the document since. */
+  #adoptionRevisions = new WeakMap<PackagedAssetAdoption, number>();
   /** How many times the byte map or the declaration list has changed. A reader
    *  that memoises a decision over both watches this rather than the values:
    *  `load` can change either while reusing declaration references. */
@@ -290,32 +286,48 @@ export class AssetManager {
     this.#declarations = [...adopted.declarations] as LocalAssetReference[];
     this.#assets = { ...adopted.assets };
     this.#mutated();
+    this.#adoptionRevisions.set(adopted, this.#mutationCount);
     return adopted.assetIds;
   }
 
-  /** The declarations, bytes and mutation count an adoption replaced. */
-  captureAssetState(): AssetManagerState {
-    return {
-      declarations: this.#declarations,
-      assets: this.#assets,
-      mutationCount: this.#mutationCount,
-    };
-  }
-
   /**
-   * Puts back a state captured before an adoption.
+   * Undoes one committed adoption, and only it.
    *
-   * A caller that had to commit before it could build the copy — because the
-   * preview URL lives here — restores this when the build fails: the adoption
-   * never happened, so the declaration list, its bytes and the mutation count
-   * the panes memoise all read as they did before.
+   * A whole-state restore also threw away whatever a concurrent operation
+   * declared while the insert was still enlivening — an import the author made
+   * during a slow card vanished with the failed insert. Removal is by the
+   * adoption's own ids and paths, so a declaration that arrived later keeps its
+   * bytes and its preview. The commit and this undo cancel for the dirty marker
+   * when nothing else changed; when something did, the count keeps climbing.
    */
-  restoreAssetState(state: AssetManagerState): void {
-    this.#declarations = [...state.declarations];
-    this.#assets = { ...state.assets };
-    this.#mutationCount = state.mutationCount;
-    // Panes saw the adoption land; the undo is a change they must redraw for.
-    for (const listener of this.#changeListeners) listener();
+  rollbackPackaged(adopted: PackagedAssetAdoption): void {
+    const committedAt = this.#adoptionRevisions.get(adopted);
+    this.#adoptionRevisions.delete(adopted);
+    const addedIds = new Set(adopted.assetIds.values());
+    const addedPaths = new Set(
+      adopted.declarations
+        .filter((declaration) => addedIds.has(declaration.id))
+        .map((declaration) => declaration.path),
+    );
+    const present = this.#declarations.filter(
+      (declaration) =>
+        addedIds.has(declaration.id) && addedPaths.has(declaration.path),
+    );
+    if (present.length === 0) return;
+    const removeIds = new Set(present.map((declaration) => declaration.id));
+    const removePaths = new Set(present.map((declaration) => declaration.path));
+    this.#declarations = this.#declarations.filter(
+      (declaration) => !removeIds.has(declaration.id),
+    );
+    for (const path of removePaths) delete this.#assets[path];
+    for (const id of removeIds) this.#revoke(id);
+    if (committedAt !== undefined && this.#mutationCount === committedAt) {
+      this.#mutationCount = committedAt - 1;
+      // Panes saw the adoption land; the undo is a change they must redraw for.
+      for (const listener of this.#changeListeners) listener();
+    } else {
+      this.#mutated();
+    }
   }
 
   async adoptFont(
