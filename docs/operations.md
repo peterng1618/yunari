@@ -40,10 +40,11 @@ revoke it.
 
 ## Extensions
 
-Everything an extension owns lives under the app folder's `settings/extensions/`:
+Everything an extension owns lives under the app folder's `settings/extensions/`,
+and the executable profiles' grants live in `settings/extension-consent.json`:
 
 - `local/<id>/<version>/` is one installed package tree; `installed.json` is the
-  live index and `extension-consent.json` holds the executable profiles' grants.
+  live index.
 - `data/<publisher>/<id>/` is the plugin's keyed data, `secrets/<publisher>/<id>/`
   its secret store (wrapped by the same OS key protector as the TLS root) and
   `settings/<publisher>/<id>.json` its settings document.

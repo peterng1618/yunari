@@ -203,8 +203,10 @@ entry beside the host bundle, and speaks to it over IPC. The child imports the
 manifest's `main` only after the parent's `init` handshake, and inherits no
 environment beyond `PATH`. Its method allowlist refuses a call before IPC; the
 parent rechecks every plugin call through `gateExtensionCall` against the
-stored consent fingerprint and the manifest's capabilities, so the allowlist is
-early refusal, not the authority.
+manifest's capabilities and the grant the worker started with, so the allowlist
+is early refusal, not the authority. Installing, revoking consent or removing
+an extension takes effect on the next host start; a running worker keeps the
+grant it was started with.
 
 The parent bounds the child. Startup and the `init` answer have 5 s, a request
 has a 5 s default, a host API call has a 30 s deadline, and `stop` gets 2 s
@@ -213,9 +215,9 @@ redacted for machine addresses, and that text is the crash detail. A start
 failure, an unexpected exit and an unanswered request are the same one crash
 report: pending calls settle as failures, and stopping is idempotent.
 
-A plugin's calls land in `runtime/host-api.ts`, which rebuilds the authority
-context from the installed manifest and stored grant on every call; a caller
-cannot widen what the gate sees. Parameters are checked against a closed key
+A plugin's calls land in `runtime/host-api.ts`, which rebuilds the gate context
+from the manifest and the grant captured when the worker started on every call;
+a caller cannot widen what the gate sees. Parameters are checked against a closed key
 set per method, denials name the method and the gate's reason only, and no
 method returns a host credential. `network.fetch` is `https` only and reaches
 only the hosts the manifest declares. Every hop re-checks the host, refuses
