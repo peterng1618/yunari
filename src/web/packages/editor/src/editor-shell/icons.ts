@@ -1,4 +1,3 @@
-import type { ListingCategory } from "@yunari/renderer-core";
 import {
   Activity,
   ArrowDown,
