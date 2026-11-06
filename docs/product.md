@@ -43,7 +43,8 @@ The host also serves a settings page and a `/pair` page for displays.
   `pack:<packId>:<presetId>`. A browser's old preset list is migrated to the
   host once and kept locally until the host accepts it. The starter theme and
   the default widget pack are committed packages; no runtime generator builds
-  them.
+  them. Installing a pack is a host API call in this phase: no import control
+  ships yet.
 - **Theme library and store.** Themes are local first. The editor can browse a
   Cloudflare-hosted catalogue, install a package, sign in to submit a theme and
   see its own submissions.

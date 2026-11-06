@@ -165,7 +165,8 @@ installed. One widget pack is one directory under
 the widget packs, through the same loopback routes — `/api/widget-packs` and
 `/api/path-presets` — so no surface keeps an independent library once a
 browser's list has migrated. Both surfaces are
-loopback admin, and every write also refuses a foreign origin.
+loopback admin, and every write also refuses a foreign origin. Installing a
+pack is a host API call in this phase; no import control ships yet.
 
 - A widget pack keeps the `yunari-widget-package` container (`manifest.json`,
   `widget.json`, declared assets) and adds unit derivation: the package's scene
