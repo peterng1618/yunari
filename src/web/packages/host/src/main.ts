@@ -377,6 +377,11 @@ export async function run(argv: readonly string[]): Promise<number> {
     extensions,
     hostApi: pluginHostApi,
     onFailure: onPluginFailure,
+    // A crashed worker cannot close the handles it opened; the host closes
+    // them here rather than waiting for a later call or shutdown.
+    onCrash: (pluginKey) => {
+      void deviceBroker.closeAll(pluginKey);
+    },
   });
   pluginSupervisors = runningSupervisors;
 

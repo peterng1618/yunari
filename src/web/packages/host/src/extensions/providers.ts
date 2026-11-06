@@ -328,6 +328,9 @@ export interface StartPluginSupervisorsOptions {
   readonly workerEntry?: string;
   /** One line per plugin that could not start; may reach the console. */
   readonly onFailure?: (pluginKey: string, reason: string) => void;
+  /** A worker that died after starting. Its devices are this host's to close:
+   *  a crash must not leave native handles open with no one to reach them. */
+  readonly onCrash?: (pluginKey: string) => void;
 }
 
 export interface CreatePluginProvidersOptions
@@ -394,6 +397,7 @@ export async function startPluginSupervisors(
       onCrash: (reason) => {
         crashReported = true;
         options.onFailure?.(plugin.key, reason);
+        options.onCrash?.(plugin.key);
       },
       ...(options.workerEntry === undefined
         ? {}

@@ -771,6 +771,7 @@ describe("createPluginProviders", () => {
   it("reports a crash and stops every started supervisor exactly once", async () => {
     const acme = plugin();
     const onFailure = vi.fn();
+    const onCrash = vi.fn();
     const runtime = await createPluginProviders({
       installer: fakeInstaller([acme]),
       extensions: fakeExtensions({
@@ -778,10 +779,13 @@ describe("createPluginProviders", () => {
       }),
       hostApi,
       onFailure,
+      onCrash,
     });
 
     supervisorMocks.created[0]?.options?.onCrash?.("plugin crashed");
     expect(onFailure).toHaveBeenCalledWith(acme.key, "plugin crashed");
+    // The host closes the crashed worker's devices; the worker cannot.
+    expect(onCrash).toHaveBeenCalledWith(acme.key);
 
     await runtime.stop();
     await runtime.stop();
