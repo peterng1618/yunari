@@ -300,7 +300,7 @@ function assertFinite(value: number, name: string): void {
 /**
  * Whether a display of this shape can hold the angle.
  *
- * **The one owner of the quarter-turn rule** (`vg-760`): a circle holds any
+ * **The one owner of the quarter-turn rule**: a circle holds any
  * whole degree below 360, a rectangle exactly 0, 90, 180 or 270. The host's
  * store, the player's publish follower and the editor's presentation controls
  * ask this rather than restating it, so the rule cannot drift between them.

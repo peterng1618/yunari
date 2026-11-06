@@ -184,7 +184,7 @@ export class ThemeAssetLimitError extends Error {
  * locale key, a stray `media.rotation`. The read-side sibling of the two
  * refusals above: the file is there, the validator's own diagnosis already
  * exists, and answering the `undefined` an absent theme answers with is what
- * throws that diagnosis away one layer below the reader (vg-110).
+ * throws that diagnosis away one layer below the reader.
  *
  * `issues` is the validator's own list rather than one flattened sentence, so a
  * reader can point at the fault. `list()` still skips such a theme: an
@@ -210,7 +210,7 @@ export class ThemeValidationError extends Error {
  * bound is the store's own, not the schema's — so dressing it as one would
  * report a fault that does not exist. What it must not be either is the
  * `undefined` an absent theme answers with, which is what told a reader a theme
- * they can see on disk was not there (vg-409).
+ * they can see on disk was not there.
  *
  * It carries no `issues`: there is no diagnosis to hand over, only the fact
  * that the document is too large to open. The bound is named because shrinking
@@ -820,9 +820,10 @@ function parseThemeDocument(id: string, bytes: Buffer): unknown {
  * The stored document, or `undefined` when the file is not there — or when it
  * resolves outside the theme's own folder, which is the absence it is: a link
  * standing where `theme.json` belongs is not this theme's document. A file that
- * *is* there and cannot be read throws rather than answering `undefined`: the
- * two facts were indistinguishable to every reader, and only the open path
- * wants them apart (vg-110, vg-409).
+ * *is* there and cannot be read throws rather than answering `undefined`: an
+ * `undefined` here would tell the open path that a document which exists is
+ * missing, and the typed error is what carries the validator's issues or the
+ * size bound to the route that can answer them.
  *
  * Both refusals are typed and neither is the other: a document that does not
  * validate is a {@link ThemeValidationError} carrying the validator's issues,

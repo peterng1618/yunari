@@ -8,9 +8,8 @@
  * read on its Appearance, Keyboard and About tabs; the colour picker is mounted
  * open; the selection column is mounted on a text object and a shape; the header
  * toolbar and the canvas context menu are read in turn; and the `?` sheet, the
- * publish dialog and the library and new-document dialogs are each mounted
- * (`vg-418` — the header once said these four were not mounted, and a header
- * owns nothing). **The publish dialog is read whole**: its warning is a bare
+ * publish dialog and the library and new-document dialogs are each mounted.
+ * **The publish dialog is read whole**: its warning is a bare
  * `<span>` marked `data-yunari-copy`, and its trigger carries `aria-controls`
  * without a `data-yunari-value`, so the button rule reads the word it prints
  * instead of skipping it as a chosen value.
@@ -109,19 +108,19 @@ it("leaves the React surfaces with no copy of their own", async () => {
     if (found === null) throw new Error(`no ${surface} surface rendered`);
     expect(spokenIn(found), surface).not.toEqual([]);
   }
-  // The shell's hint paragraph is gone (`vg-338` was its net); what remains is
+  // The shell has no hint paragraph; what remains is
   // chrome whose words `spokenIn` reads, so there is nothing left to walk here.
   expect(paragraphsOf(shell)).toEqual([]);
   destroy();
 });
 
 /**
- * The surfaces `vg-335` found reachable but unread say no word the table does
+ * The surfaces reachable but unread say no word the table does
  * not hold: the Settings Keyboard and About tabs and the canvas context menu.
- * `spokenIn` read the closed chrome, so a literal written into any of the
- * three had no net at all — and each is opened here, read for its own words,
- * and asserted non-empty first, so a surface that failed to open is a failure
- * rather than a walk that agreed with nothing.
+ * `spokenIn` reads the closed chrome, so a literal written into any of the
+ * three would have no net at all — and each is opened here, read for its own
+ * words, and asserted non-empty first, so a surface that failed to open is a
+ * failure rather than a walk that agreed with nothing.
  */
 it("reads the Settings tabs and the canvas context menu", async () => {
   const { destroy } = await mountLandedSurfaces();
@@ -185,10 +184,10 @@ it("reads the Settings tabs and the canvas context menu", async () => {
 });
 
 /**
- * `vg-418`: the four surfaces the walk did not mount — the `?` sheet, the
+ * The four surfaces the walk must mount — the `?` sheet, the
  * publish popover and the two dialogs. Each renders words an author reads, and
- * a literal in one of them was read by no net: the header stated these four
- * were not mounted, and a comment owns nothing.
+ * a literal in one of them is read by no net unless the surface is mounted; a
+ * header states coverage, not the read.
  *
  * Each is mounted and read — the header names the one read only in part — and
  * asserted non-empty first, so a surface that failed to mount is a failure
@@ -243,7 +242,7 @@ const FACETS: FacetRecord = {
   height: 1080,
 };
 
-/** The four surfaces `vg-418` found unmounted, each mounted here. They portal to
+/** The four portal-mounted surfaces, each mounted here. They portal to
  *  `body` — a `Dialog` and a `Popover` both do — so the read is over `body`
  *  rather than the mount point, which holds none of the words. */
 const READ_SURFACES: readonly ReadSurface[] = [
@@ -646,9 +645,9 @@ function isOwnedChordTooltip(text: string, owned: Set<string>): boolean {
  *
  * A walk that reads words mounts the shell whole, and the shell mounts the
  * composition pane, so the pane's reads are here too. It reports a selection
- * because the shell prints some of its chrome only then — `vg-338`'s hint
- * paragraph among it, which no net could read while the shell mounted with no
- * selection at all. Everything answers empty: this file reads copy, not state.
+ * because the shell prints some of its chrome only then — a mount with no
+ * selection at all reads less of it. Everything answers empty: this file reads
+ * copy, not state.
  */
 function selectionBridge(): EditorShellBridge {
   const noop = (): undefined => undefined;

@@ -112,6 +112,17 @@ function asEntry(value: unknown): ThemeCreditsEntry | undefined {
 }
 
 /**
+ * One entry of the member, or nothing when the value is not one. The clipboard
+ * carries entries through browser storage, so it validates them with the same
+ * reader the package does rather than trusting the store.
+ */
+export function normalizeCreditsEntry(
+  value: unknown,
+): ThemeCreditsEntry | undefined {
+  return asEntry(value);
+}
+
+/**
  * The member's contents, or nothing when the bytes are not one.
  *
  * Total, like the catalogue reader: a non-object, a wrong `format`, a version
@@ -125,18 +136,43 @@ export function readThemeCredits(bytes: Uint8Array): ThemeCredits | undefined {
   } catch {
     return undefined;
   }
+  return normalizeCredits(parsed);
+}
 
-  if (!isObject(parsed)) return undefined;
-  if (parsed.format !== "yunari-theme-credits") return undefined;
-  if (parsed.version !== 1) return undefined;
-  if (!Array.isArray(parsed.entries)) return undefined;
-  if (parsed.entries.length > MAX_CREDITS_ENTRIES) return undefined;
+/** The same reader over a value a request already decoded. */
+export function normalizeCredits(value: unknown): ThemeCredits | undefined {
+  if (!isObject(value)) return undefined;
+  if (value.format !== "yunari-theme-credits") return undefined;
+  if (value.version !== 1) return undefined;
+  if (!Array.isArray(value.entries)) return undefined;
+  if (value.entries.length > MAX_CREDITS_ENTRIES) return undefined;
 
   const entries: ThemeCreditsEntry[] = [];
-  for (const raw of parsed.entries) {
+  for (const raw of value.entries) {
     const entry = asEntry(raw);
     if (entry !== undefined) entries.push(entry);
   }
 
   return { format: "yunari-theme-credits", version: 1, entries };
+}
+
+/**
+ * Whether two attribution lists say the same thing.
+ *
+ * Order is not authorship: a list that merely reorders the same entries is the
+ * same credits, so the comparison sorts by the entry's own identity first.
+ */
+export function sameThemeCredits(
+  first: ThemeCredits | undefined,
+  second: ThemeCredits | undefined,
+): boolean {
+  const key = (entry: ThemeCreditsEntry): string =>
+    `${entry.assetId ?? ""}\0${entry.kind}\0${entry.title}`;
+  const canonical = (credits: ThemeCredits | undefined): string =>
+    JSON.stringify(
+      [...(credits?.entries ?? [])]
+        .sort((left, right) => key(left).localeCompare(key(right)))
+        .map((entry) => ({ ...entry })),
+    );
+  return canonical(first) === canonical(second);
 }

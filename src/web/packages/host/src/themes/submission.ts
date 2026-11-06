@@ -119,7 +119,10 @@ export async function submissionFiles(
 
   // The stored envelope is the baseline, and the library document the
   // candidate — the order the ladder expects.
-  const change = classifyThemeChange(item?.envelope, theme.envelope);
+  const change = classifyThemeChange(item?.envelope, theme.envelope, {
+    previous: item?.credits,
+    next: theme.credits,
+  });
   if (item !== undefined && change.level === "none") {
     return {
       ok: false,
@@ -139,32 +142,13 @@ export async function submissionFiles(
     };
   }
 
-  // Written before the package is built, so the package and the library agree
-  // on the version and the next submission diffs against the same baseline.
-  // `metadata` is created only when the document has none, and every other
-  // field is carried across untouched.
+  // The document the package carries. The library write that records this
+  // version happens only after every step that can refuse, so a refused
+  // submission never leaves the library ahead of the store.
   const withVersion: FabricThemeEnvelope = {
     ...theme.envelope,
     metadata: { ...theme.envelope.metadata, version },
   };
-  try {
-    await store.write(
-      themeId,
-      { envelope: withVersion, assets: theme.assets },
-      { base: theme.base },
-    );
-  } catch (error) {
-    // A stale base is the store's own sentence: another save moved the
-    // document on, and the author has to choose what happens next. Any other
-    // refusal could name an absolute path, so it is reported without one.
-    return {
-      ok: false,
-      message:
-        error instanceof ThemeConflictError
-          ? error.message
-          : "This theme's new version could not be saved in this PC's library.",
-    };
-  }
 
   // The same writer the export path uses, so the package a reviewer downloads
   // is the package the Install action can open.
@@ -172,6 +156,7 @@ export async function submissionFiles(
     envelope: withVersion,
     assets: theme.assets,
     thumbnail,
+    ...(theme.credits === undefined ? {} : { credits: theme.credits }),
   });
   if (!written.ok) return { ok: false, message: written.message };
 
@@ -194,7 +179,32 @@ export async function submissionFiles(
   const plan = await options.client.createVersion(themeId, {
     envelope: withVersion,
     name,
+    ...(theme.credits === undefined ? {} : { credits: theme.credits }),
   });
+
+  // The store accepted this version, so the library may record it. A stale
+  // base is the store's own sentence: another save moved the document on, and
+  // the author has to choose what happens next. Any other refusal could name an
+  // absolute path, so it is reported without one.
+  try {
+    await store.write(
+      themeId,
+      {
+        envelope: withVersion,
+        assets: theme.assets,
+        ...(theme.credits === undefined ? {} : { credits: theme.credits }),
+      },
+      { base: theme.base },
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof ThemeConflictError
+          ? error.message
+          : "This theme's new version could not be saved in this PC's library.",
+    };
+  }
 
   return {
     ok: true,

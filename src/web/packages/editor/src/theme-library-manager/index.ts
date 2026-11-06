@@ -488,7 +488,7 @@ export class ThemeLibraryManager {
   /** Reads one stored theme and hands it to whoever builds the session that
    *  shows it. **The base travels with the document**: the session replacing
    *  this one saves against what the library holds, and a base dropped on the
-   *  way would make that save ungated (`vg-642`). */
+   *  way would make that save ungated. */
   async #openStored(client: ThemeLibraryClient, id: string): Promise<void> {
     const options = this.#options;
     const opened = await client.open(id);
@@ -528,7 +528,7 @@ export class ThemeLibraryManager {
     );
     // Cleared only once the document has been handed over: a handover that
     // fails leaves the open document where it was, still gated by its base
-    // (`vg-642`).
+    //.
     this.#base = undefined;
   }
 

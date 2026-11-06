@@ -716,7 +716,7 @@ describe("a chart that throws", () => {
     // Both charts read one sensor, and the source is moved between the
     // constructor's own pass and the pass under test — so this is a refresh that
     // has something to draw. A refresh whose readings have not moved draws
-    // nothing at all (vg-107), which would make the claim untestable.
+    // nothing at all, which would make the claim untestable.
     const source = createDemoSource(0);
     const bindings = {
       good: [{ id: "good-read", semanticKey: "cpu.load" }],
@@ -873,7 +873,7 @@ describe("a chart whose reading has not moved", () => {
     // rate, 30 times a second by default, and every one of those calls used to
     // re-apply every chart's option whether or not its data had moved. ECharts
     // repainted and Fabric redrew the whole document for an identical picture
-    // (vg-107). The rate is the ceiling on how often a chart *may* re-apply,
+    //. The rate is the ceiling on how often a chart *may* re-apply,
     // never a promise that it does.
     const { manager, source, setOption } = harness({
       cpu: [{ id: "cpu-read", semanticKey: "cpu.load" }],
@@ -1074,9 +1074,9 @@ describe("a line chart's data clock", () => {
   });
 
   it("is not, for a gauge whose sample has not moved", () => {
-    // The half of vg-107 that stands: a gauge draws `latest` and nothing else,
-    // so an idle gauge is genuinely an identical picture and re-applying it
-    // thirty times a second was the cost the row measured. A clock in every
+    // A gauge draws `latest` and nothing else,
+    // so an idle gauge is genuinely an identical picture, and re-applying it
+    // thirty times a second is a cost with no benefit. A clock in every
     // family's signature would buy the line its rate back by paying that cost
     // again.
     const clock = vi.spyOn(Date, "now").mockReturnValue(pinned);

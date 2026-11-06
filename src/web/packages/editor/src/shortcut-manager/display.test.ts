@@ -76,11 +76,12 @@ describe("shortcutLabel", () => {
 
 describe("the display vocabulary", () => {
   it("names no key that only a context-only binding can carry", () => {
-    // vg-182: `escape` was named in both tables here — `Esc` printed, `Escape`
-    // spoken — while its one binding lives in `CONTEXT_SHORTCUTS`, whose own
-    // comment says those bindings are never displayed. Two modules disagreed
-    // about whether Escape is displayable; the vocabulary now takes the side
-    // the binding's owner took, so a cap the product cannot print is not in the
+    // `escape` is named in one table only: its one binding lives in
+    // `CONTEXT_SHORTCUTS`, whose own
+    // comment says those bindings are never displayed. Naming it here — `Esc`
+    // printed, `Escape` spoken — would make two modules disagree
+    // about whether Escape is displayable; the vocabulary takes the side
+    // the binding's owner takes, so a cap the product cannot print is not in the
     // table to be printed.
     const onEscape: ShortcutBinding = {
       key: "escape",
@@ -157,7 +158,7 @@ describe("shortcutSpokenLabel", () => {
     expect(shortcutLabel("canvas.nudge-left")).toBe("←");
     expect(shortcutSpokenLabel("canvas.nudge-left")).toBe("Left arrow");
     // The context-only action is the one a caller can still ask for, and it
-    // answers with nothing rather than with a chord (vg-182).
+    // answers with nothing rather than with a chord.
     expect(shortcutLabel("view.exit-group")).toBe("");
   });
 

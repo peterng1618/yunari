@@ -85,8 +85,8 @@ describe("the display's chrome", () => {
   it("replaces a strip of the same kind rather than stacking it", () => {
     // The availability strip is rebuilt on every refresh cadence and the
     // connection banner changes as the transport moves: one kind of notice is
-    // one strip, which each writer used to arrange by removing the old element
-    // by hand.
+    // one strip, arranged here by id rather than by each writer removing the
+    // old element by hand.
     putStrip({
       side: "top",
       id: "yunari-connection",
@@ -183,7 +183,7 @@ describe("the strips the display is told by", () => {
   it("overlays every notice it raises, so raising one cannot re-fit the scene", () => {
     // A strip in flow takes room, and taking room re-fits the scene: 16-25px of
     // movement on the built display, right as the notice arrives and left as it
-    // leaves (vg-028). A transport strip can flash on any reconnect, so it is
+    // leaves. A transport strip can flash on any reconnect, so it is
     // fixed to the display's edge instead of laid out in the band.
     showConnectionState("reconnecting", 3);
     expect(document.getElementById("yunari-connection")?.style.position).toBe(
@@ -281,7 +281,7 @@ describe("a strip's edge on a turned display", () => {
   });
 
   it("overlays the artboard, so no strip takes room from it", () => {
-    // A strip in flow takes room, and taking room re-fits the scene (vg-028).
+    // A strip in flow takes room, and taking room re-fits the scene.
     // A strip that hides and returns — the theme chooser now does — would also
     // keep the artboard, and the display-bounded background media fitted to
     // it, short of the screen edge while invisible.

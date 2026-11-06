@@ -8,9 +8,9 @@ import { loadFailureReason, uiCopy } from "./ui-copy.js";
  * exception thrown by something that is not this product is written for
  * whoever debugs it, and this page is read by whoever is standing there.
  *
- * The raw error goes to the console instead of the screen. The page's own
- * comment used to keep "the host's own reason" for the developer who fixes
- * this; that is still true, and the console is where every other diagnostic in
+ * The raw error goes to the console instead of the screen. The raw message is
+ * the host's own reason, written for the developer who fixes this rather than
+ * the reader standing there, and the console is where every other diagnostic in
  * the player already goes (`reportRepaintError`, `reportGlassError`). A phone
  * on the wall is reachable over a USB cable.
  */
@@ -27,9 +27,8 @@ export function showLoadFailure(error: unknown): void {
   // The second caller is the `catch` around `startHostedTheme` in `main.ts` —
   // the call that mounts the scene through `mountFabricScene` and then keeps
   // running — so a rejection arriving **after** the scene mounted reaches here
-  // too and takes that with it. That is what the page is for, and it is the
-  // ruled behaviour rather than an open question: a display that says it is
-  // broken beats one showing stale art (`vg-190`, ruled 2026-10-14).
+  // too and takes that with it. That is what the page is for: a display that
+  // says it is broken beats one showing stale art.
   document.body.replaceChildren(
     loadFailureView(loadFailureReason(error), () => window.location.reload()),
   );

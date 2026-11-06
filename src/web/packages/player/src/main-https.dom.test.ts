@@ -3,7 +3,7 @@
 // **The URL above is the whole reason this file exists.** `main.dom.test.ts`
 // runs the same harness at an http URL, so every case there is green whether
 // `main.ts` reads the page's scheme or hard-codes `"http"` — and hard-coding it
-// is `vg-623` re-created on every display served over https.
+// is what breaks re-finding the host on every display served over https.
 // This file is that page: https, paired, its host gone.
 // A LAN address rather than a name, because `sweepAddresses("localhost")` is
 // empty and a sweep that never runs asserts nothing.
@@ -146,7 +146,7 @@ describe("a display served over https", () => {
     expect(probes.length).toBeGreaterThan(0);
     // The two non-sweep rungs, at the page's scheme. Hard-code `"http"` in
     // `main.ts` and these are http — which is mixed content the browser blocks,
-    // so the display never re-finds its host (`vg-623`).
+    // so the display never re-finds its host.
     expect(probes).toContain("https://192.168.1.10:5227/api/host");
     expect(probes).toContain("https://study-pc.local:5227/api/host");
     // And the sweep, which is 253 more: every rung carries the scheme, not only

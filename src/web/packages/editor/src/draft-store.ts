@@ -1,7 +1,7 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 
 /**
- * The unsaved document, as the browser kept it (`vg-040`).
+ * The unsaved document, as the browser kept it.
  *
  * One slot, not one per theme. A draft is a crash-recovery artefact and the
  * author has one editor, so a per-theme map would be a store nobody reads
@@ -138,15 +138,14 @@ export interface DraftAutosave {
  * document in front of them. Leaving it in place instead would leave the
  * document being edited undrafted, which is the worse of the two.
  *
- * **That is the slot's whole answer to a draft this build cannot render**
- * (`vg-512`): one slot, last writer wins, because a second slot or a pinned one
+ * **That is the slot's whole answer to a draft this build cannot render**:
+ * one slot, last writer wins, because a second slot or a pinned one
  * trades the document the author is working in for a document this build cannot
  * open. What the slot owes instead is the *announcement* — which is the boot's,
  * not this store's (`editor-main.ts`), on the shell's diagnostic line, where it
  * stands until the first committed edit: the moment the fallback document
  * supersedes the pending draft. Nothing here is silent and nothing here is
- * overstated; the two claims corrected in `vg-040`'s R3 are what this paragraph
- * replaces.
+ * overstated.
  */
 export function startDraftAutosave(input: {
   readonly store: DraftStore;

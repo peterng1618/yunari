@@ -333,10 +333,10 @@ describe("layer projection", () => {
   });
 
   it("lists nothing a save would drop, so editor scaffolding is not a row", () => {
-    // The shape vg-125 measured: the crop frame a mid-crop session draws over
-    // the image carries no id, so before the filter it was a row literally named
-    // `unidentified`, and `findById("unidentified")` resolved to it — an author
-    // could rename the crop frame and have it vanish on cancel.
+    // The crop frame a mid-crop session draws over the image carries no id, so
+    // without the filter it is a row literally named `unidentified`, and
+    // `findById("unidentified")` resolves to it — an author could rename the
+    // crop frame and have it vanish on cancel.
     const image = new Rect({ id: "image-1", width: 10, height: 10 });
     const frame = new Rect({ width: 10, height: 10, excludeFromExport: true });
     const rows = projectLayers({ ...base, root: [image, frame] });
@@ -1048,7 +1048,7 @@ describe("the row's role, in the document's own terms", () => {
   it("reads a nested group's own stamp, and lends it to nothing beneath", () => {
     // A constructed document, because the starter holds no nested group and a
     // starter assertion about one could only fail if a card legitimately gained
-    // it — vg-167. The card's stamp belongs to the card: a group inside it that
+    // it. The card's stamp belongs to the card: a group inside it that
     // names a unit of its own reads that one, and one that names none reads the
     // bare arm rather than borrowing the stamp above it, which would claim a
     // unit the document never wrote there.

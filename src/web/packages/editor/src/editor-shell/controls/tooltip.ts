@@ -34,7 +34,7 @@ const WIDTH = "max-content";
     dock from flashing every label, and a keyboard user has already committed to
     a control by focusing it.
 
-    The wait is measured, not chosen (`vg-450`): crossing the dock's 296px row of
+    The wait is measured, not chosen: crossing the dock's 296px row of
     26px controls in the 0.4–1.6s a hand takes dwells at most 195ms on any one
     control, and 220ms clears that floor with room for the run-to-run spread. The
     rows this tooltip also hangs on are full width (`control-well.tsx` and

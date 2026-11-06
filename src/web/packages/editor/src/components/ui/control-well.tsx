@@ -28,7 +28,7 @@ export type ControlProps = {
   readonly refused?: string;
   /**
    * A refusal the author can repair: the engine will not take the value, but the
-   * field stays editable so they can type a different one (`vg-263`). Distinct
+   * field stays editable so they can type a different one. Distinct
    * from `refused`, which blocks mutation — the distinction the set carries is
    * **who refused**, the document or the engine, not how loudly. The caller
    * passes the words; the set renders them as the field's described-by reason.
@@ -227,7 +227,7 @@ export type ControlShape = "column" | "boxed" | "headed";
  * Fixing the slot rather than giving each kind its own width is the difference
  * between one track and four: with a content-sized slot a number well was as
  * wide as its `<input>` while a select filled the slot, so the boxes in one
- * section started at four different left edges (`vg-297`).
+ * section started at four different left edges.
  *
  * The cell still right-aligns what does not fill it — a 26×14 toggle is a fixed
  * pill by the control set and sits at the right edge, as the surface draws it.
@@ -235,7 +235,7 @@ export type ControlShape = "column" | "boxed" | "headed";
  * The column is the **default shape, not the only one**. A surface that shapes a
  * row differently is drawn differently here (`ControlShape`), because applying
  * one surface's column to another surface's row is what wrapped the settings
- * modal's switch label and ellipsised the Add pane's file name (`vg-302`).
+ * modal's switch label and ellipsised the Add pane's file name.
  */
 export function ControlRow(props: {
   readonly ids: ControlIds;
@@ -324,7 +324,7 @@ export function describedBy(
 
 /**
  * The reason for a value the engine will not take but the author can repair,
- * rendered once for the whole set so the two fields cannot drift (`vg-263`).
+ * rendered once for the whole set so the two fields cannot drift.
  *
  * **Not a live region.** The node is already the field's `aria-describedby`
  * target, so an `aria-live` here would announce every refusal twice — once when
@@ -343,7 +343,7 @@ export function ControlReason(props: {
 
 /**
  * Whether a keystroke belongs to an IME's composition rather than to the field
- * (vg-686).
+ *.
  *
  * The `composing` ref and `event.nativeEvent.isComposing` are needed together:
  * the ref catches a composition that began without a keydown, and the native
@@ -370,7 +370,7 @@ export function useComposingGuard(): {
 
 /**
  * The design's draft/commit keyboard decision, in one place for both the text
- * and the number field (vg-203).
+ * and the number field.
  *
  * A keystroke writes a draft rather than the authored value; Enter commits that
  * draft, and the blur it causes must not commit it a second time. An IME's Enter

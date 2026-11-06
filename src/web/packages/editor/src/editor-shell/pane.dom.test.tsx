@@ -87,9 +87,8 @@ it("names the section and draws the title bar DESIGN.md's panes wear", () => {
 });
 
 it("draws no footer until a layer is selected", () => {
-  // The footer used to stay visible with every command greyed (`vg-570`, ruled
-  // 2026-10-17). The user reversed that on 2026-11-02: with no subject the
-  // toolbar is not drawn at all, keeping the pixels for the tree.
+  // With no subject the toolbar is not drawn at all, keeping the pixels for the
+  // tree; a visible footer with every command greyed is not the shape.
   const empty = render(bridge(nothing()));
   expect(
     empty.host.querySelector("[data-yunari-layer-actions]"),

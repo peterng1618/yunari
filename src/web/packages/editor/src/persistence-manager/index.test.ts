@@ -204,7 +204,7 @@ describe("PersistenceManager", () => {
   });
 
   it("reads a document with nothing saved behind it as unsaved, until a save gives it a baseline", () => {
-    // A restored draft (`vg-040`): the work exists in the editor and in the
+    // A restored draft: the work exists in the editor and in the
     // draft, so it is unsaved even though the document has not moved since it
     // mounted. The first save is what makes it clean.
     const manager = new PersistenceManager(baseline, {}, { unsaved: true });
@@ -230,7 +230,7 @@ describe("PersistenceManager", () => {
     // The Starter's one declared asset is a backdrop whose bytes land after the
     // manager is constructed. Enumerating the loaded map made the key a function
     // of how much had loaded, so an untouched theme asked to save work nobody did
-    // — the prompt vg-026 was filed about.
+    // — prompting the author over nothing.
     const document = withAsset("a".repeat(64));
     const before = documentKey(document, {});
     const after = documentKey(document, {

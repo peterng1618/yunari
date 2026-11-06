@@ -7,7 +7,12 @@ import {
 } from "@yunari/renderer-core";
 import { placement } from "@yunari/scene-fabric";
 import type { PanelVideoPlacement } from "./panel-device.js";
-import { type PanelVideoTurn, turnFilter } from "./panel-video-turn.js";
+import {
+  angleFilter,
+  flipFilter,
+  type PanelVideoRotation,
+  turnFilter,
+} from "./panel-video-turn.js";
 
 /**
  * The composed background graph both device-played panel families bake.
@@ -85,7 +90,7 @@ export function composeFilterGraph(
   box: { readonly width: number; readonly height: number },
   placement: PanelVideoPlacement,
   source: VideoSourceFacts | undefined,
-  turn: PanelVideoTurn,
+  rotation: PanelVideoRotation,
 ): string {
   const composition = resolveBackgroundComposition(
     box,
@@ -113,7 +118,9 @@ export function composeFilterGraph(
         })();
 
   const parts = [
-    `[0:v]${media}[media]`,
+    // The mirror belongs to the media, not the fill behind it, so it is applied
+    // before the overlay and before the display's turn.
+    `[0:v]${media}${flipFilter(placement)}[media]`,
     `${fillSource(placement.fill, box.width, box.height)}[fill]`,
   ];
 
@@ -148,7 +155,10 @@ export function composeFilterGraph(
     overlayInput = "composed";
   }
 
-  const turnStep = turnFilter(turn);
+  const turnStep =
+    rotation.kind === "turn"
+      ? turnFilter(rotation.turn)
+      : angleFilter(rotation.degrees, box);
   parts.push(
     `[fill][${overlayInput}]overlay=x=${x}:y=${y}:shortest=1[turned]`,
     `[turned]${turnStep === "" ? "null" : turnStep.slice(1)}[out]`,
@@ -159,11 +169,11 @@ export function composeFilterGraph(
 /**
  * A solid or linear-gradient source covering the whole box.
  *
- * **`gradients` is an animated source.** It turns by default (`speed=0.01`), so
- * an authored fill visibly rotates like a clock hand. Zero is outside the
- * option's accepted range and even the smallest accepted speed still moves, so
- * the first frame is looped instead: the baked picture is the gradient the page
- * shows, held for the clip's whole length.
+ * **The ramp is computed per pixel, not by `gradients`.** That source spaces
+ * its colours evenly and accepts at most eight, so authored stop offsets and
+ * the alpha ramp of a scrim came out as different bands and a different fade.
+ * `geq` can read the authored stops directly, which makes the baked fill the
+ * one the page draws.
  */
 function fillSource(
   fill: PalettePaint | undefined,
@@ -173,33 +183,123 @@ function fillSource(
   if (fill === undefined) return `color=c=0x000000:s=${width}x${height}`;
   if (fill.kind === "solid")
     return `color=c=${ffmpegColor(fill.color)}:s=${width}x${height}`;
+  return gradientSource(fill, width, height);
+}
 
-  const colors = gradientColors(fill.stops);
+interface GradientStop {
+  readonly offset: number;
+  readonly rgb: readonly [number, number, number];
+  readonly alpha: number;
+}
+
+/** `#rgb`, `#rrggbb` and `#rrggbbaa` are the forms the editor writes. */
+function stopOf(stop: {
+  readonly offset: number;
+  readonly color: string;
+}): GradientStop | undefined {
+  const hex = stop.color.startsWith("#") ? stop.color.slice(1) : undefined;
+  const expanded =
+    hex?.length === 3
+      ? [...hex].map((digit) => `${digit}${digit}`).join("")
+      : hex;
+  if (
+    expanded === undefined ||
+    !(expanded.length === 6 || expanded.length === 8) ||
+    !/^[0-9a-fA-F]+$/.test(expanded)
+  )
+    return undefined;
+
+  const value = (from: number): number =>
+    Number.parseInt(expanded.slice(from, from + 2), 16) / 255;
+  return {
+    offset: Math.min(1, Math.max(0, stop.offset)),
+    rgb: [value(0), value(2), value(4)],
+    alpha: expanded.length === 8 ? value(6) : 1,
+  };
+}
+
+function gradientSource(
+  fill: {
+    readonly angle: number;
+    readonly stops: readonly {
+      readonly offset: number;
+      readonly color: string;
+    }[];
+  },
+  width: number,
+  height: number,
+): string {
+  const stops = fill.stops
+    .map(stopOf)
+    .filter((stop): stop is GradientStop => stop !== undefined)
+    .sort((first, second) => first.offset - second.offset);
+
+  if (stops.length === 0) return `color=c=0x000000:s=${width}x${height}`;
+  if (stops.length === 1)
+    return `color=c=${ffmpegColor(fill.stops[0]!.color)}:s=${width}x${height}`;
+
   const line = artboardGradientLine(fill, width, height);
-  const stops = colors
-    .map((color, index) => `c${String(index)}=${color}`)
-    .join(":");
+  const dx = line.x2 - line.x1;
+  const dy = line.y2 - line.y1;
+  const length = dx * dx + dy * dy;
+  const position =
+    Number.isFinite(length) && length > 0
+      ? `clip(((X-${number(line.x1)})*${number(dx)}+(Y-${number(line.y1)})*${number(dy)})/${number(length)},0,1)`
+      : "0";
+
+  const alpha = piecewise(stops, position, (stop) => stop.alpha);
+  // CSS and the canvas interpolate a gradient in premultiplied alpha; doing the
+  // same keeps a translucent stop from pulling its neighbours toward black.
+  const channel = (index: 0 | 1 | 2): string =>
+    piecewise(stops, position, (stop) => stop.rgb[index] * stop.alpha, alpha);
+
   return (
-    `gradients=s=${width}x${height}:${stops}:nb_colors=${colors.length}` +
-    `:x0=${point(line.x1, width)}:y0=${point(line.y1, height)}` +
-    `:x1=${point(line.x2, width)}:y1=${point(line.y2, height)},${FROZEN}`
+    `color=c=black@0.0:s=${width}x${height},format=rgba,` +
+    `geq=r='255*${channel(0)}':g='255*${channel(1)}':b='255*${channel(2)}':a='255*${alpha}'`
   );
 }
 
 /**
- * ffmpeg's `gradients` spaces its colours evenly and holds at most eight. A
- * longer authored ramp is sampled at eight even positions; a palette gradient
- * with more stops than that is rare and the shape is kept.
+ * The stops as one nested ffmpeg expression over `position`, clamped at both
+ * ends.
+ *
+ * `value` is interpolated straight between neighbouring stops. When `divisor`
+ * is given the interpolated value is premultiplied colour, divided by the
+ * interpolated alpha it was weighted by; the alpha channel passes no divisor.
  */
-function gradientColors(
-  stops: readonly { readonly offset: number; readonly color: string }[],
-): readonly string[] {
-  const ordered = [...stops].sort((a, b) => a.offset - b.offset);
-  if (ordered.length <= 8)
-    return ordered.map((stop) => ffmpegColor(stop.color));
-  return Array.from({ length: 8 }, (_, index) =>
-    ffmpegColor(ordered[Math.round((index * (ordered.length - 1)) / 7)]!.color),
-  );
+function piecewise(
+  stops: readonly GradientStop[],
+  position: string,
+  value: (stop: GradientStop) => number,
+  divisor?: string,
+): string {
+  const lerp = (first: GradientStop, second: GradientStop): string => {
+    const span = second.offset - first.offset;
+    const ratio =
+      span > 0
+        ? `clip((${position}-${number(first.offset)})/${number(span)},0,1)`
+        : "1";
+    const from = value(first);
+    const to = value(second);
+    const mixed = `${number(from)}+(${number(to)}-${number(from)})*${ratio}`;
+    if (divisor === undefined) return `(${mixed})`;
+    return `if(gt(${divisor},0),(${mixed})/(${divisor}),0)`;
+  };
+
+  let expression = number(value(stops[stops.length - 1]!));
+  for (let index = stops.length - 2; index >= 0; index -= 1) {
+    const first = stops[index]!;
+    const second = stops[index + 1]!;
+    expression = `if(lt(${position},${number(second.offset)}),${lerp(first, second)},${expression})`;
+  }
+  return expression;
+}
+
+/** A finite number as an ffmpeg expression literal. */
+function number(value: number): string {
+  return Number.isFinite(value)
+    ? String(Math.round(value * 10000) / 10000)
+    : "0";
 }
 
 function ffmpegColor(color: string): string {

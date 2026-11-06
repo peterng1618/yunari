@@ -653,7 +653,7 @@ describe("updating a scene", () => {
     expect(adapter.objectFor("drop")).toBeUndefined();
     expect(canvas.getObjects()).toHaveLength(1);
     // `canvas.remove()` does not dispose, so the adapter — the party removing a
-    // node the document dropped — says so itself (`vg-486`). Without
+    // node the document dropped — says so itself. Without
     // it a chart leaks its ECharts instance and its backing store: 196x the heap
     // over 100 cycles, measured.
     expect(chart.disposed).toBe(true);

@@ -10,7 +10,7 @@ import { type ObjectActionId, objectAction } from "../object-actions.js";
  * has to say before its properties say anything.
  *
  * One thing lives here, and it is here for the same reason — there is nowhere
- * else left to put it: **the arrange actions** (`vg-463`). The dock carried the
+ * else left to put it: **the arrange actions**. The dock carried the
  * eight; a multi-selection gets them at the top of the column now. The registry
  * is still their one owner: the ids and labels cross as values from `index.ts`,
  * the glyph is asked of it by id, and the run is its own — so a surface cannot
@@ -90,7 +90,7 @@ function ArrangeRow({
  *
  * **It closes with its own edge**, because it stands between the subject's
  * hairline and the sections. The first section draws no rule of its own
- * (`vg-466`): with the subject's edge above it, that was the column's one
+ *: with the subject's edge above it, that was the column's one
  * boundary. This block is a second one — what the selection can *do* is not a
  * field of it — so the rule that closes it is its own, and the boundary count
  * stays one per boundary whether the block renders or not. A rule inside the

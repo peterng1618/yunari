@@ -59,16 +59,15 @@ export function createSceneAdapter(options: SceneAdapterOptions): SceneAdapter {
   );
 
   /**
-   * **The party that removes an object disposes it** (`vg-486`).
+   * **The party that removes an object disposes it.**
    *
-   * This used to subscribe `canvas.on("object:removed", ({ target }) =>
-   * target.dispose())`, because `canvas.remove()` disposes nothing and a chart
-   * must release its ECharts instance and backing pixels. **The event carries no
-   * intent**, so the listener disposed what *anyone* removed — and
+   * `canvas.remove()` disposes nothing, and a chart must release its ECharts
+   * instance and backing pixels. **An `object:removed` event carries no
+   * intent**, so a listener on it disposes what *anyone* removed — and
    * `grouping-manager.group()` takes each member off the root with the same
    * `canvas.remove` that a deletion uses, while the member is moving into the new
-   * `Group` and the document still holds it. The scene serialized identically
-   * either way, which is why the defect was invisible.
+   * `Group` and the document still holds it. The scene serializes identically
+   * either way, so that defect is invisible.
    *
    * So disposal is explicit at the three sites below that genuinely remove a
    * node, and every other remover owns its own. `Group.dispose()` cascades into

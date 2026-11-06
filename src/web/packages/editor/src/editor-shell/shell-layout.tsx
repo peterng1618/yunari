@@ -217,7 +217,7 @@ export interface ShellLayout {
   readonly dock: HTMLElement;
   /** The shell's own projection of the selection, for the panes that read it —
    *  the Tokens pane's preset list says what the canvas selection is set in
-   *  rather than showing the first declared preset (`vg-094`). */
+   *  rather than showing the first declared preset. */
   readonly selection: SelectionStore;
   /** The token the Tokens pane has selected for the inspector. Exclusive with
    *  the canvas selection in both directions; it lives as long as the shell. */
@@ -498,7 +498,7 @@ export function createShellLayout(
      * your place again after a glance at the assets is the whole cost of it. */
     const scrollOf = useRef(new Map<RailSlot, number>());
     /** The box that scrolls, which is the showing pane's **body** and not the
-     *  column around it (the overflow rule, `vg-208`): the column clips, so its own
+     *  column around it (the overflow rule): the column clips, so its own
      *  `scrollTop` is always 0 and the offset has to come off the body inside
      *  it. Only the showing pane's body carries this — the other four are
      *  `hidden`, so their bodies are not scrollable boxes at all. */

@@ -187,7 +187,7 @@ describe("committing a canvas scale", () => {
   }
 
   it("bakes a corner drag's scaled width into the authored box", () => {
-    // vg-770's ruling: a corner drag widens the authored box instead of
+    // A corner drag widens the authored box instead of
     // letting the widened Textbox snap back when the handle scale resets.
     // Fabric's `width` is the box *before* `scaleX`, so the drawn width the
     // drag left is `width * scaleX`.
@@ -215,7 +215,7 @@ describe("committing a canvas scale", () => {
 
   it("does not compound the bake across two corner drags", () => {
     // The stored box is unscaled once `scaleX` resets, so the next drag starts
-    // from that number rather than from the scale it replaced (vg-233).
+    // from that number rather than from the scale it replaced.
     const { object, canvas, manager } = boxed();
     object.set({
       scaleX: 1.5,

@@ -303,7 +303,7 @@ export function projectRuns(
     } = {
       // The row's identity is the run's own object, minted on first sight and
       // carried across the writes that replace one — never a spelling of the
-      // run's fields, which two runs can share (`run-identity.ts`, `vg-249`).
+      // run's fields, which two runs can share (`run-identity.ts`).
       id: runIdentity(run),
       index,
       kind: run.kind,

@@ -3,9 +3,9 @@ import { execFileSync } from "node:child_process";
 /**
  * Two reachability questions over the two stylesheets the product ships:
  * whether a selector one of them declares is applied by anything, and whether a
- * class the production source writes is declared by them. `vg-380`'s ruling:
- * the reverse direction is in scope, and the instrument reads `className` and
- * `classList` writes alongside `class=` literals.
+ * class the production source writes is declared by them. Both directions are
+ * in scope, and the instrument reads `className` and `classList` writes
+ * alongside `class=` literals.
  *
  * A **write** is a literal the production source puts on an element —
  * `className="a b"`, `className={cond ? "a" : "b"}`, `className: "a"`,

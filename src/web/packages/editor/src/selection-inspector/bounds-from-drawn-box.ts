@@ -8,7 +8,7 @@ import type { FieldHooks, FieldView } from "./view.js";
  * A border, a blur or a radius past the object's own drawn size is a number
  * nothing on the canvas can show, and a radius is narrower still — it takes half
  * of that edge, because a corner is one of a rectangle's four and two opposite
- * radii meeting is the most a corner can be (`vg-478`). Fabric draws
+ * radii meeting is the most a corner can be. Fabric draws
  * `Math.min(rx, w / 2)` at draw time, so a larger stored radius is a field
  * claiming a corner the canvas never draws.
  *

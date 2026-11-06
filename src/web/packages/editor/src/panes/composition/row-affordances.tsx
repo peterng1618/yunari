@@ -21,7 +21,7 @@ import { uiCopy } from "../../ui-copy.js";
  * back the control that names it, and only that one: a hidden row is still
  * unlocked, so an unlocked row's lock icon would be noise even there.
  *
- * **Rename is not here, and it is not a missing control** (`vg-462`). It was
+ * **Rename is not here, and it is not a missing control**. It was
  * never a state — it appeared wherever either state control did, including on a
  * locked row — and the name it acted on is the one thing the row already
  * carries, so a pen beside it was a second way to reach what a double-click had

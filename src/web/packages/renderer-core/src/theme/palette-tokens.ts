@@ -47,11 +47,11 @@ export interface PaletteTokenOption {
  *
  * **One function**, because the artboard's paint controls, the chart paint rows
  * and the inspector's material fields each offered the same document tokens and
- * each was its own place a label could print as an id (vg-104, RULED
- * 2026-10-12). `keep` is the caller's own: what the surfaces differ in is which
- * tokens they offer — the artboard offers every token, the inspector hides
- * `none` and, on a solid-only field, the gradients — never in how a token is
- * named.
+ * each was its own place a label could print as an id. Sharing one function
+ * means a token is named one way everywhere. `keep` is the caller's own: what
+ * the surfaces differ in is which tokens they offer — the artboard offers every
+ * token, the inspector hides `none` and, on a solid-only field, the gradients —
+ * never in how a token is named.
  *
  * A token the document no longer declares a name for has nothing left to label
  * it, so **the reference is the label**: the one case a picker is handed a

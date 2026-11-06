@@ -33,7 +33,7 @@ export function createDeletionManager(
       for (const [owner, object] of removals) {
         if (owner.remove(object).length > 0) {
           removed += 1;
-          // Disposed here rather than by the scene adapter (`vg-486`): it no
+          // Disposed here rather than by the scene adapter: it no
           // longer disposes whatever anyone removes,
           // because the removal event cannot tell a deletion from a reparent.
           // A root `Group` takes its children with it; a member removed from a

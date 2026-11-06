@@ -98,7 +98,7 @@ export interface InsertGroup {
    * The group's own identity, which is a scope rather than the heading.
    * **The pane scopes a group by it** (`data-yunari-add-group`), and a scope
    * derived from the heading would move the day an author's copy did, which is
-   * what the hook exists to stop (`vg-211`). Basic and custom shapes are two
+   * what the hook exists to stop. Basic and custom shapes are two
    * groups of the same object kind, so this cannot be the object's kind alone.
    */
   readonly id: string;
@@ -268,7 +268,7 @@ export function insertNewShape(
  * through the editor's own diagnostics, because a throw out of a click handler
  * leaves the author with a button that silently does nothing.
  *
- * **Exported, and the one owner of a construction's refusal** (`vg-484`). Two
+ * **Exported, and the one owner of a construction's refusal**. Two
  * surfaces construct outside this pane — the layer footer and the canvas context
  * menu — and neither can report a refusal itself: the footer's `bridge.run` arm
  * and the menu's `creationGroups` both hold a `void`, so the throw reached

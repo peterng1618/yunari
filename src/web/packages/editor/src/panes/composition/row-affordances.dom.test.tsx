@@ -93,8 +93,8 @@ it("shows the row's own controls on the attended row and on a row whose state is
   // control at all — 104 icons reading "visible, unlocked" was the measured
   // defect, and it grows with the row count.
   //
-  // Rename is not a column here and is not a case: `vg-462` removed the pen, so
-  // there is no control whose presence a row's state could decide.
+  // Rename is not a column here and is not a case: there is no pen, so
+  // no control's presence is a row-state decision.
   const cases: readonly {
     readonly what: string;
     readonly row: LayerRow;
@@ -245,10 +245,10 @@ it("reaches visibility and lock from the keyboard, with a name each", async () =
 });
 
 it("draws no rename control on an attended row, and the name still opens for typing", async () => {
-  // vg-462's item is a removal: the name the pen acted on is the row's own, so a
-  // control beside it was a second route to what a double-click had always
-  // opened. The failure mode to guard is the other half — removing the pen while
-  // taking the pointer and keyboard routes with it.
+  // There is no pen: the name it acted on is the row's own, so a
+  // control beside it would be a second route to what a double-click opens.
+  // The failure mode to guard is the other half — the pointer and keyboard
+  // routes going with it.
   const host = await renderPane([row()]);
   // In the document, because the case proves where focus lands.
   document.body.append(host);
@@ -289,7 +289,7 @@ it("draws no rename control on an attended row, and the name still opens for typ
 });
 
 it("draws at most three controls in the state slot, whatever the row's state", async () => {
-  // The ceiling `editor-shell.css`'s reserve is written against (`vg-492`): the
+  // The ceiling `editor-shell.css`'s reserve is written against: the
   // two state controls, and the pane's one entry control beside them. The row is
   // drawn in the one state that shows all three — entered, so the entry control
   // is up without attention, and selected, hidden and locked, so each state

@@ -32,7 +32,7 @@ function countingMeasures(body: () => void): number {
   return count;
 }
 
-/** Frames the 30 fps loop delivers in 3.2 s, the interval vg-081 measured idle. */
+/** Frames the 30 fps loop delivers in 3.2 s, its idle interval. */
 const IDLE_FRAMES = 96;
 const IDLE_MS = 3_200;
 

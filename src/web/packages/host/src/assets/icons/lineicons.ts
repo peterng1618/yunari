@@ -1,8 +1,7 @@
 import { LINEICONS_ICONS } from "./lineicons.generated.js";
-import { createLocalIconSource, type LocalIcon } from "./local-icons.js";
+import { createLocalIconSource } from "./local-icons.js";
 
 export { LINEICONS_ICONS };
-export type LineiconsIcon = LocalIcon;
 
 const { source, search } = createLocalIconSource({
   id: "lineicons",

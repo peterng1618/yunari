@@ -337,9 +337,9 @@ interface ApplyAuthoredTextOptions {
  *
  * **Not the face.** `fontFamily` and `fontWeight` belong to `object-type.ts`'s
  * `applyObjectTypeTokens`, which reads the same first run's type token: two
- * writers of one object-level field is how a wrong number gets two homes
- * (`vg-766`). They also reach Fabric per grapheme, but `charSpacing` and
- * `lineHeight` are whole-object properties Fabric measures once, so a run's
+ * writers of one object-level field is how a wrong number gets two homes. They
+ * also reach Fabric per grapheme, but `charSpacing` and `lineHeight` are
+ * whole-object properties Fabric measures once, so a run's
  * tracking can only arrive here. A run that authored no tracking clears the
  * object's, the way the old token field did.
  */

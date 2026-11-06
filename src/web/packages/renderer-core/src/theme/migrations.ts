@@ -23,8 +23,8 @@ export type MigrationResult =
   | { readonly ok: false; readonly issue: ValidationIssue };
 
 /**
- * The oldest major this build reads. The legacy integer `2` is the floor: v1
- * was deleted and no v1 document exists.
+ * The oldest major this build reads. The legacy integer `2` is the floor: no
+ * v1 document exists.
  */
 export const MIN_SUPPORTED_SCHEMA_MAJOR: number = Math.max(
   2,

@@ -15,9 +15,9 @@ describe("ObjectLockManager", () => {
     const manager = createObjectLockManager(canvas, save);
 
     manager.lockObject();
-    // A lock is "cannot be transformed", not "cannot be selected": the whole
-    // point of vg-025 is that a locked object stays clickable, so `selectable`
-    // must not be the flag that carries it.
+    // A lock is "cannot be transformed", not "cannot be selected": a locked
+    // object stays clickable, so `selectable` must not be the flag that carries
+    // it.
     expect(object.selectable).toBe(true);
     expect(object.evented).toBe(true);
     expect(object.get("locked")).toBe(true);

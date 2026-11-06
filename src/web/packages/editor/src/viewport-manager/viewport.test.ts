@@ -142,7 +142,7 @@ describe("viewport camera", () => {
     // The editor's fit is deliberately its own rule — it frames the display's
     // screen rather than the host — but it must carry the refusals
     // `computeArtboardTransform` already has, or only one of the two copies is
-    // guarded (vg-241, RULED 2026-10-12).
+    // guarded.
     //
     // A zero-width board is the shape that slips past the derived-scale guard:
     // `box.width / 0` is `Infinity`, and `Math.min(Infinity, 800 / 720)` is a

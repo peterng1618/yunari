@@ -74,7 +74,7 @@ function hostServing(options: {
   /** Refuse the PUT itself, in the host's own words. */
   readonly refuse?: string;
   /** Accept the PUT and move nothing, leaving the refusal to arrive on the read
-   *  that follows — the shape `vg-173` gives a host that cannot rebind while
+   *  that follows — the shape a host takes when it cannot rebind while
    *  its answer is still on the socket. */
   readonly refusalAfterPut?: string;
   /** When the host's code stops being the answer. Defaults to the past, so the
@@ -417,10 +417,9 @@ it("opens the surface from the header's chord, and moves no host state", async (
 });
 
 it("closes the surface under jsdom, on its close control and on Escape", async () => {
-  // vg-215 recorded that the close half of a popover contract is browser-only,
-  // because re-adding a close assertion threw inside Base UI's own path. That
-  // does not reproduce, so the assertion is written here rather than left to the
-  // browser spec: a close no dom test asserts is the gap the row named.
+  // The close half of a popover contract needs a dom assertion, and it does not
+  // throw inside Base UI's own path, so the assertion is written here rather
+  // than left to the browser spec: a close no dom test asserts is a gap.
   const fake = hostServing({ lan: true });
   const container = await mount();
 
@@ -508,7 +507,7 @@ it("shows the host's own reason when it refuses the interface", async () => {
 it("shows the host's refusal when the move it accepted did not happen", async () => {
   // A PUT answers 200 with the state the host had *before* it moved — it has
   // to, because it cannot rebind while that answer is still on its socket
-  // (vg-173). So a refusal arrives on the read that follows, in the host's own
+  //. So a refusal arrives on the read that follows, in the host's own
   // words, and the switch ends up showing them rather than the state it asked
   // for.
   hostServing({

@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
-import type { PanelHardware, PanelHint } from "./client.js";
+import type { PanelHint } from "./client.js";
 import { Group } from "./section-group.js";
 
 /**
@@ -156,14 +156,4 @@ export function PanelsSection(props: {
       </div>
     </Group>
   );
-}
-
-/** The hardware fields an add sends. `model` is the host's to write, from its
- *  own family table, so this never names one. */
-export function hardwareOf(panel: PanelHint): PanelHardware {
-  return {
-    vendorId: panel.vendorId,
-    productId: panel.productId,
-    serial: panel.serial,
-  };
 }

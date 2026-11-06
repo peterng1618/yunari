@@ -99,7 +99,7 @@ function strokePadding(object: FabricObject): number {
  *
  * The other shapes stay distinct for free. The nested fixture's card is 400×200
  * and its `left-card-part` is 61×81 at 360…421, far outside any stroke, so the
- * part keeps its own lines (`vg-526`). */
+ * part keeps its own lines. */
 function repeatsEnclosingBounds(
   bounds: ObjectBounds,
   enclosing: ObjectBounds | null,
@@ -162,7 +162,7 @@ export function readMovementModifiers({
  * a domain-boundary line set. Shared by the movement and resize paths so both
  * see the same candidates.
  *
- * Candidates come from the whole scene, not its roots (`vg-123`): roots-only
+ * Candidates come from the whole scene, not its roots: roots-only
  * was every object while the scene was flat, and once cards are groups a part
  * inside one is content an author can align against now that selection can
  * enter a group. A nested part that adds no line of its own — a group wrapped

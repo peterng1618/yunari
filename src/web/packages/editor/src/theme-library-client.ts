@@ -102,7 +102,7 @@ export class ThemeConflictError extends Error {
 
 /**
  * The host holds the theme and its document does not validate — a different
- * answer from "no such theme", which is what the host used to give for both.
+ * answer from "no such theme".
  * `issues` is the validator's own list, carried through the `422` the host
  * answers, so a caller can tell this from the 404 a dead id gets and
  * say why rather than reporting a bare status.
@@ -118,11 +118,10 @@ export class ThemeValidationError extends Error {
 
 /**
  * The host holds the theme and its stored document is past the size the store
- * will read — a different answer from "no such theme", which is what the host
- * used to give for both. The `413` the host answers carries no issues, because
- * nothing about the document is invalid: the reason is its size, and that is
- * the whole of it, so this is its own error rather than a validation failure
- * (vg-409).
+ * will read — a different answer from "no such theme". The `413` the host
+ * answers carries no issues, because nothing about the document is invalid:
+ * the reason is its size, and that is the whole of it, so this is its own error
+ * rather than a validation failure.
  */
 export class ThemeTooLargeError extends Error {
   constructor(id: string) {
@@ -394,8 +393,8 @@ export function createThemeLibraryClient(options?: {
       );
       // Its own error, because the theme is there and the reason is a document
       // the author can fix — not the not-found a dead id gets. Without this the
-      // two collapsed into one failure and the editor reported success over a
-      // document it never opened (vg-110).
+      // two collapse into one failure and the editor reports success over a
+      // document it never opened.
       if (response.status === 422) {
         const body = (await response.json().catch(() => undefined)) as
           | { readonly issues?: unknown }
@@ -409,7 +408,7 @@ export function createThemeLibraryClient(options?: {
       }
       // The theme is there and the reason is its size rather than its content,
       // so it gets its own error instead of the not-found a dead id gets — the
-      // same half the 422 above fixed for validation (vg-409).
+      // same split the 422 above makes for validation.
       if (response.status === 413) {
         throw new ThemeTooLargeError(id);
       }

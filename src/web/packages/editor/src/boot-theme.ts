@@ -49,13 +49,13 @@ import {
  * dropping it, or the round trip and the safety go together.
  *
  * **The outcome is discriminated, not nullable.** A theme on disk that exists
- * and fails validation was answered with the same "nothing to open" a dead id
- * gets, so the editor mounted the template and reported success over a document
- * it never opened (`vg-110`); `Content | undefined` let every later reader drop
- * the report again. `invalid` carries the validator's own issues, and a caller
- * that ignores it will not compile. `too-large` is the same defect
+ * and fails validation is not the same "nothing to open" a dead id gets:
+ * otherwise the editor mounts the template and reports success over a document
+ * it never opened, and `Content | undefined` lets every later reader drop the
+ * report again. `invalid` carries the validator's own issues, and a caller
+ * that ignores it will not compile. `too-large` is the same rule
  * one trigger over — a stored document past the store's size bound — and it is
- * its own kind rather than `none` for the same reason (`vg-409`).
+ * its own kind rather than `none` for the same reason.
  */
 export type BootThemeOutcome =
   | { readonly kind: "opened"; readonly content: ThemeLibraryContent }

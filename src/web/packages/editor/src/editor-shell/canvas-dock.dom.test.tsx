@@ -152,13 +152,14 @@ function unmount(): void {
   host = undefined;
 }
 
-/** The dock's remaining half, after `vg-463` moved the arrange actions into the
+/** The dock's remaining half, the arrange actions having moved into the
  *  selection inspector: the object actions, *filtered* — an action this
  *  selection cannot run is absent — and **no arrange button at all**.
  *
  *  The negative is worth a case of its own, because the failure mode of a move
- *  like this is two surfaces answering one question: the row that used to draw
- *  them has to stop, and this is the instrument that notices if it does not. */
+ *  like this is two surfaces answering one question: the row that carries them
+ *  has to be the inspector's alone, and this is the instrument that notices if
+ *  it is not. */
 describe("the canvas dock's one half", () => {
   it("draws only Paste with nothing selected", async () => {
     const container = await mount(bridgeOverSelection(0, false));

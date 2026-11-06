@@ -558,7 +558,7 @@ function paintBody(
   // reason such a subject is offered no glass section is carried by the block
   // that leads the column (`selection-lead.tsx`, through `index.ts`), so a kind
   // that cannot be frosted gets no Paint section standing over one refusal
-  // (vg-465).
+  //.
   fields.push(...glassFields(target));
 
   // What a chart paints its data with, from the owner that writes it. A chart's

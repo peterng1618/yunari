@@ -267,8 +267,8 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // a construction's refusal (`new-object-panel.ts`), because the surfaces
     // that reach them — the layer footer through `bridge.run`, and the canvas
     // context menu through `creationGroups` — both hold a `void` and cannot
-    // report a throw themselves (`vg-484`). `addText` arms rather than
-    // constructs now, so its refusal is reported at the gesture's end by
+    // report a throw themselves. `addText` arms rather than
+    // constructs, so its refusal is reported at the gesture's end by
     // `armText`. `insertCard` is not wrapped: the document reports that one
     // at its own owner.
     addText: () => host.armText(),

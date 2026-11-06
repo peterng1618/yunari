@@ -155,7 +155,7 @@ describe("panelH264Args", () => {
     expect(filter.match(/alphamerge/g)).toHaveLength(1);
   });
 
-  it("holds an authored gradient and the eased mask still", () => {
+  it("holds the eased mask still and reads the authored fill's stops", () => {
     const filter = complexOf(
       panelH264Args(
         "in.mp4",
@@ -178,11 +178,12 @@ describe("panelH264Args", () => {
       ),
     );
 
-    // The fill and the mask are both `gradients` sources, and both turn by
-    // default; every one of them has to be pinned still.
+    // The mask ramp turns by default, so it has to be pinned still. The fill
+    // is a static `geq` expression, so it needs no freeze.
     const sources = filter.match(/gradients=/g) ?? [];
-    expect(sources).toHaveLength(2);
-    expect(filter.match(/loop=loop=-1:size=1:start=0/g)).toHaveLength(2);
+    expect(sources).toHaveLength(1);
+    expect(filter.match(/loop=loop=-1:size=1:start=0/g)).toHaveLength(1);
+    expect(filter).toContain("geq=");
   });
 
   it("multiplies a centre composition's two masks, not replaces one", () => {
@@ -239,6 +240,39 @@ describe("panelH264Args", () => {
     expect(args).toContain("-vf");
     expect(args).not.toContain("-filter_complex");
     expect(filterOf(args)).not.toContain("gradients=");
+  });
+
+  it("rotates a circle's non-quarter angle onto the wire frame", () => {
+    const filter = filterOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        { offsetX: 0, offsetY: 0, shape: "circle" },
+        { kind: "angle", degrees: 45 },
+      ),
+    );
+
+    expect(filter).toContain("rotate=45*PI/180");
+    expect(filter).toContain("crop=464:1920");
+  });
+
+  it("mirrors the media before the mount turns it", () => {
+    const args = panelH264Args(
+      "in.mp4",
+      "out.h264",
+      GEOMETRY,
+      { offsetX: 0, offsetY: 0, flipX: true, flipY: true },
+      "cw",
+    );
+
+    const filter = filterOf(args);
+    // The page mirrors the media layer inside the box and turns the box as a
+    // whole, so a screen-space mirror after the turn is the wrong axis.
+    expect(filter.indexOf("hflip,vflip")).toBeGreaterThan(-1);
+    expect(filter.indexOf("hflip,vflip")).toBeLessThan(
+      filter.indexOf("transpose=1"),
+    );
   });
 
   it("uses the vendor's block size only as a fallback", () => {

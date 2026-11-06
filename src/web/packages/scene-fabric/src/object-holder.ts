@@ -6,10 +6,9 @@ import {
 } from "fabric/es";
 
 /**
- * The collection that actually holds `object`. Callers used to spell this two
- * ways — `layer-manager` returning the canvas itself, `deletion-manager`
- * returning `undefined` and making every caller write `?? canvas` — so a caller
- * that forgot the fallback silently acted on nothing.
+ * The collection that actually holds `object`. Spelling this per caller — the
+ * canvas itself here, `undefined` there and a `?? canvas` fallback at every
+ * call site — lets a caller that forgets the fallback silently act on nothing.
  *
  * Two Fabric traps are the reason the fact exists rather than the bare test:
  *

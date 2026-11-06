@@ -23,7 +23,7 @@ export interface HostBinding {
    *
    *  Async because the address is: ranking the adapters asks the OS which one
    *  carries the default route, and Node exposes that through no synchronous
-   *  call (`vg-171`). */
+   *  call. */
   readonly state: () => Promise<HostingState>;
   /** Rebinds on the same port. Resolves false, with a reason, when the new
    *  interface will not take that port — the old binding is restored.
@@ -90,10 +90,9 @@ export function createHostBinding(
     // the connections that are still answering, and a request in flight cannot
     // end until this move does, so waiting on it is a deadlock rather than a
     // delay: the move never settles, the rebind never runs, and the host never
-    // listens again (`vg-174`, ruled 2026-10-12 — destroy the remaining
-    // connections rather than let `close` wait for them). What that spends is
-    // what `vg-173` measured: whichever request was unlucky gets an empty
-    // reply, and the editor's bounded re-read recovers. Streams a display is
+    // listens again. Destroying the remaining connections rather than letting
+    // `close` wait for them spends one unlucky request, which gets an empty
+    // reply; the editor's bounded re-read recovers. Streams a display is
     // holding are the host's to close, and it closes them before calling in.
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

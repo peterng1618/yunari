@@ -1161,8 +1161,8 @@ describe("the behaviours the Assets pane carried", () => {
   });
 
   it("swaps the chosen asset's bytes without declaring a second asset", async () => {
-    // `vg-154`'s remaining work is "re-point the *selected object* at a new
-    // asset" — the opposite shape to this, and the shape that would declare one.
+    // Re-pointing the *selected object* at a new asset is the opposite shape to
+    // this, and the shape that would declare one.
     const image = new FabricImage(document.createElement("img"), {
       id: "image-1",
     });

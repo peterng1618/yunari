@@ -40,8 +40,8 @@ Element.prototype.getAnimations ??= (): never[] => [];
 // jsdom's selector engine cannot answer `:modal`/`:popover-open`, and
 // floating-ui asks for both on every position. Each unanswerable call costs
 // ~0.5s of selector parsing, which turns one open into tens of seconds — this
-// stub is the cure for the `vg-135` stall (measured at HEAD: the file is 23
-// passed in ~8s with it, and one 20s timeout plus three 17-52s stalls without).
+// stub is the cure for the `:modal`/`:popover-open` stall: the file passes in
+// about 8s with it, against timeouts and stalls without.
 // Real browsers answer both. The sibling `publish-control.dom.test.tsx` carries
 // the same patch.
 beforeAll(() => {
@@ -100,14 +100,14 @@ function facade(): EditorActionFacade {
 
 /** The live binding table is module state, so it is put back after every test.
  *
- *  The menu check is the ordering guard (`vg-186`), inverted: each test's own
+ *  The menu check is the ordering guard, inverted: each test's own
  *  `layout.destroy()` is what unmounts the menu it opened, so a menu still in
  *  `body` here means one outlived its test — which is what made this file's
  *  tests depend on where they sit. It fails at the test that leaked rather than
  *  as a stall in whichever test runs next. */
 afterEach(() => {
   expect(document.querySelectorAll(".editor-shell-menu-popup")).toHaveLength(0);
-  // The positioner's own half of the same invariant (`vg-416`). The
+  // The positioner's own half of the same invariant. The
   // publish-surface case used to sweep these by hand *after* its own
   // `layout.destroy()`, where the sweep removed nothing — so it guarded a leak
   // no case produced and left every other case's leak unread.
@@ -314,14 +314,10 @@ it("reopens a folded inspector when a new object is selected", async () => {
 });
 
 /**
- * First in the file because it is the case `vg-186` is proved by.
- *
- * The row recorded that an earlier menu stalls this test's close, so it only
- * passed because of where it sat. Re-measured at HEAD neither half holds: the
- * stall was jsdom's `:modal`/`:popover-open` selector cost — the stub at the
- * top of this file — and this test now passes wherever it sits (0.17 s here,
- * 0.1 s last), so no case in the file depends on the order. It stays first
- * because that is the position the row's ruling named as its proof.
+ * No case in this file depends on order: an apparent ordering dependency was
+ * jsdom's `:modal`/`:popover-open` selector cost — the stub at the top of this
+ * file — and this test passes wherever it sits (0.17 s here, 0.1 s last). It
+ * stays first by convention only.
  */
 it("opens the shortcut sheet from the shell's own surface, and closes it again", async () => {
   const root = document.createElement("div");
@@ -1099,7 +1095,7 @@ it("shows one pane at a time and routes the dock through the bridge", async () =
   // Ineligible actions must not be advertised: a single object cannot group,
   // and `canArrange` refuses one too.
   expect(dock.querySelector('[aria-label="Group"]')).toBeNull();
-  // **Arrange is not here at all** (`vg-463`). The dock used to share this one
+  // **Arrange is not here at all**. The dock used to share this one
   // surface with the eight and grey them; they belong to the selection
   // inspector's lead now, which is the surface that names the selection they act
   // on, so the toolbar carries the object half alone and greys nothing.
@@ -1120,8 +1116,8 @@ it("draws one toolbar holding the object actions, and no arrange action at all",
   // the second toolbar was deleted rather than left drawing somewhere.
   expect(root.querySelector("[data-yunari-arrange-toolbar]")).toBeNull();
   // Derived, not a literal — a ninth arrange action added to `ARRANGE_ICONS`
-  // must fail here rather than be silently dropped. It fails by being **absent**
-  // now: `vg-463` moved the whole set to the inspector's lead, so the registry
+  // must fail here rather than be silently dropped. It fails by being **absent**:
+  // the whole set lives in the inspector's lead, so the registry
   // is still the list this surface is measured against, and the measurement is
   // that it draws none of it.
   for (const action of arrangeActions())

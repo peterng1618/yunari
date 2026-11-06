@@ -9,10 +9,10 @@ import type { TextRun } from "@yunari/renderer-core";
  * carries can spell that — two literal runs sharing a preset are the same
  * fields, and counting repeats is positional, so removing the first renames the
  * second, React reuses the removed row for the survivor, and the survivor's
- * draft is destroyed while the removed row's is shown against it (`vg-249`).
+ * draft is destroyed while the removed row's is shown against it.
  *
  * So the identity is the run's own object. A removal keeps the survivors'
- * objects, which is the reconciliation `vg-044` performs for a chart's paint;
+ * objects, which is the same reconciliation a chart's paint performs;
  * a write replaces the object it edits, so `carryRunIdentity` hands the
  * identity to the replacement — the mutation is what keeps a preset change from
  * remounting the field under the caret.

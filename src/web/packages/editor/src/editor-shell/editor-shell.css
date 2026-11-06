@@ -70,14 +70,14 @@ body,
 
 /* The `--shell-*` token that is not a colour. It is on bare `:root` because a
    display face does not belong in a palette. This block is what a node under
-   *no* palette resolves; every one of the six palette blocks now declares it
-   for itself, which is what lets the dark base below carry graphite's without
-   moving a palette that had inherited this one (`vg-357`). Editorial's is the
+   *no* palette resolves; every one of the six palette blocks declares it for
+   itself, which is what lets the dark base below carry graphite's without
+   moving a palette that would otherwise inherit this one. Editorial's is the
    same declaration a second time because a swatch is a self-contained scope
    that declares every token it can paint with.
-   `--shell-flat` stood beside it and is gone (`vg-312`): a per-palette flag no
-   `var()` read, while the flat treatment is selector-driven, is a knob that
-   lies — changing it moved nothing and failed nothing. */
+   There is no per-palette flag beside it: a flag no `var()` read, while the
+   flat treatment is selector-driven, is a knob that lies — changing it moves
+   nothing and fails nothing. */
 :root {
   --shell-display: ui-serif, Georgia, "Times New Roman", serif;
 }
@@ -94,19 +94,18 @@ body,
    too. `:root` and `[data-shell-palette="x"]` have equal specificity, so a
    palette can only override a base value by source order; below them, this
    block silently won and graphite's control surface never applied. For the same
-   reason the dark base must come *after* it (`vg-357`), or `--yunari-control-bg`
+   reason the dark base must come *after* it, or `--yunari-control-bg`
    would outrank the dark base and a dark-reporting OS would paint this block's
    editorial paper in the pre-attribute frame.
 
-   Four tokens, down from fifteen (`vg-552`). The eleven that went —
-   `--yunari-text`, `-panel-bg`, `-panel-border`, `-control-border`,
-   `-input-bg`, `-muted`, `-selection-bg`, `-accent`, `-accent-dim` and
-   `-guide` — each named a job the React control set now holds through the palette's
-   roles, so every one was a declaration no rule read: the knob that lies
-   `--shell-flat` was (`vg-312`). `--yunari-canvas-bg` went with the stage's
-   own background: the stage paints `--stage`, and nothing else read the
-   literal.
-   The four that stay each have a reader, and the literals among
+   Four tokens. The eleven beside them — `--yunari-text`, `-panel-bg`,
+   `-panel-border`, `-control-border`, `-input-bg`, `-muted`,
+   `-selection-bg`, `-accent`, `-accent-dim` and `-guide` — each name a job
+   the React control set holds through the palette's roles, so a declaration for
+   any of them is one no rule reads: the knob that lies. `--yunari-canvas-bg`
+   has no declaration either: the stage paints `--stage`, and nothing else
+   reads the literal.
+   Each of the four has a reader, and the literals among
    them stay literals because no shell token is that colour. `--yunari-subdued` sits
    between the shell's muted and its surface, and `--yunari-control-bg` cannot
    alias `--shell-backdrop`: that holds this same colour under editorial and
@@ -116,15 +115,15 @@ body,
 :root {
   --yunari-control-bg: #f5f1e8;
   --yunari-subdued: #8a8272;
-  /* `vg-479`: both were literals, so a dark shell painted `#c9c2b1` against its
-     own ground — no palette could reach them. `--shell-text` is a role every
+  /* As literals both painted a dark shell `#c9c2b1` against its own ground —
+     no palette could reach them. `--shell-text` is a role every
      palette declares, so an ink over the surface follows the palette from this
      one declaration.
 
-     **Two values and not three.** `--yunari-scrollbar-thumb-hover` stood here
-     and is gone (`vg-491`): its only reader was the `::-webkit-scrollbar-thumb`
-     hover rule, and that family paints nothing beside the pair below, so the
-     declaration was one nothing could consume. `scrollbar-color` states a thumb
+     **Two values and not three.** A hover thumb is not declared: its only
+     reader would be the `::-webkit-scrollbar-thumb` hover rule, and that family
+     paints nothing beside the pair below, so such a declaration is one nothing
+     could consume. `scrollbar-color` states a thumb
      and a track — no third value, and no hover state.
 
      Substituted where it is declared, so a subtree that re-declares `--shell-*`
@@ -150,7 +149,7 @@ body,
    It carries every token graphite declares, the two beyond its colours
    included. A token declared here wins over the palette blocks below at equal
    specificity, so carrying those two is only safe while every palette that
-   inherited one states its own — which `vg-357` made true: ember, moss, plum
+   inherited one states its own — which every palette holds: ember, moss, plum
    and light name the display face they took from the `:root` block above,
    and editorial and light name the control paper. That block precedes this one
    for the same reason: had the control tokens' `:root` stayed below, its
@@ -229,7 +228,7 @@ body,
   --shell-primary-bg: var(--shell-accent);
   --shell-primary-text: #f5f1e8;
   --shell-display: ui-serif, Georgia, "Times New Roman", serif;
-  /* `vg-357`: editorial's control paper, declared for the same reason as the
+  /* Editorial's control paper, declared for the same reason as the
      token above and at the value `:root` already gave it, so the dark base can
      carry graphite's. */
   --yunari-control-bg: #f5f1e8;
@@ -336,17 +335,16 @@ body,
    Their accents are deepened from the pastel that named them. A light accent
    on a light surface carries nothing: `--shell-accent` paints hover colour and
    the focus ring, so `#ffb36b` on a peach paper was a hover the author could
-   not see. Each is now the same hue at a value that holds 4.5:1 against its own
-   surface — the overlay the non-editorial rules used to put over that surface
-   retired with the glass chrome, plan 7 Task 5 — and the ring still reads as
+   not see. Each is the same hue at a value that holds 4.5:1 against its own
+   surface, with no overlay over that surface, and the ring still reads as
    ember, moss or plum.
 
-   Each names `--shell-display` at the value it used to inherit from `:root`,
-   which is what leaves the dark base free to carry graphite's (`vg-357`).
+   Each names `--shell-display` at the value it would otherwise inherit from
+   `:root`, which is what leaves the dark base free to carry graphite's.
 
-   **`--shell-warm` is deepened by that same rule, and was the one role left
-   out of it** (`vg-201`): it stayed the pastel it was named for, so a rejected
-   draft's reason — the first `text-warn` in the product — read at 1.98, 1.40
+   **`--shell-warm` is deepened by that same rule**: as the pastel it is named
+   for, a rejected draft's reason — the first `text-warn` in the product —
+   reads at 1.98, 1.40
    and 1.39:1 on these three papers. The hue is held and the lightness taken
    down until the value clears the 4.5:1, which also moves `--warn`, the role
    that aliases it. */
@@ -490,9 +488,9 @@ body,
   --shell-error: var(--shell-danger);
   --shell-primary-bg: var(--shell-accent);
   --shell-primary-text: #eefaf3;
-  /* The two tokens `light` inherited from the `:root` blocks above, declared
-     here at the values it already resolved to so the dark base can carry
-     graphite's without moving this palette (`vg-357`). */
+  /* The two tokens `light` would inherit from the `:root` blocks above,
+     declared here at the values it already resolves to so the dark base can
+     carry graphite's without moving this palette. */
   --shell-display: ui-serif, Georgia, "Times New Roman", serif;
   --yunari-control-bg: #f5f1e8;
   --bg: var(--shell-backdrop);
@@ -580,7 +578,7 @@ body,
      height, a dialog's bounds and the compact-viewport breakpoint are
      dimensions no step can spell, so each is a token rather than a literal because
      `scripts/design-tokens.mjs` holds this file to the same scale it holds
-     every surface consuming it (`vg-274`), so a dimension written here needs a
+     every surface consuming it, so a dimension written here needs a
      name and one owner like any other value. */
   --header-height: 42px;
   --menu-min-width: 190px;
@@ -591,9 +589,8 @@ body,
   --finder-height: 880px;
   --finder-compact-width: 720px;
   --finder-footer-height: 52px;
-  /* The one search field in the finder, and the store's own. Both are twice
-     the width a first draft used; an exact pixel value needs a name like every
-     other dimension (`vg-274`). */
+  /* The one search field in the finder, and the store's own; an exact pixel
+     value needs a name like every other dimension. */
   --finder-search-width: 510px;
   --store-search-width: 360px;
   /* The density slider's track and its reading column: the four steps need a
@@ -738,9 +735,8 @@ body,
    `.editor-shell-dock button[data-yunari-destructive]`, and the canvas context
    menu portals its popup to `body`, so the dock-scoped rule could not reach it:
    the menu's Delete carried the mark and painted `--shell-text` like every other
-   entry. A popup-scoped second rule would have expressed "destructive paints
-   `--hot`" in two places — the one-owner violation `vg-226` was filed for, one
-   level down.
+   entry. A popup-scoped second rule would express "destructive paints `--hot`"
+   in two places — a one-owner violation one level down.
 
    This selector needs no surface qualifier and no specificity trick, and it is
    the **only rule that declares a colour directly on an element that carries the
@@ -760,11 +756,11 @@ body,
    **The mark is painted only where the control can run.** `ControlIconButton`
    computes `text-faint` for a `disabled` or `refused` control, and that class is
    in `@layer utilities` — so an unqualified rule here outranks it and paints a
-   dead Delete `--hot`, the "mark present, paint wrong" failure `vg-226` recorded.
-   The layer footer draws the registry's commands disabled with nothing selected
-   (`vg-570`), which is no longer hypothetical: measured in the built editor, the
-   idle Delete computed the same colour as the live one until this selector
-   refused it. A blocked destructive control therefore keeps its own tone, and
+   dead Delete `--hot`, the "mark present, paint wrong" failure. The layer
+   footer draws the registry's commands disabled with nothing selected, and in
+   the built editor the idle Delete computes the same colour as the live one
+   unless this selector refuses it. A blocked destructive control therefore
+   keeps its own tone, and
    the "a disabled destructive control stays `--faint`" is held by the rule
    rather than by no surface happening to pass `disabled`. */
 [data-yunari-destructive]:not([disabled]):not([aria-disabled="true"]) {
@@ -795,8 +791,8 @@ body,
    `.editor-glass` is the **chrome** default — it is on the rail, the pane
    column and the inspector, three of the five elements that carry it — and the
    two clusters opt into the shadow by name, so the elevation cannot reach a
-   chrome region whatever the source order. That is what `vg-207`'s (0,4,0)
-   tie-break used to buy and this shape buys instead. */
+   chrome region whatever the source order. That guarantee is this shape's,
+   rather than a specificity tie-break's. */
 .editor-glass {
   background: var(--panel);
   border: 1px solid var(--shell-edge);
@@ -1453,7 +1449,7 @@ body,
 /* The pane's own column, and the owner of the pane|stage hairline (the spacing scale
    elevation-0 block above draws it). It **clips and does not scroll**: the overflow rule's
    scroll belongs to the pane's body, so the title bar and the footer stay
-   outside the box that moves (`vg-208`). The 12px padding stays on the column
+   outside the box that moves. The 12px padding stays on the column
    rather than moving onto the body, so the title bar and the footer keep the
    inset they had; the one visible difference is that the body's scrollbar is
    drawn at the body's own edge, 12px inside the column's. */
@@ -1471,8 +1467,8 @@ body,
   grid-area: inspector;
 }
 /* `min-height: 0` is the height model both columns need as grid items, so
-   neither grows past the row it was given. **The scroll is no longer shared
-   between them** (`vg-208`): the overflow rule gives the pane's column no scrollbar at all —
+   neither grows past the row it was given. **The scroll is not shared between
+   them**: the overflow rule gives the pane's column no scrollbar at all —
    the pane's *body* owns it, which is what keeps the title bar and the footer
    still — and the inspector's sections are the one scroller they always were. */
 .editor-shell-panel,
@@ -1525,8 +1521,8 @@ body,
   pointer-events: none;
 }
 /* The scrollbar is the shell's, not the platform's: the `--yunari-scrollbar-*`
-   pair was declared for this and read by nothing until `vg-458`, so every
-   scroller painted the OS default.
+   pair is declared for this, and without a rule reading it every scroller
+   paints the OS default.
 
    **Every scroller in the chrome takes the pair from its owner.** The shell
    root states it once: `scrollbar-color` inherits, so a new scroller — the
@@ -1537,12 +1533,12 @@ body,
    separate page and joins by name. A named list of individual scrollers is what
    let the Themes page keep the platform's bar while its siblings were themed.
 
-   **The pane's scroller is the pane's body** (`vg-208`), which inherits from
+   **The pane's scroller is the pane's body**, which inherits from
    the root like every other scroller.
 
-   **The standard pair is the whole styling (`vg-491`).** The
-   `::-webkit-scrollbar*` family stood here and painted nothing: measured in
-   this Chromium, either property being non-`auto` disables the family for that
+   **The standard pair is the whole styling.** The
+   `::-webkit-scrollbar*` family paints nothing: in this Chromium, either
+   property being non-`auto` disables the family for that
    scroller — a 20px webkit gutter beside `scrollbar-width: thin` renders as the
    thin bar — so the 10px width, the radius and the hover colour were
    declarations no browser the repo runs would read. Firefox reads the pair and
@@ -1569,13 +1565,12 @@ body,
   scrollbar-width: thin;
 }
 /* `cursor: pointer` is the shell's standing convention for a control, and it is
-   the **only** thing this rule may say about an inspector button. The rest of
-   what it used to say — a transparent border and background, a 7px radius, a
-   `--shell-text` colour — is a *treatment* of a control, and since the React
-   vocabulary moved into this column the control set owns it (the well
-   is `--panel-2` inside a 1px `--edge`). Unlayered, the old rule beat the
-   utilities and repainted a well in the shell's own colours, which is the second
-   owner `vg-298` records; the dock still needs its own. */
+   the **only** thing this rule may say about an inspector button. A
+   transparent border and background, a 7px radius or a `--shell-text` colour
+   is a *treatment* of a control, and the React vocabulary that lives in this
+   column has the control set own it (the well is `--panel-2` inside a 1px
+   `--edge`). Unlayered, such a rule beats the utilities and repaints a well in
+   the shell's own colours — a second owner. The dock still needs its own. */
 .editor-shell-inspector button {
   cursor: pointer;
 }
@@ -1583,8 +1578,8 @@ body,
    below**, not from a declaration of their own. A `color:` on the button applies
    directly to it, so it outranks the bare `[data-yunari-destructive]` marker
    rule at (0,1,1) against (0,1,0) — both unlayered author styles, so specificity
-   decides. That is exactly how the dock's Delete stopped painting `--hot` when
-   the mark's rule stopped being dock-scoped. On the container the buttons
+   decides. That is why the colour is declared on the container rather than on
+   the button. On the container the buttons
    inherit the colour and the marker rule still applies directly to the one
    control that carries the mark, whichever surface that control is on. */
 .editor-shell-dock button {
@@ -1596,7 +1591,7 @@ body,
 /* the glyph-only hover rule: on a glyph-only control the border is what hover raises, not a
    background wash. The dock's controls carry a 1px transparent resting border
    (set with the 26px square below), so hovering acquires `--muted`. The rail and
-   the layer row take the same shape since `vg-224`; a dialog's own button is a
+   the layer row take the same shape; a dialog's own button is a
    labelled control with a resting `--edge`, and raises that to the accent. */
 .editor-shell-dock button:hover {
   border-color: var(--muted);
@@ -1624,11 +1619,10 @@ body,
   padding-bottom: 6px;
 }
 /* A section is one region of a column and takes its own line above the one
-   before it. The `label` arm of this rule was removed with `vg-298`: every label
-   inside either ancestor belongs to a control row now, and a row centres its
-   label — this rule's 12px top margin against the row's `items-center` pushed
-   every label 6px below its control, and no utility could win against it because
-   it is unlayered. A label that is not a row's own belongs to `.yunari-field`,
+   before it. This rule has no `label` arm: every label inside either ancestor
+   belongs to a control row, and a row centres its label — a 12px top margin
+   against the row's `items-center` pushes every label 6px below its control,
+   and no utility can win against it because it is unlayered. A label that is not a row's own belongs to `.yunari-field`,
    which already writes its own `margin-top: 0`. */
 .editor-shell-panel
 section:not(.editor-shell-pane):not(.editor-shell-pane-content),
@@ -1786,11 +1780,11 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 }
 /* The Composition pane's inline rename field: the one plain-DOM input left in
    the panes. Every other pane control is drawn by the React control set, whose
-   own well is the box; an ancestor-wide rule here beat that box and put a 30px
-   bordered control inside a 26px well (`vg-298`), so this rule names the one
-   class that still needs it. `[data-yunari-asset-import]` and the card actions
-   were the last holdouts, and they are React controls now — the stale rule was
-   what made the Assets pane's Import button 30px beside a 26px Asset Finder. */
+   own well is the box; an ancestor-wide rule here would beat that box and put a
+   30px bordered control inside a 26px well, so this rule names the one class
+   that still needs it. `[data-yunari-asset-import]` and the card actions are
+   React controls too; an ancestor-wide rule sized the Assets pane's Import
+   button 30px beside a 26px Asset Finder. */
 .editor-shell-panel .yunari-layer-rename {
   max-width: 100%;
   min-height: 30px;
@@ -1806,16 +1800,15 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   color: var(--shell-text);
 }
 /* The inspector's half of the box above, **named by the control it still
-   styles**. As an ancestor-wide selector this rule was the product-only half of
-   `vg-298`: unlayered, it beat the control set's utilities and drew a second
-   border inside a well that already draws one, gave the input a 30px
-   `min-height` inside a 26px row and a 4px right margin that pulled a select's
-   well 4px off the column the surface draws. The React column owns its own
-   treatment now (the well *is* the box), and what is left here is the
-   handful of buttons the inspector still renders as plain DOM: the runs'
-   add/remove, the chart's remove-series and the crop row — the type-preset
-   reveal went with item 17's read-only section (`vg-474`). Add a hook here
-   rather than widening the selector back to the ancestor. */
+   styles**. As an ancestor-wide selector this rule would be unlayered and beat
+   the control set's utilities: it would draw a second border inside a well that
+   already draws one, give the input a 30px `min-height` inside a 26px row and a
+   4px right margin that pulls a select's well 4px off the column the surface
+   draws. The React column owns its own treatment (the well *is* the box), and
+   what is left here is the handful of buttons the inspector still renders as
+   plain DOM: the runs' add/remove, the chart's remove-series and the crop row.
+   The type-preset reveal is not among them because its section is read-only.
+   Add a hook here rather than widening the selector back to the ancestor. */
 .editor-shell-inspector [data-yunari-run-add],
 .editor-shell-inspector [data-yunari-run-remove],
 .editor-shell-inspector [data-yunari-chart-binding-remove],
@@ -1873,7 +1866,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    The well `control-well.tsx` draws is that treatment for a field — rounded to
    the control's own radius, with the halo beside it — and the field inside it
    says `outline-none`. Unlayered, this rule beat both and every field in a well
-   wore a second, square outline inside the rounded one (`vg-464`); layered, the
+   wore a second, square outline inside the rounded one; layered, the
    field's own declaration wins and the well is the boundary's one owner. What
    still takes its boundary here is every control that declares none. */
 @layer base {
@@ -1977,7 +1970,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   border-radius: var(--radius-lg);
   background: var(--shell-surface);
   color: var(--shell-text);
-  /* The `--text-sm` 12px, "Control text, menu items, list rows" (`vg-317`). A
+  /* The `--text-sm` 12px, "Control text, menu items, list rows". A
      dialog is portalled, so without a role of its own every surface inside it
      that declares no size inherits the host document's 13px — the `?` sheet's
      rows landed on `--text-md` for the wrong reason, and the day the host's base
@@ -2629,7 +2622,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   border-bottom: 0;
   padding-bottom: 0;
 }
-/* **The frame is a column and the body owns the scroll** (`vg-208`, the overflow rule's
+/* **The frame is a column and the body owns the scroll** (the overflow rule's
    "Chrome stays still"): the title bar and the footer are `flex: none`, so a
    tall body's shrink cannot squeeze them, and the body takes `min-height: 0`
    because a flex child's `min-height` is `auto` — without it the body refuses to
@@ -2737,9 +2730,9 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* **The attended row, where the strip has to come out of the line** (`vg-447`).
-   Scoped to the rows that reserve one, so no row at rest changes at all
-   (`vg-265`), and `0` rather than a smaller floor because any positive floor is
+/* **The attended row, where the strip has to come out of the line**.
+   Scoped to the rows that reserve one, so no row at rest changes at all,
+   and `0` rather than a smaller floor because any positive floor is
    still a width the row may not have. The name loses nothing where there is room
    to take: `flex-grow: 1` still gives it every free pixel, so the floor only ever
    mattered while the line was shrinking. */
@@ -2824,7 +2817,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 /* The surface and the 6px of lead-in belong to the controls, not to the slot:
    the slot is always present so the icons land in the same place, and an empty
    one that still painted them laid 6px of panel over the last glyphs of the
-   role on every row at rest (`vg-265` — the role is covered, not clipped, which
+   role on every row at rest (the role is covered, not clipped, which
    is why no overflow reading saw it). Where controls are drawn, the surface is
    still what keeps a key running underneath from showing between two icons. */
 .yunari-layer-state:has(button) {
@@ -2871,7 +2864,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    column, because the slot covers whatever is last in the row and that column
    is not always the key: a row whose selection reads nothing ends in the
    *role*, which `flex: none` keeps at its full width, so a key-column margin
-   left the slot lying over the role's last glyphs (`vg-265`). Padding the row
+   left the slot lying over the role's last glyphs. Padding the row
    takes the width out of the flex line itself, so it lands on whichever column
    is under the slot, and the arithmetic is unchanged: the same 32px the key
    column used to reserve is still reserved, because the row's own 4px and the
@@ -2890,21 +2883,20 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    key does not take, with every other row holding still. That is the price of
    not taking it from every row in every theme, and it is charged to the one row
    the author is looking at. */
-/* The three arms carry the reasons the record used to: the reason is the only
+/* The three arms carry their reasons: the reason is the only
    thing that stops a later pass "correcting" a reservation to a spacing scale step. 36 is
    the slot's own 4px offset from the row's right edge plus its footprint for
    one control — 6px of lead-in, a 26px square, and a 4px gap per further
    control — so the sum is off the step table by construction, and moving it to
    a step would move the reserved width and let the slot cover the role again
-   (`vg-265`). The reservation is the row's `padding-right` rather than a margin
+   The reservation is the row's `padding-right` rather than a margin
    on the key column because the column under the slot is the role on a row
    whose selection reads nothing. 66 and 96 are the same arithmetic at two and
    three controls, so the three are one class and not three exceptions. There is
    no fourth arm: the slot holds at most three buttons — the eye and the lock,
    and the pane's one entry control beside them — so a `:has(…nth-child(4))` arm
-   could not match, and the fourth button it was written for was the rename pen
-   `vg-462` removed (`vg-492`). `calc()` states the arithmetic rather than
-   hiding it behind a number. */
+   could not match. `calc()` states the arithmetic rather than hiding it behind
+   a number. */
 .yunari-layer-row:has(.yunari-layer-state button) {
   padding-right: calc(4px + 6px + 26px * 1);
 }
@@ -2994,11 +2986,10 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 /* The top-left corner: the document's identity. A floating cluster at
    the `--radius-xl`, `--panel` at 95%, hairline `--edge` and elevation 1,
    14px in from the stage's own edges — the inset the row above gives it.
-   The `backdrop-filter` this rule used to declare is gone with the other two
-   clusters': the user's 2026-10-13 ruling flattened all six palettes and the
-   design never blurred anything, so elevation is the whole difference between
-   chrome and a cluster, and the declaration was dead in the build anyway
-   (`vg-311`, `vg-430`).
+   There is no `backdrop-filter`, here or on the other two clusters: all six
+   palettes are flat and the design blurs nothing, so elevation is the whole
+   difference between chrome and a cluster, and a blur declaration would be dead
+   in the build.
    `min-width: 0` is the chip's half of "clusters cannot collide": it can shrink
    below its content, and the name ellipsises, rather than pushing the view
    cluster off the stage. */
@@ -3006,8 +2997,8 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   min-width: 0;
   /* `min-width: 0` lets the chip shrink below its content, and the name is the
      only child that can shrink with it, so this clip is a backstop rather than
-     a state the chip reaches: the fixed "Unsaved changes" marker it used to
-     hold was the part that could not shrink, and `vg-223` removed it. */
+     a state the chip reaches: there is no fixed "Unsaved changes" marker that
+     could not shrink. */
   overflow: hidden;
   margin: 0;
   display: flex;
@@ -3075,7 +3066,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    run, and nothing it cannot — the registry filters the row rather than greying
    it. It draws once a document is open, so the surface exists before the
    selection does and its row fills as actions become eligible. **The eight
-   arrange actions are not here** (`vg-463`): they are the selection inspector's,
+   arrange actions are not here**: they are the selection inspector's,
    so nothing on this row greys for want of a second subject. */
 .editor-shell-dock {
   position: absolute;

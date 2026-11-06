@@ -190,7 +190,7 @@ export interface HostServerOptions {
   readonly published?: PublishedStore;
   /** The leaf and its key. Omitted only by the unit suite: the launcher always
    *  brings one, because a display that cannot hold a wake lock or register a
-   *  service worker is the failure `vg-580` exists to remove, and it is the
+   *  service worker cannot stay awake or install as an app, and it is the
    *  origin rather than any route that decides it. */
   readonly tls?: { readonly key: string; readonly cert: string };
   /** The root a display installs, served at `CA_CERTIFICATE_PATH`. Omitted when

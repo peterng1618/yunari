@@ -125,7 +125,7 @@ describe("the document's identity", () => {
     // bar are both `isDirty()`. Rendering both against one session is what says
     // so — a second source would show one dirty and one clean. The chip's word
     // was a third reading, and the one part that could not shrink with the name,
-    // so `vg-223` removed it: the marker is asserted absent at both states,
+    // so it is gone: the marker is asserted absent at both states,
     // which is what reddens if it is ever put back.
     let saved = true;
     const session = stubSession(() => !saved);

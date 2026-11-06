@@ -36,7 +36,7 @@ export type HostingSnapshot =
  *  until the host answers, and it renders no claim until then.
  *
  *  **The editor is the session's only writer, by design, and this store never
- *  polls** (`vg-214`). The host is asked once, in the constructor, and again only
+ *  polls**. The host is asked once, in the constructor, and again only
  *  where this store's own `toggle()` writes — so a change made outside the editor
  *  (the host CLI's `setLan`, or a restart) is not observed until the page reloads,
  *  and the live indicator renders a stale claim meanwhile. That is a boundary and

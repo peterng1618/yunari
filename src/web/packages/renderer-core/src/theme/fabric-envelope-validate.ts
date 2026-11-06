@@ -1622,9 +1622,9 @@ function sceneObject(
 
 /**
  * The authored glass treatment, refused before revival rather than coerced.
- * An unsupported object kind is a separate refusal: Task 1 measured a clipped
- * backdrop for rectangles and groups only, so anything else is refused until
- * it has been measured rather than rendering an unproven treatment.
+ * An unsupported object kind is a separate refusal: a clipped backdrop is
+ * implemented for rectangles and groups only, so anything else is refused
+ * rather than rendering an unproven treatment.
  */
 function objectGlass(
   value: Record<string, unknown>,

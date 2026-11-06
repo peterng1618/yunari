@@ -191,7 +191,7 @@ describe("shell token stylesheet", () => {
    *  chip under graphite painted graphite's dark glass behind an ember ring.
    *  The swatch joins the editorial block so it cannot.
    *
-   *  Editorial and **not** bare `:root`, which `vg-351` made the base frame
+   *  Editorial and **not** bare `:root`, the base frame
    *  `systemShellPalette` resolves: a swatch grouped with the base would follow
    *  the OS preference rather than the palette it names — the same defect,
    *  arrived at from the other side. The pattern is anchored at the start of
@@ -211,7 +211,7 @@ describe("shell token stylesheet", () => {
     ).toBeGreaterThan(swatchAt);
   });
 
-  /** `vg-351`: the frame before `applyShellPalette` writes the attribute, which
+  /** The frame before `applyShellPalette` writes the attribute, which
    *  every browser assertion reads *instead of* seeing.
    *
    *  The base is `systemShellPalette`'s answer — `light` on the bare root, and
@@ -269,7 +269,7 @@ describe("shell token stylesheet", () => {
         "equal specificity for every palette",
     ).toBeLessThan(palettesAt);
 
-    // The two `vg-357` gave `light` its own declaration for, so the base
+    // The two `light` declares for itself, so the base
     // frame is still compared to the palette it mirrors *value for value*: a
     // key comparison would let a `--shell-*` colour drift on the bare root while
     // `light`'s block kept its own, which is the drift this case exists to see.
@@ -290,9 +290,9 @@ describe("shell token stylesheet", () => {
     );
 
     // Every token graphite declares, the two beyond its colours included
-    // (`vg-357`). A token declared in the dark base wins over the palette
+    //. A token declared in the dark base wins over the palette
     // blocks below at equal specificity, so carrying graphite's three is only
-    // safe while each palette that used to inherit them declares its own — and
+    // safe while each palette that would otherwise inherit them declares its own — and
     // this reads every palette rather than assuming the four the row named.
     const graphite = declarations(declarationBlock("graphite"));
     expect(
@@ -317,8 +317,8 @@ describe("shell token stylesheet", () => {
     for (const palette of shellPalettes) {
       inheritsNothing(palette, ["--shell-display"], "bare :root");
       // Graphite is the palette the dark base mirrors; the other five paint a
-      // control surface of their own, editorial's and light's coming from
-      // `:root`'s control block until `vg-357` restated them here.
+      // control surface of their own, editorial's and light's stated here rather
+      // than inherited from `:root`'s control block.
       inheritsNothing(
         palette,
         ["--yunari-control-bg"],
@@ -580,7 +580,7 @@ describe("shell token stylesheet", () => {
   });
 
   /** The defect this test exists to prevent, and the reason the one above could
-   *  not see it (`vg-307`).
+   *  not see it.
    *
    *  Each palette block writes the role *aliases* — `--hot: var(--shell-danger)`,
    *  `--warn: var(--shell-warm)` — and the test above asserts those aliases are
@@ -664,31 +664,30 @@ describe("shell token stylesheet", () => {
     }
   });
 
-  /** `vg-553`: a name this phase retired can be declared again with every gate
-   *  green.
+  /** A retired name can be declared again with every gate green.
    *
    *  Every surviving guard is one-directional. `shell-palette-tokens.spec.ts`'s
    *  `themeToken()` throws on an *absent* token, so it catches a removal and
    *  never an addition; the value pin above is `toMatchObject`, so an added name
    *  never fails; the not-on-`:root` list is a forbidden list over the type
    *  scale, whose purpose is `:root` beating `@layer theme`. An addition is the
-   *  direction a retired name re-enters by, and this is the assertion `vg-261`'s
-   *  red proof found missing.
+   *  direction a retired name re-enters by, and this is the assertion the
+   *  surviving guards left missing.
    *
    *  The granularity is a list rather than an exhaustive assertion over a whole
    *  block: `@theme static` also carries the type scale and the `--color-*`
    *  aliases, and the `:root` control block carries the palette roles, so a
    *  closed-set assertion over either would redden on every legitimate addition.
    *  A name joins this list when it is retired, and the list is the vocabulary
-   *  the phase has closed. */
+   *  the list closes. */
   it("declares no retired token", () => {
     const RETIRED_TOKENS = [
-      // Task 20.1, `vg-261`: one elevation ladder survives.
+      // One elevation ladder survives.
       "--shadow-raised",
       "--shadow-overlay",
-      // Task 20.3, `vg-312`: a per-palette flag no `var()` read.
+      // A per-palette flag no `var()` read.
       "--shell-flat",
-      // Task 20.7, `vg-552`: the control block's ten unread declarations.
+      // The control block's ten unread declarations.
       "--yunari-text",
       "--yunari-panel-bg",
       "--yunari-panel-border",

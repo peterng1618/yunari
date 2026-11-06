@@ -21,9 +21,9 @@ import type { RadarOption } from "./radar.js";
  * Handing one to `setOption` still needs a cast, because the builders describe
  * a deliberately small subset and ECharts' own type is enormous and largely
  * optional. **That cast is the engine boundary**, and the rule about it is that
- * there is exactly one. It used to live inline in `scene/mount.ts`; a second
- * renderer needed the same cast, and two of them is how a boundary becomes a
- * habit. Grep for `toEngineOption` to find every crossing.
+ * there is exactly one. A second renderer needs the same cast, and two of them
+ * is how a boundary becomes a habit. Grep for `toEngineOption` to find every
+ * crossing.
  */
 
 /**

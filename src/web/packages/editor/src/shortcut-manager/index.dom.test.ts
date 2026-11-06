@@ -364,7 +364,7 @@ describe("ShortcutManager unmodified keys", () => {
   it("takes a modifier chord back from a focused range, and leaves the range its own keys", () => {
     // A slider is not a text field, so `Ctrl+Z` is not a key it has any use for
     // and the manager must take it — which is what a focused range swallowed
-    // (`vg-252`). The arrows are the other half: a range moves on them, so they
+    //. The arrows are the other half: a range moves on them, so they
     // stay its own, and that is why a range was in the deferral at all.
     const manager = new ShortcutManager();
     const undo = vi.fn();
@@ -600,10 +600,10 @@ describe("ShortcutManager and a modal", () => {
     // `{ capture: true }`, which runs before this manager's `window` bubble
     // listener. Radix then unmounted its dialog synchronously — its
     // `Presence` read `getComputedStyle(node).animationName`, found `"none"` and
-    // tore down from a layout effect inside the same dispatch, which is
-    // `vg-187`: the sheet closed *and* `view.exit-group` ran on one press. Base
-    // UI keeps the popup mounted behind `hidden` until the close settles, so it
-    // may not be reachable now. **This case is kept either way**: it pins the
+    // tore down from a layout effect inside the same dispatch: the sheet closed
+    // *and* `view.exit-group` ran on one press. Base
+    // UI keeps the popup mounted behind `hidden` until the close settles, so the
+    // hazard may not be reachable. **This case is kept either way**: it pins the
     // guard's contract, which is to answer as of the start of the dispatch and
     // not when it happens to run, independently of which library is underneath.
     const manager = new ShortcutManager();

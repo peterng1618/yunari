@@ -238,9 +238,9 @@ it("leaves the mounted panels with no copy of their own", async () => {
  *
  * Scoped to these four on purpose. Both panels carry dozens more literals —
  * "Precision", "Start angle", "Rounded ends" and the rest of the chart panel's
- * fields — and folding them into the net above would be F1.25's row, not this
- * one's. What vg-113 moved was four words that were written twice with nothing
- * joining them, and this is the net under that much and no more.
+ * fields — and folding them into the net above would be a separate job, not this
+ * one's. The four unit display words written twice with nothing joining them are
+ * what this net covers, and no more.
  *
  * The number is load-bearing too: eight is four options in two panels, so a
  * control that stopped rendering takes this red rather than emptying the set.

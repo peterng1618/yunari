@@ -190,7 +190,7 @@ export function createThemeRoutes(
       // A paired display chooses its own theme, so it reads the library it is
       // offered — but only the two fields a chooser names a row by. Costs,
       // ground, origin, facets and a template list describe this PC's library
-      // and stay the admin page's business (`vg-758`).
+      // and stay the admin page's business.
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
         const themes = await themeStore.list();
         sendJson(response, 200, {
@@ -253,7 +253,7 @@ export function createThemeRoutes(
         const available = await themeStore.list();
         // A theme with no picture has none to request: the page draws its
         // fallback directly when the listing says so, instead of costing a 404
-        // per theme on every clean load (`vg-655`).
+        // per theme on every clean load.
         const listed = await Promise.all(
           available.map(async (theme) => ({
             ...theme,

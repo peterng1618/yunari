@@ -106,9 +106,10 @@ export function panelVideoMediaName(
   // earlier cover-only copies under the same pixel size; `c` is the composition
   // and `v` is the bake graph's revision.
   const placement = panelVideoPlacement(envelope);
+  const flips = `${placement.flipX === true ? "x" : ""}${placement.flipY === true ? "y" : ""}`;
   const suffix = `${width}x${height}-o${number(placement.offsetX)}_${number(
     placement.offsetY,
-  )}-s${number(geometry.scale)}${compositionKey(placement)}-v${String(
+  )}-s${number(geometry.scale)}${compositionKey(placement)}-f${flips}-v${String(
     PANEL_CLIP_REVISION,
   )}.mp4`;
   return mediaName(id, video, suffix);
@@ -127,12 +128,18 @@ export function panelVideoPlacement(
 ): PanelVideoPlacement {
   const geometry = backgroundGeometryOf(envelope);
   const background = envelope?.background;
+  const media = background?.media;
+  const flips = {
+    ...(media?.flipX === true ? { flipX: true } : {}),
+    ...(media?.flipY === true ? { flipY: true } : {}),
+  };
   const composition = activeBackgroundComposition(background);
   if (composition === undefined) {
     return {
       offsetX: geometry.offsetX,
       offsetY: geometry.offsetY,
       scale: geometry.scale,
+      ...flips,
     };
   }
 
@@ -149,6 +156,7 @@ export function panelVideoPlacement(
     offsetX: geometry.offsetX,
     offsetY: geometry.offsetY,
     scale: geometry.scale,
+    ...flips,
     composition,
     ...(fill === undefined ? {} : { fill }),
   };

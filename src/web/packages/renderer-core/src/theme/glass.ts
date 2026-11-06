@@ -8,9 +8,9 @@
 export const YUNARI_GLASS_PROPERTY = "yunariGlass";
 
 /**
- * Measured bound, not a preference. Task 1's radius sweep held 2.5–3.7 ms per
- * frame across 0–64 px, with the cost first clearly rising at 128 px (6.44 ms),
- * so 48 sits inside the measured-flat band while still bounding the worst case.
+ * Measured bound, not a preference. A radius sweep held 2.5–3.7 ms per frame
+ * across 0–64 px, with the cost first clearly rising at 128 px (6.44 ms), so
+ * 48 sits inside the measured-flat band while still bounding the worst case.
  */
 export const MAX_GLASS_BLUR_RADIUS = 48;
 

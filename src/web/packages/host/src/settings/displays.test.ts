@@ -469,7 +469,7 @@ describe("createDisplayStore", () => {
     expect(await store.rotate(local.id, "new")).toBeUndefined();
 
     // R27: a serial that is blank is absence, not a value — a hint carrying ""
-    // matches nothing, so the display would read as detached for ever (vg-616).
+    // matches nothing, so the display would read as detached for ever.
     expect(
       normalizeMonitor({ deviceName: "\\\\.\\DISPLAY2", serial: "   " }),
     ).toStrictEqual({ deviceName: "\\\\.\\DISPLAY2" });

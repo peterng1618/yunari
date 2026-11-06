@@ -571,9 +571,8 @@ export function mountBackgroundMedia(
     background = next;
     const media = next?.media;
     // A frame the author changed is a different still, and the mounted element
-    // keeps the old one: `setBackground` used to compare only the asset id, so
-    // editing the frame in the editor re-placed a video whose glass still stood
-    // on the previous frame (2026-10-29).
+    // keeps the old one: comparing only the asset id would re-place a video
+    // whose glass still stands on the previous frame.
     const frame = media === undefined ? undefined : (media.fallbackFrame ?? 0);
     const changed =
       media === undefined

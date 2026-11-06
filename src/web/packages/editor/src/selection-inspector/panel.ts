@@ -152,8 +152,7 @@ function paintOptions(
  * The bounded ones carry a slider, and their bound is the panel's own drawn box
  * rather than a number chosen here. The shadow's offset is the one that does
  * not: Fabric's `offsetY` is unbounded — a shadow above a panel is legitimate —
- * so it keeps a typed box, which is `vg-007`'s rule not reaching a field with no
- * ceiling.
+ * so it keeps a typed box: a field with no ceiling has no bound to draw.
  */
 export function panelMaterialFields(
   context: AppearanceContext,
@@ -319,7 +318,7 @@ export function writePanelField(
       //
       // Clamped to what the renderer can show: Fabric draws
       // `Math.min(rx, w / 2)`, so a larger stored value is a field claiming a
-      // corner the canvas never draws (`vg-478`). An unreadable box clamps to
+      // corner the canvas never draws. An unreadable box clamps to
       // the floor alone rather than to a guessed ceiling.
       const ceiling = radiusBound(drawnEdge(object));
       const radius =

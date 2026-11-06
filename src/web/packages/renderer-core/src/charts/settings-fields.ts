@@ -5,12 +5,11 @@ import { SEGMENT_DIVISORS } from "./segments.js";
 /**
  * Which settings each chart family accepts, as editable field descriptors.
  *
- * The **one owner** of that question. It previously had four
- * encodings that nothing related: the settings interfaces in `types.ts` and
- * `charts/*.ts`, the `default*Settings` objects, `validate.ts`'s `KNOWN_KEYS`
- * plus its `validateSettingsRange`, and the JSON schema. The editor had a
- * fifth — none at all, which is why no chart setting was editable despite all
- * four families being fully typed and validated.
+ * The **one owner** of that question. The settings interfaces in `types.ts` and
+ * `charts/*.ts`, the `default*Settings` objects, the validator's key and range
+ * checks, and the JSON schema all derive from this table rather than keeping an
+ * encoding of their own; without it no chart setting is editable even when the
+ * family is fully typed and validated.
  *
  * ## What this declares, and what it deliberately does not
  *
@@ -67,24 +66,20 @@ import { SEGMENT_DIVISORS } from "./segments.js";
  *
  * `min`/`max` below are **the document's bounds**, not only the control's: the
  * envelope loader refuses a present value outside them, and refuses a family's
- * crossed `min`/`max` pair where both halves are present (per
- * `vg-348`'s ruling of 2026-10-12). A change to a number here therefore changes
- * what loads, not only what a control offers — the table is the one owner of
- * that question, which is why the loader reads it instead of keeping a second
- * list of the same numbers.
+ * crossed `min`/`max` pair where both halves are present. A change to a number
+ * here therefore changes what loads, not only what a control offers — the table
+ * is the one owner of that question, which is why the loader reads it instead of
+ * keeping a second list of the same numbers.
  *
  * `bound` is **not** a document bound. It names a ceiling only the drawn box
  * knows — the chart's own box, halved for a radius — so a field carrying one
  * contributes its numeric floor and no ceiling, and a field with a floor and no
  * `bound` has no ceiling the envelope can name either.
  *
- * This reverses an earlier position recorded in this header, that driving
- * validation from the table was decided against because the range a control
- * offers and the invariants an adapter cannot recover from were held to be
- * different questions. That equivalence was never measured, and it is the
- * reason the table rather than a second list owns the numbers. The `validate.ts`
- * / `validateSettingsRange` validator this header used to lean on was deleted
- * before `vg-348` was filed.
+ * Driving validation from the table rests on the range a control offers and
+ * the invariants an adapter cannot recover from being the same question. The
+ * table is therefore the one owner of the numbers, rather than a second list
+ * keeping its own copy.
  */
 
 /** How a settings field is edited. */
@@ -176,7 +171,7 @@ export interface SettingsFieldDescriptor {
    *
    * A pixel measure cannot exceed the chart's own drawn box, and a radius
    * cannot exceed **half** of it — which is what Fabric's own `Rect` does with
-   * `rx` at draw time (`vg-478`), and the same finding this rule met in the
+   * `rx` at draw time, and the same finding this rule met in the
    * selection column. The box is read at projection time from the object the
    * renderer sizes its canvas from, never written here as a constant: a chart
    * the author resized re-bounds its own measures, and a surface that cannot
@@ -185,7 +180,7 @@ export interface SettingsFieldDescriptor {
    * A field with `min` alone and no `bound` has no ceiling this table can name
    * — `windowSeconds` and `maxPoints` are bounded by the sample store and
    * `total.value` by the chart's own data — so it is not a slider: a track
-   * would offer a range the store or the data does not honour (`vg-469`).
+   * would offer a range the store or the data does not honour.
    */
   readonly bound?: "drawnBox" | "halfDrawnBox";
   /** For `select`, the allowed values in the order a picker should list them. */

@@ -1,6 +1,6 @@
 # Regenerating the video fixtures
 
-Generated once with `ffmpeg-static@5.3.0` (Task 1) and committed; the tests only
+Generated with `ffmpeg-static@5.3.0` and committed; the tests only
 read the bytes, they never spawn ffmpeg. Each command was run from
 `src/web/packages/theme-package/test-fixtures/` with
 `FF=../../../../node_modules/ffmpeg-static/ffmpeg.exe`.

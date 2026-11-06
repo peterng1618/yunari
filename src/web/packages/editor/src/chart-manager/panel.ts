@@ -11,6 +11,7 @@ import {
   defaultPolarBarSettings,
   defaultRadarSettings,
   type FabricPalette,
+  MAX_CHART_BINDINGS,
   paletteTokenOptions,
   readSetting,
   SEMANTIC_KEYS,
@@ -58,7 +59,7 @@ export interface ChartFieldTarget {
    * The smaller edge of the chart's own drawn box, in artboard units — what the
    * renderer sizes the chart's canvas from, and the ceiling a pixel measure in
    * its settings is read against. Absent when the object measures nothing, which
-   * leaves those fields typed rather than bounded by a guess (`vg-469`).
+   * leaves those fields typed rather than bounded by a guess.
    */
   readonly drawnEdge?: number;
 }
@@ -120,22 +121,7 @@ function ceilingOf(
 }
 
 /**
- * How many readings a family draws, per `buildChartPlan`: a line series, a bar
- * and a slice are one binding each, and a gauge reads `bindings[0]` and nothing
- * else. So the gauge's second binding would be a control that accepts an edit
- * and applies none.
- */
-const MAX_BINDINGS: Readonly<Record<ChartFamily, number>> = {
-  gauge: 1,
-  line: Number.POSITIVE_INFINITY,
-  bar: Number.POSITIVE_INFINITY,
-  pie: Number.POSITIVE_INFINITY,
-  // More spokes than twelve collapse the polygon at theme sizes.
-  radar: 12,
-  polarBar: Number.POSITIVE_INFINITY,
-};
-
-/** The ratios the line-chart control group offers, widest last. It lives here
+ * The ratios the line-chart control group offers, widest last. It lives here
     because this is the group that offers them; `index.ts` reads it to decide
     which one a chart is at, rather than listing the three a second time. */
 export const ASPECT_RATIOS: readonly number[] = [2, 3, 4];
@@ -201,7 +187,7 @@ function seriesFields(
   descriptors: readonly SemanticKeyDescriptor[],
 ): ChartSeriesFieldsView {
   const { bindings, content } = target;
-  const full = bindings.length >= MAX_BINDINGS[content.family];
+  const full = bindings.length >= MAX_CHART_BINDINGS[content.family];
   return {
     id: "yunari-chart-series",
     label: uiCopy.inspectorFields.runSeries,
@@ -235,7 +221,7 @@ function seriesFields(
  * object the renderer sizes its canvas from rather than chosen here; and a
  * field with a minimum and no ceiling this table can name — `windowSeconds`,
  * `maxPoints`, `total.value` — keeps its typed box, because a track would offer
- * a range the store or the data does not honour (`vg-469`).
+ * a range the store or the data does not honour.
  */
 function settingRows(
   content: ChartContent,
@@ -294,7 +280,7 @@ function settingRows(
           // What the renderer draws: the authored number where there is one,
           // and the family's own default where the key is absent — a track has
           // no empty state, and showing a floor it did not choose would be the
-          // field believing itself rather than the picture (`vg-109`).
+          // field believing itself rather than the picture.
           value:
             authoredNumber(value) ??
             authoredNumber(readSetting(defaultsOf(content.family), path)) ??

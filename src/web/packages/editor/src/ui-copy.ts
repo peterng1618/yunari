@@ -1942,7 +1942,7 @@ export const uiCopy = {
     sizes: (theme: string, unused: string): string =>
       `${theme} theme · ${unused} unused`,
   },
-  /** The prompt after the editor stopped with work unsaved (`vg-040`). The lead
+  /** The prompt after the editor stopped with work unsaved. The lead
    *  is the dialog's own visible name, so it names what is at stake — the theme
    *  and the moment the copy was written — rather than asking about "recovery",
    *  which names the mechanism and not the work the author might get back. */
@@ -2139,7 +2139,7 @@ export const uiCopy = {
   },
   /** The shared control set's refusal copy. A control that refuses a value the
    *  author can repair says why, and those words are user-visible text, so they
-   *  belong here rather than as literals inside `components/ui/` (`vg-264`).
+   *  belong here rather than as literals inside `components/ui/`.
    *
    *  `atLeast`/`atMost` carry the field's own bound because the author has to
    *  see which number refused them. */
@@ -2561,7 +2561,7 @@ export const uiCopy = {
      *  `pickerSaturation` and `pickerValue` are the area's two channels, named
      *  together in its `aria-valuetext`; `pickerHue` and `pickerAlpha` are the
      *  two strips. The announced name is a word rather than the
-     *  selector-shaped `data-testid` (`vg-336`). */
+     *  selector-shaped `data-testid`. */
     pickerSaturation: "Saturation",
     pickerValue: "Value",
     pickerHue: "Hue",

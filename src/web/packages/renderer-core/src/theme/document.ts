@@ -24,6 +24,10 @@ export const TAG_PATTERN = /^[a-z0-9-]{1,24}$/;
 /** How many style tags one theme may declare. The facet reads them; this caps them. */
 export const MAX_TAGS = 5;
 
+/** The store's item-name bound, in UTF-8 bytes: the document and the
+ *  catalogue are the same name, so they share one unit and one number. */
+export const MAX_METADATA_NAME_BYTES = 200;
+
 /** Chosen import bounds, not measured rendering limits. */
 export const MAX_NODE_DEPTH = 32;
 export const MAX_NODE_COUNT = 5000;
@@ -118,6 +122,38 @@ export const CHART_FAMILIES = [
   "polarBar",
 ] as const;
 export type ChartFamily = (typeof CHART_FAMILIES)[number];
+
+/**
+ * How many readings a family draws, per `buildChartPlan`.
+ *
+ * A gauge reads `bindings[0]` and nothing else, and a radar's more than twelve
+ * spokes collapse the polygon at theme sizes. This is the one cap the editor's
+ * control, the authoring kit and the MCP tools all enforce.
+ */
+export const MAX_CHART_BINDINGS: Readonly<Record<ChartFamily, number>> = {
+  gauge: 1,
+  line: Number.POSITIVE_INFINITY,
+  bar: Number.POSITIVE_INFINITY,
+  pie: Number.POSITIVE_INFINITY,
+  radar: 12,
+  polarBar: Number.POSITIVE_INFINITY,
+};
+
+export function isChartFamily(value: string): value is ChartFamily {
+  return (CHART_FAMILIES as readonly string[]).includes(value);
+}
+
+/** Why a family cannot draw this many readings, or `undefined` when it can. */
+export function chartBindingCountRefusal(
+  family: ChartFamily,
+  count: number,
+): string | undefined {
+  const max = MAX_CHART_BINDINGS[family];
+  if (count <= max) return undefined;
+  return family === "gauge"
+    ? "A gauge reads one binding and draws nothing else."
+    : `A ${family} chart draws at most ${max} bindings.`;
+}
 
 export type GlobalRef = `${GlobalGroupName}.${string}`;
 
@@ -462,4 +498,54 @@ export interface ThemeMetadata {
   readonly tags?: readonly string[];
   /** The catalogue item this theme was remixed from, if any. */
   readonly remixOf?: ThemeRemix;
+}
+
+/**
+ * The metadata an envelope stores: an emptied field loses its key rather than
+ * being written as `""`, and an empty tag list loses `tags`.
+ *
+ * The envelope validator reads a present empty string as a value, and a theme
+ * that declares no tags carries no `tags` key at all — which is the shape the
+ * validator and the facet both expect.
+ */
+export function normalizeThemeMetadata(metadata: ThemeMetadata): ThemeMetadata {
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([, value]) =>
+      Array.isArray(value) ? value.length > 0 : value !== "",
+    ),
+  ) as ThemeMetadata;
+}
+
+/** Why a tag list is not the format's, or `undefined` when it is. */
+export function themeTagsRefusal(tags: readonly string[]): string | undefined {
+  if (tags.length > MAX_TAGS)
+    return `A theme carries at most ${MAX_TAGS} tags.`;
+  const seen = new Set<string>();
+  for (const tag of tags) {
+    if (!TAG_PATTERN.test(tag))
+      return `"${tag}" is not a tag this format takes (${TAG_PATTERN.source}).`;
+    if (seen.has(tag)) return `"${tag}" is listed twice.`;
+    seen.add(tag);
+  }
+  return undefined;
+}
+
+/**
+ * The metadata rules, applied to a write before it happens.
+ *
+ * One owner for both surfaces: the editor's metadata panel drops emptied
+ * fields, and the MCP tools write the same shape instead of storing values the
+ * panel would never author.
+ */
+export function themeMetadataRefusal(
+  metadata: ThemeMetadata,
+): string | undefined {
+  if (
+    metadata.name !== undefined &&
+    new TextEncoder().encode(metadata.name).byteLength > MAX_METADATA_NAME_BYTES
+  )
+    return `A theme name is at most ${MAX_METADATA_NAME_BYTES} bytes.`;
+  return metadata.tags === undefined
+    ? undefined
+    : themeTagsRefusal(metadata.tags);
 }

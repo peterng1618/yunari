@@ -38,7 +38,7 @@ export interface SelectionView {
  * The block that heads the column: what the selection is called, the kind whose
  * glyph heads it, and the key a binding on it reads.
  *
- * **The kind is a kind, not a word** (vg-466): the header draws `KIND_GLYPHS`'
+ * **The kind is a kind, not a word**: the header draws `KIND_GLYPHS`'
  * mark for it, so `selectionKindOf`'s own union is what crosses the boundary and
  * `activeSelection` — which is not a `LayerKind` and has no glyph — is the one
  * member the header draws nothing for. Its name already says "Selection".
@@ -626,7 +626,7 @@ export function isTextObject(object: FabricObject): boolean {
  * that object carried a scale the two disagreed — a 140 × 27 box at scale 2
  * read **27** in H while the canvas drew 54 — so the readout was a probe that
  * could be wrong about the surface it describes, and two findings had to be
- * told apart before either could be fixed (vg-109). Where the box and the edge
+ * told apart before either could be fixed. Where the box and the edge
  * are the same number, which is every object the text pass has been through,
  * this reads the same value it did before.
  */

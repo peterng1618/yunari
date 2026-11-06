@@ -74,7 +74,7 @@ describe("paletteTokenOptions", () => {
     // A token the document no longer declares a name for has nothing left to
     // label it, so the reference is the label — the one case a picker is handed
     // a reference where it offered a name. **The Document pane's own walk pinned
-    // it a second time until item 17 removed that panel** (`vg-474`).
+    // it a second time until item 17 removed that panel**.
     const deleted = {
       gone: { value: { kind: "solid", color: "#101010" } },
     } as unknown as FabricPalette;

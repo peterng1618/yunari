@@ -6,6 +6,7 @@ export interface PresignRow {
   readonly item_id: string;
   readonly version: string;
   readonly envelope_json: string;
+  readonly credits_json?: string | null;
 }
 
 /** One stored item and the version a listing shows it at. */
@@ -193,8 +194,8 @@ export interface QueueListing {
 /**
  * The owner's pending queue in one statement, oldest first. The version is a
  * left join because a pending item may predate its first finalize, and the
- * email is the same join `queueEntryOf` used to make per item. The table name
- * stays quoted: `user` is a keyword in SQLite.
+ * email is the same join `queueEntryOf` makes, here once for the whole list.
+ * The table name stays quoted: `user` is a keyword in SQLite.
  */
 export async function queueListings(
   db: D1Database,
@@ -274,7 +275,7 @@ export async function presignEventOf(
   return (
     (await db
       .prepare(
-        `SELECT item_id, version, envelope_json FROM presign_event
+        `SELECT item_id, version, envelope_json, credits_json FROM presign_event
          WHERE user_id = ? AND item_id = ? AND version = ?
          ORDER BY id DESC LIMIT 1`,
       )
@@ -311,6 +312,28 @@ export async function markFinalized(
        WHERE id = ? AND status <> 'removed'`,
     )
     .bind(status, now, status, now, itemId)
+    .run();
+  return result.meta.changes > 0;
+}
+
+/**
+ * Follows the library's current name for an item that already exists.
+ *
+ * The name is the author's, not a moderation field, so it moves with the
+ * theme; `removed` is still the owner's verdict and is never rewritten. The
+ * answer says whether a row changed.
+ */
+export async function renameItem(
+  db: D1Database,
+  itemId: string,
+  name: string,
+  now: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "UPDATE item SET name = ?, updated_at = ? WHERE id = ? AND status <> 'removed'",
+    )
+    .bind(name, now, itemId)
     .run();
   return result.meta.changes > 0;
 }

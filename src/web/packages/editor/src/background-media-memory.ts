@@ -20,9 +20,6 @@ import {
 /** The sidecar's own version. A file this build does not know is empty memory. */
 export const BACKGROUND_MEDIA_MEMORY_VERSION = 1;
 
-/** The host refuses a sidecar past this, so a corrupt file cannot grow unbounded. */
-export const MAX_BACKGROUND_MEDIA_BYTES = 256 * 1024;
-
 /**
  * One asset's working geometry, everything the document's media carries except
  * the id that keys it.

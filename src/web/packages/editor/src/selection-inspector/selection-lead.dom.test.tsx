@@ -10,7 +10,7 @@ import {
 } from "./selection-lead.js";
 
 /**
- * The block that leads the column: the arrange actions (`vg-463`).
+ * The block that leads the column: the arrange actions.
  *
  * The contract this file can see is the one the value walk cannot: the block
  * decides no eligibility — it draws exactly the buttons it is handed, and greys
@@ -87,7 +87,7 @@ describe("createSelectionLeadRoot", () => {
 
     // The boundary between this block and the sections is this block's: the
     // first section suppresses its `border-t` when it follows the subject's
-    // hairline (`vg-466`), so a lead with no rule of its own would leave the
+    // hairline, so a lead with no rule of its own would leave the
     // actions and the first section sharing a band. jsdom has no cascade, so
     // what is read is the declaration the class names — which is the part a
     // second component could take away from here without noticing.

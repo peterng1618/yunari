@@ -496,7 +496,7 @@ describe("a width the author dragged", () => {
     // `yunariText.box` is the size before `scaleX`; `assertBox` divides the
     // stored number by the scale to get Fabric's `width`. A per-step write of
     // `width * scaleX` handed the next pass a box that many units too large —
-    // `vg-233`, where a 240-unit drag landed at 177.6. The bake belongs to the
+    // a 240-unit drag landed at 177.6. The bake belongs to the
     // commit, which reads the final width and resets the scale in one step.
     const object = authoredReading();
     const canvas = scene(object);
@@ -884,7 +884,7 @@ describe("placing a text by click or drag", () => {
   it("cancels an idle arm without placing, and the next press selects", () => {
     // Choosing another tool while the text tile is armed: the arm must not
     // outlive that choice, or the author's next press on the canvas would place
-    // a text instead of selecting the object they just made (`vg-714`).
+    // a text instead of selecting the object they just made.
     const { canvas, manager, port } = placementScene({ arm: false });
     canvas.skipTargetFind = false;
     canvas.selection = true;

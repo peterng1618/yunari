@@ -131,7 +131,7 @@ export interface LineOption extends EngineAnimation {
  * A reading that is not `ok` and numeric is skipped, not carried as `null`: the
  * line joins the readings either side and has no break (§83 line exception).
  * The axis window is `[windowStart, endMs]`, and the sample just before
- * it is kept so the line reaches its left edge (`vg-571`).
+ * it is kept so the line reaches its left edge.
  */
 export function toSeriesPoints(
   samples: readonly Sample[],

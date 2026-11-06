@@ -13,15 +13,14 @@ import { Glyph } from "./icons.js";
  * footer rather than a row of the tree, so it belongs to the pane and not to the
  * list. The pane still scrolls as one — the scroll box is
  * `aside.editor-shell-panel`, which holds header, body and this footer — so it
- * does not stay pinned while the list moves under it. That gap against the overflow rule is
- * filed as `vg-208`; the aside is deliberately the single scroller.
+ * does not stay pinned while the list moves under it. That gap against the
+ * overflow rule is deliberate: the aside is the single scroller.
  *
- * **The footer exists only while a layer is selected** (ruled by the user
- * 2026-11-02, reversing `vg-570`'s always-visible grey row). With no subject
+ * **The footer exists only while a layer is selected.** With no subject
  * the registry has nothing to act on, and an empty pane should keep the pixels
  * for its tree. With a selection the registry's filter answers and an action
  * the selection cannot run is absent rather than greyed — the arrange half is
- * the one that greys, on the selection inspector's lead (`vg-463`).
+ * the one that greys, on the selection inspector's lead.
  *
  * Eligibility is the registry's alone — `objectActionsFor` is the dock's own
  * filter, so the two surfaces agree on the command half and neither re-decides it

@@ -3,8 +3,9 @@
 /**
  * The icon-ink rule, proved on pixels rather than on a property name.
  *
- * vg-092: an author set Fill on `storage-card-icon` and the icon flooded into a
- * solid slab. The counters that flooded are not a hole the path data declares —
+ * Setting Fill on `storage-card-icon` floods the icon into a
+ * solid slab unless the ink rule holds. The counters that flooded are not a
+ * hole the path data declares —
  * `starterIcons.storage` carries one closed subpath (the drive body) and no
  * second, so the whole interior is one region under *any* fill rule. The proof
  * is therefore that a counter stays background after the author picks a colour,

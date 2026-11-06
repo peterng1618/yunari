@@ -54,7 +54,7 @@ beforeEach(() => {
 /** The shell a case mounted, so a case that throws before its own `destroy()`
  *  does not leak it — canvas, listeners and the `window` entry
  *  `mountEditorShell` publishes — into the next case, which then fails on the
- *  previous case's leak rather than on its own subject (`vg-414`). */
+ *  previous case's leak rather than on its own subject. */
 let live: Awaited<ReturnType<typeof mountEditorShell>> | null = null;
 
 async function mount(
@@ -172,7 +172,7 @@ describe("a binding cannot outlive its object", () => {
 });
 
 describe("the one walk a reference question reads", () => {
-  /** `vg-367`: `dropDanglingBindings` and `assetReferencedBy` answer different
+  /** `dropDanglingBindings` and `assetReferencedBy` answer different
    *  questions about the same scene, and both need every object at any depth.
    *  The second spelling of that walk is what this pins: a copy that stopped at
    *  the canvas, or at the first group, drops this binding on save while the
@@ -211,7 +211,7 @@ describe("the one walk a reference question reads", () => {
     expect(Object.keys(after.bindings ?? {})).toContain("deep-readout");
   });
 
-  /** `vg-365`: eligibility and the two managers that refuse a locked selection
+  /** Eligibility and the two managers that refuse a locked selection
    *  answer one question — is this selection one they accept. Nothing forced
    *  them to agree, so this drives both through their real objects: a
    *  re-spelled lock test on either side, or a manager whose refusal moved,
@@ -259,7 +259,7 @@ describe("the one walk a reference question reads", () => {
 describe("the dirty guard and what the renderer paints", () => {
   /** The instrument that found this: one live pass, then count the non-empty
    *  `styles` tables on the canvas — the snapshot cannot carry them any more,
-   *  because `serialiseScene` strips the derived table (`vg-129`). */
+   *  because `serialiseScene` strips the derived table. */
   it("is not made dirty by a reading being painted", async () => {
     const host = document.createElement("div");
     Object.defineProperties(host, {

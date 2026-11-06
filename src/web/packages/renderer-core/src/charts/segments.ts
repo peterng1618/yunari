@@ -25,7 +25,7 @@ export const SEGMENT_DIVISORS: readonly [1, 2, 4, 5, 10, 20, 25, 50, 100] = [
  * owner approved on the reference gauge. Measured against the
  * segment rather than the chart edge, the relationship survives every count and
  * size: a smaller band gets a proportionally smaller gap, and the rounded caps
- * no longer eat the first part of every gap.
+ * do not eat the first part of any gap.
  */
 export const SEGMENT_SPACING_PERCENT_DEFAULT = 10;
 

@@ -27,6 +27,9 @@ export interface VersionRow {
   readonly version: string;
   /** The validated `theme.json`; the version ladder's baseline. */
   readonly envelope_json: string;
+  /** The attribution the published package carries, kept beside the version
+   *  so a later submission can tell a credits-only correction from no change. */
+  readonly credits_json?: string | null;
   /** `facetRecordOf(envelope, thumbnailLuminance)`, derived once when the
    *  version is written; the luminance is the publisher's measurement of the
    *  picture that version carries. */

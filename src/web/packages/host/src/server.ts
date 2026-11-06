@@ -101,17 +101,16 @@ const MAX_SOCKET_CONNECTIONS = 256;
  * One port, two protocols.
  *
  * A display's secure origin and the pairing link the host already prints
- * (`http://<lan-ip>:<port>`) have to be the same port, because one listener on
- * one port is what §145 asks for and a second port would be a second thing to
- * find. So the first byte on a socket decides who owns it: `0x16` is a TLS
- * ClientHello, and anything else is HTTP.
+ * (`http://<lan-ip>:<port>`) have to be the same port: one listener on one port
+ * is one thing to find, and a second port would be a second one. So the first
+ * byte on a socket decides who owns it: `0x16` is a TLS ClientHello, and
+ * anything else is HTTP.
  *
  * **Plain http is a cost here, not a feature.** On a LAN it is an origin with
- * no wake lock and no service worker — the state `vg-580` exists to remove —
- * and it is kept only because the pairing link that points at it belongs to the
- * per-display-themes work, which owns what that link should carry. A display
- * reaches the secure origin by typing `https` in front of the address until
- * then.
+ * no wake lock and no service worker, so a display cannot stay awake or install
+ * as an app there. It is kept only because the pairing link that points at it
+ * carries the LAN address a display types; a display reaches the secure origin
+ * by typing `https` in front of that address.
  */
 export function createPortListener(
   plain: http.Server,
@@ -210,7 +209,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
    * The move a PUT asked for, run once that PUT's answer is on the wire. Its
    * refusal is state rather than a status for the same reason: the request that
    * asked for the move cannot be answered with its outcome, so the next GET
-   * reads `refusal` back (vg-173).
+   * reads `refusal` back.
    */
   async function moveLan(on: boolean): Promise<void> {
     const outcome = await options.hosting?.setLan(on);
@@ -260,7 +259,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // The group is `AssignableGroup` from renderer-core, not a union
     // re-spelled here: the owner is `ASSIGNABLE_GROUPS` (renderer-core),
     // and a fourth group added there must reach this path rather than needing a
-    // second edit nobody would make (vg-189).
+    // second edit nobody would make.
     const pick = (group: AssignableGroup): string | undefined =>
       perTheme[group] ?? shared[group] ?? stored.assigned[group];
 

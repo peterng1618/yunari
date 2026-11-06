@@ -85,8 +85,8 @@ describe("the glyph-only hover rule on the shell's glyph-only controls", () => {
 
 /** the type scale gives list rows `--text-sm`. A dialog is portalled, so a body that
  *  declares no role inherits the host document's base and lands on a type-scale step by
- *  accident — `vg-317`: the `?` sheet's rows read `--text-md` because
- *  `index.html` said 13px, not because any rule of the dialog's chose it. */
+ *  accident — a `?` sheet's rows read `--text-md` because
+ *  `index.html` says 13px, not because any rule of the dialog's chose it. */
 describe("the role on a dialog's own body", () => {
   it("declares the list-row role rather than inheriting the portal's base", () => {
     expect(
@@ -99,10 +99,10 @@ describe("the role on a dialog's own body", () => {
 
 /** The destructive mark, painted by one rule that reaches every surface.
  *
- *  `vg-226`'s complaint was that Delete was `--hot` in the dock and ordinary in
- *  the layer footer and the canvas context menu. The colour is painted by the
+ *  Delete must be `--hot` in the dock, the layer footer and the canvas context
+ *  menu alike. The colour is painted by the
  *  shared `data-yunari-destructive` the registry's `destructiveMarker` puts on
- *  each control, and the failure it replaced was a **surface-scoped** rule:
+ *  each control, and a **surface-scoped** rule does not reach every one:
  *  `.editor-shell-dock button[data-yunari-destructive]` cannot reach a popup
  *  Base UI portals to `body`, so the menu's Delete kept its inherited colour.
  *
@@ -209,10 +209,10 @@ const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
 
 describe("the destructive mark", () => {
   it("paints --hot from the shared marker, and from one rule that no surface scopes", () => {
-    // The mark is painted **only where the control can run** (`vg-570`): the
+    // The mark is painted **only where the control can run**: the
     // footer draws the registry's commands disabled with nothing selected, and
     // an unqualified rule outranks `ControlIconButton`'s own blocked `text-faint`
-    // — the "mark present, paint wrong" failure `vg-226` recorded. The rendered
+    // — the "mark present, paint wrong" failure. The rendered
     // half of this is the browser case in `snapping.spec.ts`.
     expect(
       ruleBodies(
@@ -224,8 +224,8 @@ describe("the destructive mark", () => {
     ).toContain("color: var(--hot)");
 
     // One rule, not one per surface. A rule whose *selector* mentions the marker
-    // is a rule that paints it; two of them is the owner violation `vg-226` was
-    // filed for, one level down, whatever colours they name.
+    // is a rule that paints it; two of them is an owner violation, one level
+    // down, whatever colours they name.
     const painters = [
       ...cssNoComments.matchAll(
         /^[^{}\n]*\[data-yunari-destructive\][^{}\n]*\{/gm,
@@ -324,12 +324,12 @@ function bodiesNaming(part: string): string {
 }
 
 /**
- * `vg-464`: two owners drew one focus boundary. The well `control-well.tsx`
+ * Two owners must not draw one focus boundary. The well `control-well.tsx`
  * draws is the owner — rounded to the control's own radius, the halo beside it
  * — so the field inside it says `outline-none` and the shell's fallback has to
- * *lose* to that. Unlayered it beat both whatever their specificity, and every
- * field in a well wore a second, square outline inside the rounded one (the
- * cascade fact `vg-278` measured).
+ * *lose* to that. Unlayered the fallback beats both whatever their specificity,
+ * and every field in a well wears a second, square outline inside the rounded
+ * one (the cascade fact).
  *
  * A text read, because jsdom resolves no cascade: what a DOM case here could
  * prove is the class strings, and `control.dom.test.tsx` is where those are
@@ -343,7 +343,7 @@ describe("the shell's focus fallback", () => {
       base,
       "the shell's `:focus-visible` fallback is not inside an `@layer` block, " +
         "so it outranks the field's `outline-none` and the well's " +
-        "`focus-within:outline-*` and draws the second boundary `vg-464` records",
+        "`focus-within:outline-*` and draws the second boundary",
     ).toContain(":focus-visible {");
     expect(base).toContain("outline: 2px solid var(--shell-accent);");
   });
@@ -362,22 +362,22 @@ describe("the shell's focus fallback", () => {
 });
 
 /**
- * `vg-458`: the `--yunari-scrollbar-*` values were declared for the scrollers
- * and read by nothing, so the platform painted them.
+ * The `--yunari-scrollbar-*` values are declared for the scrollers and read by
+ * the rule below, so the shell paints them rather than the platform.
  *
- * `vg-480`: two of the four scrollers are portalled out of `.editor-shell`, so
+ * Two of the four scrollers are portalled out of `.editor-shell`, so
  * the rule names their portal rather than each scroller. Stating the pair once
  * on the shell root and letting it inherit is what keeps a new scroller — the
  * Themes page's gallery — from painting the platform bar; naming individual
- * scrollers was the list that went stale and this is the case that holds the
+ * scrollers is a list that goes stale and this is the case that holds the
  * roots.
  *
- * `vg-491`: the `::-webkit-scrollbar*` family that stood beside the standard
- * pair painted nothing. Measured in the Chromium the browser suite runs: either
+ * The `::-webkit-scrollbar*` family paints nothing beside the standard pair.
+ * Measured in the Chromium the browser suite runs: either
  * property being non-`auto` disables the family for that scroller, so a 20px
  * webkit gutter beside `scrollbar-width: thin` renders as the thin bar. The
- * family is gone, and with it the thumb's hover colour — `scrollbar-color`
- * states a thumb and a track and no state between them, and the family that had
+ * family is absent, and with it the thumb's hover colour — `scrollbar-color`
+ * states a thumb and a track and no state between them, and a family with
  * one is inert wherever the pair is declared. So the pair is the whole styling,
  * and both halves of that are asserted below: the pair, and the family's
  * absence.
@@ -455,14 +455,13 @@ describe("the scrollers' scrollbar", () => {
 });
 
 /** The layer row's reserve: one arm per control the row can draw, and none past
- *  that count (`vg-492`).
+ *  that count.
  *
- *  **The row draws at most three controls, so the fourth arm could not match.**
+ *  **The row draws at most three controls, so a fourth arm could not match.**
  *  `RowAffordances` renders a visibility control and, where the row is attended,
  *  selected or locked, a lock control; `composition-pane.tsx` adds at most one
- *  entry control beside them. The fourth button the arm was written for was the
- *  rename pen, and `vg-462` removed it — the caret's job moved onto the row
- *  itself — so `padding-right: 126px` has been unreachable since `e572c302`.
+ *  entry control beside them. There is no rename pen: the caret's job is the
+ *  row's own, so `padding-right: 126px` is unreachable.
  *
  *  **A dead selector moves no pixel, which is why this reads the text.** Nothing
  *  can redden for a rule that cannot match: every rendered reading of the layer

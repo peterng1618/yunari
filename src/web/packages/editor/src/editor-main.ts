@@ -93,7 +93,7 @@ async function start(): Promise<void> {
   const host = layout.hosts.canvas;
   const status = layout.hosts.status;
   // The draft: the unsaved document, kept in browser storage so a crash costs
-  // the last half-minute of work rather than all of it (`vg-040`). One slot for
+  // the last half-minute of work rather than all of it. One slot for
   // the whole editor, because the author has one editor, and a browser that
   // refuses its own storage has no draft rather than an error to report.
   const draftStore = new DraftStore(readStorage());
@@ -101,13 +101,13 @@ async function start(): Promise<void> {
    *  is mounted. **The status line cannot carry it**: the boot writes that
    *  element last, and the element carries what is open rather than what failed
    *  — the refusal is reported through the shell's own diagnostic line, which
-   *  nothing in the boot writes (vg-511). */
+   *  nothing in the boot writes. */
   let refusedDraftRestore: string | undefined;
   /** The open document as the autosave asks it. `isDirty` is the session's own,
    *  pulled rather than held, so nothing here re-derives what "saved" means.
    *  **One source per mounted document**: the autosave compares this object to
    *  notice a switch, and a fresh object every tick would make every tick look
-   *  like one (`vg-541`). */
+   *  like one. */
   let draftSource:
     | { readonly active: ActiveEditor; readonly source: DraftSource }
     | undefined;
@@ -393,7 +393,7 @@ async function start(): Promise<void> {
       bindings: () => extensions.envelope.bindings ?? {},
       // The theme's name is the document's identity; a theme the author has not
       // named is identified by its own id. The schema refuses an empty name and
-      // the loader supplies one (`vg-221`), but this reads whatever the document
+      // the loader supplies one, but this reads whatever the document
       // holds, so an empty one is still read as unnamed. The status line takes
       // the same reading (`openedStatusText`), so the two name one document one
       // way.
@@ -420,7 +420,7 @@ async function start(): Promise<void> {
           shell.backdrop("theme"),
           undefined,
           // The bridge's own picture is a read of the document too: the
-          // entered-group dim is lifted for it (`vg-527`).
+          // entered-group dim is lifted for it.
           () => shell.editor.groupingManager.suspendDim(),
           // A library or store card is what a panel would show, so a circle
           // theme's card is its disc, not the square the camera happened to
@@ -448,7 +448,7 @@ async function start(): Promise<void> {
     // **After the bridge, and only here.** The diagnostic line is a subscription
     // on this canvas, so the refusal is reported once the mount that replaced
     // the draft has handed the shell its bridge — which is also the first moment
-    // there is a shell to report through (vg-511). The draft it names is still
+    // there is a shell to report through. The draft it names is still
     // in the slot at this point, and is replaced by this document's first edit
     // (`draft-store.ts`).
     if (refusedDraftRestore !== undefined) {
@@ -486,7 +486,7 @@ async function start(): Promise<void> {
     });
   });
 
-  // **The page's own lifetime, bound as a pair** (vg-510). `pagehide` is the
+  // **The page's own lifetime, bound as a pair**. `pagehide` is the
   // last event a page gets before it is unloaded or frozen into the
   // back/forward cache; a page restored from that cache comes back with its
   // state intact and no reload, so a stop with no re-arm left the editor with a
@@ -572,7 +572,7 @@ async function start(): Promise<void> {
     }
     // A theme the URL named that is stored and does not validate is not a
     // blank success: the author is told why, over the template that stands in
-    // for the document they asked for (vg-110).
+    // for the document they asked for.
     case "invalid": {
       const theme = createNewFabricTheme();
       await mount({
@@ -588,7 +588,7 @@ async function start(): Promise<void> {
     // A theme the URL named that is stored but past the size the host will read
     // is not a blank success either: the author is told the saved theme is too
     // large to open, over the template that stands in for the document they
-    // asked for (vg-409).
+    // asked for.
     case "too-large": {
       const theme = createNewFabricTheme();
       await mount({

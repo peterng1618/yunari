@@ -183,7 +183,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("the published service worker's shell cache", () => {
   it("names the cache from the document and drops the previous build on activate", async () => {
     const { worker, name } = await installed("<html>build one</html>");
-    // A display upgrading from the fixed-name cache the worker used to write.
+    // A display holding a fixed-name cache from an earlier build.
     worker.caches.entries.set("yunari-shell-v2", new Map());
 
     await worker.run("activate");

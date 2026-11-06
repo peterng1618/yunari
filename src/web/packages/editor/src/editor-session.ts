@@ -242,7 +242,8 @@ export class EditorSession {
     // The catalogue's three writes, built once because two surfaces ask this
     // session for them: the Tokens pane's own controls and the selection
     // inspector's face field are the same owner answering the same question
-    // (`vg-268`), so neither re-implements a face or trio write.
+    // are the same owner answering the same question, so neither
+    // re-implements a face or trio write.
     const fontActions: TypeTokenFontActions = {
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
@@ -566,7 +567,10 @@ export class EditorSession {
     // The destination declares them under fresh ids before the paste re-points
     // the object, so a cross-theme paste never names files the theme lacks.
     options.shell.editor.clipboardManager.setAssets(
-      createClipboardAssets(this.#assets, () => this.#declarationsChanged()),
+      createClipboardAssets(this.#assets, () => this.#declarationsChanged(), {
+        readCredit: (assetId) => this.#document.creditForAsset(assetId),
+        addCredit: (entry) => this.#document.addCredit(entry),
+      }),
     );
     this.#document.refreshBackgroundMedia();
     // The dispatcher's chords are one owner: every one reaches the control it
@@ -583,7 +587,7 @@ export class EditorSession {
   }
 
   /** The document as the author last left it: what a save ships, and what the
-   *  draft holds (`vg-040`). Read here rather than composed at the caller, so
+   *  draft holds. Read here rather than composed at the caller, so
    *  the authored-JSON merge the snapshot is stays the document's — a second
    *  one at the boot path would drop the asset declarations with it. */
   snapshot(): FabricThemeEnvelope {

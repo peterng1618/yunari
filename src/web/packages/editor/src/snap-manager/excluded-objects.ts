@@ -4,11 +4,11 @@ import { type FabricObject, Group } from "fabric/es";
  * artboard plate spans the whole artboard, so it is "aligned" with every object
  * on the cross axis and its stroke edges sit half a pixel outside the true
  * artboard bounds, winning boundary snaps over the artboard's own source.
- * It is excluded by id — `background` is the plate's conventional id, which
- * the starter used to author and an author can still draw — not by
- * `selectable`, which would also drop locked neighbours. The starter no longer
- * authors one: its backdrop is packaged media mounted below the canvas,
- * so nothing on the canvas spans the artboard. */
+ * It is excluded by id — `background` is the plate's conventional id, which an
+ * author can still draw — not by
+ * `selectable`, which would also drop locked neighbours. The starter's backdrop
+ * is packaged media mounted below the canvas,
+ * so nothing it authors spans the artboard. */
 export const IGNORED_IDS: readonly string[] = ["background"];
 
 /** The objects one group holds; every other object holds none. The one reader
@@ -32,18 +32,17 @@ function collectParts({
 
 /** Collects the set of objects excluded from processing.
  *
- * The dragged object's own ancestors and its own parts are both excluded
- * (`vg-123`), and the reason is that **everything excluded here travels with the
+ * The dragged object's own ancestors and its own parts are both excluded,
+ * and the reason is that **everything excluded here travels with the
  * drag**: its own parts move with it, and Fabric re-fits a group's box around the
- * child being dragged — measured in `vg-123`'s fix round on the nested fixture,
- * where the child's own `left` moved `-90.5` while the card's box collapsed from
- * 400×200 onto it. So an ancestor's box, or one of the object's own parts, offers
- * the drag a line that moves with it, which is acquired at every step and pins
- * the drag wherever it starts. A group with a **declared** `width`/`height` keeps
- * that box rather than the parts' union, so the box equality the first version of
- * this comment asserted does not hold; the exclusion does, because the re-fit is
- * what makes the ancestor's box the drag's own line. Neither end was reachable
- * while the candidate set was roots. */
+ * child being dragged — on the nested fixture the child's own `left` moved
+ * `-90.5` while the card's box collapsed from 400×200 onto it. So an ancestor's
+ * box, or one of the object's own parts, offers the drag a line that moves with
+ * it, which is acquired at every step and pins the drag wherever it starts. A
+ * group with a **declared** `width`/`height` keeps that box rather than the
+ * parts' union, so box equality does not hold; the exclusion does, because the
+ * re-fit is what makes the ancestor's box the drag's own line. Neither end is
+ * reachable while the candidate set is roots. */
 export const collectExcludedObjects = ({
   activeObject,
 }: {

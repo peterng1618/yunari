@@ -364,7 +364,7 @@ export function createGroupingManager(
         canvas.remove(active);
         // The `Group` object leaves the document, so it is disposed here —
         // the scene adapter no longer disposes whatever anyone removes
-        // (`vg-486`). Safe because `removeAll` emptied it first:
+        //. Safe because `removeAll` emptied it first:
         // `Group.dispose` would otherwise cascade into the members below.
         active.dispose();
         for (const member of members) {

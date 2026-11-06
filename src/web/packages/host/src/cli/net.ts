@@ -9,7 +9,7 @@ import { MAX_PORT_ATTEMPTS } from "./args.js";
  * What this module binds. `node:http`'s server and `node:https`'s do not share
  * a type, and both carry what the callers need: `listen`, and the one way the
  * move drops connections — `closeAllConnections`, which destroys the ones still
- * answering rather than letting `close()` wait on them (`vg-174`). A host
+ * answering rather than letting `close()` wait on them. A host
  * serving both protocols on one port presents a `net.Server` wearing the same
  * method, so the interface is stated rather than spelled as a union.
  */
@@ -101,7 +101,7 @@ export function waitUntilReachable(
  * Adapter names a phone on the same Wi-Fi cannot reach, matched against the
  * interface name.
  *
- * **Data, not a heuristic** (`vg-171`): a Hyper-V switch, a WSL adapter, a
+ * **Data, not a heuristic**: a Hyper-V switch, a WSL adapter, a
  * Docker bridge, a VM's host-only network and the tunnel a VPN installs all
  * carry a perfectly plausible dotted quad, and a phone that dials one of them
  * just fails to connect. A new virtual adapter is a line here rather than a new
@@ -282,7 +282,7 @@ export async function readLanSource(): Promise<LanSource> {
   return { interfaces, defaultRouteInterface };
 }
 
-/** The ruling's order (`vg-171`), as a pure function so a case can carry a
+/** The ruling's order, as a pure function so a case can carry a
  *  fixture rather than the adapters the machine running the test happens to
  *  have: drop loopback, link-local and internal; drop virtual adapters by name;
  *  prefer the interface carrying the default route; otherwise keep the choice
@@ -377,7 +377,7 @@ async function measureLanAddress(): Promise<string | undefined> {
  *
  *  `source` is injectable so a case carries a fixture; the host reads the
  *  machine it is on. A pick made without a default route to go by is not
- *  silent: the row this exists for (`vg-171`) is invisible on the machine that
+ *  silent: the row this exists for is invisible on the machine that
  *  makes it — the header renders a plausible dotted quad either way — so the
  *  alternatives go on the record where a wrong pick can be found without a
  *  phone. The host's logging surface is `console` (`main.ts` prints its whole

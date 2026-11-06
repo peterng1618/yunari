@@ -22,7 +22,7 @@ import { InspectorSection } from "./inspector-section.js";
 
 /** `DESIGN.md`, seven levels above this file — the same way `design-md.test.ts`
  *  reaches the root `scripts/`. The spacing table is normative for the control
- *  set, and nothing compared it to what the set writes (`vg-498`).
+ *  set, and nothing compared it to what the set writes.
  *
  *  `dirname` on the file's own path rather than `new URL(relative, …)`: under
  *  jsdom the *global* `URL` is the environment's, and a `../`-prefixed
@@ -89,11 +89,10 @@ function inputFiles(): readonly {
  * about it.
  *
  * Two things make this the call and not the name: the call's own syntax
- * (`useDraftCommit(`), and comments blanked first. Both were missing from the
- * first version of this walk, and each one alone was enough to keep it green —
- * an unused import, or `tags-field.tsx`'s own docblock naming the hook, passed
- * it with the spread deleted. A guard that a *mention* satisfies is not a guard
- * (`vg-203`'s fix round 2).
+ * (`useDraftCommit(`), and comments blanked first. Either alone keeps such a
+ * walk green — an unused import, or `tags-field.tsx`'s own docblock naming the
+ * hook, passes it with the spread deleted. A guard that a *mention* satisfies
+ * is not a guard.
  */
 function callsDraftCommit(source: string): boolean {
   return /\buseDraftCommit\s*\(/.test(withoutComments(source));
@@ -109,9 +108,9 @@ const BINDS_HOOK = /const\s+(\w+)\s*=\s*useDraftCommit\s*\(/;
  *
  * **The default is to fail.** A file the walk finds that is neither a hook
  * caller nor named here is red, so a new control has to use the hook or write
- * down why not — which is the shape the list of two files had inverted, and why
- * `panes/document/tags-field.tsx` shipped owning its own Enter and Escape
- * (`vg-203`'s defect, one control later).
+ * down why not — which inverts a list of the files that do, and is why
+ * `panes/document/tags-field.tsx` owning its own Enter and Escape goes
+ * unnoticed.
  *
  * **Two entries are copies rather than sanctions.** They reimplement the key
  * decision — their own Enter, and for the rename field an Escape too — and take
@@ -889,7 +888,7 @@ it("does not commit a number outside the field owner's bounds", async () => {
 });
 
 /**
- * `vg-264`: the control set's five refusals are the copy table's words, not
+ * The control set's five refusals are the copy table's words, not
  * literals of its own. Each is asserted against its `uiCopy.controls` entry, so
  * a refusal reworded in the set and not in the table — or the reverse — is this
  * red rather than a second vocabulary an author meets on one surface and not
@@ -980,7 +979,7 @@ it("does not commit on the Enter of a composition", async () => {
 });
 
 it("takes the draft/commit keyboard decision from one owner, for the text and number fields alike", async () => {
-  // vg-203: the composing ref, the Enter/IME guard and the Escape reset live in
+  // The composing ref, the Enter/IME guard and the Escape reset live in
   // `useDraftCommit`, which both controls call, so the *same* contract is run
   // against each — the case that would catch one copy drifting from the other.
   for (const field of ["text", "number"] as const) {
@@ -1045,7 +1044,7 @@ it("takes the draft/commit keyboard decision from one owner, for the text and nu
 });
 
 it("takes the draft/commit decision from the one hook, in every file that holds an input", () => {
-  // vg-203: the composing ref, the Enter/IME guard and the Escape reset live in
+  // The composing ref, the Enter/IME guard and the Escape reset live in
   // `useDraftCommit`, and this walk is what requires every control to take them
   // from there. It fails by default — a file that holds an input is red until
   // it calls the hook or is named in `EXEMPT` with a reason — because the
@@ -1075,7 +1074,7 @@ it("takes the draft/commit decision from the one hook, in every file that holds 
   ).toEqual([]);
 
   // And a file that calls the hook may not keep a copy of the decision beside
-  // it. Both copies were *correct* when vg-203 was filed, so only reading the
+  // it. Both copies can be *correct*, so only reading the
   // source sees one coming back — the behavioural cases pass against either.
   // Comments are blanked here too: this file's own docblock says "composing
   // ref", and prose is not a copy of the decision.
@@ -1322,7 +1321,7 @@ it("does nothing on a wheel while the value sits outside the control's own range
 });
 
 it("states the stored value its own track cannot reach, rather than drawing a different one", async () => {
-  // `vg-494`. The state another owner's measure leaves behind, the one the wheel
+  // The state another owner's measure leaves behind, the one the wheel
   // case above is the other half of: a panel carrying a border of 100 whose box
   // is typed down to a drawn edge of 40 has `max` 40 and a stored value of 100.
   // The two halves of one control then read two different numbers, and the track
@@ -1478,16 +1477,16 @@ it("raises the well's edge on hover, except when the control is blocked", () => 
 });
 
 it("pads a well with the step the table names for it", () => {
-  // `vg-498`. Code padded 6, both current surfaces write `padding:4px 6px`, and
-  // The table gave the 4px step to well padding — three sources against one
-  // table cell, with no case reading either side of the split, so nothing ever
-  // reddened on it. `design-tokens.mjs` holds a surface to the *steps* and
+  // The code and both surfaces write 6, while the table gives the 4px step to
+  // well padding — three sources against one table cell, with no case reading
+  // either side of the split, so nothing reddens on it. `design-tokens.mjs`
+  // holds a surface to the *steps* and
   // never compares that list to the table's own assignment. This is the missing
   // read: the table's assignment and the class the well is built from, against
   // each other.
   //
-  // The table moves rather than the pad, and that is the row's own ruling: the
-  // code and *both* surfaces write 6 horizontally, so the cell is the odd one
+  // The table moves rather than the pad: the code and *both* surfaces write 6
+  // horizontally, so the cell is the odd one
   // out. The read is anchored on the table row's own words rather than on a
   // line, because a line number here rots and this one has already moved.
   const row =
@@ -1507,7 +1506,7 @@ it("pads a well with the step the table names for it", () => {
 });
 
 /**
- * `vg-464`: one focus boundary, owned by the well.
+ * One focus boundary, owned by the well.
  *
  * The well draws it (`focus-within:outline-*`, following the control's
  * `rounded-md`), and the field inside a well declares `outline-none` so the
@@ -1531,7 +1530,7 @@ it("focuses the field, and leaves the focus boundary to the well around it", asy
   expect(
     field.className,
     "the field draws a boundary of its own, which is the second outline " +
-      "vg-464 records beside the well's rounded one",
+      "beside the well's rounded one",
   ).toContain("outline-none");
   const well = field.parentElement;
   expect(

@@ -101,7 +101,7 @@ export function FinderFilters(props: {
 
 /** The chip per visible source. A lone source still draws its chip: the
  *  kind-off sentence says to turn one on above, and with the chip hidden there
- *  would be nothing above to turn on (`vg-710`). */
+ *  would be nothing above to turn on. */
 export function FinderSourceChips(props: {
   readonly sources: readonly AssetSourceListing[];
   readonly disabled: ReadonlySet<string>;

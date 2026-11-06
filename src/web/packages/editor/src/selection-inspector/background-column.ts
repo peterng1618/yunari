@@ -331,7 +331,7 @@ export function backgroundColumn(input: {
     ]),
     // A position with no picture to place has nothing to describe, and the
     // write below refuses it anyway: the section appears with the media rather
-    // than offering controls whose first use is an error (`vg-703`).
+    // than offering controls whose first use is an error.
     ...(media === undefined
       ? []
       : [

@@ -132,7 +132,7 @@ describe("the run editor's own state", () => {
   it("removes the selected twin without taking the survivor's text", async () => {
     // Two literals sharing a preset are the same spelling, so a key derived from
     // the run's fields cannot tell them apart. The survivor is the run it was,
-    // not the row that moved up under it (vg-249).
+    // not the row that moved up under it.
     const box = mountRunEditor({
       runs: [
         { kind: "literal", text: "A", typeToken: "typeTokens.plain" },

@@ -3,23 +3,22 @@ import { uiCopy } from "./ui-copy.js";
 /**
  * The controls a reader operates: fullscreen, keep-awake and a dimmer.
  *
- * Three controls and no settings modal — the user ruled the modal away on
- * 2026-10-18 (`vg-576`). They overlay: the bar and the dimmer are both
- * `position:fixed`, so the composition's box is the same with the bar up, with
- * it gone, and with the dimmer at any setting. A control in a chrome band would
- * take its room from the artboard and re-fit the scene, which moves the whole
- * picture (`vg-028`, measured; `chrome.ts`'s module comment carries the
+ * Three controls and no settings modal. They overlay: the bar and the dimmer
+ * are both `position:fixed`, so the composition's box is the same with the bar
+ * up, with it gone, and with the dimmer at any setting. A control in a chrome
+ * band would take its room from the artboard and re-fit the scene, which moves
+ * the whole picture (measured; `chrome.ts`'s module comment carries the
  * numbers). Their styles are in `index.html`, beside the column that places the
  * bands, so this file is a script with no colours in it.
  *
  * **Two of the three can be refused, and saying so is the point.** The host
  * serves https beside http on the same port, from a certificate it issues
- * itself (`vg-580`), so the display is a secure context
+ * itself, so the display is a secure context
  * at the https origin once that root is installed — and at the http origin, or
  * before the root is installed, the two APIs are gated on things a phone at
  * `http://<lan-ip>:<port>` does not have: the Screen Wake Lock API on a secure
  * context, and arbitrary-element fullscreen on a client that implemented it at
- * all — iPhone Safari never has, and Task 25.6's standalone mode is that
+ * all — iPhone Safari never has, and standalone mode is that
  * client's honest path instead. **`localhost` IS a secure context**, so a run on
  * the host machine sees the wake lock present and proves nothing about the phone
  * it is for. Each control is feature-detected at runtime, and one that cannot do
@@ -31,12 +30,12 @@ import { uiCopy } from "./ui-copy.js";
  *
  * Nothing here is persisted. A display's own dim setting is this page's, and a
  * reload is allowed to forget it; what a display *is* configured with belongs
- * to the host's per-display settings (`vg-574`), not to this file.
+ * to the host's per-display settings, not to this file.
  */
 
-/** How long the bar stays up after a tap or a keypress. Three seconds is the
- *  design presented to the user on 2026-10-17; keyboard focus holds it open
- *  past that (`hide`). */
+/** How long the bar stays up after a tap or a keypress. Three seconds leaves
+ *  time to tap a control without holding the bar over the picture; keyboard
+ *  focus holds it open past that (`hide`). */
 const VISIBLE_MS = 3_000;
 
 /** The dimmer's ceiling. Not 1: a display dimmed to nothing is a display

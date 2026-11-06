@@ -60,10 +60,10 @@ function ipv6(scopeid: number): NetworkInterfaceInfo {
   };
 }
 
-/** A machine with Hyper-V and an Npcap pseudo-adapter: the adapters this
- *  workstation enumerates ahead of its physical NIC, and what `vg-171` is
- *  about. Written out rather than read, so the case passes on a box that has
- *  neither. */
+/** A machine with Hyper-V and an Npcap pseudo-adapter: the virtual adapters a
+ *  Windows machine can enumerate ahead of its physical NIC, which the address
+ *  ranking must pass over. Written out rather than read, so the case passes on
+ *  a box that has neither. */
 function hyperVFirst(): LanSource["interfaces"] {
   return {
     "Npcap Loopback Adapter": [ipv4("169.254.240.162")],

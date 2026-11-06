@@ -8,14 +8,13 @@ import { paletteTokenRole } from "./palette-role.js";
  * What a card asks for, and what the document it is inserted into actually has.
  *
  * A card is authored against the starter's vocabulary — `palette.frost`,
- * `typeTokens.heading` — and a document is free to name its tokens anything
- * (`vg-128`). The answer used to be a refusal, because an unresolved reference
- * reaches `snapshot`, which validates and throws: an author gets a canvas that
- * looks right and a save that fails for the rest of the session, told nothing.
- * Refusing was the safe half of that decision and the unusable half too — **on
- * the host's default two-token palette every card refuses, and on a blank theme
- * seven of the eight do**, so the library was dead exactly where an author meets
- * it first.
+ * `typeTokens.heading` — and a document is free to name its tokens anything.
+ * A refusal is not an option, because an unresolved reference reaches
+ * `snapshot`, which validates and throws: an author gets a canvas that looks
+ * right and a save that fails for the rest of the session, told nothing.
+ * **On the host's default two-token palette every card refuses, and on a blank
+ * theme seven of the eight do**, so a refusal kills the library exactly where
+ * an author meets it first.
  *
  * So a reference resolves in this order, and the author is told which step
  * answered:

@@ -664,9 +664,9 @@ describe("mountFabricScene disposal", () => {
   });
 
   it("releases everything over repeated full mount/render/dispose cycles", () => {
-    // Task 1 measured a 56-surface leak over ten mount/unmount cycles, and it
-    // was the *scene* that leaked, not just the glass handle - so this cycles
-    // the whole mount rather than the handle alone.
+    // A leak shows up as 56 surfaces over ten mount/unmount cycles, and it can
+    // be the *scene* rather than just the glass handle — so this cycles the
+    // whole mount, not the handle alone.
     const created: HTMLCanvasElement[] = [];
     const original = document.createElement.bind(document);
     (document as unknown as { createElement: typeof original }).createElement =
@@ -731,9 +731,9 @@ describe("mountFabricScene disposal", () => {
       ).createElement = original;
     }
 
-    // Task 1's leak was a count that *grew* with the cycles - 56 surfaces
-    // after ten - so the property is that it does not. A single cycle could
-    // never have shown it, which is why this is ten.
+    // A leak is a count that *grows* with the cycles — 56 surfaces after ten —
+    // so the property is that it does not. A single cycle could never show it,
+    // which is why this is ten.
     expect(
       perCycle[0],
       "the surface was found, so the test measured something",

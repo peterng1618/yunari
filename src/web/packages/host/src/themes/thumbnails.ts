@@ -86,7 +86,7 @@ export function thumbnailCaptureSize(artboard: {
 export interface ThumbnailStore {
   read(id: string): Promise<Uint8Array | undefined>;
   /** Whether a picture is stored at all, without reading its bytes: a listing
-   *  asks this so its page requests only images that exist (`vg-655`). */
+   *  asks this so its page requests only images that exist. */
   has(id: string): Promise<boolean>;
   /** The picture's mean relative luminance, read from the value kept beside it
    *  so a listing does not decode every picture. A picture stored before that

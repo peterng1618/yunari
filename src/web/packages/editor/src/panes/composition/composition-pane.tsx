@@ -396,7 +396,7 @@ export function CompositionPane({
    * which is what it has always done. The bridge takes the ids; this decides
    * which ones, because "extend" is a fact about this list.
    *
-   * The three forms are the ruling's own (`vg-056`): shift extends a range and
+   * The three forms are the ruling's own: shift extends a range and
    * ctrl toggles, rather than one idiom or the other. The keyboard's shift
    * moves take the same range path, so the two gestures cannot disagree about
    * what a range is.
@@ -568,7 +568,7 @@ export function CompositionPane({
                 // group boundary: the anchor's own parent is the container the
                 // drop enters, which is what makes dragging a row into a group
                 // and back out to the root the same gesture as restacking one
-                // (`vg-461`). Two things are refused instead — a cycle, a group
+                //. Two things are refused instead — a cycle, a group
                 // dropped inside itself, and an anchor that does not resolve —
                 // and the bridge answers both in the tree's own terms, so the
                 // panel cannot promise a drop Fabric would log and drop.
@@ -582,9 +582,8 @@ export function CompositionPane({
                   event.preventDefault();
                   mark(event.currentTarget, "slot");
                 } else {
-                  // vg-099: the refusal used to be swallowed whole — cancelled
-                  // or not made no difference to anything an author could see.
-                  // Not cancelling is deliberate: the browser then shows its own
+                  // The refusal must reach the author: not cancelling is
+                  // deliberate, because the browser then shows its own
                   // no-drop cursor here, which is one more surface saying no
                   // rather than the panel saying it alone.
                   mark(moved ? event.currentTarget : undefined, "refused");
@@ -672,7 +671,7 @@ export function CompositionPane({
                   setEditing(row.id);
                   return;
                 }
-                // Selecting is the other half of the keys vg-067 added, and a
+                // Selecting is the other half of the pane's navigation keys, and a
                 // treeitem you can walk to but not pick is half a tree. Enter
                 // is already rename's, so selection takes the key a list has
                 // always used for it.
@@ -812,7 +811,7 @@ export function CompositionPane({
                   There is no rename control: the name the pen acted on is this
                   row's own, so the field opens from the row itself — a
                   double-click on it, or F2/Enter from the keyboard
-                  (`vg-462`). */}
+                 . */}
               <span className="yunari-layer-state">
                 {showEnter ? (
                   <RowIconButton

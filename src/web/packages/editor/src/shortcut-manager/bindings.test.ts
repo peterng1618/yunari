@@ -444,7 +444,7 @@ describe("bindingRefusal", () => {
   it("refuses a letter whose Shift variant the browser keeps too", () => {
     // The blanket Shift exclusion these replace was never a measurement: it
     // assumed Shift made a chord safe, and `Ctrl+Shift+T` — reopen the closed
-    // tab — is one of the chords most likely to be tried (`vg-290`). `a` is
+    // tab — is one of the chords most likely to be tried. `a` is
     // Chromium's tab search, so the finder's old Ctrl+Shift+A was a chord the
     // page never saw.
     for (const key of ["a", "n", "r", "t", "w"]) {

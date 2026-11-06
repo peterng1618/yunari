@@ -127,7 +127,7 @@ interface ObjectAction extends ActionIdentity {
 
 /**
  * An action that needs no selection: it constructs rather than commands, so it
- * is not gated on a subject (`vg-460`).
+ * is not gated on a subject.
  *
  * **It carries no `eligible` and no `run`, and both absences are the fact.**
  * There is no rule to state, because the whole of this action's eligibility is
@@ -144,7 +144,7 @@ export interface ConstructionAction extends ActionIdentity {
 
 /** Whether there is a subject at all: the floor `hasUnlockedSelection` and
  *  `hasLockedSelection` are built on, and the question the layer footer asks
- *  before it draws the registry greyed (`vg-570`). */
+ *  before it draws the registry greyed. */
 export const hasSelection = (target: ObjectTarget): boolean =>
   target.kind !== "none";
 
@@ -421,12 +421,11 @@ export function arrangeActions(): readonly ObjectAction[] {
 
 /**
  * The constructions, in the Add pane's own order: text, then one entry per
- * primitive. **No surface draws these** — the layer footer did, and the user
- * ruled that answer wrong on 2026-10-17 (`vg-570`): `vg-460` asked only that the
- * footer always show, and with nothing selected it draws the registry's commands
- * disabled instead. What is left is the id list `isConstructionAction` answers
- * from, so a construction reaching `bridge.can`/`bridge.run` still takes the
- * session façade's own route rather than the selection gate.
+ * primitive. **No surface draws these**: the layer footer draws its commands
+ * disabled with nothing selected, rather than the registry itself. What is left
+ * is the id list `isConstructionAction` answers from, so a construction reaching
+ * `bridge.can`/`bridge.run` still takes the session façade's own route rather
+ * than the selection gate.
  *
  * **The set is the Add pane's primitives, and the words are the Add pane's own**
  * (`uiCopy.shapeKinds`, `uiCopy.panels.text` — the labels `insertGroups()` hands

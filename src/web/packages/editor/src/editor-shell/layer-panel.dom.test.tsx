@@ -180,7 +180,7 @@ it("indents a group child and carries the row's controls once it is selected", a
   const rows = host.querySelectorAll<HTMLElement>("[data-yunari-layer]");
   expect(rows).toHaveLength(2);
   // One dense line, plus the two state indicators — not six text buttons, and
-  // no pen beside the name (`vg-462`).
+  // no pen beside the name.
   expect(rows[1]?.style.getPropertyValue("--layer-depth")).toBe("1");
   expect(rows[1]?.querySelectorAll("button")).toHaveLength(2);
   expect(rows[1]?.querySelector('[aria-label="Unlock"]')).not.toBeNull();
@@ -752,8 +752,8 @@ it("marks a slot across a group boundary, a container for an empty group, and on
   const selectLayer = vi.fn();
   // Two children in one group, a sibling at the top level, and an empty group
   // whose row is the only thing that can name it as a destination. The boundary
-  // that used to be the refusal is now a slot — that is `vg-461` — so what a row
-  // can still be refused is a drop that would put a container inside itself.
+  // between groups is a slot, so what a row can still be refused is a drop that
+  // would put a container inside itself.
   const tree = [
     layerRow({
       id: "group",
@@ -886,7 +886,7 @@ it("marks a slot across a group boundary, a container for an empty group, and on
 });
 
 it("draws locked as a filled lock and unlocked as an outline one", async () => {
-  // vg-024: at the row's icon size the two outline locks differ only by a gap
+  // At the row's icon size the two outline locks differ only by a gap
   // in the shackle, which the author could not tell apart. Filled versus outline
   // is a difference in weight the row can be read by at that size, and it comes
   // from the icon's own `fill` rather than from hand-picking a second glyph.
@@ -979,7 +979,7 @@ it("answers the keys a tree is defined by, and does not nudge", async () => {
 });
 
 it("expands a shut group on ArrowRight, and steps into an open one's first child", async () => {
-  // vg-273: moveFocus's ArrowRight branch. On a shut group it opens the group
+  // moveFocus's ArrowRight branch. On a shut group it opens the group
   // through the bridge; on an open one it moves focus into the first child.
   const shut = layerRow({
     id: "group",
@@ -1020,7 +1020,7 @@ it("expands a shut group on ArrowRight, and steps into an open one's first child
 });
 
 it("collapses an open group on ArrowLeft, and steps out to the parent otherwise", async () => {
-  // vg-273: moveFocus's ArrowLeft branch. On an open group it shuts the group
+  // moveFocus's ArrowLeft branch. On an open group it shuts the group
   // through the bridge; on a child it walks out to the level above it.
   const group = layerRow({
     id: "group",
@@ -1081,7 +1081,7 @@ it("marks a hidden row so the list says what the canvas is doing", async () => {
 });
 
 it("selects the focused row with Space, so the list can be driven without a mouse", async () => {
-  // vg-067 gave the list navigation and vg-074 is its residual: a treeitem you
+  // The list has navigation, and a treeitem you
   // can walk to but not pick is half a tree. Enter is already rename's, so
   // selection takes the key a list has always used for it.
   const selectLayer = vi.fn();
@@ -1151,7 +1151,7 @@ it("extends the selection with Shift+Arrow, Home and End", async () => {
   host.remove();
 });
 
-/** vg-107: the pane's own half pins which ids a shift move asks for, but
+/** The pane's own half pins which ids a shift move asks for, but
  *  "arrange is reachable" is a fact about the selection the real bridge builds
  *  — a stub `canArrange` would answer true whatever the panel did. This one
  *  runs the gesture against Fabric and asks the gate the arrange controls ask. */
@@ -1214,12 +1214,11 @@ function dragEvent(type: string): Event {
   return event;
 }
 
-/** vg-099: the refusal was silent, so an author dragging toward another group
- * saw the same row, the same cursor and the same list as a drop that lands.
- * What was missing is the panel saying so, so the state a row carries
- * mid-gesture is the thing pinned here: a slot, a refusal, or neither. The
- * refusal itself is the cycle now (`vg-461`), which is why the gesture below
- * picks a group up rather than a child. */
+/** A refused drop must look different from one that would land, or an author
+ * dragging toward another group sees the same row, the same cursor and the same
+ * list as a drop that lands. The state a row carries mid-gesture is the thing
+ * pinned here: a slot, a refusal, or neither. The only refusal left is the
+ * cycle, which is why the gesture below picks a group up rather than a child. */
 it("tells a refused drop target from one that would land, mid-gesture", async () => {
   const moveLayer = vi.fn(() => false);
   const tree = [
@@ -1319,7 +1318,7 @@ it("takes the drop line away when the row under the pointer refuses it", async (
   // shown over a sibling is still lit while the pointer has moved a row further
   // to a refusal — offering the very drop that row has just said no to.
   //
-  // The refusal left after `vg-461` is the cycle, so the gesture picks up the
+  // The only refusal left is the cycle, so the gesture picks up the
   // group: a bar of line over a row the whole drag would have to land inside is
   // the same false promise in the other direction.
   const tree = [
@@ -1389,9 +1388,9 @@ it("takes the drop line away when the row under the pointer refuses it", async (
 });
 
 it("still moves on a drop the panel marked, and refuses the one it did not", async () => {
-  // The half of vg-099 that must not move: making a refusal visible is not a
-  // reason to stop accepting a drop, and the two answers come from one gesture.
-  // What the accepted half now moves is a *reparent* (`vg-460`), which is why
+  // Making a refusal visible is not a reason to stop accepting a drop: the two
+  // answers come from one gesture.
+  // What the accepted half moves is a *reparent*, which is why
   // the row dropped on sits outside the dragged row's group.
   const moveLayer = vi.fn(() => true);
   const tree = [
@@ -1434,10 +1433,10 @@ it("still moves on a drop the panel marked, and refuses the one it did not", asy
   ).toBeNull();
 });
 
-/** vg-087: the rows said `draggable` and nothing acted on it. Every earlier test
- * here drove the panel through a stub bridge, so a stub that answered
- * `layerDrop` and `moveLayer` the way the test wanted would keep them
- * green while the real bridge refused the same gesture. This one wires the real
+/** The rows say `draggable`, and a stub bridge cannot prove anything acts on
+ * it: a stub that answers `layerDrop` and `moveLayer` the way the test wants
+ * keeps the test green while the real bridge refuses the same gesture. This test
+ * wires the real
  * `createEditorShellBridge` over a real Fabric canvas, so the drag has to land
  * in Fabric's own array — the thing the panel's markup promises.
  *
@@ -1505,7 +1504,7 @@ it("restacks the document when a row is dropped on another", async () => {
   host.remove();
 });
 
-/** vg-461: a row can be dragged into a group and back out again. The stub cases
+/** A row can be dragged into a group and back out again. The stub cases
  *  above pin the panel's half (which row is offered, what the bridge is handed);
  *  this one pins the document's, over Fabric's real group, because a reparent is
  *  the one move whose write is Fabric's own — `Group.add` and `Group.remove`
@@ -1662,7 +1661,7 @@ it("shows the state icons on hover, on focus and on selection", async () => {
     row.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })),
   );
   // The eye and the lock: the whole of what a row at rest withholds. The pen
-  // used to be the third and is gone (`vg-462`).
+  // used to be the third and is gone.
   expect(icons()).toBe(2);
 
   await act(async () =>

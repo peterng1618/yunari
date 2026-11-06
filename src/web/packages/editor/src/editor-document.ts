@@ -667,8 +667,8 @@ export class EditorDocument {
   /** The picture a save ships, or the one this document arrived with: a
    *  capture that fails must cost the preview, not the theme. One owner for the
    *  fallback, called by every save that ships a picture — `save` and the
-   *  library's `picture` port alike. It was spelled inline at `save` as well,
-   *  so two changes to the policy left one of them missing `save` (`vg-239`). */
+   *  library's `picture` port alike — so a change to the policy reaches both
+   *  rather than one of them missing `save`. */
   async picture(): Promise<Uint8Array | undefined> {
     return (await this.#capture()) ?? this.#thumbnail;
   }
@@ -684,7 +684,7 @@ export class EditorDocument {
         // background is captured as it would sit on the artboard.
         this.#shell.backdrop("theme"),
         // A package saved from inside an entered group ships the document, not
-        // the dim the author is working behind (`vg-527`).
+        // the dim the author is working behind.
         () => this.#shell.editor.groupingManager.suspendDim(),
         // A circle theme's picture is its disc, not the square the camera
         // happened to show. The artboard carries the size the disc is built in.
@@ -1427,12 +1427,13 @@ export class EditorDocument {
   /**
    * Every owner that reads the theme's globals, handed the new value once.
    *
-   * The receivers used to be listed inline, once per setter, and the lists
-   * disagreed: `setPalette` reached six, `setTypes` three, `deleteType` two.
-   * A consumer a setter did not happen to name stopped updating — `setTypes`
-   * never told the selection inspector, which then painted a renamed type preset
-   * from the globals it already held (`vg-232`). One list is what makes the
-   * omission unrepresentable: a setter cannot drop a receiver by not naming it.
+   * The receivers are one list, not one per setter: per-setter lists disagree —
+   * `setPalette` reaching six and `setTypes` three says nothing about a fourth
+   * receiver needing the same write. A consumer a setter does not name stops
+   * updating — `setTypes` missing the selection inspector leaves it painting a
+   * renamed type preset from the globals it already holds. One list is what
+   * makes the omission unrepresentable: a setter cannot drop a receiver by not
+   * naming it.
    */
   #globalsChanged(): void {
     const globals = this.#envelope.globals;

@@ -12,7 +12,7 @@ import type { CatalogueFacts, StoreItem } from "./local-source.js";
  * read them.
  *
  * **The reason is the design-token gate.** A `*.dom.test.tsx` beside a gated
- * source is itself gated (`vg-228`), and a theme's ground is a colour a fixture
+ * source is itself gated, and a theme's ground is a colour a fixture
  * cannot spell except as a hex literal — so the two grounds live here, where a
  * fixture's own values are not a surface going around the language.
  *

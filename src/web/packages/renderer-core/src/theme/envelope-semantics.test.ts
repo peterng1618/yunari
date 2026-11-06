@@ -10,10 +10,9 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
 /**
  * The Yunari-owned half of an envelope, decided without Fabric.
  *
- * These are the cases that outlived the retired v1 document validator: the
- * semantic checks over metadata, id, artboard, globals, assets and background
- * media are the ones a v2 envelope still runs, so their coverage moves here
- * rather than dying with the format that used to host them.
+ * The semantic checks over metadata, id, artboard, globals, assets and
+ * background media are the ones a v2 envelope runs, so their coverage lives
+ * here rather than in a document validator.
  */
 
 /** A minimal valid envelope. Tests mutate clones of this. */
@@ -259,14 +258,16 @@ describe("metadata and identity", () => {
     ]);
   });
 
-  it("refuses a name longer than the published bound, and takes its edge", () => {
-    const named = (length: number): Record<string, unknown> => ({
+  it("bounds a name in the bytes publishing measures, and takes its edge", () => {
+    const named = (name: string): Record<string, unknown> => ({
       ...baseEnvelope(),
-      metadata: { themeLanguage: "en", name: "n".repeat(length) },
+      metadata: { themeLanguage: "en", name },
     });
 
-    expect(codes(named(201))).toEqual(["out-of-range"]);
-    expect(issuesFor(named(200))).toEqual([]);
+    expect(codes(named("n".repeat(201)))).toEqual(["out-of-range"]);
+    expect(issuesFor(named("n".repeat(200)))).toEqual([]);
+    // 67 three-byte characters: 201 bytes, though only 67 UTF-16 units.
+    expect(codes(named("あ".repeat(67)))).toEqual(["out-of-range"]);
   });
 });
 

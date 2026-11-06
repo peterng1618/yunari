@@ -19,7 +19,7 @@ import { MetadataFields } from "./metadata-fields.js";
  * a second element under that name is a strict-mode failure for every locator
  * that browses by it. This tree is the pane's whole body: the References
  * sub-panel that used to be appended to the same host as a sibling of these
- * sections went with item 17 (`vg-474`), and what is left is what this file
+ * sections went with item 17, and what is left is what this file
  * returns.
  *
  * The pane's title already says "Theme settings", so the body starts with its

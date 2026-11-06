@@ -12,7 +12,7 @@ import { CHECK_GLYPH, Glyph } from "./icons.js";
  * unknown or absent host renders nothing rather than "not live": until the host
  * has answered the editor has nothing to say, and a mark invented for it would
  * be a fact the product does not have. Nothing here polls the host;
- * a state changed outside the editor is stale until reload (`vg-214`).
+ * a state changed outside the editor is stale until reload.
  */
 export function PublishIndicator({
   store,

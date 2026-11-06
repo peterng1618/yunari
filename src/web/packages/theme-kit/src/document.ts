@@ -2,9 +2,11 @@ import {
   type Artboard,
   type Background,
   type Binding,
+  chartBindingCountRefusal,
   createWidgetIdAllocator,
   type FabricPalette,
   type FabricThemeEnvelope,
+  isChartFamily,
   type TypeToken,
 } from "@yunari/renderer-core";
 import type { ObjectJson } from "./objects.js";
@@ -25,6 +27,8 @@ export interface SceneObjectInfo {
   readonly id: string;
   readonly type: string | undefined;
   readonly name: string | undefined;
+  /** A chart's family; the objects of every other type carry none. */
+  readonly family: string | undefined;
 }
 
 interface SceneRecord {
@@ -72,10 +76,12 @@ export function listSceneObjects(
       if (id !== undefined) {
         const type = object["type"];
         const name = object["name"];
+        const family = object["family"];
         found.push({
           id,
           type: typeof type === "string" ? type : undefined,
           name: typeof name === "string" ? name : undefined,
+          family: typeof family === "string" ? family : undefined,
         });
       }
       walk(childrenOf(object));
@@ -324,10 +330,15 @@ export function setBindings(
   id: string,
   bindings: readonly Binding[],
 ): FabricThemeEnvelope {
-  const next = clone(envelope);
-  if (!listSceneObjects(next).some((entry) => entry.id === id)) {
+  const target = listSceneObjects(envelope).find((object) => object.id === id);
+  if (target === undefined) {
     throw new Error(`There is no object "${id}" in this scene.`);
   }
+  if (target.family !== undefined && isChartFamily(target.family)) {
+    const refusal = chartBindingCountRefusal(target.family, bindings.length);
+    if (refusal !== undefined) throw new Error(refusal);
+  }
+  const next = clone(envelope);
   const merged = { ...(next.bindings ?? {}) };
   if (bindings.length === 0) delete merged[id];
   else merged[id] = bindings;

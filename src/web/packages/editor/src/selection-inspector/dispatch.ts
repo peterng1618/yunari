@@ -97,7 +97,7 @@ export function createFieldDispatch(args: {
         // and a scaled text object draws `box × scale`. So the write divides by
         // the same scale the read multiplies by, or the control cannot
         // round-trip: a 140 × 27 box at scale 2 read 280, typing 280 back
-        // stored 280, and the object drew 560 (vg-109). A dragged handle writes
+        // stored 280, and the object drew 560. A dragged handle writes
         // the same unscaled unit (`text-manager`'s `adoptResizedBox`,
         // `controls-manager`'s height control), and `scaleOf` is the rule for a
         // zero scale, so neither side re-spells it.
@@ -133,7 +133,7 @@ export function createFieldDispatch(args: {
           // Same unit as the width above, and as `writeAuthoredBoxDimension`'s
           // own seeding of the other dimension from the object's edges — those
           // are unscaled too, so the first Size edit still produces a whole box
-          // in one unit (vg-057). The box refuses a dimension below its own
+          // in one unit. The box refuses a dimension below its own
           // minimum; the funnel takes that refusal rather than flooring it.
           const written = writeAuthoredBoxDimension(
             object as PlanTextObject,
@@ -154,7 +154,7 @@ export function createFieldDispatch(args: {
       case "angle": {
         // The property alone rotates about the authored left/top origin while
         // the gesture holds the centre (`centeredRotation`), so the centre is
-        // read before the write and restored after it (vg-475; canvas-nudge).
+        // read before the write and restored after it (canvas-nudge).
         const centre = object.getRelativeCenterPoint();
         object.set({ angle: value });
         object.setPositionByOrigin(centre, "center", "center");
@@ -226,7 +226,7 @@ export function createFieldDispatch(args: {
   /**
    * One field, written by the owner that owns it: the funnel a slider's preview
    * and its release share, so the two cannot take different routes to the
-   * document (`vg-254`).
+   * document.
    *
    * `settled` marks the settled write rather than a frame of one. A frame
    * announces no refusal — sixty times a second is a log, not a report — and

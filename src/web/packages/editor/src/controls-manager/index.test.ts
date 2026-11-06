@@ -36,9 +36,9 @@ describe("applyEditorControls", () => {
     applyEditorControls();
     const controls = Textbox.ownDefaults.controls;
 
-    // vg-089: an author who picked a type preset taller than the authored box
-    // had no way to move the box by hand. Corners and horizontal edges were
-    // already there; these two were the whole of the gap.
+    // A type preset taller than the authored box leaves no way to move the box
+    // by hand without the two vertical edges. Corners and horizontal edges are
+    // already there; these two are the whole of the gap.
     expect(controls?.["mt"]?.visible).not.toBe(false);
     expect(controls?.["mb"]?.visible).not.toBe(false);
     expect(controls?.["ml"]?.visible).not.toBe(false);

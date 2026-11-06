@@ -13,7 +13,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { uiCopy } from "../ui-copy.js";
 import * as client from "./client.js";
-import { AssetFinder, SEARCH_DEBOUNCE_MS } from "./modal.js";
+import { SEARCH_DEBOUNCE_MS } from "./finder-model.js";
+import { AssetFinder } from "./modal.js";
 
 vi.mock("./client.js", () => ({
   listSources: vi.fn(),

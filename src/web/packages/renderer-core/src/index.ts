@@ -393,9 +393,11 @@ export {
   BACKGROUND_MODES,
   bumpSemanticVersion,
   CHART_FAMILIES,
+  chartBindingCountRefusal,
   DEFAULT_BACKGROUND_EXTENT,
   FONT_ASSET_FORMATS,
   GLOBAL_GROUPS,
+  isChartFamily,
   isSemanticVersion,
   isTypeTokenRole,
   MAX_ARTBOARD_DIMENSION,
@@ -403,6 +405,8 @@ export {
   MAX_BACKGROUND_FADE,
   MAX_BACKGROUND_OFFSET,
   MAX_BACKGROUND_SCALE,
+  MAX_CHART_BINDINGS,
+  MAX_METADATA_NAME_BYTES,
   MAX_NODE_COUNT,
   MAX_NODE_DEPTH,
   MAX_TAGS,
@@ -411,9 +415,12 @@ export {
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   NODE_TYPES,
+  normalizeThemeMetadata,
   STABLE_ID_PATTERN,
   TAG_PATTERN,
   TYPE_TOKEN_ROLES,
+  themeMetadataRefusal,
+  themeTagsRefusal,
 } from "./theme/document.js";
 export { envelopeKeysFor } from "./theme/envelope-keys.js";
 export type {

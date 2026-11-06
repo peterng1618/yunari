@@ -256,7 +256,7 @@ describe("mountFabricScene's display presentation", () => {
     // red on its left half and blue on its right. A 90° rect presentation maps
     // the board's left half to the screen's bottom, so (100, 240) reads blue
     // and (300, 60) reads red — the opposite of a screen-fixed gradient, which
-    // is what the plate used to be.
+    // is what a screen-fixed plate would draw.
     const element = host();
     const scene = mountFabricScene({
       host: element,

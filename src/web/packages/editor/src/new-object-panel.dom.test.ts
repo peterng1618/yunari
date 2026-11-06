@@ -372,7 +372,7 @@ describe("new object panel", () => {
   // No circle and no triangle: both are shapes the editor no longer offers.
   // A circle is an ellipse that nothing kept round, and a triangle is a
   // 3-sided polygon, so each had an entry that added nothing the other could
-  // not already produce. See vg-078.
+  // not already produce.
   it.each([
     ["rect", Rect],
     ["ellipse", Ellipse],

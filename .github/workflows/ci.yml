@@ -144,7 +144,21 @@ jobs:
               exit 1
             fi
 
-            npx playwright test
+            # Projects are run one group at a time. Playwright runs files from
+            # different projects concurrently, and each project starts (or its
+            # specs start) its own server and browser; on a shared runner that
+            # put several hosts and browsers beside the preview specs, and the
+            # load surfaced as 60 s locator timeouts across the editor specs
+            # rather than as a product failure (issue #426). Two workers are
+            # pinned for the same reason: the default follows the runner's core
+            # count, which is not the machine the timings were measured on.
+            status=0
+            npx playwright test --workers=2 \
+              --project=desktop-chromium --project=phone-chromium || status=1
+            npx playwright test --workers=2 \
+              --project=desktop-host --project=phone-host || status=1
+            npx playwright test --workers=2 --project=own-host || status=1
+            exit "$status"
           '
 
   licences:

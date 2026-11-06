@@ -241,8 +241,8 @@ function reportRepaintError(message: string): void {
 /** A packaged face that would not load, or that declared no bytes. `loadFontAssets`
  *  reports and carries on, so the scene is already mounted and drawing in a
  *  fallback — the same case as `reportRepaintError`, and reported the same way.
- *  It used to take the display down, which turned a wrong typeface into a blank
- *  screen and a page that claims nothing is being shown. */
+ *  Taking the display down would turn a wrong typeface into a blank screen and
+ *  a page that claims nothing is being shown. */
 function reportFontError(message: string): void {
   console.warn(`Yunari: ${message}`);
 }
@@ -510,7 +510,7 @@ async function startHostedTheme(
     try {
       const found = await refindHost(pairing, probe, {
         // The page's own scheme, so an https display probes over https: the
-        // other way round is mixed content and matches nothing (`vg-623`).
+        // other way round is mixed content and matches nothing.
         scheme: window.location.protocol === "https:" ? "https" : "http",
       });
 

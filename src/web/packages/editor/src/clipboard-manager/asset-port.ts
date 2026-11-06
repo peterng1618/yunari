@@ -1,3 +1,7 @@
+import {
+  normalizeCreditsEntry,
+  type ThemeCreditsEntry,
+} from "@yunari/theme-package";
 import { type AssetManager, mimeOf } from "../asset-manager/index.js";
 
 /** One declared image or SVG, as a clipboard payload carries it. The bytes are
@@ -32,6 +36,12 @@ export interface ClipboardAssets {
   readonly declare: (
     assets: readonly ClipboardAsset[],
   ) => Promise<readonly ClipboardAssetDeclaration[]>;
+  /** The credit a source asset carries, so the copy can carry the attribution
+   *  with its bytes. */
+  readonly readCredit: (assetId: string) => ThemeCreditsEntry | undefined;
+  /** Records the attribution against the destination's own asset id, through
+   *  the document's one credit owner. */
+  readonly addCredit: (entry: ThemeCreditsEntry) => void;
 }
 
 function fileNameOf(path: string): string {
@@ -39,13 +49,41 @@ function fileNameOf(path: string): string {
   return separator < 0 ? path : path.slice(separator + 1);
 }
 
+/**
+ * The attribution a stored payload carries, or `undefined` when it is
+ * malformed. The clipboard payload is untrusted storage, so each entry goes
+ * through the package's own reader. Only an entry that names a carried file can
+ * be re-pointed at the paste's fresh asset id.
+ */
+export function parsePortableCredits(
+  value: unknown,
+  held: ReadonlySet<string>,
+): readonly ThemeCreditsEntry[] | undefined {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return undefined;
+  const entries: ThemeCreditsEntry[] = [];
+  for (const raw of value) {
+    const entry = normalizeCreditsEntry(raw);
+    if (entry === undefined) return undefined;
+    if (entry.assetId !== undefined && held.has(entry.assetId))
+      entries.push(entry);
+  }
+  return entries;
+}
+
 /** The clipboard's port onto one `AssetManager`: read from the source theme,
  *  declare into the destination through the manager's own validation. */
 export function createClipboardAssets(
   assets: AssetManager,
   onDeclared: () => void,
+  credits: {
+    readonly readCredit: (assetId: string) => ThemeCreditsEntry | undefined;
+    readonly addCredit: (entry: ThemeCreditsEntry) => void;
+  },
 ): ClipboardAssets {
   return {
+    readCredit: credits.readCredit,
+    addCredit: credits.addCredit,
     read(assetId) {
       const declaration = assets.declarations.find(
         (candidate) => candidate.id === assetId,

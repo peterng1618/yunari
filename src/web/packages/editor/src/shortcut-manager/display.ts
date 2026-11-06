@@ -44,7 +44,7 @@ const SPOKEN_CAPS = {
  *
  * Every entry names a key a binding the product **displays** can carry, because
  * a cap nothing can print is a second vocabulary for a key the author is never
- * shown: `escape` left this table with `vg-182`, since its one binding lives in
+ * shown: `escape` is absent from this table, since its one binding lives in
  * `CONTEXT_SHORTCUTS`, whose comment says those bindings are never displayed.
  * `f5`/`f11`/`f12` are the one exception, and they are here for the refusal
  * reason rather than for a surface — the note below says why.

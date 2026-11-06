@@ -508,7 +508,7 @@ export function mountFabricScene(
     updateBackground(background: Background | undefined): void {
       if (disposed) return;
       // Same asset re-places the mounted element; a different one remounts,
-      // because a remount is what restarts a video (Task 5's handle).
+      // because a remount is what restarts a video.
       media?.setBackground(background);
       canvas.requestRenderAll();
     },
