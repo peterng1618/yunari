@@ -1,13 +1,10 @@
-import type {
-  FabricThemeEnvelope,
-  ThemeMetadata,
-  ThemeRemix,
-} from "@yunari/renderer-core";
 import {
-  type ThemeCredits,
-  type ThemeCreditsEntry,
-  themeIdFromName,
-} from "@yunari/theme-package";
+  type FabricThemeEnvelope,
+  newThemeId,
+  type ThemeMetadata,
+  type ThemeRemix,
+} from "@yunari/renderer-core";
+import type { ThemeCredits, ThemeCreditsEntry } from "@yunari/theme-package";
 import type { AssetManager } from "../asset-manager/index.js";
 import type { BackgroundMediaMemory } from "../background-media-memory.js";
 import type { CleanupAnswer } from "../editor-document.js";
@@ -79,7 +76,7 @@ function remixedEnvelope(
   }
   return {
     ...stored,
-    id: crypto.randomUUID(),
+    id: newThemeId(),
     metadata: {
       ...(kept as ThemeMetadata),
       name: `${remixOf.name} (remix)`,
@@ -110,7 +107,7 @@ function duplicatedEnvelope(stored: FabricThemeEnvelope): FabricThemeEnvelope {
   }
   return {
     ...stored,
-    id: crypto.randomUUID(),
+    id: newThemeId(),
     ...(stored.metadata === undefined
       ? {}
       : { metadata: kept as ThemeMetadata }),
@@ -181,28 +178,6 @@ interface ThemeLibraryManagerOptions {
     credits?: readonly ThemeCreditsEntry[],
     backgroundMedia?: BackgroundMediaMemory,
   ) => Promise<void>;
-}
-
-/** The base a name with no id-shaped characters falls back to. The host's import
- *  path makes the same choice, so a theme saved here and an imported package
- *  with the same nameless title land under the same kind of id. */
-const NAMELESS_THEME_ID = "theme";
-
-/**
- * A name as a free library id: `themeIdFromName`'s host rule, suffixed the way
- * an import suffixes a taken id. A save-as never overwrites — the old theme is
- * the author's other work — so a taken slug has to move aside rather than raise
- * the replace question.
- */
-function freeThemeId(name: string, taken: ReadonlySet<string>): string {
-  const base = themeIdFromName(name) || NAMELESS_THEME_ID;
-  let candidate = base;
-  let suffix = 2;
-  while (taken.has(candidate)) {
-    candidate = `${base}-${suffix}`;
-    suffix += 1;
-  }
-  return candidate;
 }
 
 /**
@@ -397,12 +372,12 @@ export class ThemeLibraryManager {
    * continues as that theme.
    *
    * **The theme it came from is never touched.** No base travels and the target
-   * id is a fresh slug, so the write is a first save rather than a gated
-   * replacement; a slug the library already holds moves to `-2`, `-3` and so on
-   * instead of raising the replace question, because the old theme is other work
-   * the author is keeping. The cleanup question is not asked either: this is not
-   * a replacement, and files it trashed would be gone from the document the
-   * author still has.
+   * id is a fresh UUID, so the write is a first save rather than a gated
+   * replacement. The id is minted rather than derived from the name: a library
+   * id is an identity the author can rename around, and every other new
+   * document — the starter, a remix, a duplicate — is minted the same way. The
+   * cleanup question is not asked either: this is not a replacement, and files
+   * it trashed would be gone from the document the author still has.
    *
    * Once the host has taken the write, `adoptIdentity` re-points the document at
    * the new id and name, and the base moves with it, so the next **Save**
@@ -415,11 +390,7 @@ export class ThemeLibraryManager {
     if (name === undefined) return;
     const client = this.#client();
     try {
-      // Read before the write so a taken slug is avoided rather than raced: the
-      // host answers a first save onto a stored id with a conflict, and treating
-      // that as "replace it?" would be the one question this row must not ask.
-      const taken = new Set((await client.list()).map((entry) => entry.id));
-      const id = freeThemeId(name, taken);
+      const id = newThemeId();
       const renamed: FabricThemeEnvelope = {
         ...current,
         id,

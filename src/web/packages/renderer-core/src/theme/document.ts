@@ -14,6 +14,17 @@ export const MAX_ARTBOARD_DIMENSION = 16384;
 /** Stable IDs are separate from display names so renaming preserves references. */
 export const STABLE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
+/**
+ * The id a **new** theme document gets. Every producer — the starter, a
+ * blank theme, a remix, a duplicate, a Save as — mints through here, so an id
+ * is an identity the author can rename around and never a slug of the name.
+ * Ids read from an existing document are kept, including older slug-shaped
+ * ones; this is only for documents being born.
+ */
+export function newThemeId(): string {
+  return crypto.randomUUID();
+}
+
 /** Necessary asset-path shape; validator also rejects `.`/`..` segments. */
 export const ASSET_PATH_PATTERN = /^assets\/[A-Za-z0-9._/-]{1,200}$/;
 

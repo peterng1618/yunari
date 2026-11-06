@@ -562,7 +562,6 @@ describe("ThemeLibraryManager", () => {
         adoptIdentity: (id, name) => {
           current = { ...current, id, metadata: { ...current.metadata, name } };
         },
-        client: { list: async () => [listed("living-room", "2026-01-01")] },
       });
 
       await manager.saveAs();
@@ -581,49 +580,30 @@ describe("ThemeLibraryManager", () => {
         },
       ][];
       const [id, content] = calls[0]!;
-      // The name's slug, not the open theme's id; the old theme is never a
-      // target, which is the difference between Save as and Save.
-      expect(id).toBe("living-room-copy");
-      expect(content.envelope.id).toBe("living-room-copy");
+      // A fresh UUID, not the name's slug and not the open theme's id; the old
+      // theme is never a target, which is the difference between Save as and
+      // Save.
+      expect(id).toMatch(UUID);
+      expect(id).not.toBe("living-room");
+      expect(content.envelope.id).toBe(id);
       expect(content.envelope.metadata?.name).toBe("Living room copy");
       // A first save: no base, so the host takes it as a new theme, and every
       // declared byte travels even though the old folder already holds it.
       expect(content.base).toBeUndefined();
       expect(content.assets).toEqual({ "assets/kept.png": PNG });
       expect(content.backgroundMedia).toEqual({ kept: { bounds: "display" } });
-      expect(adoptIdentity).toHaveBeenCalledWith(
-        "living-room-copy",
-        "Living room copy",
-      );
+      expect(adoptIdentity).toHaveBeenCalledWith(id, "Living room copy");
       expect(markSaved).toHaveBeenCalledWith(content.envelope, {
         "assets/kept.png": PNG,
       });
       expect(manager.isStored()).toBe(true);
       // The next Save is the new theme's.
       await manager.save();
-      expect(calls[1]?.[0]).toBe("living-room-copy");
+      expect(calls[1]?.[0]).toBe(id);
       expect(
         calls.some(([target]) => target === "living-room"),
         "save-as wrote over the theme it came from",
       ).toBe(false);
-    });
-
-    it("moves a taken slug aside instead of asking to replace it", async () => {
-      saveAsMock.mockReset();
-      saveAsMock.mockResolvedValue("Kitchen");
-      const { manager, save } = harness({
-        client: {
-          list: async () => [
-            listed("kitchen", "2026-01-01"),
-            listed("kitchen-2", "2026-01-02"),
-          ],
-        },
-      });
-
-      await manager.saveAs();
-
-      const calls = save.mock.calls as unknown as readonly [string][];
-      expect(calls[0]?.[0]).toBe("kitchen-3");
     });
 
     it("writes nothing when the name question is dismissed", async () => {
