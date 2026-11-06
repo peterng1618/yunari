@@ -17,7 +17,6 @@ import {
   readIdentifier,
   readList,
   readOptionalList,
-  readPositiveNumber,
   readRecord,
   readRelativePath,
   readString,
@@ -50,6 +49,11 @@ const CONTRIBUTION_KEYS = [
 
 /** A family's stream choice is a short menu, not a catalogue. */
 const MAX_RENDER_MODES = 8;
+
+/** A panel raster is a bounded size. The largest shipping panels are under
+ *  4K; 16K leaves room and keeps a manifest from asking for an unbounded
+ *  frame buffer the host would have to allocate. */
+const MAX_PANEL_DIMENSION = 16_384;
 
 const SENSOR_PROVIDER_KEYS = ["id", "label"] as const;
 const ASSET_CATEGORY_KEYS = [
@@ -146,6 +150,21 @@ function readAssetSource(
   return { ok: true, value: { ...entry } };
 }
 
+/** A panel dimension is a whole number of pixels in a bounded range: a
+ *  fractional or unbounded value is not a raster the host can render into. */
+function readPanelDimension(value: unknown, subject: string): Check<number> {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_PANEL_DIMENSION
+  )
+    return refuse(
+      `${subject} must be a whole number between 1 and ${MAX_PANEL_DIMENSION}.`,
+    );
+  return { ok: true, value };
+}
+
 function readGeometry(
   value: unknown,
   subject: string,
@@ -153,9 +172,9 @@ function readGeometry(
   if (!isRecord(value)) return refuse(`${subject} must be an object.`);
   const unknown = checkKeys(value, ["width", "height"], subject);
   if (unknown !== undefined) return refuse(unknown);
-  const width = readPositiveNumber(value["width"], `${subject}.width`);
+  const width = readPanelDimension(value["width"], `${subject}.width`);
   if (!width.ok) return width;
-  const height = readPositiveNumber(value["height"], `${subject}.height`);
+  const height = readPanelDimension(value["height"], `${subject}.height`);
   if (!height.ok) return height;
   return { ok: true, value: { width: width.value, height: height.value } };
 }

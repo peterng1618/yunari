@@ -408,15 +408,23 @@ export async function run(argv: readonly string[]): Promise<number> {
           : { renderModes: entry.renderModes }),
       };
 
-      pluginPanelFamilies.add({
-        pluginKey: plugin.key,
-        family: pluginPanelFamily({
-          plugin,
-          contribution,
-          supervisor,
-          broker: deviceBroker,
-        }),
-      });
+      // One bad row is reported and skipped: a plugin's manifest error must
+      // not take the host down before its own displays start.
+      try {
+        pluginPanelFamilies.add({
+          pluginKey: plugin.key,
+          family: pluginPanelFamily({
+            plugin,
+            contribution,
+            supervisor,
+            broker: deviceBroker,
+          }),
+        });
+      } catch (error) {
+        console.error(
+          `Panel family ${entry.id} in ${plugin.key}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 

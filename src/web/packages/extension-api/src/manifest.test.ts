@@ -484,6 +484,19 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it.each([
+    ["a fractional", { width: 320.5, height: 320 }],
+    ["a negative", { width: -1, height: 320 }],
+    ["an unbounded", { width: 200_000, height: 320 }],
+    ["a non-finite", { width: Number.POSITIVE_INFINITY, height: 320 }],
+  ])("refuses %s geometry dimension", (_label, geometry) => {
+    expect(readPluginManifest(panelManifest({ geometry }))).toEqual({
+      ok: false,
+      reason:
+        "contributes.panelFamilies[0].geometry.width must be a whole number between 1 and 16384.",
+    });
+  });
+
   it("requires transports on a panel family", () => {
     const { transports, ...rest } = PANEL_FAMILY;
     expect(transports).toEqual(["usb"]);
@@ -563,7 +576,7 @@ describe("readPluginManifest", () => {
     ).toEqual({
       ok: false,
       reason:
-        "contributes.panelFamilies[0].geometry.width must be a positive number.",
+        "contributes.panelFamilies[0].geometry.width must be a whole number between 1 and 16384.",
     });
   });
 });
