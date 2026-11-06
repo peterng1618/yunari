@@ -317,7 +317,14 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
           : { ...device, interfaceNumber: selector.interfaceNumber };
 
       const handle = await backend.open(target);
-      await handle.open();
+      try {
+        await handle.open();
+      } catch (error) {
+        // A claim that failed after the device opened must not leave the
+        // native handle open with no token to reach it.
+        await handle.close().catch(() => undefined);
+        throw error;
+      }
 
       const token = crypto.randomUUID();
       tokens.set(token, {
