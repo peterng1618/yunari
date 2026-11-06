@@ -6,11 +6,12 @@
 - **Transport:** two interfaces on one device — **HID** control on interface 1,
   64-byte reports; **bulk** data on interface 0, endpoint `0x02`
 - **Driver:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`
-- **Last hardware verification:** 2026-10-31
-- **Last known good revision:** `988cda820713` (2026-11-06) — playing well on
-  the attached Z73; its frame rate still trails NZXT CAM, which is a known gap
-  rather than a regression. Compare a future playback regression against this
-  revision.
+- **Last hardware verification:** 2026-11-06
+- **Last known good revision:** `2e64685d93af` (2026-11-06) — playing well on
+  the attached Z73. Mode B (CAM's paletted stream) runs at CAM's cadence and
+  the owner judged the picture indistinguishable from CAM on the glass;
+  Mode A remains the default. Compare a future playback regression against
+  this revision.
 
 **Update this document with every new fact.** Record a firmware string, a
 command the driver starts using, a refusal and its cause, a timing constraint —
@@ -197,7 +198,10 @@ length, the slot count and the settle differ.
   settle measured 120 ms on 2026-10-31 (145 updates with no skips at 120 ms, 2
   missing of ~145 at 115 ms, ~6% at 110 ms), so the ring, not only the bytes,
   is part of the ceiling. Mode B uses CAM's ring and its 110 ms cadence
-  (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`).
+  (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`). Measured back to back on the attached
+  Z73 on 2026-11-06, every frame accepted: Mode A 9.09 FPS (110 ms median),
+  Mode B 9.99 FPS (98 ms median). On the glass the owner found Mode B as
+  smooth as CAM with no visible quality difference.
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host
