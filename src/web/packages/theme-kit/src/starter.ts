@@ -3,6 +3,7 @@ import {
   type AssetReference,
   type Binding,
   type FabricThemeEnvelope,
+  newThemeId,
   SUPPORTED_SCHEMA_VERSION,
 } from "@yunari/renderer-core";
 import {
@@ -162,7 +163,7 @@ export function createStarterTheme(
   return {
     schemaVersion: SUPPORTED_SCHEMA_VERSION,
     fabricVersion: "7.4.0",
-    id: crypto.randomUUID(),
+    id: newThemeId(),
     metadata: {
       name: "System dashboard",
       author: "Yunari",
@@ -294,7 +295,7 @@ export function createBlankTheme(input: {
     ...starter,
     // A blank theme is its own document, not the starter it was built from:
     // keeping that id would overwrite the reference the first time this saved.
-    id: crypto.randomUUID(),
+    id: newThemeId(),
     metadata: {
       name: input.name ?? "New theme",
       // An author nobody named stays absent: filling in the product's name is

@@ -415,6 +415,7 @@ export {
   MIN_BACKGROUND_OFFSET,
   MIN_BACKGROUND_SCALE,
   NODE_TYPES,
+  newThemeId,
   normalizeThemeMetadata,
   STABLE_ID_PATTERN,
   TAG_PATTERN,
