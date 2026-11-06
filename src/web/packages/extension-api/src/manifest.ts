@@ -847,6 +847,23 @@ export function qualifiedPluginKey(publisher: string, id: string): string {
   return `${publisher}/${id}`;
 }
 
+/**
+ * The publisher segment of a qualified key, or `undefined` when the key is not
+ * `publisher/id`: exactly one separator with a non-empty segment on each side.
+ * Consent is never keyed by a bare id, so an unqualified key has no publisher
+ * to name rather than an empty one.
+ */
+export function publisherOf(pluginKey: string): string | undefined {
+  const separator = pluginKey.indexOf("/");
+  if (
+    separator <= 0 ||
+    separator !== pluginKey.lastIndexOf("/") ||
+    separator === pluginKey.length - 1
+  )
+    return undefined;
+  return pluginKey.slice(0, separator);
+}
+
 /** First-party names cannot be claimed by a published plugin. A `yunari`
  *  prefix is reserved in full, not only the exact name. */
 export function isReservedPublisher(publisher: string): boolean {

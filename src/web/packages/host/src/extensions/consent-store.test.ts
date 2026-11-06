@@ -78,6 +78,45 @@ describe("consent store", () => {
     });
   });
 
+  it("refuses a bare plugin id and writes nothing", async () => {
+    // A bare id could be claimed by any publisher, so it can never name a grant.
+    await expect(
+      createConsentStore(dir).grant(record({ pluginKey: "acme-sensors" })),
+    ).rejects.toThrow(/publisher\/id/);
+    await expect(readFile(path.join(dir, FILE), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("refuses a file whose key is bare or disagrees with its record", async () => {
+    const target = path.join(dir, FILE);
+    const cases = [
+      { "acme-sensors": record({ pluginKey: "acme-sensors" }) },
+      {
+        "acme/acme-sensors": record({ pluginKey: "other/acme-sensors" }),
+      },
+    ];
+
+    for (const plugins of cases) {
+      const malformed = JSON.stringify({ version: 1, plugins });
+      await writeFile(target, malformed, "utf8");
+
+      await expect(createConsentStore(dir).grant(record())).rejects.toThrow();
+      expect(await readFile(target, "utf8")).toBe(malformed);
+    }
+  });
+
+  it("refuses to revoke against a malformed file rather than replacing it", async () => {
+    const target = path.join(dir, FILE);
+    const malformed = '{\n  "version": 2,\n  "plugins": {}\n}\n';
+    await writeFile(target, malformed, "utf8");
+
+    await expect(
+      createConsentStore(dir).revoke("acme/acme-sensors"),
+    ).rejects.toThrow();
+    expect(await readFile(target, "utf8")).toBe(malformed);
+  });
+
   it("refuses a malformed file instead of replacing it", async () => {
     const target = path.join(dir, FILE);
     const malformed = '{\n  "version": 2,\n  "plugins": {}\n}\n';

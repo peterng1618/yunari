@@ -8,6 +8,7 @@ import {
   consentMatches,
   consentRequired,
 } from "./consent";
+import { type ExecutionProfile, publisherOf } from "./manifest";
 
 function binding(overrides: Partial<ConsentBinding> = {}): ConsentBinding {
   return {
@@ -51,6 +52,27 @@ describe("consent fingerprint", () => {
   it("is a yc1 tag over lowercase hex SHA-256", async () => {
     expect(await consentFingerprint(binding())).toMatch(/^yc1-[0-9a-f]{64}$/);
   });
+
+  it("changes when any covered field changes", async () => {
+    // A field the fingerprint silently drops lets a changed grant reuse the
+    // old consent, so every input in the binding is exercised.
+    const base = await consentFingerprint(binding());
+    const changes: readonly Partial<ConsentBinding>[] = [
+      { pluginKey: "other/acme-sensors" },
+      { version: "1.3.0" },
+      { contentHash: "sha256-def" },
+      { execution: "trusted-worker" },
+      { capabilities: ["network:fetch", "storage:own"] },
+      { contributions: ["sensorProviders/acme", "assetCategories/acme-cat"] },
+      { devices: ["usb:1cbe:a092"] },
+    ];
+
+    for (const change of changes) {
+      expect(await consentFingerprint({ ...binding(), ...change })).not.toBe(
+        base,
+      );
+    }
+  });
 });
 
 describe("canonical JSON", () => {
@@ -59,6 +81,16 @@ describe("canonical JSON", () => {
       canonicalJson({ b: [1, 2], a: { x: 1, y: 2 } }),
     );
     expect(canonicalJson(["a", "b"])).not.toBe(canonicalJson(["b", "a"]));
+  });
+});
+
+describe("publisher segment", () => {
+  it("names a publisher only for a qualified key", () => {
+    expect(publisherOf("acme/acme-sensors")).toBe("acme");
+    expect(publisherOf("acme-sensors")).toBeUndefined();
+    expect(publisherOf("acme/")).toBeUndefined();
+    expect(publisherOf("/acme-sensors")).toBeUndefined();
+    expect(publisherOf("a/b/c")).toBeUndefined();
   });
 });
 
@@ -119,11 +151,18 @@ describe("access growth", () => {
 });
 
 describe("consent requirements", () => {
-  it("requires consent only for executable profiles", () => {
-    expect(consentRequired("data")).toBe(false);
-    expect(consentRequired("declarative")).toBe(false);
-    expect(consentRequired("sandboxed-ui")).toBe(true);
-    expect(consentRequired("trusted-worker")).toBe(true);
+  it("requires consent for every executable profile and neither data profile", () => {
+    const executable: readonly ExecutionProfile[] = [
+      "sandboxed-ui",
+      "trusted-worker",
+    ];
+    const data: readonly ExecutionProfile[] = ["data", "declarative"];
+
+    for (const profile of executable)
+      expect(consentRequired(profile)).toBe(true);
+    for (const profile of data) expect(consentRequired(profile)).toBe(false);
+    // A profile added later must fail closed rather than silently run unasked.
+    expect(consentRequired("future-profile" as ExecutionProfile)).toBe(true);
   });
 
   it("matches only a record with the same fingerprint", () => {

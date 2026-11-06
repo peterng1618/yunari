@@ -1,5 +1,5 @@
 import type { Capability } from "./capabilities";
-import type { ExecutionProfile } from "./manifest";
+import { type ExecutionProfile, publisherOf } from "./manifest";
 
 /**
  * What the user agreed to when a plugin was installed, kept apart from the
@@ -106,9 +106,13 @@ export async function consentFingerprint(
   return `yc1-${hex}`;
 }
 
-/** A data or declarative plugin runs no code of its own, so it asks for nothing. */
+/**
+ * A data or declarative plugin runs no code of its own, so it asks for nothing.
+ * Everything else is executable, including a profile added after this build:
+ * consent fails closed on profiles this function does not know.
+ */
 export function consentRequired(execution: ExecutionProfile): boolean {
-  return execution === "sandboxed-ui" || execution === "trusted-worker";
+  return execution !== "data" && execution !== "declarative";
 }
 
 export function consentMatches(
@@ -116,11 +120,6 @@ export function consentMatches(
   fingerprint: string,
 ): boolean {
   return record !== undefined && record.fingerprint === fingerprint;
-}
-
-function publisherOf(pluginKey: string): string {
-  const separator = pluginKey.indexOf("/");
-  return separator === -1 ? "" : pluginKey.slice(0, separator);
 }
 
 function added(
