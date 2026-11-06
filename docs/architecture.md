@@ -83,8 +83,27 @@ Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
 - `panels/panel-device.ts` defines the seam: geometry, still format and minimum
   frame interval, optional video and hardware controls, open/present/close.
 - Each driver owns discovery, protocol, transport and its `PanelFamily` rows.
-  `panel-families.ts` only gathers those rows and resolves USB IDs; managers and
-  UI never learn packet formats.
+  `panel-families.ts` is `PanelFamilyRegistry`: built-in rows first, plugin rows
+  after. A plugin row cannot shadow a built-in or an earlier plugin row, and
+  `forDevice` is the only lookup, so every surface answers with the same driver.
+  `setPlugins` replaces the plugin rows live when a plugin is revoked; routes,
+  preview and the manager hold the same registry object. Managers and UI never
+  learn packet formats.
+- A plugin panel family is adapted by `panels/plugin-panel-family.ts` and
+  `plugin-panel-device.ts` to the same `PanelFamily`/`PanelDevice` port. Managers
+  never learn plugin details.
+- The host owns every device handle. `extensions/runtime/device-broker.ts` keeps
+  an opaque token per open handle, and on the plugin path the broker's backends,
+  `usb-backend.ts` and `serial-backend.ts`, are the only route to `usb`,
+  `node-hid` or `serialport`. A plugin opens only the vendor/product ids or
+  serial path its manifest declares and its hardware consent allows; transfer
+  bytes cross the worker boundary as buffers, never a handle.
+- A panel-family plugin runs only as `trusted-worker`. A hardware plugin needs
+  store review before publish and exact-device hardware consent before load. A
+  driver crash or timeout stops only that display's runner; the kill list unloads
+  the plugin and closes its handles.
+- Node cannot sandbox a native USB stack. Host mediation, store review, hardware
+  consent and revocation are the controls, not an OS sandbox.
 - `panel-manager.ts` owns one serialized runner per display. It opens attached
   hardware, coordinates start/stop/refresh, and owns cadence.
 - One `panel-raster-browser.ts` Chromium runtime serves every panel: one profile,

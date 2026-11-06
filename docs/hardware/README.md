@@ -15,6 +15,24 @@ The driver paths are relative to `src/web/packages/host/src/panels/`. The port
 and registry that sit above every driver are described in
 [`../architecture.md`](../architecture.md).
 
+## Plugin panel drivers
+
+The table above lists the built-in drivers. A reviewed plugin may add a panel
+family through the extension platform: it declares its transports, vendor and
+product ids, an optional serial path, geometry, support and commands, and the
+host adapts that row to the same `PanelFamily`/`PanelDevice` port.
+
+The host mediates every transfer. The plugin receives an opaque broker token,
+never a handle, and the broker opens only the device ids or serial path the
+manifest declares and hardware consent allows.
+
+Protocol knowledge for a plugin's device belongs in that plugin's package and
+its store listing, not in this directory. This directory records the built-in
+drivers' measured hardware facts.
+
+A hardware plugin is store-reviewed before publish. A kill-list entry unloads
+the plugin and closes its handles.
+
 ## What belongs in a device document
 
 Everything expensive to rediscover:
