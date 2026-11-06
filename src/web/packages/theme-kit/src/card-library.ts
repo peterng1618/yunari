@@ -6,65 +6,34 @@ import {
   type WidgetProvenance,
   YUNARI_NAME_PROPERTY,
 } from "@yunari/renderer-core";
-import { YUNARI_TEXT_PROPERTY } from "@yunari/scene-fabric";
+import {
+  isFabricAssetReference,
+  YUNARI_ASSET_PROPERTY,
+  YUNARI_TEXT_PROPERTY,
+} from "@yunari/scene-fabric";
 import {
   resolveCardToken,
   type TokenSubstitution,
 } from "./card-token-mapping.js";
-import {
-  CARD_LABELS,
-  clockCard,
-  cpuCard,
-  gpuCard,
-  networkCard,
-  ramCard,
-  storageCard,
-  trendsCard,
-  vramCard,
-} from "./cards.js";
 import { type ObjectJson } from "./objects.js";
-import { STARTER_BINDINGS } from "./starter.js";
 
 /**
- * The card library: the starter's eight cards as **units** an author can insert.
+ * One card an author can insert, as **a unit**.
  *
  * A unit is the fast path, not the only path — the Add pane offers primitives
- * beside it. What the library adds is that one click brings the whole
- * composition with its readings, its group and its provenance: **a copy, not a
- * twin**.
+ * beside it. What a unit adds is that one click brings the whole composition
+ * with its readings, its group and its provenance: **a copy, not a twin**.
  *
  * The document is Fabric JSON, so a card is one Fabric `Group` over its parts
  * and its readings live in the envelope's `bindings`, keyed by object id.
  * `createWidgetIdAllocator` is the rule that decides what a fresh id looks
  * like, and it is shared so a pasted object and an inserted card agree on it.
  *
- * **Scope limit — the copy is faithful in ids, not necessarily in readings.**
- * `cardBindings` reads the *starter's* bindings map, keyed by the starter's own
- * part ids, so only the parts that map declares can carry a reading. Inserted
- * into a document whose part ids differ, or one an author has renamed, every
- * binding comes across as `null` and **no issue is raised** — `unmapped-global`
- * fires only on `palette.*` / `typeTokens.*` string references, never on
- * bindings. The readings are the document's to carry, not this module's to look
- * up by a key it does not have; closing this needs a binding reference that
- * survives being copied, which is a format question, not a lookup.
+ * **The readings travel with the unit.** A packaged unit carries its own
+ * bindings, keyed by its authored part ids, so a copy of a card from another
+ * document arrives with the keys its author meant rather than with a lookup
+ * this module could not perform.
  */
-
-/**
- * The name of the mark a card unit's tile draws.
- *
- * A closed union, so the **library** owns the name and a ninth card cannot be
- * added without one; the pane owns the rendering. Named for the reading the card
- * shows rather than for the card's title, so it is the unit that is identified.
- */
-export type CardDiagram =
-  | "time"
-  | "cpu"
-  | "gpu"
-  | "ram"
-  | "vram"
-  | "trends"
-  | "storage"
-  | "network";
 
 /** One card an author can insert, named as the control that inserts it. */
 export interface CardUnit {
@@ -72,63 +41,16 @@ export interface CardUnit {
   readonly id: string;
   /** What the chooser's button says, and what a copy is named in the tree. */
   readonly label: string;
-  /** Which mark the Add pane's tile draws for this unit. */
-  readonly diagram: CardDiagram;
-  /** The card as the starter authored it — one group over its parts. */
+  /**
+   * The stable key a glyph is chosen by. A packaged unit's own id, which is
+   * unique within its package; the pane owns the rendering and its fallback.
+   */
+  readonly diagram: string;
+  /** The card as its author built it — one group over its parts. */
   readonly build: () => ObjectJson;
+  /** The unit's own readings, keyed by authored object id. */
+  readonly bindings?: Readonly<Record<string, readonly Binding[]>>;
 }
-
-/** The starter's cards, in the order the reference composition reads. */
-export const CARD_LIBRARY: readonly CardUnit[] = [
-  {
-    id: "group-time-card",
-    label: CARD_LABELS.time,
-    diagram: "time",
-    build: clockCard,
-  },
-  {
-    id: "group-cpu-card",
-    label: CARD_LABELS.cpu,
-    diagram: "cpu",
-    build: cpuCard,
-  },
-  {
-    id: "group-gpu-card",
-    label: CARD_LABELS.gpu,
-    diagram: "gpu",
-    build: gpuCard,
-  },
-  {
-    id: "group-ram-card",
-    label: CARD_LABELS.ram,
-    diagram: "ram",
-    build: ramCard,
-  },
-  {
-    id: "group-vram-card",
-    label: CARD_LABELS.vram,
-    diagram: "vram",
-    build: vramCard,
-  },
-  {
-    id: "group-trends-card",
-    label: CARD_LABELS.trends,
-    diagram: "trends",
-    build: trendsCard,
-  },
-  {
-    id: "group-storage-card",
-    label: CARD_LABELS.storage,
-    diagram: "storage",
-    build: storageCard,
-  },
-  {
-    id: "group-network-card",
-    label: CARD_LABELS.network,
-    diagram: "network",
-    build: networkCard,
-  },
-];
 
 /** The prefix every copied id carries, so a copy reads as a copy in the tree. */
 const COPY_PREFIX = "card";
@@ -161,6 +83,14 @@ export interface InstantiateCardOptions {
    * one id twice — which the validator refuses.
    */
   readonly existingBindingIds?: Iterable<string>;
+  /**
+   * Package asset id -> the id the destination document adopted.
+   *
+   * Absent means the copy is inserted without adopting any packaged asset: a
+   * reference left unmapped stays visibly missing rather than being rewritten
+   * to an id that names nothing.
+   */
+  readonly assetIds?: ReadonlyMap<string, string>;
   /** Artboard coordinates the copy's corner lands on (§67: placement, nothing more). */
   readonly origin: { readonly left: number; readonly top: number };
 }
@@ -171,6 +101,8 @@ interface CopyContext {
   readonly provenance: WidgetProvenance;
   /** How far the root moves; its parts are group-local and stay put (§57). */
   readonly offset: { readonly x: number; readonly y: number };
+  /** The asset ids the destination adopted, when the caller adopted any. */
+  readonly assetIds: ReadonlyMap<string, string> | undefined;
   /**
    * Every declared object's own id, keyed by **the object** rather than by its
    * authored id: a card may declare one id twice, and each declaration still
@@ -196,7 +128,7 @@ interface CopyContext {
 export function instantiateCard(options: InstantiateCardOptions): CardCopy {
   const issues: WidgetIssue[] = [];
   const card = options.unit.build();
-  const sourceBindings = cardBindings(card);
+  const sourceBindings = options.unit.bindings ?? {};
   // Mapped before any id is claimed, because the id map is keyed by object
   // identity and `mapGlobals` rebuilds every object it touches. Mapping first
   // means one walk rather than two.
@@ -271,6 +203,7 @@ export function instantiateCard(options: InstantiateCardOptions): CardCopy {
       x: options.origin.left - numberAt(mapping.card, "left"),
       y: options.origin.top - numberAt(mapping.card, "top"),
     },
+    assetIds: options.assetIds,
     objectIds,
     firstCopy,
     bindingIds,
@@ -285,30 +218,12 @@ export function instantiateCard(options: InstantiateCardOptions): CardCopy {
 }
 
 /**
- * The card's own slice of the **starter's** bindings, read rather than restated.
+ * One copied subtree; only the root moves, so no descendant shifts twice (§57).
  *
- * A card and the reference composition are one authoring decision, so a second
- * table of semantic keys here would be a place for the two to drift — and a
- * drifted key is a reading that quietly stops being the one the author meant.
+ * An asset reference is rewritten only when the destination adopted the package
+ * asset it names. Everything else on the reference — its `kind` — is the unit's
+ * own description and travels unchanged.
  */
-function cardBindings(
-  card: ObjectJson,
-): Readonly<Record<string, readonly Binding[]>> {
-  const declared: Readonly<Record<string, readonly Binding[]>> =
-    STARTER_BINDINGS;
-  const carried: Record<string, readonly Binding[]> = {};
-  const collect = (object: ObjectJson): void => {
-    const id = readId(object);
-    if (id !== undefined && declared[id] !== undefined) {
-      carried[id] = declared[id];
-    }
-    for (const child of childrenOf(object)) collect(child);
-  };
-  collect(card);
-  return carried;
-}
-
-/** One copied subtree; only the root moves, so no descendant shifts twice (§57). */
 function copyObject(
   object: ObjectJson,
   context: CopyContext,
@@ -316,6 +231,12 @@ function copyObject(
 ): ObjectJson {
   const authored = object[YUNARI_TEXT_PROPERTY];
   const children = childrenOf(object);
+  const assetValue = object[YUNARI_ASSET_PROPERTY];
+  const asset = isFabricAssetReference(assetValue) ? assetValue : undefined;
+  const adopted =
+    asset !== undefined && context.assetIds !== undefined
+      ? context.assetIds.get(asset.assetId)
+      : undefined;
 
   return {
     ...object,
@@ -326,6 +247,9 @@ function copyObject(
     ...(isRecord(authored)
       ? { [YUNARI_TEXT_PROPERTY]: copyText(authored, context) }
       : {}),
+    ...(adopted === undefined
+      ? {}
+      : { [YUNARI_ASSET_PROPERTY]: { ...asset, assetId: adopted } }),
     ...(children.length === 0
       ? {}
       : {

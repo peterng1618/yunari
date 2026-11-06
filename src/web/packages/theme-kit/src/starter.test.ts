@@ -20,7 +20,6 @@ import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { type FabricObject, Group, StaticCanvas } from "fabric/es";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { CARD_LIBRARY } from "./card-library.js";
 import { cpuCard } from "./cards.js";
 import { starterPalette } from "./globals.js";
 import { createBlankTheme, createStarterTheme } from "./starter.js";
@@ -500,12 +499,12 @@ describe("the new Fabric document", () => {
     // The stamp is authored state too (§67): a stamp the editor added on the way
     // in would be runtime state wearing an authored hat, and it would vanish the
     // first time this document was opened somewhere that derives its own rows.
-    for (const unit of CARD_LIBRARY) {
-      const card = persistedNodes.find((object) => object["id"] === unit.id);
+    for (const card of CARDS) {
+      const node = persistedNodes.find((object) => object["id"] === card.id);
       expect(
-        card?.["provenance"],
-        `${unit.id} lost its stamp in the file`,
-      ).toMatchObject({ widgetId: unit.id });
+        node?.["provenance"],
+        `${card.id} lost its stamp in the file`,
+      ).toMatchObject({ widgetId: card.id });
     }
     // And the archive is still a package, not a document with extra bytes.
     expect(readThemePackage(pkg.bytes).ok).toBe(true);

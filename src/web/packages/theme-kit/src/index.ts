@@ -18,3 +18,4 @@ export * from "./icons.js";
 export * from "./objects.js";
 export * from "./palette-role.js";
 export * from "./starter.js";
+export * from "./widget-unit.js";

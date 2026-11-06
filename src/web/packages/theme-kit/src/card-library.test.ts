@@ -4,13 +4,21 @@ import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
-  CARD_LIBRARY,
+  CARD_LABELS,
   type CardUnit,
+  clockCard,
   cpuCard,
+  gpuCard,
   instantiateCard,
+  networkCard,
   type ObjectJson,
+  ramCard,
+  STARTER_BINDINGS,
   starterPalette,
   starterTypeTokens,
+  storageCard,
+  trendsCard,
+  vramCard,
 } from "./index.js";
 
 const CPU_CARD = "group-cpu-card";
@@ -21,10 +29,83 @@ const STARTER_GLOBALS = {
   typeTokens: starterTypeTokens,
 } as FabricGlobals;
 
+/** The starter's cards as insertion units, with the readings they carry. */
+const CARD_UNITS: readonly CardUnit[] = [
+  {
+    id: "group-time-card",
+    label: CARD_LABELS.time,
+    diagram: "time",
+    build: clockCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-cpu-card",
+    label: CARD_LABELS.cpu,
+    diagram: "cpu",
+    build: cpuCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-gpu-card",
+    label: CARD_LABELS.gpu,
+    diagram: "gpu",
+    build: gpuCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-ram-card",
+    label: CARD_LABELS.ram,
+    diagram: "ram",
+    build: ramCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-vram-card",
+    label: CARD_LABELS.vram,
+    diagram: "vram",
+    build: vramCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-trends-card",
+    label: CARD_LABELS.trends,
+    diagram: "trends",
+    build: trendsCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-storage-card",
+    label: CARD_LABELS.storage,
+    diagram: "storage",
+    build: storageCard,
+    bindings: STARTER_BINDINGS,
+  },
+  {
+    id: "group-network-card",
+    label: CARD_LABELS.network,
+    diagram: "network",
+    build: networkCard,
+    bindings: STARTER_BINDINGS,
+  },
+];
+
 function unit(cardId: string): CardUnit {
-  const found = CARD_LIBRARY.find((candidate) => candidate.id === cardId);
+  const found = CARD_UNITS.find((candidate) => candidate.id === cardId);
   if (found === undefined) throw new Error(`no ${cardId} unit`);
   return found;
+}
+
+/** The smallest card the copier accepts: one group over one bound text part. */
+function group(id: string, semanticKey: string): ObjectJson {
+  return {
+    id,
+    type: "group",
+    left: 0,
+    top: 0,
+    objects: [
+      { id: `${id}-value`, type: "text", text: semanticKey, left: 0, top: 0 },
+    ],
+  };
 }
 
 function partsOf(card: ObjectJson): readonly ObjectJson[] {
@@ -65,30 +146,25 @@ function runsOf(card: ObjectJson): readonly ObjectJson[] {
   return runs;
 }
 
-describe("the card library", () => {
-  it("offers one unit per card the starter itself draws", () => {
-    expect(CARD_LIBRARY.map((entry) => entry.id)).toEqual([
-      "group-time-card",
-      "group-cpu-card",
-      "group-gpu-card",
-      "group-ram-card",
-      "group-vram-card",
-      "group-trends-card",
-      "group-storage-card",
-      "group-network-card",
-    ]);
-    expect(CARD_LIBRARY.map((entry) => entry.diagram)).toEqual([
-      "time",
-      "cpu",
-      "gpu",
-      "ram",
-      "vram",
-      "trends",
-      "storage",
-      "network",
-    ]);
-    expect(new Set(CARD_LIBRARY.map((entry) => entry.diagram)).size).toBe(
-      CARD_LIBRARY.length,
+describe("a card unit", () => {
+  it("carries the unit's own bindings", () => {
+    const unit: CardUnit = {
+      id: "group-cpu-card",
+      label: "CPU",
+      diagram: "cpu",
+      build: () => group("group-cpu-card", "cpu.load"),
+      bindings: {
+        "group-cpu-card": [{ id: "cpu-binding", semanticKey: "cpu.load" }],
+      },
+    };
+    const copy = instantiateCard({
+      unit,
+      globals: undefined,
+      existingIds: [],
+      origin: { left: 0, top: 0 },
+    });
+    expect(copy.bindings["card-group-cpu-card"]?.[0]?.semanticKey).toBe(
+      "cpu.load",
     );
   });
 
@@ -303,6 +379,7 @@ describe("a card that declares one id twice", () => {
         ),
       };
     },
+    bindings: STARTER_BINDINGS,
   };
 
   const copied = () =>
@@ -342,7 +419,7 @@ describe("a card that declares one id twice", () => {
 describe("the type tokens a shipped card names", () => {
   it("is a role the theme always carries, for every card", () => {
     const refs: string[] = [];
-    for (const entry of CARD_LIBRARY) {
+    for (const entry of CARD_UNITS) {
       const copied = instantiateCard({
         unit: entry,
         globals: STARTER_GLOBALS,
@@ -397,6 +474,7 @@ describe("a card whose repeat mints the suffix a genuine part already holds", ()
         objects: [...renamed, { ...icon, id: "cpu-card-value-2" }],
       };
     },
+    bindings: STARTER_BINDINGS,
   };
 
   const copied = () =>
