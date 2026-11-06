@@ -218,7 +218,7 @@ describe("KrakenPanel mode B", () => {
 
   it("streams CAM's paletted frame from all sixteen buckets", async () => {
     const panel = await openKraken("The NZXT Kraken", "mode-b");
-    expect(panel.frameIntervalMs).toBe(100);
+    expect(panel.frameIntervalMs).toBe(110);
 
     const frame = pngOf(320, 320);
     await panel.present(frame);

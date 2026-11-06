@@ -122,22 +122,21 @@ export const KRAKEN_FRAME_INTERVAL_MS = 140;
 /**
  * **A paletted switch costs the glass about 110 ms, and CAM sends one every
  * 110 ms** (captured frame starts: median 110, p10 108, p90 114 — about 9.1
- * fps). This driver asks for **100 ms** instead, and the reason is the source,
- * not the wire.
+ * fps). Mode B uses that cadence because the ring cannot retire switches
+ * faster: a faster tick does not raise the glass's rate, it only adds switches
+ * the firmware answers status 1 and silently drops, so the motion stutters
+ * irregularly instead of advancing.
  *
- * The panel is fed screenshots of a page playing a video. A 30 fps source
- * sampled every 110 ms advances **3.3 frames** each time, so the motion moves
- * 3, 3, 4, 3, 3, 4 source frames — a beat a viewer reads as micro-judder on
- * heavy motion even though the panel's own rate is steady. Every 100 ms the
- * advance is **exactly 3 source frames at 30 fps and exactly 6 at 60 fps**, so
- * the sampled motion is even. 9.1 fps cannot be made even against either rate;
- * 10 fps is the nearest cadence that can.
+ * Sampling a 30 fps page every 110 ms advances 3, 3, 4 source frames. Asking
+ * for 100 ms to make that advance exactly 3 was measured **worse on the glass**
+ * on 2026-11-06; the sampled beat is smaller than the dropped-switch judder it
+ * buys. The device's ceiling is spent evenly, not exceeded.
  *
  * Measured on the attached Z73 on 2026-11-06: one frame costs 75 ms of host
- * work (encode, six commands, 103,424 bytes of bulk), and a 100 ms pace sent
- * 121 of 121 frames with no refused command.
+ * work (encode, six commands, 103,424 bytes of bulk), so the 110 ms cadence
+ * leaves headroom without outrunning the glass.
  */
-export const KRAKEN_PALETTED_FRAME_INTERVAL_MS = 100;
+export const KRAKEN_PALETTED_FRAME_INTERVAL_MS = 110;
 
 /**
  * The header that precedes a frame: the 12-byte magic, the transfer type, and

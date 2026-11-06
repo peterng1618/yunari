@@ -8,16 +8,12 @@
 - **Driver:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`
 - **Last hardware verification:** 2026-11-06
 - **Last known good revision:** `2e64685d93af` (2026-11-06) — **the last
-  revision a person watched on the glass and confirmed.** Mode B was judged as
-  smooth as CAM with no visible quality difference; Mode A remains the default.
-  Compare a future playback regression against this revision. A revision only
-  becomes this line after the user confirms it played well — probe results and
-  command timings are not a substitute for watching the panel.
-- **Awaiting visual review:** `a738b21c01b4` (2026-11-06) — Mode B now samples
-  at 100 ms instead of 110 ms so a 30 fps video background advances exactly
-  three source frames per frame. Measured accepted on the wire (121 of 121
-  frames, no refused command) but **not yet watched**; do not treat it as known
-  good until the user confirms.
+  revision a person watched on the glass and confirmed.** Mode B at CAM's
+  110 ms was judged as smooth as CAM with no visible quality difference; Mode A
+  remains the default. Compare a future playback regression against this
+  revision. A revision only becomes this line after the user confirms it played
+  well — probe results and command timings are not a substitute for watching the
+  panel.
 
 **Update this document with every new fact.** Record a firmware string, a
 command the driver starts using, a refusal and its cause, a timing constraint —
@@ -203,17 +199,15 @@ length, the slot count and the settle differ.
   108, p90 114) — about 9.1 FPS. The same payload on a two-bucket ring with the
   settle measured 120 ms on 2026-10-31 (145 updates with no skips at 120 ms, 2
   missing of ~145 at 115 ms, ~6% at 110 ms), so the ring, not only the bytes,
-  is part of the ceiling. Mode B uses CAM's ring but asks for **100 ms**
+  is part of the ceiling. Mode B uses CAM's ring and its **110 ms** cadence
   (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`). Measured on the attached Z73 on
-  2026-11-06: one frame costs ~75 ms of host work, and a 100 ms pace sent 121
-  of 121 frames with no refused command.
-- **100 ms, not CAM's 110 ms, because the source is a video.** The page plays
-  a video and the panel is fed screenshots of it. A 30 fps source sampled every
-  110 ms advances 3.3 frames each time — the motion moves 3, 3, 4, 3, 3, 4
-  source frames, which reads as micro-judder on heavy motion. Every 100 ms the
-  advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps. Heavy motion
-  exposes the beat: CAM's 110 ms sampling steps irregularly against the same
-  clip. Whether 100 ms closes the gap awaits the user's visual confirmation.
+  2026-11-06: one frame costs ~75 ms of host work, so 110 ms leaves headroom.
+- **The cadence is the glass's, not the source's.** Sampling a 30 fps page
+  every 110 ms advances 3, 3, 4 source frames. A 100 ms tick makes that advance
+  exactly 3, but it outruns the glass: the extra switches are answered status 1
+  and never appear (the drop below), and the owner watched that build as
+  **worse** on heavy motion than 110 ms (2026-11-06). Spending the device's
+  ceiling evenly beats exceeding it.
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host
