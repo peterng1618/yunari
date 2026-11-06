@@ -102,6 +102,13 @@ export interface AssetImportMetadata {
   readonly license?: AssetLicense;
 }
 
+/** Everything an adoption changes, as a value a caller can put back. */
+export interface AssetManagerState {
+  readonly declarations: readonly LocalAssetReference[];
+  readonly assets: Readonly<Record<string, Uint8Array>>;
+  readonly mutationCount: number;
+}
+
 /** Owns declared package bytes and the disposable browser previews derived from them. */
 export class AssetManager {
   #assets: Record<string, Uint8Array> = {};
@@ -284,6 +291,31 @@ export class AssetManager {
     this.#assets = { ...adopted.assets };
     this.#mutated();
     return adopted.assetIds;
+  }
+
+  /** The declarations, bytes and mutation count an adoption replaced. */
+  captureAssetState(): AssetManagerState {
+    return {
+      declarations: this.#declarations,
+      assets: this.#assets,
+      mutationCount: this.#mutationCount,
+    };
+  }
+
+  /**
+   * Puts back a state captured before an adoption.
+   *
+   * A caller that had to commit before it could build the copy — because the
+   * preview URL lives here — restores this when the build fails: the adoption
+   * never happened, so the declaration list, its bytes and the mutation count
+   * the panes memoise all read as they did before.
+   */
+  restoreAssetState(state: AssetManagerState): void {
+    this.#declarations = [...state.declarations];
+    this.#assets = { ...state.assets };
+    this.#mutationCount = state.mutationCount;
+    // Panes saw the adoption land; the undo is a change they must redraw for.
+    for (const listener of this.#changeListeners) listener();
   }
 
   async adoptFont(

@@ -38,7 +38,10 @@ function sha256Of(bytes: Uint8Array): string {
  * the insertion can refuse, so adoption must not have landed first.
  */
 function picturePack(
-  options: { readonly unmappable?: boolean } = {},
+  options: {
+    readonly unmappable?: boolean;
+    readonly unknownType?: boolean;
+  } = {},
 ): Uint8Array {
   const picture: AssetReference = {
     id: "pack-image",
@@ -79,6 +82,11 @@ function picturePack(
             provenance: { widgetId: "picture", widgetName: "Picture" },
             ...(options.unmappable === true
               ? { yunariPaint: { fill: "palette.frost" } }
+              : {}),
+            // The envelope accepts any non-empty type string; enlivening is
+            // what discovers the class registry has no such object.
+            ...(options.unknownType === true
+              ? { type: "NotARealFabricObject" }
               : {}),
           },
           {
@@ -216,6 +224,26 @@ describe("an inserted unit that carries an image", () => {
         assetManager: assets,
       }),
     ).rejects.toThrow(/palette\.frost/);
+
+    expect(assets.declarations).toEqual([]);
+    expect(assets.assets).toEqual({});
+    expect(assets.mutationCount).toBe(0);
+  });
+
+  it("leaves the asset list unchanged when enlivening the copy fails", async () => {
+    // The envelope accepts the type string, so adoption commits; enlivening
+    // then discovers no such Fabric class and the insert rejects.
+    await installWidgetPack("picture-pack", picturePack({ unknownType: true }));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue(PICTURE_URL);
+    const assets = new AssetManager();
+
+    await expect(
+      insertCard(editorStub(stage()) as never, "picture", {
+        globals: STARTER_GLOBALS,
+        onBindings: vi.fn(),
+        assetManager: assets,
+      }),
+    ).rejects.toThrow();
 
     expect(assets.declarations).toEqual([]);
     expect(assets.assets).toEqual({});

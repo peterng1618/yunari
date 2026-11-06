@@ -64,7 +64,11 @@ export async function insertCard(
      */
     readonly assetManager?: Pick<
       AssetManager,
-      "planPackaged" | "commitPackaged" | "previewUrl"
+      | "planPackaged"
+      | "commitPackaged"
+      | "captureAssetState"
+      | "restoreAssetState"
+      | "previewUrl"
     >;
   },
 ): Promise<FabricObject> {
@@ -94,23 +98,38 @@ export async function insertCard(
 
   // The copy can be built, so the package's declarations and bytes may land.
   // Adopting before this point would leave an orphan on a refused insert.
+  const before =
+    adopted !== undefined && manager !== undefined
+      ? manager.captureAssetState()
+      : undefined;
   if (adopted !== undefined && manager !== undefined) {
     manager.commitPackaged(adopted);
   }
 
-  // Fabric enlivens an image from `src` alone, and a persisted asset reference
-  // carries none: without this the copy paints blank until a reload hydrates
-  // it. Set on the plain object, before enlivening.
-  const card =
-    manager === undefined
-      ? copy.card
-      : withPreviewSources(copy.card, unit.label, (assetId) =>
-          manager.previewUrl(assetId),
-        );
-
-  const [object] = await util.enlivenObjects<FabricObject>([card]);
-  if (object === undefined) {
-    throw new Error(`The ${unit.label} card could not be built.`);
+  // The preview URL resolves through the manager, so the adoption has to be in
+  // place first. It is undone if revival discovers, say, an object type this
+  // build does not register — the validator only requires a non-empty string.
+  let object: FabricObject;
+  try {
+    // Fabric enlivens an image from `src` alone, and a persisted asset
+    // reference carries none: without this the copy paints blank until a
+    // reload hydrates it. Set on the plain object, before enlivening.
+    const card =
+      manager === undefined
+        ? copy.card
+        : withPreviewSources(copy.card, unit.label, (assetId) =>
+            manager.previewUrl(assetId),
+          );
+    const [revived] = await util.enlivenObjects<FabricObject>([card]);
+    if (revived === undefined) {
+      throw new Error(`The ${unit.label} card could not be built.`);
+    }
+    object = revived;
+  } catch (error) {
+    if (before !== undefined && manager !== undefined) {
+      manager.restoreAssetState(before);
+    }
+    throw error;
   }
 
   // Added before its readings are recorded: every pass that resolves them walks
