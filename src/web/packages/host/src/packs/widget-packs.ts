@@ -33,20 +33,28 @@ export interface WidgetPackStore {
   remove(id: string): Promise<void>;
 }
 
+/** Windows treats these as device names in every directory, whatever their
+ *  case, so a directory carrying one is not a name a pack may take. */
+const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 /** A pack id is one path segment under the settings directory: a reader's
  *  `document.id` already matches `STABLE_ID_PATTERN`, but a route parameter or
  *  a bundled package is not the reader's to trust. `import` is the import
- *  route's own segment, so no pack may take it. */
+ *  route's own segment, so no pack may take it; a leading dot would hide the
+ *  directory from the lister, and a trailing dot or space names no directory on
+ *  Windows while reading as a different id everywhere else. */
 export function isPackId(id: string): boolean {
   return (
     id !== "" &&
-    id !== "." &&
-    id !== ".." &&
+    !id.startsWith(".") &&
     id !== "import" &&
     id.length <= 64 &&
     !id.includes("/") &&
     !id.includes("\\") &&
-    !id.includes("..")
+    !id.includes("..") &&
+    !id.endsWith(".") &&
+    !id.endsWith(" ") &&
+    !WINDOWS_DEVICE.test(id)
   );
 }
 

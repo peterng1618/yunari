@@ -266,8 +266,18 @@ describe("widget package", () => {
           },
         ],
         assets: [
-          { id: "used", kind: "image", path: "assets/used.png" },
-          { id: "unused", kind: "image", path: "assets/unused.png" },
+          {
+            id: "used",
+            kind: "image",
+            path: "assets/used.png",
+            sha256: "a".repeat(64),
+          },
+          {
+            id: "unused",
+            kind: "image",
+            path: "assets/unused.png",
+            sha256: "a".repeat(64),
+          },
         ],
         assetBytes: {
           "assets/used.png": usedBytes,
@@ -285,6 +295,26 @@ describe("widget package", () => {
     expect(result.units[0]?.assets["assets/used.png"]).toEqual(usedBytes);
   });
 
+  it("refuses an asset declaration with no SHA-256 digest", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          {
+            ...groupWithProvenance("a", "Alpha"),
+            yunariAsset: { assetId: "used", kind: "image" },
+          },
+        ],
+        assets: [{ id: "used", kind: "image", path: "assets/used.png" }],
+      }),
+    );
+    // An install must refuse at the container boundary: the insert path
+    // verifies digests and would otherwise fail only when the unit is used.
+    expect(result).toEqual({
+      ok: false,
+      message: "Package asset assets/used.png declares no SHA-256 digest.",
+    });
+  });
+
   it("keeps a type-token face the kept globals name", () => {
     const face = new Uint8Array([9, 9, 9]);
     const result = readWidgetPackageFiles(
@@ -298,6 +328,7 @@ describe("widget package", () => {
             id: "face",
             kind: "font",
             path: "assets/face.woff2",
+            sha256: "a".repeat(64),
             family: "Inter",
             weight: 400,
             style: "normal",
@@ -321,7 +352,14 @@ describe("widget package", () => {
       widgetFiles({
         objects: [groupWithProvenance("a", "Alpha")],
         background: { media: { assetId: "clip", bounds: "theme" } },
-        assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+        assets: [
+          {
+            id: "clip",
+            kind: "video",
+            path: "assets/clip.mp4",
+            sha256: "a".repeat(64),
+          },
+        ],
       }),
     );
     assert(result.ok);

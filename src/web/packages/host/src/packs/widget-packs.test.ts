@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { type WidgetDocument, writeWidgetPackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createWidgetPackStore } from "./widget-packs.js";
+import { createWidgetPackStore, isPackId } from "./widget-packs.js";
 
 const PACKAGE = "package.zip";
 
@@ -53,6 +53,28 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
+});
+
+describe("isPackId", () => {
+  it("refuses hidden names, device names, and a trailing dot or space", () => {
+    for (const id of [
+      ".hidden",
+      "CON",
+      "con",
+      "NUL",
+      "AUX",
+      "PRN",
+      "COM1",
+      "COM9",
+      "LPT1",
+      "LPT9",
+      "trailing.",
+      "trailing ",
+    ]) {
+      expect(isPackId(id), id).toBe(false);
+    }
+    expect(isPackId("pack-one")).toBe(true);
+  });
 });
 
 describe("the widget pack store", () => {

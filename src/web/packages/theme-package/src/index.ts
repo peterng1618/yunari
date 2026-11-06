@@ -629,6 +629,14 @@ export function readWidgetPackageFiles(
   );
   if (!validation.ok)
     return fail(validation.issues[0]?.message ?? "Invalid widget.");
+  // A digest is the package's proof that the bytes are the ones it declares.
+  // Insertion verifies it, so a declaration without one would install, list,
+  // and only then fail when an author tried to use the unit.
+  const undigested = validation.envelope.assets?.find(
+    (asset) => asset.sha256 === undefined,
+  );
+  if (undigested !== undefined)
+    return fail(`Package asset ${undigested.path} declares no SHA-256 digest.`);
   const paths = new Set(
     validation.envelope.assets?.map((asset) => asset.path) ?? [],
   );
