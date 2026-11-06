@@ -15,10 +15,10 @@ export type FetchOutcome =
   | { readonly ok: false; readonly status?: number; readonly reason: string };
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_REDIRECTS = 3;
+export const MAX_REDIRECTS = 3;
 const MAX_IN_FLIGHT = 4;
-const TIMEOUT_REASON = "the source did not answer within its timeout";
-const REDIRECT_STATUSES: ReadonlySet<number> = new Set([
+export const TIMEOUT_REASON = "the source did not answer within its timeout";
+export const REDIRECT_STATUSES: ReadonlySet<number> = new Set([
   301, 302, 303, 307, 308,
 ]);
 
@@ -44,6 +44,17 @@ function releaseSlot(): void {
     return;
   }
   inFlight -= 1;
+}
+
+/** One of the host's four fetch slots, held for the duration of `work`. */
+export function withFetchSlot<T>(work: () => Promise<T>): Promise<T> {
+  return acquireSlot().then(async (): Promise<T> => {
+    try {
+      return await work();
+    } finally {
+      releaseSlot();
+    }
+  });
 }
 
 /** One tail per source id, so a second call queues rather than overlaps. */
@@ -249,7 +260,7 @@ type Resolved =
   | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
   | { readonly ok: false; readonly reason: string };
 
-async function resolveDestination(
+export async function resolveDestination(
   destination: URL,
   resolve: HostLookup,
 ): Promise<Resolved> {
@@ -280,7 +291,7 @@ async function resolveDestination(
   return { ok: true, addresses: resolved };
 }
 
-function refusalOf(
+export function refusalOf(
   addresses: readonly string[],
   allowPrivate: boolean,
 ): string | undefined {
@@ -297,7 +308,7 @@ type CheckedDestination =
   | { readonly ok: true; readonly addresses: readonly ResolvedAddress[] }
   | { readonly ok: false; readonly reason: string };
 
-async function checkDestination(
+export async function checkDestination(
   destination: URL,
   options: { readonly allowPrivate: boolean },
   resolve: HostLookup,
@@ -378,19 +389,19 @@ function buildRequest(
   return { url, headers };
 }
 
-function isJsonContentType(value: string | null): boolean {
+export function isJsonContentType(value: string | null): boolean {
   if (value === null) return false;
   const type = value.split(";")[0]?.trim().toLowerCase() ?? "";
   return /^application\/(?:json|[\w.+-]+\+json)$/.test(type);
 }
 
-async function discard(response: Response): Promise<void> {
+export async function discard(response: Response): Promise<void> {
   await response.body?.cancel().catch(() => undefined);
 }
 
 /** Counts bytes as they arrive and races the deadline, so neither an upstream
  *  that ignores `content-length` nor a stalled body can outlast the cap. */
-async function readBody(
+export async function readBody(
   response: Response,
   signal: AbortSignal,
   maxBytes: number,
@@ -427,7 +438,7 @@ async function readBody(
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function messageOf(error: unknown): string {
+export function messageOf(error: unknown): string {
   return error instanceof Error && error.message !== ""
     ? error.message
     : "the source could not be fetched";
@@ -602,209 +613,6 @@ export interface FetchSourceOptions {
   readonly pluginContributed?: boolean;
 }
 
-export interface GuardedFetchOptions {
-  readonly url: string;
-  readonly allowedHosts: readonly string[];
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly signal: AbortSignal;
-  readonly maxBytes: number;
-  readonly fetchImpl: typeof fetch;
-  readonly method?: "GET" | "POST";
-  readonly body?: string;
-  readonly allowPrivateOrigin?: boolean;
-  /** Test seam; production resolves through the host's DNS. */
-  readonly resolve?: HostLookup;
-  readonly redirects?: number;
-}
-
-/** Hosts are declared without a port or case, so the comparison drops both. */
-function isDeclaredHost(
-  hostname: string,
-  allowedHosts: readonly string[],
-): boolean {
-  const wanted = hostname.toLowerCase();
-  return allowedHosts.some((host) => host.toLowerCase() === wanted);
-}
-
-/**
- * A plugin's own request through the same destination policy the custom-source
- * reader uses: the manifest-declared host is checked before any dial and again
- * on every hop, link-local and metadata addresses are refused outright, and a
- * private address needs the caller's explicit permission. The plugin's headers
- * and body are its own; no host credential is added. `fetchImpl` must pin the
- * checked address (see `createPinnedFetch`), so a second resolution cannot
- * redirect the connection.
- *
- * The request takes one of the host's four fetch slots, so a plugin cannot
- * hold more stalled connections than every other source combined.
- */
-export async function guardedFetch(
-  options: GuardedFetchOptions,
-): Promise<FetchOutcome> {
-  await acquireSlot();
-  try {
-    return await runGuardedFetch(options);
-  } finally {
-    releaseSlot();
-  }
-}
-
-async function runGuardedFetch(
-  options: GuardedFetchOptions,
-): Promise<FetchOutcome> {
-  const startedAt = Date.now();
-  const fetchImpl = options.fetchImpl;
-  const resolve = options.resolve ?? dnsLookup;
-  const maxRedirects = options.redirects ?? MAX_REDIRECTS;
-  const allowPrivate = options.allowPrivateOrigin === true;
-
-  const fail = (reason: string, status?: number): FetchOutcome =>
-    status === undefined
-      ? { ok: false, reason }
-      : { ok: false, status, reason };
-
-  let destination: URL;
-  try {
-    destination = new URL(options.url);
-  } catch {
-    return fail("the request URL is not a URL");
-  }
-
-  if (destination.protocol !== "http:" && destination.protocol !== "https:") {
-    return fail("the request URL must be http or https");
-  }
-  if (destination.username !== "" || destination.password !== "") {
-    return fail("the request URL carries credentials");
-  }
-  if (!isDeclaredHost(destination.hostname, options.allowedHosts)) {
-    return fail(
-      `the host ${destination.hostname} is not declared by the plugin`,
-    );
-  }
-
-  const origin = destination.origin;
-  let sameOrigin = true;
-  let redirects = 0;
-
-  for (;;) {
-    if (!isDeclaredHost(destination.hostname, options.allowedHosts)) {
-      return fail(
-        `the host ${destination.hostname} is not declared by the plugin`,
-      );
-    }
-
-    const checked = await checkDestination(
-      destination,
-      { allowPrivate },
-      resolve,
-    );
-    if (!checked.ok) return fail(checked.reason);
-    if (options.signal.aborted) return fail(TIMEOUT_REASON);
-
-    const headers = new Headers();
-    if (sameOrigin) {
-      for (const [name, value] of Object.entries(options.headers ?? {})) {
-        headers.set(name, value);
-      }
-    }
-
-    const init: PinnedRequestInit = {
-      headers,
-      signal: options.signal,
-      redirect: "manual",
-      [PINNED_ADDRESSES]: checked.addresses,
-    };
-    if (options.method !== undefined) init.method = options.method;
-    // A cross-origin hop carries neither the plugin's headers nor its body: a
-    // body can hold the plugin's own credential.
-    if (sameOrigin && options.body !== undefined) init.body = options.body;
-
-    let response: Response;
-    try {
-      response = await fetchImpl(destination, init);
-    } catch (error) {
-      return fail(options.signal.aborted ? TIMEOUT_REASON : messageOf(error));
-    }
-
-    if (REDIRECT_STATUSES.has(response.status)) {
-      await discard(response);
-
-      if (redirects >= maxRedirects) {
-        return fail(`the request redirected more than ${maxRedirects} times`);
-      }
-
-      const location = response.headers.get("location");
-      if (location === null) {
-        return fail("the request redirected without a location");
-      }
-
-      let next: URL;
-      try {
-        next = new URL(location, destination);
-      } catch {
-        return fail("the request redirected to an unusable address");
-      }
-
-      if (next.username !== "" || next.password !== "") {
-        return fail("the request redirected to a URL carrying credentials");
-      }
-      if (next.protocol !== destination.protocol) {
-        return fail(
-          `the request redirected from ${destination.protocol} to ${next.protocol}, which changes the scheme`,
-        );
-      }
-      if (!isDeclaredHost(next.hostname, options.allowedHosts)) {
-        return fail(`the host ${next.hostname} is not declared by the plugin`);
-      }
-
-      redirects += 1;
-      if (next.origin !== origin) sameOrigin = false;
-      destination = next;
-      continue;
-    }
-
-    if (!response.ok) {
-      await discard(response);
-      return fail(
-        `the request answered HTTP ${response.status}`,
-        response.status,
-      );
-    }
-
-    const contentType = response.headers.get("content-type");
-    if (!isJsonContentType(contentType)) {
-      await discard(response);
-      return fail(
-        `the request answered ${contentType ?? "no content type"} instead of JSON`,
-        response.status,
-      );
-    }
-
-    let text: string;
-    try {
-      text = await readBody(response, options.signal, options.maxBytes);
-    } catch (error) {
-      return fail(
-        options.signal.aborted ? TIMEOUT_REASON : messageOf(error),
-        response.status,
-      );
-    }
-
-    try {
-      return {
-        ok: true,
-        body: JSON.parse(text),
-        elapsedMs: Date.now() - startedAt,
-      };
-    } catch {
-      return fail(
-        "the request answered something that is not JSON",
-        response.status,
-      );
-    }
-  }
-}
-
 export async function fetchSource(
   source: CustomSource,
   credential: string | undefined,
@@ -821,9 +629,8 @@ export async function fetchSource(
       : { ok: false, status, reason: clean };
   };
 
-  return withSourceLock(source.id, async () => {
-    await acquireSlot();
-    try {
+  return withSourceLock(source.id, () =>
+    withFetchSlot(async (): Promise<FetchOutcome> => {
       const startedAt = nowMs();
       const paging = source.paging;
 
@@ -873,10 +680,6 @@ export async function fetchSource(
       }
 
       return { ok: true, body: merged, elapsedMs: nowMs() - startedAt };
-    } catch (error) {
-      return fail(messageOf(error));
-    } finally {
-      releaseSlot();
-    }
-  });
+    }).catch((error: unknown) => fail(messageOf(error))),
+  );
 }

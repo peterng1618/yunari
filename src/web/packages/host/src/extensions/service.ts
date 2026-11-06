@@ -16,6 +16,7 @@ import {
 } from "@yunari/extension-api";
 import type { ConsentStore } from "./consent-store.js";
 import {
+  isProviderPlugin,
   type ProviderOrder,
   readProviderOrder as parseProviderOrder,
 } from "./provider-order.js";
@@ -241,11 +242,7 @@ export function createExtensionService(options: {
 
       const providerKeys = new Set(
         (await installer.list())
-          .filter(
-            (plugin) =>
-              plugin.manifest.execution === "trusted-worker" &&
-              (plugin.manifest.contributes.sensorProviders?.length ?? 0) > 0,
-          )
+          .filter(isProviderPlugin)
           .map((plugin) => plugin.key),
       );
 

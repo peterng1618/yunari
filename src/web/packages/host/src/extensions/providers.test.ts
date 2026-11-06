@@ -262,6 +262,62 @@ describe("PluginSensorProvider", () => {
     expect(await provider.describe()).toEqual([descriptor("cpu.load")]);
   });
 
+  it("drops a descriptor for a key the vocabulary does not declare", async () => {
+    const provider = providerWith(
+      supervisorAnswering(() => [
+        descriptor("cpu.load"),
+        descriptor("not.a.real.key"),
+      ]),
+    );
+
+    expect(await provider.describe()).toEqual([descriptor("cpu.load")]);
+    expect(provider.health().message).toContain("unreadable");
+  });
+
+  it("accepts a text reading the vocabulary declares", async () => {
+    const supervisor = supervisorAnswering((method) =>
+      method === "describe"
+        ? [descriptor("gpu.name")]
+        : [
+            {
+              semanticKey: "gpu.name",
+              sample: {
+                sensorId: "acme:gpu.name",
+                timestamp: new Date(NOW).toISOString(),
+                status: "ok",
+                textValue: "Radeon RX 6800",
+              },
+            },
+          ],
+    );
+    const provider = providerWith(supervisor);
+    await provider.describe();
+
+    const [entry] = await provider.sample(["gpu.name"], NOW);
+
+    expect(entry?.sample).toMatchObject({
+      status: "ok",
+      textValue: "Radeon RX 6800",
+    });
+  });
+
+  it("refuses an ok reading whose field does not match the key's kind", async () => {
+    const supervisor = supervisorAnswering((method) =>
+      method === "describe"
+        ? [descriptor("gpu.name")]
+        : [okEntry("gpu.name", 42)],
+    );
+    const provider = providerWith(supervisor);
+    await provider.describe();
+
+    const [entry] = await provider.sample(["gpu.name"], NOW);
+
+    expect(entry?.sample.status).toBe("unavailable");
+    expect(entry?.sample.value).toBeUndefined();
+    expect(entry?.sample.message).toBeTruthy();
+    expect(provider.health().available).toBe(false);
+  });
+
   it("passes only the requested keys and the context in one params object", async () => {
     const supervisor = supervisorAnswering((method) =>
       method === "describe"
@@ -431,6 +487,20 @@ describe("orderProviders", () => {
       "untagged",
     ]);
   });
+
+  it("ignores an order key no plugin carries and keeps input order", () => {
+    const plugins = [
+      tagged("alpha", "local/alpha"),
+      tagged("beta", "local/beta"),
+    ];
+
+    const ordered = orderProviders([], plugins, {
+      version: 1,
+      pluginOrder: ["local/gone"],
+    });
+
+    expect(ordered.map((provider) => provider.id)).toEqual(["alpha", "beta"]);
+  });
 });
 
 describe("provider order store", () => {
@@ -577,7 +647,18 @@ describe("createPluginProviders", () => {
 
     const runtime = await createPluginProviders({
       installer: fakeInstaller([data, nothing]),
-      extensions: fakeExtensions(),
+      // Both would be loadable and consented, so only the provider-plugin
+      // predicate keeps them out.
+      extensions: fakeExtensions({
+        consentRecord: (key) =>
+          Promise.resolve(
+            key === data.key
+              ? consentOf(data)
+              : key === nothing.key
+                ? consentOf(nothing)
+                : undefined,
+          ),
+      }),
       hostApi,
     });
 
@@ -586,14 +667,41 @@ describe("createPluginProviders", () => {
   });
 
   it("skips a plugin that may not load", async () => {
+    const acme = plugin();
     const runtime = await createPluginProviders({
-      installer: fakeInstaller([plugin()]),
-      extensions: fakeExtensions({ mayLoad: () => Promise.resolve(false) }),
+      installer: fakeInstaller([acme]),
+      extensions: fakeExtensions({
+        mayLoad: () => Promise.resolve(false),
+        consentRecord: () => Promise.resolve(consentOf(acme)),
+      }),
       hostApi,
     });
 
     expect(supervisorMocks.created).toEqual([]);
     expect(runtime.providers).toEqual([]);
+  });
+
+  it("makes one provider for a plugin with several contributions", async () => {
+    const acme = plugin({
+      contributes: {
+        sensorProviders: [
+          { id: "acme", label: "Acme" },
+          { id: "acme-two", label: "Acme Two" },
+        ],
+      },
+    });
+
+    const runtime = await createPluginProviders({
+      installer: fakeInstaller([acme]),
+      extensions: fakeExtensions({
+        consentRecord: () => Promise.resolve(consentOf(acme)),
+      }),
+      hostApi,
+    });
+
+    expect(supervisorMocks.created).toHaveLength(1);
+    expect(runtime.providers).toHaveLength(1);
+    expect(runtime.providers.map((provider) => provider.id)).toEqual(["acme"]);
   });
 
   it("reports a failed start and keeps every other plugin", async () => {

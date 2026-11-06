@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  guardedFetch,
-  type HostLookup,
-} from "../../providers/custom/fetch-source.js";
+import type { HostLookup } from "../../providers/custom/fetch-source.js";
+import { guardedFetch } from "./network.js";
 
 /**
  * A plugin's fetch is mediated: the manifest declares the hosts, the same

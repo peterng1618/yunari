@@ -27,6 +27,8 @@ function call(
     readonly body?: Uint8Array | string;
     readonly remoteAddress?: string;
     readonly headers?: Record<string, string>;
+    /** Omit content-length so the cap must be enforced while the body arrives. */
+    readonly chunked?: boolean;
   } = {},
 ): Promise<Answered> {
   return new Promise((resolve) => {
@@ -44,7 +46,11 @@ function call(
       host: "127.0.0.1:5173",
       ...(options.headers ?? {}),
     };
-    if (body !== undefined && request.headers["content-length"] === undefined)
+    if (
+      body !== undefined &&
+      options.chunked !== true &&
+      request.headers["content-length"] === undefined
+    )
       request.headers["content-length"] = String(
         typeof body === "string" ? Buffer.byteLength(body) : body.byteLength,
       );
@@ -404,5 +410,13 @@ describe("extension routes", () => {
       },
     );
     expect(oversize.status).toBe(413);
+
+    const chunked = await call(
+      handle,
+      "PUT",
+      "/api/extensions/provider-order",
+      { body: "x".repeat(64 * 1024 + 1), chunked: true },
+    );
+    expect(chunked.status).toBe(413);
   });
 });

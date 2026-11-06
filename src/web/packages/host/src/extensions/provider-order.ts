@@ -1,8 +1,19 @@
 import path from "node:path";
+import type { InstalledPlugin } from "@yunari/extension-api";
 import type { SensorProvider } from "../providers/provider.js";
 import { createJsonFile } from "../settings/json-file.js";
 
 /** Plugin provider precedence, stored beside the plugins it names. */
+
+/** The one definition of "this plugin contributes sensor providers": a worker
+ *  plugin that names at least one contribution. Order keys and the provider
+ *  adapter both read it here rather than spelling it twice. */
+export function isProviderPlugin(plugin: InstalledPlugin): boolean {
+  return (
+    plugin.manifest.execution === "trusted-worker" &&
+    (plugin.manifest.contributes.sensorProviders?.length ?? 0) > 0
+  );
+}
 
 export interface ProviderOrder {
   readonly version: 1;
@@ -69,9 +80,7 @@ export function orderProviders(
   const ranked = plugins.map((provider, index) => ({
     provider,
     index,
-    rank: rankOf.get(
-      (provider as { readonly pluginKey?: string }).pluginKey ?? "",
-    ),
+    rank: rankOf.get(provider.pluginKey ?? ""),
   }));
 
   ranked.sort((left, right) => {

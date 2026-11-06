@@ -9,10 +9,10 @@ import {
 } from "@yunari/extension-api";
 import {
   dnsLookup,
-  guardedFetch,
   type HostLookup,
 } from "../../providers/custom/fetch-source.js";
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
+import { guardedFetch } from "./network.js";
 import {
   createScopedStores,
   isStorageKey,

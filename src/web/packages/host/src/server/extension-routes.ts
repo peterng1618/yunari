@@ -104,9 +104,26 @@ export function createExtensionRoutes(
         return true;
       }
 
+      let body: string;
+      try {
+        body = await readBody(request, MAX_PROVIDER_ORDER_BYTES);
+      } catch (error) {
+        // A chunked body carries no content-length, so the cap is enforced
+        // while it arrives; that refusal is a size refusal, not a bad shape.
+        if (error instanceof Error && error.message.includes("too large")) {
+          sendText(response, 413, "That provider order is too large.");
+          return true;
+        }
+        sendJson(response, 400, {
+          ok: false,
+          message: "That provider order is not readable.",
+        });
+        return true;
+      }
+
       let parsed: unknown;
       try {
-        parsed = JSON.parse(await readBody(request, MAX_PROVIDER_ORDER_BYTES));
+        parsed = JSON.parse(body);
       } catch {
         sendJson(response, 400, {
           ok: false,

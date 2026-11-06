@@ -111,6 +111,9 @@ export interface SensorProvider {
   /** Stable provider id and sensor-id prefix. */
   readonly id: string;
   readonly label: string;
+  /** Present on a plugin provider: the qualified key of the plugin whose
+   *  worker answers, which is what provider order names. */
+  readonly pluginKey?: string;
 
   describe(): Promise<readonly SensorDescriptor[]>;
 

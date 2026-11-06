@@ -1,8 +1,10 @@
 import {
+  type ConsentRecord,
   type InstalledPlugin,
   type PluginInstaller,
 } from "@yunari/extension-api";
 import {
+  describeSemanticKey,
   isKnownSemanticKey,
   type Sample,
   type SampleEntry,
@@ -18,6 +20,7 @@ import {
   type SensorDescriptor,
   type SensorProvider,
 } from "../providers/provider.js";
+import { isProviderPlugin } from "./provider-order.js";
 import {
   createPluginSupervisor,
   type HostApiDispatcher,
@@ -47,6 +50,8 @@ const TIERS: ReadonlySet<string> = new Set(["baseline", "extended"]);
 const WAITING_MESSAGE = "Waiting for the first reading.";
 const INVALID_MESSAGE = "The plugin returned an unreadable reading.";
 const UNREADABLE_RESPONSE = "The plugin returned an unreadable response.";
+const UNREADABLE_READINGS =
+  "The plugin returned readings this host could not read.";
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -77,6 +82,9 @@ function readDescriptor(value: unknown): SensorDescriptor | undefined {
   if (!nonEmpty(sensorId) || !nonEmpty(semanticKey) || !nonEmpty(label)) {
     return undefined;
   }
+  // The vocabulary owns which keys exist; a descriptor for any other key could
+  // never be bound or sampled.
+  if (!isKnownSemanticKey(semanticKey)) return undefined;
   if (typeof tier !== "string" || !TIERS.has(tier)) return undefined;
 
   const unitKind = value["unitKind"];
@@ -109,7 +117,13 @@ function readDescriptor(value: unknown): SensorDescriptor | undefined {
   };
 }
 
-/** A plugin sample is accepted only when its key is known and its value usable. */
+/** The conversion contract's value kind; keys without one are numbers. */
+function valueKindOf(semanticKey: string): ValueKind {
+  return describeSemanticKey(semanticKey)?.valueKind ?? "number";
+}
+
+/** A plugin sample is accepted only when its key is known and its value is the
+ *  kind the vocabulary declares. */
 function readEntry(
   value: unknown,
   nowMs: number,
@@ -128,12 +142,24 @@ function readEntry(
   const status = raw["status"];
   if (typeof status !== "string" || !STATUSES.has(status)) return undefined;
 
-  const value_ = raw["value"];
-  if (
-    status === "ok" &&
-    !(typeof value_ === "number" && Number.isFinite(value_))
-  ) {
-    return undefined;
+  const numeric = raw["value"];
+  const textValue = raw["textValue"];
+  const booleanValue = raw["booleanValue"];
+
+  if (status === "ok") {
+    switch (valueKindOf(semanticKey)) {
+      case "number":
+        if (!(typeof numeric === "number" && Number.isFinite(numeric))) {
+          return undefined;
+        }
+        break;
+      case "text":
+        if (typeof textValue !== "string") return undefined;
+        break;
+      case "boolean":
+        if (typeof booleanValue !== "boolean") return undefined;
+        break;
+    }
   }
 
   const sensorId = nonEmpty(raw["sensorId"])
@@ -148,15 +174,11 @@ function readEntry(
     sensorId,
     timestamp,
     status: status as Sample["status"],
-    ...(typeof value_ === "number" && Number.isFinite(value_)
-      ? { value: value_ }
+    ...(typeof numeric === "number" && Number.isFinite(numeric)
+      ? { value: numeric }
       : {}),
-    ...(typeof raw["textValue"] === "string"
-      ? { textValue: raw["textValue"] }
-      : {}),
-    ...(typeof raw["booleanValue"] === "boolean"
-      ? { booleanValue: raw["booleanValue"] }
-      : {}),
+    ...(typeof textValue === "string" ? { textValue } : {}),
+    ...(typeof booleanValue === "boolean" ? { booleanValue } : {}),
     ...(typeof raw["unit"] === "string" ? { unit: raw["unit"] } : {}),
     ...(typeof message === "string"
       ? { message: redactForBrowser(message) }
@@ -270,7 +292,10 @@ export class PluginSensorProvider implements SensorProvider {
       }
     }
 
-    this.#health = { available: true };
+    this.#health =
+      invalid.size === 0
+        ? { available: true }
+        : { available: false, message: UNREADABLE_READINGS };
 
     return wanted.map(
       (key): SampleEntry =>
@@ -295,14 +320,6 @@ export class PluginSensorProvider implements SensorProvider {
   }
 }
 
-/** A plugin is a provider plugin when it runs a worker and names contributions. */
-function contributesProviders(plugin: InstalledPlugin): boolean {
-  return (
-    plugin.manifest.execution === "trusted-worker" &&
-    (plugin.manifest.contributes.sensorProviders?.length ?? 0) > 0
-  );
-}
-
 export interface CreatePluginProvidersOptions {
   readonly installer: PluginInstaller;
   readonly extensions: ExtensionService;
@@ -313,9 +330,14 @@ export interface CreatePluginProvidersOptions {
 }
 
 /**
- * Starts one worker per loadable provider plugin and adapts each contribution.
- * A plugin that fails to start is reported and contributes nothing; the rest
- * keep starting.
+ * Starts one worker per loadable provider plugin and adapts it once. A plugin
+ * that fails to start is reported and contributes nothing; the rest keep
+ * starting.
+ *
+ * One provider per plugin, not per `sensorProviders` entry: the worker answers
+ * `describe`/`sample` for the whole plugin, and provider order is keyed by the
+ * plugin's qualified key, so more rows would only ask the same child the same
+ * question twice. The first contribution supplies the row's id and label.
  */
 export async function createPluginProviders(
   options: CreatePluginProvidersOptions,
@@ -327,18 +349,25 @@ export async function createPluginProviders(
   const supervisors: PluginSupervisor[] = [];
 
   for (const plugin of await options.installer.list()) {
-    if (!contributesProviders(plugin)) continue;
+    if (!isProviderPlugin(plugin)) continue;
 
     let loadable = false;
+    let consent: ConsentRecord | undefined;
+
     try {
       loadable = await options.extensions.mayLoad(plugin.key);
+      if (loadable) {
+        consent = await options.extensions.consentRecord(plugin.key);
+      }
     } catch {
+      // A plugin whose consent cannot be read is not loadable; only this one
+      // loses its provider.
       loadable = false;
     }
-    if (!loadable) continue;
+    if (!loadable || consent === undefined) continue;
 
-    const consent = await options.extensions.consentRecord(plugin.key);
-    if (consent === undefined) continue;
+    const contribution = plugin.manifest.contributes.sensorProviders?.[0];
+    if (contribution === undefined) continue;
 
     const supervisor = createPluginSupervisor({
       plugin,
@@ -360,12 +389,9 @@ export async function createPluginProviders(
     }
 
     supervisors.push(supervisor);
-    for (const contribution of plugin.manifest.contributes.sensorProviders ??
-      []) {
-      providers.push(
-        new PluginSensorProvider({ plugin, supervisor, contribution }),
-      );
-    }
+    providers.push(
+      new PluginSensorProvider({ plugin, supervisor, contribution }),
+    );
   }
 
   let stopped = false;
