@@ -100,7 +100,10 @@ describe("the extension UI route", () => {
   beforeEach(async () => {
     root = await mkdtemp(path.join(os.tmpdir(), "yunari-ui-"));
     await mkdir(path.join(root, "nested"));
-    await writeFile(path.join(root, "index.html"), "<!doctype html><title>Acme");
+    await writeFile(
+      path.join(root, "index.html"),
+      "<!doctype html><title>Acme",
+    );
     await writeFile(path.join(root, "nested", "panel.js"), "export {};");
     await writeFile(path.join(root, "secret.js"), "host secret");
     await writeFile(path.join(root, "blob.bin"), Buffer.from([1, 2, 3]));
@@ -116,9 +119,7 @@ describe("the extension UI route", () => {
     });
     expect(response.status).toBe(200);
     expect(response.body.toString("utf8")).toContain("<title>Acme");
-    expect(response.headers["content-security-policy"]).toBe(
-      EXTENSION_UI_CSP,
-    );
+    expect(response.headers["content-security-policy"]).toBe(EXTENSION_UI_CSP);
     expect(response.headers["content-security-policy"]).toContain(
       "default-src 'none'",
     );
@@ -127,9 +128,7 @@ describe("the extension UI route", () => {
     );
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["cache-control"]).toBe("no-store");
-    expect(response.headers["content-type"]).toBe(
-      "text/html; charset=utf-8",
-    );
+    expect(response.headers["content-type"]).toBe("text/html; charset=utf-8");
   });
 
   it("serves a nested file with its own MIME type", async () => {
@@ -154,7 +153,10 @@ describe("the extension UI route", () => {
 
   it.each([
     ["an encoded separator", "/api/extensions/local/acme/ui/..%2fsecret.js"],
-    ["an encoded absolute path", "/api/extensions/local/acme/ui/%2fetc%2fpasswd"],
+    [
+      "an encoded absolute path",
+      "/api/extensions/local/acme/ui/%2fetc%2fpasswd",
+    ],
     ["a backslash segment", "/api/extensions/local/acme/ui/..%5csecret.js"],
     ["a null byte", "/api/extensions/local/acme/ui/index%00.html"],
   ])("refuses %s", async (_name, url) => {

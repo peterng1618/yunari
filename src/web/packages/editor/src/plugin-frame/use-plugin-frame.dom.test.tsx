@@ -114,9 +114,9 @@ describe("usePluginFrame", () => {
   it("refuses a write with no gesture", async () => {
     const onRequest = vi.fn();
     const { latest } = harness(onRequest);
-    await expect(
-      latest.current?.request("settings.set", {}),
-    ).rejects.toThrow("host control");
+    await expect(latest.current?.request("settings.set", {})).rejects.toThrow(
+      "host control",
+    );
     expect(onRequest).not.toHaveBeenCalled();
   });
 

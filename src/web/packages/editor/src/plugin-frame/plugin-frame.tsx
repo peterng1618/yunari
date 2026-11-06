@@ -74,9 +74,7 @@ export function PluginFrame(props: PluginFrameProps): React.JSX.Element {
         data-yunari-plugin-frame-failed=""
         className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[var(--space-8)] p-[var(--space-16)]"
       >
-        <p className="m-0 text-sm text-muted">
-          {props.title} could not load.
-        </p>
+        <p className="m-0 text-sm text-muted">{props.title} could not load.</p>
         <button
           type="button"
           className={ACTION_BUTTON}

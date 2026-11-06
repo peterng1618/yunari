@@ -34,7 +34,10 @@ function mount(element: ReactElement): void {
 }
 
 function renderFrame(
-  onRequest: (request: unknown, token: string | undefined) => Promise<unknown> = async () => undefined,
+  onRequest: (
+    request: unknown,
+    token: string | undefined,
+  ) => Promise<unknown> = async () => undefined,
 ): void {
   mount(
     <PluginFrame

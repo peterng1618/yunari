@@ -6,8 +6,8 @@ import {
   type FrameResult,
   readPluginFrameMessage,
 } from "@yunari/extension-api";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** How long a host control's gesture stays usable. A token is also consumed by
  *  the first write, so a quick double click cannot spend two writes. */
@@ -99,7 +99,8 @@ export function usePluginFrame(
   const takeGesture = (): string | undefined => {
     const granted = gestureRef.current;
     gestureRef.current = undefined;
-    if (granted === undefined || Date.now() > granted.expiresAt) return undefined;
+    if (granted === undefined || Date.now() > granted.expiresAt)
+      return undefined;
     return granted.token;
   };
 
