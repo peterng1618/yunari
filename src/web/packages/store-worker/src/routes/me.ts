@@ -885,6 +885,9 @@ async function finalizeVersion(
       facets_json: JSON.stringify(
         facetRecordOf(parseEnvelope(presign), luminance.value),
       ),
+      metadata_json: "{}",
+      execution_profile: null,
+      review_state: "none",
       package_key: stored.key,
       thumbnail_key: thumbnailKey(itemId),
       bytes: inspected.bytes,

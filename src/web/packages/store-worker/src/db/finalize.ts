@@ -19,9 +19,9 @@ export async function finalizeStoredVersion(
     db
       .prepare(
         `INSERT OR IGNORE INTO item_version (item_id, version, envelope_json,
-           credits_json, facets_json, package_key, thumbnail_key, bytes, sha256,
-           created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           credits_json, facets_json, metadata_json, execution_profile,
+           review_state, package_key, thumbnail_key, bytes, sha256, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         row.item_id,
@@ -29,6 +29,9 @@ export async function finalizeStoredVersion(
         row.envelope_json,
         row.credits_json ?? null,
         row.facets_json,
+        row.metadata_json,
+        row.execution_profile,
+        row.review_state,
         row.package_key,
         row.thumbnail_key,
         row.bytes,

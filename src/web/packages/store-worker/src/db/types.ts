@@ -19,21 +19,35 @@ export interface ItemRow {
   readonly removed_at: string | null;
   readonly downloads: number;
   readonly remix_of_id: string | null;
+  /** The store account's publisher slug; `''` for a row from before the
+   *  account owned the name. */
+  readonly publisher: string;
+  readonly review_state: ReviewState;
 }
+
+/** The review vocabulary both the item and its version rows hold. */
+export type ReviewState = "none" | "pending" | "approved" | "rejected";
 
 /** The `item_version` table's columns, as `item`'s: snake_case, one per column. */
 export interface VersionRow {
   readonly item_id: string;
   readonly version: string;
-  /** The validated `theme.json`; the version ladder's baseline. */
+  /** The validated `theme.json`; the version ladder's baseline. `{}` for a
+   *  non-theme kind, whose metadata is `metadata_json`. */
   readonly envelope_json: string;
   /** The attribution the published package carries, kept beside the version
    *  so a later submission can tell a credits-only correction from no change. */
   readonly credits_json?: string | null;
   /** `facetRecordOf(envelope, thumbnailLuminance)`, derived once when the
    *  version is written; the luminance is the publisher's measurement of the
-   *  picture that version carries. */
+   *  picture that version carries. A non-theme kind is filed by its default
+   *  facets. */
   readonly facets_json: string;
+  /** The pack manifest or plugin metadata; `{}` for a dashboard theme. */
+  readonly metadata_json: string;
+  /** The plugin's execution profile; null for every data kind. */
+  readonly execution_profile: string | null;
+  readonly review_state: ReviewState;
   readonly package_key: string;
   readonly thumbnail_key: string;
   readonly bytes: number;
