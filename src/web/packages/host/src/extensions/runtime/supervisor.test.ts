@@ -214,6 +214,28 @@ export async function describe() {
     expect(scopes).toEqual(["display-1", undefined]);
   });
 
+  it("lets a serial-only plugin call the device lifecycle pair", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe() {
+  return await api.call("usb.open", { transport: "serial", vendorId: 1, productId: 2, path: "COM3" });
+}
+`);
+    const methods: string[] = [];
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "serial:device"],
+      hostApi: hostApi(async ({ method }) => {
+        methods.push(method);
+        return "token";
+      }),
+    });
+
+    await supervisor.start();
+    expect(await supervisor.request("describe", {})).toBe("token");
+    expect(methods).toEqual(["usb.open"]);
+  });
+
   it("carries binary across IPC in both directions", async () => {
     const plugin = await writePlugin(`
 let api;
