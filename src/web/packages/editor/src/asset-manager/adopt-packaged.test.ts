@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { AssetReference, FontAssetReference } from "@yunari/renderer-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AssetManager, mimeOf } from "./index.js";
 
 /** A PNG signature is enough: the manager pairs a file's bytes with its
@@ -172,5 +172,112 @@ describe("AssetManager.adoptPackaged", () => {
 
     expect(manager.declarations).toEqual([]);
     expect(manager.mutationCount).toBe(0);
+  });
+});
+
+describe("AssetManager.rollbackPackaged", () => {
+  it("removes the adoption and keeps an asset imported after it", async () => {
+    const manager = new AssetManager();
+    const adopted = await manager.planPackaged(
+      [
+        {
+          id: "card-image",
+          kind: "image",
+          path: "assets/card.png",
+          sha256: SHA,
+        },
+      ],
+      { "assets/card.png": PNG_BYTES },
+    );
+    manager.commitPackaged(adopted);
+    const late = await manager.import(file("assets/late.png", PNG_BYTES));
+
+    manager.rollbackPackaged(adopted);
+
+    expect(manager.declarations.map((entry) => entry.id)).toEqual([late.id]);
+    expect(manager.assets["assets/late.png"]).toEqual(PNG_BYTES);
+    expect(manager.assets["assets/card.png"]).toBeUndefined();
+  });
+
+  it("keeps a declaration that was already here before the adoption", async () => {
+    const manager = new AssetManager();
+    const resident = await manager.import(file("assets/card.png", PNG_BYTES));
+    const adopted = await manager.planPackaged(
+      [
+        {
+          id: "card-image",
+          kind: "image",
+          path: "assets/card.png",
+          sha256: SHA,
+        },
+      ],
+      { "assets/card.png": PNG_BYTES },
+    );
+    manager.commitPackaged(adopted);
+
+    manager.rollbackPackaged(adopted);
+
+    expect(manager.declarations.map((entry) => entry.id)).toEqual([
+      resident.id,
+    ]);
+    expect(manager.assets[resident.path]).toEqual(PNG_BYTES);
+  });
+
+  it("cancels the adoption's mutation when nothing arrived after it", async () => {
+    const manager = new AssetManager();
+    const listener = vi.fn();
+    manager.subscribe(listener);
+    const adopted = await manager.planPackaged(
+      [
+        {
+          id: "card-image",
+          kind: "image",
+          path: "assets/card.png",
+          sha256: SHA,
+        },
+      ],
+      { "assets/card.png": PNG_BYTES },
+    );
+    manager.commitPackaged(adopted);
+    expect(manager.mutationCount).toBe(1);
+    listener.mockClear();
+
+    manager.rollbackPackaged(adopted);
+
+    // The commit and its undo cancel for the dirty marker; panes still redraw.
+    expect(manager.mutationCount).toBe(0);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("revokes the adopted preview and leaves a later import's URL alone", async () => {
+    const create = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation(() => `blob:preview-${create.mock.calls.length}`);
+    const revoke = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => {});
+    const manager = new AssetManager();
+    const adopted = await manager.planPackaged(
+      [
+        {
+          id: "card-image",
+          kind: "image",
+          path: "assets/card.png",
+          sha256: SHA,
+        },
+      ],
+      { "assets/card.png": PNG_BYTES },
+    );
+    manager.commitPackaged(adopted);
+    const adoptedUrl = manager.previewUrl("card-image");
+    const late = await manager.import(file("assets/late.png", PNG_BYTES));
+    const lateUrl = manager.previewUrl(late.id);
+
+    manager.rollbackPackaged(adopted);
+
+    expect(adoptedUrl).toBeDefined();
+    expect(revoke).toHaveBeenCalledWith(adoptedUrl);
+    expect(revoke).not.toHaveBeenCalledWith(lateUrl);
+    expect(manager.previewUrl(late.id)).toBe(lateUrl);
   });
 });
