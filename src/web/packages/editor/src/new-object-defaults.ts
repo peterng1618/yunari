@@ -112,7 +112,7 @@ export function newObjectName(
  *  chart family `newObjectName` resolves it to. */
 export function newShapeName(kind: ShapeInsertion): string {
   if (isPathPreset(kind)) {
-    if (kind.startsWith("user:")) {
+    if (kind.startsWith("user:") || kind.startsWith("pack:")) {
       return userPathPreset(kind)?.label ?? uiCopy.shapeKinds.path;
     }
     return uiCopy.pathPresets[kind as PathPresetId];
@@ -299,11 +299,15 @@ export type PathPresetId = (typeof BUILTIN_PATH_PRESETS)[number]["id"];
 export const PATH_PRESET_IDS: readonly PathPresetId[] =
   BUILTIN_PATH_PRESETS.map((preset) => preset.id);
 
-/** A preset the author added in Settings. Its label and data live in the
- *  author's own list rather than in this module. */
+/** A preset the author added in Settings, or one an installed pack carries.
+ *  Its label and data live in the live list rather than in this module. */
 export type UserPathPresetId = `user:${string}`;
 
-export type CustomShapeId = PathPresetId | UserPathPresetId;
+/** A preset an installed pack carries. The prefix keeps one pack's ids from
+ *  colliding with another's or with the author's own rows. */
+export type PackPathPresetId = `pack:${string}`;
+
+export type CustomShapeId = PathPresetId | UserPathPresetId | PackPathPresetId;
 
 /** Everything that inserts a shape — a basic kind or a custom preset. */
 export type ShapeInsertion = ShapeKind | CustomShapeId;
@@ -312,7 +316,8 @@ export type ShapeInsertion = ShapeKind | CustomShapeId;
 export function isPathPreset(value: string): value is CustomShapeId {
   return (
     (PATH_PRESET_IDS as readonly string[]).includes(value) ||
-    value.startsWith("user:")
+    value.startsWith("user:") ||
+    value.startsWith("pack:")
   );
 }
 

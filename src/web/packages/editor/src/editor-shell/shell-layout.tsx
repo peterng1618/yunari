@@ -12,12 +12,6 @@ import {
   setActivePreviewRatios,
 } from "../display-lens.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
-import {
-  readRemovedPathPresetIds,
-  readUserPathPresets,
-  setActiveRemovedPathPresetIds,
-  setActiveUserPathPresets,
-} from "../path-presets.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
   SettingsRegion,
@@ -294,10 +288,10 @@ export function createShellLayout(
   const storage = readStorage();
   // The preview catalogue is read once, here, beside the palette and shortcut
   // reads: the camera opens on the author's list rather than on the defaults,
-  // and nothing after this re-reads storage — the settings tab writes both.
+  // and nothing after this re-reads storage — the settings tab writes it back.
   setActivePreviewRatios(readPreviewRatioTokens(storage));
-  setActiveUserPathPresets(readUserPathPresets(storage));
-  setActiveRemovedPathPresetIds(readRemovedPathPresetIds(storage));
+  // The path presets are the host's list now; `loadPathPresets` in the boot
+  // fills the live store before the shell renders the Add pane.
   const initial = resolveShellPalette(
     storage === undefined ? undefined : readShellChoice(storage),
     prefersDarkAppearance(),

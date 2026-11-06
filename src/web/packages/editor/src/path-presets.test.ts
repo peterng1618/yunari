@@ -1,3 +1,4 @@
+import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
 import { Path } from "fabric/es";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -9,6 +10,7 @@ import { insertGroups } from "./new-object-panel.js";
 import {
   activeRemovedPathPresetIds,
   activeUserPathPresets,
+  loadPathPresets,
   REMOVED_PATH_PRESETS_STORAGE_KEY,
   readRemovedPathPresetIds,
   readUserPathPresets,
@@ -57,9 +59,158 @@ function preset(label: string, data: string): UserPathPreset {
   return candidate;
 }
 
+function jsonAnswer(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function fetchFailing(): typeof fetch {
+  return vi.fn(async () => {
+    throw new TypeError("Failed to fetch");
+  }) as unknown as typeof fetch;
+}
+
+function fetchAcceptingMigration(state: {
+  readonly presets: readonly UserPathPreset[];
+  readonly removedBuiltins: readonly string[];
+}): typeof fetch {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/path-presets/migrate") {
+      return jsonAnswer({
+        version: 1,
+        presets: state.presets,
+        removedBuiltins: state.removedBuiltins,
+        migrated: true,
+      });
+    }
+    return jsonAnswer({
+      version: 1,
+      presets: [],
+      removedBuiltins: [],
+      migrated: false,
+    });
+  }) as unknown as typeof fetch;
+}
+
 afterEach(() => {
   setActiveUserPathPresets([]);
   setActiveRemovedPathPresetIds([]);
+});
+
+describe("loading the host's preset list at boot", () => {
+  const mine = (): UserPathPreset => preset("Mine", "M 0 0 L 10 0");
+
+  it("keeps browser presets when the host refuses migration", async () => {
+    const stored = mine();
+    const storage = memoryStorage({
+      "yunari.editor.path-presets": JSON.stringify([stored]),
+      "yunari.editor.removed-path-presets": JSON.stringify(["star"]),
+    });
+    await expect(loadPathPresets(fetchFailing(), storage)).resolves.toEqual({
+      version: 1,
+      presets: [stored],
+      removedBuiltins: ["star"],
+      migrated: false,
+    });
+    expect(storage.getItem("yunari.editor.path-presets")).not.toBeNull();
+  });
+
+  it("clears browser presets only after the host accepts them", async () => {
+    const storage = memoryStorage({
+      "yunari.editor.path-presets": JSON.stringify([mine()]),
+      "yunari.editor.removed-path-presets": JSON.stringify(["star"]),
+    });
+    await loadPathPresets(
+      fetchAcceptingMigration({ presets: [mine()], removedBuiltins: ["star"] }),
+      storage,
+    );
+    expect(storage.getItem("yunari.editor.path-presets")).toBeNull();
+    expect(storage.getItem("yunari.editor.removed-path-presets")).toBeNull();
+  });
+
+  it("retries an unavailable host's migration on the next load", async () => {
+    const stored = mine();
+    const storage = memoryStorage({
+      "yunari.editor.path-presets": JSON.stringify([stored]),
+      "yunari.editor.removed-path-presets": JSON.stringify([]),
+    });
+    await loadPathPresets(fetchFailing(), storage);
+
+    const migrate = vi.fn(async () =>
+      jsonAnswer({
+        version: 1,
+        presets: [stored],
+        removedBuiltins: [],
+        migrated: true,
+      }),
+    );
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/path-presets/migrate") return migrate();
+        return jsonAnswer({
+          version: 1,
+          presets: [],
+          removedBuiltins: [],
+          migrated: false,
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    await loadPathPresets(fetcher, storage);
+
+    expect(migrate).toHaveBeenCalledTimes(1);
+    expect(storage.getItem("yunari.editor.path-presets")).toBeNull();
+  });
+
+  it("does not migrate a host that has already migrated", async () => {
+    const stored = mine();
+    const storage = memoryStorage({
+      "yunari.editor.path-presets": JSON.stringify([stored]),
+      "yunari.editor.removed-path-presets": JSON.stringify([]),
+    });
+    const post = vi.fn();
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") post();
+        return jsonAnswer({
+          version: 1,
+          presets: [stored],
+          removedBuiltins: [],
+          migrated: true,
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    await loadPathPresets(fetcher, storage);
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("writes no built-in or pack row into browser storage", async () => {
+    const storage = memoryStorage();
+    const packed = {
+      id: "pack:pack-one:star",
+      label: "Pack star",
+      data: "M 0 0 L 10 0 L 10 10 Z",
+      paint: "fill" as const,
+    };
+    const fetcher = vi.fn(async () =>
+      jsonAnswer({
+        version: 1,
+        presets: [...BUILTIN_PATH_PRESETS, packed],
+        removedBuiltins: [],
+        migrated: true,
+      }),
+    ) as unknown as typeof fetch;
+
+    await loadPathPresets(fetcher, storage);
+
+    expect(storage.getItem(USER_PATH_PRESETS_STORAGE_KEY)).toBeNull();
+    expect(storage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).toBeNull();
+    expect(activeUserPathPresets()).toEqual([packed]);
+  });
 });
 
 describe("a preset made from the settings form", () => {

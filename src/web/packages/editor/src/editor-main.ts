@@ -38,6 +38,7 @@ import {
   createBlankFabricTheme,
   createNewFabricTheme,
 } from "./new-fabric-theme.js";
+import { loadPathPresets } from "./path-presets.js";
 import { createSensorCatalogue } from "./sensor-catalogue.js";
 import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
@@ -62,6 +63,11 @@ async function start(): Promise<void> {
   if (root === null) {
     throw new Error("Editor shell is missing #app.");
   }
+
+  // The host's preset list, read once before the shell can render the Add
+  // pane. A host that cannot be reached keeps the browser's list, so an
+  // unavailable host costs the rows rather than the boot.
+  await loadPathPresets();
 
   const libraryClient = createThemeLibraryClient();
   // The author's favourite font trios, which the host keeps in its settings

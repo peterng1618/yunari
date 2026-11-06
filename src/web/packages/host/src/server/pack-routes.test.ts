@@ -3,12 +3,21 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { type WidgetDocument, writeWidgetPackage } from "@yunari/theme-package";
+import {
+  BUILTIN_PATH_PRESETS,
+  type WidgetDocument,
+  writeWidgetPackage,
+} from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createWidgetPackStore,
   type WidgetPackStore,
 } from "../packs/widget-packs.js";
+import {
+  createPathPresetStore,
+  MAX_PATH_PRESET_PACK_BYTES,
+  type PathPresetStore,
+} from "../presets/path-presets.js";
 import { createLargeBodyGate } from "./http.js";
 import { MAX_WIDGET_PACK_BYTES } from "./limits.js";
 import { handlePackRoutes } from "./pack-routes.js";
@@ -40,6 +49,26 @@ function widgetPackageBytes(): Uint8Array {
 let running: http.Server | undefined;
 let directory: string;
 let store: WidgetPackStore | undefined;
+let pathPresets: PathPresetStore | undefined;
+
+function pathPresetPackBytes(): Uint8Array {
+  return new TextEncoder().encode(
+    JSON.stringify({
+      format: "yunari-path-preset-pack",
+      version: 1,
+      id: "pack-one",
+      name: "Pack One",
+      presets: [
+        {
+          id: "star",
+          label: "Star",
+          data: "M 0 0 L 10 0 L 5 10 Z",
+          paint: "fill",
+        },
+      ],
+    }),
+  );
+}
 
 async function start(
   withStore = true,
@@ -48,6 +77,10 @@ async function start(
   store = withStore
     ? createWidgetPackStore(directory, bundled === undefined ? {} : { bundled })
     : undefined;
+  pathPresets = createPathPresetStore(
+    path.join(directory, "presets"),
+    BUILTIN_PATH_PRESETS,
+  );
   const largeBody = createLargeBodyGate();
   const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -56,6 +89,7 @@ async function start(
       response,
       url,
       store,
+      pathPresets,
       largeBody,
     }).then((handled) => {
       if (handled) return;
@@ -78,6 +112,7 @@ afterEach(async () => {
   const server = running;
   running = undefined;
   store = undefined;
+  pathPresets = undefined;
   if (server !== undefined) {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
@@ -292,5 +327,138 @@ describe("the widget pack routes", () => {
   it("answers 404 when the host serves no pack store", async () => {
     const base = await start(false);
     expect((await fetch(`${base}/api/widget-packs`)).status).toBe(404);
+  });
+});
+
+describe("the path preset routes", () => {
+  it("installs a pack, then removes it without touching the user preset", async () => {
+    const base = await start();
+
+    const added = await fetch(`${base}/api/path-presets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Mine", data: "M 0 0 L 10 0" }),
+    });
+    expect(added.status).toBe(200);
+    const userPreset = (await added.json()) as {
+      readonly id: string;
+      readonly label: string;
+    };
+    expect(userPreset.id).toMatch(/^user:/);
+    expect(userPreset.label).toBe("Mine");
+
+    const installed = await fetch(`${base}/api/path-presets/packs`, {
+      method: "POST",
+      body: pathPresetPackBytes().buffer as ArrayBuffer,
+    });
+    expect(installed.status).toBe(200);
+    expect(await installed.json()).toEqual({
+      packId: "pack-one",
+      presets: [
+        {
+          id: "pack:pack-one:star",
+          label: "Star",
+          data: "M 0 0 L 10 0 L 5 10 Z",
+          paint: "fill",
+        },
+      ],
+    });
+
+    const listed = await fetch(`${base}/api/path-presets`);
+    expect(listed.status).toBe(200);
+    const state = (await listed.json()) as {
+      readonly presets: readonly { readonly id: string }[];
+    };
+    expect(state.presets.map((preset) => preset.id)).toContain(userPreset.id);
+    expect(state.presets.map((preset) => preset.id)).toContain(
+      "pack:pack-one:star",
+    );
+
+    const removed = await fetch(`${base}/api/path-presets/packs/pack-one`, {
+      method: "DELETE",
+    });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ ok: true });
+
+    const after = (await (await fetch(`${base}/api/path-presets`)).json()) as {
+      readonly presets: readonly { readonly id: string }[];
+    };
+    expect(after.presets.map((preset) => preset.id)).toContain(userPreset.id);
+    expect(after.presets.map((preset) => preset.id)).not.toContain(
+      "pack:pack-one:star",
+    );
+  });
+
+  it("refuses a non-loopback and a foreign-origin write", async () => {
+    const base = await start();
+
+    const foreign = await fetch(`${base}/api/path-presets`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://evil.example",
+      },
+      body: JSON.stringify({ label: "Mine", data: "M 0 0 L 10 0" }),
+    });
+    expect(foreign.status).toBe(403);
+
+    let status = 0;
+    const response = {
+      writeHead(code: number) {
+        status = code;
+        return response;
+      },
+      end() {
+        return response;
+      },
+    };
+    const handled = await handlePackRoutes({
+      request: {
+        method: "POST",
+        headers: { host: "127.0.0.1:5173" },
+        socket: { remoteAddress: "192.168.1.4" },
+      } as unknown as http.IncomingMessage,
+      response: response as unknown as http.ServerResponse,
+      url: new URL("http://127.0.0.1/api/path-presets"),
+      store: undefined,
+      pathPresets,
+    });
+    expect(handled).toBe(true);
+    expect(status).toBe(403);
+  });
+
+  it("answers a malformed or non-object body with 4xx, never 500", async () => {
+    const base = await start();
+
+    const malformed = await fetch(`${base}/api/path-presets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{not json",
+    });
+    expect(malformed.status).toBe(400);
+
+    const nonObject = await fetch(`${base}/api/path-presets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["not", "an", "object"]),
+    });
+    expect(nonObject.status).toBe(400);
+
+    const invalid = await fetch(`${base}/api/path-presets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "", data: "M 0 0 L 10 0" }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.text()).toBe("A path preset needs a name.");
+  });
+
+  it("refuses a pack over 10 MiB before parsing it", async () => {
+    const base = await start();
+    const response = await fetch(`${base}/api/path-presets/packs`, {
+      method: "POST",
+      body: new Uint8Array(MAX_PATH_PRESET_PACK_BYTES + 1).buffer,
+    });
+    expect(response.status).toBe(413);
   });
 });

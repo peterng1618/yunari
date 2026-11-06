@@ -8,34 +8,31 @@ import { PathGlyph } from "../../panes/add/path-glyph.js";
 import {
   activeRemovedPathPresetIds,
   activeUserPathPresets,
-  clearRemovedPathPresetIds,
+  addPathPreset,
+  removeBuiltinPathPreset,
   removedPathPresetIdsKey,
-  setActiveRemovedPathPresetIds,
-  setActiveUserPathPresets,
+  removePathPreset,
+  restoreBuiltinPathPresets,
   subscribeRemovedPathPresetIds,
   subscribeUserPathPresets,
-  type UserPathPreset,
   userPathPresetFrom,
   userPathPresetsKey,
-  writeRemovedPathPresetIds,
-  writeUserPathPresets,
 } from "../../path-presets.js";
 import { uiCopy } from "../../ui-copy.js";
 import { Page } from "../page.js";
 import { Group } from "../section-group.js";
 
 /**
- * The Add pane's shapes: the shipped presets and the author's custom ones.
+ * The Add pane's shapes: the shipped presets and the ones this host serves.
  *
  * **A shipped preset is removable.** It is Add-pane vocabulary rather than
  * authored state, but an author who never draws an arc should not carry it in
  * the menu; the removal is author state of its own. Restore defaults brings
- * back every removed built-in and leaves the author's presets untouched, which
- * is why the two lists are stored under separate keys.
+ * back every removed built-in and leaves the stored rows untouched. Every
+ * write goes to the host; this page owns no browser storage except the
+ * one-time migration `loadPathPresets` performs at boot.
  */
-export function PathPresetsPage(props: {
-  readonly storage: Storage | undefined;
-}): React.JSX.Element {
+export function PathPresetsPage(): React.JSX.Element {
   return (
     <Page page="path-presets">
       <Group
@@ -43,15 +40,17 @@ export function PathPresetsPage(props: {
         name={uiCopy.settings.pathPresetsHeading}
         hint={uiCopy.settings.pathPresetsHint}
       >
-        <PathPresetsSection storage={props.storage} />
+        <PathPresetsSection />
       </Group>
     </Page>
   );
 }
 
-function PathPresetsSection(props: {
-  readonly storage: Storage | undefined;
-}): React.JSX.Element {
+function failureText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function PathPresetsSection(): React.JSX.Element {
   useSyncExternalStore(subscribeUserPathPresets, userPathPresetsKey);
   useSyncExternalStore(subscribeRemovedPathPresetIds, removedPathPresetIdsKey);
   const presets = activeUserPathPresets();
@@ -60,16 +59,8 @@ function PathPresetsSection(props: {
   const [name, setName] = useState("");
   const [data, setData] = useState("");
   const [reason, setReason] = useState<string | undefined>(undefined);
-  const [persisted, setPersisted] = useState<boolean | undefined>(undefined);
 
-  /** Storage first, then the live list, as the preview catalogue writes: a
-   *  failed write still leaves the session's list changed. */
-  const commit = (next: readonly UserPathPreset[]): void => {
-    setPersisted(writeUserPathPresets(props.storage, next));
-    setActiveUserPathPresets(next);
-  };
-
-  const add = (): void => {
+  const add = async (): Promise<void> => {
     const candidate = userPathPresetFrom(name, data);
     if ("reason" in candidate) {
       setReason(
@@ -84,29 +75,42 @@ function PathPresetsSection(props: {
       return;
     }
     setReason(undefined);
-    setName("");
-    setData("");
-    commit([...presets, candidate]);
+    try {
+      await addPathPreset(candidate.label, candidate.data);
+      setName("");
+      setData("");
+    } catch (error) {
+      setReason(failureText(error));
+    }
   };
 
-  const remove = (id: string): void => {
+  const remove = async (id: string): Promise<void> => {
     setReason(undefined);
-    commit(presets.filter((preset) => preset.id !== id));
+    try {
+      await removePathPreset(id);
+    } catch (error) {
+      setReason(failureText(error));
+    }
   };
 
-  /** Removing a built-in writes the removals list, not the author's presets. */
-  const removeBuiltin = (id: string): void => {
+  /** Removing a built-in records the removal, not the stored rows. */
+  const removeBuiltin = async (id: string): Promise<void> => {
     setReason(undefined);
-    const next = [...removed, id];
-    setPersisted(writeRemovedPathPresetIds(props.storage, next));
-    setActiveRemovedPathPresetIds(next);
+    try {
+      await removeBuiltinPathPreset(id);
+    } catch (error) {
+      setReason(failureText(error));
+    }
   };
 
-  /** Every built-in back, the author's own list as it was. */
-  const restoreDefaults = (): void => {
+  /** Every built-in back, the stored rows as they were. */
+  const restoreDefaults = async (): Promise<void> => {
     setReason(undefined);
-    setPersisted(clearRemovedPathPresetIds(props.storage));
-    setActiveRemovedPathPresetIds([]);
+    try {
+      await restoreBuiltinPathPresets();
+    } catch (error) {
+      setReason(failureText(error));
+    }
   };
 
   return (
@@ -133,7 +137,7 @@ function PathPresetsSection(props: {
             <ControlIconButton
               label={`${uiCopy.settings.pathPresetRemoveBuiltin} ${uiCopy.pathPresets[id]}`}
               data={{ "data-yunari-path-preset-builtin-remove": id }}
-              onClick={() => removeBuiltin(id)}
+              onClick={() => void removeBuiltin(id)}
             >
               <Glyph icon={MINUS_GLYPH} size={14} />
             </ControlIconButton>
@@ -154,7 +158,7 @@ function PathPresetsSection(props: {
             <ControlIconButton
               label={`${uiCopy.settings.pathPresetRemove} ${preset.label}`}
               data={{ "data-yunari-path-preset-remove": preset.id }}
-              onClick={() => remove(preset.id)}
+              onClick={() => void remove(preset.id)}
             >
               <Glyph icon={MINUS_GLYPH} size={14} />
             </ControlIconButton>
@@ -197,7 +201,7 @@ function PathPresetsSection(props: {
         </ControlWell>
         <button
           type="button"
-          onClick={add}
+          onClick={() => void add()}
           data-yunari-path-preset-add=""
           className={ACTION_BUTTON}
         >
@@ -206,7 +210,7 @@ function PathPresetsSection(props: {
         <button
           type="button"
           disabled={removed.length === 0}
-          onClick={restoreDefaults}
+          onClick={() => void restoreDefaults()}
           data-yunari-path-preset-restore=""
           className={ACTION_BUTTON}
         >
@@ -218,11 +222,6 @@ function PathPresetsSection(props: {
           {reason}
         </p>
       )}
-      {props.storage === undefined || persisted === false ? (
-        <p className="text-sm text-muted">
-          {uiCopy.settings.pathPresetsSessionOnly}
-        </p>
-      ) : null}
     </div>
   );
 }

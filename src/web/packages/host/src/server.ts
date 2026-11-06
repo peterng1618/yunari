@@ -190,6 +190,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeOrigins = options.themeOrigins;
   const published = options.published ?? createPublishedStore();
   const widgetPacks = options.widgetPacks;
+  const pathPresets = options.pathPresets;
   const caCertificate = options.caCertificate;
   /** Hashed from the bytes being served, once per server: a value passed
    *  alongside them could describe a different certificate. */
@@ -478,6 +479,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         response,
         url,
         store: widgetPacks,
+        pathPresets,
         largeBody,
       })
     )

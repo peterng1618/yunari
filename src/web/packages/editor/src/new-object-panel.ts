@@ -246,11 +246,15 @@ export function insertNewShape(
   // name and an author never sees the id, which is exactly why a circle keyed
   // `panel-…` survived: nobody reading the screen sees it.
   //
-  // An author preset's id is `user:<uuid>`, and the colon is not in the
-  // envelope's object-id alphabet. The prefix is therefore the insertion's own
-  // safe word rather than the preset id; the preset still supplies the data and
-  // the display name.
-  const prefix = kind.startsWith("user:") ? "custom-shape" : kind;
+  // An author or pack preset's id carries colons (`user:<uuid>`,
+  // `pack:<packId>:<presetId>`), and the colon is not in the envelope's
+  // object-id alphabet. The prefix is therefore the insertion's own safe word
+  // rather than the preset id; the preset still supplies the data and the
+  // display name.
+  const prefix =
+    kind.startsWith("user:") || kind.startsWith("pack:")
+      ? "custom-shape"
+      : kind;
   const inserted = createNewShape(
     `${prefix}-${crypto.randomUUID()}`,
     globals,

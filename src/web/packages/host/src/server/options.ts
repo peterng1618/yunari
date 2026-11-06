@@ -4,6 +4,7 @@ import type { ListenableServer } from "../cli/net.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { PanelHint } from "../panels/panel-device.js";
 import type { PanelManager } from "../panels/panel-manager.js";
+import type { PathPresetStore } from "../presets/path-presets.js";
 import type {
   CustomSourceStatus,
   SourceTestResult,
@@ -209,6 +210,10 @@ export interface HostServerOptions {
    *  Omitted when this host serves none; the routes then say so rather than
    *  falling through to the static 404. */
   readonly widgetPacks?: WidgetPackStore;
+  /** The author's path presets, one settings file. Omitted when this host
+   *  serves none; the routes then say so rather than falling through to the
+   *  static 404. */
+  readonly pathPresets?: PathPresetStore;
 }
 
 export interface HostingState {
