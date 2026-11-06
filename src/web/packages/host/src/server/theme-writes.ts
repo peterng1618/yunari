@@ -1,5 +1,5 @@
-import type http from "node:http";
 import { readFile } from "node:fs/promises";
+import type http from "node:http";
 import { isCatalogueId } from "@yunari/renderer-core";
 import { handleSubmitRoute } from "../catalogue/submit.js";
 import type { PublishedStore } from "../serve/published.js";
@@ -407,7 +407,9 @@ export function createThemeWrites(
     // The bytes of an editor theme the store installed. The settings import
     // control reads one back through this route, so the id is the catalogue's
     // and the file name is this host's own rule.
-    const editorThemeMatch = url.pathname.match(/^\/api\/editor-themes\/([^/]+)$/);
+    const editorThemeMatch = url.pathname.match(
+      /^\/api\/editor-themes\/([^/]+)$/,
+    );
     if (editorThemeMatch) {
       if (request.method !== "GET") {
         sendText(response, 405, "Only GET is supported.");
@@ -428,7 +430,9 @@ export function createThemeWrites(
       }
       let bytes: Buffer;
       try {
-        bytes = await readFile(editorThemePath(options.editorThemesDirectory, id));
+        bytes = await readFile(
+          editorThemePath(options.editorThemesDirectory, id),
+        );
       } catch {
         sendText(response, 404, "Editor theme not found.");
         return true;

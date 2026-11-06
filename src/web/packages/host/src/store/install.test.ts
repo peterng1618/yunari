@@ -43,9 +43,7 @@ afterEach(async () => {
   );
 });
 
-function widgetStore(
-  install: WidgetPackStore["install"],
-): WidgetPackStore {
+function widgetStore(install: WidgetPackStore["install"]): WidgetPackStore {
   return {
     list: async () => [],
     read: async () => undefined,
@@ -54,7 +52,9 @@ function widgetStore(
   };
 }
 
-function stores(overrides: Partial<CatalogueInstallStores> = {}): CatalogueInstallStores {
+function stores(
+  overrides: Partial<CatalogueInstallStores> = {},
+): CatalogueInstallStores {
   return {
     theme: {
       store: {} as ThemeStore,
@@ -62,7 +62,12 @@ function stores(overrides: Partial<CatalogueInstallStores> = {}): CatalogueInsta
     },
     widgetPacks: widgetStore(async () => ({
       ok: true,
-      pack: { id: "starter", name: "Starter Cards", version: undefined, units: [] },
+      pack: {
+        id: "starter",
+        name: "Starter Cards",
+        version: undefined,
+        units: [],
+      },
     })),
     ...overrides,
   };
@@ -129,7 +134,11 @@ describe("installCatalogueItem", () => {
   it("refuses a download whose digest differs", async () => {
     const result = await installCatalogueItem(
       request("widget-pack", { sha256: "00" }),
-      { fetch: fetchBytes(WIDGET_PACK_BYTES), stores: stores(), storeOrigin: ORIGIN },
+      {
+        fetch: fetchBytes(WIDGET_PACK_BYTES),
+        stores: stores(),
+        storeOrigin: ORIGIN,
+      },
     );
 
     expect(result).toMatchObject({ ok: false, stage: "integrity" });
@@ -141,7 +150,11 @@ describe("installCatalogueItem", () => {
         sha256: await digestOf(WIDGET_PACK_BYTES),
         bytes: WIDGET_PACK_BYTES.byteLength + 1,
       }),
-      { fetch: fetchBytes(WIDGET_PACK_BYTES), stores: stores(), storeOrigin: ORIGIN },
+      {
+        fetch: fetchBytes(WIDGET_PACK_BYTES),
+        stores: stores(),
+        storeOrigin: ORIGIN,
+      },
     );
 
     expect(result).toMatchObject({ ok: false, stage: "integrity" });
@@ -150,7 +163,11 @@ describe("installCatalogueItem", () => {
   it("hands a verified widget pack to the widget store", async () => {
     const result = await installCatalogueItem(
       request("widget-pack", { sha256: await digestOf(WIDGET_PACK_BYTES) }),
-      { fetch: fetchBytes(WIDGET_PACK_BYTES), stores: stores(), storeOrigin: ORIGIN },
+      {
+        fetch: fetchBytes(WIDGET_PACK_BYTES),
+        stores: stores(),
+        storeOrigin: ORIGIN,
+      },
     );
 
     expect(result).toEqual({ ok: true, id: "starter", consentRequired: false });
@@ -162,7 +179,11 @@ describe("installCatalogueItem", () => {
         packageUrl: `https://evil.example/catalogue/x/1.0.0.zip`,
         sha256: await digestOf(WIDGET_PACK_BYTES),
       }),
-      { fetch: fetchBytes(WIDGET_PACK_BYTES), stores: stores(), storeOrigin: ORIGIN },
+      {
+        fetch: fetchBytes(WIDGET_PACK_BYTES),
+        stores: stores(),
+        storeOrigin: ORIGIN,
+      },
     );
 
     expect(result).toMatchObject({ ok: false, stage: "address" });
@@ -229,11 +250,17 @@ describe("installCatalogueItem", () => {
       },
     );
 
-    expect(result).toMatchObject({ ok: true, id: request("editor-theme").catalogueId });
+    expect(result).toMatchObject({
+      ok: true,
+      id: request("editor-theme").catalogueId,
+    });
     expect(
       new Uint8Array(
         await readFile(
-          path.join(directory, `${request("editor-theme").catalogueId}.yunari-theme`),
+          path.join(
+            directory,
+            `${request("editor-theme").catalogueId}.yunari-theme`,
+          ),
         ),
       ),
     ).toEqual(bytes);

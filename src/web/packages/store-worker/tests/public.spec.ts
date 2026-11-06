@@ -213,9 +213,9 @@ describe("public reads across kinds", () => {
     expect((await finalize(headers, version)).status).toBe(200);
     await clearIndexCache();
 
-    const index = (await (
-      await SELF.fetch(`${BASE}/index.json`)
-    ).json()) as { readonly entries: readonly Record<string, unknown>[] };
+    const index = (await (await SELF.fetch(`${BASE}/index.json`)).json()) as {
+      readonly entries: readonly Record<string, unknown>[];
+    };
 
     expect(index.entries).toContainEqual(
       expect.objectContaining({

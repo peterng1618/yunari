@@ -101,7 +101,11 @@ export function isPackVersion(text: string): boolean {
 function parseVersion(text: string): ParsedVersion | undefined {
   const match = PACK_VERSION.exec(text);
   if (match === null) return undefined;
-  const numbers = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+  const numbers = [
+    Number(match[1]),
+    Number(match[2]),
+    Number(match[3]),
+  ] as const;
   if (!numbers.every(Number.isSafeInteger)) return undefined;
   return {
     numbers,

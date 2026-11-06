@@ -5,11 +5,15 @@ import {
   type ExecutionProfile,
   type InstallResult as PluginInstallResult,
 } from "@yunari/extension-api";
-import { isCatalogueId, isStoreItemKind, type StoreItemKind } from "@yunari/renderer-core";
+import {
+  isCatalogueId,
+  isStoreItemKind,
+  type StoreItemKind,
+} from "@yunari/renderer-core";
 import { readEditorThemePackage } from "@yunari/theme-package";
 import type { ExtensionService } from "../extensions/service.js";
-import type { PathPresetStore } from "../presets/path-presets.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
+import type { PathPresetStore } from "../presets/path-presets.js";
 import { downloadPackage } from "../themes/download.js";
 import {
   installThemeBytes,
@@ -42,11 +46,20 @@ export interface CatalogueInstallRequest {
 }
 
 export type CatalogueInstallResult =
-  | { readonly ok: true; readonly id: string; readonly consentRequired: boolean }
+  | {
+      readonly ok: true;
+      readonly id: string;
+      readonly consentRequired: boolean;
+    }
   | {
       readonly ok: false;
       readonly message: string;
-      readonly stage: "address" | "download" | "integrity" | "package" | "store";
+      readonly stage:
+        | "address"
+        | "download"
+        | "integrity"
+        | "package"
+        | "store";
     };
 
 export interface CatalogueInstallStores {
@@ -160,9 +173,8 @@ async function installByKind(
     case "plugin": {
       if (stores.extensions === undefined)
         return refuse("store", "This host keeps no plugins.");
-      const installed: PluginInstallResult = await stores.extensions.install(
-        bytes,
-      );
+      const installed: PluginInstallResult =
+        await stores.extensions.install(bytes);
       if (!installed.ok || installed.plugin === undefined) {
         return refuse(
           "package",
@@ -181,7 +193,10 @@ async function installByKind(
 }
 
 /** The one file name an installed editor theme is read back by. */
-export function editorThemePath(directory: string, catalogueId: string): string {
+export function editorThemePath(
+  directory: string,
+  catalogueId: string,
+): string {
   return path.join(directory, `${catalogueId}.yunari-theme`);
 }
 

@@ -92,9 +92,11 @@ describe("createKillListStore", () => {
     expect(await store.isKilled(KEY)).toBe(true);
     expect(await store.isKilled("acme/other")).toBe(false);
 
-    expect(JSON.parse(await readFile(path.join(directory, "kill-list.json"), "utf8"))).toEqual(
-      document({ [KEY]: {} }),
-    );
+    expect(
+      JSON.parse(
+        await readFile(path.join(directory, "kill-list.json"), "utf8"),
+      ),
+    ).toEqual(document({ [KEY]: {} }));
   });
 
   it("keeps a cached list whose fetch fails to parse", async () => {
@@ -120,7 +122,8 @@ describe("createKillListStore", () => {
     const store = createKillListStore({
       directory,
       origin: undefined,
-      fetch: (async () => Response.json(document({ [KEY]: {} }))) as typeof fetch,
+      fetch: (async () =>
+        Response.json(document({ [KEY]: {} }))) as typeof fetch,
       now: () => GENERATED_AT,
     });
     await store.refresh();
@@ -193,9 +196,9 @@ describe("a killed plugin", () => {
 
     const [listed] = await services[0]!.list();
     if (listed === undefined) throw new Error("no extension listed");
-    expect(
-      await services[0]!.grantConsent(KEY, listed.fingerprint),
-    ).toEqual({ ok: true });
+    expect(await services[0]!.grantConsent(KEY, listed.fingerprint)).toEqual({
+      ok: true,
+    });
 
     expect(await services[0]!.mayLoad(KEY)).toBe(true);
     expect(await services[1]!.mayLoad(KEY)).toBe(false);

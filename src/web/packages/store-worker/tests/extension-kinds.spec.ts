@@ -20,7 +20,11 @@ describe("extension kinds migration", () => {
       expect.arrayContaining(["publisher", "review_state"]),
     );
     expect(await columns("item_version")).toEqual(
-      expect.arrayContaining(["metadata_json", "execution_profile", "review_state"]),
+      expect.arrayContaining([
+        "metadata_json",
+        "execution_profile",
+        "review_state",
+      ]),
     );
     expect(await columns("presign_event")).toEqual(
       expect.arrayContaining([

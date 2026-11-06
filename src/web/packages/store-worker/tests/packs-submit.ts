@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
-import { strToU8, zipSync } from "fflate";
 import { writeWidgetPackage } from "@yunari/theme-package";
+import { strToU8, zipSync } from "fflate";
 import { expect } from "vitest";
 import { BASE, USER_ID } from "./helpers";
 import { ITEM_ID } from "./seed";
@@ -78,18 +78,21 @@ export async function submit(
   kind: string,
   options: SubmitOptions = {},
 ): Promise<{ readonly version: string; readonly uploadUrl: string }> {
-  const response = await SELF.fetch(`${BASE}/api/me/items/${ITEM_ID}/versions`, {
-    method: "POST",
-    headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({
-      kind,
-      name: options.name ?? "Pack One",
-      version: options.version ?? "1.0.0",
-      metadata: options.metadata ?? {},
-      sha256: options.declaredSha256 ?? (await sha256Hex(bytes)),
-      bytes: options.declaredBytes ?? bytes.byteLength,
-    }),
-  });
+  const response = await SELF.fetch(
+    `${BASE}/api/me/items/${ITEM_ID}/versions`,
+    {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        kind,
+        name: options.name ?? "Pack One",
+        version: options.version ?? "1.0.0",
+        metadata: options.metadata ?? {},
+        sha256: options.declaredSha256 ?? (await sha256Hex(bytes)),
+        bytes: options.declaredBytes ?? bytes.byteLength,
+      }),
+    },
+  );
   expect(response.status, await response.clone().text()).toBe(200);
   const { version, uploadUrl } = (await response.json()) as {
     version: string;

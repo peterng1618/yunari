@@ -1,8 +1,7 @@
 import { SELF } from "cloudflare:test";
-import { beforeEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { publisherFor } from "../src/catalogue/publisher";
 import { BASE, sessionHeaders } from "./helpers";
-import { ITEM_ID } from "./seed";
 import {
   finalize,
   itemRow,
@@ -12,6 +11,7 @@ import {
   submit,
   verifyAuthor,
 } from "./packs-submit";
+import { ITEM_ID } from "./seed";
 
 describe("publisherFor", () => {
   it("slugs the display name, then the email local part, then the user id", () => {

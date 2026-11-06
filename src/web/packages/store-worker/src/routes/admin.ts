@@ -16,12 +16,7 @@ import {
 } from "../db/reports.js";
 import type { Env } from "../env.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
-import {
-  clearKill,
-  isAdvisoryUrl,
-  isPluginKey,
-  setKill,
-} from "./kill-list.js";
+import { clearKill, isAdvisoryUrl, isPluginKey, setKill } from "./kill-list.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
@@ -341,7 +336,8 @@ async function reviewAction(
   let reason: string | null = null;
   const rawReason = read.body["reason"];
   if (rawReason !== undefined) {
-    if (typeof rawReason !== "string") return badRequest("A reason must be text.");
+    if (typeof rawReason !== "string")
+      return badRequest("A reason must be text.");
     const trimmed = rawReason.trim();
     if (trimmed.length > MAX_REASON_LENGTH)
       return badRequest(
@@ -377,7 +373,10 @@ async function reviewAction(
       itemId,
     ),
   ]);
-  if ((results[0]?.meta.changes ?? 0) === 0 || (results[1]?.meta.changes ?? 0) === 0)
+  if (
+    (results[0]?.meta.changes ?? 0) === 0 ||
+    (results[1]?.meta.changes ?? 0) === 0
+  )
     return new Response(
       `Item "${itemId}" has no pending review at version "${version.version}".`,
       { status: 409 },

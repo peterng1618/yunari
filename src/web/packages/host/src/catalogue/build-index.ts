@@ -166,9 +166,7 @@ export async function buildCatalogueIndexCommand(
         items.push({
           id: name,
           item,
-          ...(facets === undefined
-            ? {}
-            : { facets: facets as FacetRecord }),
+          ...(facets === undefined ? {} : { facets: facets as FacetRecord }),
         });
         continue;
       }

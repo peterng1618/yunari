@@ -1,16 +1,16 @@
-import { strToU8, zipSync } from "fflate";
-import { describe, expect, it } from "vitest";
 import {
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
   writeWidgetPackage,
 } from "@yunari/theme-package";
+import { strToU8, zipSync } from "fflate";
+import { describe, expect, it } from "vitest";
+import { planPackVersion } from "../version/plan.js";
 import {
   defaultFacetsFor,
   readPackSubmission,
   validateFinalizedPackage,
 } from "./kinds.js";
-import { planPackVersion } from "../version/plan.js";
 
 function submission(
   overrides: Readonly<Record<string, unknown>> = {},

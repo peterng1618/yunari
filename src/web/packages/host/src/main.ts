@@ -50,8 +50,8 @@ import {
   type Launcher,
 } from "./serve/display-launcher.js";
 import { createHostAutostart, hostEntry } from "./serve/host-autostart.js";
-import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
 import { resolveStoreOrigin } from "./server/identity.js";
+import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import {
   assignedThemeFor,

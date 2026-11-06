@@ -457,11 +457,13 @@ describe("parseCatalogueItemFile", () => {
         executionProfile: "declarative",
       },
     });
-    expect(parseCatalogueItemFile({ ...entry(), kind: "sensor-pack" })).toEqual({
-      ok: false,
-      reason:
-        'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.',
-    });
+    expect(parseCatalogueItemFile({ ...entry(), kind: "sensor-pack" })).toEqual(
+      {
+        ok: false,
+        reason:
+          'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.',
+      },
+    );
   });
 
   it("refuses a malformed remixOf with the one sentence", () => {

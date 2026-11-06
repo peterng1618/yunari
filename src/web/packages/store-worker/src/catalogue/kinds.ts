@@ -1,13 +1,13 @@
 import {
-  type FacetRecord,
-  isStoreItemKind,
-  type StoreItemKind,
-} from "@yunari/renderer-core";
-import {
   type ExecutionProfile,
   type PluginManifest,
   readPluginPackage,
 } from "@yunari/extension-api";
+import {
+  type FacetRecord,
+  isStoreItemKind,
+  type StoreItemKind,
+} from "@yunari/renderer-core";
 import {
   MAX_ARCHIVE_BYTES,
   readEditorThemePackage,
@@ -50,9 +50,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 function field(value: unknown, key: string): unknown {
-  return isRecord(value) && Object.hasOwn(value, key)
-    ? value[key]
-    : undefined;
+  return isRecord(value) && Object.hasOwn(value, key) ? value[key] : undefined;
 }
 
 /** The submitted header, or the first field that is not what it declares. */

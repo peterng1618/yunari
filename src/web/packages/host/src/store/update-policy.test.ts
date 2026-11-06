@@ -2,9 +2,7 @@ import { CONSENT_SCHEMA_TAG, type ConsentBinding } from "@yunari/extension-api";
 import { describe, expect, it } from "vitest";
 import { decideUpdate } from "./update-policy.js";
 
-function binding(
-  overrides: Partial<ConsentBinding> = {},
-): ConsentBinding {
+function binding(overrides: Partial<ConsentBinding> = {}): ConsentBinding {
   return {
     schemaTag: CONSENT_SCHEMA_TAG,
     pluginApi: 1,

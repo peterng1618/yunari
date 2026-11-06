@@ -1,7 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BASE, sessionHeaders } from "./helpers";
-import { ITEM_ID, statusOf, versionsOf } from "./seed";
 import {
   finalize,
   itemRow,
@@ -12,6 +11,7 @@ import {
   verifyAuthor,
   widgetPack,
 } from "./packs-submit";
+import { ITEM_ID, statusOf, versionsOf } from "./seed";
 
 describe("pack submissions", () => {
   beforeAll(async () => {

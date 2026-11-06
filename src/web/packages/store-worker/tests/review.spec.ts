@@ -3,7 +3,6 @@ import type { TestHelpers } from "better-auth/plugins";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAuth } from "../src/auth";
 import { BASE, sessionHeaders } from "./helpers";
-import { ITEM_ID, statusOf } from "./seed";
 import {
   finalize,
   itemRow,
@@ -13,6 +12,7 @@ import {
   verifyAuthor,
   versionReviewState,
 } from "./packs-submit";
+import { ITEM_ID, statusOf } from "./seed";
 
 const OWNER_ID = "user-review-owner";
 const OWNER_EMAIL = "owner@example.com";
@@ -101,9 +101,7 @@ describe("hardware review", () => {
     const { version } = await submit(headers, hardwarePlugin(), "plugin");
     await finalize(headers, version);
 
-    expect(
-      (await review(headers, { decision: "approved" })).status,
-    ).toBe(404);
+    expect((await review(headers, { decision: "approved" })).status).toBe(404);
 
     const owner = await ownerHeaders();
     const rejected = await review(owner, {

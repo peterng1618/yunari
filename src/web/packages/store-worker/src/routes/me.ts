@@ -373,7 +373,14 @@ async function requestVersion(
       `A version request names one of: dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.`,
     );
   if (declaredKind !== DASHBOARD_THEME_KIND)
-    return requestPackVersion(request, env, session, itemId, declaredKind, body);
+    return requestPackVersion(
+      request,
+      env,
+      session,
+      itemId,
+      declaredKind,
+      body,
+    );
 
   const validated = validateFabricThemeEnvelope(body["envelope"]);
   if (!validated.ok)
@@ -598,7 +605,10 @@ async function requestPackVersion(
     );
   }
 
-  if (new TextEncoder().encode(submission.name).byteLength > MAX_METADATA_NAME_BYTES)
+  if (
+    new TextEncoder().encode(submission.name).byteLength >
+    MAX_METADATA_NAME_BYTES
+  )
     return badRequest(
       `An item name may be at most ${MAX_METADATA_NAME_BYTES} bytes.`,
     );
@@ -637,7 +647,8 @@ async function requestPackVersion(
       creatingNewItem,
       now,
     );
-    if (exceeded === "items") return tooMany("An account may own at most 20 items.");
+    if (exceeded === "items")
+      return tooMany("An account may own at most 20 items.");
     if (exceeded === "bytes")
       return tooMany("An author's stored packages may total at most 1 GiB.");
     return tooMany(
@@ -668,10 +679,7 @@ async function requestPackVersion(
     } else if (item !== undefined && submission.name !== item.name) {
       await renameItem(env.DB, itemId, submission.name, nowIso);
     }
-    if (
-      item !== undefined &&
-      item.publisher !== publisher.publisher
-    )
+    if (item !== undefined && item.publisher !== publisher.publisher)
       await setPublisher(env.DB, itemId, publisher.publisher);
 
     const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
@@ -1188,7 +1196,10 @@ async function finalizePackVersion(
 
   const existing = await versionOf(env.DB, item.id, version);
   if (existing !== undefined) {
-    if (existing.sha256 !== inspected.sha256 || existing.bytes !== inspected.bytes)
+    if (
+      existing.sha256 !== inspected.sha256 ||
+      existing.bytes !== inspected.bytes
+    )
       return differentBytes(version);
     await releaseReservedUpload(env.DB, item.id, version, nowIso);
     if (item.updated_at < existing.created_at)
@@ -1196,7 +1207,10 @@ async function finalizePackVersion(
     return Response.json({ ok: true, status: item.status, version });
   }
 
-  if (Date.parse(stored.created_at) <= Date.parse(nowIso) - UPLOAD_RESERVATION_TTL_MS)
+  if (
+    Date.parse(stored.created_at) <=
+    Date.parse(nowIso) - UPLOAD_RESERVATION_TTL_MS
+  )
     return new Response("This upload expired; request a new version.", {
       status: 409,
     });
@@ -1211,7 +1225,9 @@ async function finalizePackVersion(
       version,
       envelope_json: "{}",
       credits_json: null,
-      facets_json: JSON.stringify(defaultFacetsFor(presign.kind as StoreItemKind)),
+      facets_json: JSON.stringify(
+        defaultFacetsFor(presign.kind as StoreItemKind),
+      ),
       metadata_json: JSON.stringify(finalized.finalized.metadata),
       execution_profile: finalized.finalized.executionProfile,
       review_state: reviewState,
@@ -1252,7 +1268,8 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 }
 
 /** No reservation and a reservation with no row answer the same 409. */
-function noUploadRequested(version: string): Response {  return new Response(`No upload was requested for version "${version}".`, {
+function noUploadRequested(version: string): Response {
+  return new Response(`No upload was requested for version "${version}".`, {
     status: 409,
   });
 }

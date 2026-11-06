@@ -5,9 +5,7 @@ import type { Env } from "../env.js";
 export interface KillListDocument {
   readonly version: 1;
   readonly generatedAt: string;
-  readonly plugins: Readonly<
-    Record<string, { readonly advisory?: string }>
-  >;
+  readonly plugins: Readonly<Record<string, { readonly advisory?: string }>>;
 }
 
 const KILL_LIST = "/kill-list.json";
@@ -97,10 +95,7 @@ export async function setKill(
 }
 
 /** `false` when the key was not killed, so a repeat DELETE is a 404. */
-export async function clearKill(
-  db: D1Database,
-  key: string,
-): Promise<boolean> {
+export async function clearKill(db: D1Database, key: string): Promise<boolean> {
   const result = await db
     .prepare("DELETE FROM kill_list WHERE plugin_key = ?")
     .bind(key)

@@ -1,7 +1,4 @@
-import {
-  accessGrowth,
-  type ConsentBinding,
-} from "@yunari/extension-api";
+import { accessGrowth, type ConsentBinding } from "@yunari/extension-api";
 
 /**
  * Whether an already-installed plugin may move to a new version without its
