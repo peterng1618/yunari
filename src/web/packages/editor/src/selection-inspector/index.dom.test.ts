@@ -241,9 +241,8 @@ async function beginRename(host: HTMLElement): Promise<HTMLInputElement> {
 
 /** The starter's CPU card, revived from the installed unit's authored JSON
  *  through Fabric's enliven utility — so the case starts from the document the
- *  product ships rather than from numbers re-typed into this file. Its panel is
- *  `frostedCard("cpu-card", 421, 187, 280, 307)`, so the card's centre is
- *  (561, 340.5). */
+ *  product ships rather than from numbers re-typed into this file. Its panel
+ *  occupies 421, 187 at 280×307, so the card's centre is (561, 340.5). */
 async function starterCpuCard(): Promise<Group> {
   const unit = activeWidgetUnits().find(
     (candidate) => candidate.id === "group-cpu-card",
