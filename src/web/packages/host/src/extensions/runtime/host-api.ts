@@ -15,6 +15,9 @@ import {
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
 import {
   createScopedStores,
+  isStorageKey,
+  MAX_SETTINGS_BYTES,
+  MAX_STORAGE_VALUE_BYTES,
   type PluginSettingsScope,
   type ScopedStores,
   type SecretScope,
@@ -46,11 +49,16 @@ export interface HostApiOptions {
 }
 
 const INVALID = "invalid-params";
+const HOST_ERROR = "host-error";
 const LOG_LIMIT = 2_048;
 const NETWORK_BODY_BYTES = 1024 * 1024;
 const CALL_TIMEOUT_MS = 30_000;
 const TIMEOUT_ANSWER = { ok: false, reason: "timeout" };
 const LOG_LEVELS: ReadonlySet<string> = new Set(["info", "warn", "error"]);
+
+/** A value the plugin supplied is malformed. Only this class maps to
+ *  `invalid-params`; every other throw is a host fault. */
+class InvalidParamsError extends Error {}
 
 type Params = Readonly<Record<string, unknown>>;
 
@@ -93,6 +101,23 @@ function stringOf(params: Params, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function requireKey(key: string | undefined): string {
+  if (key === undefined || !isStorageKey(key)) {
+    throw new InvalidParamsError(`"${key ?? ""}" is not a storage key`);
+  }
+  return key;
+}
+
+function requireValue(value: string | undefined): string {
+  if (value === undefined) {
+    throw new InvalidParamsError("a value is required");
+  }
+  if (Buffer.byteLength(value, "utf8") > MAX_STORAGE_VALUE_BYTES) {
+    throw new InvalidParamsError("a value is at most 1 MiB");
+  }
+  return value;
+}
+
 async function networkFetch(
   plugin: InstalledPlugin,
   params: unknown,
@@ -123,6 +148,13 @@ async function networkFetch(
     const entries = Object.entries(rawHeaders);
     if (entries.some(([, value]) => typeof value !== "string"))
       return invalid();
+    try {
+      // A header name or value `Headers` refuses is the plugin's param error,
+      // not a host failure; surface it as one before any request is built.
+      new Headers(entries as [string, string][]);
+    } catch {
+      throw new InvalidParamsError("a header name or value is invalid");
+    }
     headers = Object.fromEntries(entries) as Record<string, string>;
   }
 
@@ -167,24 +199,21 @@ async function storageCall(
     case "storage.get": {
       const read = strictParams(params, ["key"], ["key"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      if (key === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
       return (await scope.get(key)) ?? null;
     }
     case "storage.set": {
       const read = strictParams(params, ["key", "value"], ["key", "value"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      const value = stringOf(read.value, "value");
-      if (key === undefined || value === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
+      const value = requireValue(stringOf(read.value, "value"));
       await scope.set(key, value);
       return null;
     }
     case "storage.remove": {
       const read = strictParams(params, ["key"], ["key"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      if (key === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
       await scope.remove(key);
       return null;
     }
@@ -207,24 +236,21 @@ async function secretCall(
     case "secrets.get": {
       const read = strictParams(params, ["key"], ["key"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      if (key === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
       return (await scope.get(key)) ?? null;
     }
     case "secrets.set": {
       const read = strictParams(params, ["key", "value"], ["key", "value"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      const value = stringOf(read.value, "value");
-      if (key === undefined || value === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
+      const value = requireValue(stringOf(read.value, "value"));
       await scope.set(key, value);
       return null;
     }
     case "secrets.remove": {
       const read = strictParams(params, ["key"], ["key"]);
       if (!read.ok) return read;
-      const key = stringOf(read.value, "key");
-      if (key === undefined) return invalid();
+      const key = requireKey(stringOf(read.value, "key"));
       await scope.remove(key);
       return null;
     }
@@ -249,6 +275,11 @@ async function settingsCall(
       if (!read.ok) return read;
       const value = read.value["value"];
       if (!isObject(value)) return invalid();
+      if (
+        Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_SETTINGS_BYTES
+      ) {
+        throw new InvalidParamsError("settings are at most 64 KiB");
+      }
       await scope.set(value);
       return null;
     }
@@ -367,10 +398,15 @@ export function createHostApiDispatcher(
       try {
         const stores = storesFor(input.plugin);
         return await withDeadline(dispatchCall(input, stores, options));
-      } catch {
-        // Bad params (for example a header name `Headers` refuses) must answer
-        // rather than reject the dispatch promise.
-        return { ok: false, reason: INVALID };
+      } catch (error) {
+        if (error instanceof InvalidParamsError) {
+          return { ok: false, reason: INVALID };
+        }
+        // A genuine host fault is logged by method, never by parameter, and is
+        // not mislabelled as the plugin's mistake.
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Extension call ${input.method} failed: ${message}`);
+        return { ok: false, reason: HOST_ERROR };
       }
     },
   };

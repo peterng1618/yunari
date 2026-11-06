@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
@@ -359,6 +359,41 @@ describe("host API dispatcher", () => {
         params: { key: "../x", value: "v" },
       }),
     ).toEqual({ ok: false, reason: "invalid-params" });
+  });
+
+  it("answers host-error and logs when a store fails", async () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const api = dispatcherOf({ settingsDir });
+    const owner = plugin({ capabilities: ["storage:own"] });
+    // A directory where the stored value file belongs makes `readFile` fail
+    // with a host error rather than a malformed param.
+    await mkdir(
+      path.join(
+        settingsDir,
+        "extensions",
+        "data",
+        "acme",
+        "test-plugin",
+        Buffer.from("a").toString("base64url"),
+      ),
+      { recursive: true },
+    );
+
+    const answer = await api.call({
+      plugin: owner,
+      consent,
+      method: "storage.get",
+      params: { key: "a" },
+    });
+
+    expect(answer).toEqual({ ok: false, reason: "host-error" });
+    expect(error).toHaveBeenCalledOnce();
+    const logged = error.mock.calls[0]?.join(" ") ?? "";
+    expect(logged).toContain("storage.get");
+    expect(logged).not.toContain("value");
+    error.mockRestore();
   });
 
   it("logs the message only and bounds it", async () => {

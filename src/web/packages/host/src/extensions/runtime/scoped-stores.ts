@@ -17,9 +17,15 @@ import { createSecretStore } from "../../settings/secret-store.js";
  */
 
 const KEY_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
-const MAX_VALUE_BYTES = 1024 * 1024;
+export const MAX_STORAGE_VALUE_BYTES = 1024 * 1024;
 const MAX_FILES = 1000;
-const MAX_SETTINGS_BYTES = 64 * 1024;
+export const MAX_SETTINGS_BYTES = 64 * 1024;
+
+/** The storage key grammar, shared with the dispatcher's param check so a bad
+ *  key is refused before it reaches the filesystem. */
+export function isStorageKey(key: string): boolean {
+  return KEY_PATTERN.test(key) && key !== "." && key !== "..";
+}
 
 export interface StorageScope {
   get(key: string): Promise<string | undefined>;
@@ -46,7 +52,7 @@ export interface ScopedStores {
 }
 
 function checkKey(key: string): void {
-  if (!KEY_PATTERN.test(key) || key === "." || key === "..") {
+  if (!isStorageKey(key)) {
     throw new Error(`"${key}" is not a storage key`);
   }
 }
@@ -61,9 +67,9 @@ function checkSegment(value: string, label: string): void {
 }
 
 function checkValue(value: string, label: string): void {
-  if (Buffer.byteLength(value, "utf8") > MAX_VALUE_BYTES) {
+  if (Buffer.byteLength(value, "utf8") > MAX_STORAGE_VALUE_BYTES) {
     throw new Error(
-      `a ${label} value is at most ${MAX_VALUE_BYTES} bytes (1 MiB)`,
+      `a ${label} value is at most ${MAX_STORAGE_VALUE_BYTES} bytes (1 MiB)`,
     );
   }
 }
