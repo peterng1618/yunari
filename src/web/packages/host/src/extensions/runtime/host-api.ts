@@ -37,6 +37,9 @@ export interface HostApiCall {
   readonly consent: ConsentRecord;
   readonly method: string;
   readonly params: unknown;
+  /** The runner that caused this call, when the host knows it. Device tokens
+   *  opened under it close together and nothing else. */
+  readonly scope?: string;
 }
 
 export interface HostApiDispatcher {
@@ -429,13 +432,17 @@ async function deviceCall(
           ? undefined
           : integerParam(read.value, "interfaceNumber", 0xff);
 
-      return await broker.open(input.plugin.key, {
-        transport: transport as "usb" | "hid" | "serial",
-        vendorId,
-        productId,
-        ...(path === undefined ? {} : { path }),
-        ...(interfaceNumber === undefined ? {} : { interfaceNumber }),
-      });
+      return await broker.open(
+        input.plugin.key,
+        {
+          transport: transport as "usb" | "hid" | "serial",
+          vendorId,
+          productId,
+          ...(path === undefined ? {} : { path }),
+          ...(interfaceNumber === undefined ? {} : { interfaceNumber }),
+        },
+        input.scope,
+      );
     }
 
     if (input.method === "usb.close") {

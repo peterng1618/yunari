@@ -190,6 +190,30 @@ export async function describe() {
     ]);
   });
 
+  it("carries the runner's scope to a host call the plugin makes", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe() {
+  return await api.call("storage.get", { key: "one" });
+}
+`);
+    const scopes: (string | undefined)[] = [];
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "storage:own"],
+      hostApi: hostApi(async ({ scope }) => {
+        scopes.push(scope);
+        return null;
+      }),
+    });
+
+    await supervisor.start();
+    await supervisor.request("describe", {}, "display-1");
+    await supervisor.request("describe", {});
+
+    expect(scopes).toEqual(["display-1", undefined]);
+  });
+
   it("carries binary across IPC in both directions", async () => {
     const plugin = await writePlugin(`
 let api;

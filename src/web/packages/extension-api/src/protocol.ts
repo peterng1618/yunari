@@ -47,12 +47,17 @@ export interface HostRequest {
   readonly id: string;
   readonly method: HostMethod;
   readonly params: unknown;
+  /** The display runner the request belongs to; host calls the plugin makes
+   *  while answering it carry the same scope. */
+  readonly scope?: string;
 }
 export interface PluginRequest {
   readonly type: "plugin.request";
   readonly id: string;
   readonly method: PluginMethod;
   readonly params: unknown;
+  /** Echoed from the host request the plugin is answering, when it had one. */
+  readonly scope?: string;
 }
 export interface PluginResult {
   readonly type: "plugin.result";
@@ -78,7 +83,13 @@ export type PluginMessage =
   | PluginReady
   | PluginLog;
 
-const PLUGIN_REQUEST_KEYS = ["type", "id", "method", "params"] as const;
+const PLUGIN_REQUEST_KEYS = [
+  "type",
+  "id",
+  "method",
+  "params",
+  "scope",
+] as const;
 const PLUGIN_RESULT_KEYS = ["type", "id", "ok", "value", "reason"] as const;
 const PLUGIN_READY_KEYS = ["type", "pluginApi"] as const;
 const PLUGIN_LOG_KEYS = ["type", "level", "message"] as const;
@@ -137,11 +148,14 @@ export function readPluginMessage(value: unknown): PluginMessage | undefined {
     )
       return undefined;
     if (!("params" in value)) return undefined;
+    const scope = value["scope"];
+    if (scope !== undefined && typeof scope !== "string") return undefined;
     return {
       type,
       id,
       method: method as PluginMethod,
       params: value["params"],
+      ...(scope === undefined ? {} : { scope }),
     };
   }
 

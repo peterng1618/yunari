@@ -461,6 +461,7 @@ function fakeBroker(overrides: Partial<DeviceBroker> = {}): DeviceBroker {
     call: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
     closeAll: vi.fn(async () => undefined),
+    closeScope: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -651,6 +652,37 @@ describe("device methods", () => {
       "tok",
       "usb.bulkTransfer",
       { token: "tok", endpoint: 2, bytes },
+    );
+  });
+});
+
+describe("device runner scope", () => {
+  let settingsDir: string;
+
+  beforeEach(async () => {
+    settingsDir = await mkdtemp(path.join(os.tmpdir(), "yunari-device-scope-"));
+  });
+
+  afterEach(async () => {
+    await rm(settingsDir, { recursive: true, force: true });
+  });
+
+  it("carries the display runner's scope to the broker", async () => {
+    const broker = fakeBroker();
+    const api = dispatcherOf({ settingsDir, broker });
+
+    await api.call({
+      plugin: plugin({ capabilities: ["usb:device"] }),
+      consent,
+      method: "usb.open",
+      params: { transport: "usb", vendorId: 1, productId: 2 },
+      scope: "display-1",
+    });
+
+    expect(broker.open).toHaveBeenCalledWith(
+      "acme/test-plugin",
+      expect.objectContaining({ transport: "usb", vendorId: 1, productId: 2 }),
+      "display-1",
     );
   });
 });

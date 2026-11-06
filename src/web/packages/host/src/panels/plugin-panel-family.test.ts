@@ -74,6 +74,7 @@ function fakeBroker(overrides: Partial<DeviceBroker> = {}): DeviceBroker {
     call: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
     closeAll: vi.fn(async () => undefined),
+    closeScope: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -156,7 +157,10 @@ describe("pluginPanelFamily", () => {
     const family = familyOf(supervisor, broker);
 
     await expect(family.open()).rejects.toThrow("stopped answering");
-    expect(broker.closeAll).toHaveBeenCalledWith("acme/panel");
+    expect(broker.closeScope).toHaveBeenCalledWith(
+      "acme/panel",
+      expect.any(String),
+    );
   });
 
   it("attaches only the hints its own ids claim", async () => {

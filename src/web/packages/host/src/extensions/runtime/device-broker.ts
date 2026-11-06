@@ -49,6 +49,8 @@ export interface DeviceBackend {
 
 export interface DeviceBroker {
   list(pluginKey: string): Promise<readonly DeviceDescriptor[]>;
+  /** `scope` names the runner that asked: every token it opens is closed
+   *  together, so one display's failure cannot reach another's device. */
   open(
     pluginKey: string,
     selector: {
@@ -58,6 +60,7 @@ export interface DeviceBroker {
       readonly path?: string;
       readonly interfaceNumber?: number;
     },
+    scope?: string,
   ): Promise<string>;
   call(
     pluginKey: string,
@@ -67,6 +70,9 @@ export interface DeviceBroker {
   ): Promise<unknown>;
   close(pluginKey: string, token: string): Promise<void>;
   closeAll(pluginKey: string): Promise<void>;
+  /** Closes the tokens one runner opened, leaving the plugin's other devices
+   *  open. A token with no scope is closed by `closeAll` only. */
+  closeScope(pluginKey: string, scope: string): Promise<void>;
 }
 
 export interface DeviceBrokerOptions {
@@ -80,6 +86,7 @@ type Transport = DeviceDescriptor["transport"];
 
 interface TokenRecord {
   readonly pluginKey: string;
+  readonly scope: string | undefined;
   readonly transport: Transport;
   readonly handle: DeviceHandle;
 }
@@ -293,6 +300,22 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
     return semaphore;
   };
 
+  /** Closes and drops every token matching `match`, leaving the rest open. */
+  const closeWhere = async (
+    match: (record: TokenRecord) => boolean,
+  ): Promise<void> => {
+    const closing: Promise<void>[] = [];
+
+    for (const [token, record] of tokens) {
+      if (!match(record)) continue;
+
+      tokens.delete(token);
+      closing.push(record.handle.close().catch(() => undefined));
+    }
+
+    await Promise.all(closing);
+  };
+
   return {
     async list(pluginKey) {
       const declared = allowlists(pluginKey);
@@ -303,7 +326,7 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
       );
     },
 
-    async open(pluginKey, selector) {
+    async open(pluginKey, selector, scope) {
       const declared = allowlists(pluginKey);
       if (!declared.some((entry) => isDeclared(entry, selector))) {
         throw new Error("The device is not declared for this plugin.");
@@ -334,6 +357,7 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
       const token = crypto.randomUUID();
       tokens.set(token, {
         pluginKey,
+        scope,
         transport: selector.transport,
         handle,
       });
@@ -401,16 +425,13 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
     },
 
     async closeAll(pluginKey) {
-      const closing: Promise<void>[] = [];
+      await closeWhere((record) => record.pluginKey === pluginKey);
+    },
 
-      for (const [token, record] of tokens) {
-        if (record.pluginKey !== pluginKey) continue;
-
-        tokens.delete(token);
-        closing.push(record.handle.close().catch(() => undefined));
-      }
-
-      await Promise.all(closing);
+    async closeScope(pluginKey, scope) {
+      await closeWhere(
+        (record) => record.pluginKey === pluginKey && record.scope === scope,
+      );
     },
   };
 }

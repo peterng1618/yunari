@@ -48,20 +48,28 @@ function familyContribution(
 type Answer = (method: HostMethod, params: unknown) => unknown;
 type FakeSupervisor = PluginSupervisor & {
   readonly calls: [HostMethod, unknown][];
+  readonly scopes: (string | undefined)[];
 };
 
 function fakeSupervisor(answer: Answer = () => undefined): FakeSupervisor {
   const calls: [HostMethod, unknown][] = [];
+  const scopes: (string | undefined)[] = [];
 
   return {
     get alive() {
       return true;
     },
     calls,
+    scopes,
     start: async () => undefined,
     stop: async () => undefined,
-    request: async <T>(method: HostMethod, params: unknown): Promise<T> => {
+    request: async <T>(
+      method: HostMethod,
+      params: unknown,
+      scope?: string,
+    ): Promise<T> => {
       calls.push([method, params]);
+      scopes.push(scope);
       return (await answer(method, params)) as T;
     },
   };
@@ -74,6 +82,7 @@ function fakeBroker(overrides: Partial<DeviceBroker> = {}): DeviceBroker {
     call: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
     closeAll: vi.fn(async () => undefined),
+    closeScope: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -116,7 +125,11 @@ describe("PluginPanelDevice", () => {
     await expect(device.present(new Uint8Array([1]))).rejects.toThrow(
       "stopped answering",
     );
-    expect(broker.closeAll).toHaveBeenCalledWith("acme/panel");
+    expect(broker.closeScope).toHaveBeenCalledWith(
+      "acme/panel",
+      supervisor.scopes[0],
+    );
+    expect(broker.closeAll).not.toHaveBeenCalled();
   });
 
   it("keeps the manifest's geometry over a disagreeing open result", async () => {
@@ -167,7 +180,10 @@ describe("PluginPanelDevice", () => {
     const device = deviceOf(supervisor, broker);
 
     await expect(device.open()).rejects.toThrow();
-    expect(broker.closeAll).toHaveBeenCalledWith("acme/panel");
+    expect(broker.closeScope).toHaveBeenCalledWith(
+      "acme/panel",
+      supervisor.scopes[0],
+    );
   });
 
   it("returns the device's own reply text from a command", async () => {
@@ -213,8 +229,8 @@ describe("PluginPanelDevice", () => {
       return undefined;
     });
     const broker = fakeBroker({
-      closeAll: vi.fn(async () => {
-        events.push("closeAll");
+      closeScope: vi.fn(async () => {
+        events.push("closeScope");
       }),
     });
     const device = deviceOf(supervisor, broker);
@@ -222,7 +238,34 @@ describe("PluginPanelDevice", () => {
     await device.open();
     await device.close();
 
-    expect(events).toEqual(["panel.open", "panel.close", "closeAll"]);
-    expect(broker.closeAll).toHaveBeenCalledWith("acme/panel");
+    expect(events).toEqual(["panel.open", "panel.close", "closeScope"]);
+    expect(broker.closeScope).toHaveBeenCalledWith(
+      "acme/panel",
+      supervisor.scopes[0],
+    );
+  });
+
+  it("gives each display its own scope, so one failure closes one display", async () => {
+    const supervisor = fakeSupervisor((method) => {
+      if (method === "panel.present") {
+        throw new Error("The plugin stopped answering.");
+      }
+      return undefined;
+    });
+    const broker = fakeBroker();
+    const first = deviceOf(supervisor, broker);
+    const second = deviceOf(supervisor, broker);
+
+    await first.open();
+    await second.open();
+    await expect(first.present(new Uint8Array([1]))).rejects.toThrow();
+
+    expect(supervisor.scopes[0]).not.toBe(supervisor.scopes[1]);
+    expect(broker.closeScope).toHaveBeenCalledTimes(1);
+    expect(broker.closeScope).toHaveBeenCalledWith(
+      "acme/panel",
+      supervisor.scopes[0],
+    );
+    expect(broker.closeAll).not.toHaveBeenCalled();
   });
 });

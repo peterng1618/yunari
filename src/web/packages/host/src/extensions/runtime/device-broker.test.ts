@@ -362,4 +362,29 @@ describe("createDeviceBroker", () => {
     await Promise.all([first, second]);
     expect(handle.enteredCount).toBe(2);
   });
+
+  it("closes one runner's tokens and leaves the other display open", async () => {
+    const { backend, handles } = fakeBackend([descriptor(), descriptor()]);
+    const broker = createDeviceBroker({
+      allowlists: () => [declared()],
+      backend,
+    });
+    const first = await broker.open(PLUGIN, declaredSelector(), "display-1");
+    const second = await broker.open(PLUGIN, declaredSelector(), "display-2");
+
+    await broker.closeScope(PLUGIN, "display-1");
+
+    expect(handles[0]?.closed).toBe(true);
+    expect(handles[1]?.closed).toBe(false);
+    await expect(
+      broker.call(PLUGIN, first, "usb.bulkTransfer", {
+        endpoint: 1,
+        bytes: new Uint8Array(),
+      }),
+    ).rejects.toThrow("not open");
+    await broker.call(PLUGIN, second, "usb.bulkTransfer", {
+      endpoint: 1,
+      bytes: new Uint8Array(),
+    });
+  });
 });
