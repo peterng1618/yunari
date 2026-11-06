@@ -10,6 +10,9 @@
   `src/web/packages/host/src/panels/panel-families.ts`
   `src/web/packages/host/src/panels/plugin-panel-family.ts`
   `src/web/packages/host/src/panels/plugin-panel-device.ts`
+  `src/web/packages/host/src/panels/plugin-panel-rows.ts`
+  `src/web/packages/host/src/extensions/runtime/plugin-revocation.ts`
+  `src/web/packages/host/src/extensions/runtime/plugin-host.ts`
   `src/web/packages/host/src/panels/panel-manager.ts`
   `src/web/packages/host/src/server/displays-routes.ts`
   `src/web/packages/host/src/server/panel-preview-route.ts`
@@ -92,3 +95,29 @@ Adapt a plugin family to the existing `PanelFamily` / `PanelDevice` /
 Frame bytes travel as buffers with advanced serialization; no handle crosses, so
 a driver crash or timeout stops only that display's runner. This is host
 mediation, consent and revocation, not an OS sandbox.
+
+## Revision — per-runner authority
+
+The first cut left four gaps that the same mechanism closes:
+
+- **Transport capability.** `usb.open`/`usb.close` are the lifecycle pair for
+  every transport, so a table row naming one capability made them unreachable
+  under the other grant. The method table now holds a set of acceptable
+  capabilities and the gate needs any one of them; the broker still refuses a
+  device the manifest did not declare and the user did not consent to.
+- **Interface consent.** A USB interface is part of the device identity
+  (`usb:1cbe:a092#0`), declared in the manifest and matched exactly on open, so
+  a plugin cannot claim an interface the consent record does not name.
+- **Per-runner scope.** Tokens record the runner scope carried from the host
+  request through the worker (Node `AsyncLocalStorage`, a stdlib builtin) to the
+  `usb.open` call. `closeScope` closes one runner's tokens; `closeAll` remains
+  for revocation and crash cleanup.
+- **Live rows.** `PluginPanelRows` owns the plugin rows the registry serves, and
+  `plugin-revocation.ts` is the one path that stops a worker, drops its
+  allowlist, removes its rows and closes its devices. `main.ts` calls it; the
+  test builds the same real registry, broker and supervisor map.
+
+Manifest geometry is a bounded whole number of pixels: a fractional, negative
+or unbounded value is refused at the trust boundary rather than aborting host
+start, and `main.ts` skips a row that still fails to build so one bad plugin
+cannot take the host down.

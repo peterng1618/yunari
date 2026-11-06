@@ -40,6 +40,7 @@ import {
 } from "./extensions/providers.js";
 import { createDeviceBroker } from "./extensions/runtime/device-broker.js";
 import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
+import { revokePluginRuntime } from "./extensions/runtime/plugin-revocation.js";
 import type { PluginSupervisor } from "./extensions/runtime/supervisor.js";
 import { createNativeDeviceBackend } from "./extensions/runtime/usb-backend.js";
 import { createExtensionService } from "./extensions/service.js";
@@ -57,6 +58,7 @@ import {
 } from "./panels/panel-manager.js";
 import { panelPageUrl, themePageUrl } from "./panels/panel-page.js";
 import { pluginPanelFamily } from "./panels/plugin-panel-family.js";
+import { PluginPanelRows } from "./panels/plugin-panel-rows.js";
 import { createPathPresetStore } from "./presets/path-presets.js";
 import { ClockSensorProvider } from "./providers/clock.js";
 import { CustomSourceProvider } from "./providers/custom/provider.js";
@@ -319,18 +321,18 @@ export async function run(argv: readonly string[]): Promise<number> {
     backend: createNativeDeviceBackend(),
   });
 
-  // Plugin rows tagged with the key that owns them, so a revoked plugin's
-  // families can be removed without touching the built-in rows.
-  const pluginPanelFamilies: {
-    readonly pluginKey: string;
-    readonly family: PanelFamily;
-  }[] = [];
+  // The one registry the server and the panel manager share: a family the
+  // routes offer a record for is the same row the manager opens, plugin rows
+  // included. Plugin rows are tagged with the key that owns them, so a revoked
+  // plugin's families can be removed without touching the built-in rows.
+  const panelFamilies = createPanelFamilyRegistry();
+  const pluginPanelFamilies = new PluginPanelRows(panelFamilies);
 
   recheckPluginSupervisors = async () => {
     const running = pluginSupervisors;
     if (running === undefined) return;
 
-    for (const [key, supervisor] of running.supervisors) {
+    for (const key of running.supervisors.keys()) {
       let loadable = false;
       try {
         loadable = await extensions.mayLoad(key);
@@ -339,25 +341,15 @@ export async function run(argv: readonly string[]): Promise<number> {
       }
       if (loadable) continue;
 
-      try {
-        await supervisor.stop();
-      } catch {
-        // One worker that will not stop must not strand the others.
-      }
-      (running.supervisors as Map<string, PluginSupervisor>).delete(key);
-      // A revoked plugin's devices and panel rows go with its worker: a
+      // A revoked plugin's worker, devices and panel rows go together: a
       // surface must not offer a panel the host will refuse to drive.
-      deviceAllowlists.delete(key);
-
-      const remaining = pluginPanelFamilies.filter(
-        (row) => row.pluginKey !== key,
-      );
-      if (remaining.length !== pluginPanelFamilies.length) {
-        pluginPanelFamilies.splice(0, pluginPanelFamilies.length, ...remaining);
-        panelFamilies.setPlugins(pluginPanelFamilies.map((row) => row.family));
-      }
-
-      await deviceBroker.closeAll(key);
+      await revokePluginRuntime({
+        pluginKey: key,
+        supervisors: running.supervisors as Map<string, PluginSupervisor>,
+        allowlists: deviceAllowlists,
+        panelRows: pluginPanelFamilies,
+        broker: deviceBroker,
+      });
     }
   };
 
@@ -416,7 +408,7 @@ export async function run(argv: readonly string[]): Promise<number> {
           : { renderModes: entry.renderModes }),
       };
 
-      pluginPanelFamilies.push({
+      pluginPanelFamilies.add({
         pluginKey: plugin.key,
         family: pluginPanelFamily({
           plugin,
@@ -682,13 +674,6 @@ export async function run(argv: readonly string[]): Promise<number> {
   // later. The tray's "Auto start" toggle drives the same owner (Task 9).
   const autostart = createHostAutostart();
   const entry = hostEntry(argv, here);
-
-  // The one registry the server and the panel manager share: a family the
-  // routes offer a record for is the same row the manager opens, plugin rows
-  // included.
-  const panelFamilies = createPanelFamilyRegistry(
-    pluginPanelFamilies.map((row) => row.family),
-  );
 
   const hosted = createHostServer({
     registry,
