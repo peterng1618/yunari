@@ -45,8 +45,23 @@ const PANEL_FAMILY = {
   productId: 1,
   geometry: { width: 320, height: 320 },
   support: PANEL_SUPPORT,
-  commands: ["init"],
+  commands: ["hello"],
+  transports: ["usb"] as const,
 };
+
+/** A panel manifest that passes admission, so one family change is the only
+ *  difference under test. */
+function panelManifest(
+  family: Readonly<Record<string, unknown>> = {},
+  overrides: Readonly<Record<string, unknown>> = {},
+): Readonly<Record<string, unknown>> {
+  return {
+    ...validManifest(),
+    capabilities: ["panel:drive", "usb:device"],
+    contributes: { panelFamilies: [{ ...PANEL_FAMILY, ...family }] },
+    ...overrides,
+  };
+}
 
 /** A manifest whose own execution needs nothing, so a required profile can
  *  only come from the contributions under test. */
@@ -187,7 +202,8 @@ describe("readPluginManifest", () => {
               productId: 1,
               geometry: { width: 320, height: 320 },
               support: PANEL_SUPPORT,
-              commands: ["init"],
+              commands: ["hello"],
+              transports: ["usb"],
             },
           ],
         },
@@ -297,6 +313,168 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("requires panel:drive for a panel family", () => {
+    const manifest = panelManifest({}, { capabilities: ["usb:device"] });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: false,
+      reason:
+        'The panelFamilies contribution requires the "panel:drive" capability.',
+    });
+  });
+
+  it("requires usb:device or serial:device for a panel family", () => {
+    expect(
+      readPluginManifest(panelManifest({}, { capabilities: ["panel:drive"] })),
+    ).toEqual({
+      ok: false,
+      reason:
+        'The panelFamilies contribution requires the "usb:device" or "serial:device" capability.',
+    });
+  });
+
+  it("refuses a command outside the panel command union", () => {
+    expect(
+      readPluginManifest(panelManifest({ commands: ["hello", "dim"] })),
+    ).toEqual({
+      ok: false,
+      reason:
+        "contributes.panelFamilies[0].commands[1] is not a panel command.",
+    });
+  });
+
+  it("refuses a serial transport without serial:device", () => {
+    expect(
+      readPluginManifest(
+        panelManifest(
+          { transports: ["serial"], serialPath: "COM3" },
+          { capabilities: ["panel:drive"] },
+        ),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        'The panelFamilies contribution requires the "usb:device" or "serial:device" capability.',
+    });
+  });
+
+  it("requires serialPath for the serial transport", () => {
+    expect(
+      readPluginManifest(
+        panelManifest(
+          { transports: ["serial"] },
+          { capabilities: ["panel:drive", "serial:device"] },
+        ),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        'contributes.panelFamilies[0].serialPath is required for the "serial" transport.',
+    });
+  });
+
+  it("refuses serialPath without the serial transport", () => {
+    expect(readPluginManifest(panelManifest({ serialPath: "COM3" }))).toEqual({
+      ok: false,
+      reason:
+        'contributes.panelFamilies[0].serialPath requires the "serial" transport.',
+    });
+  });
+
+  it("refuses a serial path that is not a COM port or absolute POSIX path", () => {
+    for (const serialPath of [
+      "C:\\dev\\panel",
+      "COM",
+      "dev/ttyUSB0",
+      "/dev/../ttyUSB0",
+    ]) {
+      expect(
+        readPluginManifest(
+          panelManifest(
+            { transports: ["serial"], serialPath },
+            { capabilities: ["panel:drive", "serial:device"] },
+          ),
+        ),
+      ).toEqual({
+        ok: false,
+        reason:
+          "contributes.panelFamilies[0].serialPath must be a COM port or an absolute POSIX path.",
+      });
+    }
+  });
+
+  it("reads a COM port and an absolute POSIX serial path", () => {
+    for (const serialPath of ["COM3", "com12", "/dev/ttyUSB0"]) {
+      const manifest = panelManifest(
+        { transports: ["serial"], serialPath },
+        { capabilities: ["panel:drive", "serial:device"] },
+      );
+      expect(readPluginManifest(manifest)).toEqual({ ok: true, manifest });
+    }
+  });
+
+  it("refuses an empty, duplicate or unknown transport", () => {
+    expect(readPluginManifest(panelManifest({ transports: [] }))).toEqual({
+      ok: false,
+      reason:
+        "contributes.panelFamilies[0].transports must declare at least one transport.",
+    });
+    expect(
+      readPluginManifest(panelManifest({ transports: ["usb", "usb"] })),
+    ).toEqual({
+      ok: false,
+      reason: 'contributes.panelFamilies[0].transports lists "usb" twice.',
+    });
+    expect(
+      readPluginManifest(panelManifest({ transports: ["bluetooth"] })),
+    ).toEqual({
+      ok: false,
+      reason:
+        'contributes.panelFamilies[0].transports[0] must be "usb", "hid" or "serial".',
+    });
+  });
+
+  it("requires transports on a panel family", () => {
+    const { transports, ...rest } = PANEL_FAMILY;
+    expect(transports).toEqual(["usb"]);
+    expect(
+      readPluginManifest({
+        ...validManifest(),
+        capabilities: ["panel:drive", "usb:device"],
+        contributes: { panelFamilies: [rest] },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "contributes.panelFamilies[0].transports is required.",
+    });
+  });
+
+  it("deduplicates renderModes", () => {
+    const manifest = panelManifest({ renderModes: ["wave", "wave", "static"] });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: true,
+      manifest: {
+        ...manifest,
+        contributes: {
+          panelFamilies: [{ ...PANEL_FAMILY, renderModes: ["wave", "static"] }],
+        },
+      },
+    });
+  });
+
+  it("refuses more than 8 renderModes", () => {
+    expect(
+      readPluginManifest(
+        panelManifest({
+          renderModes: Array.from({ length: 9 }, (_, index) => `mode-${index}`),
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        "contributes.panelFamilies[0].renderModes carries at most 8 entries.",
+    });
+  });
+
   it("refuses a non-positive geometry dimension", () => {
     expect(
       readPluginManifest({
@@ -310,7 +488,8 @@ describe("readPluginManifest", () => {
               productId: 1,
               geometry: { width: 0, height: 320 },
               support: PANEL_SUPPORT,
-              commands: ["init"],
+              commands: ["hello"],
+              transports: ["usb"],
             },
           ],
         },

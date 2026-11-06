@@ -1,4 +1,5 @@
 import { CAPABILITIES, type Capability } from "./capabilities";
+import type { PanelTransport } from "./device";
 import { readContributions } from "./manifest-contributions";
 import {
   type Check,
@@ -60,6 +61,11 @@ export interface PluginContributions {
     };
     readonly commands: readonly string[];
     readonly renderModes?: readonly string[];
+    /** The buses this family reaches its device on. */
+    readonly transports: readonly PanelTransport[];
+    /** The declared serial address; required exactly when `transports`
+     *  includes `"serial"`. */
+    readonly serialPath?: string;
   }[];
   readonly settingsPages?: readonly {
     readonly id: string;
@@ -221,8 +227,16 @@ function missingCapability(
       contributes[contribution] !== undefined &&
       !capabilities.includes(capability)
     )
-      return `The ${contribution} contribution needs the ${JSON.stringify(capability)} capability.`;
+      return `The ${contribution} contribution requires the ${JSON.stringify(capability)} capability.`;
   }
+  // Driving a panel means reaching hardware, and the bus is the family's
+  // choice: one of the two device grants covers it.
+  if (
+    contributes.panelFamilies !== undefined &&
+    !capabilities.includes("usb:device") &&
+    !capabilities.includes("serial:device")
+  )
+    return 'The panelFamilies contribution requires the "usb:device" or "serial:device" capability.';
   return undefined;
 }
 

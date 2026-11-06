@@ -1,9 +1,17 @@
+import {
+  isSerialPath,
+  PANEL_COMMAND_KINDS,
+  PANEL_TRANSPORTS,
+  type PanelCommand,
+  type PanelTransport,
+} from "./device";
 import type { PluginContributions } from "./manifest";
 import {
   type Check,
   checkKeys,
   isRecord,
   MAX_CONTRIBUTIONS,
+  MAX_ENTRY_PATH,
   MAX_NAME,
   readIdentifier,
   readList,
@@ -39,6 +47,9 @@ const CONTRIBUTION_KEYS = [
   "customSources",
 ] as const;
 
+/** A family's stream choice is a short menu, not a catalogue. */
+const MAX_RENDER_MODES = 8;
+
 const SENSOR_PROVIDER_KEYS = ["id", "label"] as const;
 const ASSET_CATEGORY_KEYS = [
   "id",
@@ -56,6 +67,8 @@ const PANEL_FAMILY_KEYS = [
   "support",
   "commands",
   "renderModes",
+  "transports",
+  "serialPath",
 ] as const;
 const PANEL_SUPPORT_KEYS = [
   "maker",
@@ -178,6 +191,36 @@ function readPanelSupport(
   };
 }
 
+/** A family reaches its device on one or more of the three buses. The order is
+ *  the declaration's; a repeat is a typo, not a second reach. */
+function readPanelTransports(
+  value: unknown,
+  subject: string,
+): Check<readonly PanelTransport[]> {
+  if (value === undefined) return refuse(`${subject} is required.`);
+  if (!Array.isArray(value)) return refuse(`${subject} must be an array.`);
+  if (value.length === 0)
+    return refuse(`${subject} must declare at least one transport.`);
+  if (value.length > PANEL_TRANSPORTS.size)
+    return refuse(
+      `${subject} carries at most ${PANEL_TRANSPORTS.size} entries.`,
+    );
+  const seen = new Set<string>();
+  const transports: PanelTransport[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (
+      typeof entry !== "string" ||
+      !PANEL_TRANSPORTS.has(entry as PanelTransport)
+    )
+      return refuse(`${subject}[${index}] must be "usb", "hid" or "serial".`);
+    if (seen.has(entry))
+      return refuse(`${subject} lists ${JSON.stringify(entry)} twice.`);
+    seen.add(entry);
+    transports.push(entry as PanelTransport);
+  }
+  return { ok: true, value: transports };
+}
+
 function readPanelFamily(
   entry: unknown,
   subject: string,
@@ -203,16 +246,51 @@ function readPanelFamily(
     MAX_CONTRIBUTIONS,
   );
   if (!commands.ok) return commands;
+  const unknownCommand = commands.value.findIndex(
+    (kind) => !PANEL_COMMAND_KINDS.has(kind as PanelCommand["kind"]),
+  );
+  if (unknownCommand !== -1)
+    return refuse(
+      `${subject}.commands[${unknownCommand}] is not a panel command.`,
+    );
   let renderModes: readonly string[] | undefined;
   if (entry["renderModes"] !== undefined) {
     const read = readStringList(
       entry["renderModes"],
       `${subject}.renderModes`,
-      MAX_CONTRIBUTIONS,
+      MAX_RENDER_MODES,
     );
     if (!read.ok) return read;
-    renderModes = read.value;
+    // One stream has one row in a surface's choice; a repeat is not a second
+    // mode.
+    renderModes = [...new Set(read.value)];
   }
+  const transports = readPanelTransports(
+    entry["transports"],
+    `${subject}.transports`,
+  );
+  if (!transports.ok) return transports;
+  let serialPath: string | undefined;
+  if (entry["serialPath"] !== undefined) {
+    const read = readString(
+      entry["serialPath"],
+      `${subject}.serialPath`,
+      MAX_ENTRY_PATH,
+    );
+    if (!read.ok) return read;
+    if (!isSerialPath(read.value))
+      return refuse(
+        `${subject}.serialPath must be a COM port or an absolute POSIX path.`,
+      );
+    serialPath = read.value;
+  }
+  const declaresSerial = transports.value.includes("serial");
+  if (declaresSerial && serialPath === undefined)
+    return refuse(
+      `${subject}.serialPath is required for the "serial" transport.`,
+    );
+  if (!declaresSerial && serialPath !== undefined)
+    return refuse(`${subject}.serialPath requires the "serial" transport.`);
   return {
     ok: true,
     value: {
@@ -224,6 +302,8 @@ function readPanelFamily(
       support: support.value,
       commands: commands.value,
       ...(renderModes === undefined ? {} : { renderModes }),
+      transports: transports.value,
+      ...(serialPath === undefined ? {} : { serialPath }),
     },
   };
 }

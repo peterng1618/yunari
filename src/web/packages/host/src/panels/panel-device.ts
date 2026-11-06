@@ -6,6 +6,7 @@
  * module exporting its own rows; nothing above changes.
  */
 
+import type { PanelCommand } from "@yunari/extension-api";
 import type {
   BackgroundMediaComposition,
   DisplayRenderMode,
@@ -54,22 +55,9 @@ export interface PanelHint {
   readonly reason?: string;
 }
 
-/** A command a panel's control channel accepts. */
-export type PanelControlCommand =
-  | { readonly kind: "brightness"; readonly level: number }
-  | { readonly kind: "screen"; readonly on: boolean }
-  | {
-      readonly kind: "panel-settings";
-      /** What the panel shows when it powers on: 0 default, 1 image, 2 video. */
-      readonly startMode: 0 | 1 | 2;
-      /** One byte; the adapter sends the image upside down when true. */
-      readonly flip: boolean;
-      /** Whole steps: 0 is no sleep, 1..10 are the firmware's own. */
-      readonly sleepDelay: number;
-    }
-  | { readonly kind: "restart" }
-  | { readonly kind: "status" }
-  | { readonly kind: "hello" };
+/** A command a panel's control channel accepts. The manifest declares the same
+ *  union, so admission and the driver cannot disagree on the vocabulary. */
+export type PanelControlCommand = PanelCommand;
 
 /**
  * What a panel beyond its picture can do, when it can do more.
