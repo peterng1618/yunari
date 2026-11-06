@@ -265,6 +265,10 @@ const LIST_PATH = "/api/path-presets";
  *  one it was given, so a caller that injects a host into the boot keeps it. */
 let clientFetcher: typeof fetch = (input, init) => fetch(input, init);
 
+/** The store the migration reads and writes. Set by the boot beside the
+ *  fetcher, so a mutation can tell whether local rows are still retained. */
+let clientStorage: Storage | undefined;
+
 function defaultStorage(): Storage | undefined {
   try {
     return globalThis.localStorage;
@@ -381,6 +385,7 @@ export async function loadPathPresets(
   storage: Storage | undefined = defaultStorage(),
 ): Promise<PathPresetState> {
   clientFetcher = fetcher;
+  clientStorage = storage;
   const localPresets = readUserPathPresets(storage);
   const localRemoved = readRemovedPathPresetIds(storage);
   const pending = localPresets.length > 0 || localRemoved.length > 0;
@@ -439,8 +444,17 @@ async function refreshPathPresets(): Promise<PathPresetState> {
   const response = await clientFetcher(LIST_PATH);
   await requireOk(response, "The path presets could not be read");
   const state = stateOf(await response.json());
-  applyState(state);
-  return state;
+  // A host that has not migrated yet is not the whole list: the local keys are
+  // retained until it does, and the live view must keep their rows so a
+  // mutation does not hide — or resurrect — one for the session.
+  const localPresets = readUserPathPresets(clientStorage);
+  const localRemoved = readRemovedPathPresetIds(clientStorage);
+  const answer =
+    !state.migrated && (localPresets.length > 0 || localRemoved.length > 0)
+      ? mergedFallback(state, localPresets, localRemoved)
+      : state;
+  applyState(answer);
+  return answer;
 }
 
 export async function addPathPreset(
@@ -472,11 +486,30 @@ async function mutatePathPresets(
 }
 
 export async function removePathPreset(id: string): Promise<void> {
-  await mutatePathPresets(
+  const response = await clientFetcher(
     `${LIST_PATH}/${encodeURIComponent(id)}`,
-    "DELETE",
-    "The path preset could not be removed",
+    {
+      method: "DELETE",
+    },
   );
+  await requireOk(response, "The path preset could not be removed");
+  // A row still held only in this browser's retained key is a no-op on the
+  // host; removing it from that key is what makes the removal stick rather
+  // than return on the next boot.
+  const local = readUserPathPresets(clientStorage);
+  if (local.some((preset) => preset.id === id)) {
+    if (
+      !writeUserPathPresets(
+        clientStorage,
+        local.filter((preset) => preset.id !== id),
+      )
+    ) {
+      throw new Error(
+        "The path preset could not be removed from this browser.",
+      );
+    }
+  }
+  await refreshPathPresets();
 }
 
 export async function removeBuiltinPathPreset(id: string): Promise<void> {

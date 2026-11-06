@@ -5,6 +5,7 @@ import {
   MAX_PATH_PRESET_PACK_BYTES,
   type PathPresetStore,
 } from "../presets/path-presets.js";
+import { UnreadableJsonFileError } from "../settings/json-file.js";
 import {
   isPlatformError,
   LARGE_BODY_BUSY,
@@ -210,7 +211,7 @@ async function readJsonBody(
 /** The store's own sentence for input it refused; a file fault is this
  *  machine's and is logged rather than returned with its path. */
 function sendStoreFailure(response: http.ServerResponse, error: unknown): void {
-  if (isPlatformError(error)) {
+  if (isPlatformError(error) || error instanceof UnreadableJsonFileError) {
     console.error(error);
     sendText(response, 500, "The path presets could not be saved.");
     return;

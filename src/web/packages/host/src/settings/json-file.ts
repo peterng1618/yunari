@@ -20,6 +20,15 @@ import path from "node:path";
 /** A mutation returns the value to store and whatever its caller needs. */
 export type MutateResult<T, R> = { readonly next: T; readonly result: R };
 
+/** The stored file exists but cannot be parsed or read. Its message names the
+ *  absolute path, so a route logs it rather than returning it to a browser. */
+export class UnreadableJsonFileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnreadableJsonFileError";
+  }
+}
+
 export interface JsonFile<T> {
   /** The stored value, or `empty()` when there is no file or it cannot be read. */
   read(): Promise<T>;
@@ -79,7 +88,7 @@ export function createJsonFile<T>(
       raw = await readFile(target, "utf8");
     } catch (error) {
       if (isMissing(error)) return undefined;
-      throw new Error(
+      throw new UnreadableJsonFileError(
         `${target} could not be read, so it was not written: ${reason(error)}`,
       );
     }
@@ -87,7 +96,7 @@ export function createJsonFile<T>(
     try {
       return JSON.parse(raw);
     } catch (error) {
-      throw new Error(
+      throw new UnreadableJsonFileError(
         `${target} could not be read, so it was not written: ${reason(error)}`,
       );
     }

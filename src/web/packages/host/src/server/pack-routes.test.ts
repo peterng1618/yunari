@@ -461,4 +461,102 @@ describe("the path preset routes", () => {
     });
     expect(response.status).toBe(413);
   });
+
+  it("migrates browser rows once and refuses one that is not a user id", async () => {
+    const base = await start();
+    const row = {
+      id: "user:mine",
+      label: "Mine",
+      data: "M 0 0 L 10 0",
+      paint: "stroke",
+    };
+
+    const migrated = await fetch(`${base}/api/path-presets/migrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ presets: [row], removedBuiltins: ["arc"] }),
+    });
+    expect(migrated.status).toBe(200);
+    const state = (await migrated.json()) as {
+      readonly presets: readonly { readonly id: string }[];
+      readonly removedBuiltins: readonly string[];
+      readonly migrated: boolean;
+    };
+    expect(state.migrated).toBe(true);
+    expect(state.removedBuiltins).toEqual(["arc"]);
+    expect(state.presets.map((preset) => preset.id)).toContain("user:mine");
+    expect(state.presets.map((preset) => preset.id)).not.toContain("arc");
+
+    const refused = await fetch(`${base}/api/path-presets/migrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        presets: [{ ...row, id: "builtin-not-user" }],
+        removedBuiltins: [],
+      }),
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toBe(
+      'The migrated id "builtin-not-user" is not a user id.',
+    );
+  });
+
+  it("removes and restores a built-in", async () => {
+    const base = await start();
+
+    const removed = await fetch(
+      `${base}/api/path-presets/builtins/arc/remove`,
+      { method: "POST" },
+    );
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ ok: true });
+
+    const without = (await (
+      await fetch(`${base}/api/path-presets`)
+    ).json()) as {
+      readonly presets: readonly { readonly id: string }[];
+      readonly removedBuiltins: readonly string[];
+    };
+    expect(without.removedBuiltins).toEqual(["arc"]);
+    expect(without.presets.map((preset) => preset.id)).not.toContain("arc");
+
+    const restored = await fetch(`${base}/api/path-presets/builtins/restore`, {
+      method: "POST",
+    });
+    expect(restored.status).toBe(200);
+
+    const back = (await (await fetch(`${base}/api/path-presets`)).json()) as {
+      readonly presets: readonly { readonly id: string }[];
+      readonly removedBuiltins: readonly string[];
+    };
+    expect(back.removedBuiltins).toEqual([]);
+    expect(back.presets.map((preset) => preset.id)).toContain("arc");
+  });
+
+  it("answers a corrupt store file with 500 and no path in the body", async () => {
+    const base = await start();
+    const storeDirectory = path.join(directory, "presets");
+    await mkdir(storeDirectory, { recursive: true });
+    await writeFile(
+      path.join(storeDirectory, "path-presets.json"),
+      "{not json",
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const response = await fetch(`${base}/api/path-presets`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label: "Mine", data: "M 0 0 L 10 0" }),
+      });
+      expect(response.status).toBe(500);
+      const body = await response.text();
+      expect(body).toBe("The path presets could not be saved.");
+      expect(body).not.toContain(directory);
+      expect(body).not.toContain("path-presets.json");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
 });
