@@ -108,6 +108,38 @@ describe("readCustomSource", () => {
     expect(read.ok).toBe(false);
     if (!read.ok) expect(read.message).toContain("pageParam");
   });
+
+  it("refuses an unknown paging key", () => {
+    const read = readCustomSource(
+      source({
+        paging: {
+          pageParam: "page",
+          firstPage: 1,
+          maxPages: 2,
+          pageSize: 50,
+        },
+      }),
+    );
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.message).toContain('unknown key "pageSize"');
+  });
+
+  it("refuses an itemsPath that is not a string", () => {
+    const read = readCustomSource(
+      source({
+        paging: {
+          pageParam: "page",
+          firstPage: 1,
+          maxPages: 2,
+          itemsPath: 5,
+        },
+      }),
+    );
+
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.message).toContain("itemsPath");
+  });
 });
 
 describe("normalizeSources", () => {

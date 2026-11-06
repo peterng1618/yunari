@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-06
 - **Status:** accepted
-- **Paths:** `src/web/packages/host/src/settings/sources.ts`, `src/web/packages/host/src/providers/custom/provider.ts`, `src/web/packages/host/src/providers/custom/fetch-source.ts`, `src/web/packages/host/src/main.ts`, `src/web/packages/host/src/providers/custom/fetch-source.fixture.ts`
+- **Paths:** `src/web/packages/host/src/settings/sources.ts`, `src/web/packages/host/src/providers/custom/provider.ts`, `src/web/packages/host/src/providers/custom/fetch-source.ts`, `src/web/packages/host/src/main.ts`, `src/web/packages/host/src/extensions/service.ts`, `src/web/packages/host/src/extensions/custom-sources.ts`, `src/web/packages/host/src/providers/custom/fetch-source.fixture.ts`
 
 ## Problem
 
@@ -53,3 +53,5 @@ The existing `fetch-source` suites already exercise the guard through an injecte
 ## Decision
 
 Extend the existing owners. `readCustomSource` is the single validator and `asSource` delegates to it; the provider merges user rows first and skips duplicate plugin ids; `fetchSource` calls the existing `run` once per page, in order, and merges only after every page succeeds. `itemsPath` uses the existing `resolvePointer`; without it, page bodies must be arrays. A failing page fails the whole fetch, so no partial body becomes a reading.
+
+The intake in `extensions/custom-sources.ts` is the trust boundary for plugin rows: it reads only extensions `mayLoad` admits (so a missing consent contributes nothing) and refuses any row carrying `auth`, because a plugin must never name a host credential. `createExtensionService` reports successful install, consent and remove mutations through `onChange`, and the host reloads the provider from that callback.

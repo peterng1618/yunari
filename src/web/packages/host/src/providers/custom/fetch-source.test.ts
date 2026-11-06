@@ -194,6 +194,35 @@ describe("fetchSource", () => {
       expect(calls).toHaveLength(2);
     });
 
+    it("checks every page destination before dialling it", async () => {
+      const { fetchImpl, calls } = serve(() => json([{ a: 1 }]));
+      let resolutions = 0;
+      const resolve = async () => {
+        resolutions += 1;
+        return resolutions === 1
+          ? [{ address: "127.0.0.1", family: 4 }]
+          : [{ address: "169.254.169.254", family: 4 }];
+      };
+
+      const outcome = await fetchSource(
+        sourceOf({
+          url: "http://pager.example/data",
+          paging: { pageParam: "page", firstPage: 1, maxPages: 2 },
+        }),
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+      );
+
+      // The first page dialled; the second resolution was refused before any
+      // request for it left the host.
+      expect(resolutions).toBe(2);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.reason).toContain("link-local");
+      expect(calls).toHaveLength(1);
+    });
+
     it("refuses an itemsPath that does not resolve to an array", async () => {
       const { fetchImpl, calls } = serve(() => json({ items: { a: 1 } }));
 

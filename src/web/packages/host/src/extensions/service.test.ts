@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { CONSENT_SCHEMA_TAG, consentFingerprint } from "@yunari/extension-api";
 import { strToU8, zipSync } from "fflate";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConsentStore } from "./consent-store";
 import { contentHash } from "./content-hash";
 import { createPluginInstaller } from "./install";
@@ -249,5 +249,36 @@ describe("extension service", () => {
 
   it("answers false for a plugin that is not installed", async () => {
     expect(await service.mayLoad("local/missing")).toBe(false);
+  });
+
+  it("notifies after a successful install, grant and remove, not a failed grant", async () => {
+    const onChange = vi.fn(async () => undefined);
+    const notifying = createExtensionService({
+      installer: createPluginInstaller(path.join(dir, "extensions")),
+      consent,
+      now: () => "2026-11-06T00:00:00Z",
+      onChange,
+    });
+
+    expect(await notifying.install(validPluginBytes())).toMatchObject({
+      ok: true,
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    const [listed] = await notifying.list();
+    if (listed === undefined) throw new Error("no extension listed");
+
+    expect(await notifying.grantConsent(listed.key, "yc1-nope")).toMatchObject({
+      ok: false,
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    expect(
+      await notifying.grantConsent(listed.key, listed.fingerprint),
+    ).toEqual({ ok: true });
+    expect(onChange).toHaveBeenCalledTimes(2);
+
+    await notifying.remove(listed.key);
+    expect(onChange).toHaveBeenCalledTimes(3);
   });
 });

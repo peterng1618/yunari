@@ -110,8 +110,13 @@ export function createExtensionService(options: {
   readonly installer: PluginInstaller;
   readonly consent: ConsentStore;
   readonly now: () => string;
+  /** Runs after a successful install, grant or remove, so the host can reload
+   *  the managers that read plugin contributions. */
+  readonly onChange?: () => Promise<void>;
 }): ExtensionService {
   const { installer, consent } = options;
+  const changed = (): Promise<void> =>
+    options.onChange?.() ?? Promise.resolve();
 
   /** A plugin the index cannot account for must not load, but its absence is a
    *  refusal rather than a failed request. */
@@ -144,8 +149,10 @@ export function createExtensionService(options: {
       );
     },
 
-    install(bytes) {
-      return installer.install(bytes);
+    async install(bytes) {
+      const result = await installer.install(bytes);
+      if (result.ok) await changed();
+      return result;
     },
 
     async grantConsent(key, fingerprint) {
@@ -154,7 +161,10 @@ export function createExtensionService(options: {
 
       // A data or declarative plugin runs no code of its own; nothing was ever
       // required, so granting changes no stored state.
-      if (!consentRequired(plugin.manifest.execution)) return { ok: true };
+      if (!consentRequired(plugin.manifest.execution)) {
+        await changed();
+        return { ok: true };
+      }
 
       const computed = await fingerprintFor(plugin);
       if (computed !== fingerprint) return { ok: false, message: MISMATCH };
@@ -165,12 +175,14 @@ export function createExtensionService(options: {
         fingerprint: computed,
         grantedAt: options.now(),
       });
+      await changed();
       return { ok: true };
     },
 
     async remove(key) {
       await installer.remove(key);
       await consent.revoke(key);
+      await changed();
     },
 
     async mayLoad(key) {
