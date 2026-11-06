@@ -4,6 +4,11 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  type CodeAssetSourceContribution,
+  PluginAssetSource,
+} from "../extensions/asset-sources.js";
+import type { PluginSupervisor } from "../extensions/runtime/supervisor.js";
 import { curatedFontSource } from "./fonts/curated.js";
 import { lucideSource } from "./icons/lucide.js";
 import {
@@ -12,6 +17,7 @@ import {
   isNameRefusal,
 } from "./routes.js";
 import type { AssetSource } from "./source.js";
+import { createAssetSources } from "./sources.js";
 
 // Small enough that the 413 case is a short body rather than a hundred
 // megabytes of base64. The route reads the store's own constant; this only
@@ -105,6 +111,63 @@ describe("the asset routes", () => {
       "palette",
     );
     expect(body.sources.find((s) => s.id === "lucide")?.presetKind).toBeNull();
+  });
+
+  it("lists a plugin asset source beside the built-ins", async () => {
+    const contribution: CodeAssetSourceContribution = {
+      id: "plugin-source",
+      label: "Plugin Source",
+      category: "image",
+      body: "grid",
+      entry: "code",
+    };
+    const supervisor: PluginSupervisor = {
+      alive: true,
+      start: () => Promise.resolve(),
+      request: <T>() => Promise.resolve(undefined as T),
+      stop: () => Promise.resolve(),
+    };
+    const pluginSource = new PluginAssetSource({
+      plugin: {
+        key: "local/acme-assets",
+        publisher: "local",
+        manifest: {
+          manifestVersion: 1,
+          id: "acme-assets",
+          name: "Acme Assets",
+          version: "1.0.0",
+          description: "Serves artwork.",
+          engines: { yunari: ">=0.1.0" },
+          pluginApi: 1,
+          execution: "trusted-worker",
+          capabilities: ["asset:provide"],
+          contributes: { assetSources: [contribution] },
+          main: "main.js",
+        },
+        directory: "plugins/acme-assets",
+        contentHash: "a".repeat(64),
+      },
+      supervisor,
+      contribution,
+    });
+    const base = await start({
+      sources: createAssetSources([lucideSource], [pluginSource]),
+    });
+    const body = (await (await fetch(`${base}/api/assets/sources`)).json()) as {
+      sources: readonly Record<string, unknown>[];
+    };
+
+    expect(body.sources).toContainEqual(
+      expect.objectContaining({
+        id: "plugin-source",
+        label: "Plugin Source",
+        category: "image",
+        body: "grid",
+        requires: null,
+        configurable: false,
+      }),
+    );
+    expect(body.sources[0]?.id).toBe("lucide");
   });
 
   it("lists the sources, with no credential needed", async () => {

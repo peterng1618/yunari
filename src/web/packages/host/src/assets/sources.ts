@@ -30,3 +30,24 @@ export const ASSET_SOURCES: readonly AssetSource[] = [
   googleFontSource,
   wallpaperEngineSource,
 ];
+
+/**
+ * Built-ins first, then plugin sources. One id names one source: a plugin may
+ * neither shadow a built-in nor another plugin.
+ */
+export function createAssetSources(
+  builtins: readonly AssetSource[],
+  plugins: readonly AssetSource[],
+): readonly AssetSource[] {
+  const sources: AssetSource[] = [];
+  const seen = new Set<string>();
+
+  for (const source of [...builtins, ...plugins]) {
+    if (seen.has(source.id))
+      throw new Error(`"${source.id}" is already an asset source`);
+    seen.add(source.id);
+    sources.push(source);
+  }
+
+  return sources;
+}

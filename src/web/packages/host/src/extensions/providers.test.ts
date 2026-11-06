@@ -641,6 +641,30 @@ describe("createPluginProviders", () => {
     ]);
   });
 
+  it("uses a shared supervisor map instead of starting its own", async () => {
+    const acme = plugin();
+    const shared: PluginSupervisor = {
+      alive: true,
+      start: () => Promise.resolve(),
+      request: <T>() => Promise.resolve(undefined as T),
+      stop: () => Promise.resolve(),
+    };
+
+    const runtime = await createPluginProviders({
+      installer: fakeInstaller([acme]),
+      extensions: fakeExtensions({
+        consentRecord: () => Promise.resolve(consentOf(acme)),
+      }),
+      hostApi,
+      supervisors: new Map([[acme.key, shared]]),
+    });
+
+    expect(supervisorMocks.created).toEqual([]);
+    expect(runtime.providers.map((provider) => provider.id)).toEqual([
+      "acme",
+    ]);
+  });
+
   it("skips plugins that are not trusted workers or contribute no providers", async () => {
     const data = plugin({ id: "data-only", execution: "data" });
     const nothing = plugin({ id: "nothing", contributes: {} });

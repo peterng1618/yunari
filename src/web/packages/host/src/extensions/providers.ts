@@ -1,6 +1,7 @@
 import {
   type ConsentRecord,
   type InstalledPlugin,
+  isCodeAssetSourceEntry,
   type PluginInstaller,
 } from "@yunari/extension-api";
 import {
@@ -320,7 +321,7 @@ export class PluginSensorProvider implements SensorProvider {
   }
 }
 
-export interface CreatePluginProvidersOptions {
+export interface StartPluginSupervisorsOptions {
   readonly installer: PluginInstaller;
   readonly extensions: ExtensionService;
   readonly hostApi: HostApiDispatcher;
@@ -329,27 +330,44 @@ export interface CreatePluginProvidersOptions {
   readonly onFailure?: (pluginKey: string, reason: string) => void;
 }
 
-/**
- * Starts one worker per loadable provider plugin and adapts it once. A plugin
- * that fails to start is reported and contributes nothing; the rest keep
- * starting.
- *
- * One provider per plugin, not per `sensorProviders` entry: the worker answers
- * `describe`/`sample` for the whole plugin, and provider order is keyed by the
- * plugin's qualified key, so more rows would only ask the same child the same
- * question twice. The first contribution supplies the row's id and label.
- */
-export async function createPluginProviders(
-  options: CreatePluginProvidersOptions,
-): Promise<{
-  readonly providers: readonly PluginSensorProvider[];
+export interface CreatePluginProvidersOptions
+  extends StartPluginSupervisorsOptions {
+  /** The one worker per plugin, already started and owned by the caller. */
+  readonly supervisors?: ReadonlyMap<string, PluginSupervisor>;
+}
+
+export interface PluginSupervisors {
+  readonly supervisors: ReadonlyMap<string, PluginSupervisor>;
   stop(): Promise<void>;
-}> {
-  const providers: PluginSensorProvider[] = [];
-  const supervisors: PluginSupervisor[] = [];
+}
+
+/** The one definition of "this plugin needs a forked worker": it contributes
+ *  sensor providers or code asset sources, and only a trusted worker runs
+ *  code. A plugin contributing both still gets one process. */
+export function needsCodeWorker(plugin: InstalledPlugin): boolean {
+  return (
+    plugin.manifest.execution === "trusted-worker" &&
+    (isProviderPlugin(plugin) ||
+      (plugin.manifest.contributes.assetSources ?? []).some(
+        isCodeAssetSourceEntry,
+      ))
+  );
+}
+
+/**
+ * Starts one supervisor per loadable plugin that needs code.
+ *
+ * A plugin that fails to start is reported and left out; the rest keep
+ * starting. The map is keyed by the plugin's qualified key, so every adapter a
+ * plugin contributes answers through the same child.
+ */
+export async function startPluginSupervisors(
+  options: StartPluginSupervisorsOptions,
+): Promise<PluginSupervisors> {
+  const supervisors = new Map<string, PluginSupervisor>();
 
   for (const plugin of await options.installer.list()) {
-    if (!isProviderPlugin(plugin)) continue;
+    if (!needsCodeWorker(plugin)) continue;
 
     let loadable = false;
     let consent: ConsentRecord | undefined;
@@ -361,13 +379,10 @@ export async function createPluginProviders(
       }
     } catch {
       // A plugin whose consent cannot be read is not loadable; only this one
-      // loses its provider.
+      // loses its worker.
       loadable = false;
     }
     if (!loadable || consent === undefined) continue;
-
-    const contribution = plugin.manifest.contributes.sensorProviders?.[0];
-    if (contribution === undefined) continue;
 
     const supervisor = createPluginSupervisor({
       plugin,
@@ -388,10 +403,62 @@ export async function createPluginProviders(
       continue;
     }
 
-    supervisors.push(supervisor);
-    providers.push(
-      new PluginSensorProvider({ plugin, supervisor, contribution }),
-    );
+    supervisors.set(plugin.key, supervisor);
+  }
+
+  let stopped = false;
+
+  return {
+    supervisors,
+    async stop() {
+      if (stopped) return;
+      stopped = true;
+      for (const supervisor of supervisors.values()) {
+        try {
+          await supervisor.stop();
+        } catch {
+          // One worker that will not stop must not strand the others.
+        }
+      }
+    },
+  };
+}
+
+/**
+ * One provider per loadable provider plugin, adapted from its supervisor.
+ *
+ * An optional shared map is used instead of starting workers: `main.ts`
+ * starts them once so a plugin contributing both providers and asset sources
+ * is one process. Without the map this starts and owns its own workers, which
+ * is what its standalone callers and tests expect.
+ */
+export async function createPluginProviders(
+  options: CreatePluginProvidersOptions,
+): Promise<{
+  readonly providers: readonly PluginSensorProvider[];
+  stop(): Promise<void>;
+}> {
+  const runtime =
+    options.supervisors === undefined
+      ? await startPluginSupervisors(options)
+      : undefined;
+  const supervisors = options.supervisors ?? runtime?.supervisors;
+  const providers: PluginSensorProvider[] = [];
+
+  if (supervisors !== undefined) {
+    for (const plugin of await options.installer.list()) {
+      if (!isProviderPlugin(plugin)) continue;
+
+      const supervisor = supervisors.get(plugin.key);
+      if (supervisor === undefined) continue;
+
+      const contribution = plugin.manifest.contributes.sensorProviders?.[0];
+      if (contribution === undefined) continue;
+
+      providers.push(
+        new PluginSensorProvider({ plugin, supervisor, contribution }),
+      );
+    }
   }
 
   let stopped = false;
@@ -401,13 +468,7 @@ export async function createPluginProviders(
     async stop() {
       if (stopped) return;
       stopped = true;
-      for (const supervisor of supervisors) {
-        try {
-          await supervisor.stop();
-        } catch {
-          // One worker that will not stop must not strand the others.
-        }
-      }
+      await runtime?.stop();
     },
   };
 }

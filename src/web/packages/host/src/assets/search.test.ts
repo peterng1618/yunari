@@ -144,6 +144,22 @@ describe("searchSources", () => {
     ]);
   });
 
+  it("does not prefix an id the source already namespaced", async () => {
+    const outcome = await searchSources(request(["fake-a"]), context(), [
+      fakeSource({
+        id: "fake-a",
+        search: async () => ({
+          results: [result("fake-a:1")],
+          totalPages: 1,
+        }),
+      }),
+    ]);
+
+    expect(outcome.pages[0]?.results.map((entry) => entry.id)).toEqual([
+      "fake-a:1",
+    ]);
+  });
+
   it("answers pages in registry order, not completion order", async () => {
     const slow = fakeSource({
       id: "fake-a",

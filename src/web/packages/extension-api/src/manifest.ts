@@ -133,7 +133,7 @@ const VERSION_PATTERN = new RegExp(
 const ENGINE_RANGE_PATTERN = /^>=(\d+)\.(\d+)\.(\d+)$/;
 /** The bodies the editor renders itself. Any other body is plugin UI and needs
  *  the sandboxed profile; an `entry` is code and needs the trusted one. */
-const BUILT_IN_ASSET_BODIES: ReadonlySet<string> = new Set([
+export const BUILT_IN_ASSET_BODIES: ReadonlySet<string> = new Set([
   "grid",
   "font-picker",
   "wallpaper-engine",
@@ -340,8 +340,15 @@ interface Requirement {
   readonly profile: ExecutionProfile;
 }
 
+/** A string `entry` is code the host runs, so it needs the trusted profile. One
+ *  definition for the manifest's profile rule and every adapter that loads a
+ *  code contribution. */
+export function isCodeAssetSourceEntry(source: ObjectValue): boolean {
+  return typeof source["entry"] === "string";
+}
+
 function assetSourceProfile(source: ObjectValue): ExecutionProfile {
-  if (typeof source["entry"] === "string") return "trusted-worker";
+  if (isCodeAssetSourceEntry(source)) return "trusted-worker";
   if (
     typeof source["body"] === "string" &&
     !BUILT_IN_ASSET_BODIES.has(source["body"])

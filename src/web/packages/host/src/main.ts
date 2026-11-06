@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
+import { ASSET_SOURCES, createAssetSources } from "./assets/sources.js";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
@@ -15,6 +16,7 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import { createPluginAssetSources } from "./extensions/asset-sources.js";
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
@@ -22,7 +24,10 @@ import {
   createProviderOrderStore,
   orderProviders,
 } from "./extensions/provider-order.js";
-import { createPluginProviders } from "./extensions/providers.js";
+import {
+  createPluginProviders,
+  startPluginSupervisors,
+} from "./extensions/providers.js";
 import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { createExtensionService } from "./extensions/service.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
@@ -251,15 +256,31 @@ export async function run(argv: readonly string[]): Promise<number> {
   });
   await refreshPluginSources();
   await customProvider.reload();
-  // One forked worker per loadable provider plugin. A plugin that will not
-  // start is reported and left out; the machine's own providers still answer.
+  // One forked worker per loadable plugin that needs code. A plugin that will
+  // not start is reported and left out; the machine's own providers still
+  // answer, and a plugin contributing both providers and asset sources is one
+  // process. The supervisors are started once and shared by both adapters.
+  const pluginHostApi = createHostApiDispatcher({ settingsDir });
+  const onPluginFailure = (pluginKey: string, reason: string): void => {
+    console.error(`Plugin worker ${pluginKey}: ${reason}`);
+  };
+  const pluginSupervisors = await startPluginSupervisors({
+    installer: pluginInstaller,
+    extensions,
+    hostApi: pluginHostApi,
+    onFailure: onPluginFailure,
+  });
   const pluginRuntime = await createPluginProviders({
     installer: pluginInstaller,
     extensions,
-    hostApi: createHostApiDispatcher({ settingsDir }),
-    onFailure: (pluginKey, reason) => {
-      console.error(`Plugin provider ${pluginKey}: ${reason}`);
-    },
+    hostApi: pluginHostApi,
+    supervisors: pluginSupervisors.supervisors,
+    onFailure: onPluginFailure,
+  });
+  const pluginAssetSources = await createPluginAssetSources({
+    installer: pluginInstaller,
+    supervisors: pluginSupervisors.supervisors,
+    onFailure: onPluginFailure,
   });
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
@@ -563,7 +584,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     fontFavorites,
     credentials,
     sources: { store: customSources, provider: customProvider },
-    assets: { credentials },
+    assets: {
+      credentials,
+      sources: createAssetSources(ASSET_SOURCES, pluginAssetSources),
+    },
     artwork: mediaArtwork,
     gameArtwork: createGameArtwork({
       ...(steamRoot === undefined ? {} : { steamRoot }),
@@ -925,9 +949,10 @@ export async function run(argv: readonly string[]): Promise<number> {
         // A throwing stop must not leave the server listening with no tray.
         void (async () => {
           // Plugin workers stop before the panels: a child left polling would
-          // outlive the host that owned it.
+          // outlive the host that owned it. The supervisors are shared by the
+          // provider and asset-source adapters, so they are stopped once here.
           try {
-            await pluginRuntime.stop();
+            await pluginSupervisors.stop();
           } catch (error) {
             console.error(
               `The plugin workers could not stop: ${error instanceof Error ? error.message : String(error)}`,
