@@ -42,6 +42,7 @@ function installed(
     execution: "declarative",
     capabilities: ["asset:provide"],
     contributions: {},
+    devices: [],
     consent: "not-required",
     fingerprint: "a".repeat(64),
     ...overrides,

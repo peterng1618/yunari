@@ -14,7 +14,11 @@ import type {
 } from "../providers/provider.js";
 import type { ConsentStore } from "./consent-store.js";
 import { createProviderOrderStore, orderProviders } from "./provider-order.js";
-import { createPluginProviders, PluginSensorProvider } from "./providers.js";
+import {
+  createPluginProviders,
+  needsCodeWorker,
+  PluginSensorProvider,
+} from "./providers.js";
 import type {
   HostApiDispatcher,
   PluginSupervisor,
@@ -439,6 +443,39 @@ describe("PluginSensorProvider", () => {
     await expect(provider.sample(["cpu.load"], NOW)).rejects.toThrow();
     expect(provider.health().available).toBe(false);
     expect(provider.health().message).not.toContain("10.0.0.5");
+  });
+});
+
+describe("needsCodeWorker", () => {
+  it("needs a worker for a plugin that contributes a panel family", () => {
+    const panelPlugin = plugin({
+      capabilities: ["panel:drive", "usb:device"],
+      contributes: {
+        panelFamilies: [
+          {
+            id: "acme-panel",
+            label: "Acme panel",
+            vendorId: 0x1234,
+            productId: 0x5678,
+            geometry: { width: 480, height: 1920 },
+            support: {
+              maker: "Acme",
+              hardwareRevision: "1",
+              supportedFirmware: ["1.0"],
+              updatedAt: "2026-11-07",
+            },
+            commands: ["brightness"],
+            transports: ["usb"],
+          },
+        ],
+      },
+    });
+
+    expect(needsCodeWorker(panelPlugin)).toBe(true);
+  });
+
+  it("does not need a worker for a plugin with no code contribution", () => {
+    expect(needsCodeWorker(plugin({ contributes: {} }))).toBe(false);
   });
 });
 

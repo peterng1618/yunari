@@ -15,6 +15,7 @@ function extensionOf(options: {
     execution: "declarative",
     capabilities: [],
     contributions: { customSources: options.customSources ?? [] },
+    devices: [],
     consent: options.consent ?? "not-required",
     fingerprint: "fingerprint",
   };

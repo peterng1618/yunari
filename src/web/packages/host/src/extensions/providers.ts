@@ -342,15 +342,16 @@ export interface PluginSupervisors {
 }
 
 /** The one definition of "this plugin needs a forked worker": it contributes
- *  sensor providers or code asset sources, and only a trusted worker runs
- *  code. A plugin contributing both still gets one process. */
+ *  sensor providers, code asset sources or a panel family, and only a trusted
+ *  worker runs code. A plugin contributing several still gets one process. */
 export function needsCodeWorker(plugin: InstalledPlugin): boolean {
   return (
     plugin.manifest.execution === "trusted-worker" &&
     (isProviderPlugin(plugin) ||
       (plugin.manifest.contributes.assetSources ?? []).some(
         isCodeAssetSourceEntry,
-      ))
+      ) ||
+      plugin.manifest.contributes.panelFamilies !== undefined)
   );
 }
 
