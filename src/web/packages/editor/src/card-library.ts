@@ -1,9 +1,15 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
-import { visitSceneObjects, YUNARI_ASSET_PROPERTY } from "@yunari/scene-fabric";
+import {
+  isFabricAssetReference,
+  visitSceneObjects,
+  YUNARI_ASSET_PROPERTY,
+} from "@yunari/scene-fabric";
 import {
   instantiateCard,
   type ObjectJson,
+  type PackagedAssetAdoption,
   type TokenSubstitution,
+  unitAssetDeclarations,
 } from "@yunari/theme-kit";
 import { type FabricObject, util } from "fabric/es";
 import type { AssetManager } from "./asset-manager/index.js";
@@ -56,11 +62,15 @@ export async function insertCard(
      * manager owns ids, paths and collision renames, so the copy is handed its
      * map rather than resolving bytes itself.
      */
-    readonly assetManager?: Pick<AssetManager, "adoptPackaged">;
+    readonly assetManager?: Pick<
+      AssetManager,
+      "planPackaged" | "commitPackaged" | "previewUrl"
+    >;
   },
 ): Promise<FabricObject> {
   const installed = installedUnit(cardId);
-  const assetIds = await adoptedAssets(installed, options.assetManager);
+  const manager = options.assetManager;
+  const adopted = await adoptedAssets(installed, manager);
   const unit = installed.unit;
   const copy = instantiateCard({
     unit,
@@ -69,7 +79,7 @@ export async function insertCard(
     existingBindingIds: Object.values(options.bindings ?? {}).flatMap(
       (bindings) => bindings.map((binding) => binding.id),
     ),
-    ...(assetIds === undefined ? {} : { assetIds }),
+    ...(adopted === undefined ? {} : { assetIds: adopted.assetIds }),
     // The one place a new object's position is decided — the same cascade every
     // other insertion takes, rather than a corner this module invented.
     origin: nextNewObjectPlacement(editor),
@@ -82,7 +92,23 @@ export async function insertCard(
     throw new Error(unresolved.map((issue) => issue.detail).join(" "));
   }
 
-  const [object] = await util.enlivenObjects<FabricObject>([copy.card]);
+  // The copy can be built, so the package's declarations and bytes may land.
+  // Adopting before this point would leave an orphan on a refused insert.
+  if (adopted !== undefined && manager !== undefined) {
+    manager.commitPackaged(adopted);
+  }
+
+  // Fabric enlivens an image from `src` alone, and a persisted asset reference
+  // carries none: without this the copy paints blank until a reload hydrates
+  // it. Set on the plain object, before enlivening.
+  const card =
+    manager === undefined
+      ? copy.card
+      : withPreviewSources(copy.card, unit.label, (assetId) =>
+          manager.previewUrl(assetId),
+        );
+
+  const [object] = await util.enlivenObjects<FabricObject>([card]);
   if (object === undefined) {
     throw new Error(`The ${unit.label} card could not be built.`);
   }
@@ -138,18 +164,19 @@ function installedUnit(cardId: string): InstalledWidgetUnit {
   return unit;
 }
 
-/** Adopts the unit's scene assets, refusing a surface that cannot carry them.
+/** Plans the unit's scene assets, refusing a surface that cannot carry them.
  *
- * **Only what the unit's own subtree names is adopted.** A unit document also
- * carries its globals' font faces, which a card may not draw; adopting those
- * would leave an orphan declaration behind on every copy. */
+ * **Only what the unit's own subtree names is adopted**, through the one
+ * selector the MCP server also uses. A unit document also carries its globals'
+ * font faces, which a card may not draw; adopting those would leave an orphan
+ * declaration behind on every copy. */
 async function adoptedAssets(
   installed: InstalledWidgetUnit,
-  manager: Pick<AssetManager, "adoptPackaged"> | undefined,
-): Promise<ReadonlyMap<string, string> | undefined> {
-  const referenced = sceneAssetIds(installed.unit.build());
-  const declarations = installed.declarations.filter((declaration) =>
-    referenced.has(declaration.id),
+  manager: Pick<AssetManager, "planPackaged"> | undefined,
+): Promise<PackagedAssetAdoption | undefined> {
+  const declarations = unitAssetDeclarations(
+    installed.unit,
+    installed.declarations,
   );
   if (declarations.length === 0) return undefined;
   if (manager === undefined) {
@@ -162,28 +189,47 @@ async function adoptedAssets(
     const bytes = installed.assets[declaration.path];
     if (bytes !== undefined) assets[declaration.path] = bytes;
   }
-  return await manager.adoptPackaged(declarations, assets);
+  return await manager.planPackaged(declarations, assets);
 }
 
-/** Every asset id the authored subtree references through `yunariAsset`. */
-function sceneAssetIds(value: ObjectJson): Set<string> {
-  const ids = new Set<string>();
-  const visit = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
-    if (typeof node !== "object" || node === null) return;
-    const record = node as Readonly<Record<string, unknown>>;
-    const asset = record[YUNARI_ASSET_PROPERTY];
-    if (typeof asset === "object" && asset !== null) {
-      const id = (asset as Readonly<Record<string, unknown>>)["assetId"];
-      if (typeof id === "string") ids.add(id);
-    }
-    for (const child of Object.values(record)) visit(child);
+/**
+ * The copy with every asset-bearing node pointed at its adopted preview URL.
+ *
+ * A reference may sit at any depth, so the walk descends through groups. A
+ * missing URL is a refusal, not a blank picture: an image nothing can decode
+ * would look inserted and never paint.
+ */
+function withPreviewSources(
+  object: ObjectJson,
+  label: string,
+  previewUrl: (assetId: string) => string | undefined,
+): ObjectJson {
+  const reference = object[YUNARI_ASSET_PROPERTY];
+  const asset = isFabricAssetReference(reference) ? reference : undefined;
+  const src = asset === undefined ? undefined : previewUrl(asset.assetId);
+  if (asset !== undefined && src === undefined) {
+    throw new Error(
+      `The ${label} card's asset "${asset.assetId}" has no preview to show.`,
+    );
+  }
+  const children = object["objects"];
+  return {
+    ...object,
+    ...(src === undefined ? {} : { src }),
+    ...(Array.isArray(children)
+      ? {
+          objects: children.map((child) =>
+            isRecord(child)
+              ? withPreviewSources(child, label, previewUrl)
+              : child,
+          ),
+        }
+      : {}),
   };
-  visit(value);
-  return ids;
+}
+
+function isRecord(value: unknown): value is ObjectJson {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Every id the canvas already holds, descending into groups. */

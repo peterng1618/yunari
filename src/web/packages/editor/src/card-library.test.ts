@@ -17,8 +17,8 @@ import {
   starterTypeTokens,
 } from "@yunari/theme-kit";
 import { writeWidgetPackage } from "@yunari/theme-package";
-import { Canvas, type FabricObject, Group, util } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Canvas, FabricImage, type FabricObject, Group, util } from "fabric/es";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetManager } from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
@@ -82,6 +82,10 @@ beforeEach(() => {
         },
       }) as unknown as CanvasRenderingContext2D,
   );
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const CPU_CARD = "group-cpu-card";
@@ -444,6 +448,11 @@ describe("the card library", () => {
 
   it("adopts only the assets the unit's own scene draws", async () => {
     await installWidgetPack("picture-pack", picturePack());
+    // The copy now arrives with a preview src, and jsdom cannot decode it.
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:pack-picture");
+    vi.spyOn(FabricImage, "fromObject").mockImplementation(
+      async () => new FabricImage(document.createElement("img")),
+    );
     const assets = new AssetManager();
 
     await insertCard(editorStub(stage()) as never, "picture", {

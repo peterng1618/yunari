@@ -13,7 +13,10 @@ import {
   sceneObjects,
   setObjectAssetReference,
 } from "@yunari/scene-fabric";
-import { adoptPackagedAssets } from "@yunari/theme-kit";
+import {
+  adoptPackagedAssets,
+  type PackagedAssetAdoption,
+} from "@yunari/theme-kit";
 import { FabricImage, type FabricObject, type StaticCanvas } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
@@ -234,6 +237,20 @@ export class AssetManager {
     declarations: readonly AssetReference[],
     assets: Readonly<Record<string, Uint8Array>>,
   ): Promise<ReadonlyMap<string, string>> {
+    return this.commitPackaged(await this.planPackaged(declarations, assets));
+  }
+
+  /**
+   * Drafts an adoption without touching the document.
+   *
+   * A caller that must build something with the adopted ids — a card copy that
+   * may refuse — plans first and commits only once the build succeeded, so a
+   * refusal leaves no declaration or byte nothing draws.
+   */
+  async planPackaged(
+    declarations: readonly AssetReference[],
+    assets: Readonly<Record<string, Uint8Array>>,
+  ): Promise<PackagedAssetAdoption> {
     // The editor's own policy is checked before the shared adoption runs: an
     // extension this editor does not package is refused rather than guessed
     // into a neighbouring kind. None of this mutates, and a refusal here means
@@ -254,15 +271,17 @@ export class AssetManager {
       if (type.kind === "font") fontFactsOf(declaration, extension);
     }
 
-    if (declarations.length === 0) return new Map();
-
-    const adopted = await adoptPackagedAssets(
+    return await adoptPackagedAssets(
       { declarations: this.#declarations, assets: this.#assets },
       { declarations, assets },
     );
+  }
+
+  /** Applies a plan `planPackaged` made; one insertion is one mutation. */
+  commitPackaged(adopted: PackagedAssetAdoption): ReadonlyMap<string, string> {
+    if (adopted.assetIds.size === 0) return adopted.assetIds;
     this.#declarations = [...adopted.declarations] as LocalAssetReference[];
     this.#assets = { ...adopted.assets };
-    // One insertion is one mutation, however many assets the pack carried.
     this.#mutated();
     return adopted.assetIds;
   }
