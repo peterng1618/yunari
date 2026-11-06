@@ -197,11 +197,17 @@ length, the slot count and the settle differ.
   108, p90 114) — about 9.1 FPS. The same payload on a two-bucket ring with the
   settle measured 120 ms on 2026-10-31 (145 updates with no skips at 120 ms, 2
   missing of ~145 at 115 ms, ~6% at 110 ms), so the ring, not only the bytes,
-  is part of the ceiling. Mode B uses CAM's ring and its 110 ms cadence
-  (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`). Measured back to back on the attached
-  Z73 on 2026-11-06, every frame accepted: Mode A 9.09 FPS (110 ms median),
-  Mode B 9.99 FPS (98 ms median). On the glass the owner found Mode B as
-  smooth as CAM with no visible quality difference.
+  is part of the ceiling. Mode B uses CAM's ring but asks for **100 ms**
+  (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`). Measured on the attached Z73 on
+  2026-11-06: one frame costs ~75 ms of host work, and a 100 ms pace sent 121
+  of 121 frames with no refused command.
+- **100 ms, not CAM's 110 ms, because the source is a video.** The page plays
+  a video and the panel is fed screenshots of it. A 30 fps source sampled every
+  110 ms advances 3.3 frames each time — the motion moves 3, 3, 4, 3, 3, 4
+  source frames, which reads as micro-judder on heavy motion. Every 100 ms the
+  advance is exactly 3 frames at 30 fps and exactly 6 at 60 fps. The owner
+  reported CAM as slightly smoother on a heavy-motion theme before this change;
+  the beat is the measured explanation.
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host

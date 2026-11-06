@@ -120,11 +120,24 @@ const UPLOAD_SETTLE_MS = 10;
  */
 export const KRAKEN_FRAME_INTERVAL_MS = 140;
 /**
- * **A paletted switch costs the glass about 110 ms.** CAM's captured frame
- * starts are 110 ms apart (median; p10 108, p90 114) — about 9.1 fps. The
- * quarter-size frame leaves the wire and the glass both inside that budget.
+ * **A paletted switch costs the glass about 110 ms, and CAM sends one every
+ * 110 ms** (captured frame starts: median 110, p10 108, p90 114 — about 9.1
+ * fps). This driver asks for **100 ms** instead, and the reason is the source,
+ * not the wire.
+ *
+ * The panel is fed screenshots of a page playing a video. A 30 fps source
+ * sampled every 110 ms advances **3.3 frames** each time, so the motion moves
+ * 3, 3, 4, 3, 3, 4 source frames — a beat a viewer reads as micro-judder on
+ * heavy motion even though the panel's own rate is steady. Every 100 ms the
+ * advance is **exactly 3 source frames at 30 fps and exactly 6 at 60 fps**, so
+ * the sampled motion is even. 9.1 fps cannot be made even against either rate;
+ * 10 fps is the nearest cadence that can.
+ *
+ * Measured on the attached Z73 on 2026-11-06: one frame costs 75 ms of host
+ * work (encode, six commands, 103,424 bytes of bulk), and a 100 ms pace sent
+ * 121 of 121 frames with no refused command.
  */
-export const KRAKEN_PALETTED_FRAME_INTERVAL_MS = 110;
+export const KRAKEN_PALETTED_FRAME_INTERVAL_MS = 100;
 
 /**
  * The header that precedes a frame: the 12-byte magic, the transfer type, and

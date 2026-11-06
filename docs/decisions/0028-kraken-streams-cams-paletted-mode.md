@@ -106,7 +106,14 @@ panel when it changes.
 - **Mode B** is CAM's stream: `toPalettedFrame` builds a per-frame 256-entry
   palette and diffs the quantization error with Floyd–Steinberg; the driver
   sends mode `0x03` into 101-slot buckets across all 16, deletes twice, sends no
-  settle, and runs at 110 ms.
+  settle, and runs at **100 ms**.
+
+**100 ms rather than CAM's 110 ms, on the owner's report.** After the first
+ship the owner found CAM still slightly smoother on a heavy-motion video theme.
+The page plays a video and the panel is fed screenshots of it: at 30 fps every
+110 ms advances the source by 3.3 frames, so the motion moves 3, 3, 4, 3, 3, 4
+frames — a beat that reads as micro-judder. At 100 ms the advance is exactly 3
+frames at 30 fps and exactly 6 at 60 fps, so the sampled motion is even.
 
 The palette is built from exact channel sums per 5-bit bin, not from the bin
 centre. A flat colour is otherwise not exactly representable, and because
@@ -135,16 +142,17 @@ today — plays Mode A, so the full-colour output is never traded away silently.
 ## Hardware check
 
 Measured 2026-11-06 on the attached Z73, firmware 5.11.0, by streaming synthetic
-frames back to back and counting accepted frames (any refused command throws):
+frames and counting accepted frames (any refused command throws):
 
 | Stream | Frames/s | Median frame time |
 |---|---|---|
 | Mode A | 9.09 | 110 ms |
-| Mode B | 9.99 | 98 ms |
+| Mode B, back to back | 9.99 | 98 ms (including PNG generation) |
+| Mode B, paced | 10.08 | 75 ms of host work per frame |
 
-Mode B leaves 12 ms of headroom under CAM's 110 ms cadence, so the runner's tick
-lands every frame; Mode A's 110 ms is the driver's own send cost, which is why
-its cadence stays at 140 ms for the glass.
+A paced 100 ms run sent 121 of 121 frames with no refused command. Mode A's
+110 ms is the driver's own send cost, which is why its cadence stays at 140 ms
+for the glass.
 
 Quality is CAM's own target: a 256-colour dithered picture. 0020 rejected that
 against a 24-bit ideal; the user's target is CAM's output, which is this format,
