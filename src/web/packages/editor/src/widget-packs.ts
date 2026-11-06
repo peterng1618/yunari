@@ -1,5 +1,5 @@
-import type { AssetReference } from "@yunari/renderer-core";
-import { type CardUnit, cardUnitFromWidget } from "@yunari/theme-kit";
+import { type PackagedWidgetUnit, packagedUnits } from "@yunari/theme-kit";
+import type { WidgetPackageResult } from "@yunari/theme-package";
 import {
   readWidgetPackage,
   type WidgetPackSummary,
@@ -15,19 +15,11 @@ import {
  * would be fabricated content. The store is module-lived because every surface
  * that offers a unit reads the same list: the Add pane, the canvas context
  * menu and an insertion all resolve one unit from one place.
+ *
+ * The unit shape and the duplicate-id rule are `@yunari/theme-kit`'s; this
+ * module owns only reading the host's routes and keeping the live list.
  */
-export interface InstalledWidgetUnit {
-  readonly id: string;
-  readonly label: string;
-  /** The glyph key: the unit's own id, because two packs may both ship a card
-   *  called "CPU" and only the id tells them apart. */
-  readonly diagram: string;
-  readonly packId: string;
-  /** The unit as the kit's copier consumes it. */
-  readonly unit: CardUnit;
-  readonly declarations: readonly AssetReference[];
-  readonly assets: Readonly<Record<string, Uint8Array>>;
-}
+export type InstalledWidgetUnit = PackagedWidgetUnit;
 
 const LIST_PATH = "/api/widget-packs";
 const packPath = (id: string): string =>
@@ -73,9 +65,8 @@ function packsOf(body: unknown): readonly WidgetPackSummary[] {
  * Reads every installed pack and returns its units, replacing the live list.
  *
  * A failed listing or pack read rejects and **leaves the live list as it was**;
- * the caller decides how to report it. A unit id in two packs rejects outright:
- * an insertion names a unit only by id, so two packs claiming one id would make
- * the id name whichever pack the listing happened to put first.
+ * the caller decides how to report it. A unit id in two packs is refused by
+ * `packagedUnits`, the one owner of that rule.
  */
 export async function loadWidgetUnits(
   fetcher: typeof fetch = fetch,
@@ -87,8 +78,10 @@ export async function loadWidgetUnits(
     );
   }
   const summaries = packsOf(await listing.json());
-  const owners = new Map<string, string>();
-  const units: InstalledWidgetUnit[] = [];
+  const packs: {
+    readonly packId: string;
+    readonly result: WidgetPackageResult;
+  }[] = [];
 
   for (const summary of summaries) {
     const response = await fetcher(packPath(summary.id));
@@ -104,43 +97,12 @@ export async function loadWidgetUnits(
         `The widget pack "${summary.id}" is not readable: ${result.message}`,
       );
     }
-    for (const unit of result.units) {
-      const owner = owners.get(unit.id);
-      if (owner !== undefined) {
-        throw new Error(
-          `The unit "${unit.id}" is carried by more than one installed pack ` +
-            `("${owner}" and "${summary.id}"); an insertion names a unit by id, ` +
-            "so two packs may not claim one.",
-        );
-      }
-      owners.set(unit.id, summary.id);
-      units.push({
-        id: unit.id,
-        label: unit.label,
-        diagram: unit.id,
-        packId: summary.id,
-        unit: cardUnitFromWidget(unit),
-        declarations: unit.declarations,
-        assets: unit.assets,
-      });
-    }
+    packs.push({ packId: summary.id, result });
   }
 
+  const units = packagedUnits(packs);
   active = units;
   revision += 1;
   for (const listener of listeners) listener();
   return units;
-}
-
-/**
- * Re-reads the installed packs after a pack was imported or removed.
- *
- * The same read as boot; named for the moment that calls it so an import path
- * does not have to know that boot and import share one loader. The caller
- * reports a rejection — this store never invents a unit to fill the gap.
- */
-export function reloadWidgetUnits(
-  fetcher: typeof fetch = fetch,
-): Promise<readonly InstalledWidgetUnit[]> {
-  return loadWidgetUnits(fetcher);
 }

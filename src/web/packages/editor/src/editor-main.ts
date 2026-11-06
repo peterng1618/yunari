@@ -105,8 +105,8 @@ async function start(): Promise<void> {
     if (manager === undefined) widgetUnitsError = message;
     else manager.warn("controls", message);
   };
-  // Once, at boot. `reloadWidgetUnits()` is the same read, for a pack import or
-  // removal. A failure leaves the live list untouched.
+  // Once, at boot. A later pack import calls `loadWidgetUnits()` again. A
+  // failure leaves the live list untouched.
   void loadWidgetUnits().catch(reportWidgetUnitsFailure);
   // The draft: the unsaved document, kept in browser storage so a crash costs
   // the last half-minute of work rather than all of it. One slot for

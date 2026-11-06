@@ -381,10 +381,18 @@ export class HttpHostClient implements HostClient {
   }
 
   async listWidgetPacks(): Promise<readonly WidgetPackSummary[]> {
-    const body = await this.json<{
-      readonly packs?: readonly WidgetPackSummary[];
-    }>("/api/widget-packs");
-    return body.packs ?? [];
+    const body = await this.json<unknown>("/api/widget-packs");
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body) ||
+      !Array.isArray((body as { readonly packs?: unknown }).packs)
+    ) {
+      // An unreadable listing is not an empty library: reporting "nothing
+      // installed" would hide every unit behind a host that answered garbage.
+      throw new Error("The Yunari host did not answer a widget-pack listing.");
+    }
+    return (body as { readonly packs: readonly WidgetPackSummary[] }).packs;
   }
 
   async readWidgetPack(id: string): Promise<Uint8Array> {

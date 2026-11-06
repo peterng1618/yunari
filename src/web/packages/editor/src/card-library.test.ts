@@ -1,23 +1,47 @@
 // @vitest-environment jsdom
 
-import type { Binding, FabricGlobals } from "@yunari/renderer-core";
+import { createHash, webcrypto } from "node:crypto";
+import type {
+  AssetReference,
+  Binding,
+  FabricGlobals,
+} from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { reviveScene, serialiseScene } from "@yunari/scene-fabric";
 import {
+  addImageObject,
   type CardUnit,
   cpuCard,
+  createStarterTheme,
   instantiateCard,
   type ObjectJson,
   starterTypeTokens,
 } from "@yunari/theme-kit";
+import { writeWidgetPackage } from "@yunari/theme-package";
 import { Canvas, type FabricObject, Group, util } from "fabric/es";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AssetManager } from "./asset-manager/index.js";
 import { insertCard } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
-import { installStarterUnits } from "./testing/widget-units.js";
+import {
+  installStarterUnits,
+  installThermalUnit,
+  installWidgetPack,
+  THERMAL_UNIT_ID,
+  THERMAL_UNIT_LABEL,
+} from "./testing/widget-units.js";
 import { activeWidgetUnits } from "./widget-packs.js";
 
-beforeAll(async () => {
+// jsdom's `crypto` has no SubtleCrypto, and adoption verifies digests through
+// it exactly as a browser does.
+if (globalThis.crypto?.subtle === undefined) {
+  Object.defineProperty(globalThis, "crypto", {
+    value: webcrypto,
+    configurable: true,
+  });
+}
+
+beforeEach(async () => {
   await installStarterUnits();
 });
 
@@ -56,6 +80,79 @@ const CPU_PARTS = 7;
 
 /** The starter's own globals, so a card's every reference resolves. */
 const STARTER_GLOBALS = createNewFabricTheme().globals as FabricGlobals;
+
+const PICTURE_BYTES = new Uint8Array([137, 80, 78, 71]);
+const FACE_BYTES = new Uint8Array([0, 1, 2, 3]);
+
+function sha256Of(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * A pack whose one unit draws a picture, beside two declarations the document
+ * carries: the drawn picture and a body face no object in the subtree names.
+ *
+ * The face is a real theme global, so an insertion that adopted "everything the
+ * package brought" would leave an orphan declaration in the document — bytes
+ * nothing draws, which the validator accepts and the next save carries.
+ */
+function picturePack(): Uint8Array {
+  const picture: AssetReference = {
+    id: "pack-image",
+    kind: "image",
+    path: "assets/pack.png",
+    sha256: sha256Of(PICTURE_BYTES),
+  };
+  const face = {
+    id: "unused-face",
+    kind: "font",
+    path: "assets/face.woff2",
+    sha256: sha256Of(FACE_BYTES),
+    family: "Inter",
+    weight: 400,
+    style: "normal",
+    format: "woff2",
+  } as const;
+  const { artboard: _artboard, ...document } = createStarterTheme();
+  const globals = document.globals as Record<string, unknown>;
+  const written = writeWidgetPackage({
+    document: {
+      ...document,
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            ...addImageObject({
+              id: "picture-image",
+              assetId: picture.id,
+              kind: "image",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            }),
+            provenance: { widgetId: "picture", widgetName: "Picture" },
+          },
+        ],
+      },
+      bindings: {},
+      globals: {
+        ...globals,
+        typeTokens: {
+          ...(globals["typeTokens"] as Record<string, unknown>),
+          body: { family: "Inter", face: { assetId: face.id } },
+        },
+      },
+      assets: [picture, face],
+    } as never,
+    assets: {
+      "assets/pack.png": PICTURE_BYTES,
+      "assets/face.woff2": FACE_BYTES,
+    },
+  });
+  if (!written.ok) throw new Error(written.message);
+  return written.bytes;
+}
 
 /** A card's parts, as the plain records the factories authored them as. */
 function partsOf(card: ObjectJson): readonly ObjectJson[] {
@@ -311,6 +408,43 @@ describe("the card library", () => {
       unitLabel(CPU_CARD),
       unitLabel(CPU_CARD),
     ]);
+  });
+
+  it("stamps an inserted copy with the installed pack's own label", async () => {
+    // A label no build-time card word could produce, so the copy's name proves
+    // it came from the pack rather than from a constant this build ships.
+    await installThermalUnit();
+    const canvas = stage();
+
+    await insertCard(editorStub(canvas) as never, THERMAL_UNIT_ID, {
+      globals: STARTER_GLOBALS,
+      onBindings: vi.fn(),
+    });
+
+    const inserted = copy(canvas);
+    expect(inserted.get("name")).toBe(THERMAL_UNIT_LABEL);
+    expect(inserted.get("provenance")).toMatchObject({
+      widgetId: THERMAL_UNIT_ID,
+      widgetName: THERMAL_UNIT_LABEL,
+    });
+  });
+
+  it("adopts only the assets the unit's own scene draws", async () => {
+    await installWidgetPack("picture-pack", picturePack());
+    const assets = new AssetManager();
+
+    await insertCard(editorStub(stage()) as never, "picture", {
+      globals: STARTER_GLOBALS,
+      onBindings: vi.fn(),
+      assetManager: assets,
+    });
+
+    // The drawn picture arrived under its package id; the package's unused body
+    // face did not, so the document holds no declaration nothing references.
+    expect(assets.declarations.map((asset) => asset.id)).toEqual([
+      "pack-image",
+    ]);
+    expect(Object.keys(assets.assets)).toEqual(["assets/pack.png"]);
   });
 
   it("mints past an id the document already holds rather than shadowing it", async () => {

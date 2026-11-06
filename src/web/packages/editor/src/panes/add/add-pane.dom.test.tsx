@@ -12,9 +12,14 @@
  * it inserts, and no two units share one; a shape's is its kind and nothing
  * more.
  */
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
-import { installStarterUnits } from "../../testing/widget-units.js";
+import {
+  installStarterUnits,
+  installThermalUnit,
+  THERMAL_UNIT_ID,
+  THERMAL_UNIT_LABEL,
+} from "../../testing/widget-units.js";
 import { uiCopy } from "../../ui-copy.js";
 import { activeWidgetUnits } from "../../widget-packs.js";
 
@@ -25,7 +30,7 @@ function unitLabel(id: string): string {
   return unit.label;
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
   await installStarterUnits();
 });
 
@@ -161,9 +166,23 @@ describe("the Add pane's insert surface", () => {
   it("names a card unit with the library's own label, never a literal", () => {
     const { pane } = mount();
 
-    // Change `unitLabel(CPU_CARD)` and this fails: a tile that hard-codes
-    // "CPU" agrees with the copy until the copy moves.
+    // Change the installed pack's label and this fails: a tile that hard-codes
+    // "CPU" agrees with the pack until the pack moves.
     expect(cardTile(pane, CPU_CARD).textContent).toBe(unitLabel(CPU_CARD));
+  });
+
+  it("wears a label no build-time card word could have produced", async () => {
+    // "Thermal rig" is not a `CARD_LABELS` string, so the old closed map could
+    // not have drawn this tile at all.
+    await installThermalUnit();
+    const { pane } = mount();
+
+    expect(cardTile(pane, THERMAL_UNIT_ID).textContent).toBe(
+      THERMAL_UNIT_LABEL,
+    );
+    expect(cardTile(pane, THERMAL_UNIT_ID).getAttribute("aria-label")).toBe(
+      THERMAL_UNIT_LABEL,
+    );
   });
 
   it("draws a card unit and a primitive with the one icon vocabulary", () => {

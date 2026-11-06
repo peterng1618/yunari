@@ -5,18 +5,19 @@ import {
   isKnownSemanticKey,
 } from "@yunari/renderer-core";
 import {
-  addAsset,
   addChartObject,
   addIconObject,
   addImageObject,
   addSceneObject,
   addShapeObject,
   addTextObject,
-  cardUnitFromWidget,
+  adoptPackagedAssets,
   instantiateCard,
   listSceneObjects,
   moveSceneObject,
   type ObjectJson,
+  type PackagedWidgetUnit,
+  packagedUnits,
   type Run,
   removeSceneObject,
   type SceneStackMove,
@@ -24,7 +25,10 @@ import {
   starterIcons,
   updateSceneObject,
 } from "@yunari/theme-kit";
-import { readWidgetPackage, type WidgetUnit } from "@yunari/theme-package";
+import {
+  readWidgetPackage,
+  type WidgetPackageResult,
+} from "@yunari/theme-package";
 import type { Draft, ToolContext } from "../types.js";
 import { draftFor } from "./draft.js";
 import { jsonAttempt } from "./result.js";
@@ -121,8 +125,12 @@ function added(
   draft: Draft,
   object: ObjectJson,
   bindings?: readonly Binding[] | Readonly<Record<string, readonly Binding[]>>,
+  envelope: Draft["envelope"] = draft.envelope,
 ): { themeId: string; ids: readonly string[] } {
-  const result = addSceneObject(draft.envelope, object, bindings);
+  // The caller may hand in an envelope that is not the draft's yet (an insert
+  // whose assets must apply with the object). Only a successful build becomes
+  // the draft.
+  const result = addSceneObject(envelope, object, bindings);
   draft.envelope = result.envelope;
   return { themeId: draft.id, ids: result.ids };
 }
@@ -130,70 +138,42 @@ function added(
 /**
  * The unit an insertion names, from the packs the host has installed.
  *
- * A unit id names a unit only within a pack, so the id is looked up across the
- * listing first and then confirmed against that pack's zip — the listing is a
- * summary, and a pack may have changed on disk since it was read.
+ * **Every listed pack is read**, not only the one whose summary names the id:
+ * the summary lists units that may repeat across packs, and `packagedUnits` is
+ * the one owner of the duplicate-id rule. A pack that cannot be read is
+ * refused rather than skipped, because a skipped pack hides a duplicate.
  */
 async function installedUnit(
   context: ToolContext,
   id: string,
-): Promise<{ readonly packId: string; readonly unit: WidgetUnit }> {
+): Promise<PackagedWidgetUnit> {
   const packs = await context.host.listWidgetPacks();
-  const matches = packs.flatMap((pack) =>
-    pack.units.some((unit) => unit.id === id) ? [{ packId: pack.id }] : [],
-  );
-  if (matches.length === 0) {
-    const known = packs.flatMap((pack) => pack.units.map((unit) => unit.id));
+  const results: {
+    readonly packId: string;
+    readonly result: WidgetPackageResult;
+  }[] = [];
+  for (const pack of packs) {
+    const bytes = await context.host.readWidgetPack(pack.id);
+    const result = readWidgetPackage(bytes);
+    if (!result.ok) {
+      throw new Error(
+        `The widget pack "${pack.id}" is not readable: ${result.message}`,
+      );
+    }
+    results.push({ packId: pack.id, result });
+  }
+
+  const units = packagedUnits(results);
+  const unit = units.find((candidate) => candidate.id === id);
+  if (unit === undefined) {
+    const known = units.map((candidate) => candidate.id);
     throw new Error(
       `There is no card unit "${id}" in the installed packs${
         known.length === 0 ? "" : ` (${known.join(", ")})`
       }.`,
     );
   }
-
-  for (const match of matches) {
-    const bytes = await context.host.readWidgetPack(match.packId);
-    const read = readWidgetPackage(bytes);
-    if (!read.ok) {
-      throw new Error(
-        `The widget pack "${match.packId}" is not readable: ${read.message}`,
-      );
-    }
-    const unit = read.units.find((candidate) => candidate.id === id);
-    if (unit !== undefined) return { packId: match.packId, unit };
-  }
-  throw new Error(
-    `The unit "${id}" is listed but no installed pack carries it.`,
-  );
-}
-
-/** Adds a unit's declared assets to the draft, refusing a collision. */
-function adoptUnitAssets(
-  context: ToolContext,
-  draft: Draft,
-  unit: WidgetUnit,
-): void {
-  for (const declaration of unit.declarations) {
-    const existing = draft.envelope.assets ?? [];
-    if (existing.some((asset) => asset.id === declaration.id)) {
-      throw new Error(
-        `The package asset id "${declaration.id}" already exists in this theme; rename or remove it first.`,
-      );
-    }
-    if (existing.some((asset) => asset.path === declaration.path)) {
-      throw new Error(
-        `The package asset path "${declaration.path}" already exists in this theme; rename or remove it first.`,
-      );
-    }
-    const bytes = unit.assets[declaration.path];
-    if (bytes === undefined) {
-      throw new Error(
-        `The package asset "${declaration.path}" travels without its bytes; the unit was refused.`,
-      );
-    }
-    draft.envelope = addAsset(draft.envelope, declaration, bytes);
-    context.drafts.setAsset(draft.id, declaration.path, bytes);
-  }
+  return unit;
 }
 
 export async function addCard(
@@ -209,17 +189,31 @@ export async function addCard(
   return await jsonAttempt(async () => {
     const installed = await installedUnit(context, input.unit);
     const draft = draftFor(context, input.themeId);
-    // Built before any asset is adopted, so a refusal in the copy leaves the
-    // draft exactly as it was.
+    const existing = draft.envelope.assets ?? [];
+
+    // Pure: every declaration is verified before anything is returned, and the
+    // draft is not touched until the copy has been built on the next envelope.
+    const adopted = await adoptPackagedAssets(
+      { declarations: existing, assets: draft.assets },
+      { declarations: installed.declarations, assets: installed.assets },
+    );
+    const next = { ...draft.envelope, assets: adopted.declarations };
     const copy = instantiateCard({
-      unit: cardUnitFromWidget(installed.unit),
-      globals: draft.envelope.globals,
-      existingIds: listSceneObjects(draft.envelope).map((entry) => entry.id),
-      existingBindingIds: bindingIdsOf(draft.envelope),
+      unit: installed.unit,
+      globals: next.globals,
+      existingIds: listSceneObjects(next).map((entry) => entry.id),
+      existingBindingIds: bindingIdsOf(next),
+      assetIds: adopted.assetIds,
       origin: { left: input.left, top: input.top },
     });
-    adoptUnitAssets(context, draft, installed.unit);
-    const result = added(draft, copy.card, copy.bindings);
+    const result = added(draft, copy.card, copy.bindings, next);
+    // The object landed, so the bytes its declarations name are the draft's.
+    for (const declaration of adopted.declarations.slice(existing.length)) {
+      const bytes = adopted.assets[declaration.path];
+      if (bytes !== undefined) {
+        context.drafts.setAsset(draft.id, declaration.path, bytes);
+      }
+    }
     if (input.scale !== undefined && input.scale !== 1) {
       const rootId = result.ids[0];
       if (rootId !== undefined) {

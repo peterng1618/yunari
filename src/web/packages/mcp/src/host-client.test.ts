@@ -142,6 +142,18 @@ describe("HttpHostClient", () => {
     ]);
   });
 
+  it("refuses a widget-pack listing it cannot read rather than calling it empty", async () => {
+    const host = await fakeHost((_request, url) =>
+      url.pathname === "/api/widget-packs"
+        ? { body: { unexpected: [] } }
+        : undefined,
+    );
+
+    await expect(
+      new HttpHostClient(host.url).listWidgetPacks(),
+    ).rejects.toThrow("did not answer a widget-pack listing");
+  });
+
   it("decodes a stored theme's base64 assets", async () => {
     const host = await fakeHost((_request, url) =>
       url.pathname === "/api/themes/abc"

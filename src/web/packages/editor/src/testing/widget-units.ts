@@ -78,3 +78,71 @@ export async function installStarterUnits(): Promise<void> {
     packFetcher([{ id: STARTER_PACK_ID, bytes: starterPackBytes() }]),
   );
 }
+
+/** Installs one test-authored pack as the whole store. */
+export async function installWidgetPack(
+  id: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  await loadWidgetUnits(packFetcher([{ id, bytes }]));
+}
+
+/** A pack whose one unit's label is no `CARD_LABELS` string, so a tile that
+ *  hard-codes a starter word cannot pass by coincidence. */
+export const THERMAL_PACK_ID = "thermal-pack";
+export const THERMAL_UNIT_ID = "thermal-rig";
+export const THERMAL_UNIT_LABEL = "Thermal rig";
+
+let thermalBytes: Uint8Array | undefined;
+
+export function thermalPackBytes(): Uint8Array {
+  if (thermalBytes !== undefined) return thermalBytes;
+  const { artboard: _artboard, ...document } = createStarterTheme();
+  const written = writeWidgetPackage({
+    document: {
+      ...document,
+      scene: {
+        version: "7.4.0",
+        objects: [
+          {
+            id: "thermal-rig-object",
+            type: "Group",
+            left: 0,
+            top: 0,
+            width: 10,
+            height: 10,
+            provenance: {
+              widgetId: THERMAL_UNIT_ID,
+              widgetName: THERMAL_UNIT_LABEL,
+            },
+            objects: [
+              {
+                id: "thermal-rig-text",
+                type: "text",
+                left: 0,
+                top: 0,
+                text: "Thermal",
+              },
+            ],
+          },
+        ],
+      },
+      bindings: {},
+      assets: [],
+    },
+    assets: {},
+  });
+  if (!written.ok) throw new Error(written.message);
+  thermalBytes = written.bytes;
+  return written.bytes;
+}
+
+/** Installs the starter units plus the thermal fixture. */
+export async function installThermalUnit(): Promise<void> {
+  await loadWidgetUnits(
+    packFetcher([
+      { id: STARTER_PACK_ID, bytes: starterPackBytes() },
+      { id: THERMAL_PACK_ID, bytes: thermalPackBytes() },
+    ]),
+  );
+}

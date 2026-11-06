@@ -1,6 +1,10 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
-import { visitSceneObjects } from "@yunari/scene-fabric";
-import { instantiateCard, type TokenSubstitution } from "@yunari/theme-kit";
+import { visitSceneObjects, YUNARI_ASSET_PROPERTY } from "@yunari/scene-fabric";
+import {
+  instantiateCard,
+  type ObjectJson,
+  type TokenSubstitution,
+} from "@yunari/theme-kit";
 import { type FabricObject, util } from "fabric/es";
 import type { AssetManager } from "./asset-manager/index.js";
 import type { EditorInteraction } from "./editor-interaction.js";
@@ -56,10 +60,7 @@ export async function insertCard(
   },
 ): Promise<FabricObject> {
   const installed = installedUnit(cardId);
-  const assetIds =
-    installed.declarations.length === 0
-      ? undefined
-      : await adoptedAssets(installed, options.assetManager);
+  const assetIds = await adoptedAssets(installed, options.assetManager);
   const unit = installed.unit;
   const copy = instantiateCard({
     unit,
@@ -137,17 +138,52 @@ function installedUnit(cardId: string): InstalledWidgetUnit {
   return unit;
 }
 
-/** Adopts a packaged unit's assets, refusing a surface that cannot carry them. */
+/** Adopts the unit's scene assets, refusing a surface that cannot carry them.
+ *
+ * **Only what the unit's own subtree names is adopted.** A unit document also
+ * carries its globals' font faces, which a card may not draw; adopting those
+ * would leave an orphan declaration behind on every copy. */
 async function adoptedAssets(
   installed: InstalledWidgetUnit,
   manager: Pick<AssetManager, "adoptPackaged"> | undefined,
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, string> | undefined> {
+  const referenced = sceneAssetIds(installed.unit.build());
+  const declarations = installed.declarations.filter((declaration) =>
+    referenced.has(declaration.id),
+  );
+  if (declarations.length === 0) return undefined;
   if (manager === undefined) {
     throw new Error(
       `The ${installed.label} card carries packaged assets, and this surface cannot adopt them.`,
     );
   }
-  return await manager.adoptPackaged(installed.declarations, installed.assets);
+  const assets: Record<string, Uint8Array> = {};
+  for (const declaration of declarations) {
+    const bytes = installed.assets[declaration.path];
+    if (bytes !== undefined) assets[declaration.path] = bytes;
+  }
+  return await manager.adoptPackaged(declarations, assets);
+}
+
+/** Every asset id the authored subtree references through `yunariAsset`. */
+function sceneAssetIds(value: ObjectJson): Set<string> {
+  const ids = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (typeof node !== "object" || node === null) return;
+    const record = node as Readonly<Record<string, unknown>>;
+    const asset = record[YUNARI_ASSET_PROPERTY];
+    if (typeof asset === "object" && asset !== null) {
+      const id = (asset as Readonly<Record<string, unknown>>)["assetId"];
+      if (typeof id === "string") ids.add(id);
+    }
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(value);
+  return ids;
 }
 
 /** Every id the canvas already holds, descending into groups. */

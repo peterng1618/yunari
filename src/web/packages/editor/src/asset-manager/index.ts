@@ -13,6 +13,7 @@ import {
   sceneObjects,
   setObjectAssetReference,
 } from "@yunari/scene-fabric";
+import { adoptPackagedAssets } from "@yunari/theme-kit";
 import { FabricImage, type FabricObject, type StaticCanvas } from "fabric/es";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { CuratedFontFace } from "../font-catalog.js";
@@ -233,29 +234,15 @@ export class AssetManager {
     declarations: readonly AssetReference[],
     assets: Readonly<Record<string, Uint8Array>>,
   ): Promise<ReadonlyMap<string, string>> {
-    const verified: {
-      readonly declaration: AssetReference;
-      readonly bytes: Uint8Array;
-      readonly kind: AssetKind;
-      readonly extension: AssetExtension;
-      readonly digest: string;
-      readonly font?: ReturnType<typeof fontFactsOf>;
-    }[] = [];
-
+    // The editor's own policy is checked before the shared adoption runs: an
+    // extension this editor does not package is refused rather than guessed
+    // into a neighbouring kind. None of this mutates, and a refusal here means
+    // the shared helper never saw the declaration.
     for (const declaration of declarations) {
       if (!isSafeAssetPath(declaration.path))
         throw new Error(
           `Package asset path is not package-relative: ${declaration.path}.`,
         );
-      const bytes = Object.hasOwn(assets, declaration.path)
-        ? assets[declaration.path]
-        : undefined;
-      if (bytes === undefined)
-        throw new Error(`Package asset has no bytes: ${declaration.path}.`);
-
-      // An extension this editor does not package is refused rather than
-      // guessed into a neighbouring kind: a file the manager cannot type would
-      // otherwise be declared with a kind its own `typeOf` disagrees with.
       const extension = extensionOf(declaration.path);
       if (extension === undefined)
         throw new Error(`Unsupported asset file type: ${declaration.path}.`);
@@ -264,76 +251,20 @@ export class AssetManager {
         throw new Error(
           `Package asset ${declaration.path} declares kind "${declaration.kind}" but its extension is a ${type.kind}.`,
         );
-
-      const font =
-        type.kind === "font" ? fontFactsOf(declaration, extension) : undefined;
-
-      if (declaration.sha256 === undefined)
-        throw new Error(
-          `Package asset ${declaration.path} declares no SHA-256 digest.`,
-        );
-      const digest = await sha256(bytes);
-      if (declaration.sha256 !== digest)
-        throw new Error(
-          `Package asset ${declaration.path} does not match its declared SHA-256 digest.`,
-        );
-      verified.push({
-        declaration,
-        bytes,
-        kind: type.kind,
-        extension,
-        digest,
-        ...(font === undefined ? {} : { font }),
-      });
+      if (type.kind === "font") fontFactsOf(declaration, extension);
     }
 
-    const adopted = new Map<string, string>();
-    if (verified.length === 0) return adopted;
+    if (declarations.length === 0) return new Map();
 
-    for (const {
-      declaration,
-      bytes,
-      kind,
-      extension,
-      digest,
-      font,
-    } of verified) {
-      const collides = this.#declarations.some(
-        (asset) =>
-          asset.id === declaration.id || asset.path === declaration.path,
-      );
-      const placed = collides
-        ? this.#allocate(
-            declaration.path.slice(declaration.path.lastIndexOf("/") + 1),
-            extension,
-          )
-        : { id: declaration.id, path: declaration.path };
-
-      const credit = creditOf(declaration);
-      const reference: LocalAssetReference =
-        kind === "font" && font !== undefined
-          ? {
-              id: placed.id,
-              kind: "font",
-              path: placed.path,
-              sha256: digest,
-              ...font,
-              ...credit,
-            }
-          : {
-              id: placed.id,
-              kind,
-              path: placed.path,
-              sha256: digest,
-              ...credit,
-            };
-      this.#assets[placed.path] = bytes;
-      this.#declarations.push(reference);
-      adopted.set(declaration.id, placed.id);
-    }
+    const adopted = await adoptPackagedAssets(
+      { declarations: this.#declarations, assets: this.#assets },
+      { declarations, assets },
+    );
+    this.#declarations = [...adopted.declarations] as LocalAssetReference[];
+    this.#assets = { ...adopted.assets };
     // One insertion is one mutation, however many assets the pack carried.
     this.#mutated();
-    return adopted;
+    return adopted.assetIds;
   }
 
   async adoptFont(
@@ -769,21 +700,6 @@ function assertFileFormat(
     signature.every((byte, index) => bytes[index] === byte),
   );
   if (!matches) throw new Error("The file's bytes do not match its extension.");
-}
-
-/** The credit a pack wrote for an asset travels with the bytes it names. */
-function creditOf(declaration: AssetReference): {
-  readonly sourceUrl?: string;
-  readonly license?: AssetLicense;
-} {
-  return {
-    ...(declaration.sourceUrl === undefined
-      ? {}
-      : { sourceUrl: declaration.sourceUrl }),
-    ...(declaration.license === undefined
-      ? {}
-      : { license: declaration.license }),
-  };
 }
 
 /** A packaged face's facts, refused rather than guessed when any is missing:
