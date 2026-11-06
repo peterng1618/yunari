@@ -13,6 +13,7 @@
   `src/web/packages/host/src/extensions/providers.ts`
   `src/web/packages/host/src/extensions/provider-order.ts`
   `src/web/packages/host/src/extensions/asset-sources.ts`
+  `src/web/packages/host/src/extensions/declarative-contributions.ts`
   `src/web/packages/host/src/extensions/declarative-sources.ts`
   `src/web/packages/host/src/assets/source.ts`
   `src/web/packages/host/src/providers/custom/fetch-source.ts`

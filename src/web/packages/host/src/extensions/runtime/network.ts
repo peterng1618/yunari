@@ -44,7 +44,7 @@ export interface GuardedFetchOptions {
 }
 
 /** Hosts are declared without a port or case, so the comparison drops both. */
-function isDeclaredHost(
+export function isAllowedHost(
   hostname: string,
   allowedHosts: readonly string[],
 ): boolean {
@@ -85,7 +85,7 @@ async function runGuardedFetch(
   if (destination.username !== "" || destination.password !== "") {
     return fail("the request URL carries credentials");
   }
-  if (!isDeclaredHost(destination.hostname, options.allowedHosts)) {
+  if (!isAllowedHost(destination.hostname, options.allowedHosts)) {
     return fail(
       `the host ${destination.hostname} is not declared by the plugin`,
     );
@@ -96,7 +96,7 @@ async function runGuardedFetch(
   let redirects = 0;
 
   for (;;) {
-    if (!isDeclaredHost(destination.hostname, options.allowedHosts)) {
+    if (!isAllowedHost(destination.hostname, options.allowedHosts)) {
       return fail(
         `the host ${destination.hostname} is not declared by the plugin`,
       );
@@ -162,7 +162,7 @@ async function runGuardedFetch(
           `the request redirected from ${destination.protocol} to ${next.protocol}, which changes the scheme`,
         );
       }
-      if (!isDeclaredHost(next.hostname, options.allowedHosts)) {
+      if (!isAllowedHost(next.hostname, options.allowedHosts)) {
         return fail(`the host ${next.hostname} is not declared by the plugin`);
       }
 
@@ -208,6 +208,212 @@ async function runGuardedFetch(
     } catch {
       return fail(
         "the request answered something that is not JSON",
+        response.status,
+      );
+    }
+  }
+}
+
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+export interface GuardedFetchBytesOptions {
+  readonly url: string;
+  readonly allowedHosts: readonly string[];
+  readonly signal: AbortSignal;
+  readonly maxBytes: number;
+  readonly fetchImpl: typeof fetch;
+  /** Test seam; production resolves through the host's DNS. */
+  readonly resolve?: HostLookup;
+  readonly redirects?: number;
+}
+
+export type FetchBytesOutcome =
+  | {
+      readonly ok: true;
+      readonly bytes: Uint8Array;
+      readonly contentType: string;
+    }
+  | { readonly ok: false; readonly status?: number; readonly reason: string };
+
+/** Counts bytes as they arrive, so a lying Content-Length and a stalled body
+ *  both stop at the cap. */
+async function readBodyBytes(
+  response: Response,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array();
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const stop = () => reject(new Error(TIMEOUT_REASON));
+    if (signal.aborted) {
+      stop();
+      return;
+    }
+    signal.addEventListener("abort", stop, { once: true });
+  });
+
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(`the answer carried more than ${maxBytes} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+/**
+ * The same destination policy as `guardedFetch`, for an answer that is bytes
+ * rather than JSON. Every hop is checked and pinned, the scheme may not change,
+ * and a link-local or private destination stays refused.
+ */
+export function guardedFetchBytes(
+  options: GuardedFetchBytesOptions,
+): Promise<FetchBytesOutcome> {
+  return withFetchSlot(() => runGuardedFetchBytes(options));
+}
+
+async function runGuardedFetchBytes(
+  options: GuardedFetchBytesOptions,
+): Promise<FetchBytesOutcome> {
+  const fetchImpl = options.fetchImpl;
+  const resolve = options.resolve ?? dnsLookup;
+  const maxRedirects = options.redirects ?? MAX_REDIRECTS;
+
+  const fail = (reason: string, status?: number): FetchBytesOutcome =>
+    status === undefined
+      ? { ok: false, reason }
+      : { ok: false, status, reason };
+
+  let destination: URL;
+  try {
+    destination = new URL(options.url);
+  } catch {
+    return fail("the request URL is not a URL");
+  }
+
+  if (destination.protocol !== "http:" && destination.protocol !== "https:") {
+    return fail("the request URL must be http or https");
+  }
+  if (destination.username !== "" || destination.password !== "") {
+    return fail("the request URL carries credentials");
+  }
+  if (!isAllowedHost(destination.hostname, options.allowedHosts)) {
+    return fail(
+      `the host ${destination.hostname} is not declared by the plugin`,
+    );
+  }
+
+  let redirects = 0;
+
+  for (;;) {
+    if (!isAllowedHost(destination.hostname, options.allowedHosts)) {
+      return fail(
+        `the host ${destination.hostname} is not declared by the plugin`,
+      );
+    }
+
+    const checked = await checkDestination(
+      destination,
+      { allowPrivate: false },
+      resolve,
+    );
+    if (!checked.ok) return fail(checked.reason);
+    if (options.signal.aborted) return fail(TIMEOUT_REASON);
+
+    const init: PinnedRequestInit = {
+      headers: new Headers(),
+      signal: options.signal,
+      redirect: "manual",
+      [PINNED_ADDRESSES]: checked.addresses,
+    };
+
+    let response: Response;
+    try {
+      response = await fetchImpl(destination, init);
+    } catch (error) {
+      return fail(options.signal.aborted ? TIMEOUT_REASON : messageOf(error));
+    }
+
+    if (REDIRECT_STATUSES.has(response.status)) {
+      await discard(response);
+
+      if (redirects >= maxRedirects) {
+        return fail(`the request redirected more than ${maxRedirects} times`);
+      }
+
+      const location = response.headers.get("location");
+      if (location === null) {
+        return fail("the request redirected without a location");
+      }
+
+      let next: URL;
+      try {
+        next = new URL(location, destination);
+      } catch {
+        return fail("the request redirected to an unusable address");
+      }
+
+      if (next.username !== "" || next.password !== "") {
+        return fail("the request redirected to a URL carrying credentials");
+      }
+      if (next.protocol !== destination.protocol) {
+        return fail(
+          `the request redirected from ${destination.protocol} to ${next.protocol}, which changes the scheme`,
+        );
+      }
+      if (!isAllowedHost(next.hostname, options.allowedHosts)) {
+        return fail(`the host ${next.hostname} is not declared by the plugin`);
+      }
+
+      redirects += 1;
+      destination = next;
+      continue;
+    }
+
+    if (!response.ok) {
+      await discard(response);
+      return fail(
+        `the request answered HTTP ${response.status}`,
+        response.status,
+      );
+    }
+
+    const contentType = response.headers.get("content-type")?.trim();
+    if (
+      contentType === undefined ||
+      contentType === "" ||
+      CONTROL_CHARACTERS.test(contentType)
+    ) {
+      await discard(response);
+      return fail(
+        "the request answered an unusable content type",
+        response.status,
+      );
+    }
+
+    try {
+      const bytes = await readBodyBytes(
+        response,
+        options.signal,
+        options.maxBytes,
+      );
+      return { ok: true, bytes, contentType };
+    } catch (error) {
+      return fail(
+        options.signal.aborted ? TIMEOUT_REASON : messageOf(error),
         response.status,
       );
     }

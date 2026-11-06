@@ -1,13 +1,32 @@
 import type { InstalledExtension } from "@yunari/extension-api";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SourceContext } from "../assets/source.js";
-import type { HostLookup } from "../providers/custom/fetch-source.js";
+import {
+  type HostLookup,
+  PINNED_ADDRESSES,
+  type PinnedRequestInit,
+} from "../providers/custom/fetch-source.js";
 import {
   type DeclarativeAssetSource,
-  DeclarativeAssetSourceAdapter,
   declarativeAssetSources,
   readDeclarativeAssetSource,
-} from "./declarative-sources.js";
+} from "./declarative-contributions.js";
+import { DeclarativeAssetSourceAdapter } from "./declarative-sources.js";
+
+const pinned = vi.hoisted(() => ({
+  createPinnedFetch: vi.fn(),
+  fetchImpl: vi.fn(),
+}));
+
+vi.mock("../providers/custom/pinned-fetch.js", () => ({
+  createPinnedFetch: pinned.createPinnedFetch,
+}));
+
+beforeEach(() => {
+  pinned.createPinnedFetch.mockReset();
+  pinned.fetchImpl.mockReset();
+  pinned.createPinnedFetch.mockImplementation(() => pinned.fetchImpl);
+});
 
 const resolve: HostLookup = async () => [
   { address: "93.184.216.34", family: 4 },
@@ -245,6 +264,55 @@ describe("DeclarativeAssetSourceAdapter.search", () => {
     );
   });
 
+  it("refuses a totalPages that is not an integer in range", async () => {
+    for (const total of [3.5, 10_001]) {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse({ total, items: [ITEM] }),
+      ) as unknown as typeof fetch;
+      const source = adapter(declarativeSource(), fetchImpl);
+
+      expect((await source.search("glass", 1, context())).totalPages).toBe(
+        undefined,
+      );
+    }
+  });
+
+  it("is configurable so the finder can toggle it", () => {
+    const source = adapter(
+      declarativeSource(),
+      vi.fn() as unknown as typeof fetch,
+    );
+    expect(source.configurable).toBe(true);
+  });
+
+  it("pins every request through the default fetch", async () => {
+    pinned.fetchImpl.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect((init as PinnedRequestInit)[PINNED_ADDRESSES]).toEqual([
+          { address: "93.184.216.34", family: 4 },
+        ]);
+        return String(input).endsWith("/items/r1")
+          ? new Response(new Uint8Array([1]), {
+              status: 200,
+              headers: { "content-type": "image/png" },
+            })
+          : jsonResponse({ total: 1, items: [ITEM] });
+      },
+    );
+
+    const source = new DeclarativeAssetSourceAdapter({
+      plugin: installed(),
+      contribution: readSource(declarativeSource()),
+      resolve,
+    });
+
+    await source.search("glass", 1, context());
+    await source.bytesOf("r1", context());
+
+    expect(pinned.createPinnedFetch).toHaveBeenCalledWith({ lookup: resolve });
+    expect(pinned.fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("sends a header credential but never puts it in a result", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ total: 1, items: [{ id: "r1", name: "Glass" }] }),
@@ -270,6 +338,33 @@ describe("DeclarativeAssetSourceAdapter.search", () => {
     const [, init] = vi.mocked(fetchImpl).mock.calls[0] ?? [];
     expect(new Headers(init?.headers).get("x-api-key")).toBe("sekrit-token");
     expect(page.results[0]?.sourceUrl).not.toContain("sekrit-token");
+  });
+
+  it("omits a query credential from a result's fallback sourceUrl", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ items: [{ id: "r1", name: "Glass" }] }),
+    ) as unknown as typeof fetch;
+    const source = adapter(
+      declarativeSource({
+        requires: "acme-key",
+        request: {
+          url: "https://api.acme.test/search?q={query}",
+          auth: { kind: "query", name: "key" },
+        },
+        result: { itemsPath: "/items", id: "/id", name: "/name" },
+      }),
+      fetchImpl,
+    );
+
+    const page = await source.search(
+      "glass",
+      1,
+      context(() => "sekrit-token"),
+    );
+
+    expect(page.results[0]?.sourceUrl).toBe(
+      "https://api.acme.test/search?q=glass",
+    );
   });
 
   it("redacts a query credential from a request's error", async () => {
@@ -341,6 +436,106 @@ describe("DeclarativeAssetSourceAdapter.bytesOf", () => {
     await source.search("glass", 1, context());
     expect(await source.bytesOf("r1", context())).toBeUndefined();
     expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+
+    warn.mockRestore();
+  });
+
+  it("refuses an artwork host that resolves to a private address", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const artworkResolve: HostLookup = async (host) =>
+      host === "cdn.acme.test"
+        ? [{ address: "127.0.0.1", family: 4 }]
+        : [{ address: "93.184.216.34", family: 4 }];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/items/r1")
+        ? new Response(new Uint8Array([1]), {
+            status: 200,
+            headers: { "content-type": "image/png" },
+          })
+        : jsonResponse({
+            total: 1,
+            items: [{ ...ITEM, sourceUrl: "https://cdn.acme.test/r1" }],
+          }),
+    ) as unknown as typeof fetch;
+    const source = new DeclarativeAssetSourceAdapter({
+      plugin: installed(),
+      contribution: readSource(declarativeSource({ host: "cdn.acme.test" })),
+      fetchImpl,
+      resolve: artworkResolve,
+    });
+
+    await source.search("glass", 1, context());
+    expect(await source.bytesOf("r1", context())).toBeUndefined();
+    expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+
+    warn.mockRestore();
+  });
+
+  it("refuses a remembered sourceUrl that is not https", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        total: 1,
+        items: [{ ...ITEM, sourceUrl: "http://api.acme.test/r1" }],
+      }),
+    ) as unknown as typeof fetch;
+    const source = adapter(declarativeSource(), fetchImpl);
+
+    await source.search("glass", 1, context());
+    expect(await source.bytesOf("r1", context())).toBeUndefined();
+    expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+
+    warn.mockRestore();
+  });
+
+  it("falls back to a safe filename for a non-ASCII path", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/items/r1")
+        ? new Response(new Uint8Array([1]), {
+            status: 200,
+            headers: { "content-type": "image/png" },
+          })
+        : jsonResponse({
+            total: 1,
+            items: [{ ...ITEM, sourceUrl: "https://api.acme.test/%E4%B8%AD" }],
+          }),
+    ) as unknown as typeof fetch;
+    const source = adapter(declarativeSource(), fetchImpl);
+
+    await source.search("glass", 1, context());
+    const bytes = await source.bytesOf("r1", context());
+
+    expect(bytes?.filename).toBe("asset");
+  });
+
+  it("stops an artwork past the 32 MiB cap", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 33) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        controller.enqueue(new Uint8Array(1024 * 1024));
+      },
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/items/r1")
+        ? new Response(body, {
+            status: 200,
+            headers: { "content-type": "image/png" },
+          })
+        : jsonResponse({ total: 1, items: [ITEM] }),
+    ) as unknown as typeof fetch;
+    const source = adapter(declarativeSource(), fetchImpl);
+
+    await source.search("glass", 1, context());
+    expect(await source.bytesOf("r1", context())).toBeUndefined();
     expect(warn).toHaveBeenCalled();
 
     warn.mockRestore();

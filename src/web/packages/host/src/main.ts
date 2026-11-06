@@ -20,10 +20,8 @@ import {
 import { createPluginAssetSources } from "./extensions/asset-sources.js";
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
-import {
-  DeclarativeAssetSourceAdapter,
-  declarativeAssetSources,
-} from "./extensions/declarative-sources.js";
+import { declarativeAssetSources } from "./extensions/declarative-contributions.js";
+import { DeclarativeAssetSourceAdapter } from "./extensions/declarative-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
 import {
   createProviderOrderStore,

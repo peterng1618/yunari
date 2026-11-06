@@ -245,6 +245,19 @@ describe("the asset routes", () => {
     expect(await response.text()).toContain("<svg");
   });
 
+  it("marks every byte answer no-sniff and sandboxed", async () => {
+    const base = await start({});
+    const response = await fetch(
+      `${base}/api/assets/bytes?source=lucide&id=arrow-down`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toBe(
+      "sandbox; default-src 'none'",
+    );
+  });
+
   it("answers 404 for an unknown source or asset", async () => {
     const base = await start({});
 
