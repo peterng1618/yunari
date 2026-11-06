@@ -55,6 +55,11 @@ const HANDLERS = new Set([
   "stop",
   "asset.search",
   "asset.bytes",
+  "panel.attached",
+  "panel.open",
+  "panel.present",
+  "panel.command",
+  "panel.close",
 ]);
 
 const pending = new Map<string, PendingCall>();

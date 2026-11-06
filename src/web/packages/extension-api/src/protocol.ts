@@ -12,10 +12,25 @@ export type HostMethod =
   | "health"
   | "stop"
   | "asset.search"
-  | "asset.bytes";
+  | "asset.bytes"
+  | "panel.attached"
+  | "panel.open"
+  | "panel.present"
+  | "panel.command"
+  | "panel.close";
 
 export type PluginMethod =
   | "network.fetch"
+  | "usb.open"
+  | "usb.close"
+  | "usb.bulkTransfer"
+  | "usb.controlTransfer"
+  | "usb.interruptTransfer"
+  | "hid.read"
+  | "hid.write"
+  | "serial.read"
+  | "serial.write"
+  | "serial.drain"
   | "storage.get"
   | "storage.set"
   | "storage.remove"
@@ -73,6 +88,16 @@ const PLUGIN_LOG_KEYS = ["type", "level", "message"] as const;
  *  plugin naming one is refused rather than forwarded. */
 export const PLUGIN_METHODS: ReadonlySet<PluginMethod> = new Set<PluginMethod>([
   "network.fetch",
+  "usb.open",
+  "usb.close",
+  "usb.bulkTransfer",
+  "usb.controlTransfer",
+  "usb.interruptTransfer",
+  "hid.read",
+  "hid.write",
+  "serial.read",
+  "serial.write",
+  "serial.drain",
   "storage.get",
   "storage.set",
   "storage.remove",

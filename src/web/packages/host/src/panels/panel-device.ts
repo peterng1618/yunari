@@ -169,7 +169,7 @@ export interface PanelDevice {
    * encoding is what its own decoder takes: a panel that decodes the still to
    * raw pixels pays JPEG artifacts for nothing.
    */
-  readonly stillFormat?: "jpeg" | "png";
+  readonly stillFormat?: "jpeg" | "png" | undefined;
   /**
    * How often the runner should ask this device for a frame, when it states a
    * rate.
@@ -180,11 +180,11 @@ export interface PanelDevice {
    * A tick that finds the previous capture still running is skipped, so this is
    * a target the pipeline can fall short of, not a promise.
    */
-  readonly frameIntervalMs?: number;
+  readonly frameIntervalMs?: number | undefined;
   /** Present when the device accepts commands beyond the picture. */
-  readonly controls?: PanelControls;
+  readonly controls?: PanelControls | undefined;
   /** Present when the device takes video as well as stills. */
-  readonly video?: PanelVideo;
+  readonly video?: PanelVideo | undefined;
   close(): Promise<void>;
 }
 

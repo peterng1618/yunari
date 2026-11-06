@@ -134,6 +134,14 @@ export interface PanelOpenParams {
   readonly renderMode?: string;
 }
 
+/** What a plugin may state when it has opened the device: the cadence the host
+ *  should capture at, and the still encoding the device consumes. Both are
+ *  optional; absent means the runner's default and a JPEG. */
+export interface PanelOpenResult {
+  readonly frameIntervalMs?: number;
+  readonly stillFormat?: "jpeg" | "png";
+}
+
 export interface PanelCommandParams {
   readonly command: PanelCommand;
 }
