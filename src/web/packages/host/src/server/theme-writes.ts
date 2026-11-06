@@ -1,12 +1,19 @@
+import { readFile } from "node:fs/promises";
 import type http from "node:http";
+import { isCatalogueId } from "@yunari/renderer-core";
 import { handleSubmitRoute } from "../catalogue/submit.js";
 import type { PublishedStore } from "../serve/published.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
+import {
+  editorThemePath,
+  installCatalogueItem,
+  parseCatalogueInstallRequest,
+} from "../store/install.js";
 import { importThemePackage } from "../themes/import.js";
 import {
   type InstallRequest,
-  installCatalogueItem,
+  installCatalogueItem as installThemeItem,
   parseInstallRequest,
 } from "../themes/install.js";
 import { normalizeVideo } from "../themes/normalize-video.js";
@@ -287,7 +294,7 @@ export function createThemeWrites(
         return true;
       }
 
-      const installed = await installCatalogueItem(install, {
+      const installed = await installThemeItem(install, {
         store: themeStore,
         origins: themeOrigins,
         ...(thumbnails === undefined ? {} : { thumbnails }),
@@ -307,6 +314,135 @@ export function createThemeWrites(
         return true;
       }
       sendJson(response, 200, { ok: true, id: installed.id });
+      return true;
+    }
+
+    // The store's install for every kind: the dispatcher owns the download,
+    // the digest check and each kind's writer. Loopback and origin checks are
+    // the same as every other modification on this host.
+    if (url.pathname === "/api/store/install") {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Store installs are loopback only.");
+        return true;
+      }
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return true;
+      }
+
+      let raw: string;
+      try {
+        raw = await readBody(request);
+      } catch {
+        sendText(response, 413, "That install request is too large.");
+        return true;
+      }
+
+      let install: ReturnType<typeof parseCatalogueInstallRequest>;
+      try {
+        install = parseCatalogueInstallRequest(JSON.parse(raw));
+      } catch {
+        sendText(response, 400, "That install request is not JSON.");
+        return true;
+      }
+      if (install === undefined) {
+        sendText(
+          response,
+          400,
+          "An install needs packageUrl, catalogueId, kind, version, sha256 and bytes.",
+        );
+        return true;
+      }
+
+      const installed = await installCatalogueItem(install, {
+        stores: {
+          ...(themeOrigins === undefined
+            ? {}
+            : {
+                theme: {
+                  store: themeStore,
+                  origins: themeOrigins,
+                  ...(thumbnails === undefined ? {} : { thumbnails }),
+                  ...(fetcher === undefined ? {} : { fetch: fetcher }),
+                },
+              }),
+          ...(options.widgetPacks === undefined
+            ? {}
+            : { widgetPacks: options.widgetPacks }),
+          ...(options.pathPresets === undefined
+            ? {}
+            : { pathPresets: options.pathPresets }),
+          ...(options.extensions === undefined
+            ? {}
+            : { extensions: options.extensions }),
+          ...(options.editorThemesDirectory === undefined
+            ? {}
+            : { editorThemesDirectory: options.editorThemesDirectory }),
+        },
+        ...(fetcher === undefined ? {} : { fetch: fetcher }),
+        ...(storeOrigin === undefined ? {} : { storeOrigin }),
+      });
+      if (!installed.ok) {
+        const status =
+          installed.stage === "download"
+            ? 502
+            : installed.stage === "store"
+              ? 500
+              : 400;
+        sendText(response, status, installed.message);
+        return true;
+      }
+      sendJson(response, 200, {
+        ok: true,
+        id: installed.id,
+        consentRequired: installed.consentRequired,
+      });
+      return true;
+    }
+
+    // The bytes of an editor theme the store installed. The settings import
+    // control reads one back through this route, so the id is the catalogue's
+    // and the file name is this host's own rule.
+    const editorThemeMatch = url.pathname.match(
+      /^\/api\/editor-themes\/([^/]+)$/,
+    );
+    if (editorThemeMatch) {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Editor themes are available on this PC only.");
+        return true;
+      }
+      const id = decodeURIComponent(editorThemeMatch[1] ?? "");
+      if (!isCatalogueId(id)) {
+        sendText(response, 400, "Invalid editor theme id.");
+        return true;
+      }
+      if (options.editorThemesDirectory === undefined) {
+        sendText(response, 404, "This host keeps no editor themes.");
+        return true;
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(
+          editorThemePath(options.editorThemesDirectory, id),
+        );
+      } catch {
+        sendText(response, 404, "Editor theme not found.");
+        return true;
+      }
+      response.writeHead(200, {
+        "cache-control": "no-store",
+        "content-type": "application/octet-stream",
+        "content-length": String(bytes.byteLength),
+      });
+      response.end(bytes);
       return true;
     }
 

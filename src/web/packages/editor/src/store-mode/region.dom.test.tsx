@@ -1930,7 +1930,7 @@ function installHost(options: {
   const posts: unknown[] = [];
   const releases: (() => void)[] = [];
   const fetchStub = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input) !== "/api/themes/install") {
+    if (String(input) !== "/api/store/install") {
       return new Response(
         JSON.stringify({
           generatedAt: "2026-10-21T00:00:00.000Z",
@@ -3955,7 +3955,7 @@ it("speaks a status refusal even while an install sentence still stands", async 
     ],
   });
   const withInstall = (async (input: RequestInfo | URL, init?: RequestInit) =>
-    String(input) === "/api/themes/install"
+    String(input) === "/api/store/install"
       ? new Response(JSON.stringify({ ok: true }), { status: 200 })
       : host.fetch(input, init)) as typeof fetch;
   vi.stubGlobal("fetch", withInstall);

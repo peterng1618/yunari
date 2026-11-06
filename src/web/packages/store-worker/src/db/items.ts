@@ -1,5 +1,5 @@
 import type { CatalogueStatus } from "@yunari/renderer-core";
-import type { ItemRow, VersionRow } from "./types.js";
+import type { ItemRow, ReviewState, VersionRow } from "./types.js";
 
 /** The pending-upload record finalize reads its envelope and version from. */
 export interface PresignRow {
@@ -7,6 +7,12 @@ export interface PresignRow {
   readonly version: string;
   readonly envelope_json: string;
   readonly credits_json?: string | null;
+  /** The kind this submission declared; a legacy row reads `dashboard-theme`. */
+  readonly kind: string;
+  readonly metadata_json: string;
+  readonly declared_sha256: string | null;
+  readonly declared_bytes: number | null;
+  readonly execution_profile: string | null;
 }
 
 /** One stored item and the version a listing shows it at. */
@@ -68,9 +74,14 @@ interface JoinedRow {
   readonly removed_at: string | null;
   readonly downloads: number;
   readonly remix_of_id: string | null;
+  readonly publisher: string;
+  readonly item_review_state: ReviewState;
   readonly version: string | null;
   readonly envelope_json: string | null;
   readonly facets_json: string | null;
+  readonly metadata_json: string | null;
+  readonly execution_profile: string | null;
+  readonly version_review_state: ReviewState | null;
   readonly package_key: string | null;
   readonly thumbnail_key: string | null;
   readonly bytes: number | null;
@@ -84,6 +95,8 @@ function versionOfRow(row: JoinedRow): VersionRow | null {
     row.version === null ||
     row.envelope_json === null ||
     row.facets_json === null ||
+    row.metadata_json === null ||
+    row.version_review_state === null ||
     row.package_key === null ||
     row.thumbnail_key === null ||
     row.bytes === null ||
@@ -96,6 +109,9 @@ function versionOfRow(row: JoinedRow): VersionRow | null {
     version: row.version,
     envelope_json: row.envelope_json,
     facets_json: row.facets_json,
+    metadata_json: row.metadata_json,
+    execution_profile: row.execution_profile,
+    review_state: row.version_review_state,
     package_key: row.package_key,
     thumbnail_key: row.thumbnail_key,
     bytes: row.bytes,
@@ -119,6 +135,8 @@ function itemOf(row: JoinedRow): ItemRow {
     removed_at: row.removed_at,
     downloads: row.downloads,
     remix_of_id: row.remix_of_id,
+    publisher: row.publisher,
+    review_state: row.item_review_state,
   };
 }
 
@@ -143,9 +161,11 @@ export interface AuthorListing extends Listing {
 const LISTING_COLUMNS = `i.id AS item_id, i.kind, i.author_user_id, i.name,
          i.status, i.status_reason, i.created_at AS item_created_at,
          i.updated_at AS item_updated_at, i.published_at, i.unpublished_at,
-         i.removed_at, i.downloads, i.remix_of_id,
-         v.version, v.envelope_json, v.facets_json, v.package_key,
-         v.thumbnail_key, v.bytes, v.sha256,
+         i.removed_at, i.downloads, i.remix_of_id, i.publisher,
+         i.review_state AS item_review_state,
+         v.version, v.envelope_json, v.facets_json, v.metadata_json,
+         v.execution_profile, v.review_state AS version_review_state,
+         v.package_key, v.thumbnail_key, v.bytes, v.sha256,
          v.created_at AS version_created_at`;
 
 /**
@@ -275,7 +295,9 @@ export async function presignEventOf(
   return (
     (await db
       .prepare(
-        `SELECT item_id, version, envelope_json, credits_json FROM presign_event
+        `SELECT item_id, version, envelope_json, credits_json, kind,
+           metadata_json, declared_sha256, declared_bytes, execution_profile
+         FROM presign_event
          WHERE user_id = ? AND item_id = ? AND version = ?
          ORDER BY id DESC LIMIT 1`,
       )
@@ -299,10 +321,11 @@ export async function markFinalized(
   itemId: string,
   status: CatalogueStatus,
   now: string,
+  reviewState: ReviewState = "none",
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      `UPDATE item SET status = ?, updated_at = ?,
+      `UPDATE item SET status = ?, updated_at = ?, review_state = ?,
          published_at = CASE
            WHEN ? = 'published' AND status <> 'published' THEN ?
            ELSE published_at
@@ -311,7 +334,7 @@ export async function markFinalized(
            ELSE status_reason END
        WHERE id = ? AND status <> 'removed'`,
     )
-    .bind(status, now, status, now, itemId)
+    .bind(status, now, reviewState, status, now, itemId)
     .run();
   return result.meta.changes > 0;
 }

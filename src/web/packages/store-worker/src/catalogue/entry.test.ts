@@ -1,4 +1,4 @@
-import type { FacetRecord } from "@yunari/renderer-core";
+import type { CatalogueEntry, FacetRecord } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import type { ItemRow, VersionRow } from "../db/types.js";
 import { entryOf, indexDocument, itemFileOf } from "./entry.js";
@@ -34,6 +34,8 @@ function itemRow(overrides: Partial<ItemRow> = {}): ItemRow {
     removed_at: null,
     downloads: 3,
     remix_of_id: null,
+    publisher: "",
+    review_state: "none",
     ...overrides,
   };
 }
@@ -44,6 +46,9 @@ function versionRow(overrides: Partial<VersionRow> = {}): VersionRow {
     version: "1.0.0",
     envelope_json: JSON.stringify({ schemaVersion: "2.0.0", metadata: {} }),
     facets_json: JSON.stringify(FACETS),
+    metadata_json: "{}",
+    execution_profile: null,
+    review_state: "none",
     package_key: `packages/${ITEM_ID}/1.0.0.zip`,
     thumbnail_key: `thumbnails/${ITEM_ID}.png`,
     bytes: 1024,
@@ -53,9 +58,22 @@ function versionRow(overrides: Partial<VersionRow> = {}): VersionRow {
   };
 }
 
+/** The tests below all read the entry, so a dropped row is their failure. */
+function madeEntry(
+  item: ItemRow,
+  version: VersionRow,
+  favorites: number,
+  packageUrl: string,
+  thumbnailUrl: string,
+): CatalogueEntry {
+  const entry = entryOf(item, version, favorites, packageUrl, thumbnailUrl);
+  if (entry === undefined) throw new Error("The row did not make an entry.");
+  return entry;
+}
+
 describe("entryOf", () => {
   it("maps a published row to the wire entry the parser accepts", () => {
-    const entry = entryOf(
+    const entry = madeEntry(
       itemRow(),
       versionRow(),
       7,
@@ -76,7 +94,7 @@ describe("entryOf", () => {
   });
 
   it("keeps the thumbnail a stored path and omits an absent credit", () => {
-    const entry = entryOf(
+    const entry = madeEntry(
       itemRow(),
       versionRow(),
       0,
@@ -95,7 +113,7 @@ describe("entryOf", () => {
       name: "Parent",
       version: "2.1.0",
     };
-    const entry = entryOf(
+    const entry = madeEntry(
       itemRow({ remix_of_id: remixOf.catalogueId }),
       versionRow({
         envelope_json: JSON.stringify({
@@ -110,12 +128,39 @@ describe("entryOf", () => {
     expect(entry.remixOf).toEqual(remixOf);
     expect(itemFileOf(entry).remixOf).toEqual(remixOf);
   });
+
+  it("names a pack from its stored metadata, never the empty envelope", () => {
+    const entry = madeEntry(
+      itemRow({ kind: "widget-pack" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({ name: "Starter Cards", units: [] }),
+      }),
+      0,
+      "https://store.test/catalogue/x/1.0.0.zip",
+      `catalogue/${ITEM_ID}/thumbnail.png`,
+    );
+    expect(entry).toMatchObject({ kind: "widget-pack", name: "Starter Cards" });
+    expect(itemFileOf(entry)).not.toHaveProperty("remixOf");
+    expect(itemFileOf(entry)).not.toHaveProperty("facets");
+  });
+
+  it("drops a pack whose stored metadata cannot name it", () => {
+    const entry = entryOf(
+      itemRow({ kind: "widget-pack" }),
+      versionRow({ metadata_json: "{}" }),
+      0,
+      "https://store.test/catalogue/x/1.0.0.zip",
+      `catalogue/${ITEM_ID}/thumbnail.png`,
+    );
+    expect(entry).toBeUndefined();
+  });
 });
 
 describe("indexDocument", () => {
   it("stamps the caller's instant verbatim", () => {
     const entries = [
-      entryOf(itemRow(), versionRow(), 1, "u", "catalogue/x/thumbnail.png"),
+      madeEntry(itemRow(), versionRow(), 1, "u", "catalogue/x/thumbnail.png"),
     ];
     expect(indexDocument(entries, NOW)).toEqual({
       generatedAt: NOW,

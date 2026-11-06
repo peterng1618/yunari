@@ -2,7 +2,7 @@ import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
 /** Where an install is handed over. The host's own route, named once. */
-const INSTALL_PATH = "/api/themes/install";
+const INSTALL_PATH = "/api/store/install";
 
 export type InstallOutcome =
   | { readonly ok: true }
@@ -28,7 +28,7 @@ export interface InstallControl {
 
 /**
  * Posts one catalogue item to the host, which fetches and writes the package.
- * The browser posts four facts and reads no bytes: the
+ * The browser posts the catalogue's facts and reads no bytes: the
  * host owns the download, the validation and the folder, so a client that
  * downloaded here would be a second owner of the same install.
  *
@@ -65,6 +65,11 @@ export async function installItem(
         catalogueId: catalogue.id,
         version,
         kind: item.kind,
+        ...(catalogue.sha256 === undefined ? {} : { sha256: catalogue.sha256 }),
+        ...(catalogue.bytes === undefined ? {} : { bytes: catalogue.bytes }),
+        ...(catalogue.publisher === undefined
+          ? {}
+          : { publisher: catalogue.publisher }),
       }),
     });
   } catch (error) {

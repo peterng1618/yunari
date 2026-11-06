@@ -15,6 +15,7 @@ import {
   type PluginInstaller,
 } from "@yunari/extension-api";
 import type { ConsentStore } from "./consent-store.js";
+import type { KillListStore } from "./kill-list.js";
 
 export type { InstalledExtension } from "@yunari/extension-api";
 
@@ -110,6 +111,9 @@ export function createExtensionService(options: {
   readonly installer: PluginInstaller;
   readonly consent: ConsentStore;
   readonly now: () => string;
+  /** The store's revoke list. Absent when this host has no store origin, which
+   *  leaves every plugin to its consent state. */
+  readonly killList?: KillListStore;
   /** Runs after a successful install, grant or remove, so the host can reload
    *  the managers that read plugin contributions. */
   readonly onChange?: () => Promise<void>;
@@ -151,7 +155,12 @@ export function createExtensionService(options: {
 
     async install(bytes) {
       const result = await installer.install(bytes);
-      if (result.ok) await changed();
+      if (result.ok) {
+        // A plugin that arrived after the last refresh may already be revoked;
+        // the check is cheap and the answer is what `mayLoad` reads.
+        await options.killList?.refresh();
+        await changed();
+      }
       return result;
     },
 
@@ -186,6 +195,10 @@ export function createExtensionService(options: {
     },
 
     async mayLoad(key) {
+      // A revoked plugin does not load even while its consent still matches:
+      // the kill list is the store's word about a package already on disk.
+      if ((await options.killList?.isKilled(key)) === true) return false;
+
       const plugin = await read(key);
       if (plugin === undefined) return false;
       if (!consentRequired(plugin.manifest.execution)) return true;

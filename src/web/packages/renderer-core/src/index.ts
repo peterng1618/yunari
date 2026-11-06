@@ -346,11 +346,15 @@ export type {
 } from "./theme/catalogue-index.js";
 export {
   CATALOGUE_ID_PATTERN,
+  type CatalogueKind,
   DASHBOARD_THEME_KIND,
   isCatalogueId,
   isCatalogueStatus,
+  isStoreItemKind,
   parseCatalogueIndex,
   parseCatalogueItemFile,
+  STORE_ITEM_KINDS,
+  type StoreItemKind,
 } from "./theme/catalogue-index.js";
 export {
   CATALOGUE_ORIGIN,

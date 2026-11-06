@@ -10,9 +10,37 @@ import type { FacetRecord } from "./facet-record.js";
  * fetches: the reader hands in a parsed document.
  */
 
-/** The one kind v1 exchanges, and the value it is identified by on the wire.
- *  What it is *called* is `uiCopy.store.cell.kinds`. */
-export const DASHBOARD_THEME_KIND = "dashboard-theme";
+/**
+ * Every package kind the store exchanges, and the value each is identified by
+ * on the wire. What one is *called* is `uiCopy.store.cell.kinds`.
+ *
+ * A parsed wire entry's kind stays a string: a listing written by a newer store
+ * may name a kind this build does not ship, and `parseCatalogueIndex` reports
+ * that entry as `unknown-kind` rather than dropping it as malformed.
+ */
+export const STORE_ITEM_KINDS = [
+  "dashboard-theme",
+  "editor-theme",
+  "widget-pack",
+  "path-preset-pack",
+  "plugin",
+] as const;
+
+export type StoreItemKind = (typeof STORE_ITEM_KINDS)[number];
+
+export function isStoreItemKind(value: unknown): value is StoreItemKind {
+  return (
+    typeof value === "string" &&
+    (STORE_ITEM_KINDS as readonly string[]).includes(value)
+  );
+}
+
+/** The first kind, and the one every v1 client already read. */
+export const DASHBOARD_THEME_KIND: StoreItemKind = STORE_ITEM_KINDS[0];
+
+/** A kind this build ships, or one a newer listing named. The literal members
+ *  survive for autocomplete; the string arm is what a wire read produces. */
+export type CatalogueKind = StoreItemKind | (string & {});
 
 /**
  * The catalogue's id shape: a lowercase UUID.
@@ -31,7 +59,7 @@ export interface CatalogueEntry {
   /** The catalogue's own id for the item, not a library id. */
   readonly id: string;
   /** The wire identifier, e.g. `"dashboard-theme"`. */
-  readonly kind: string;
+  readonly kind: CatalogueKind;
   readonly name: string;
   readonly version: string;
   /** An ISO instant. */
@@ -46,6 +74,17 @@ export interface CatalogueEntry {
   /** Derived by the producer from the envelope. Checked as a record and never
    *  re-derived: deriving it again would be a second owner of one fact. */
   readonly facets: FacetRecord;
+  /** The stored package's SHA-256 and exact size, so an installer verifies the
+   *  bytes it downloaded. Absent on an entry written before the store recorded
+   *  them, which is an item the host cannot install. */
+  readonly sha256?: string;
+  readonly bytes?: number;
+  /** The store account's publisher slug. Absent on a legacy dashboard theme,
+   *  which had no publisher before the account owned it. */
+  readonly publisher?: string;
+  /** The wire value of the plugin's execution profile; a theme or pack has
+   *  none. */
+  readonly executionProfile?: string;
   /** The parent an item credits, when it has one. The key is absent, never
    *  present-and-undefined, so "no credit" and "credit omitted" are one fact. */
   readonly remixOf?: ThemeRemix;
@@ -130,6 +169,7 @@ export function parseCatalogueItemFile(
 
   const kind = stringField(value, "kind");
   if (kind === undefined) return refusedText("kind");
+  if (!isStoreItemKind(kind)) return refusedKind();
   const name = stringField(value, "name");
   if (name === undefined) return refusedText("name");
   const version = stringField(value, "version");
@@ -146,6 +186,15 @@ export function parseCatalogueItemFile(
   if (packageUrl === undefined) return refusedText("packageUrl");
   const thumbnail = stringField(value, "thumbnail");
   if (thumbnail === undefined) return refusedText("thumbnail");
+  const publisher = optionalText(value, "publisher");
+  if (publisher === null) return refusedText("publisher");
+  const executionProfile = optionalText(value, "executionProfile");
+  if (executionProfile === null) return refusedText("executionProfile");
+  const sha256 = optionalText(value, "sha256");
+  if (sha256 === null || (sha256 !== undefined && !isSha256(sha256)))
+    return refusedDigest();
+  const bytes = optionalBytes(value);
+  if (bytes === null) return refusedBytes();
   const remixOf = field(value, "remixOf");
   if (remixOf !== undefined && !isThemeRemix(remixOf)) return refusedRemix();
 
@@ -161,8 +210,60 @@ export function parseCatalogueItemFile(
       favorites,
       packageUrl,
       thumbnail,
+      ...(publisher === undefined ? {} : { publisher }),
+      ...(executionProfile === undefined ? {} : { executionProfile }),
+      ...(sha256 === undefined ? {} : { sha256 }),
+      ...(bytes === undefined ? {} : { bytes }),
       ...(remixOf === undefined ? {} : { remixOf }),
     },
+  };
+}
+
+/** An optional non-empty string: `undefined` when absent, `null` when present
+ *  and unusable, so a caller can tell "no credit" from a misspelt one. */
+function optionalText(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined | null {
+  const value = field(record, key);
+  if (value === undefined) return undefined;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** An optional package size: `undefined` when absent, `null` when present and
+ *  not a count. A size of zero is a count a package cannot have. */
+function optionalBytes(
+  record: Record<string, unknown>,
+): number | undefined | null {
+  const value = field(record, "bytes");
+  if (value === undefined) return undefined;
+  const bytes = countField(record, "bytes");
+  return bytes === undefined || bytes === 0 ? null : bytes;
+}
+
+/** Lowercase hex, exactly SHA-256's width. */
+function isSha256(text: string): boolean {
+  return /^[0-9a-f]{64}$/.test(text);
+}
+
+function refusedDigest(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason: 'item.json\'s "sha256" must be a lowercase hex SHA-256.',
+  };
+}
+
+function refusedBytes(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason: 'item.json\'s "bytes" must be a positive whole number.',
+  };
+}
+
+function refusedKind(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason: `item.json's "kind" must be one of ${STORE_ITEM_KINDS.join(", ")}.`,
   };
 }
 
@@ -287,8 +388,16 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
   const thumbnail = stringField(value, "thumbnail");
   const facets = facetsOf(value);
   const remixOf = field(value, "remixOf");
+  const publisher = optionalText(value, "publisher");
+  const executionProfile = optionalText(value, "executionProfile");
+  const sha256 = optionalText(value, "sha256");
+  const bytes = optionalBytes(value);
 
   if (remixOf !== undefined && !isThemeRemix(remixOf)) return undefined;
+  if (publisher === null || executionProfile === null) return undefined;
+  if (sha256 === null || (sha256 !== undefined && !isSha256(sha256)))
+    return undefined;
+  if (bytes === null) return undefined;
 
   if (
     id === undefined ||
@@ -318,6 +427,10 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
     packageUrl,
     thumbnail,
     facets,
+    ...(publisher === undefined ? {} : { publisher }),
+    ...(executionProfile === undefined ? {} : { executionProfile }),
+    ...(sha256 === undefined ? {} : { sha256 }),
+    ...(bytes === undefined ? {} : { bytes }),
     ...(remixOf === undefined ? {} : { remixOf }),
   };
 }

@@ -159,5 +159,45 @@ never committed. The cron `*/15 * * * *` cleans abandoned uploads. The Worker's
 `/migrate` route creates better-auth tables; the D1 SQL migrations create the
 catalogue tables. Both are safe to re-run.
 
+### Store contents and revocations
+
+The listing serves five kinds: `dashboard-theme`, `editor-theme`,
+`widget-pack`, `path-preset-pack` and `plugin`. A non-theme version is stored in
+`item_version.metadata_json`; a dashboard theme keeps `envelope_json`. Both are
+written by the Worker from a package it read and validated, never from the
+browser's claims.
+
+A hardware plugin — one contributing a panel family or asking for
+`usb:device`/`serial:device` — finalizes as `pending` and is published by an
+owner verdict:
+
+```bash
+curl -X POST https://<worker>/api/admin/items/<id>/review \
+  -H "content-type: application/json" \
+  -b "<owner session>" -d '{"decision":"approved"}'
+```
+
+A revocation is one `publisher/id` key with an optional https advisory link:
+
+```bash
+curl -X PUT https://<worker>/api/admin/kill-list/acme/acme-sensors \
+  -H "content-type: application/json" \
+  -b "<owner session>" -d '{"advisoryUrl":"https://example.test/advisory"}'
+curl -X DELETE https://<worker>/api/admin/kill-list/acme/acme-sensors \
+  -b "<owner session>"
+```
+
+The host fetches `GET /kill-list.json` at startup and after an install, caches
+it under `<settingsDir>/extensions/kill-list.json`, and stops a listed plugin
+from loading even when its consent matches. A failed fetch keeps the cached
+list; with no cache, nothing is killed.
+
+The host's store install route is `/api/store/install`, loopback and
+same-origin only. It downloads over https from `YUNARI_STORE_ORIGIN` (the
+shipped catalogue origin when unset), verifies the listing's `sha256` and
+`bytes`, and dispatches by kind. Editor themes land in
+`<settingsDir>/editor-themes/<catalogueId>.yunari-theme` and are read back
+through `GET /api/editor-themes/:id` for the Settings import control.
+
 The Free plan allows 10 ms CPU per invocation; the runbook's step 11 describes
 the measurement and the Paid-plan threshold.

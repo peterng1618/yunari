@@ -6,8 +6,10 @@ import type {
 import {
   DASHBOARD_THEME_KIND,
   facetRecordOf,
+  isStoreItemKind,
   MAX_METADATA_NAME_BYTES,
   migrateFabricThemeEnvelope,
+  type StoreItemKind,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import {
@@ -17,6 +19,13 @@ import {
 } from "@yunari/theme-package";
 import { type Session, sessionOf } from "../auth/session.js";
 import { entryOf } from "../catalogue/entry.js";
+import {
+  defaultFacetsFor,
+  readPackSubmission,
+  validateFinalizedPackage,
+} from "../catalogue/kinds.js";
+import { publisherFor } from "../catalogue/publisher.js";
+import { reviewStateFor } from "../catalogue/review.js";
 import { favoriteCount, toggleFavorite } from "../db/favorites.js";
 import {
   finalizeStoredVersion,
@@ -27,6 +36,7 @@ import {
   itemById,
   latestVersion,
   markFinalized,
+  type PresignRow,
   presignEventOf,
   renameItem,
   setStatus,
@@ -45,12 +55,12 @@ import {
   REPORT_CATEGORIES,
   reportAllowed,
 } from "../db/reports.js";
-import type { ItemRow, UploadRow } from "../db/types.js";
+import type { ItemRow, ReviewState, UploadRow } from "../db/types.js";
 import { uploadsForVersion } from "../db/uploads.js";
 import type { Env } from "../env.js";
 import { pendingKey, thumbnailKey } from "../storage/keys.js";
-import { inspectObject } from "../storage/objects.js";
-import { planVersion } from "../version/plan.js";
+import { inspectObject, openObject } from "../storage/objects.js";
+import { planPackVersion, planVersion } from "../version/plan.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
 
 const ITEMS_PREFIX = "/api/me/items/";
@@ -145,19 +155,26 @@ async function mine(request: Request, env: Env, url: URL): Promise<Response> {
   // favourite count. `authorListings` owns the latest-version rule the public
   // reads use, so one item is shown at one version everywhere.
   const listings = await authorListings(env.DB, session.userId);
-  const entries: MineEntry[] = listings.map(({ item, version, favorites }) => ({
-    ...entryOf(
+  const entries: MineEntry[] = [];
+  for (const { item, version, favorites } of listings) {
+    const entry = entryOf(
       item,
       version,
       favorites,
       `${url.origin}/catalogue/${item.id}/${version.version}.zip`,
       `catalogue/${item.id}/thumbnail.png`,
-    ),
-    status: item.status,
-    ...(item.status_reason === null
-      ? {}
-      : { statusReason: item.status_reason }),
-  }));
+    );
+    // A row whose stored metadata cannot name it is not a row the Mine surface
+    // can draw; the index drops it the same way.
+    if (entry === undefined) continue;
+    entries.push({
+      ...entry,
+      status: item.status,
+      ...(item.status_reason === null
+        ? {}
+        : { statusReason: item.status_reason }),
+    });
+  }
 
   return Response.json({ entries });
 }
@@ -350,6 +367,21 @@ async function requestVersion(
   if (!read.ok) return read.response;
   const body = read.body;
 
+  const declaredKind = body["kind"] ?? DASHBOARD_THEME_KIND;
+  if (!isStoreItemKind(declaredKind))
+    return badRequest(
+      `A version request names one of: dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.`,
+    );
+  if (declaredKind !== DASHBOARD_THEME_KIND)
+    return requestPackVersion(
+      request,
+      env,
+      session,
+      itemId,
+      declaredKind,
+      body,
+    );
+
   const validated = validateFabricThemeEnvelope(body["envelope"]);
   if (!validated.ok)
     return badRequest(validated.issues.map((issue) => issue.message).join(" "));
@@ -408,6 +440,8 @@ async function requestVersion(
 
   const now = new Date();
   const nowIso = now.toISOString();
+  const publisher = await publisherOf(env, session);
+  if (!publisher.ok) return badRequest(publisher.message);
   const plan = planVersion({
     previous: await previousEnvelope(env, envelope.id),
     candidate: envelope,
@@ -460,6 +494,8 @@ async function requestVersion(
 
   if (renamedTo !== undefined)
     await renameItem(env.DB, itemId, renamedTo, nowIso);
+  if (item !== undefined && item.publisher !== publisher.publisher)
+    await setPublisher(env.DB, itemId, publisher.publisher);
 
   // A parallel first submission may win the insert; that loser is ignored
   // rather than failing on the PRIMARY KEY, then reads the row it shares. An
@@ -477,6 +513,7 @@ async function requestVersion(
         session.userId,
         newItemName,
         nowIso,
+        publisher.publisher,
       );
       stored = await itemById(env.DB, envelope.id);
       if (stored === undefined && !wrote) {
@@ -538,6 +575,185 @@ async function requestVersion(
     }
     throw error;
   }
+}
+
+/**
+ * A non-theme version request: the same reservation, quota and ownership rules
+ * as a theme's, but the version is the submission's own semver checked by
+ * `planPackVersion`, and the pending record carries the digest a finalize must
+ * match before any version row is written.
+ */
+async function requestPackVersion(
+  request: Request,
+  env: Env,
+  session: Session,
+  itemId: string,
+  kind: StoreItemKind,
+  body: Readonly<Record<string, unknown>>,
+): Promise<Response> {
+  const read = readPackSubmission(body);
+  if (!read.ok) return badRequest(read.message);
+  const submission = read.submission;
+
+  const item = await itemById(env.DB, itemId);
+  if (item !== undefined && item.author_user_id !== session.userId)
+    return notFound();
+  if (item?.status === "removed") {
+    return new Response(
+      item.status_reason ?? "This item was removed from the store.",
+      { status: 409 },
+    );
+  }
+
+  if (
+    new TextEncoder().encode(submission.name).byteLength >
+    MAX_METADATA_NAME_BYTES
+  )
+    return badRequest(
+      `An item name may be at most ${MAX_METADATA_NAME_BYTES} bytes.`,
+    );
+
+  const previous = await latestVersion(env.DB, itemId);
+  const plan = planPackVersion(previous?.version, submission.version);
+  if (!plan.ok) return badRequest(plan.message);
+
+  const publisher = await publisherOf(env, session);
+  if (!publisher.ok) return badRequest(publisher.message);
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  if (!(await presignAllowed(env.DB, session.userId, now)))
+    return tooMany("Too many upload requests; try again in an hour.");
+
+  const uploadId = crypto.randomUUID();
+  const creatingNewItem = item === undefined;
+  const reserved = await reserveUpload(env, {
+    uploadId,
+    userId: session.userId,
+    itemId,
+    version: plan.version,
+    // A non-theme version carries no envelope; its metadata is the pending
+    // record's own column.
+    envelopeJson: "{}",
+    now,
+    nowIso,
+    creatingNewItem,
+  });
+  if (!reserved) {
+    const exceeded = await authorQuotaExceeded(
+      env.DB,
+      session.userId,
+      MAX_ARCHIVE_BYTES,
+      creatingNewItem,
+      now,
+    );
+    if (exceeded === "items")
+      return tooMany("An account may own at most 20 items.");
+    if (exceeded === "bytes")
+      return tooMany("An author's stored packages may total at most 1 GiB.");
+    return tooMany(
+      "Your account has no room for another package; try again later.",
+    );
+  }
+
+  let stored = item;
+  try {
+    if (creatingNewItem) {
+      const wrote = await createPackDraft(env, {
+        id: itemId,
+        kind,
+        name: submission.name,
+        publisher: publisher.publisher,
+        userId: session.userId,
+        now: nowIso,
+      });
+      stored = await itemById(env.DB, itemId);
+      if (stored === undefined && !wrote) {
+        await discardReservation(env, uploadId);
+        return tooMany("An account may own at most 20 items.");
+      }
+      if (stored === undefined || stored.author_user_id !== session.userId) {
+        await discardReservation(env, uploadId);
+        return notFound();
+      }
+    } else if (item !== undefined && submission.name !== item.name) {
+      await renameItem(env.DB, itemId, submission.name, nowIso);
+    }
+    if (item !== undefined && item.publisher !== publisher.publisher)
+      await setPublisher(env.DB, itemId, publisher.publisher);
+
+    const uploadUrl = `${new URL(request.url).origin}${UPLOADS_PREFIX}${uploadId}`;
+    await env.DB.prepare(
+      `INSERT INTO presign_event (user_id, at, item_id, version, envelope_json,
+         credits_json, kind, metadata_json, declared_sha256, declared_bytes,
+         execution_profile)
+       VALUES (?, ?, ?, ?, '{}', NULL, ?, ?, ?, ?, NULL)`,
+    )
+      .bind(
+        session.userId,
+        nowIso,
+        itemId,
+        plan.version,
+        kind,
+        JSON.stringify(submission.metadata),
+        submission.sha256,
+        submission.bytes,
+      )
+      .run();
+
+    // A hardware plugin is held for review at finalize, when its manifest is
+    // readable; every other pack follows the verified-author rule.
+    const status =
+      stored?.status === "rejected"
+        ? "pending"
+        : (await isVerified(env.DB, session.userId))
+          ? "published"
+          : "pending";
+    return Response.json({ version: plan.version, status, uploadUrl });
+  } catch (error) {
+    try {
+      await discardReservation(env, uploadId);
+    } catch {
+      // A failed delete must not replace the original failure.
+    }
+    throw error;
+  }
+}
+
+function publisherOf(
+  env: Env,
+  session: Session,
+): Promise<
+  | { readonly ok: true; readonly publisher: string }
+  | { readonly ok: false; readonly message: string }
+> {
+  return env.DB.prepare(
+    "SELECT display_name FROM author_profile WHERE user_id = ?",
+  )
+    .bind(session.userId)
+    .first<{ display_name: string | null }>()
+    .then((row) =>
+      publisherFor({
+        userId: session.userId,
+        displayName: row?.display_name ?? null,
+        email: session.email,
+      }),
+    );
+}
+
+async function setPublisher(
+  db: D1Database,
+  itemId: string,
+  publisher: string,
+): Promise<void> {
+  await db
+    .prepare("UPDATE item SET publisher = ? WHERE id = ?")
+    .bind(publisher, itemId)
+    .run();
+}
+
+async function discardReservation(env: Env, uploadId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM upload WHERE id = ?").bind(uploadId).run();
 }
 
 /**
@@ -825,6 +1041,20 @@ async function finalizeVersion(
   const inspected = await inspectObject(env.BUCKET, stored.key);
   if (inspected === undefined) return notFound();
 
+  if (presign.kind !== DASHBOARD_THEME_KIND) {
+    return finalizePackVersion(
+      env,
+      session,
+      item,
+      version,
+      presign,
+      stored,
+      inspected,
+      thumbnail.bytes,
+      new Date().toISOString(),
+    );
+  }
+
   const now = new Date();
   const nowIso = now.toISOString();
   const existing = await versionOf(env.DB, itemId, version);
@@ -885,6 +1115,9 @@ async function finalizeVersion(
       facets_json: JSON.stringify(
         facetRecordOf(parseEnvelope(presign), luminance.value),
       ),
+      metadata_json: "{}",
+      execution_profile: null,
+      review_state: "none",
       package_key: stored.key,
       thumbnail_key: thumbnailKey(itemId),
       bytes: inspected.bytes,
@@ -908,6 +1141,132 @@ async function finalizeVersion(
   return await settle(env, session, item, version, nowIso);
 }
 
+/**
+ * The non-theme half of finalize: the pending object's exact size and SHA-256
+ * must be the ones the version request declared, and the package must pass its
+ * own kind's reader before any version row or thumbnail is written. A refused
+ * upload is deleted in the same answer, so a mismatched submission leaves no
+ * package behind for cleanup to prune.
+ */
+async function finalizePackVersion(
+  env: Env,
+  session: Session,
+  item: ItemRow,
+  version: string,
+  presign: PresignRow,
+  stored: UploadRow,
+  inspected: { readonly bytes: number; readonly sha256: string },
+  thumbnail: Uint8Array,
+  nowIso: string,
+): Promise<Response> {
+  if (presign.declared_sha256 === null || presign.declared_bytes === null)
+    return unprocessable(
+      "This upload carries no package digest; request the version again.",
+    );
+
+  const object = await openObject(env.BUCKET, stored.key);
+  if (object === undefined) return notFound();
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  const digest = await sha256Hex(bytes);
+  if (
+    bytes.byteLength !== presign.declared_bytes ||
+    digest !== presign.declared_sha256 ||
+    inspected.bytes !== presign.declared_bytes
+  ) {
+    await discardUpload(env, stored);
+    return badRequest(
+      "The uploaded package does not match the size and SHA-256 the submission declared.",
+    );
+  }
+
+  const finalized = validateFinalizedPackage(
+    presign.kind as StoreItemKind,
+    bytes,
+  );
+  if (!finalized.ok) {
+    await discardUpload(env, stored);
+    return badRequest(finalized.message);
+  }
+  // A hardware plugin is held for the owner whatever the author's state; the
+  // manifest review reads is the package's own, validated above.
+  const reviewState: ReviewState =
+    finalized.finalized.manifest === undefined
+      ? "none"
+      : reviewStateFor(finalized.finalized.manifest);
+
+  const existing = await versionOf(env.DB, item.id, version);
+  if (existing !== undefined) {
+    if (
+      existing.sha256 !== inspected.sha256 ||
+      existing.bytes !== inspected.bytes
+    )
+      return differentBytes(version);
+    await releaseReservedUpload(env.DB, item.id, version, nowIso);
+    if (item.updated_at < existing.created_at)
+      return await settle(env, session, item, version, nowIso, reviewState);
+    return Response.json({ ok: true, status: item.status, version });
+  }
+
+  if (
+    Date.parse(stored.created_at) <=
+    Date.parse(nowIso) - UPLOAD_RESERVATION_TTL_MS
+  )
+    return new Response("This upload expired; request a new version.", {
+      status: 409,
+    });
+
+  await env.BUCKET.put(thumbnailKey(item.id), thumbnail, {
+    httpMetadata: { contentType: "image/png" },
+  });
+  const wrote = await finalizeStoredVersion(
+    env.DB,
+    {
+      item_id: item.id,
+      version,
+      envelope_json: "{}",
+      credits_json: null,
+      facets_json: JSON.stringify(
+        defaultFacetsFor(presign.kind as StoreItemKind),
+      ),
+      metadata_json: JSON.stringify(finalized.finalized.metadata),
+      execution_profile: finalized.finalized.executionProfile,
+      review_state: reviewState,
+      package_key: stored.key,
+      thumbnail_key: thumbnailKey(item.id),
+      bytes: inspected.bytes,
+      sha256: inspected.sha256,
+      created_at: nowIso,
+    },
+    nowIso,
+  );
+  if (!wrote) {
+    const won = await versionOf(env.DB, item.id, version);
+    if (
+      won === undefined ||
+      won.sha256 !== inspected.sha256 ||
+      won.bytes !== inspected.bytes
+    )
+      return differentBytes(version);
+  }
+  return await settle(env, session, item, version, nowIso, reviewState);
+}
+
+/** Drops a refused submission's stored object and its reservation together. */
+async function discardUpload(env: Env, stored: UploadRow): Promise<void> {
+  await env.BUCKET.delete(stored.key);
+  await env.DB.prepare("DELETE FROM upload WHERE id = ?").bind(stored.id).run();
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    bytes as unknown as BufferSource,
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** No reservation and a reservation with no row answer the same 409. */
 function noUploadRequested(version: string): Response {
   return new Response(`No upload was requested for version "${version}".`, {
@@ -926,12 +1285,13 @@ async function settle(
   item: ItemRow,
   version: string,
   now: string,
+  reviewState: ReviewState = "none",
 ): Promise<Response> {
-  const status = nextStatus(
-    item.status,
-    await isVerified(env.DB, session.userId),
-  );
-  if (!(await markFinalized(env.DB, item.id, status, now)))
+  const status =
+    reviewState === "pending"
+      ? "pending"
+      : nextStatus(item.status, await isVerified(env.DB, session.userId));
+  if (!(await markFinalized(env.DB, item.id, status, now, reviewState)))
     return await takenDown(env, item.id);
   return Response.json({ ok: true, status, version });
 }
@@ -1124,12 +1484,13 @@ async function createDraft(
   userId: string,
   name: string,
   now: string,
+  publisher: string,
 ): Promise<boolean> {
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO item (id, kind, author_user_id, name, status,
        status_reason, created_at, updated_at, published_at, unpublished_at,
-       removed_at, downloads, remix_of_id)
-     SELECT ?, ?, ?, ?, 'draft', NULL, ?, ?, NULL, NULL, NULL, 0, ?
+       removed_at, downloads, remix_of_id, publisher)
+     SELECT ?, ?, ?, ?, 'draft', NULL, ?, ?, NULL, NULL, NULL, 0, ?, ?
      WHERE (SELECT COUNT(*) FROM item WHERE author_user_id = ?) < ?`,
   )
     .bind(
@@ -1140,7 +1501,42 @@ async function createDraft(
       now,
       now,
       envelope.metadata?.remixOf?.catalogueId ?? null,
+      publisher,
       userId,
+      MAX_AUTHOR_ITEMS,
+    )
+    .run();
+  return result.meta.changes > 0;
+}
+
+/** A draft for a non-theme kind: no envelope, so no remix credit to carry. */
+async function createPackDraft(
+  env: Env,
+  input: {
+    readonly id: string;
+    readonly kind: StoreItemKind;
+    readonly name: string;
+    readonly publisher: string;
+    readonly userId: string;
+    readonly now: string;
+  },
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `INSERT OR IGNORE INTO item (id, kind, author_user_id, name, status,
+       status_reason, created_at, updated_at, published_at, unpublished_at,
+       removed_at, downloads, remix_of_id, publisher)
+     SELECT ?, ?, ?, ?, 'draft', NULL, ?, ?, NULL, NULL, NULL, 0, NULL, ?
+     WHERE (SELECT COUNT(*) FROM item WHERE author_user_id = ?) < ?`,
+  )
+    .bind(
+      input.id,
+      input.kind,
+      input.userId,
+      input.name,
+      input.now,
+      input.now,
+      input.publisher,
+      input.userId,
       MAX_AUTHOR_ITEMS,
     )
     .run();

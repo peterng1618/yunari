@@ -3,6 +3,7 @@ import { sessionOf } from "../auth/session.js";
 import type { QueueListing } from "../db/items.js";
 import {
   itemById,
+  latestVersion,
   queueListings,
   setStatus,
   setStatusStatement,
@@ -15,10 +16,12 @@ import {
 } from "../db/reports.js";
 import type { Env } from "../env.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
+import { clearKill, isAdvisoryUrl, isPluginKey, setKill } from "./kill-list.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
 const REPORTS = "/api/admin/reports";
+const KILL_LIST = "/api/admin/kill-list/";
 const MAX_REASON_LENGTH = 500;
 
 /** One pending item as the owner's queue shows it. */
@@ -89,6 +92,12 @@ type Route =
       readonly itemId: string;
       readonly action: "approve" | "reject" | "remove" | "restore";
     }
+  | { readonly kind: "review"; readonly itemId: string }
+  | {
+      readonly kind: "kill";
+      readonly key: string;
+      readonly method: "PUT" | "DELETE";
+    }
   | {
       readonly kind: "report";
       readonly userId: string;
@@ -104,6 +113,18 @@ type Route =
 function matchRoute(method: string, pathname: string): Route | undefined {
   if (method === "GET" && pathname === QUEUE) return { kind: "queue" };
   if (method === "GET" && pathname === REPORTS) return { kind: "reports" };
+  if (
+    pathname.startsWith(KILL_LIST) &&
+    (method === "PUT" || method === "DELETE")
+  ) {
+    let key: string;
+    try {
+      key = decodeURIComponent(pathname.slice(KILL_LIST.length));
+    } catch {
+      return undefined;
+    }
+    return isPluginKey(key) ? { kind: "kill", key, method } : undefined;
+  }
   if (method !== "POST") return undefined;
 
   const parts = pathname.slice(ADMIN_PREFIX.length).split("/");
@@ -125,6 +146,7 @@ function matchRoute(method: string, pathname: string): Route | undefined {
   if (rest.length > 0 || action === undefined) return undefined;
 
   if (head === "items" && subject !== undefined && subject.length > 0) {
+    if (action === "review") return { kind: "review", itemId: subject };
     if (
       action === "approve" ||
       action === "reject" ||
@@ -150,6 +172,9 @@ async function dispatch(
 ): Promise<Response> {
   if (route.kind === "queue") return queue(env);
   if (route.kind === "reports") return reportQueue(env);
+  if (route.kind === "kill")
+    return killAction(route.key, route.method, request, env);
+  if (route.kind === "review") return reviewAction(route.itemId, request, env);
   if (route.kind === "report")
     return reportAction(route.userId, route.itemId, route.action, env);
   if (route.kind === "author")
@@ -289,6 +314,99 @@ async function itemAction(
     );
   }
   return Response.json({ ok: true, status: transition.to });
+}
+
+/**
+ * The hardware-review verdict: one decision moves the latest version and the
+ * item together. A batched pair is the atomic form D1 offers, so a crash cannot
+ * leave an approved version on a pending item. The guard is the pending review
+ * state itself; a second verdict races the first and answers 409.
+ */
+async function reviewAction(
+  itemId: string,
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const decision = read.body["decision"];
+  if (decision !== "approved" && decision !== "rejected")
+    return badRequest('A review decision is "approved" or "rejected".');
+
+  let reason: string | null = null;
+  const rawReason = read.body["reason"];
+  if (rawReason !== undefined) {
+    if (typeof rawReason !== "string")
+      return badRequest("A reason must be text.");
+    const trimmed = rawReason.trim();
+    if (trimmed.length > MAX_REASON_LENGTH)
+      return badRequest(
+        `A reason may be at most ${MAX_REASON_LENGTH} characters.`,
+      );
+    reason = trimmed === "" ? null : trimmed;
+  }
+
+  const item = await itemById(env.DB, itemId);
+  if (item === undefined) return notFound();
+  const version = await latestVersion(env.DB, itemId);
+  if (version === undefined) return notFound();
+
+  const status = decision === "approved" ? "published" : "rejected";
+  const at = new Date().toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE item_version SET review_state = ?
+       WHERE item_id = ? AND version = ? AND review_state = 'pending'`,
+    ).bind(decision, itemId, version.version),
+    env.DB.prepare(
+      `UPDATE item SET status = ?, review_state = ?, status_reason = ?,
+         updated_at = ?,
+         published_at = CASE WHEN ? = 'published' THEN ? ELSE published_at END
+       WHERE id = ? AND status = 'pending' AND review_state = 'pending'`,
+    ).bind(
+      status,
+      decision,
+      decision === "rejected" ? reason : null,
+      at,
+      status,
+      at,
+      itemId,
+    ),
+  ]);
+  if (
+    (results[0]?.meta.changes ?? 0) === 0 ||
+    (results[1]?.meta.changes ?? 0) === 0
+  )
+    return new Response(
+      `Item "${itemId}" has no pending review at version "${version.version}".`,
+      { status: 409 },
+    );
+  return Response.json({ ok: true, status, review: decision });
+}
+
+/** The owner's revoke list: one key at a time, with an optional advisory link. */
+async function killAction(
+  key: string,
+  method: "PUT" | "DELETE",
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (method === "DELETE") {
+    if (!(await clearKill(env.DB, key))) return notFound();
+    return Response.json({ ok: true, key });
+  }
+
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const advisory = read.body["advisoryUrl"];
+  if (advisory !== undefined && !isAdvisoryUrl(advisory))
+    return badRequest("An advisory URL must be an https URL.");
+  await setKill(env.DB, key, advisory, new Date().toISOString());
+  return Response.json({
+    ok: true,
+    key,
+    ...(advisory === undefined ? {} : { advisoryUrl: advisory }),
+  });
 }
 
 /** A verdict sentence: trimmed, non-empty and bounded. */

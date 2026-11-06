@@ -3,15 +3,20 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
 
 /**
  * Fetches one catalogue package. The address is data from a remote document,
- * so this is where the trust boundary is held: https only, the store's own
- * host, no redirect, and the reader's own cap enforced while the body streams.
- * The bytes then go to the owners that already exist (`importThemePackage`,
- * `ThemeStore`, `ThemeOriginsStore`); this module writes nothing.
+ * so this is where the trust boundary is held: https only,
+ * the configured store's own origin (the shipped catalogue when none is
+ * configured), no redirect, and the reader's own cap enforced while the body
+ * streams. The bytes then go to the owners that already exist
+ * (`installCatalogueItem`, `ThemeStore`, `ThemeOriginsStore`); this module
+ * writes nothing.
  */
 
 export interface DownloadOptions {
   /** Injected so a unit test drives this without a network. */
   readonly fetch?: typeof fetch;
+  /** The configured store origin. Given, the package must be same-origin with
+   *  it; absent, the shipped catalogue origin is the only one. */
+  readonly origin?: string;
   /** Aborts the read when the store's own patience runs out. */
   readonly timeoutMs?: number;
 }
@@ -49,7 +54,7 @@ export async function downloadPackage(
     return refuseAddress("That is not a URL a catalogue can produce.");
   if (target.protocol !== "https:")
     return refuseAddress("A catalogue package must be downloaded over https.");
-  if (!isCatalogueHost(target))
+  if (!isCatalogueAddress(target, options?.origin))
     return refuseAddress("That host cannot serve a catalogue package.");
 
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -164,12 +169,18 @@ function parseUrl(raw: string): URL | undefined {
   }
 }
 
-/** The hostname is compared after parsing, so `yunari-store.workers.dev.evil.example`
+/** The configured origin, when there is one; otherwise the shipped catalogue.
+ *  The hostname is compared after parsing, so `yunari-store.workers.dev.evil.example`
  *  and a userinfo prefix both fail. */
-function isCatalogueHost(url: URL): boolean {
-  return (
-    url.protocol === "https:" && url.hostname.toLowerCase() === ALLOWED_HOST
-  );
+function isCatalogueAddress(target: URL, origin: string | undefined): boolean {
+  if (target.protocol !== "https:") return false;
+  if (origin === undefined)
+    return target.hostname.toLowerCase() === ALLOWED_HOST;
+  try {
+    return new URL(origin).origin === target.origin;
+  } catch {
+    return false;
+  }
 }
 
 function refuseDownload(message: string): DownloadResult {
