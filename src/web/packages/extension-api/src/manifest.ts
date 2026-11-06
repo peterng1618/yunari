@@ -33,6 +33,64 @@ export type ExecutionProfile =
   | "sandboxed-ui"
   | "trusted-worker";
 
+/** A declarative settings control. The closed set is deliberate: the host
+ *  validates a write against the same declaration the editor draws, so a field
+ *  kind neither knows cannot exist. */
+export type SettingsField =
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly type: "text";
+      readonly default?: string;
+      readonly maxLength?: number;
+    }
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly type: "number";
+      readonly default?: number;
+      readonly min?: number;
+      readonly max?: number;
+    }
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly type: "boolean";
+      readonly default?: boolean;
+    }
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly type: "select";
+      readonly options: readonly {
+        readonly value: string;
+        readonly label: string;
+      }[];
+      readonly default?: string;
+    }
+  | {
+      readonly key: string;
+      readonly label: string;
+      readonly type: "secret";
+      readonly default?: never;
+    };
+
+/** One settings destination: a declarative form the editor draws, or a
+ *  sandboxed page the plugin serves. */
+export type SettingsPageContribution =
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly section?: string;
+      readonly fields: readonly SettingsField[];
+    }
+  | {
+      readonly id: string;
+      readonly label: string;
+      readonly section?: string;
+      readonly ui: string;
+    };
+
 export interface PluginContributions {
   readonly sensorProviders?: readonly {
     readonly id: string;
@@ -61,13 +119,7 @@ export interface PluginContributions {
     readonly commands: readonly string[];
     readonly renderModes?: readonly string[];
   }[];
-  readonly settingsPages?: readonly {
-    readonly id: string;
-    readonly label: string;
-    readonly section?: string;
-    readonly fields?: readonly Readonly<Record<string, unknown>>[];
-    readonly ui?: string;
-  }[];
+  readonly settingsPages?: readonly SettingsPageContribution[];
   readonly customSources?: readonly Readonly<Record<string, unknown>>[];
 }
 
@@ -297,6 +349,20 @@ export function readPluginManifest(value: unknown): ManifestResult {
   if (execution.value === "sandboxed-ui" && ui === undefined)
     return refuse('A sandboxed-ui plugin needs "ui".');
 
+  // A sandboxed settings page is a frame contribution, so its capability is
+  // checked by name before the generic settings rule, which would otherwise
+  // answer with the capability the contribution already names.
+  const sandboxedPage = contributes.value.settingsPages?.find(
+    (page) => "ui" in page,
+  );
+  if (
+    sandboxedPage !== undefined &&
+    !capabilities.value.includes("ui:frame")
+  )
+    return refuse(
+      `The settings page ${JSON.stringify(sandboxedPage.id)} requires the "ui:frame" capability.`,
+    );
+
   const missing = missingCapability(capabilities.value, contributes.value);
   if (missing !== undefined) return refuse(missing);
 
@@ -390,9 +456,7 @@ function contributionRequirements(
   if (contributes.settingsPages !== undefined)
     requirements.push({
       contribution: "settingsPages",
-      profile: contributes.settingsPages.some(
-        (page) => typeof page["ui"] === "string",
-      )
+      profile: contributes.settingsPages.some((page) => "ui" in page)
         ? "sandboxed-ui"
         : "declarative",
     });
