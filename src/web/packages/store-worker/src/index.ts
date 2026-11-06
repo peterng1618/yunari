@@ -4,6 +4,7 @@ import { sessionOf } from "./auth/session.js";
 import { createAuth } from "./auth.js";
 import type { Env } from "./env.js";
 import { handleAdmin } from "./routes/admin.js";
+import { handleKillList } from "./routes/kill-list.js";
 import { handleMe } from "./routes/me.js";
 import { handlePublic } from "./routes/public.js";
 import { cleanupPending } from "./storage/cleanup.js";
@@ -40,6 +41,8 @@ export default {
     if (meResponse !== undefined) return meResponse;
     const adminResponse = await handleAdmin(request, env, url);
     if (adminResponse !== undefined) return adminResponse;
+    const killListResponse = await handleKillList(request, env, url);
+    if (killListResponse !== undefined) return killListResponse;
     const publicResponse = await handlePublic(request, env, url);
     if (publicResponse !== undefined) return publicResponse;
     return new Response("Not found", { status: 404 });

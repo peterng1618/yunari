@@ -16,10 +16,17 @@ import {
 } from "../db/reports.js";
 import type { Env } from "../env.js";
 import { MAX_JSON_BODY, readJsonBody } from "./body.js";
+import {
+  clearKill,
+  isAdvisoryUrl,
+  isPluginKey,
+  setKill,
+} from "./kill-list.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const QUEUE = "/api/admin/queue";
 const REPORTS = "/api/admin/reports";
+const KILL_LIST = "/api/admin/kill-list/";
 const MAX_REASON_LENGTH = 500;
 
 /** One pending item as the owner's queue shows it. */
@@ -92,6 +99,11 @@ type Route =
     }
   | { readonly kind: "review"; readonly itemId: string }
   | {
+      readonly kind: "kill";
+      readonly key: string;
+      readonly method: "PUT" | "DELETE";
+    }
+  | {
       readonly kind: "report";
       readonly userId: string;
       readonly itemId: string;
@@ -106,6 +118,18 @@ type Route =
 function matchRoute(method: string, pathname: string): Route | undefined {
   if (method === "GET" && pathname === QUEUE) return { kind: "queue" };
   if (method === "GET" && pathname === REPORTS) return { kind: "reports" };
+  if (
+    pathname.startsWith(KILL_LIST) &&
+    (method === "PUT" || method === "DELETE")
+  ) {
+    let key: string;
+    try {
+      key = decodeURIComponent(pathname.slice(KILL_LIST.length));
+    } catch {
+      return undefined;
+    }
+    return isPluginKey(key) ? { kind: "kill", key, method } : undefined;
+  }
   if (method !== "POST") return undefined;
 
   const parts = pathname.slice(ADMIN_PREFIX.length).split("/");
@@ -153,6 +177,8 @@ async function dispatch(
 ): Promise<Response> {
   if (route.kind === "queue") return queue(env);
   if (route.kind === "reports") return reportQueue(env);
+  if (route.kind === "kill")
+    return killAction(route.key, route.method, request, env);
   if (route.kind === "review") return reviewAction(route.itemId, request, env);
   if (route.kind === "report")
     return reportAction(route.userId, route.itemId, route.action, env);
@@ -357,6 +383,31 @@ async function reviewAction(
       { status: 409 },
     );
   return Response.json({ ok: true, status, review: decision });
+}
+
+/** The owner's revoke list: one key at a time, with an optional advisory link. */
+async function killAction(
+  key: string,
+  method: "PUT" | "DELETE",
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (method === "DELETE") {
+    if (!(await clearKill(env.DB, key))) return notFound();
+    return Response.json({ ok: true, key });
+  }
+
+  const read = await readJsonBody(request, MAX_JSON_BODY);
+  if (!read.ok) return read.response;
+  const advisory = read.body["advisoryUrl"];
+  if (advisory !== undefined && !isAdvisoryUrl(advisory))
+    return badRequest("An advisory URL must be an https URL.");
+  await setKill(env.DB, key, advisory, new Date().toISOString());
+  return Response.json({
+    ok: true,
+    key,
+    ...(advisory === undefined ? {} : { advisoryUrl: advisory }),
+  });
 }
 
 /** A verdict sentence: trimmed, non-empty and bounded. */

@@ -18,6 +18,7 @@ import {
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
+import { createKillListStore } from "./extensions/kill-list.js";
 import { createExtensionService } from "./extensions/service.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
@@ -50,6 +51,7 @@ import {
 } from "./serve/display-launcher.js";
 import { createHostAutostart, hostEntry } from "./serve/host-autostart.js";
 import { CA_CERTIFICATE_PATH, createHostServer } from "./server.js";
+import { resolveStoreOrigin } from "./server/identity.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import {
   assignedThemeFor,
@@ -226,9 +228,19 @@ export async function run(argv: readonly string[]): Promise<number> {
     credentials,
     extraSources: () => pluginSources,
   });
+  const killList = createKillListStore({
+    directory: path.join(settingsDir, "extensions"),
+    origin: resolveStoreOrigin(process.env.YUNARI_STORE_ORIGIN),
+    fetch,
+    now: () => new Date().toISOString(),
+  });
+  // Fetched once at startup, then again whenever a package lands. A store that
+  // cannot answer leaves the cached list in force.
+  await killList.refresh();
   extensions = createExtensionService({
     installer: createPluginInstaller(path.join(settingsDir, "extensions")),
     consent: createConsentStore(settingsDir),
+    killList,
     now: () => new Date().toISOString(),
     onChange: async () => {
       await refreshPluginSources();
