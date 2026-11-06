@@ -242,6 +242,39 @@ A plugin requesting a network call takes one of the host's four shared fetch
 slots, which bounds how many plugin connections run at once; a stalled call
 holds its slot until its deadline.
 
+A `sandboxed-ui` plugin's settings page and custom asset body are drawn in an
+`<iframe sandbox="allow-scripts">`. Nothing else is granted: no same-origin
+access, forms, popups or top navigation, so the frame has an opaque origin and
+`postMessage` is its only channel. The host serves its files under
+`/api/extensions/<publisher>/<id>/ui/*` from the install directory only; decoded
+segments that are `.`, `..`, a separator or a NUL byte, a resolved path outside
+the directory, a symlink, a directory and a missing file are all refused before
+bytes are read. Answers carry `default-src 'none'; script-src 'self'
+'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;
+connect-src 'none'; frame-ancestors 'self'`, `x-content-type-options: nosniff`
+and `cache-control: no-store`.
+
+`@yunari/extension-api`'s frame protocol is the one owner of that channel. A
+message is trusted only when `event.source` is this frame's window and, for a
+request, its nonce matches the one minted for the mount; `event.origin` is
+`"null"` and is never compared. The closed method table is `settings.get`,
+`settings.set`, `asset.search`, `asset.bytes` and `ui.resize`. A write method
+also needs a gesture token: a host control mints one, posts it to the frame, and
+the first write consumes it within 30 s. A frame cannot mint one. The frame
+receives its own plugin's settings and the theme, never a host credential or
+another plugin's state; the width of `settings.get` is the plugin settings store
+in `settings.ts`.
+
+A declarative settings page carries a closed field set: `text`, `number`,
+`boolean`, `select` and `secret`, each with its own bounds, default and option
+list. A value outside those bounds, an unknown select option, an unknown field
+key or more than 64 sandboxed keys is refused before any key is written; a
+secret is written to the secret store and never returned. A source whose body is
+not one of `grid`, `font-picker` or `wallpaper-engine` is plugin UI: it requires
+the `sandboxed-ui` profile and the `ui:frame` capability, and the editor draws
+its frame. Without that capability the host lists the source and the editor
+shows the refusal sentence rather than an empty grid.
+
 Each plugin owns three scopes under `settings/extensions/`:
 `data/<publisher>/<id>/` for keyed values (1 MiB per value, 1,000 keys),
 `secrets/<publisher>/<id>/` in the OS-protected secret store, and
