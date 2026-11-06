@@ -2,7 +2,7 @@ import type http from "node:http";
 import type { DisplayPresentation } from "@yunari/renderer-core";
 import type { ListenableServer } from "../cli/net.js";
 import type { PanelControlCommand, PanelHint } from "../panels/panel-device.js";
-import { familyFor } from "../panels/panel-families.js";
+import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import {
   DisplaySettingError,
   normalizePresentation,
@@ -28,6 +28,7 @@ export interface DisplayRouteDeps {
   readonly options: HostServerOptions;
   readonly monitors: () => Promise<readonly Monitor[]>;
   readonly panelsAttached: () => Promise<readonly PanelHint[]>;
+  readonly panelFamilies: PanelFamilyRegistry;
   readonly server: ListenableServer;
 }
 
@@ -43,7 +44,7 @@ export function createDisplayRoutes(
   response: http.ServerResponse,
   url: URL,
 ) => Promise<boolean> {
-  const { options, monitors, panelsAttached, server } = deps;
+  const { options, monitors, panelsAttached, panelFamilies, server } = deps;
   const displays = options.displays;
   const hostRecord = options.host;
 
@@ -451,7 +452,10 @@ export function createDisplayRoutes(
           // are read from, so a surface renders what this host can actually
           // do rather than a list the caller supplied. A device no row claims
           // keeps its hint and gets the honest empty command list.
-          const family = familyFor(panel.vendorId, panel.productId);
+          const family = panelFamilies.forDevice(
+            panel.vendorId,
+            panel.productId,
+          );
 
           return {
             ...panel,
@@ -517,7 +521,7 @@ export function createDisplayRoutes(
       // A model this host has no driver for is the caller's to fix, and it is
       // refused *before* the write: a record nothing can open would be a row
       // in the list that never shows anything and cannot say why.
-      const family = familyFor(panel.vendorId, panel.productId);
+      const family = panelFamilies.forDevice(panel.vendorId, panel.productId);
 
       if (family === undefined) {
         sendText(

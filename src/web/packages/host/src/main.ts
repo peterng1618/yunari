@@ -36,6 +36,7 @@ import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { createExtensionService } from "./extensions/service.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
+import { createPanelFamilyRegistry } from "./panels/panel-families.js";
 import {
   createPanelManager,
   type PanelManager,
@@ -540,6 +541,11 @@ export async function run(argv: readonly string[]): Promise<number> {
   const autostart = createHostAutostart();
   const entry = hostEntry(argv, here);
 
+  // The one registry the server and the panel manager share: a family the
+  // routes offer a record for is the same row the manager opens, plugin rows
+  // included.
+  const panelFamilies = createPanelFamilyRegistry();
+
   const hosted = createHostServer({
     registry,
     // The leaf, signed by the root a display installs once. In memory only:
@@ -629,6 +635,7 @@ export async function run(argv: readonly string[]): Promise<number> {
     storeSession,
     displays,
     pairingCodes,
+    panelFamilies,
     devices: deviceSettings,
     display: displaySettings,
     weather: weatherSettings,
@@ -728,6 +735,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // down with it.
   panels = createPanelManager({
     displays,
+    families: panelFamilies,
     pageFor: (displayId, clip, themeId) =>
       panelPageUrl(bound, displayId, clip, themeId),
     // A thumbnail's page belongs to no display: it is the theme alone, in the

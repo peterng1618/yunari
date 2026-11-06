@@ -5,6 +5,7 @@ import type {
   PanelFamily,
   PanelVideoSource,
 } from "./panel-device.js";
+import { createPanelFamilyRegistry } from "./panel-families.js";
 import {
   createPanelManager,
   type PanelManagerOptions,
@@ -131,6 +132,7 @@ export function managerOver(
 ): ReturnType<typeof createPanelManager> {
   return createPanelManager({
     displays: store,
+    families: createPanelFamilyRegistry(),
     pageFor: (displayId) => `http://127.0.0.1:1/?display=${displayId}`,
     pageForTheme: (themeId) => `http://127.0.0.1:1/?theme=${themeId}`,
     rasterBrowserFactory: () => {

@@ -4,6 +4,7 @@ import type { ListenableServer } from "../cli/net.js";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { PanelHint } from "../panels/panel-device.js";
+import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import type { PanelManager } from "../panels/panel-manager.js";
 import type { PathPresetStore } from "../presets/path-presets.js";
 import type {
@@ -166,6 +167,10 @@ export interface HostServerOptions {
    *  the real USB enumeration; supplied so a case can hold a fixture rather
    *  than this machine's hardware. */
   readonly attachedPanels?: () => Promise<readonly PanelHint[]>;
+  /** The driver rows this host serves. Omitted uses the built-ins; supplied so
+   *  the host that drives panels can hand over the same registry it opens from,
+   *  plugin rows included. */
+  readonly panelFamilies?: PanelFamilyRegistry;
   /** The host's own start-at-sign-in entry: whether the OS holds one now, and
    *  the write that turns it on or off. Omitted when this host cannot manage
    *  it: the routes then say so rather than reporting a change that did not

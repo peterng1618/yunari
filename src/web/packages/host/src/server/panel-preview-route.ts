@@ -1,5 +1,5 @@
 import type http from "node:http";
-import { familyFor } from "../panels/panel-families.js";
+import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import type { PanelManager } from "../panels/panel-manager.js";
 import type { DisplayStore } from "../settings/displays.js";
 import {
@@ -17,6 +17,7 @@ export interface PanelPreviewInput {
   readonly themeStore: ThemeStore;
   readonly displays: DisplayStore | undefined;
   readonly panels: PanelManager;
+  readonly families: PanelFamilyRegistry;
 }
 
 /**
@@ -29,7 +30,7 @@ export interface PanelPreviewInput {
 export async function servePanelPreview(
   input: PanelPreviewInput,
 ): Promise<void> {
-  const { response, rawId, themeStore, displays, panels } = input;
+  const { response, rawId, themeStore, displays, panels, families } = input;
 
   // `read` rather than `readEnvelope`: the preview must refuse a stored theme
   // that does not validate, and only `read` tells that apart from an absent one.
@@ -71,7 +72,7 @@ export async function servePanelPreview(
   const hardware = record.panel;
   if (
     hardware === undefined ||
-    familyFor(hardware.vendorId, hardware.productId) === undefined
+    families.forDevice(hardware.vendorId, hardware.productId) === undefined
   ) {
     sendText(response, 409, "The host has no panel driver for that display.");
     return;

@@ -26,7 +26,9 @@ const h = vi.hoisted(() => ({
   events: [] as string[],
 }));
 
-vi.mock("./panel-families.js", () => ({ familyFor: () => h.family }));
+vi.mock("./panel-families.js", () => ({
+  createPanelFamilyRegistry: () => ({ forDevice: () => h.family }),
+}));
 vi.mock("../serve/display-launcher.js", () => ({
   findBrowser: () => "C:/fake/chrome.exe",
 }));
