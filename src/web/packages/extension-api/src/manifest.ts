@@ -155,9 +155,22 @@ const PANEL_SUPPORT_KEYS = [
 const SETTINGS_PAGE_KEYS = ["id", "label", "section", "fields", "ui"] as const;
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const VERSION_PATTERN =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+/** Semver's prerelease identifiers are dot-separated; a numeric one has no
+ *  leading zero, and an alphanumeric one carries a letter or hyphen. Build
+ *  metadata is looser and may repeat a numeric identifier with a zero. */
+const SEMVER_IDENTIFIER = "(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)";
+const VERSION_PATTERN = new RegExp(
+  `^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-${SEMVER_IDENTIFIER}(?:\\.${SEMVER_IDENTIFIER})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`,
+);
 const ENGINE_RANGE_PATTERN = /^>=(\d+)\.(\d+)\.(\d+)$/;
+/** The bodies the editor renders itself. Any other body is plugin UI and needs
+ *  the sandboxed profile; an `entry` is code and needs the trusted one. */
+const BUILT_IN_ASSET_BODIES: ReadonlySet<string> = new Set([
+  "grid",
+  "font-picker",
+  "wallpaper-engine",
+]);
+const MAX_USB_ID = 0xffff;
 
 const MAX_IDENTIFIER = 64;
 const MAX_NAME = 200;
@@ -219,12 +232,11 @@ function readIdentifier(
   return string;
 }
 
-function readNonNegativeInteger(
-  value: unknown,
-  subject: string,
-): Check<number> {
+function readUsbId(value: unknown, subject: string): Check<number> {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0)
     return refuse(`${subject} must be a non-negative integer.`);
+  if (value > MAX_USB_ID)
+    return refuse(`${subject} must be a 16-bit USB id (0-65535).`);
   return { ok: true, value };
 }
 
@@ -426,15 +438,9 @@ function readPanelFamily(
   if (!id.ok) return id;
   const label = readString(entry["label"], `${subject}.label`, MAX_NAME);
   if (!label.ok) return label;
-  const vendorId = readNonNegativeInteger(
-    entry["vendorId"],
-    `${subject}.vendorId`,
-  );
+  const vendorId = readUsbId(entry["vendorId"], `${subject}.vendorId`);
   if (!vendorId.ok) return vendorId;
-  const productId = readNonNegativeInteger(
-    entry["productId"],
-    `${subject}.productId`,
-  );
+  const productId = readUsbId(entry["productId"], `${subject}.productId`);
   if (!productId.ok) return productId;
   const geometry = readGeometry(entry["geometry"], `${subject}.geometry`);
   if (!geometry.ok) return geometry;
@@ -734,6 +740,16 @@ interface Requirement {
   readonly profile: ExecutionProfile;
 }
 
+function assetSourceProfile(source: ObjectValue): ExecutionProfile {
+  if (typeof source["entry"] === "string") return "trusted-worker";
+  if (
+    typeof source["body"] === "string" &&
+    !BUILT_IN_ASSET_BODIES.has(source["body"])
+  )
+    return "sandboxed-ui";
+  return "declarative";
+}
+
 function contributionRequirements(
   contributes: PluginContributions,
 ): readonly Requirement[] {
@@ -748,15 +764,15 @@ function contributionRequirements(
       contribution: "assetCategories",
       profile: "declarative",
     });
-  if (contributes.assetSources !== undefined)
-    requirements.push({
-      contribution: "assetSources",
-      profile: contributes.assetSources.some(
-        (source) => typeof source["entry"] === "string",
-      )
-        ? "trusted-worker"
-        : "declarative",
-    });
+  if (contributes.assetSources !== undefined) {
+    let profile: ExecutionProfile = "declarative";
+    for (const source of contributes.assetSources) {
+      const required = assetSourceProfile(source);
+      if (EXECUTION_RANK[required] > EXECUTION_RANK[profile])
+        profile = required;
+    }
+    requirements.push({ contribution: "assetSources", profile });
+  }
   if (contributes.panelFamilies !== undefined)
     requirements.push({
       contribution: "panelFamilies",
