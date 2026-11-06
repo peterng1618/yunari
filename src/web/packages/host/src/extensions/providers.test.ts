@@ -660,9 +660,7 @@ describe("createPluginProviders", () => {
     });
 
     expect(supervisorMocks.created).toEqual([]);
-    expect(runtime.providers.map((provider) => provider.id)).toEqual([
-      "acme",
-    ]);
+    expect(runtime.providers.map((provider) => provider.id)).toEqual(["acme"]);
   });
 
   it("skips plugins that are not trusted workers or contribute no providers", async () => {

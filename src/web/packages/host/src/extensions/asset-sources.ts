@@ -32,10 +32,8 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 const LOG_LIMIT = 200;
 
-const UNREADABLE_PAGE =
-  "The plugin returned an unreadable search page.";
-const UNREADABLE_RESULT =
-  "The plugin returned an unreadable asset result.";
+const UNREADABLE_PAGE = "The plugin returned an unreadable search page.";
+const UNREADABLE_RESULT = "The plugin returned an unreadable asset result.";
 const UNREADABLE_BYTES =
   "The plugin returned an unreadable asset bytes answer.";
 
@@ -159,9 +157,7 @@ function readContribution(
   };
 }
 
-function readPreset(
-  value: unknown,
-): NonNullable<AssetResult["preset"]> {
+function readPreset(value: unknown): NonNullable<AssetResult["preset"]> {
   if (!isRecord(value)) throw new Error(UNREADABLE_RESULT);
 
   const kind = value["kind"];
@@ -272,7 +268,10 @@ function readBytes(value: unknown): BytesRead {
     !BASE64.test(encoded) ||
     encoded.length % 4 !== 0
   )
-    return { ok: false, reason: `${UNREADABLE_BYTES} Its bytes are not base64.` };
+    return {
+      ok: false,
+      reason: `${UNREADABLE_BYTES} Its bytes are not base64.`,
+    };
 
   const decoded = Buffer.from(encoded, "base64");
   if (decoded.byteLength > MAX_PLUGIN_ASSET_BYTES)
@@ -283,10 +282,7 @@ function readBytes(value: unknown): BytesRead {
 
   // Both travel as response headers, so a control character would split one and
   // make `writeHead` throw; a filename separator would also name a path.
-  if (
-    !nonEmpty(contentType) ||
-    CONTROL_CHARACTERS.test(contentType)
-  )
+  if (!nonEmpty(contentType) || CONTROL_CHARACTERS.test(contentType))
     return {
       ok: false,
       reason: `${UNREADABLE_BYTES} Its content type is unusable.`,
@@ -298,7 +294,10 @@ function readBytes(value: unknown): BytesRead {
     filename.includes("\\") ||
     CONTROL_CHARACTERS.test(filename)
   )
-    return { ok: false, reason: `${UNREADABLE_BYTES} Its filename is unusable.` };
+    return {
+      ok: false,
+      reason: `${UNREADABLE_BYTES} Its filename is unusable.`,
+    };
 
   return {
     ok: true,

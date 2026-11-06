@@ -246,9 +246,7 @@ describe("PluginAssetSource", () => {
     );
 
     expect(
-      (await source.search("x", 1, context())).results.map(
-        (entry) => entry.id,
-      ),
+      (await source.search("x", 1, context())).results.map((entry) => entry.id),
     ).toEqual(["plugin-source:a"]);
   });
 
@@ -406,7 +404,9 @@ describe("createPluginAssetSources", () => {
   it("refuses a body the editor does not draw", async () => {
     installed = [
       plugin({
-        contributes: { assetSources: [codeContribution({ body: "custom-ui" })] },
+        contributes: {
+          assetSources: [codeContribution({ body: "custom-ui" })],
+        },
       }),
     ];
     const onFailure = vi.fn();
