@@ -26,6 +26,7 @@ const supervisorMocks = vi.hoisted(() => {
     alive: boolean;
     starts: number;
     stops: number;
+    options?: { readonly onCrash?: (reason: string) => void };
     requests: { readonly method: string; readonly params: unknown }[];
     startMode: "resolve" | "reject";
     answer: (method: string, params: unknown) => unknown;
@@ -81,7 +82,13 @@ const supervisorMocks = vi.hoisted(() => {
 });
 
 vi.mock("./runtime/supervisor.js", () => ({
-  createPluginSupervisor: () => supervisorMocks.make(),
+  createPluginSupervisor: (options: {
+    readonly onCrash?: (reason: string) => void;
+  }) => {
+    const supervisor = supervisorMocks.make();
+    supervisor.options = options;
+    return supervisor;
+  },
 }));
 
 const NOW = Date.parse("2026-01-01T00:00:10Z");
@@ -756,6 +763,24 @@ describe("createPluginProviders", () => {
 
     expect(onFailure).toHaveBeenCalledWith(first.key, "plugin did not start");
     expect(runtime.providers.map((provider) => provider.id)).toEqual(["beta"]);
+  });
+
+  it("reports a worker that crashes after starting", async () => {
+    const acme = plugin();
+    const onFailure = vi.fn();
+
+    await createPluginProviders({
+      installer: fakeInstaller([acme]),
+      extensions: fakeExtensions({
+        consentRecord: () => Promise.resolve(consentOf(acme)),
+      }),
+      hostApi,
+      onFailure,
+    });
+
+    supervisorMocks.created[0]?.options?.onCrash?.("plugin crashed");
+
+    expect(onFailure).toHaveBeenCalledWith(acme.key, "plugin crashed");
   });
 
   it("stops every started supervisor exactly once", async () => {

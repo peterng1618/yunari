@@ -389,6 +389,7 @@ export async function startPluginSupervisors(
       granted: plugin.manifest.capabilities,
       consent,
       hostApi: options.hostApi,
+      onCrash: (reason) => options.onFailure?.(plugin.key, reason),
       ...(options.workerEntry === undefined
         ? {}
         : { workerEntry: options.workerEntry }),
