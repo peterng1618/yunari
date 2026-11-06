@@ -19,6 +19,7 @@ import {
 
 export * from "./archive-preflight";
 export * from "./credits";
+export * from "./path-preset-pack";
 export * from "./theme-id";
 export * from "./theme-origin";
 export * from "./version-ladder";

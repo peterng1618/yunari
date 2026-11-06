@@ -22,6 +22,7 @@ import {
   SURFACE_TOKENS,
   surfacePaletteToken,
 } from "@yunari/theme-kit";
+import { BUILTIN_PATH_PRESETS, type PathPreset } from "@yunari/theme-package";
 import {
   Ellipse,
   type FabricObject,
@@ -30,7 +31,7 @@ import {
   Polygon,
   Rect,
 } from "fabric/es";
-import { type PathPresetPaint, userPathPreset } from "./path-presets.js";
+import { userPathPreset } from "./path-presets.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** Semantic defaults for a new object; generic construction remains editor-owned. */
@@ -401,38 +402,27 @@ export function cornersForSides(
  */
 const NEW_PATH = `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height / 4} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width / 2} ${(NEW_PANEL_SIZE.height * 3) / 4} L ${NEW_PANEL_SIZE.width / 2} ${NEW_PANEL_SIZE.height} L 0 ${NEW_PANEL_SIZE.height / 2} Z`;
 
-/** The radius a custom arc and wedge are drawn at: the new-shape box's height,
- *  so the quarter turn fits the box's shorter side. */
-const PRESET_RADIUS = NEW_PANEL_SIZE.height;
-
-export interface PathPreset {
-  /** SVG path data, the same authored field a basic path edits. */
-  readonly data: string;
-  /** Which property the preset's paint belongs on. A line and an arc are open
-   *  curves, so their token is ink; a sector encloses a region, so it takes the
-   *  card surface. */
-  readonly paint: PathPresetPaint;
-}
-
 /**
  * The custom shapes, as data. **Nothing here is a class**: each preset
  * constructs Fabric's `Path`, whose SVG data is the only geometry a scene
  * stores, so a future custom shape is another entry rather than a type.
+ *
+ * The rows come from `BUILTIN_PATH_PRESETS`, the same owner the host stores and
+ * the Settings page read; this module only names which ids the Add pane offers.
  */
 export const PATH_PRESETS: Readonly<Record<PathPresetId, PathPreset>> = {
-  line: {
-    data: `M 0 ${NEW_PANEL_SIZE.height / 2} L ${NEW_PANEL_SIZE.width} ${NEW_PANEL_SIZE.height / 2}`,
-    paint: "stroke",
-  },
-  arc: {
-    data: `M ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS}`,
-    paint: "stroke",
-  },
-  wedge: {
-    data: `M 0 0 L ${PRESET_RADIUS} 0 A ${PRESET_RADIUS} ${PRESET_RADIUS} 0 0 1 0 ${PRESET_RADIUS} Z`,
-    paint: "fill",
-  },
+  line: builtinPreset("line"),
+  arc: builtinPreset("arc"),
+  wedge: builtinPreset("wedge"),
 };
+
+function builtinPreset(id: PathPresetId): PathPreset {
+  const preset = BUILTIN_PATH_PRESETS.find((candidate) => candidate.id === id);
+  if (preset === undefined) {
+    throw new Error(`The built-in path preset "${id}" is missing.`);
+  }
+  return preset;
+}
 
 /**
  * Constructs one new shape.

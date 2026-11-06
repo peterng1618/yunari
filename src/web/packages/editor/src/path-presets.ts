@@ -1,9 +1,7 @@
-import { hasClosedPath } from "@yunari/scene-fabric";
-import { Path } from "fabric/es";
+import { pathPresetGeometry } from "@yunari/scene-fabric";
+import type { PathPresetPaint } from "@yunari/theme-package";
 
-/** Which property a path preset's paint belongs on. An open curve is stroked;
- *  a closed path encloses a region and is filled. */
-export type PathPresetPaint = "stroke" | "fill";
+export type { PathPresetPaint } from "@yunari/theme-package";
 
 /** A custom shape the author added in Settings. Built-in presets are data in
  *  `new-object-defaults`; this is the one list the author owns. */
@@ -175,22 +173,14 @@ export function userPathPresetFrom(
   if (trimmedLabel === "") return { reason: "name" };
   if (trimmedData === "") return { reason: "data" };
 
-  let path: Path;
-  try {
-    path = new Path(trimmedData);
-  } catch {
-    return { reason: "unreadable" };
-  }
-  // Either axis may be zero — a horizontal or vertical line is still a
-  // drawing; only a path with no extent on both, or a NaN measured from
-  // malformed data, is refused.
-  if (!(path.width > 0) && !(path.height > 0)) return { reason: "empty" };
+  const geometry = pathPresetGeometry(trimmedData);
+  if (!geometry.ok) return { reason: geometry.reason };
 
   return {
     id: `user:${crypto.randomUUID()}`,
     label: trimmedLabel,
     data: trimmedData,
-    paint: hasClosedPath(path) ? "fill" : "stroke",
+    paint: geometry.paint,
   };
 }
 
