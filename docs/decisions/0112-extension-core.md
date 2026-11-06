@@ -66,15 +66,28 @@ profile rules, no capability gate and no consent semantics.
 
 ## Rung 4 — public solutions
 
-Searched: Orca's extension manifest and capability gate (manifest, deny-by-
-default host API table, consent), VS Code's `engines`/`activationEvents`, and
-Chrome's manifest permission model.
+Searched:
+- Yunari's parity target, `docs/superpowers/specs/2026-11-06-extension-platform-design.md`
+  (`Extension model`, `Security invariants`) — the manifest, deny-by-default
+  host API table and consent shape this note adopts.
+- VS Code manifest and activation events:
+  `https://code.visualstudio.com/api/references/extension-manifest`,
+  `https://code.visualstudio.com/api/references/activation-events`.
+- Chrome manifest and permissions:
+  `https://developer.chrome.com/docs/extensions/reference/manifest`,
+  `https://developer.chrome.com/docs/extensions/reference/permissions`.
+- Node `fs.rename` and `fsync`: `https://nodejs.org/api/fs.html`.
 
-Found: Orca is the closest prior art — its manifest plus deny-by-default host
-API table plus consent is the shape the spec adopts. VS Code and Chrome both
-veto an unknown permission and both gate calls, but neither supplies Yunari's
-qualified plugin key (store account plus id) or its content-binding digest, so
-neither model can be adopted whole.
+Found: the spec is the parity target. VS Code records `engines` and
+`activationEvents` as declared metadata and refuses an unknown contribution
+point, but its key is a bare marketplace id and it has no content-binding
+digest. Chrome refuses an unknown permission at load and gates API access at
+call time, but its key is the extension id from the store and its manifest is
+versioned by Chrome's own engine, not a separate `pluginApi` major. Neither
+supplies Yunari's qualified plugin key (store account plus id), its binding
+digest over the install tree, or host-mediated execution for a trusted worker.
+Node's rename/fsync underpin the atomic consent store but carry no plugin
+semantics.
 
 ## Rung 5 — integration comparison
 
@@ -86,11 +99,12 @@ neither model can be adopted whole.
 
 ## Rung 6 — smallest probe
 
-A disposable local package declared `process:spawn` in its manifest and was
-handed to the manifest reader. It was refused with
-`Unknown capability "process:spawn".` — not installed and not executed. The
-closed capability list therefore fails before any install or execution path is
-reached, which is what the gate is meant to guarantee.
+No manifest reader exists when this note lands — the reader is built in Task 2.
+The probe this note authorises is therefore the reader's first test: a local
+package declaring `process:spawn` is refused with
+`Unknown capability "process:spawn".`, and no install or execution path is
+reached. This is design-established here, not measured; the Task 2 test measures
+it.
 
 ## Decision
 
