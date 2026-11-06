@@ -2,6 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import {
   readWidgetPackage,
+  readWidgetPackageFiles,
   type WidgetDocument,
   writeWidgetPackage,
 } from "./index.js";
@@ -48,6 +49,65 @@ const widget: WidgetDocument = {
 };
 
 const photo = new Uint8Array([1, 2, 3]);
+
+/** The brief's assertion: fail the case here, and narrow the result after. */
+function assert(value: unknown): asserts value {
+  expect(value).toBe(true);
+}
+
+/** One top-level unit, stamped the way the editor stamps a card. */
+function groupWithProvenance(
+  widgetId: string,
+  widgetName: string,
+): Readonly<Record<string, unknown>> {
+  return {
+    type: "Group",
+    id: widgetId,
+    objects: [{ type: "Rect", id: `${widgetId}-value` }],
+    provenance: { widgetId, widgetName },
+  };
+}
+
+function widgetFiles(options: {
+  readonly objects: readonly Readonly<Record<string, unknown>>[];
+  readonly manifestUnits?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly objectId: string;
+  }[];
+  readonly assets?: readonly Readonly<Record<string, unknown>>[];
+}): Readonly<Record<string, Uint8Array>> {
+  const document = {
+    ...widget,
+    scene: { version: "7.4.0", objects: options.objects },
+    bindings: Object.fromEntries(
+      options.objects.map((object) => [
+        String(object["id"]),
+        [{ id: `${String(object["id"])}-binding`, semanticKey: "cpu.load" }],
+      ]),
+    ),
+    assets: options.assets ?? [],
+  };
+  return {
+    "manifest.json": strToU8(
+      JSON.stringify({
+        format: "yunari-widget-package",
+        version: 1,
+        widget: "widget.json",
+        ...(options.manifestUnits === undefined
+          ? {}
+          : { units: options.manifestUnits }),
+      }),
+    ),
+    "widget.json": strToU8(JSON.stringify(document)),
+    ...Object.fromEntries(
+      (options.assets ?? []).map((asset) => [
+        String(asset["path"]),
+        new Uint8Array([1]),
+      ]),
+    ),
+  };
+}
 
 describe("widget package", () => {
   it("round-trips the scene subtree, its bindings and its assets", () => {
@@ -127,5 +187,80 @@ describe("widget package", () => {
       ok: false,
       message: "A widget document must not carry an artboard.",
     });
+  });
+
+  it("reads two provenance units from one package", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          groupWithProvenance("a", "Alpha"),
+          groupWithProvenance("b", "Beta"),
+        ],
+      }),
+    );
+    assert(result.ok);
+    expect(result.units.map((unit) => [unit.id, unit.label])).toEqual([
+      ["a", "Alpha"],
+      ["b", "Beta"],
+    ]);
+    expect(result.units[0]?.document.scene["objects"]).toHaveLength(1);
+    expect(result.units[0]?.document.bindings).toHaveProperty("a");
+    expect(result.units[0]?.document.bindings).not.toHaveProperty("b");
+  });
+
+  it("refuses a manifest unit naming no top-level object", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [groupWithProvenance("a", "Alpha")],
+        manifestUnits: [{ id: "missing", label: "Missing", objectId: "nope" }],
+      }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      message: 'Widget unit "missing" names no top-level object "nope".',
+    });
+  });
+
+  it("refuses a duplicate manifest unit id", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          groupWithProvenance("a", "Alpha"),
+          groupWithProvenance("b", "Beta"),
+        ],
+        manifestUnits: [
+          { id: "same", label: "One", objectId: "a" },
+          { id: "same", label: "Two", objectId: "b" },
+        ],
+      }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      message: 'Widget unit "same" is declared more than once.',
+    });
+  });
+
+  it("keeps only the asset declarations a unit's subtree references", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          {
+            ...groupWithProvenance("a", "Alpha"),
+            yunariAsset: { assetId: "used", kind: "image" },
+          },
+        ],
+        assets: [
+          { id: "used", kind: "image", path: "assets/used.png" },
+          { id: "unused", kind: "image", path: "assets/unused.png" },
+        ],
+      }),
+    );
+    assert(result.ok);
+    expect(result.units[0]?.declarations.map((asset) => asset.id)).toEqual([
+      "used",
+    ]);
+    expect(Object.keys(result.units[0]?.assets ?? {})).toEqual([
+      "assets/used.png",
+    ]);
   });
 });

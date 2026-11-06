@@ -1,4 +1,5 @@
 import {
+  type AssetReference,
   type FabricThemeEnvelope,
   readFabricThemeEnvelope,
   validateFabricThemeEnvelope,
@@ -339,13 +340,284 @@ export type WidgetDocument = Omit<FabricThemeEnvelope, "artboard">;
  */
 const WIDGET_VALIDATION_ARTBOARD = { width: 1, height: 1 } as const;
 
+/** A unit a package manifest names, before its object is found in the scene. */
+export interface WidgetPackUnitRef {
+  readonly id: string;
+  readonly label: string;
+  readonly objectId: string;
+}
+
+/** One insertion unit, carrying its own subtree, bindings and asset bytes. */
+export interface WidgetUnit {
+  readonly id: string;
+  readonly label: string;
+  readonly document: WidgetDocument;
+  readonly declarations: readonly AssetReference[];
+  readonly assets: Readonly<Record<string, Uint8Array>>;
+}
+
 export type WidgetPackageResult =
   | {
       readonly ok: true;
       readonly document: WidgetDocument;
       readonly assets: Readonly<Record<string, Uint8Array>>;
+      readonly units: readonly WidgetUnit[];
+      readonly name: string | undefined;
+      readonly version: string | undefined;
     }
   | { readonly ok: false; readonly message: string };
+
+/** The manifest keys this reader admits; a package naming any other is not one
+ *  it can understand well enough to open. */
+const WIDGET_MANIFEST_KEYS = new Set(["format", "version", "widget", "units"]);
+const WIDGET_UNIT_KEYS = new Set(["id", "label", "objectId"]);
+
+type WidgetManifestResult =
+  | {
+      readonly ok: true;
+      readonly units: readonly WidgetPackUnitRef[] | undefined;
+    }
+  | { readonly ok: false; readonly message: string };
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The strict manifest check: the format's three keys and an optional unit
+ *  list, each entry of which is exactly its three strings. */
+function readWidgetManifest(value: unknown): WidgetManifestResult {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !WIDGET_MANIFEST_KEYS.has(key)) ||
+    value["format"] !== WIDGET_FORMAT ||
+    value["version"] !== 1 ||
+    value["widget"] !== WIDGET
+  )
+    return fail("Unsupported widget package manifest.");
+  const declared = value["units"];
+  if (declared === undefined) return { ok: true, units: undefined };
+  if (!Array.isArray(declared))
+    return fail("Unsupported widget package manifest.");
+  const units: WidgetPackUnitRef[] = [];
+  for (const entry of declared) {
+    if (
+      !isRecord(entry) ||
+      Object.keys(entry).some((key) => !WIDGET_UNIT_KEYS.has(key))
+    )
+      return fail("Unsupported widget package manifest.");
+    const id = entry["id"];
+    const label = entry["label"];
+    const objectId = entry["objectId"];
+    if (
+      typeof id !== "string" ||
+      id.trim() === "" ||
+      typeof label !== "string" ||
+      typeof objectId !== "string" ||
+      objectId.trim() === ""
+    )
+      return fail("Unsupported widget package manifest.");
+    units.push({ id, label, objectId });
+  }
+  return { ok: true, units };
+}
+
+/** Every object id in a unit's subtree, the root included. */
+function subtreeIds(object: Readonly<Record<string, unknown>>): Set<string> {
+  const ids = new Set<string>();
+  const visit = (value: Readonly<Record<string, unknown>>): void => {
+    const id = value["id"];
+    if (typeof id === "string") ids.add(id);
+    const children = value["objects"];
+    if (Array.isArray(children))
+      for (const child of children) if (isRecord(child)) visit(child);
+  };
+  visit(object);
+  return ids;
+}
+
+/** The asset declarations the subtree names anywhere in its JSON. A reference
+ *  is an `assetId` key, so one walk covers an object's `yunariAsset`, a text
+ *  run's face and a media layer alike. */
+function referencedAssetIds(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isRecord(node)) return;
+    for (const [key, child] of Object.entries(node)) {
+      if (key === "assetId" && typeof child === "string") ids.add(child);
+      else visit(child);
+    }
+  };
+  visit(value);
+  return ids;
+}
+
+/** The package's own units when authored, otherwise one unit per top-level
+ *  object the editor stamped with provenance. */
+function unitRefs(
+  objects: readonly Readonly<Record<string, unknown>>[],
+  declared: readonly WidgetPackUnitRef[] | undefined,
+): readonly WidgetPackUnitRef[] {
+  if (declared !== undefined) return declared;
+  const refs: WidgetPackUnitRef[] = [];
+  for (const object of objects) {
+    const provenance = object["provenance"];
+    if (!isRecord(provenance)) continue;
+    const widgetId = provenance["widgetId"];
+    if (typeof widgetId !== "string" || widgetId.trim() === "") continue;
+    const widgetName = provenance["widgetName"];
+    const objectId = object["id"];
+    refs.push({
+      id: widgetId,
+      label:
+        typeof widgetName === "string" && widgetName.trim() !== ""
+          ? widgetName
+          : widgetId,
+      objectId: typeof objectId === "string" ? objectId : widgetId,
+    });
+  }
+  return refs;
+}
+
+type UnitsResult =
+  | { readonly ok: true; readonly units: readonly WidgetUnit[] }
+  | { readonly ok: false; readonly message: string };
+
+function deriveUnits(
+  document: WidgetDocument,
+  files: Readonly<Record<string, Uint8Array>>,
+  declared: readonly WidgetPackUnitRef[] | undefined,
+): UnitsResult {
+  const rawObjects = document.scene["objects"];
+  const objects = Array.isArray(rawObjects) ? rawObjects.filter(isRecord) : [];
+  const byId = new Map<string, Readonly<Record<string, unknown>>>();
+  for (const object of objects) {
+    const id = object["id"];
+    if (typeof id === "string") byId.set(id, object);
+  }
+  const seen = new Set<string>();
+  const units: WidgetUnit[] = [];
+  for (const ref of unitRefs(objects, declared)) {
+    if (seen.has(ref.id))
+      return fail(`Widget unit "${ref.id}" is declared more than once.`);
+    seen.add(ref.id);
+    const object = byId.get(ref.objectId);
+    if (object === undefined)
+      return fail(
+        `Widget unit "${ref.id}" names no top-level object "${ref.objectId}".`,
+      );
+    const ids = subtreeIds(object);
+    const assetIds = referencedAssetIds(object);
+    const declarations = (document.assets ?? []).filter((asset) =>
+      assetIds.has(asset.id),
+    );
+    const assets: Record<string, Uint8Array> = {};
+    for (const declaration of declarations) {
+      const bytes = files[declaration.path];
+      if (bytes !== undefined) assets[declaration.path] = bytes;
+    }
+    units.push({
+      id: ref.id,
+      label: ref.label,
+      document: {
+        ...document,
+        scene: { ...document.scene, objects: [object] },
+        bindings: Object.fromEntries(
+          Object.entries(document.bindings ?? {}).filter(([id]) => ids.has(id)),
+        ),
+        assets: declarations,
+      },
+      declarations,
+      assets,
+    });
+  }
+  return { ok: true, units };
+}
+
+/**
+ * Reads a widget package from its unpacked member map. The archive gate lives
+ * in `readWidgetPackage`; this owner decides the manifest, the document, the
+ * asset declaration and every unit the package offers.
+ */
+export function readWidgetPackageFiles(
+  files: Readonly<Record<string, Uint8Array>>,
+): WidgetPackageResult {
+  const manifest = files[MANIFEST];
+  const widget = files[WIDGET];
+  if (manifest === undefined || widget === undefined)
+    return fail("A widget package needs manifest.json and widget.json.");
+  let parsedManifest: unknown;
+  try {
+    parsedManifest = JSON.parse(strFromU8(manifest));
+  } catch {
+    return fail("Unsupported widget package manifest.");
+  }
+  const manifestCheck = readWidgetManifest(parsedManifest);
+  if (!manifestCheck.ok) return manifestCheck;
+  let parsedWidget: unknown;
+  try {
+    parsedWidget = JSON.parse(strFromU8(widget));
+  } catch {
+    return fail("Invalid widget.");
+  }
+  if (
+    typeof parsedWidget !== "object" ||
+    parsedWidget === null ||
+    Array.isArray(parsedWidget) ||
+    "artboard" in parsedWidget
+  )
+    return fail("A widget document must not carry an artboard.");
+  const validation = readFabricThemeEnvelope(
+    {
+      ...parsedWidget,
+      artboard: WIDGET_VALIDATION_ARTBOARD,
+    },
+    { requireTrioRoles: false },
+  );
+  if (!validation.ok)
+    return fail(validation.issues[0]?.message ?? "Invalid widget.");
+  const paths = new Set(
+    validation.envelope.assets?.map((asset) => asset.path) ?? [],
+  );
+  const assets = Object.fromEntries(
+    Object.entries(files).filter(([path]) => path.startsWith("assets/")),
+  );
+  if (
+    Object.keys(files).some(
+      (path) => path !== MANIFEST && path !== WIDGET && !paths.has(path),
+    ) ||
+    Object.keys(assets).length !== paths.size ||
+    [...paths].some((path) => assets[path] === undefined)
+  )
+    return fail("Package assets must exactly match the widget declaration.");
+  const { artboard: _artboard, ...document } = validation.envelope;
+  const units = deriveUnits(document, files, manifestCheck.units);
+  if (!units.ok) return units;
+  return {
+    ok: true,
+    document,
+    assets,
+    units: units.units,
+    name: document.metadata?.name,
+    version: document.metadata?.version,
+  };
+}
+
+export function readWidgetPackage(bytes: Uint8Array): WidgetPackageResult {
+  const archive = readPackageArchive(
+    bytes,
+    (name) =>
+      name === MANIFEST ||
+      name === WIDGET ||
+      /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(name),
+    "That file is not a readable widget package.",
+  );
+  if (!archive.ok) return fail(archive.message);
+  return readWidgetPackageFiles(archive.files);
+}
 
 /**
  * Writes a selection as a widget package: the manifest, the widget document
@@ -393,68 +665,6 @@ export function writeWidgetPackage(input: {
       { level: 6 },
     ),
   };
-}
-
-export function readWidgetPackage(bytes: Uint8Array): WidgetPackageResult {
-  const archive = readPackageArchive(
-    bytes,
-    (name) =>
-      name === MANIFEST ||
-      name === WIDGET ||
-      /^assets\/[A-Za-z0-9._/-]{1,200}$/.test(name),
-    "That file is not a readable widget package.",
-  );
-  if (!archive.ok) return fail(archive.message);
-  {
-    const files = archive.files;
-    const manifest = files[MANIFEST];
-    const widget = files[WIDGET];
-    if (manifest === undefined || widget === undefined)
-      return fail("A widget package needs manifest.json and widget.json.");
-    const parsedManifest = JSON.parse(strFromU8(manifest)) as Record<
-      string,
-      unknown
-    >;
-    if (
-      parsedManifest["format"] !== WIDGET_FORMAT ||
-      parsedManifest["version"] !== 1 ||
-      parsedManifest["widget"] !== WIDGET
-    )
-      return fail("Unsupported widget package manifest.");
-    const parsedWidget = JSON.parse(strFromU8(widget));
-    if (
-      typeof parsedWidget !== "object" ||
-      parsedWidget === null ||
-      Array.isArray(parsedWidget) ||
-      "artboard" in parsedWidget
-    )
-      return fail("A widget document must not carry an artboard.");
-    const validation = readFabricThemeEnvelope(
-      {
-        ...parsedWidget,
-        artboard: WIDGET_VALIDATION_ARTBOARD,
-      },
-      { requireTrioRoles: false },
-    );
-    if (!validation.ok)
-      return fail(validation.issues[0]?.message ?? "Invalid widget.");
-    const paths = new Set(
-      validation.envelope.assets?.map((asset) => asset.path) ?? [],
-    );
-    const assets = Object.fromEntries(
-      Object.entries(files).filter(([path]) => path.startsWith("assets/")),
-    );
-    if (
-      Object.keys(files).some(
-        (path) => path !== MANIFEST && path !== WIDGET && !paths.has(path),
-      ) ||
-      Object.keys(assets).length !== paths.size ||
-      [...paths].some((path) => assets[path] === undefined)
-    )
-      return fail("Package assets must exactly match the widget declaration.");
-    const { artboard: _artboard, ...document } = validation.envelope;
-    return { ok: true, document, assets };
-  }
 }
 
 /** The named functions whose arguments are colour values, plus the gradients a
