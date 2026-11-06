@@ -136,6 +136,74 @@ describe("the widget pack store", () => {
     }
   });
 
+  it("serialises two installs of the same id and leaves no temporary folder", async () => {
+    const store = createWidgetPackStore(directory);
+    const first = widgetPackageBytes("pack-one", "One", "1.0.0");
+    const second = widgetPackageBytes("pack-one", "Two", "2.0.0");
+
+    const results = await Promise.all([
+      store.install(first),
+      store.install(second),
+    ]);
+    expect(results.every((result) => result.ok)).toBe(true);
+
+    const final = await store.read("pack-one");
+    expect([first, second]).toContainEqual(final);
+    expect(
+      (await readdir(directory)).filter(
+        (name) => name.startsWith(".old-") || name.startsWith(".install-"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses the reserved import segment as a pack id", async () => {
+    const store = createWidgetPackStore(directory);
+    expect(
+      await store.install(widgetPackageBytes("import", "Import")),
+    ).toMatchObject({ ok: false });
+    await expect(store.read("import")).resolves.toBeUndefined();
+    expect(await readdir(directory).catch(() => [])).toEqual([]);
+  });
+
+  it("refuses a pack id longer than 64 characters", async () => {
+    const store = createWidgetPackStore(directory);
+    const overlong = "a".repeat(100);
+    await expect(store.read(overlong)).resolves.toBeUndefined();
+    await store.remove(overlong);
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  it("reports a stored directory with no package.zip", async () => {
+    const store = createWidgetPackStore(directory);
+    await mkdir(path.join(directory, "pack-one"), { recursive: true });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(await store.list()).toEqual([]);
+      expect(logged).toHaveBeenCalledWith(
+        "Widget pack pack-one: the package is missing.",
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("attributes an unreadable bundled package to the bundled set", async () => {
+    const store = createWidgetPackStore(directory, {
+      bundled: [new Uint8Array([1, 2, 3])],
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(store.read("pack-one")).resolves.toBeUndefined();
+      expect(logged).toHaveBeenCalledWith(
+        "Widget pack bundled: That file is not a readable widget package.",
+      );
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("refuses a pack id that is not a plain path segment", async () => {
     const store = createWidgetPackStore(directory);
     await expect(store.read("../pack-one")).resolves.toBeUndefined();

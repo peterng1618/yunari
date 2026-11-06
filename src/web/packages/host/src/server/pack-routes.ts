@@ -8,10 +8,7 @@ import {
   sendText,
 } from "./http.js";
 import { isForeignOrigin, isLoopbackRemote } from "./identity.js";
-
-/** A pack is a zip the browser posts; the same class of body a theme package is,
- *  with its own ceiling. Enforced while reading, before the reader unzips it. */
-export const MAX_WIDGET_PACK_BYTES = 64 * 1024 * 1024;
+import { MAX_WIDGET_PACK_BYTES } from "./limits.js";
 
 const PREFIX = "/api/widget-packs";
 
@@ -20,8 +17,9 @@ export interface PackRouteDeps {
   readonly response: http.ServerResponse;
   readonly url: URL;
   readonly store: WidgetPackStore | undefined;
-  /** Theme-sized bodies go through one slot; a pack import shares it so two
-   *  buffered zips cannot run at once. Omitted runs the read directly. */
+  /** The same one-slot gate theme uploads use, so a pack body and a theme body
+   *  are never buffered together; a second caller is answered 429. Omitted runs
+   *  the read directly. */
   readonly largeBody?: { run<T>(work: () => Promise<T>): Promise<T> };
 }
 
@@ -95,6 +93,11 @@ export async function handlePackRoutes(deps: PackRouteDeps): Promise<boolean> {
       return true;
     }
     sendJson(response, 200, { ok: true, pack: installed.pack });
+    return true;
+  }
+
+  if (url.pathname === `${PREFIX}/`) {
+    sendText(response, 400, "Invalid widget pack id.");
     return true;
   }
 

@@ -40,12 +40,15 @@ export interface WidgetPackStore {
 
 /** A pack id is one path segment under the settings directory: a reader's
  *  `document.id` already matches `STABLE_ID_PATTERN`, but a route parameter or
- *  a bundled package is not the reader's to trust. */
+ *  a bundled package is not the reader's to trust. `import` is the import
+ *  route's own segment, so no pack may take it. */
 export function isPackId(id: string): boolean {
   return (
     id !== "" &&
     id !== "." &&
     id !== ".." &&
+    id !== "import" &&
+    id.length <= 64 &&
     !id.includes("/") &&
     !id.includes("\\") &&
     !id.includes("..")
@@ -96,26 +99,42 @@ export function createWidgetPackStore(
 ): WidgetPackStore {
   const bundled = options?.bundled ?? [];
 
+  /** Installs are serialised: two same-id swaps interleaved could leave one
+   *  writer's old directory orphaned and the other's rename racing it. The
+   *  queue pattern is `createJsonFile`'s. */
+  let queue: Promise<unknown> = Promise.resolve();
+  const exclusively = <R>(work: () => Promise<R>): Promise<R> => {
+    const next = queue.then(work, work);
+    queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+
   function packagePath(id: string): string | undefined {
     return isPackId(id) ? path.join(directory, id, PACKAGE) : undefined;
   }
 
-  /** The reader's answer for bytes, logging an invalid bundled package once. */
+  /** The reader's answer for bytes. A fault is attributed to the bundled set,
+   *  not to whichever id a caller happened to ask for, so a miss cannot log a
+   *  new line per requested id. */
   async function readBundled(
     bytes: Uint8Array,
-    id: string | undefined,
+    id: string,
   ): Promise<Uint8Array | undefined> {
     const result = readWidgetPackage(bytes);
     if (!result.ok) {
-      if (id !== undefined) report(id, result.message);
+      report("bundled", result.message);
       return undefined;
     }
-    if (id === undefined || result.document.id === id) return bytes;
+    if (result.document.id === id) return bytes;
     return undefined;
   }
 
   async function readInstalled(
     id: string,
+    reportMissing = false,
   ): Promise<
     | { readonly bytes: Uint8Array; readonly result: InstalledPackage }
     | undefined
@@ -127,7 +146,13 @@ export function createWidgetPackStore(
     try {
       bytes = new Uint8Array(await readFile(target));
     } catch (error) {
-      if (!isMissing(error)) report(id, "the package could not be read.");
+      if (!isMissing(error)) {
+        report(id, "the package could not be read.");
+      } else if (reportMissing) {
+        // A directory that is on disk but carries no package is a stored pack
+        // that broke, not an id nobody installed.
+        report(id, "the package is missing.");
+      }
       return undefined;
     }
 
@@ -163,7 +188,7 @@ export function createWidgetPackStore(
         // Temporary installs and the old directory of a replacement are
         // dot-prefixed and are not packs.
         if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-        const installed = await readInstalled(entry.name);
+        const installed = await readInstalled(entry.name, true);
         if (installed === undefined) continue;
         seen.add(installed.result.document.id);
         summaries.push(summaryOf(installed.result));
@@ -195,47 +220,49 @@ export function createWidgetPackStore(
     },
 
     async install(bytes) {
-      const result = readWidgetPackage(bytes);
-      if (!result.ok) return result;
-      const id = result.document.id;
-      if (!isPackId(id)) {
-        return { ok: false, message: "That package has an unusable id." };
-      }
+      return exclusively(async () => {
+        const result = readWidgetPackage(bytes);
+        if (!result.ok) return result;
+        const id = result.document.id;
+        if (!isPackId(id)) {
+          return { ok: false, message: "That package has an unusable id." };
+        }
 
-      await mkdir(directory, { recursive: true });
-      const temporary = await mkdtemp(path.join(directory, ".install-"));
-      const target = path.join(directory, id);
-      const aside = path.join(
-        directory,
-        `.old-${randomBytes(6).toString("hex")}`,
-      );
-      let movedAside = false;
+        await mkdir(directory, { recursive: true });
+        const temporary = await mkdtemp(path.join(directory, ".install-"));
+        const target = path.join(directory, id);
+        const aside = path.join(
+          directory,
+          `.old-${randomBytes(6).toString("hex")}`,
+        );
+        let movedAside = false;
 
-      try {
-        await writeFile(path.join(temporary, PACKAGE), bytes);
         try {
-          await rename(target, aside);
-          movedAside = true;
+          await writeFile(path.join(temporary, PACKAGE), bytes);
+          try {
+            await rename(target, aside);
+            movedAside = true;
+          } catch (error) {
+            if (!isMissing(error)) throw error;
+          }
+          await rename(temporary, target);
         } catch (error) {
-          if (!isMissing(error)) throw error;
+          await rm(temporary, { recursive: true, force: true }).catch(
+            () => undefined,
+          );
+          if (movedAside) {
+            await rename(aside, target).catch(() => undefined);
+          }
+          throw error;
         }
-        await rename(temporary, target);
-      } catch (error) {
-        await rm(temporary, { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-        if (movedAside) {
-          await rename(aside, target).catch(() => undefined);
-        }
-        throw error;
-      }
 
-      if (movedAside) {
-        await rm(aside, { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-      }
-      return { ok: true, pack: summaryOf(result) };
+        if (movedAside) {
+          await rm(aside, { recursive: true, force: true }).catch(
+            () => undefined,
+          );
+        }
+        return { ok: true, pack: summaryOf(result) };
+      });
     },
 
     async remove(id) {

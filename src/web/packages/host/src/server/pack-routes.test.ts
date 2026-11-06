@@ -1,16 +1,17 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { type WidgetDocument, writeWidgetPackage } from "@yunari/theme-package";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createWidgetPackStore,
   type WidgetPackStore,
 } from "../packs/widget-packs.js";
 import { createLargeBodyGate } from "./http.js";
-import { handlePackRoutes, MAX_WIDGET_PACK_BYTES } from "./pack-routes.js";
+import { MAX_WIDGET_PACK_BYTES } from "./limits.js";
+import { handlePackRoutes } from "./pack-routes.js";
 
 function widgetPackageBytes(): Uint8Array {
   const document: WidgetDocument = {
@@ -40,8 +41,13 @@ let running: http.Server | undefined;
 let directory: string;
 let store: WidgetPackStore | undefined;
 
-async function start(withStore = true): Promise<string> {
-  store = withStore ? createWidgetPackStore(directory) : undefined;
+async function start(
+  withStore = true,
+  bundled?: readonly Uint8Array[],
+): Promise<string> {
+  store = withStore
+    ? createWidgetPackStore(directory, bundled === undefined ? {} : { bundled })
+    : undefined;
   const largeBody = createLargeBodyGate();
   const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -168,24 +174,119 @@ describe("the widget pack routes", () => {
     });
   });
 
-  it("refuses a non-loopback caller", async () => {
+  it("refuses a non-loopback caller with 403 for both writes", async () => {
     // The real socket is loopback; the module's decision is exercised in
-    // isolation by calling the handler with a foreign address.
-    const response = {
-      writeHead: () => response,
-      end: () => response,
-    };
-    const handled = await handlePackRoutes({
-      request: {
-        method: "GET",
-        headers: { host: "127.0.0.1:5173" },
-        socket: { remoteAddress: "192.168.1.4" },
-      } as unknown as http.IncomingMessage,
-      response: response as unknown as http.ServerResponse,
-      url: new URL("http://127.0.0.1/api/widget-packs"),
-      store,
+    // isolation by calling the handler with a foreign address. A configured
+    // store proves the loopback gate, not the missing-store 404, is what
+    // answers.
+    store = createWidgetPackStore(directory);
+
+    for (const [method, urlPath] of [
+      ["POST", "/api/widget-packs/import"],
+      ["DELETE", "/api/widget-packs/pack-one"],
+    ] as const) {
+      let status = 0;
+      const response = {
+        writeHead(code: number) {
+          status = code;
+          return response;
+        },
+        end() {
+          return response;
+        },
+      };
+      const handled = await handlePackRoutes({
+        request: {
+          method,
+          headers: { host: "127.0.0.1:5173" },
+          socket: { remoteAddress: "192.168.1.4" },
+        } as unknown as http.IncomingMessage,
+        response: response as unknown as http.ServerResponse,
+        url: new URL(`http://127.0.0.1${urlPath}`),
+        store,
+      });
+
+      expect(handled).toBe(true);
+      expect(status).toBe(403);
+    }
+  });
+
+  it("refuses a DELETE from another origin", async () => {
+    const base = await start();
+    const bytes = widgetPackageBytes();
+    await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: bytes.buffer as ArrayBuffer,
     });
-    expect(handled).toBe(true);
+
+    const removed = await fetch(`${base}/api/widget-packs/pack-one`, {
+      method: "DELETE",
+      headers: { origin: "http://evil.example" },
+    });
+    expect(removed.status).toBe(403);
+    expect((await fetch(`${base}/api/widget-packs/pack-one`)).status).toBe(200);
+  });
+
+  it("refuses a malformed, empty or overlong pack id", async () => {
+    const base = await start();
+
+    for (const urlPath of [
+      "/api/widget-packs/",
+      "/api/widget-packs/..%2F",
+      "/api/widget-packs/%5C",
+      `/api/widget-packs/${"a".repeat(100)}`,
+    ]) {
+      const response = await fetch(`${base}${urlPath}`, { method: "DELETE" });
+      expect(response.status, urlPath).toBe(400);
+    }
+  });
+
+  it("serves a bundled pack's bytes", async () => {
+    const bundled = widgetPackageBytes();
+    // The fixture's id is pack-one; it is bundled, not installed.
+    const base = await start(true, [bundled]);
+
+    const response = await fetch(`${base}/api/widget-packs/pack-one`);
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bundled);
+  });
+
+  it("does not serve a stored pack whose bytes no longer validate", async () => {
+    const base = await start();
+    const target = path.join(directory, "pack-one");
+    await mkdir(target, { recursive: true });
+    await writeFile(
+      path.join(target, "package.zip"),
+      new Uint8Array([1, 2, 3]),
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect((await fetch(`${base}/api/widget-packs/pack-one`)).status).toBe(
+        404,
+      );
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("keeps an existing good pack when the replacement is invalid", async () => {
+    const base = await start();
+    const good = widgetPackageBytes();
+    await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: good.buffer as ArrayBuffer,
+    });
+
+    const refused = await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: new Uint8Array([1, 2, 3]).buffer,
+    });
+    expect(refused.status).toBe(400);
+
+    const response = await fetch(`${base}/api/widget-packs/pack-one`);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(good);
   });
 
   it("answers 404 when the host serves no pack store", async () => {
