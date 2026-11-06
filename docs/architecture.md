@@ -163,7 +163,8 @@ installed. One widget pack is one directory under
 `settings/widget-packs/<packId>/package.zip`; the path-preset list is
 `settings/path-presets.json`. The editor reads both surfaces and the MCP server
 the widget packs, through the same loopback routes — `/api/widget-packs` and
-`/api/path-presets` — so no surface keeps a second library. Both surfaces are
+`/api/path-presets` — so no surface keeps an independent library once a
+browser's list has migrated. Both surfaces are
 loopback admin, and every write also refuses a foreign origin.
 
 - A widget pack keeps the `yunari-widget-package` container (`manifest.json`,
@@ -179,7 +180,7 @@ loopback admin, and every write also refuses a foreign origin.
   anything is stored.
 - Built-in path presets stay bundled data in `BUILTIN_PATH_PRESETS`. The host
   merges them ahead of the stored rows, minus the ids the author removed. A
-  stored row's id is `user:` for one the author added and
+  stored row's id is `user:<id>` for one the author added and
   `pack:<packId>:<presetId>` for one a pack carries, so neither can collide
   with a built-in id.
 - The starter theme is a bundled `yunari-theme-package` committed at

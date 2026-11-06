@@ -36,10 +36,10 @@ The host also serves a settings page and a `/pair` page for displays.
 - **Widget packs and path presets.** The host owns the installed widget packs
   and the one path-preset list under its settings folder. The editor reads both
   and the MCP server reads the same installed widget-pack rows, so neither keeps
-  a second library. Widget packs keep the
+  an independent library once a browser's list has migrated. Widget packs keep the
   `yunari-widget-package` container and add insertable units with their
   bindings and assets; path-preset packs are `yunari-path-preset-pack` JSON v1.
-  Built-in path shapes stay bundled data, and a stored preset is `user:` or
+  Built-in path shapes stay bundled data, and a stored preset is `user:<id>` or
   `pack:<packId>:<presetId>`. A browser's old preset list is migrated to the
   host once and kept locally until the host accepts it. The starter theme and
   the default widget pack are committed packages; no runtime generator builds
