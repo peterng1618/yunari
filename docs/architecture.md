@@ -193,8 +193,9 @@ answered without a record.
 
 Declarative contributions join the registries they extend; no manager learns
 plugin details. An installed `assetCategories` entry is drawn by the finder's
-generic grid, and consented `customSources` rows join the custom source
-provider. No plugin code runs in this phase.
+generic grid, and `customSources` rows from a declarative extension join the
+custom source provider. A declarative profile needs no consent; executable
+profiles are gated. No plugin code runs in this phase.
 
 ## Host serving and gates
 

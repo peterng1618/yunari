@@ -11,6 +11,16 @@ export const MAX_USB_ID = 0xffff;
 
 export const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** Names Windows reserves for devices, with or without an extension. */
+const WINDOWS_RESERVED = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/;
+
+/** Whether a name is a Windows device name, case-insensitive and regardless of
+ *  an extension. The plugin package path check and manifest identifiers share
+ *  this rule: both become path segments on the host. */
+export function isWindowsReservedName(name: string): boolean {
+  return WINDOWS_RESERVED.test((name.split(".")[0] ?? "").toUpperCase());
+}
+
 export type Check<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly reason: string };
@@ -65,6 +75,10 @@ export function readIdentifier(
   if (!IDENTIFIER_PATTERN.test(string.value))
     return refuse(
       `${subject} ${JSON.stringify(string.value)} must be kebab-case.`,
+    );
+  if (isWindowsReservedName(string.value))
+    return refuse(
+      `${subject} ${JSON.stringify(string.value)} is a reserved device name.`,
     );
   if (reservedPrefix !== undefined && string.value.startsWith(reservedPrefix))
     return refuse(`${subject} ${JSON.stringify(string.value)} is reserved.`);

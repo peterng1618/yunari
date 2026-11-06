@@ -271,6 +271,24 @@ describe("plugin installer", () => {
     ).toBe("export default {};");
   });
 
+  it("refuses an index entry whose execution cannot carry its own manifest", async () => {
+    const installer = createPluginInstaller(dir);
+    const installed = await installer.install(validPluginBytes());
+    if (!installed.ok || installed.plugin === undefined)
+      throw new Error("install failed");
+
+    // A hand-edited index cannot record `data` beside `main`, which requires
+    // `trusted-worker`.
+    const indexFile = path.join(dir, "installed.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8")) as {
+      plugins: Record<string, { manifest: Record<string, unknown> }>;
+    };
+    index.plugins["local/acme-sensors"]!.manifest.execution = "data";
+    await writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+
+    expect(await installer.list()).toEqual([]);
+  });
+
   it("restores the old tree when the index write fails", async () => {
     const installer = createPluginInstaller(dir);
     const installed = await installer.install(validPluginBytes());

@@ -8,6 +8,7 @@ import {
   qualifiedPluginKey,
   readPluginManifest,
   readPluginPackage,
+  validateManifestExecution,
 } from "@yunari/extension-api";
 import { createJsonFile } from "../settings/json-file.js";
 import { contentHash } from "./content-hash.js";
@@ -106,6 +107,13 @@ function createIndex(root: string) {
       if (!manifest.ok)
         throw new Error(
           `Plugin index refused: entry ${JSON.stringify(key)} carries an invalid manifest: ${manifest.reason}`,
+        );
+      // A hand-edited index may declare a profile its own contributions cannot
+      // carry, so the execution rule is re-applied here, not only at install.
+      const execution = validateManifestExecution(manifest.manifest);
+      if (!execution.ok)
+        throw new Error(
+          `Plugin index refused: entry ${JSON.stringify(key)} carries an impossible execution profile: ${execution.reason}`,
         );
       // The publisher is not echoed from the file: this installer only owns
       // local installs, and a hand-edited segment must never steer a path.

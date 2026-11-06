@@ -101,6 +101,15 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("refuses a Windows device name as an id", () => {
+    for (const id of ["con", "prn", "aux", "nul", "com1", "lpt9"]) {
+      expect(readPluginManifest({ ...validManifest(), id })).toEqual({
+        ok: false,
+        reason: `Plugin id ${JSON.stringify(id)} is a reserved device name.`,
+      });
+    }
+  });
+
   it("refuses an unknown contributes key", () => {
     expect(
       readPluginManifest({ ...validManifest(), contributes: { widgets: [] } }),

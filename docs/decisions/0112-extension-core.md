@@ -3,11 +3,15 @@
 - **Date:** 2026-11-06
 - **Status:** accepted
 - **Paths:** `src/web/packages/extension-api/src/manifest.ts`
+  `src/web/packages/extension-api/src/manifest-values.ts`
+  `src/web/packages/extension-api/src/manifest-contributions.ts`
   `src/web/packages/extension-api/src/capabilities.ts`
   `src/web/packages/extension-api/src/host-api.ts`
   `src/web/packages/extension-api/src/gate.ts`
   `src/web/packages/extension-api/src/consent.ts`
   `src/web/packages/extension-api/src/package.ts`
+  `src/web/packages/extension-api/src/index.ts`
+  `src/web/packages/extension-api/src/installed.ts`
   `src/web/packages/host/src/extensions/content-hash.ts`
   `src/web/packages/host/src/extensions/install.ts`
   `src/web/packages/host/src/extensions/consent-store.ts`

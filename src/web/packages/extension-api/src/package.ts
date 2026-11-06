@@ -5,6 +5,7 @@ import {
   readPluginManifest,
   validateManifestExecution,
 } from "./manifest";
+import { isWindowsReservedName } from "./manifest-values";
 
 /** The plugin archive is bounded tighter than a theme package: it carries code,
  *  not pictures, and a plugin that needs more than this is not a plugin. */
@@ -17,8 +18,6 @@ const MAX_PLUGIN_ENTRY_BYTES = 64 * 1024 * 1024;
 const MAX_ENTRY_PATH_BYTES = 512;
 const MAX_ENTRY_DEPTH = 16;
 const UNREADABLE = "That file is not a readable plugin package.";
-/** Names Windows reserves for devices, with or without an extension. */
-const WINDOWS_RESERVED = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/;
 
 export interface PluginPackage {
   readonly manifest: PluginManifest;
@@ -130,8 +129,7 @@ function checkArchivePath(name: string): PathCheck {
     if (segment === "__proto__") return invalidName(name);
     if (segment.endsWith(".") || segment.endsWith(" "))
       return invalidName(name);
-    const base = segment.split(".")[0]?.toUpperCase() ?? "";
-    if (WINDOWS_RESERVED.test(base)) return invalidName(name);
+    if (isWindowsReservedName(segment)) return invalidName(name);
   }
   return { ok: true, directory };
 }
