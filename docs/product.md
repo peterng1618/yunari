@@ -59,12 +59,12 @@ support.
 ## Extensions
 
 An extension package is a zip with `yunari-plugin.json` at its root. The
-manifest names a kebab-case id, a semver version, the Yunari releases it
-supports, host API major `1`, an execution profile, capabilities and the
-contributions it adds. The four execution profiles are `data` (metadata only),
-`declarative` (descriptors only), `sandboxed-ui` (an isolated frame) and
-`trusted-worker` (a forked worker). A manifest may ask for a higher profile than
-its contributions require, never a lower one.
+manifest names a kebab-case id, a semver version, the minimum Yunari release it
+supports (`engines.yunari` `>=x.y.z`), host API major `1`, an execution profile,
+capabilities and the contributions it adds. The four execution profiles are
+`data` (metadata only), `declarative` (descriptors only), `sandboxed-ui` (an
+isolated frame) and `trusted-worker` (a forked worker). A manifest may ask for a
+higher profile than its contributions require, never a lower one.
 
 Capabilities are a closed list of ten: `sensor:provide`, `asset:provide`,
 `panel:drive`, `network:fetch`, `storage:own`, `secrets:own`, `settings:own`,
@@ -72,8 +72,9 @@ Capabilities are a closed list of ten: `sensor:provide`, `asset:provide`,
 manifest. No plugin receives arbitrary filesystem access, a way to spawn
 processes or the host's credential store.
 
-Consent is recorded per plugin against the qualified key `publisher/id`, never
-the bare id, and binds one fingerprint: version, install contents, profile,
+Consent is required and recorded for the executable profiles, `sandboxed-ui`
+and `trusted-worker`, against the qualified key `publisher/id`, never the bare
+id. A grant binds one fingerprint: version, install contents, profile,
 capabilities, authority-bearing contributions and device allowlists. Any of
 those changing asks the owner again, and missing or stale consent stops the
 plugin loading. The fingerprint is a binding digest, not a signature. Local
@@ -82,8 +83,9 @@ are reserved. Extension management is available on this PC only.
 
 Today an extension is installed from a package on this PC; the store does not
 yet carry plugin items. Declarative asset categories and custom sources take
-effect without editor code. No plugin code runs yet: executable providers,
-sandboxed UI and USB panel drivers are not in this release.
+effect without editor code, and a declarative plugin records no consent. No
+plugin code runs yet: executable providers, sandboxed UI and USB panel drivers
+are not in this release.
 
 ## Product rules
 

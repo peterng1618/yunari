@@ -159,11 +159,11 @@ provider or display that falls behind is dropped rather than growing memory.
 
 ## Extensions
 
-`@yunari/extension-api` owns the extension ABI as one pure surface shared by the
-host, the editor and the store: the manifest schema with strict unknown-key
-refusal, the four execution profiles, the closed capability list, the host API
-method table, the deny-by-default gate and the consent binding digest. No
-surface re-spells a subset of that vocabulary.
+`@yunari/extension-api` owns the extension ABI as one pure surface the host and
+the editor share: the manifest schema with strict unknown-key refusal, the four
+execution profiles, the closed capability list, the host API method table, the
+deny-by-default gate and the consent binding digest. No surface re-spells a
+subset of that vocabulary.
 
 A plugin is a zip whose root carries `yunari-plugin.json`. The manifest names a
 kebab-case `id`, a semver `version`, the host range in `engines.yunari`, the
@@ -175,18 +175,21 @@ lower one. Unknown keys, capabilities and profiles are refused, not ignored.
 The host validates package paths, size, declared file set and manifest before
 it writes anything. An install lands under `settings/extensions/` as
 `local/<id>/<version>/`, and `installed.json` is what makes it live. Consent is
-kept in `settings/extension-consent.json`, keyed by the qualified plugin key
-`publisher/id`. A grant's fingerprint is a SHA-256 binding digest over the
-schema tag, host API major, key, version, install-tree content hash, profile,
-sorted capabilities, authority-bearing contribution identities and device
-allowlists. It binds rather than signs: a changed file set, version or access
-yields a new fingerprint, and stale consent reads as missing.
+required and recorded only for the executable profiles, `sandboxed-ui` and
+`trusted-worker`; a data or declarative plugin needs no record. A record lives
+in `settings/extension-consent.json`, keyed by the qualified plugin key
+`publisher/id`, and its fingerprint is a SHA-256 binding digest over the schema
+tag, host API major, key, version, install-tree content hash, profile, sorted
+capabilities, authority-bearing contribution identities and device allowlists.
+It binds rather than signs: a changed file set, version or access yields a new
+fingerprint, and stale consent reads as missing.
 
 `/api/extensions` and its children are loopback-only and origin-checked. `GET`
-lists installs, `POST /api/extensions/install` takes a package, `POST
-/api/extensions/<publisher>/<id>/consent` records a grant whose fingerprint
-matches the install, and `DELETE /api/extensions/<publisher>/<id>` removes the
-tree and its grant.
+lists installs, `POST /api/extensions/install` takes a package, and `DELETE
+/api/extensions/<publisher>/<id>` removes the tree and its grant. `POST
+/api/extensions/<publisher>/<id>/consent` recomputes the install's fingerprint
+and records a grant only when it matches; a profile that needs no consent is
+answered without a record.
 
 Declarative contributions join the registries they extend; no manager learns
 plugin details. An installed `assetCategories` entry is drawn by the finder's
