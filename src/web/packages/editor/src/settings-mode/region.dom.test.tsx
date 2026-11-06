@@ -2349,9 +2349,11 @@ it("confirms a delete, offers the unreferenced credential and leaves it on decli
       "declining did not take the offer away",
     ).toBeNull();
     expect(
-      fetched,
+      fetched.mock.calls.filter(([input]) =>
+        String(input).includes("/api/credentials"),
+      ),
       "declining still cleared the credential",
-    ).not.toHaveBeenCalled();
+    ).toEqual([]);
   } finally {
     vi.unstubAllGlobals();
   }
@@ -2510,9 +2512,10 @@ it("clears the credential the delete offer names, when accepted", async () => {
     );
     await act(async () => {});
 
-    expect(calls, "the accept did not reach the credential route").toEqual([
-      { method: "DELETE", url: "/api/credentials/fixture-key" },
-    ]);
+    expect(
+      calls.filter((call) => call.url.includes("/api/credentials")),
+      "the accept did not reach the credential route",
+    ).toEqual([{ method: "DELETE", url: "/api/credentials/fixture-key" }]);
     expect(
       container.querySelector("[data-yunari-source-credential-offer]"),
       "the offer stayed after the key was removed",

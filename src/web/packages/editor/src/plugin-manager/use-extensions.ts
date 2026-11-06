@@ -40,7 +40,7 @@ function messageOf(error: unknown): string {
 
 /** `publisher/id`, each segment encoded. A key with no publisher is a local
  *  install, which is the only publisher this host mints itself. */
-function keyPath(key: string): string {
+export function keyPath(key: string): string {
   const at = key.indexOf("/");
   const publisher = at === -1 ? "local" : key.slice(0, at);
   const id = at === -1 ? key : key.slice(at + 1);

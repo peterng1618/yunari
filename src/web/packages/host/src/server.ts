@@ -172,6 +172,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const panelsAttached = options.attachedPanels ?? attachedDevices;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const extensions = options.extensions;
+  const pluginSettings = options.pluginSettings;
   const saved = options.rememberLan;
   const devices = options.devices;
   const display = options.display;
@@ -350,7 +351,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
     server,
   });
   const pairingRoutes = createPairingRoutes({ displays, pairingCodes });
-  const extensionRoutes = createExtensionRoutes({ extensions });
+  const extensionRoutes = createExtensionRoutes({
+    extensions,
+    settings: pluginSettings,
+  });
   const settingsRoutes = createSettingsRoutes({
     options,
     devices,
