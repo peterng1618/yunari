@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { createStarterTheme } from "@yunari/theme-kit";
+import { createBlankTheme } from "@yunari/theme-kit";
 import {
   readWidgetPackage,
   type WidgetPackSummary,
@@ -20,7 +20,9 @@ function packWithUnit(
   unitId: string,
   label: string,
 ): PackFixture {
-  const { artboard: _artboard, ...document } = createStarterTheme();
+  const { artboard: _artboard, ...document } = createBlankTheme({
+    artboard: { width: 1, height: 1 },
+  });
   const written = writeWidgetPackage({
     document: {
       ...document,

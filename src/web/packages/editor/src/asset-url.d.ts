@@ -7,3 +7,9 @@ declare module "*.jpg?url" {
   const url: string;
   export default url;
 }
+
+/** A committed package the bundler emits beside the bundle. */
+declare module "*.zip?url" {
+  const url: string;
+  export default url;
+}

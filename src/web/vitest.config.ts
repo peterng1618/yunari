@@ -39,6 +39,9 @@ export default defineConfig({
       "tests/scripts/**/*.test.ts",
     ],
     environment: "node",
+    // The editor's template is committed data now; every suite opens it the
+    // way boot does, from the package the product ships.
+    setupFiles: ["./packages/editor/src/testing/bundled-starter-setup.ts"],
     restoreMocks: true,
     // The default 5s per-test budget is below the floor this harness imposes: at
     // 144 files Vitest spawns a worker per file (~5.2s of startup each), and a

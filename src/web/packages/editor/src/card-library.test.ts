@@ -11,8 +11,7 @@ import { reviveScene, serialiseScene } from "@yunari/scene-fabric";
 import {
   addImageObject,
   type CardUnit,
-  cpuCard,
-  createStarterTheme,
+  createBlankTheme,
   instantiateCard,
   type ObjectJson,
   starterTypeTokens,
@@ -50,6 +49,18 @@ function unitLabel(id: string): string {
   const unit = activeWidgetUnits().find((candidate) => candidate.id === id);
   if (unit === undefined) throw new Error(`no installed unit "${id}"`);
   return unit.label;
+}
+
+/** The shipped CPU card, taken from the installed package rather than rebuilt
+ *  here: the composition is data now, and a second builder would be a card the
+ *  product does not ship. */
+function cpuCard(): ObjectJson {
+  const installed = activeWidgetUnits().find(
+    (candidate) => candidate.id === CPU_CARD,
+  );
+  if (installed === undefined)
+    throw new Error(`no installed unit "${CPU_CARD}"`);
+  return installed.unit.build();
 }
 
 // jsdom cannot drawImage an undecoded img, and a card carries a frosted panel,
@@ -113,7 +124,9 @@ function picturePack(): Uint8Array {
     style: "normal",
     format: "woff2",
   } as const;
-  const { artboard: _artboard, ...document } = createStarterTheme();
+  const { artboard: _artboard, ...document } = createBlankTheme({
+    artboard: { width: 1, height: 1 },
+  });
   const globals = document.globals as Record<string, unknown>;
   const written = writeWidgetPackage({
     document: {

@@ -1,7 +1,7 @@
 import type { AssetReference, Binding } from "@yunari/renderer-core";
 import {
   addImageObject,
-  createStarterTheme,
+  createBlankTheme,
   type ObjectJson,
 } from "@yunari/theme-kit";
 import {
@@ -41,7 +41,9 @@ interface FixtureUnit {
  *  provenance. The writer validates the document, so a fixture cannot describe
  *  a package the reader would refuse. */
 function packBytes(units: readonly FixtureUnit[]): Uint8Array {
-  const { artboard: _artboard, ...document } = createStarterTheme();
+  const { artboard: _artboard, ...document } = createBlankTheme({
+    artboard: { width: 1, height: 1 },
+  });
   const written = writeWidgetPackage({
     document: {
       ...document,

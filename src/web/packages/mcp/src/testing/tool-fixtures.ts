@@ -1,9 +1,10 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CallToolResult } from "@modelcontextprotocol/server";
-import { createStarterTheme } from "@yunari/theme-kit";
 import {
   readWidgetPackage,
   type WidgetPackSummary,
-  writeWidgetPackage,
 } from "@yunari/theme-package";
 import { InMemoryDraftStore } from "../drafts.js";
 import { HttpHostClient } from "../host-client.js";
@@ -78,21 +79,19 @@ export const localDisplay = {
   rotation: 0,
 };
 
-/** The starter composition as one installed pack: the units every existing
- *  add_card case names. Built once, like the host would have stored it. */
-const STARTER_PACK_ID = "yunari-starter";
+/** The pack the app ships: the units every existing add_card case names. */
+const STARTER_PACK_ID = "yunari-default-widgets";
+const DEFAULT_PACK_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../host/src/packs/default.widgets.zip",
+);
 let starterPack: { readonly bytes: Uint8Array } | undefined;
 
 function starterPackOf(): {
   readonly bytes: Uint8Array;
   readonly summary: WidgetPackSummary;
 } {
-  if (starterPack === undefined) {
-    const { artboard: _artboard, ...document } = createStarterTheme();
-    const written = writeWidgetPackage({ document, assets: {} });
-    if (!written.ok) throw new Error(written.message);
-    starterPack = { bytes: written.bytes };
-  }
+  starterPack ??= { bytes: new Uint8Array(readFileSync(DEFAULT_PACK_PATH)) };
   const read = readWidgetPackage(starterPack.bytes);
   if (!read.ok) throw new Error(read.message);
   return {

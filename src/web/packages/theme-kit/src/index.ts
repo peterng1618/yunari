@@ -11,7 +11,6 @@ export * from "./assets.js";
 export * from "./authoring.js";
 export * from "./card-library.js";
 export * from "./card-token-mapping.js";
-export * from "./cards.js";
 export * from "./document.js";
 export * from "./globals.js";
 export * from "./icons.js";

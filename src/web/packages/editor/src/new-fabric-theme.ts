@@ -1,17 +1,14 @@
 import type { Artboard, FabricThemeEnvelope } from "@yunari/renderer-core";
-import { createBlankTheme, createStarterTheme } from "@yunari/theme-kit";
-import { starterBackdrop } from "./starter-backdrop.js";
+import { createBlankTheme } from "@yunari/theme-kit";
+import { bundledStarterEnvelope } from "./bundled/starter.js";
 
 /**
  * The starter as the library offers it: a template the product ships.
  *
  * A template is not a theme the author made, so it is not in the host's
  * library store — it has no file, no id in a themes directory and nothing to
- * delete, which is what "your themes" is counted over.
- *
- * The composition itself lives in `@yunari/theme-kit`; this file supplies the
- * editor's packaged backdrop bytes. A second copy of the composition here would
- * be a document the MCP server could not reproduce.
+ * delete, which is what "your themes" is counted over. The document itself is
+ * the committed `bundled/starter.theme.zip`, loaded once at boot.
  */
 export const STARTER_TEMPLATE = {
   id: "yunari-starter-template",
@@ -24,7 +21,7 @@ export const STARTER_TEMPLATE = {
  * It is not what `New` means; see `createBlankFabricTheme`.
  */
 export function createNewFabricTheme(): FabricThemeEnvelope {
-  return createStarterTheme({ backdrop: starterBackdrop });
+  return bundledStarterEnvelope();
 }
 
 /**

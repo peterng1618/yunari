@@ -150,11 +150,10 @@ export function frostedCard(
  * drifting apart.
  *
  * The card's own identity is stamped on the group and nowhere else: the unit's
- * word arrives as a parameter so its one owner stays `CARD_LABELS` in
- * `cards.ts` (which the editor's `uiCopy.cardLibrary` aliases), and
- * `provenance` is the document's own authored key for it — the same pair a copy
- * carries (`card-library.ts` `instantiateCard`), written where the card's other
- * authored state is written.
+ * word arrives as a parameter, and `provenance` is the document's own authored
+ * key for it — the same pair a copy carries (`card-library.ts`
+ * `instantiateCard`), written where the card's other authored state is
+ * written.
  */
 export function cardGroup(
   id: string,

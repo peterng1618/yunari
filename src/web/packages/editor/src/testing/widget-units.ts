@@ -1,4 +1,7 @@
-import { createStarterTheme } from "@yunari/theme-kit";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createBlankTheme } from "@yunari/theme-kit";
 import {
   readWidgetPackage,
   type WidgetPackSummary,
@@ -7,24 +10,26 @@ import {
 import { loadWidgetUnits } from "../widget-packs.js";
 
 /**
- * A real starter pack for the editor's unit-consuming suites.
+ * The pack the app ships, for the editor's unit-consuming suites.
  *
- * The bytes are produced by the package writer from the same composition the
- * product ships, so a test never re-types a unit. The store has no test seam;
- * the fixture feeds it through its own two host routes, which is exactly what a
- * browser session does.
+ * The bytes are the committed `default.widgets.zip`, not a fixture built from
+ * a second composition: the Add pane must offer exactly the units the host
+ * serves, and a test that rebuilt them could pass over a shipped pack that is
+ * missing one. The store has no test seam; the fixture feeds it through its own
+ * two host routes, which is exactly what a browser session does.
  */
-export const STARTER_PACK_ID = "yunari-starter";
+export const STARTER_PACK_ID = "yunari-default-widgets";
+
+const DEFAULT_PACK_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../host/src/packs/default.widgets.zip",
+);
 
 let starterBytes: Uint8Array | undefined;
 
 export function starterPackBytes(): Uint8Array {
-  if (starterBytes !== undefined) return starterBytes;
-  const { artboard: _artboard, ...document } = createStarterTheme();
-  const written = writeWidgetPackage({ document, assets: {} });
-  if (!written.ok) throw new Error(written.message);
-  starterBytes = written.bytes;
-  return written.bytes;
+  starterBytes ??= new Uint8Array(readFileSync(DEFAULT_PACK_PATH));
+  return starterBytes;
 }
 
 function summaryOf(id: string, bytes: Uint8Array): WidgetPackSummary {
@@ -87,7 +92,7 @@ export async function installWidgetPack(
   await loadWidgetUnits(packFetcher([{ id, bytes }]));
 }
 
-/** A pack whose one unit's label is no `CARD_LABELS` string, so a tile that
+/** A pack whose one unit's label is no shipped card's, so a tile that
  *  hard-codes a starter word cannot pass by coincidence. */
 export const THERMAL_PACK_ID = "thermal-pack";
 export const THERMAL_UNIT_ID = "thermal-rig";
@@ -97,7 +102,9 @@ let thermalBytes: Uint8Array | undefined;
 
 export function thermalPackBytes(): Uint8Array {
   if (thermalBytes !== undefined) return thermalBytes;
-  const { artboard: _artboard, ...document } = createStarterTheme();
+  const { artboard: _artboard, ...document } = createBlankTheme({
+    artboard: { width: 1, height: 1 },
+  });
   const written = writeWidgetPackage({
     document: {
       ...document,

@@ -14,6 +14,7 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
+import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
 import {
   createPanelManager,
@@ -331,10 +332,12 @@ export async function run(argv: readonly string[]): Promise<number> {
   // its address changes.
   const hostRecord = await readOrMintHostRecord(settingsDir);
 
-  // Installed widget packs, one folder each under the settings directory. This
-  // task adds none of the app's own: a bundled default pack is Task 7's (R10).
+  // Installed widget packs, one folder each under the settings directory. The
+  // app's own eight cards travel as a bundled package, read from the build and
+  // never written: they are the product's, not this machine's files.
   const widgetPacks = createWidgetPackStore(
     path.join(settingsDir, "widget-packs"),
+    { bundled: [defaultWidgetPackBytes()] },
   );
 
   // The certificate is the whole reason the host serves https: a phone at

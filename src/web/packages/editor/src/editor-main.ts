@@ -10,6 +10,7 @@ import {
 import type { ThemeCreditsEntry } from "@yunari/theme-package";
 import { AssetManager } from "./asset-manager/index.js";
 import type { BackgroundMediaMemory } from "./background-media-memory.js";
+import { bundledStarterAssets, loadBundledStarter } from "./bundled/starter.js";
 import { EditorSession } from "./editor-session.js";
 import {
   createEditorShellBridge,
@@ -38,7 +39,6 @@ import {
   createNewFabricTheme,
 } from "./new-fabric-theme.js";
 import { createSensorCatalogue } from "./sensor-catalogue.js";
-import { loadStarterBackdrop } from "./starter-backdrop.js";
 import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
 import { captureCanvas } from "./thumbnail-capture.js";
@@ -93,6 +93,15 @@ async function start(): Promise<void> {
   });
   const host = layout.hosts.canvas;
   const status = layout.hosts.status;
+  // The template every boot path that builds a document reaches for. Loaded
+  // before anything is mounted: a broken bundle is reported on the status line
+  // and stops the boot rather than opening an empty document in its place.
+  try {
+    await loadBundledStarter();
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    return;
+  }
   /** The installed packs could not be read. Held until a shell exists to report
    *  through; the store keeps its (empty) list, so the Add pane offers no card
    *  tiles rather than a fabricated library. */
@@ -335,7 +344,7 @@ async function start(): Promise<void> {
         await mount({
           input: envelopeInputFor(fresh),
           envelope: fresh,
-          assets: await starterAssets(),
+          assets: bundledStarterAssets(),
         });
         status.textContent = "New theme from the starter";
       },
@@ -599,7 +608,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent = `Could not open the saved theme: ${requested.issues
         .map((issue) => issue.message)
@@ -615,7 +624,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent =
         "Could not open the saved theme: it is too large to open.";
@@ -626,7 +635,7 @@ async function start(): Promise<void> {
       await mount({
         input: envelopeInputFor(theme),
         envelope: theme,
-        assets: await starterAssets(),
+        assets: bundledStarterAssets(),
       });
       status.textContent = "Editor ready";
       return;
@@ -639,21 +648,6 @@ async function start(): Promise<void> {
       throw new Error(`Unhandled boot outcome: ${String(unhandled)}`);
     }
   }
-}
-
-/**
- * The starter's own declared bytes, read once.
- *
- * A new theme declares a packaged backdrop, and a declaration without bytes is
- * a broken theme: the media layer would report it unreadable and the artboard
- * would show nothing behind the glass. A package opened from disk brings its
- * own, which is why this is only wired into the two paths that *build* the
- * starter.
- */
-let starterBytes: Promise<Readonly<Record<string, Uint8Array>>> | undefined;
-function starterAssets(): Promise<Readonly<Record<string, Uint8Array>>> {
-  starterBytes ??= loadStarterBackdrop();
-  return starterBytes;
 }
 
 void start();

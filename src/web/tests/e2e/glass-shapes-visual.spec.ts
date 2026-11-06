@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
 import { frost, solidOf } from "@yunari/theme-kit";
-import { writeThemePackage } from "@yunari/theme-package";
+import { readThemePackage, writeThemePackage } from "@yunari/theme-package";
 import { decode, luma as sharedLuma } from "./frame-diff.js";
 import { GLASS_BAR } from "./glass-fixture.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
@@ -183,18 +183,31 @@ function envelope(fill: "panel" | "frost" | "none", withGlass: boolean) {
   };
 }
 
+/** The photograph the starter package carries, read from the committed zip. */
+function starterPhotograph(): Uint8Array {
+  const zip = new Uint8Array(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../packages/editor/src/bundled/starter.theme.zip",
+          import.meta.url,
+        ),
+      ),
+    ),
+  );
+  const read = readThemePackage(zip);
+  if (!read.ok) throw new Error(read.message);
+  const bytes = read.assets["assets/starter-backdrop.jpg"];
+  if (bytes === undefined)
+    throw new Error("the starter package carries no backdrop");
+  return bytes;
+}
+
 function packageFor(
   fill: "panel" | "frost" | "none",
   withGlass: boolean,
 ): Uint8Array {
-  const photograph = readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../packages/editor/src/starter-backdrop.jpg",
-        import.meta.url,
-      ),
-    ),
-  );
+  const photograph = starterPhotograph();
   const written = writeThemePackage({
     envelope: withRoleTokens(envelope(fill, withGlass)),
     assets: { "assets/backdrop.jpg": photograph },
