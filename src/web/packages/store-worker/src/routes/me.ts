@@ -155,19 +155,26 @@ async function mine(request: Request, env: Env, url: URL): Promise<Response> {
   // favourite count. `authorListings` owns the latest-version rule the public
   // reads use, so one item is shown at one version everywhere.
   const listings = await authorListings(env.DB, session.userId);
-  const entries: MineEntry[] = listings.map(({ item, version, favorites }) => ({
-    ...entryOf(
+  const entries: MineEntry[] = [];
+  for (const { item, version, favorites } of listings) {
+    const entry = entryOf(
       item,
       version,
       favorites,
       `${url.origin}/catalogue/${item.id}/${version.version}.zip`,
       `catalogue/${item.id}/thumbnail.png`,
-    ),
-    status: item.status,
-    ...(item.status_reason === null
-      ? {}
-      : { statusReason: item.status_reason }),
-  }));
+    );
+    // A row whose stored metadata cannot name it is not a row the Mine surface
+    // can draw; the index drops it the same way.
+    if (entry === undefined) continue;
+    entries.push({
+      ...entry,
+      status: item.status,
+      ...(item.status_reason === null
+        ? {}
+        : { statusReason: item.status_reason }),
+    });
+  }
 
   return Response.json({ entries });
 }

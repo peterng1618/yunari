@@ -1,7 +1,14 @@
 import { env, SELF } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { handlePublic } from "../src/routes/public";
-import { BASE, countingEnv } from "./helpers";
+import { BASE, countingEnv, sessionHeaders } from "./helpers";
+import {
+  finalize,
+  reset,
+  submit,
+  verifyAuthor,
+  widgetPack,
+} from "./packs-submit";
 import {
   clearIndexCache,
   downloads,
@@ -178,6 +185,45 @@ describe("public reads", () => {
     expect(
       (await SELF.fetch(`${BASE}/catalogue/${unknown}/1.0.0.zip`)).status,
     ).toBe(404);
+  });
+});
+
+describe("public reads across kinds", () => {
+  beforeAll(async () => {
+    const migrated = await SELF.fetch(`${BASE}/migrate`, {
+      method: "POST",
+      headers: { "x-migrate-token": "test-migrate" },
+    });
+    expect(migrated.status).toBe(200);
+  });
+
+  beforeEach(async () => {
+    await reset();
+    await clearIndexCache();
+  });
+
+  it("lists a widget pack with its metadata name", async () => {
+    const headers = await sessionHeaders();
+    await verifyAuthor("acme");
+    const { version } = await submit(
+      headers,
+      widgetPack("Starter Cards"),
+      "widget-pack",
+    );
+    expect((await finalize(headers, version)).status).toBe(200);
+    await clearIndexCache();
+
+    const index = (await (
+      await SELF.fetch(`${BASE}/index.json`)
+    ).json()) as { readonly entries: readonly Record<string, unknown>[] };
+
+    expect(index.entries).toContainEqual(
+      expect.objectContaining({
+        kind: "widget-pack",
+        name: "Starter Cards",
+        version: "1.0.0",
+      }),
+    );
   });
 });
 

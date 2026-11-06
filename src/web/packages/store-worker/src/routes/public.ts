@@ -98,9 +98,17 @@ async function indexResponse(
   );
   const entries: CatalogueEntry[] = [];
   for (const { item, version } of listings) {
-    entries.push(
-      await entryOfListing(env, url, item, version, counts.get(item.id) ?? 0),
+    const entry = await entryOfListing(
+      env,
+      url,
+      item,
+      version,
+      counts.get(item.id) ?? 0,
     );
+    // A version whose stored metadata cannot name it is left out of the
+    // listing: one unreadable row must not fail every other item, and a
+    // fabricated name is worse than an absent one.
+    if (entry !== undefined) entries.push(entry);
   }
   // `generatedAt` is the newest instant the listing depends on, not the clock:
   // a per-request stamp would change the ETag on every call and no 304 could
@@ -142,6 +150,7 @@ async function itemResponse(
     version,
     await favoriteCount(env.DB, item.id),
   );
+  if (entry === undefined) return notFound();
   // The id is redundant with the directory name but is what a caller that
   // fetched this file by id already holds; `facets` stays the index's.
   const body = JSON.stringify({ id: item.id, ...itemFileOf(entry) });
@@ -197,7 +206,7 @@ async function entryOfListing(
   item: ItemRow,
   version: VersionRow,
   favorites: number,
-): Promise<CatalogueEntry> {
+): Promise<CatalogueEntry | undefined> {
   return entryOf(
     item,
     version,

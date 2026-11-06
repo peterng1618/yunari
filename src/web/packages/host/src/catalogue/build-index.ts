@@ -4,10 +4,13 @@ import {
   type CatalogueEntry,
   type CatalogueIndex,
   DASHBOARD_THEME_KIND,
+  type FacetRecord,
   facetRecordOf,
+  isStoreItemKind,
   parseCatalogueIndex,
   parseCatalogueItemFile,
   readFabricThemeEnvelope,
+  STORE_ITEM_KINDS,
 } from "@yunari/renderer-core";
 import { readThemePackage } from "@yunari/theme-package";
 import { thumbnailLuminance } from "../themes/thumbnails.js";
@@ -24,7 +27,12 @@ import { thumbnailLuminance } from "../themes/thumbnails.js";
 export interface CatalogueItem {
   readonly id: string;
   readonly item: unknown;
-  readonly theme: unknown;
+  /** The package's envelope. Only a dashboard theme has one; another kind's
+   *  package is not a theme and is not read as one. */
+  readonly theme?: unknown;
+  /** The facets the authoring input stored for a kind with no envelope to
+   *  derive them from. `facets_json` is the store's owner of the same fact. */
+  readonly facets?: FacetRecord;
   /** The package picture's mean, measured the same way the library measures a
    *  stored picture, so both halves file a theme by the same reading. */
   readonly thumbnailLuminance?: number;
@@ -58,23 +66,25 @@ export function catalogueIndexOf(
   return { generatedAt, entries };
 }
 
-/** One entry, or nothing when the theme or the header cannot make one. */
-function entryOf({
-  id,
-  item,
-  theme,
-  thumbnailLuminance,
-}: CatalogueItem): CatalogueEntry | undefined {
-  const file = parseCatalogueItemFile(item);
+/** One entry, or nothing when the header or the input cannot make one. */
+function entryOf(item: CatalogueItem): CatalogueEntry | undefined {
+  const file = parseCatalogueItemFile(item.item);
   if (!file.ok) return undefined;
-  const validated = readFabricThemeEnvelope(theme);
-  if (!validated.ok) return undefined;
 
-  return {
-    id,
-    ...file.file,
-    facets: facetRecordOf(validated.envelope, thumbnailLuminance),
-  };
+  if (file.file.kind === DASHBOARD_THEME_KIND) {
+    const validated = readFabricThemeEnvelope(item.theme);
+    if (!validated.ok) return undefined;
+    return {
+      id: item.id,
+      ...file.file,
+      facets: facetRecordOf(validated.envelope, item.thumbnailLuminance),
+    };
+  }
+
+  // Only a theme has an envelope to derive facets from; another kind files
+  // itself by the record its authoring input stored.
+  if (item.facets === undefined) return undefined;
+  return { id: item.id, ...file.file, facets: item.facets };
 }
 
 /**
@@ -134,9 +144,34 @@ export async function buildCatalogueIndexCommand(
   if (names === undefined) return 1;
 
   const items: CatalogueItem[] = [];
+  // A kind this build does not ship is fatal: publishing the rest would leave
+  // the item out of every client without anyone noticing.
+  let unknownKind = false;
   for (const name of names) {
     try {
       const item = await readJson(path.join(directory, name, "item.json"));
+      const declared = fieldOf(item, "kind");
+      if (declared !== undefined && !isStoreItemKind(declared)) {
+        console.error(
+          `Refused catalogue/${name}: kind "${String(declared)}" is not a kind this build ships.`,
+        );
+        unknownKind = true;
+        continue;
+      }
+      const header = parseCatalogueItemFile(item);
+      if (!header.ok || header.file.kind !== DASHBOARD_THEME_KIND) {
+        // Another kind's package is not a theme: its facets come from the
+        // authoring input, and the index parse below validates them.
+        const facets = fieldOf(item, "facets");
+        items.push({
+          id: name,
+          item,
+          ...(facets === undefined
+            ? {}
+            : { facets: facets as FacetRecord }),
+        });
+        continue;
+      }
       // Option B: the package is the theme, beside `item.json`; a loose
       // `theme.json` would be a second copy that can drift.
       const bytes = await readBytes(path.join(directory, name, `${name}.zip`));
@@ -166,10 +201,10 @@ export async function buildCatalogueIndexCommand(
   const published = new Set(index.entries.map((entry) => entry.id));
   for (const item of items) {
     if (published.has(item.id)) continue;
-    console.error(
-      `Refused catalogue/${item.id}: ${refusalOf(item.theme, item.item)}`,
-    );
+    console.error(`Refused catalogue/${item.id}: ${refusalOf(item)}`);
   }
+
+  if (unknownKind) return 1;
 
   // A catalogue that read items and kept none is a defect, not an honest empty
   // catalogue: publishing it would replace a good listing with nothing.
@@ -182,9 +217,9 @@ export async function buildCatalogueIndexCommand(
     return 1;
   }
 
-  // The reader's own parser checks the generator's output with the kind this
+  // The reader's own parser checks the generator's output with every kind this
   // build ships: a mistyped kind would otherwise be skipped by every client.
-  const checked = parseCatalogueIndex(index, [DASHBOARD_THEME_KIND]);
+  const checked = parseCatalogueIndex(index, [...STORE_ITEM_KINDS]);
   if (checked.refused.length > 0) {
     for (const refusal of checked.refused) {
       const named =
@@ -245,9 +280,15 @@ async function readBytes(file: string): Promise<Uint8Array> {
 }
 
 /** Why the pure half dropped this item, resolved only for the items it dropped. */
-function refusalOf(theme: unknown, item: unknown): string {
+function refusalOf({ item, theme, facets }: CatalogueItem): string {
   const file = parseCatalogueItemFile(item);
   if (!file.ok) return file.reason;
+
+  if (file.file.kind !== DASHBOARD_THEME_KIND) {
+    return facets === undefined
+      ? "item.json carries no facets and this kind has no theme to derive them from."
+      : "item.json and its facets could not make an entry.";
+  }
 
   const validated = readFabricThemeEnvelope(theme);
   if (validated.ok) {
@@ -257,6 +298,16 @@ function refusalOf(theme: unknown, item: unknown): string {
   return issue === undefined
     ? "The package's theme is not a theme this build can read."
     : `${issue.path === "" ? "/" : issue.path} ${issue.message}`;
+}
+
+/** A field's own value, never an inherited one. */
+function fieldOf(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.hasOwn(value, key)
+    ? (value as Readonly<Record<string, unknown>>)[key]
+    : undefined;
 }
 
 function messageOf(error: unknown): string {

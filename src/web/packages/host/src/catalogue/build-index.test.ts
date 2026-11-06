@@ -6,6 +6,7 @@ import {
   type FabricThemeEnvelope,
   facetRecordOf,
   parseCatalogueIndex,
+  STORE_ITEM_KINDS,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -249,6 +250,39 @@ describe("catalogueIndexOf", () => {
 
     expect(index.entries.map((entry) => entry.id)).toEqual(["aurora"]);
   });
+
+  it("files a pack by the facets its authoring input stored", () => {
+    const facets = facetRecordOf(themeFor("pack", "Pack"));
+
+    const index = catalogueIndexOf(
+      [
+        {
+          id: "pack",
+          item: itemFor("pack", { kind: "widget-pack", name: "Starter Cards" }),
+          facets,
+        },
+      ],
+      GENERATED_AT,
+    );
+
+    expect(index.entries).toContainEqual(
+      expect.objectContaining({
+        id: "pack",
+        kind: "widget-pack",
+        name: "Starter Cards",
+        facets,
+      }),
+    );
+  });
+
+  it("refuses a pack with no facets and no envelope to derive them from", () => {
+    const index = catalogueIndexOf(
+      [{ id: "pack", item: itemFor("pack", { kind: "plugin" }) }],
+      GENERATED_AT,
+    );
+
+    expect(index.entries).toEqual([]);
+  });
 });
 
 describe("buildCatalogueIndexCommand", () => {
@@ -354,6 +388,48 @@ describe("buildCatalogueIndexCommand", () => {
     const alpha = output.entries.find((entry) => entry["id"] === "alpha");
     expect(beta?.["remixOf"]).toStrictEqual(REMIX);
     expect(Object.hasOwn(alpha ?? {}, "remixOf")).toBe(false);
+  });
+
+  it("writes a widget pack beside the themes from its stored facets", async () => {
+    const facets = facetRecordOf(themeFor("pack", "Pack"));
+    const catalogue = await catalogueOf([
+      { id: "alpha" },
+      {
+        id: "pack",
+        item: {
+          ...(itemFor("pack") as Record<string, unknown>),
+          kind: "widget-pack",
+          name: "Starter Cards",
+          facets,
+        },
+        packageBytes: null,
+      },
+    ]);
+    const out = path.join(catalogue, "index.json");
+
+    expect(
+      await buildCatalogueIndexCommand([
+        "--build-catalogue-index",
+        catalogue,
+        "--out",
+        out,
+        "--generated-at",
+        GENERATED_AT,
+      ]),
+    ).toBe(0);
+
+    const parsed = parseCatalogueIndex(
+      JSON.parse(await readFile(out, "utf8")),
+      [...STORE_ITEM_KINDS],
+    );
+    expect(parsed.refused).toEqual([]);
+    expect(parsed.entries).toContainEqual(
+      expect.objectContaining({
+        kind: "widget-pack",
+        name: "Starter Cards",
+        facets,
+      }),
+    );
   });
 
   it("fails on a catalogue directory that does not exist", async () => {
