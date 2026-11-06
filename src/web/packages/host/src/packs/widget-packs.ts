@@ -13,18 +13,13 @@ import path from "node:path";
 import {
   readWidgetPackage,
   type WidgetPackageResult,
+  type WidgetPackSummary,
 } from "@yunari/theme-package";
 
 /** The one file an installed pack is: the zip the reader opened. */
 const PACKAGE = "package.zip";
 
-/** A pack summary, as a listing and an import answer carry it. */
-export interface WidgetPackSummary {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string | undefined;
-  readonly units: readonly { readonly id: string; readonly label: string }[];
-}
+export type { WidgetPackSummary };
 
 export interface WidgetPackStore {
   list(): Promise<readonly WidgetPackSummary[]>;

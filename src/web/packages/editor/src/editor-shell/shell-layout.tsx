@@ -1,8 +1,7 @@
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import type { ListingCategory } from "@yunari/renderer-core";
-import { CARD_LIBRARY } from "@yunari/theme-kit";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { AssetFinder } from "../asset-finder/modal.js";
@@ -34,6 +33,7 @@ import { StoreHalves } from "../store-mode/halves.js";
 import type { StoreTab } from "../store-mode/region.js";
 import { StoreModeRegion } from "../store-mode/region.js";
 import { uiCopy } from "../ui-copy.js";
+import { activeWidgetUnits, subscribeWidgetUnits } from "../widget-packs.js";
 import { BackgroundPlayback } from "./background-playback.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { CanvasContextMenu } from "./canvas-context-menu.js";
@@ -382,6 +382,12 @@ export function createShellLayout(
   }
 
   function Shell({ mode, onModeChange }: ShellLayoutProps): React.JSX.Element {
+    // The installed units arrive after boot, so the Add pane's count is read
+    // from the live store rather than from a build-time library.
+    const widgetUnits = useSyncExternalStore(
+      subscribeWidgetUnits,
+      activeWidgetUnits,
+    );
     const [palette, setPalette] = useState(initial);
     /** Whether the OS is still choosing. Initialized from storage — the same
      *  question `createShellLayout` asked for `initial` — and moved from there
@@ -667,10 +673,10 @@ export function createShellLayout(
                 - Composition — the scene's objects, through the bridge's own
                   `objectCount`, which the strip reads too. One number, two
                   chrome surfaces, and deliberately not a second spelling of it.
-                - Add — the card library's entry count, `CARD_LIBRARY`, not
+                - Add — the installed widget units, `activeWidgetUnits()`, not
                   `insertGroups()`'s objects: the pane's insert grid adds
-                  primitives and a text object to the library, and the Add pane's
-                  title bar counts the library.
+                  primitives and a text object to the units, and the Add pane's
+                  title bar counts the units.
                 - Tokens — nothing, because its body is two libraries with
                   their own headings; each heading carries its own count
                   beside it rather than one total over both.
@@ -706,7 +712,7 @@ export function createShellLayout(
               id="add"
               title={uiCopy.rail.slots.add}
               icon={RAIL_GLYPHS.add}
-              count={uiCopy.paneCounts.units(CARD_LIBRARY.length)}
+              count={uiCopy.paneCounts.units(widgetUnits.length)}
               hidden={slot !== "add"}
               bodyRef={paneBody}
             >

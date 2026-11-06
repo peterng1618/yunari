@@ -5,13 +5,14 @@ import {
   isKnownSemanticKey,
 } from "@yunari/renderer-core";
 import {
+  addAsset,
   addChartObject,
   addIconObject,
   addImageObject,
   addSceneObject,
   addShapeObject,
   addTextObject,
-  CARD_LIBRARY,
+  cardUnitFromWidget,
   instantiateCard,
   listSceneObjects,
   moveSceneObject,
@@ -23,6 +24,7 @@ import {
   starterIcons,
   updateSceneObject,
 } from "@yunari/theme-kit";
+import { readWidgetPackage, type WidgetUnit } from "@yunari/theme-package";
 import type { Draft, ToolContext } from "../types.js";
 import { draftFor } from "./draft.js";
 import { jsonAttempt } from "./result.js";
@@ -125,6 +127,75 @@ function added(
   return { themeId: draft.id, ids: result.ids };
 }
 
+/**
+ * The unit an insertion names, from the packs the host has installed.
+ *
+ * A unit id names a unit only within a pack, so the id is looked up across the
+ * listing first and then confirmed against that pack's zip — the listing is a
+ * summary, and a pack may have changed on disk since it was read.
+ */
+async function installedUnit(
+  context: ToolContext,
+  id: string,
+): Promise<{ readonly packId: string; readonly unit: WidgetUnit }> {
+  const packs = await context.host.listWidgetPacks();
+  const matches = packs.flatMap((pack) =>
+    pack.units.some((unit) => unit.id === id) ? [{ packId: pack.id }] : [],
+  );
+  if (matches.length === 0) {
+    const known = packs.flatMap((pack) => pack.units.map((unit) => unit.id));
+    throw new Error(
+      `There is no card unit "${id}" in the installed packs${
+        known.length === 0 ? "" : ` (${known.join(", ")})`
+      }.`,
+    );
+  }
+
+  for (const match of matches) {
+    const bytes = await context.host.readWidgetPack(match.packId);
+    const read = readWidgetPackage(bytes);
+    if (!read.ok) {
+      throw new Error(
+        `The widget pack "${match.packId}" is not readable: ${read.message}`,
+      );
+    }
+    const unit = read.units.find((candidate) => candidate.id === id);
+    if (unit !== undefined) return { packId: match.packId, unit };
+  }
+  throw new Error(
+    `The unit "${id}" is listed but no installed pack carries it.`,
+  );
+}
+
+/** Adds a unit's declared assets to the draft, refusing a collision. */
+function adoptUnitAssets(
+  context: ToolContext,
+  draft: Draft,
+  unit: WidgetUnit,
+): void {
+  for (const declaration of unit.declarations) {
+    const existing = draft.envelope.assets ?? [];
+    if (existing.some((asset) => asset.id === declaration.id)) {
+      throw new Error(
+        `The package asset id "${declaration.id}" already exists in this theme; rename or remove it first.`,
+      );
+    }
+    if (existing.some((asset) => asset.path === declaration.path)) {
+      throw new Error(
+        `The package asset path "${declaration.path}" already exists in this theme; rename or remove it first.`,
+      );
+    }
+    const bytes = unit.assets[declaration.path];
+    if (bytes === undefined) {
+      throw new Error(
+        `The package asset "${declaration.path}" travels without its bytes; the unit was refused.`,
+      );
+    }
+    draft.envelope = addAsset(draft.envelope, declaration, bytes);
+    context.drafts.setAsset(draft.id, declaration.path, bytes);
+  }
+}
+
 export async function addCard(
   context: ToolContext,
   input: {
@@ -135,21 +206,19 @@ export async function addCard(
     readonly themeId?: string | undefined;
   },
 ): Promise<CallToolResult> {
-  return await jsonAttempt(() => {
-    const unit = CARD_LIBRARY.find((candidate) => candidate.id === input.unit);
-    if (unit === undefined) {
-      throw new Error(
-        `There is no card unit "${input.unit}" (${CARD_LIBRARY.map((candidate) => candidate.id).join(", ")}).`,
-      );
-    }
+  return await jsonAttempt(async () => {
+    const installed = await installedUnit(context, input.unit);
     const draft = draftFor(context, input.themeId);
+    // Built before any asset is adopted, so a refusal in the copy leaves the
+    // draft exactly as it was.
     const copy = instantiateCard({
-      unit,
+      unit: cardUnitFromWidget(installed.unit),
       globals: draft.envelope.globals,
       existingIds: listSceneObjects(draft.envelope).map((entry) => entry.id),
       existingBindingIds: bindingIdsOf(draft.envelope),
       origin: { left: input.left, top: input.top },
     });
+    adoptUnitAssets(context, draft, installed.unit);
     const result = added(draft, copy.card, copy.bindings);
     if (input.scale !== undefined && input.scale !== 1) {
       const rootId = result.ids[0];

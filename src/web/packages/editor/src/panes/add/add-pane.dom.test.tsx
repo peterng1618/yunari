@@ -12,9 +12,22 @@
  * it inserts, and no two units share one; a shape's is its kind and nothing
  * more.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
+import { installStarterUnits } from "../../testing/widget-units.js";
 import { uiCopy } from "../../ui-copy.js";
+import { activeWidgetUnits } from "../../widget-packs.js";
+
+/** A unit's label, as the installed pack declares it. */
+function unitLabel(id: string): string {
+  const unit = activeWidgetUnits().find((candidate) => candidate.id === id);
+  if (unit === undefined) throw new Error(`no installed unit "${id}"`);
+  return unit.label;
+}
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
 
 /** The CPU unit, whose label is the one the hard-coded-label red proof moves. */
 const CPU_CARD = "group-cpu-card";
@@ -148,9 +161,9 @@ describe("the Add pane's insert surface", () => {
   it("names a card unit with the library's own label, never a literal", () => {
     const { pane } = mount();
 
-    // Change `uiCopy.cardLibrary.cpu` and this fails: a tile that hard-codes
+    // Change `unitLabel(CPU_CARD)` and this fails: a tile that hard-codes
     // "CPU" agrees with the copy until the copy moves.
-    expect(cardTile(pane, CPU_CARD).textContent).toBe(uiCopy.cardLibrary.cpu);
+    expect(cardTile(pane, CPU_CARD).textContent).toBe(unitLabel(CPU_CARD));
   });
 
   it("draws a card unit and a primitive with the one icon vocabulary", () => {
@@ -201,11 +214,11 @@ describe("the Add pane's insert surface", () => {
     // whole name even though it also draws it. `aria-label` covers the
     // programmatic half; focus and hover cover the other two, and all three read
     // one string.
-    expect(tile.getAttribute("aria-label")).toBe(uiCopy.cardLibrary.trends);
+    expect(tile.getAttribute("aria-label")).toBe(unitLabel(TRENDS_CARD));
 
     tile.focus();
     expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
-      uiCopy.cardLibrary.trends,
+      unitLabel(TRENDS_CARD),
     );
     tile.blur();
     expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
@@ -218,7 +231,7 @@ describe("the Add pane's insert surface", () => {
       tile.dispatchEvent(new Event("pointerenter"));
       vi.advanceTimersByTime(600);
       expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
-        uiCopy.cardLibrary.trends,
+        unitLabel(TRENDS_CARD),
       );
     } finally {
       vi.useRealTimers();

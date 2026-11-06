@@ -14,7 +14,9 @@ import {
   PRODUCT_SHORTCUTS,
   type ShortcutBinding,
 } from "../shortcut-manager/index.js";
+import { installStarterUnits } from "../testing/widget-units.js";
 import { uiCopy } from "../ui-copy.js";
+import { activeWidgetUnits } from "../widget-packs.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { CanvasContextMenu } from "./canvas-context-menu.js";
 import type { EditorActionFacade } from "./session-facade.js";
@@ -31,6 +33,10 @@ beforeAll(() => {
     if (selector === ":modal" || selector === ":popover-open") return false;
     return matches.call(this, selector);
   }, matches);
+});
+
+beforeAll(async () => {
+  await installStarterUnits();
 });
 
 afterEach(() => {
@@ -392,7 +398,11 @@ it("routes every creation entry through the façade the way its kind says", asyn
   // `case "card"` from this file's own switch left 175 tests passing, because
   // every façade here stubs `insertCard`. A right-click that offered six
   // shapes, four charts and no card would look identical in this file.
-  inGroup(uiCopy.panels.cards, uiCopy.cardLibrary.cpu)?.click();
+  const cpuLabel = activeWidgetUnits().find(
+    (unit) => unit.id === "group-cpu-card",
+  )?.label;
+  if (cpuLabel === undefined) throw new Error("no installed CPU unit");
+  inGroup(uiCopy.panels.cards, cpuLabel)?.click();
   expect(opened.session.insertCard).toHaveBeenCalledWith("group-cpu-card");
 
   await opened.close();

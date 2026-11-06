@@ -355,6 +355,16 @@ export interface WidgetPackUnitRef {
   readonly objectId: string;
 }
 
+/** One installed pack as a listing (and an import answer) names it. The host
+ *  reads it from a stored zip; the editor and the MCP server read it from the
+ *  listing route, so all three name a pack the same way. */
+export interface WidgetPackSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string | undefined;
+  readonly units: readonly { readonly id: string; readonly label: string }[];
+}
+
 /** One insertion unit, carrying its own subtree, bindings and asset bytes. */
 export interface WidgetUnit {
   readonly id: string;

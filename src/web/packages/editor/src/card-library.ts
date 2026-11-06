@@ -1,14 +1,11 @@
 import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { visitSceneObjects } from "@yunari/scene-fabric";
-import {
-  CARD_LIBRARY,
-  type CardUnit,
-  instantiateCard,
-  type TokenSubstitution,
-} from "@yunari/theme-kit";
+import { instantiateCard, type TokenSubstitution } from "@yunari/theme-kit";
 import { type FabricObject, util } from "fabric/es";
+import type { AssetManager } from "./asset-manager/index.js";
 import type { EditorInteraction } from "./editor-interaction.js";
 import { nextNewObjectPlacement } from "./new-object-defaults.js";
+import { activeWidgetUnits, type InstalledWidgetUnit } from "./widget-packs.js";
 
 /**
  * The card library's editor half: inserting one unit onto the live canvas.
@@ -50,9 +47,20 @@ export async function insertCard(
     readonly onBindings: (
       bindings: Readonly<Record<string, readonly Binding[]>>,
     ) => void;
+    /**
+     * Adopts a packaged unit's declared assets before its copy is built. The
+     * manager owns ids, paths and collision renames, so the copy is handed its
+     * map rather than resolving bytes itself.
+     */
+    readonly assetManager?: Pick<AssetManager, "adoptPackaged">;
   },
 ): Promise<FabricObject> {
-  const unit = cardUnit(cardId);
+  const installed = installedUnit(cardId);
+  const assetIds =
+    installed.declarations.length === 0
+      ? undefined
+      : await adoptedAssets(installed, options.assetManager);
+  const unit = installed.unit;
   const copy = instantiateCard({
     unit,
     globals: options.globals,
@@ -60,6 +68,7 @@ export async function insertCard(
     existingBindingIds: Object.values(options.bindings ?? {}).flatMap(
       (bindings) => bindings.map((binding) => binding.id),
     ),
+    ...(assetIds === undefined ? {} : { assetIds }),
     // The one place a new object's position is decided — the same cascade every
     // other insertion takes, rather than a corner this module invented.
     origin: nextNewObjectPlacement(editor),
@@ -119,12 +128,26 @@ function reportSubstitutions(
   );
 }
 
-function cardUnit(cardId: string): CardUnit {
-  const unit = CARD_LIBRARY.find((candidate) => candidate.id === cardId);
+/** The unit an insertion names, from the packs the host has installed. */
+function installedUnit(cardId: string): InstalledWidgetUnit {
+  const unit = activeWidgetUnits().find((candidate) => candidate.id === cardId);
   if (unit === undefined) {
-    throw new Error(`There is no "${cardId}" card in the library.`);
+    throw new Error(`There is no "${cardId}" card installed.`);
   }
   return unit;
+}
+
+/** Adopts a packaged unit's assets, refusing a surface that cannot carry them. */
+async function adoptedAssets(
+  installed: InstalledWidgetUnit,
+  manager: Pick<AssetManager, "adoptPackaged"> | undefined,
+): Promise<ReadonlyMap<string, string>> {
+  if (manager === undefined) {
+    throw new Error(
+      `The ${installed.label} card carries packaged assets, and this surface cannot adopt them.`,
+    );
+  }
+  return await manager.adoptPackaged(installed.declarations, installed.assets);
 }
 
 /** Every id the canvas already holds, descending into groups. */

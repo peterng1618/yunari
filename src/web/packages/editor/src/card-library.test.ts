@@ -4,7 +4,6 @@ import type { Binding, FabricGlobals } from "@yunari/renderer-core";
 import { validateFabricThemeEnvelope } from "@yunari/renderer-core";
 import { reviveScene, serialiseScene } from "@yunari/scene-fabric";
 import {
-  CARD_LIBRARY,
   type CardUnit,
   cpuCard,
   instantiateCard,
@@ -12,10 +11,22 @@ import {
   starterTypeTokens,
 } from "@yunari/theme-kit";
 import { Canvas, type FabricObject, Group, util } from "fabric/es";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { insertCard } from "./card-library.js";
 import { createNewFabricTheme } from "./new-fabric-theme.js";
-import { uiCopy } from "./ui-copy.js";
+import { installStarterUnits } from "./testing/widget-units.js";
+import { activeWidgetUnits } from "./widget-packs.js";
+
+beforeAll(async () => {
+  await installStarterUnits();
+});
+
+/** A starter unit's label, as the installed pack declares it. */
+function unitLabel(id: string): string {
+  const unit = activeWidgetUnits().find((candidate) => candidate.id === id);
+  if (unit === undefined) throw new Error(`no installed unit "${id}"`);
+  return unit.label;
+}
 
 // jsdom cannot drawImage an undecoded img, and a card carries a frosted panel,
 // a gauge and a sparkline. Same proxy `starter-round-trip.dom.test.ts` installs.
@@ -148,7 +159,7 @@ describe("the card library", () => {
     };
     walk(scene);
 
-    expect(CARD_LIBRARY.map((entry) => entry.id)).toEqual([
+    expect(activeWidgetUnits().map((entry) => entry.id)).toEqual([
       "group-time-card",
       "group-cpu-card",
       "group-gpu-card",
@@ -158,7 +169,7 @@ describe("the card library", () => {
       "group-storage-card",
       "group-network-card",
     ]);
-    for (const entry of CARD_LIBRARY) {
+    for (const entry of activeWidgetUnits()) {
       expect(
         cards.some((object) => object["id"] === entry.id),
         `${entry.id} is a card in the starter`,
@@ -167,10 +178,10 @@ describe("the card library", () => {
 
     // The stamp the library offers is the stamp the starter's own card carries: the
     // row on the reference composition and the row a copy makes are the same fact.
-    // The word is not compared — both sides read `uiCopy.cardLibrary`.
+    // The word is not compared — both sides read the installed unit.
     for (const card of cards) {
       const id = String(card["id"]);
-      const unit = CARD_LIBRARY.find((entry) => entry.id === id);
+      const unit = activeWidgetUnits().find((entry) => entry.id === id);
       expect(card["provenance"], `${id} carries no stamp`).toMatchObject({
         widgetId: unit?.id,
       });
@@ -283,7 +294,7 @@ describe("the card library", () => {
 
     expect(copy(reopened).get("provenance")).toEqual({
       widgetId: CPU_CARD,
-      widgetName: uiCopy.cardLibrary.cpu,
+      widgetName: unitLabel(CPU_CARD),
     });
   });
 
@@ -297,8 +308,8 @@ describe("the card library", () => {
     }
 
     expect(canvas.getObjects().map((object) => object.get("name"))).toEqual([
-      uiCopy.cardLibrary.cpu,
-      uiCopy.cardLibrary.cpu,
+      unitLabel(CPU_CARD),
+      unitLabel(CPU_CARD),
     ]);
   });
 

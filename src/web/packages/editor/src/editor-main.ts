@@ -43,6 +43,7 @@ import { importThemePackage } from "./theme-import.js";
 import { createThemeLibraryClient } from "./theme-library-client.js";
 import { captureCanvas } from "./thumbnail-capture.js";
 import { uiCopy } from "./ui-copy.js";
+import { loadWidgetUnits } from "./widget-packs.js";
 
 type EditorSource = ReturnType<typeof createEditorSource>;
 type ActiveEditor = {
@@ -92,6 +93,21 @@ async function start(): Promise<void> {
   });
   const host = layout.hosts.canvas;
   const status = layout.hosts.status;
+  /** The installed packs could not be read. Held until a shell exists to report
+   *  through; the store keeps its (empty) list, so the Add pane offers no card
+   *  tiles rather than a fabricated library. */
+  let widgetUnitsError: string | undefined;
+  const reportWidgetUnitsFailure = (error: unknown): void => {
+    const message = `The installed widget packs could not be read: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    const manager = active?.shell.editor.errorManager;
+    if (manager === undefined) widgetUnitsError = message;
+    else manager.warn("controls", message);
+  };
+  // Once, at boot. `reloadWidgetUnits()` is the same read, for a pack import or
+  // removal. A failure leaves the live list untouched.
+  void loadWidgetUnits().catch(reportWidgetUnitsFailure);
   // The draft: the unsaved document, kept in browser storage so a crash costs
   // the last half-minute of work rather than all of it. One slot for
   // the whole editor, because the author has one editor, and a browser that
@@ -455,6 +471,11 @@ async function start(): Promise<void> {
       const message = refusedDraftRestore;
       refusedDraftRestore = undefined;
       shell.editor.errorManager.warn("draft", message);
+    }
+    if (widgetUnitsError !== undefined) {
+      const message = widgetUnitsError;
+      widgetUnitsError = undefined;
+      shell.editor.errorManager.warn("controls", message);
     }
     // Bound per document, because the canvas is torn down and rebuilt with it.
     const canvas = shell.editor.canvas;
