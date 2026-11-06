@@ -209,6 +209,68 @@ describe("plugin installer", () => {
     ).toBe("export default {};");
   });
 
+  it("refuses an index entry whose publisher escapes the root", async () => {
+    const installer = createPluginInstaller(dir);
+    const installed = await installer.install(validPluginBytes());
+    if (!installed.ok || installed.plugin === undefined)
+      throw new Error("install failed");
+
+    // A crafted publisher would have made the old derivation join outside the
+    // extensions root. The escaped tree is real, so a removal would show.
+    const name = `yunari-escape-${path.basename(dir)}`;
+    const escapedVersion = path.join(
+      os.tmpdir(),
+      name,
+      "acme-sensors",
+      "1.0.0",
+    );
+    await mkdir(escapedVersion, { recursive: true });
+    await writeFile(path.join(escapedVersion, "sentinel.txt"), "x", "utf8");
+
+    const indexFile = path.join(dir, "installed.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8")) as {
+      plugins: Record<string, Record<string, unknown>>;
+    };
+    index.plugins["local/acme-sensors"] = {
+      ...index.plugins["local/acme-sensors"],
+      publisher: `../${name}`,
+      // Exactly what the old derivation joined for that publisher.
+      directory: path.join(dir, "..", name, "acme-sensors", "1.0.0"),
+    };
+    await writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+
+    expect(await installer.list()).toEqual([]);
+    await installer.remove("local/acme-sensors");
+
+    expect(
+      await readFile(path.join(escapedVersion, "sentinel.txt"), "utf8"),
+    ).toBe("x");
+    expect(
+      await readFile(path.join(installed.plugin.directory, "main.js"), "utf8"),
+    ).toBe("export default {};");
+    await rm(path.join(os.tmpdir(), name), { recursive: true, force: true });
+  });
+
+  it("refuses an index entry whose key disagrees with its manifest", async () => {
+    const installer = createPluginInstaller(dir);
+    const installed = await installer.install(validPluginBytes());
+    if (!installed.ok || installed.plugin === undefined)
+      throw new Error("install failed");
+
+    const indexFile = path.join(dir, "installed.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8")) as {
+      plugins: Record<string, unknown>;
+    };
+    index.plugins["local/other-plugin"] = index.plugins["local/acme-sensors"];
+    await writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+
+    expect(await installer.list()).toEqual([]);
+    await installer.remove("local/acme-sensors");
+    expect(
+      await readFile(path.join(installed.plugin.directory, "main.js"), "utf8"),
+    ).toBe("export default {};");
+  });
+
   it("restores the old tree when the index write fails", async () => {
     const installer = createPluginInstaller(dir);
     const installed = await installer.install(validPluginBytes());

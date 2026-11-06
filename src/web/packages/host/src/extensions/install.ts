@@ -107,6 +107,12 @@ function createIndex(root: string) {
         throw new Error(
           `Plugin index refused: entry ${JSON.stringify(key)} carries an invalid manifest: ${manifest.reason}`,
         );
+      // The publisher is not echoed from the file: this installer only owns
+      // local installs, and a hand-edited segment must never steer a path.
+      if (publisher !== LOCAL_PUBLISHER)
+        throw new Error(
+          `Plugin index refused: entry ${JSON.stringify(key)} names an unknown publisher.`,
+        );
       if (key !== qualifiedPluginKey(publisher, manifest.manifest.id))
         throw new Error(
           `Plugin index refused: entry ${JSON.stringify(key)} disagrees with its plugin key.`,
@@ -122,7 +128,7 @@ function createIndex(root: string) {
       // tree this index may remove or trust.
       const expected = path.join(
         root,
-        publisher,
+        LOCAL_PUBLISHER,
         manifest.manifest.id,
         manifest.manifest.version,
       );
@@ -133,7 +139,7 @@ function createIndex(root: string) {
 
       plugins[key] = {
         key,
-        publisher,
+        publisher: LOCAL_PUBLISHER,
         manifest: manifest.manifest,
         directory: expected,
         contentHash: hash,
