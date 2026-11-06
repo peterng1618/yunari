@@ -384,12 +384,16 @@ export async function startPluginSupervisors(
     }
     if (!loadable || consent === undefined) continue;
 
+    let crashReported = false;
     const supervisor = createPluginSupervisor({
       plugin,
       granted: plugin.manifest.capabilities,
       consent,
       hostApi: options.hostApi,
-      onCrash: (reason) => options.onFailure?.(plugin.key, reason),
+      onCrash: (reason) => {
+        crashReported = true;
+        options.onFailure?.(plugin.key, reason);
+      },
       ...(options.workerEntry === undefined
         ? {}
         : { workerEntry: options.workerEntry }),
@@ -398,7 +402,11 @@ export async function startPluginSupervisors(
     try {
       await supervisor.start();
     } catch (error) {
-      options.onFailure?.(plugin.key, redactForBrowser(reasonOf(error)));
+      // A crash during startup already reported through onCrash; a refused
+      // start (no main entry, mismatched consent) reports here instead.
+      if (!crashReported) {
+        options.onFailure?.(plugin.key, redactForBrowser(reasonOf(error)));
+      }
       // A start that failed may have left a child behind; release it.
       await supervisor.stop().catch(() => undefined);
       continue;

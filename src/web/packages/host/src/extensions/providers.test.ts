@@ -49,6 +49,7 @@ const supervisorMocks = vi.hoisted(() => {
       async start() {
         supervisor.starts += 1;
         if (supervisor.startMode === "reject") {
+          supervisor.options?.onCrash?.("plugin did not start");
           throw new Error("plugin did not start");
         }
       },
@@ -761,15 +762,15 @@ describe("createPluginProviders", () => {
       onFailure,
     });
 
+    expect(onFailure).toHaveBeenCalledTimes(1);
     expect(onFailure).toHaveBeenCalledWith(first.key, "plugin did not start");
     expect(runtime.providers.map((provider) => provider.id)).toEqual(["beta"]);
   });
 
-  it("reports a worker that crashes after starting", async () => {
+  it("reports a crash and stops every started supervisor exactly once", async () => {
     const acme = plugin();
     const onFailure = vi.fn();
-
-    await createPluginProviders({
+    const runtime = await createPluginProviders({
       installer: fakeInstaller([acme]),
       extensions: fakeExtensions({
         consentRecord: () => Promise.resolve(consentOf(acme)),
@@ -779,19 +780,7 @@ describe("createPluginProviders", () => {
     });
 
     supervisorMocks.created[0]?.options?.onCrash?.("plugin crashed");
-
     expect(onFailure).toHaveBeenCalledWith(acme.key, "plugin crashed");
-  });
-
-  it("stops every started supervisor exactly once", async () => {
-    const acme = plugin();
-    const runtime = await createPluginProviders({
-      installer: fakeInstaller([acme]),
-      extensions: fakeExtensions({
-        consentRecord: () => Promise.resolve(consentOf(acme)),
-      }),
-      hostApi,
-    });
 
     await runtime.stop();
     await runtime.stop();

@@ -204,9 +204,9 @@ manifest's `main` only after the parent's `init` handshake, and inherits no
 environment beyond `PATH`. Its method allowlist refuses a call before IPC; the
 parent rechecks every plugin call through `gateExtensionCall` against the
 manifest's capabilities and the grant the worker started with, so the allowlist
-is early refusal, not the authority. Installing, revoking consent or removing
-an extension takes effect on the next host start; a running worker keeps the
-grant it was started with.
+is early refusal, not the authority. A running worker keeps the grant it was
+started with: installing, revoking consent or removing the extension affects
+that worker only at the next host start.
 
 The parent bounds the child. Startup and the `init` answer have 5 s, a request
 has a 5 s default, a host API call has a 30 s deadline, and `stop` gets 2 s
