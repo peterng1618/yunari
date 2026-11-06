@@ -441,6 +441,29 @@ describe("parseCatalogueItemFile", () => {
     expect(parsed.ok && parsed.file.remixOf).toStrictEqual(credit);
   });
 
+  it("accepts a plugin entry and refuses an unknown kind", () => {
+    expect(
+      parseCatalogueItemFile({
+        ...entry(),
+        kind: "plugin",
+        publisher: "acme",
+        executionProfile: "declarative",
+      }),
+    ).toMatchObject({
+      ok: true,
+      file: {
+        kind: "plugin",
+        publisher: "acme",
+        executionProfile: "declarative",
+      },
+    });
+    expect(parseCatalogueItemFile({ ...entry(), kind: "sensor-pack" })).toEqual({
+      ok: false,
+      reason:
+        'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.',
+    });
+  });
+
   it("refuses a malformed remixOf with the one sentence", () => {
     const reason = `item.json's "remixOf" must be { catalogueId, name, version } with a UUID id and a version.`;
     const malformed = [
