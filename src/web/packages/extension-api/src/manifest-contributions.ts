@@ -1,4 +1,5 @@
 import {
+  canonicalSerialPath,
   isSerialPath,
   PANEL_COMMAND_KINDS,
   PANEL_TRANSPORTS,
@@ -258,12 +259,17 @@ function readPanelFamily(
     const read = readStringList(
       entry["renderModes"],
       `${subject}.renderModes`,
-      MAX_RENDER_MODES,
+      MAX_CONTRIBUTIONS,
     );
     if (!read.ok) return read;
     // One stream has one row in a surface's choice; a repeat is not a second
-    // mode.
+    // mode. Dedupe first, so a repeated list is measured by its distinct
+    // entries.
     renderModes = [...new Set(read.value)];
+    if (renderModes.length > MAX_RENDER_MODES)
+      return refuse(
+        `${subject}.renderModes carries at most ${MAX_RENDER_MODES} entries.`,
+      );
   }
   const transports = readPanelTransports(
     entry["transports"],
@@ -282,7 +288,7 @@ function readPanelFamily(
       return refuse(
         `${subject}.serialPath must be a COM port or an absolute POSIX path.`,
       );
-    serialPath = read.value;
+    serialPath = canonicalSerialPath(read.value);
   }
   const declaresSerial = transports.value.includes("serial");
   if (declaresSerial && serialPath === undefined)

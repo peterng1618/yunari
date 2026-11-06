@@ -72,6 +72,17 @@ describe("deviceIdentity", () => {
       }),
     ).toBe("serial:COM3");
   });
+
+  it("canonicalises a COM port to uppercase in the identity", () => {
+    expect(
+      deviceIdentity({
+        transport: "serial",
+        path: "com3",
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+      }),
+    ).toBe("serial:COM3");
+  });
 });
 
 describe("deviceAllowlistOf", () => {
@@ -139,6 +150,25 @@ describe("deviceAllowlistOf", () => {
     expect(deviceAllowlistOf(manifest).map(deviceIdentity)).toEqual([
       "serial:COM3",
     ]);
+  });
+
+  it("collapses one COM port declared in either case", () => {
+    const manifest = manifestWithFamilies([
+      family({ transports: ["serial"], serialPath: "COM3" }),
+      family({
+        id: "acme-serial-two",
+        transports: ["serial"],
+        serialPath: "com3",
+      }),
+    ]);
+    expect(deviceAllowlistOf(manifest)).toEqual([
+      {
+        transport: "serial",
+        path: "COM3",
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+      },
+    ] satisfies readonly DeviceAllowlist[]);
   });
 
   it("returns no devices for a manifest without panel families", () => {

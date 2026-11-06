@@ -237,6 +237,16 @@ function missingCapability(
     !capabilities.includes("serial:device")
   )
     return 'The panelFamilies contribution requires the "usb:device" or "serial:device" capability.';
+  // A declared transport names the bus the host will use, so each one needs
+  // its own grant: a serial device is never driven under a usb-only grant.
+  for (const family of contributes.panelFamilies ?? []) {
+    for (const transport of family.transports) {
+      const capability: Capability =
+        transport === "serial" ? "serial:device" : "usb:device";
+      if (!capabilities.includes(capability))
+        return `The panelFamilies contribution requires the ${JSON.stringify(capability)} capability.`;
+    }
+  }
   return undefined;
 }
 

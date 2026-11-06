@@ -65,6 +65,13 @@ export function isSerialPath(value: string): boolean {
   return !value.split("/").includes("..");
 }
 
+/** A Windows COM port is one port in any case. The manifest, the consent row
+ *  and the path the host opens all use the canonical uppercase form, so `com3`
+ *  and `COM3` are one device. */
+export function canonicalSerialPath(value: string): string {
+  return WINDOWS_COM_PORT.test(value) ? value.toUpperCase() : value;
+}
+
 function hexId(value: number): string {
   return value.toString(16).padStart(4, "0");
 }
@@ -72,7 +79,8 @@ function hexId(value: number): string {
 /** The consent row's stable name. Vendor and product hex are lowercase and
  *  four digits wide, so one device has one identity. */
 export function deviceIdentity(device: DeviceAllowlist): string {
-  if (device.transport === "serial") return `serial:${device.path}`;
+  if (device.transport === "serial")
+    return `serial:${canonicalSerialPath(device.path)}`;
   return `${device.transport}:${hexId(device.vendorId)}:${hexId(device.productId)}`;
 }
 
@@ -97,7 +105,7 @@ export function deviceAllowlistOf(
         if (family.serialPath === undefined) continue;
         add({
           transport: "serial",
-          path: family.serialPath,
+          path: canonicalSerialPath(family.serialPath),
           vendorId: family.vendorId,
           productId: family.productId,
         });

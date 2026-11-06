@@ -357,6 +357,46 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("requires the capability of every declared transport", () => {
+    expect(
+      readPluginManifest(
+        panelManifest(
+          { transports: ["serial"], serialPath: "COM3" },
+          { capabilities: ["panel:drive", "usb:device"] },
+        ),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        'The panelFamilies contribution requires the "serial:device" capability.',
+    });
+    expect(
+      readPluginManifest(
+        panelManifest({}, { capabilities: ["panel:drive", "serial:device"] }),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        'The panelFamilies contribution requires the "usb:device" capability.',
+    });
+  });
+
+  it("admits each transport with its own capability", () => {
+    for (const family of [
+      { transports: ["serial"], serialPath: "COM3" },
+      { transports: ["hid"] },
+      { transports: ["usb", "hid"] },
+    ]) {
+      const capabilities =
+        family.transports[0] === "serial"
+          ? ["panel:drive", "serial:device"]
+          : ["panel:drive", "usb:device"];
+      expect(
+        readPluginManifest(panelManifest(family, { capabilities })).ok,
+      ).toBe(true);
+    }
+  });
+
   it("requires serialPath for the serial transport", () => {
     expect(
       readPluginManifest(
@@ -403,12 +443,23 @@ describe("readPluginManifest", () => {
   });
 
   it("reads a COM port and an absolute POSIX serial path", () => {
-    for (const serialPath of ["COM3", "com12", "/dev/ttyUSB0"]) {
-      const manifest = panelManifest(
-        { transports: ["serial"], serialPath },
-        { capabilities: ["panel:drive", "serial:device"] },
+    const paths = [
+      ["COM3", "COM3"],
+      ["com12", "COM12"],
+      ["/dev/ttyUSB0", "/dev/ttyUSB0"],
+    ] as const;
+    for (const [declared, canonical] of paths) {
+      const result = readPluginManifest(
+        panelManifest(
+          { transports: ["serial"], serialPath: declared },
+          { capabilities: ["panel:drive", "serial:device"] },
+        ),
       );
-      expect(readPluginManifest(manifest)).toEqual({ ok: true, manifest });
+      expect(result.ok).toBe(true);
+      if (result.ok)
+        expect(result.manifest.contributes.panelFamilies?.[0]?.serialPath).toBe(
+          canonical,
+        );
     }
   });
 
@@ -456,6 +507,21 @@ describe("readPluginManifest", () => {
         ...manifest,
         contributes: {
           panelFamilies: [{ ...PANEL_FAMILY, renderModes: ["wave", "static"] }],
+        },
+      },
+    });
+  });
+
+  it("admits nine identical renderModes as one", () => {
+    const manifest = panelManifest({
+      renderModes: Array.from({ length: 9 }, () => "wave"),
+    });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: true,
+      manifest: {
+        ...manifest,
+        contributes: {
+          panelFamilies: [{ ...PANEL_FAMILY, renderModes: ["wave"] }],
         },
       },
     });
