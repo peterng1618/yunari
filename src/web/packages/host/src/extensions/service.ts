@@ -41,6 +41,9 @@ export interface ExtensionService {
   remove(key: string): Promise<void>;
   /** False when the plugin is killed, stale, or its consent is missing. */
   mayLoad(key: string): Promise<boolean>;
+  /** The installed record, including the directory this host serves the
+   *  plugin's own files from; undefined when no such plugin is installed. */
+  installedPlugin(key: string): Promise<InstalledPlugin | undefined>;
   /** The stored grant, unread when there is none; fingerprints stay the
    *  service's business. */
   consentRecord(key: string): Promise<ConsentRecord | undefined>;
@@ -113,6 +116,7 @@ function extensionOf(
     contributions: plugin.manifest.contributes,
     consent,
     fingerprint,
+    ...(plugin.manifest.ui === undefined ? {} : { ui: plugin.manifest.ui }),
   };
 }
 
@@ -239,6 +243,10 @@ export function createExtensionService(options: {
         // An unreadable grant is no grant.
         return undefined;
       }
+    },
+
+    async installedPlugin(key) {
+      return read(key);
     },
 
     readProviderOrder() {

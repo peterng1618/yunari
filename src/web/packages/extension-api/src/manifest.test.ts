@@ -418,3 +418,170 @@ describe("validateManifestExecution", () => {
     });
   });
 });
+
+describe("settings pages", () => {
+  function pageManifest(contributes: unknown, capabilities: string[]) {
+    return readPluginManifest({
+      ...validManifest(),
+      capabilities,
+      contributes,
+    });
+  }
+
+  it("refuses a sandboxed page without ui:frame", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            { id: "acme", label: "Acme", ui: "settings/index.html" },
+          ],
+        },
+        ["settings:own"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: 'The settings page "acme" requires the "ui:frame" capability.',
+    });
+  });
+
+  it("reads a declarative page field set", () => {
+    const fields = [
+      { key: "apiKey", label: "API key", type: "secret" },
+      { key: "refresh", label: "Refresh", type: "number", min: 1, max: 60 },
+    ];
+    const read = pageManifest(
+      { settingsPages: [{ id: "acme", label: "Acme", fields }] },
+      ["settings:own"],
+    );
+    expect(read.ok).toBe(true);
+    if (read.ok)
+      expect(read.manifest.contributes.settingsPages).toEqual([
+        { id: "acme", label: "Acme", fields },
+      ]);
+  });
+
+  it("refuses a page with neither fields nor ui", () => {
+    expect(
+      pageManifest({ settingsPages: [{ id: "acme", label: "Acme" }] }, [
+        "settings:own",
+      ]),
+    ).toEqual({
+      ok: false,
+      reason: 'The settings page "acme" needs "fields" or "ui".',
+    });
+  });
+
+  it("refuses a page with both fields and ui", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            {
+              id: "acme",
+              label: "Acme",
+              fields: [{ key: "mode", label: "Mode", type: "text" }],
+              ui: "settings/index.html",
+            },
+          ],
+        },
+        ["settings:own", "ui:frame"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: 'The settings page "acme" declares both "fields" and "ui".',
+    });
+  });
+
+  it("refuses a duplicate field key within a page", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            {
+              id: "acme",
+              label: "Acme",
+              fields: [
+                { key: "mode", label: "Mode", type: "text" },
+                { key: "mode", label: "Again", type: "boolean" },
+              ],
+            },
+          ],
+        },
+        ["settings:own"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: 'The settings page "acme" declares the field "mode" twice.',
+    });
+  });
+
+  it("refuses a select default outside its options", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            {
+              id: "acme",
+              label: "Acme",
+              fields: [
+                {
+                  key: "mode",
+                  label: "Mode",
+                  type: "select",
+                  options: [{ value: "a", label: "A" }],
+                  default: "b",
+                },
+              ],
+            },
+          ],
+        },
+        ["settings:own"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: 'The field "mode" has a default that is not one of its options.',
+    });
+  });
+
+  it("refuses an unknown field type", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            {
+              id: "acme",
+              label: "Acme",
+              fields: [{ key: "mode", label: "Mode", type: "colour" }],
+            },
+          ],
+        },
+        ["settings:own"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: "contributes.settingsPages[0].fields[0].type is unknown.",
+    });
+  });
+
+  it("refuses an inverted number range", () => {
+    expect(
+      pageManifest(
+        {
+          settingsPages: [
+            {
+              id: "acme",
+              label: "Acme",
+              fields: [
+                { key: "n", label: "N", type: "number", min: 10, max: 1 },
+              ],
+            },
+          ],
+        },
+        ["settings:own"],
+      ),
+    ).toEqual({
+      ok: false,
+      reason: 'The field "n" has a minimum above its maximum.',
+    });
+  });
+});

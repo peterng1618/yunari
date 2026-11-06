@@ -1,4 +1,4 @@
-import type { PluginContributions } from "./manifest";
+import type { PluginContributions, SettingsField } from "./manifest";
 import {
   type Check,
   checkKeys,
@@ -64,6 +64,11 @@ const PANEL_SUPPORT_KEYS = [
   "updatedAt",
 ] as const;
 const SETTINGS_PAGE_KEYS = ["id", "label", "section", "fields", "ui"] as const;
+
+/** The field key becomes a settings object key and a secret's name, so it is
+ *  a dotted lower-case identifier with a bounded length. */
+const FIELD_KEY_PATTERN = /^[a-z][a-zA-Z0-9.]{0,63}$/;
+const MAX_FIELD_LENGTH = 100_000;
 
 function readSensorProvider(
   entry: unknown,
@@ -228,6 +233,229 @@ function readPanelFamily(
   };
 }
 
+function readFinite(value: unknown, subject: string): Check<number> {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return refuse(`${subject} must be a finite number.`);
+  return { ok: true, value };
+}
+
+function readSettingsField(
+  entry: unknown,
+  subject: string,
+): Check<SettingsField> {
+  if (!isRecord(entry)) return refuse(`${subject} must be an object.`);
+  const key = entry["key"];
+  if (typeof key !== "string" || !FIELD_KEY_PATTERN.test(key))
+    return refuse(`${subject}.key must be a lower-case dotted key.`);
+  const label = readString(entry["label"], `${subject}.label`, MAX_NAME);
+  if (!label.ok) return label;
+  const type = entry["type"];
+
+  if (type === "text") {
+    const unknown = checkKeys(
+      entry,
+      ["key", "label", "type", "default", "maxLength"],
+      subject,
+    );
+    if (unknown !== undefined) return refuse(unknown);
+    let defaultValue: string | undefined;
+    if (entry["default"] !== undefined) {
+      const read = entry["default"];
+      if (typeof read !== "string")
+        return refuse(`${subject}.default must be a string.`);
+      if (read.length > MAX_FIELD_LENGTH)
+        return refuse(
+          `${subject}.default must be at most ${MAX_FIELD_LENGTH} characters.`,
+        );
+      defaultValue = read;
+    }
+    let maxLength: number | undefined;
+    if (entry["maxLength"] !== undefined) {
+      const read = entry["maxLength"];
+      if (
+        typeof read !== "number" ||
+        !Number.isInteger(read) ||
+        read < 1 ||
+        read > MAX_FIELD_LENGTH
+      )
+        return refuse(`${subject}.maxLength must be a positive integer.`);
+      maxLength = read;
+    }
+    if (
+      defaultValue !== undefined &&
+      maxLength !== undefined &&
+      defaultValue.length > maxLength
+    )
+      return refuse(
+        `The field ${JSON.stringify(key)} has a default longer than its maxLength.`,
+      );
+    return {
+      ok: true,
+      value: {
+        key,
+        label: label.value,
+        type: "text",
+        ...(defaultValue === undefined ? {} : { default: defaultValue }),
+        ...(maxLength === undefined ? {} : { maxLength }),
+      },
+    };
+  }
+
+  if (type === "number") {
+    const unknown = checkKeys(
+      entry,
+      ["key", "label", "type", "default", "min", "max"],
+      subject,
+    );
+    if (unknown !== undefined) return refuse(unknown);
+    let min: number | undefined;
+    let max: number | undefined;
+    if (entry["min"] !== undefined) {
+      const read = readFinite(entry["min"], `${subject}.min`);
+      if (!read.ok) return read;
+      min = read.value;
+    }
+    if (entry["max"] !== undefined) {
+      const read = readFinite(entry["max"], `${subject}.max`);
+      if (!read.ok) return read;
+      max = read.value;
+    }
+    if (min !== undefined && max !== undefined && min > max)
+      return refuse(
+        `The field ${JSON.stringify(key)} has a minimum above its maximum.`,
+      );
+    let defaultValue: number | undefined;
+    if (entry["default"] !== undefined) {
+      const read = readFinite(entry["default"], `${subject}.default`);
+      if (!read.ok) return read;
+      if (
+        (min !== undefined && read.value < min) ||
+        (max !== undefined && read.value > max)
+      )
+        return refuse(
+          `The field ${JSON.stringify(key)} has a default outside its bounds.`,
+        );
+      defaultValue = read.value;
+    }
+    return {
+      ok: true,
+      value: {
+        key,
+        label: label.value,
+        type: "number",
+        ...(defaultValue === undefined ? {} : { default: defaultValue }),
+        ...(min === undefined ? {} : { min }),
+        ...(max === undefined ? {} : { max }),
+      },
+    };
+  }
+
+  if (type === "boolean") {
+    const unknown = checkKeys(
+      entry,
+      ["key", "label", "type", "default"],
+      subject,
+    );
+    if (unknown !== undefined) return refuse(unknown);
+    const defaultValue = entry["default"];
+    if (defaultValue !== undefined && typeof defaultValue !== "boolean")
+      return refuse(`${subject}.default must be a boolean.`);
+    return {
+      ok: true,
+      value: {
+        key,
+        label: label.value,
+        type: "boolean",
+        ...(defaultValue === undefined
+          ? {}
+          : { default: defaultValue as boolean }),
+      },
+    };
+  }
+
+  if (type === "select") {
+    const unknown = checkKeys(
+      entry,
+      ["key", "label", "type", "options", "default"],
+      subject,
+    );
+    if (unknown !== undefined) return refuse(unknown);
+    const options = readList(
+      entry["options"],
+      `${subject}.options`,
+      (option, optionSubject) => {
+        if (!isRecord(option))
+          return refuse(`${optionSubject} must be an object.`);
+        const optionUnknown = checkKeys(
+          option,
+          ["value", "label"],
+          optionSubject,
+        );
+        if (optionUnknown !== undefined) return refuse(optionUnknown);
+        const value = readString(
+          option["value"],
+          `${optionSubject}.value`,
+          MAX_NAME,
+        );
+        if (!value.ok) return value;
+        const optionLabel = readString(
+          option["label"],
+          `${optionSubject}.label`,
+          MAX_NAME,
+        );
+        if (!optionLabel.ok) return optionLabel;
+        return {
+          ok: true,
+          value: { value: value.value, label: optionLabel.value },
+        };
+      },
+    );
+    if (!options.ok) return options;
+    if (options.value.length === 0)
+      return refuse(`${subject}.options must offer at least one option.`);
+    const values = new Set<string>();
+    for (const option of options.value) {
+      if (values.has(option.value))
+        return refuse(
+          `The field ${JSON.stringify(key)} lists the option ${JSON.stringify(option.value)} twice.`,
+        );
+      values.add(option.value);
+    }
+    const defaultValue = entry["default"];
+    if (defaultValue !== undefined) {
+      if (typeof defaultValue !== "string")
+        return refuse(`${subject}.default must be a string.`);
+      if (!values.has(defaultValue))
+        return refuse(
+          `The field ${JSON.stringify(key)} has a default that is not one of its options.`,
+        );
+    }
+    return {
+      ok: true,
+      value: {
+        key,
+        label: label.value,
+        type: "select",
+        options: options.value,
+        ...(defaultValue === undefined ? {} : { default: defaultValue }),
+      },
+    };
+  }
+
+  if (type === "secret") {
+    // `default` is not an allowed key: a secret has no authored initial value,
+    // and handing one to the editor would write it in the page's own state.
+    const unknown = checkKeys(entry, ["key", "label", "type"], subject);
+    if (unknown !== undefined) return refuse(unknown);
+    return {
+      ok: true,
+      value: { key, label: label.value, type: "secret" },
+    };
+  }
+
+  return refuse(`${subject}.type is unknown.`);
+}
+
 function readSettingsPage(
   entry: unknown,
   subject: string,
@@ -245,26 +473,53 @@ function readSettingsPage(
     if (!read.ok) return read;
     section = read.value;
   }
-  let fields: readonly Readonly<Record<string, unknown>>[] | undefined;
-  if (entry["fields"] !== undefined) {
-    const read = readList(entry["fields"], `${subject}.fields`, readRecord);
-    if (!read.ok) return read;
-    fields = read.value;
+
+  const hasFields = entry["fields"] !== undefined;
+  const hasUi = entry["ui"] !== undefined;
+  if (hasFields && hasUi)
+    return refuse(
+      `The settings page ${JSON.stringify(id.value)} declares both "fields" and "ui".`,
+    );
+  if (!hasFields && !hasUi)
+    return refuse(
+      `The settings page ${JSON.stringify(id.value)} needs "fields" or "ui".`,
+    );
+
+  if (hasFields) {
+    const fields = readList(
+      entry["fields"],
+      `${subject}.fields`,
+      readSettingsField,
+    );
+    if (!fields.ok) return fields;
+    const seen = new Set<string>();
+    for (const field of fields.value) {
+      if (seen.has(field.key))
+        return refuse(
+          `The settings page ${JSON.stringify(id.value)} declares the field ${JSON.stringify(field.key)} twice.`,
+        );
+      seen.add(field.key);
+    }
+    return {
+      ok: true,
+      value: {
+        id: id.value,
+        label: label.value,
+        ...(section === undefined ? {} : { section }),
+        fields: fields.value,
+      },
+    };
   }
-  let ui: string | undefined;
-  if (entry["ui"] !== undefined) {
-    const read = readRelativePath(entry["ui"], `${subject}.ui`);
-    if (!read.ok) return read;
-    ui = read.value;
-  }
+
+  const ui = readRelativePath(entry["ui"], `${subject}.ui`);
+  if (!ui.ok) return ui;
   return {
     ok: true,
     value: {
       id: id.value,
       label: label.value,
       ...(section === undefined ? {} : { section }),
-      ...(fields === undefined ? {} : { fields }),
-      ...(ui === undefined ? {} : { ui }),
+      ui: ui.value,
     },
   };
 }

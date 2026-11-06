@@ -9,12 +9,15 @@ import type { FinderCardModel } from "./finder-card.js";
 import { FinderGrid } from "./finder-grid.js";
 import { categoryLabel } from "./finder-model.js";
 import { FinderState } from "./finder-state.js";
+import { type PluginAssetBodyProps, PluginBody } from "./plugin-body.js";
 import { FinderSkeleton } from "./skeleton.js";
 import { wallpaperCards } from "./wallpaper.js";
 
 /** The frame's content: the missing-body sentence, the Wallpaper Engine
  *  listing, or the search grid with its notice and empty state. */
 export function FinderBody(props: {
+  /** The plugin frame body, when the active source declares one. */
+  readonly plugin?: PluginAssetBodyProps;
   readonly active: ListingCategory;
   readonly grid: boolean;
   readonly local: boolean;
@@ -45,6 +48,16 @@ export function FinderBody(props: {
   readonly canLoadMore: boolean;
   readonly appending: boolean;
 }): React.JSX.Element {
+  if (props.plugin !== undefined) {
+    return (
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        data-yunari-asset-body={props.active}
+      >
+        <PluginBody {...props.plugin} />
+      </div>
+    );
+  }
   if (!props.grid) {
     return (
       <div

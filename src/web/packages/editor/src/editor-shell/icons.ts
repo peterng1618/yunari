@@ -50,6 +50,7 @@ import {
   MonitorActivity,
   Network,
   OctagonAlert,
+  Package,
   Palette,
   Pause,
   Pencil,
@@ -197,9 +198,10 @@ export const PALETTE_GLYPH: LucideIcon = Palette;
  *  `Shapes` is the mark the Add pane's custom section wears. */
 export const PREVIEW_RATIOS_GLYPH: LucideIcon = Ratio;
 export const CUSTOM_SHAPES_GLYPH: LucideIcon = Shapes;
+/** The Extensions page: a package that contributes its own behaviour. */
+export const PACKAGE_GLYPH: LucideIcon = Package;
 
-/** The inspector's collapse handle points at the edge it gives the stage back;
- *  the reopen handle points back into the column. */
+/** The inspector's collapse handle points at the edge it gives the stage back; *  the reopen handle points back into the column. */
 export const INSPECTOR_COLLAPSE_GLYPH: LucideIcon = ChevronRight;
 export const INSPECTOR_EXPAND_GLYPH: LucideIcon = ChevronLeft;
 /** The picker's eyedropper: a sample taken off the screen, not a paint pick. */

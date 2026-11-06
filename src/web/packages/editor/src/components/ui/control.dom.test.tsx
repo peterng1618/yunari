@@ -188,6 +188,14 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "asset-finder/font-preview-panel.tsx",
     "the sample is transient preview text applied on every keystroke and reset by its own button; nothing is written to the theme, so there is no commit or cancel to take",
   ],
+  [
+    "settings-mode/plugin-pages.tsx",
+    "a plugin's settings document commits through its own Save button; a field holds the value, and a keystroke composes nothing to commit or cancel",
+  ],
+  [
+    "plugin-manager/plugin-manager.tsx",
+    "a `type=file` chooser: the chosen file is read once by its own handler, with no text to compose or commit",
+  ],
 ];
 
 /**

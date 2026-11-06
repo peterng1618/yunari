@@ -134,8 +134,16 @@ export interface AssetSourceListing {
   readonly id: string;
   readonly label: string;
   readonly category: ListingCategory;
-  /** "grid" searches; "font-picker" and "wallpaper-engine" are editor bodies. */
-  readonly body: "grid" | "font-picker" | "wallpaper-engine";
+  /** "grid" searches; "font-picker" and "wallpaper-engine" are editor bodies.
+   *  Any other value names the plugin's own frame body. */
+  readonly body: string;
+  /** The plugin that owns this source, and the UI entry its frame is served
+   *  from; absent for the host's own sources and for a host that predates
+   *  plugin UI. */
+  readonly plugin?: {
+    readonly key: string;
+    readonly ui: string;
+  } | null;
   /** `null` on the wire when the source needs no credential. */
   readonly requires: string | null;
   readonly configurable: boolean;

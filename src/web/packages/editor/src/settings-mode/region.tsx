@@ -1,9 +1,12 @@
 import { Tabs } from "@base-ui/react/tabs";
+import type { FrameInit, FrameRequest } from "@yunari/extension-api";
 import type * as React from "react";
-import { Fragment, useEffect, useRef, useState } from "react";
-import { Glyph } from "../editor-shell/icons.js";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Glyph, PACKAGE_GLYPH } from "../editor-shell/icons.js";
 import type { ShellPalette } from "../editor-shell/palette.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
+import { ExtensionsPage } from "../plugin-manager/plugin-manager.js";
+import { useExtensions } from "../plugin-manager/use-extensions.js";
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
 import type { ThemeLibraryClient } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
@@ -20,6 +23,11 @@ import { PathPresetsPage } from "./pages/path-presets-page.js";
 import { PreviewsPage } from "./pages/previews-page.js";
 import { ReadingsPage } from "./pages/readings-page.js";
 import { UnitsPage } from "./pages/units-page.js";
+import {
+  createPluginSettingsClient,
+  PluginSettingsView,
+  pluginSettingsPages,
+} from "./plugin-pages.js";
 import type { SourcesClient } from "./sources-client.js";
 
 /**
@@ -111,6 +119,49 @@ function Settings(props: {
     ...(props.sources === undefined ? {} : { sources: props.sources }),
   });
 
+  /** Installed plugins add their own destinations. A page with a `section`
+   *  naming This PC files there; every other page joins the Editor group. */
+  const extensionState = useExtensions();
+  const pluginPages = useMemo(
+    () => pluginSettingsPages(extensionState.extensions),
+    [extensionState.extensions],
+  );
+  const pluginSettings = useMemo(() => createPluginSettingsClient(), []);
+  const frameTheme: FrameInit["theme"] = {
+    palette: { name: props.palette },
+    typeTokens: {},
+  };
+  const sectionOf = (page: (typeof pluginPages)[number]): string =>
+    page.section === "this-pc" ? "this-pc" : "editor";
+
+  /** A sandboxed page's `settings.get`/`settings.set` go through the same host
+   *  routes the declarative form uses; the frame never sees a host credential. */
+  async function pluginRequest(
+    page: (typeof pluginPages)[number],
+    request: FrameRequest,
+  ): Promise<unknown> {
+    if (request.method === "settings.get")
+      return pluginSettings.read(page.pluginKey);
+    if (request.method === "ui.resize") return undefined;
+    if (request.method === "settings.set") {
+      const params = request.params;
+      if (
+        typeof params !== "object" ||
+        params === null ||
+        Array.isArray(params)
+      )
+        throw new Error("That settings body is not an object.");
+      const result = await pluginSettings.write(
+        page.pluginKey,
+        params as Record<string, unknown>,
+      );
+      if (!result.ok)
+        throw new Error(result.message ?? "The host refused that change.");
+      return { ok: true };
+    }
+    throw new Error(`This page cannot answer "${request.method}".`);
+  }
+
   /** The mode's status line is published, not drawn. A count no read answered
    *  is `null` rather than `0`, which is the same refusal the pages make. The
    *  count belongs to Displays only; every other page leaves that half empty. */
@@ -195,6 +246,19 @@ function Settings(props: {
                     </Tabs.Tab>
                   ),
                 )}
+                {pluginPages
+                  .filter((page) => sectionOf(page) === group.id)
+                  .map((page) => (
+                    <Tabs.Tab
+                      key={page.id}
+                      value={page.id}
+                      data-yunari-settings-nav-item={page.id}
+                      className="settings-mode-nav-item"
+                    >
+                      <Glyph icon={PACKAGE_GLYPH} size={14} />
+                      {page.label}
+                    </Tabs.Tab>
+                  ))}
               </Fragment>
             ))}
           </Tabs.List>
@@ -236,10 +300,28 @@ function Settings(props: {
                     />
                   ) : null}
                   {page.id === "asset-sources" ? <AssetSourcesPage /> : null}
+                  {page.id === "extensions" ? <ExtensionsPage /> : null}
                   {page.id === "about" ? (
                     <AboutPage releaseVersion={props.releaseVersion} />
                   ) : null}
                 </>
+              ) : null}
+            </Tabs.Panel>
+          ))}
+          {pluginPages.map((page) => (
+            <Tabs.Panel
+              key={page.id}
+              value={page.id}
+              keepMounted
+              data-yunari-settings-panel={page.id}
+              className="settings-mode-page"
+            >
+              {visited.has(page.id) ? (
+                <PluginSettingsView
+                  page={page}
+                  theme={frameTheme}
+                  onRequest={(request) => pluginRequest(page, request)}
+                />
               ) : null}
             </Tabs.Panel>
           ))}

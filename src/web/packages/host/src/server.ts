@@ -17,6 +17,7 @@ import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createPublishedStore } from "./serve/published.js";
 import { createDisplayRoutes } from "./server/displays-routes.js";
 import { createExtensionRoutes } from "./server/extension-routes.js";
+import { handleExtensionUiRoutes } from "./server/extension-ui-routes.js";
 import {
   createLargeBodyGate,
   readBody,
@@ -171,6 +172,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const panelsAttached = options.attachedPanels ?? attachedDevices;
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const extensions = options.extensions;
+  const pluginSettings = options.pluginSettings;
   const saved = options.rememberLan;
   const devices = options.devices;
   const display = options.display;
@@ -349,7 +351,10 @@ export function createHostServer(options: HostServerOptions): HostServer {
     server,
   });
   const pairingRoutes = createPairingRoutes({ displays, pairingCodes });
-  const extensionRoutes = createExtensionRoutes({ extensions });
+  const extensionRoutes = createExtensionRoutes({
+    extensions,
+    settings: pluginSettings,
+  });
   const settingsRoutes = createSettingsRoutes({
     options,
     devices,
@@ -491,6 +496,17 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // The submission and the stored theme's open/save/remove. The submission
     // is a module of its own for the reason the store sign-in routes are.
     if (await themeWrites(request, response, url)) return;
+
+    // Plugin UI files are read through the installed record, never a path the
+    // caller supplied, so they are answered before the manager route that owns
+    // the rest of `/api/extensions`.
+    if (
+      extensions !== undefined &&
+      (await handleExtensionUiRoutes(request, response, url, {
+        service: extensions,
+      }))
+    )
+      return;
 
     if (await extensionRoutes(request, response, url)) return;
 

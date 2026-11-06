@@ -34,6 +34,7 @@ import {
 } from "./extensions/providers.js";
 import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { createExtensionService } from "./extensions/service.js";
+import { createPluginSettingsStore } from "./extensions/settings.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
 import {
@@ -79,7 +80,10 @@ import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
-import { KeyProtectorUnavailable } from "./settings/secret-store.js";
+import {
+  createSecretStore,
+  KeyProtectorUnavailable,
+} from "./settings/secret-store.js";
 import { type CustomSource, createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -231,6 +235,13 @@ export async function run(argv: readonly string[]): Promise<number> {
   const pluginInstaller = createPluginInstaller(
     path.join(settingsDir, "extensions"),
   );
+  // Declarative plugin settings stay beside the plugins they belong to. A
+  // secret field lands in the plugin's encrypted store, never in this JSON.
+  const pluginSettings = createPluginSettingsStore({
+    installer: pluginInstaller,
+    directory: path.join(settingsDir, "extensions", "settings"),
+    secrets: createSecretStore(path.join(settingsDir, "extensions", "secrets")),
+  });
   // Which plugin provider answers a shared key first, kept beside the plugins.
   const providerOrder = createProviderOrderStore(
     path.join(settingsDir, "extensions", "provider-order.json"),
@@ -598,6 +609,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     // Local plugin trees live beside the settings that admit them; the consent
     // file records the grants, and the browser only ever sees the listed shape.
     extensions,
+    // Declarative plugin settings: non-secret values in one host file, secret
+    // fields in the encrypted store beside it.
+    pluginSettings,
     // The Steam library on this PC, read on demand: the install is located per
     // listing, because a library can appear while the editor is open. The scan
     // is cached beside the other disposable host data so a rebuild does not

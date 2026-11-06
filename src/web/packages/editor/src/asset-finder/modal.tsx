@@ -35,6 +35,7 @@ import {
   categoryLabel,
   categoryTabs,
   categoryWord,
+  customSourcesOf,
   DISABLED_KEY,
   EMPTY_VIEW,
   gridSourcesOf,
@@ -130,6 +131,15 @@ export function AssetFinder({
    *  running. The preview is a second surface over the finder, not a tab. */
   const [previewing, setPreviewing] = useState<PreviewTarget | undefined>();
   const [runningAsset, setRunningAsset] = useState<string | undefined>();
+  /** A plugin body owns its own search; the finder keeps the question it last
+   *  answered and the page it answered it with. */
+  const [customQuery, setCustomQuery] = useState("");
+  const [customPage, setCustomPage] = useState<AssetPage | undefined>(
+    undefined,
+  );
+  /** The finder does not page a plugin body; the frame asks for its own pages.
+   *  The setter still records the answer, so a caller may read it later. */
+  const [, setCustomPageNumber] = useState(1);
 
   /** A category exists when an extension declares it, the registry lists one,
    *  or the session offers the writes a pane needs. */
@@ -213,6 +223,14 @@ export function AssetFinder({
     }
   }, [disabled]);
 
+  useEffect(() => {
+    // Each tab's plugin body is its own frame; a question and page from the
+    // previous tab are not this one's.
+    setCustomQuery("");
+    setCustomPage(undefined);
+    setCustomPageNumber(1);
+  }, [active]);
+
   /** A declared category is a tab even before a source serves it: the
    *  extension registered the place, and its grid says it has nothing yet. */
   const declaredIds = new Set(declared.map((category) => category.id));
@@ -225,6 +243,9 @@ export function AssetFinder({
 
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
+  /** The tab's source whose body is a plugin frame, when it declares one. */
+  const customSource =
+    active === undefined ? undefined : customSourcesOf(sources, active)[0];
   /** The kinds the tab's sources actually yield, never a fixed list. */
   const kinds = [
     ...new Set(
@@ -317,7 +338,8 @@ export function AssetFinder({
   /** The Wallpaper Engine tab draws the same frame, card and grid, but its
    *  content is a listing rather than an answer. */
   const isLocal = active === "local";
-  const isGrid = isLocal || gridSources.length > 0;
+  const isGrid =
+    isLocal || gridSources.length > 0 || customSource !== undefined;
   const rows = rowsOf(view.data, enabled);
   /** What the grid draws: the tab's own filter can narrow a font answer
    *  without touching what was asked or kept. */
@@ -437,6 +459,29 @@ export function AssetFinder({
     />
   );
 
+  /** A plugin body answers its own search; `onPick` is the frame asking for a
+   *  result's bytes, which the finder imports through its normal action. */
+  const pluginBody =
+    customSource === undefined
+      ? undefined
+      : {
+          source: customSource,
+          page: customPage,
+          query: customQuery,
+          onQuery: setCustomQuery,
+          onPage: setCustomPageNumber,
+          onResults: setCustomPage,
+          onPick: (result: AssetResult) => {
+            const page: AssetPage = customPage ?? {
+              source: customSource.id,
+              results: [result],
+              totalPages: undefined,
+              failure: undefined,
+            };
+            void runRow(active, { page, result });
+          },
+        };
+
   return (
     <>
       <FinderFrame
@@ -483,7 +528,7 @@ export function AssetFinder({
           }
           setActive(category);
         }}
-        {...(isGrid
+        {...(isGrid && customSource === undefined
           ? isLocal
             ? {
                 query: wallpaperTab.local.query,
@@ -609,6 +654,7 @@ export function AssetFinder({
         }
       >
         <FinderBody
+          {...(pluginBody === undefined ? {} : { plugin: pluginBody })}
           active={active}
           grid={isGrid}
           local={isLocal}
