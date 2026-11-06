@@ -172,8 +172,8 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("wears a label no build-time card word could have produced", async () => {
-    // "Thermal rig" is not a `CARD_LABELS` string, so the old closed map could
-    // not have drawn this tile at all.
+    // "Thermal rig" comes from the installed pack, so no build-time card word
+    // could have drawn this tile.
     await installThermalUnit();
     const { pane } = mount();
 

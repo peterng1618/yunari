@@ -99,17 +99,13 @@ const clipDuration = (milliseconds: number): string => {
 };
 
 /**
- * A built-in custom shape's label, from the same list the host stores and the
- * editor's catalogue reads. A missing id is a code fault: throwing here says so
- * at import rather than printing an id where a name belongs.
+ * One label per built-in custom shape, derived from the same list the host
+ * stores and the editor's catalogue reads. A fourth builtin gains its word
+ * here without a second spelling, and the map stays total for a `PathPresetId`.
  */
-function builtinPathPresetLabel(id: string): string {
-  const preset = BUILTIN_PATH_PRESETS.find((candidate) => candidate.id === id);
-  if (preset === undefined) {
-    throw new Error(`The built-in path preset "${id}" is missing.`);
-  }
-  return preset.label;
-}
+const pathPresetLabels = Object.fromEntries(
+  BUILTIN_PATH_PRESETS.map((preset) => [preset.id, preset.label]),
+) as Record<(typeof BUILTIN_PATH_PRESETS)[number]["id"], string>;
 
 export const uiCopy = {
   brand: "Yunari",
@@ -284,8 +280,6 @@ export const uiCopy = {
     pathPresetDataRequired: "A custom shape needs path data.",
     pathPresetUnreadable: "That path data cannot be read.",
     pathPresetDrawsNothing: "That path data draws nothing.",
-    pathPresetsSessionOnly:
-      "This browser is not keeping editor settings, so the list lasts until the editor is reloaded.",
     /** The Keyboard tab: the reference with editing. One word for one act —
      *  the arm button's `aria-label` and its tooltip are this string. */
     keyboardRebind: "Change chord",
@@ -2203,11 +2197,7 @@ export const uiCopy = {
   /** One label per custom shape. Each is a `Path` preset, so its name is a
    *  drawing rather than a class: "Horizontal line" says what the tile inserts,
    *  where "Line" would collide with the chart family. */
-  pathPresets: {
-    line: builtinPathPresetLabel("line"),
-    arc: builtinPathPresetLabel("arc"),
-    wedge: builtinPathPresetLabel("wedge"),
-  },
+  pathPresets: pathPresetLabels,
   /**
    * Artboard preset labels, shared by the inspector's controls and the
    * new-document chooser. A ratio labels itself; an orientation and a

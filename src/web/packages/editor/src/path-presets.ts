@@ -127,23 +127,6 @@ export function readRemovedPathPresetIds(
   }
 }
 
-/** Writes the removals, and answers whether they will survive the reload. */
-export function writeRemovedPathPresetIds(
-  storage: Storage | undefined,
-  ids: readonly string[],
-): boolean {
-  if (storage === undefined) return false;
-  try {
-    storage.setItem(
-      REMOVED_PATH_PRESETS_STORAGE_KEY,
-      JSON.stringify([...new Set(ids)]),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Removing the key is "every built-in back", the same absence-means-defaults
  *  rule the preview catalogue uses. */
 export function clearRemovedPathPresetIds(

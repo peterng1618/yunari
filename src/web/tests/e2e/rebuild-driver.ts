@@ -171,8 +171,8 @@ export function addButton(page: Page, label: string, group: AddGroup): Locator {
   // ever labelled `Text` would give this lookup two matches. It would then fail
   // **loudly**, as Playwright's strict-mode violation on the click, and not as
   // the silent wrong-kind insert `vg-537` was: a broken driver rather than a
-  // lying one. `uiCopy.cardLibrary` carries no `Text` today, which is all that
-  // holds it.
+  // lying one. The installed widget units carry no `Text` today, which is all
+  // that holds it.
   const scope =
     group === "text"
       ? page.locator('[data-yunari-panel="add"]')

@@ -27,7 +27,6 @@ import {
   userPathPreset,
   userPathPresetFrom,
   userPathPresetsKey,
-  writeRemovedPathPresetIds,
   writeUserPathPresets,
 } from "./path-presets.js";
 
@@ -410,14 +409,6 @@ describe("the stored preset list", () => {
 });
 
 describe("the built-in presets the author removed", () => {
-  it("round-trips through its own key, deduped", () => {
-    const storage = memoryStorage();
-
-    expect(writeRemovedPathPresetIds(storage, ["arc", "arc"])).toBe(true);
-    expect(storage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).not.toBeNull();
-    expect(readRemovedPathPresetIds(storage)).toEqual(["arc"]);
-  });
-
   it("drops entries that are not ids rather than failing the list", () => {
     const storage = memoryStorage({
       [REMOVED_PATH_PRESETS_STORAGE_KEY]: JSON.stringify([
