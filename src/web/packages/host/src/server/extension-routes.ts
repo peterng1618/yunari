@@ -107,9 +107,12 @@ export function createExtensionRoutes(
 
       const installed = await extensions.install(bytes);
       if (!installed.ok) {
+        // The installer's message is bounded but can name a real path or an
+        // internal file; it stays on this machine.
+        if (installed.message !== undefined) console.error(installed.message);
         sendJson(response, 400, {
           ok: false,
-          message: installed.message ?? "That plugin could not be installed.",
+          message: "That plugin could not be installed.",
         });
         return true;
       }
@@ -119,10 +122,15 @@ export function createExtensionRoutes(
       const listed = (await extensions.list()).find(
         (extension) => extension.key === installed.plugin?.key,
       );
-      sendJson(response, 200, {
-        ok: true,
-        ...(listed === undefined ? {} : { plugin: listed }),
-      });
+      if (listed === undefined) {
+        sendJson(response, 500, {
+          ok: false,
+          message: "That plugin could not be installed.",
+        });
+        return true;
+      }
+
+      sendJson(response, 200, { ok: true, plugin: listed });
       return true;
     }
 

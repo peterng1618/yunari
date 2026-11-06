@@ -122,21 +122,45 @@ describe("extension routes", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("refuses a non-loopback caller", async () => {
-    const answer = await call(handle, "GET", "/api/extensions", {
-      remoteAddress: "192.168.1.10",
-    });
-    expect(answer.status).toBe(403);
+  it("refuses a non-loopback caller on every extension route", async () => {
+    const routes = [
+      ["GET", "/api/extensions", undefined],
+      ["POST", "/api/extensions/install", pluginBytes()],
+      ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
+      ["DELETE", "/api/extensions/local/acme-sensors", undefined],
+    ] as const;
+
+    for (const [method, path, body] of routes) {
+      const answer = await call(handle, method, path, {
+        remoteAddress: "192.168.1.10",
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(answer.status, `${method} ${path}`).toBe(403);
+    }
   });
 
-  it("refuses a foreign origin", async () => {
-    const answer = await call(handle, "GET", "/api/extensions", {
-      headers: { origin: "https://evil.example" },
-    });
-    expect(answer.status).toBe(403);
+  it("refuses a foreign origin on every extension route", async () => {
+    const routes = [
+      ["GET", "/api/extensions", undefined],
+      ["POST", "/api/extensions/install", pluginBytes()],
+      ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
+      ["DELETE", "/api/extensions/local/acme-sensors", undefined],
+    ] as const;
+
+    for (const [method, path, body] of routes) {
+      const answer = await call(handle, method, path, {
+        headers: { origin: "https://evil.example" },
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(answer.status, `${method} ${path}`).toBe(403);
+    }
   });
 
   it("installs, lists, approves and removes one plugin", async () => {
+    // JSON escapes Windows backslashes, so the directory must be looked for in
+    // the wire form a browser would actually receive.
+    const escapedDir = JSON.stringify(dir).slice(1, -1);
+
     const installed = await call(handle, "POST", "/api/extensions/install", {
       body: pluginBytes(),
       headers: { "content-type": "application/zip" },
@@ -151,6 +175,8 @@ describe("extension routes", () => {
         version: "1.0.0",
       }),
     });
+    expect(installed.text).not.toContain(escapedDir);
+    expect(installed.text).not.toContain("directory");
 
     const listed = await call(handle, "GET", "/api/extensions");
     const listing = listed.json() as {
@@ -161,7 +187,7 @@ describe("extension routes", () => {
       key: "local/acme-sensors",
       consent: "missing",
     });
-    expect(listed.text).not.toContain(dir);
+    expect(listed.text).not.toContain(escapedDir);
     expect(listed.text).not.toContain("directory");
 
     const consented = await call(
@@ -224,6 +250,36 @@ describe("extension routes", () => {
       { body: JSON.stringify({ fingerprint: 5 }) },
     );
     expect(nonString.status).toBe(400);
+  });
+
+  it("does not forward the installer's message to the browser", async () => {
+    const answer = await call(handle, "POST", "/api/extensions/install", {
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json()).toEqual({
+      ok: false,
+      message: "That plugin could not be installed.",
+    });
+  });
+
+  it("answers 500 when the installed key is absent from the listing", async () => {
+    const real = createExtensionService({
+      installer: createPluginInstaller(path.join(dir, "extensions")),
+      consent: createConsentStore(dir),
+      now: () => "2026-11-06T00:00:00Z",
+    });
+    const broken = { ...real, list: async () => [] };
+    const route = createExtensionRoutes({ extensions: broken });
+
+    const answer = await call(route, "POST", "/api/extensions/install", {
+      body: pluginBytes(),
+    });
+    expect(answer.status).toBe(500);
+    expect(answer.json()).toEqual({
+      ok: false,
+      message: "That plugin could not be installed.",
+    });
   });
 
   it("answers 503 when the host manages no extensions", async () => {

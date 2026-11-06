@@ -1,9 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { CONSENT_SCHEMA_TAG, consentFingerprint } from "@yunari/extension-api";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createConsentStore } from "./consent-store";
+import { contentHash } from "./content-hash";
 import { createPluginInstaller } from "./install";
 import { createExtensionService } from "./service";
 
@@ -40,8 +42,35 @@ function zipWith(
   return zipSync(members, { level: 0 });
 }
 
+function validPluginFiles(
+  manifestValue: unknown = manifest(),
+): Readonly<Record<string, Uint8Array>> {
+  return {
+    "yunari-plugin.json": strToU8(JSON.stringify(manifestValue)),
+    "main.js": strToU8("export default {};"),
+  };
+}
+
 function validPluginBytes(): Uint8Array {
-  return zipWith({ "main.js": "export default {};" });
+  return zipSync(validPluginFiles(), { level: 0 });
+}
+
+/** The fingerprint the host should compute for the fixture, built here from
+ *  the fixture's own parts rather than read back from `list()`. */
+function expectedFingerprint(
+  manifestValue: unknown = manifest(),
+): Promise<string> {
+  return consentFingerprint({
+    schemaTag: CONSENT_SCHEMA_TAG,
+    pluginApi: 1,
+    pluginKey: "local/acme-sensors",
+    version: "1.0.0",
+    contentHash: contentHash(validPluginFiles(manifestValue)),
+    execution: "trusted-worker",
+    capabilities: [],
+    contributions: [],
+    devices: [],
+  });
 }
 
 describe("extension service", () => {
@@ -84,12 +113,14 @@ describe("extension service", () => {
     });
   });
 
-  it("grants consent from the listed fingerprint and then loads", async () => {
+  it("grants consent from the host-computed fingerprint and then loads", async () => {
     await service.install(validPluginBytes());
     const [listed] = await service.list();
     if (listed === undefined) throw new Error("no extension listed");
+    const expected = await expectedFingerprint();
 
-    expect(await service.grantConsent(listed.key, listed.fingerprint)).toEqual({
+    expect(listed.fingerprint).toBe(expected);
+    expect(await service.grantConsent(listed.key, expected)).toEqual({
       ok: true,
     });
 
@@ -97,7 +128,7 @@ describe("extension service", () => {
       expect.objectContaining({
         key: listed.key,
         consent: "granted",
-        fingerprint: listed.fingerprint,
+        fingerprint: expected,
       }),
     ]);
     expect(await service.mayLoad(listed.key)).toBe(true);
@@ -106,21 +137,18 @@ describe("extension service", () => {
     expect(file.plugins[listed.key]).toEqual({
       pluginKey: listed.key,
       version: "1.0.0",
-      fingerprint: listed.fingerprint,
+      fingerprint: expected,
       grantedAt: "2026-11-06T00:00:00Z",
     });
   });
 
-  it("rejects a fingerprint from a superseded install", async () => {
+  it("rejects a fingerprint from a superseded content hash", async () => {
     await service.install(validPluginBytes());
     const [before] = await service.list();
     if (before === undefined) throw new Error("no extension listed");
 
     await service.install(
-      zipWith(
-        { "main.js": "export default { changed: true };" },
-        manifest({ version: "1.0.1" }),
-      ),
+      zipWith({ "main.js": "export default { changed: true };" }),
     );
 
     expect(await service.grantConsent(before.key, before.fingerprint)).toEqual({
@@ -128,7 +156,7 @@ describe("extension service", () => {
       message: MISMATCH,
     });
     expect(await service.list()).toEqual([
-      expect.objectContaining({ consent: "missing", version: "1.0.1" }),
+      expect.objectContaining({ consent: "missing", version: "1.0.0" }),
     ]);
   });
 
@@ -144,6 +172,22 @@ describe("extension service", () => {
       expect.objectContaining({ consent: "not-required" }),
     ]);
     expect(await service.mayLoad("local/acme-sensors")).toBe(true);
+  });
+
+  it("does not store a grant for a data plugin", async () => {
+    await service.install(
+      zipWith(
+        { "readme.txt": "nothing runs here" },
+        manifest({ execution: "data", main: undefined }),
+      ),
+    );
+    const [listed] = await service.list();
+    if (listed === undefined) throw new Error("no extension listed");
+
+    expect(await service.grantConsent(listed.key, listed.fingerprint)).toEqual({
+      ok: true,
+    });
+    expect((await consent.read()).plugins).toEqual({});
   });
 
   it("treats a declarative plugin as not requiring consent and loads it", async () => {

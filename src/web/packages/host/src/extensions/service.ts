@@ -152,6 +152,10 @@ export function createExtensionService(options: {
       const plugin = await read(key);
       if (plugin === undefined) return { ok: false, message: MISMATCH };
 
+      // A data or declarative plugin runs no code of its own; nothing was ever
+      // required, so granting changes no stored state.
+      if (!consentRequired(plugin.manifest.execution)) return { ok: true };
+
       const computed = await fingerprintFor(plugin);
       if (computed !== fingerprint) return { ok: false, message: MISMATCH };
 
