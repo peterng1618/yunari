@@ -8,10 +8,10 @@
 
 import {
   type AssignableGroup,
+  type BuiltinListingCategory,
   type ChartFamily,
   type ColourMode,
   DASHBOARD_THEME_KIND,
-  type ListingCategory,
   type Orientation,
   type SemanticFamily,
 } from "@yunari/renderer-core";
@@ -1569,7 +1569,7 @@ export const uiCopy = {
       video: "Videos",
       colour: "Colors",
       local: "Wallpaper Engine",
-    } satisfies Record<ListingCategory, string>,
+    } as const satisfies Record<BuiltinListingCategory, string>,
     action: {
       font: "Apply to token",
       icon: "Place on canvas",
@@ -1577,7 +1577,7 @@ export const uiCopy = {
       video: "Set as background",
       colour: "Add to presets",
       local: "Open in Wallpaper Engine",
-    } satisfies Record<ListingCategory, string>,
+    } as const satisfies Record<BuiltinListingCategory, string>,
     searchPlaceholder: "Search assets…",
     /** Each tab's own field, so the words name what is searched. */
     search: {
@@ -1587,7 +1587,7 @@ export const uiCopy = {
       video: "Search videos…",
       colour: "Search colors…",
       local: "Search the Host…",
-    } satisfies Record<ListingCategory, string>,
+    } as const satisfies Record<BuiltinListingCategory, string>,
     searching: (sources: number): string =>
       `Searching ${sources} ${sources === 1 ? "source" : "sources"}…`,
     /** The pressed action's own word while it is out, so the footer never says
@@ -1599,7 +1599,7 @@ export const uiCopy = {
       video: "Setting…",
       colour: "Adding…",
       local: "Opening…",
-    } satisfies Record<ListingCategory, string>,
+    } as const satisfies Record<BuiltinListingCategory, string>,
     /** The finder's double-click preview (R8): one result, enlarged, with the
      *  same actions the footer offers. A video result carries a poster only —
      *  no source serves a playable URL yet. */
@@ -1616,7 +1616,7 @@ export const uiCopy = {
       video: "Set as background.",
       colour: "Added to presets.",
       local: "Opened in Wallpaper Engine.",
-    } satisfies Record<ListingCategory, string>,
+    } as const satisfies Record<BuiltinListingCategory, string>,
     endOfResults: "End of results",
     /** The footer's icon button that opens the same preview a double-click does. */
     previewOpen: "Preview",

@@ -7,6 +7,7 @@ import type {
 } from "../wallpaper-engine/client.js";
 import type { FinderCardModel } from "./finder-card.js";
 import { FinderGrid } from "./finder-grid.js";
+import { categoryLabel } from "./finder-model.js";
 import { FinderState } from "./finder-state.js";
 import { FinderSkeleton } from "./skeleton.js";
 import { wallpaperCards } from "./wallpaper.js";
@@ -141,7 +142,7 @@ export function FinderBody(props: {
             // A question or a tab is a new grid: the scroll starts at the
             // top and the roving focus at the first card.
             key={`${props.active}:${props.query}`}
-            label={uiCopy.assets.category[props.active]}
+            label={categoryLabel(props.active)}
             cards={props.cards}
             selectedId={props.selectedId}
             {...(props.busyId === undefined ? {} : { busyId: props.busyId })}

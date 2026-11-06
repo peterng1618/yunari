@@ -204,6 +204,36 @@ describe("extension service", () => {
     expect(await service.mayLoad("local/acme-sensors")).toBe(true);
   });
 
+  it("carries a declarative category through to the listed extension", async () => {
+    const assetCategories = [
+      {
+        id: "brand",
+        label: "Brand",
+        icon: "Shapes",
+        resultKind: "logo",
+        body: "grid",
+      },
+    ];
+    await service.install(
+      zipWith(
+        { "readme.txt": "nothing runs here" },
+        manifest({
+          execution: "declarative",
+          main: undefined,
+          capabilities: ["asset:provide"],
+          contributes: { assetCategories },
+        }),
+      ),
+    );
+
+    expect(await service.list()).toEqual([
+      expect.objectContaining({
+        contributions: { assetCategories },
+        consent: "not-required",
+      }),
+    ]);
+  });
+
   it("removes the tree and revokes consent", async () => {
     await service.install(validPluginBytes());
     const [listed] = await service.list();

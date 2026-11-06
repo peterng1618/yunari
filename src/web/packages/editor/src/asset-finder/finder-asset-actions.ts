@@ -2,7 +2,7 @@ import type { ListingCategory } from "@yunari/renderer-core";
 import { uiCopy } from "../ui-copy.js";
 import type { AssetPlacement } from "./actions.js";
 import type { FinderAction } from "./finder-controls.js";
-import type { ActionOutcome } from "./finder-model.js";
+import { type ActionOutcome, categoryWord } from "./finder-model.js";
 import type { FinderRow } from "./tab-data.js";
 
 /** The same two actions, built for whichever row they are about: the footer's
@@ -32,8 +32,13 @@ export function assetActionsFor(props: {
   };
   const main: FinderAction = {
     id: "apply",
-    label: uiCopy.assets.action[props.active],
-    busyLabel: uiCopy.assets.busy[props.active],
+    // A declared category this build has no word or bulk action for falls back
+    // to the general import action the grid already runs.
+    label:
+      categoryWord(uiCopy.assets.action, props.active) ??
+      uiCopy.assets.placeOnCanvas,
+    busyLabel:
+      categoryWord(uiCopy.assets.busy, props.active) ?? uiCopy.assets.working,
     tone: "accent",
     disabled: props.row === undefined || props.busy,
     run: run(props.active === "image" ? "background" : undefined),

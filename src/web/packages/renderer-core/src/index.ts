@@ -31,7 +31,11 @@ export type {
   AssetSearchAnswer,
   AssetSearchRequest,
   AssetSourceListing,
+  BuiltinListingCategory,
+  BuiltinSourceCategory,
   CredentialRow,
+  DeclarativeCategory,
+  DeclarativeCategoryContributor,
   FontCut,
   FontFormat,
   FontTrioInfo,
@@ -39,7 +43,12 @@ export type {
   PresetKind,
   SourceCategory,
 } from "./assets/wire.js";
-export { parseAssetSearchRequest } from "./assets/wire.js";
+export {
+  BUILTIN_LISTING_CATEGORIES,
+  BUILTIN_SOURCE_CATEGORIES,
+  declarativeCategories,
+  parseAssetSearchRequest,
+} from "./assets/wire.js";
 /**
  * The animation block's own defaults, exported beside the families' because
  * a surface has to show the value a chart draws with: `AnimationSettings` is an

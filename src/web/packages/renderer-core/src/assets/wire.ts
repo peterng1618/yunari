@@ -15,7 +15,18 @@ export type AssetPreset =
       }[];
     };
 
-export type SourceCategory = "font" | "icon" | "image" | "video" | "colour";
+/** The categories the product ships, in the finder rail's order. A plugin
+ *  cannot add to this list; `SourceCategory` is open so a source may serve a
+ *  category this build does not draw. */
+export const BUILTIN_SOURCE_CATEGORIES = [
+  "colour",
+  "font",
+  "icon",
+  "image",
+  "video",
+] as const;
+export type BuiltinSourceCategory = (typeof BUILTIN_SOURCE_CATEGORIES)[number];
+export type SourceCategory = string;
 
 /** Deliberately not the persisted `FontAssetFormat`: a host may learn a format
  *  the schema still refuses, so the wire can widen without the file following. */
@@ -47,7 +58,55 @@ export interface FontTrioInfo {
 
 /** `"local"` is a category no grid draws: it names a source that is a library
  *  on this PC rather than a provider, which is only Wallpaper Engine (R8). */
-export type ListingCategory = SourceCategory | "local";
+export const BUILTIN_LISTING_CATEGORIES = [
+  ...BUILTIN_SOURCE_CATEGORIES,
+  "local",
+] as const;
+export type BuiltinListingCategory =
+  (typeof BUILTIN_LISTING_CATEGORIES)[number];
+export type ListingCategory = string;
+
+/** A category a plugin declares for the finder. `body` is the editor body it
+ *  draws; only the generic grid is declarable. */
+export interface DeclarativeCategory {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly resultKind: string;
+  readonly body: "grid";
+}
+
+/** The part of an installed extension this reader needs. Structural so
+ *  `renderer-core` does not import `@yunari/extension-api` — that package
+ *  depends on `@yunari/theme-package`, which would close a cycle. */
+export interface DeclarativeCategoryContributor {
+  readonly contributions: {
+    readonly assetCategories?: readonly DeclarativeCategory[];
+  };
+}
+
+/**
+ * Every category the installed extensions declare, in installation order.
+ *
+ * A declared id that collides with a built-in listing category is dropped: the
+ * built-in owns its label, glyph and place, so a plugin can neither rename nor
+ * reorder a tab the finder already draws. Two extensions declaring one id yield
+ * one entry.
+ */
+export function declarativeCategories(
+  extensions: readonly DeclarativeCategoryContributor[],
+): readonly DeclarativeCategory[] {
+  const taken = new Set<string>(BUILTIN_LISTING_CATEGORIES);
+  const declared: DeclarativeCategory[] = [];
+  for (const extension of extensions) {
+    for (const category of extension.contributions.assetCategories ?? []) {
+      if (taken.has(category.id)) continue;
+      taken.add(category.id);
+      declared.push(category);
+    }
+  }
+  return declared;
+}
 
 export interface AssetResult {
   /** The source's own id; the host prefixes it. */

@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { type ClientOptions, searchAssets } from "./client.js";
 import {
   bodyOf,
-  CATEGORY_ORDER,
   EMPTY_VIEW,
   emptyViews,
   SEARCH_DEBOUNCE_MS,
@@ -31,7 +30,7 @@ export function useTabSearches(props: {
   readonly client: ClientOptions | undefined;
   readonly onNotice: (notice: string | undefined) => void;
 }): {
-  readonly views: Record<ListingCategory, TabView>;
+  readonly views: Record<string, TabView>;
   readonly patch: (
     category: ListingCategory,
     update: (current: TabView) => TabView,
@@ -42,11 +41,13 @@ export function useTabSearches(props: {
 } {
   const { open, active, visibleSources, enabled, enabledSources, client } =
     props;
-  const [views, setViews] =
-    useState<Record<ListingCategory, TabView>>(emptyViews);
-  const tickets = useRef(new Map<ListingCategory, number>());
+  const [views, setViews] = useState<Record<string, TabView>>(emptyViews);
+  const tickets = useRef(new Map<string, number>());
   const announced = useRef(false);
-  const view = active === undefined ? EMPTY_VIEW : views[active];
+  // A category this session has not drawn yet reads as the empty view rather
+  // than being pre-populated for an id nothing knows.
+  const view =
+    active === undefined ? EMPTY_VIEW : (views[active] ?? EMPTY_VIEW);
 
   // A closed finder is not a status surface: the sentence a write left belongs
   // to the session that ran it, so reopening starts without one.
@@ -55,9 +56,9 @@ export function useTabSearches(props: {
     setViews((current) => {
       let changed = false;
       const next = { ...current };
-      for (const category of CATEGORY_ORDER) {
-        if (current[category].message === undefined) continue;
-        next[category] = { ...current[category], message: undefined };
+      for (const [category, view] of Object.entries(current)) {
+        if (view.message === undefined) continue;
+        next[category] = { ...view, message: undefined };
         changed = true;
       }
       return changed ? next : current;
@@ -77,7 +78,7 @@ export function useTabSearches(props: {
   ): void => {
     setViews((current) => ({
       ...current,
-      [category]: update(current[category]),
+      [category]: update(current[category] ?? EMPTY_VIEW),
     }));
   };
 
@@ -102,11 +103,11 @@ export function useTabSearches(props: {
     // A body category draws its own component, and a tab whose sources are all
     // switched off has no question to ask.
     if (visibleSources.length === 0 || enabled.length === 0) return undefined;
-    if (views[active].browsed) return undefined;
+    if (view.browsed) return undefined;
 
     const category = active;
-    const question = views[category].data.query;
-    const pages = nextPages(views[category].data, enabled);
+    const question = view.data.query;
+    const pages = nextPages(view.data, enabled);
     if (Object.keys(pages).length === 0) return undefined;
     const issued = bump(category);
     patch(category, (current) => ({ ...current, loading: "first" }));
@@ -148,7 +149,7 @@ export function useTabSearches(props: {
   const loadMore = (): void => {
     if (active === undefined) return;
     const category = active;
-    const current = views[category];
+    const current = views[category] ?? EMPTY_VIEW;
     if (current.loading !== undefined || !current.browsed) return;
     const pages = nextPages(current.data, enabled);
     if (Object.keys(pages).length === 0) return;
@@ -178,14 +179,15 @@ export function useTabSearches(props: {
   const retry = (): void => {
     if (active === undefined) return;
     const category = active;
-    const pages = retryPages(views[category].data, enabled);
+    const current = views[category] ?? EMPTY_VIEW;
+    const pages = retryPages(current.data, enabled);
     if (Object.keys(pages).length === 0) return;
 
     const issued = bump(category);
     patch(category, (view) => ({ ...view, loading: "first" }));
     void searchAssets(
       {
-        query: views[category].data.query,
+        query: current.data.query,
         enabled,
         pages,
         body: bodyOf(category),

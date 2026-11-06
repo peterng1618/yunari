@@ -18,6 +18,7 @@ import { AssetFinder } from "./modal.js";
 
 vi.mock("./client.js", () => ({
   listSources: vi.fn(),
+  listExtensions: vi.fn(),
   searchAssets: vi.fn(),
   assetBytes: vi.fn(),
 }));
@@ -27,6 +28,7 @@ vi.mock("./client.js", () => ({
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const listSources = vi.mocked(client.listSources);
+const listExtensions = vi.mocked(client.listExtensions);
 const searchAssets = vi.mocked(client.searchAssets);
 
 const lucide: AssetSourceListing = {
@@ -373,6 +375,8 @@ beforeEach(() => {
   localStorage.clear();
   vi.useFakeTimers();
   listSources.mockReset();
+  listExtensions.mockReset();
+  listExtensions.mockResolvedValue({ ok: false });
   searchAssets.mockReset();
   searchAssets.mockResolvedValue({ pages: [] });
 });

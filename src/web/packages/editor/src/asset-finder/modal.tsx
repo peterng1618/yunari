@@ -1,18 +1,20 @@
-import type {
-  AssetPage,
-  AssetResult,
-  AssetSourceListing,
-  ListingCategory,
-  PresetKind,
+import {
+  type AssetPage,
+  type AssetResult,
+  type AssetSourceListing,
+  type DeclarativeCategory,
+  declarativeCategories,
+  type ListingCategory,
+  type PresetKind,
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useState } from "react";
-import { FINDER_TAB_GLYPHS, Glyph } from "../editor-shell/icons.js";
+import { finderTabGlyph, Glyph } from "../editor-shell/icons.js";
 import { VideoTrimModal } from "../panes/assets/video-trim-modal.js";
 import { uiCopy } from "../ui-copy.js";
 import { itemAssetPath } from "../wallpaper-engine/client.js";
 import { type AssetPlacement } from "./actions.js";
-import { type ClientOptions, listSources } from "./client.js";
+import { type ClientOptions, listExtensions, listSources } from "./client.js";
 import { assetActionsFor } from "./finder-asset-actions.js";
 import { FinderBody } from "./finder-body.js";
 import {
@@ -30,7 +32,9 @@ import { FinderFooterActions } from "./finder-footer.js";
 import { FinderFrame } from "./finder-frame.js";
 import {
   type ActionOutcome,
-  CATEGORY_ORDER,
+  categoryLabel,
+  categoryTabs,
+  categoryWord,
   DISABLED_KEY,
   EMPTY_VIEW,
   gridSourcesOf,
@@ -102,6 +106,9 @@ export function AssetFinder({
   client,
 }: FinderProps): React.JSX.Element {
   const [sources, setSources] = useState<readonly AssetSourceListing[]>([]);
+  /** The categories the installed extensions declare. A host that cannot list
+   *  extensions leaves this empty, so the finder keeps its built-in tabs. */
+  const [declared, setDeclared] = useState<readonly DeclarativeCategory[]>([]);
   const [listing, setListing] = useState<"loading" | "ok" | "failed">(
     "loading",
   );
@@ -134,29 +141,39 @@ export function AssetFinder({
     if (!open) return;
 
     let live = true;
-    void listSources(client).then((next) => {
-      if (!live) return;
-      // A host that cannot be reached is a sentence, not an empty dialog: a
-      // build without the asset routes and an absent host read the same here,
-      // and both mean the finder cannot work.
-      if (!next.ok) {
-        setListing("failed");
-        setSources([]);
-        return;
-      }
-      setListing("ok");
-      setSources(next.sources);
-      const listed = next.sources;
-      setActive((current) => {
-        // A caller that names a category wins over the last one: the font
-        // field opens Fonts every time, not only the first time.
-        if (initialCategory !== undefined && present(initialCategory, listed)) {
-          return initialCategory;
+    // The sources decide the dialog; the extensions only add tabs. A host that
+    // cannot list extensions is not a failed listing.
+    void Promise.all([listSources(client), listExtensions(client)]).then(
+      ([next, extensions]) => {
+        if (!live) return;
+        setDeclared(
+          extensions.ok ? declarativeCategories(extensions.extensions) : [],
+        );
+        // A host that cannot be reached is a sentence, not an empty dialog: a
+        // build without the asset routes and an absent host read the same here,
+        // and both mean the finder cannot work.
+        if (!next.ok) {
+          setListing("failed");
+          setSources([]);
+          return;
         }
-        if (current !== undefined && present(current, listed)) return current;
-        return listed[0]?.category ?? (font !== undefined ? "font" : "local");
-      });
-    });
+        setListing("ok");
+        setSources(next.sources);
+        const listed = next.sources;
+        setActive((current) => {
+          // A caller that names a category wins over the last one: the font
+          // field opens Fonts every time, not only the first time.
+          if (
+            initialCategory !== undefined &&
+            present(initialCategory, listed)
+          ) {
+            return initialCategory;
+          }
+          if (current !== undefined && present(current, listed)) return current;
+          return listed[0]?.category ?? (font !== undefined ? "font" : "local");
+        });
+      },
+    );
     return () => {
       live = false;
     };
@@ -174,27 +191,12 @@ export function AssetFinder({
     }
   }, [disabled]);
 
-  const presentCategories: ListingCategory[] = [];
-  for (const source of sources) {
-    if (!presentCategories.includes(source.category)) {
-      presentCategories.push(source.category);
-    }
-  }
-  for (const category of ["font", "local"] as const) {
-    const offered =
-      category === "font" ? font !== undefined : wallpaper !== undefined;
-    if (offered && !presentCategories.includes(category)) {
-      presentCategories.push(category);
-    }
-  }
-  const categories: ListingCategory[] = [
-    ...CATEGORY_ORDER.filter((category) =>
-      presentCategories.includes(category),
-    ),
-    ...presentCategories
-      .filter((category) => !CATEGORY_ORDER.includes(category))
-      .sort(),
-  ];
+  /** A declared category is a tab even before a source serves it: the
+   *  extension registered the place, and its grid says it has nothing yet. */
+  const declaredIds = new Set(declared.map((category) => category.id));
+  const categories = categoryTabs(declared, sources).filter(
+    (category) => present(category, sources) || declaredIds.has(category),
+  );
 
   const gridSources =
     active === undefined ? [] : gridSourcesOf(sources, active);
@@ -226,7 +228,8 @@ export function AssetFinder({
     client,
     onNotice: setNotice,
   });
-  const view = active === undefined ? EMPTY_VIEW : views[active];
+  const view =
+    active === undefined ? EMPTY_VIEW : (views[active] ?? EMPTY_VIEW);
   const fontTab = useFontTab({
     open,
     active,
@@ -256,7 +259,10 @@ export function AssetFinder({
     patch(category, (current) => ({
       ...current,
       message: {
-        text: outcome.message ?? uiCopy.assets.done[category],
+        text:
+          outcome.message ??
+          categoryWord(uiCopy.assets.done, category) ??
+          uiCopy.assets.done.icon,
         tone: outcome.ok ? "ok" : "failed",
         ...(outcome.ok ? {} : { failedId: row.result.id }),
       },
@@ -439,8 +445,8 @@ export function AssetFinder({
         className="editor-shell-dialog--finder"
         tabs={categories.map((category) => ({
           id: category,
-          label: uiCopy.assets.category[category],
-          icon: <Glyph icon={FINDER_TAB_GLYPHS[category]} size={13} />,
+          label: categoryLabel(category),
+          icon: <Glyph icon={finderTabGlyph(category)} size={13} />,
         }))}
         active={active}
         onTabChange={(category) => {
@@ -449,7 +455,7 @@ export function AssetFinder({
           // narrower question than the chip will show on the way back.
           if (presetFilter !== "all") {
             setPresetFilter("all");
-            askNew("colour", views.colour.data.query);
+            askNew("colour", views.colour?.data.query ?? "");
           }
           setActive(category);
         }}
@@ -457,12 +463,16 @@ export function AssetFinder({
           ? isLocal
             ? {
                 query: wallpaperTab.local.query,
-                searchPlaceholder: uiCopy.assets.search[active],
+                searchPlaceholder:
+                  categoryWord(uiCopy.assets.search, active) ??
+                  uiCopy.assets.searchPlaceholder,
                 onQueryChange: wallpaperTab.setQuery,
               }
             : {
                 query: view.data.query,
-                searchPlaceholder: uiCopy.assets.search[active],
+                searchPlaceholder:
+                  categoryWord(uiCopy.assets.search, active) ??
+                  uiCopy.assets.searchPlaceholder,
                 onQueryChange: (value: string) => askNew(active, value),
               }
           : {})}
