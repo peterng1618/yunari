@@ -13,6 +13,7 @@ function binding(overrides: Partial<ConsentBinding> = {}): ConsentBinding {
     capabilities: [],
     contributions: [],
     devices: [],
+    hosts: [],
     ...overrides,
   };
 }

@@ -191,6 +191,10 @@ describe("a killed plugin", () => {
         consent,
         killList: fixedKillList(list),
         now: () => GENERATED_AT,
+        providerOrder: {
+          read: async () => ({ version: 1, pluginOrder: [] }),
+          write: async () => undefined,
+        },
       }),
     );
 
