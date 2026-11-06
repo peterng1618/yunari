@@ -182,7 +182,10 @@ function findAttached(
     return (
       device.transport === selector.transport &&
       device.vendorId === selector.vendorId &&
-      device.productId === selector.productId
+      device.productId === selector.productId &&
+      // Two panels can share ids; a supplied path picks the one the plugin
+      // means instead of the first the backend enumerated.
+      (selector.path === undefined || device.path === selector.path)
     );
   });
 }
@@ -273,6 +276,9 @@ export function createDeviceBroker(options: DeviceBrokerOptions): DeviceBroker {
   const { allowlists, backend } = options;
   const maxInFlight =
     options.maxInFlightPerPlugin ?? DEFAULT_MAX_IN_FLIGHT_PER_PLUGIN;
+  if (!Number.isInteger(maxInFlight) || maxInFlight < 1) {
+    throw new Error("maxInFlightPerPlugin must be a positive integer.");
+  }
   const maxTransferBytes =
     options.maxTransferBytes ?? DEFAULT_MAX_TRANSFER_BYTES;
   const tokens = new Map<string, TokenRecord>();

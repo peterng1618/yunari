@@ -85,13 +85,16 @@ function fakeBackend(devices: readonly DeviceDescriptor[] = [descriptor()]): {
   readonly backend: DeviceBackend;
   readonly opened: DeviceDescriptor[];
   readonly handles: FakeHandle[];
+  readonly listCalls: () => number;
 } {
   const opened: DeviceDescriptor[] = [];
   const handles: FakeHandle[] = [];
+  let listCalls = 0;
 
   return {
     backend: {
       async list() {
+        listCalls += 1;
         return devices;
       },
       async open(device) {
@@ -103,12 +106,13 @@ function fakeBackend(devices: readonly DeviceDescriptor[] = [descriptor()]): {
     },
     opened,
     handles,
+    listCalls: () => listCalls,
   };
 }
 
 describe("createDeviceBroker", () => {
   it("refuses an undeclared device before opening", async () => {
-    const { backend, opened } = fakeBackend();
+    const { backend, opened, listCalls } = fakeBackend();
     const broker = createDeviceBroker({
       allowlists: () => [declared()],
       backend,
@@ -122,6 +126,34 @@ describe("createDeviceBroker", () => {
       }),
     ).rejects.toThrow("not declared");
     expect(opened).toEqual([]);
+    expect(listCalls()).toBe(0);
+  });
+
+  it("opens the descriptor whose path the selector names", async () => {
+    const { backend, opened } = fakeBackend([
+      descriptor(),
+      { ...descriptor(), path: "1:3" },
+    ]);
+    const broker = createDeviceBroker({
+      allowlists: () => [declared()],
+      backend,
+    });
+
+    await broker.open(PLUGIN, { ...declaredSelector(), path: "1:3" });
+
+    expect(opened.map((device) => device.path)).toEqual(["1:3"]);
+  });
+
+  it("refuses a non-positive in-flight limit", () => {
+    const { backend } = fakeBackend();
+
+    expect(() =>
+      createDeviceBroker({
+        allowlists: () => [declared()],
+        backend,
+        maxInFlightPerPlugin: 0,
+      }),
+    ).toThrow("maxInFlightPerPlugin");
   });
 
   it("refuses another plugin's token", async () => {

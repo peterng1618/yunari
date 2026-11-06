@@ -267,12 +267,17 @@ export function createUsbBackend(): DeviceBackend {
 
     async open(device) {
       if (device.transport === "hid") {
-        const found = HID.devices().find(
+        const candidates = HID.devices().filter(
           (candidate) =>
             candidate.vendorId === device.vendorId &&
             candidate.productId === device.productId &&
             candidate.path !== undefined,
         );
+        // The descriptor's path is the device the broker resolved; ids alone
+        // collide when two identical panels are attached.
+        const found =
+          candidates.find((candidate) => candidate.path === device.path) ??
+          candidates[0];
         if (found?.path === undefined) {
           throw new Error("The device is not attached.");
         }
@@ -281,11 +286,14 @@ export function createUsbBackend(): DeviceBackend {
       }
 
       if (device.transport === "usb") {
-        const found = (await usb.getDevices()).find(
+        const candidates = (await usb.getDevices()).filter(
           (candidate) =>
             candidate.vendorId === device.vendorId &&
             candidate.productId === device.productId,
         );
+        const found =
+          candidates.find((candidate) => usbPath(candidate) === device.path) ??
+          candidates[0];
         if (found === undefined) {
           throw new Error("The device is not attached.");
         }
