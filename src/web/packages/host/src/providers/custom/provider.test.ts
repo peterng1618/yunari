@@ -313,6 +313,36 @@ describe("CustomSourceProvider", () => {
     ).toEqual(["custom.acme.weather.user"]);
   });
 
+  it("marks a plugin row so its loopback destination is refused", async () => {
+    const store = storeOf({
+      sources: [sourceOf({ id: "mine", fields: [fieldOf({ id: "x" })] })],
+      issues: [],
+    });
+    const { fetcher, calls } = fetcherOf(() => json({ x: 1 }));
+    const provider = new CustomSourceProvider({
+      sources: store,
+      credentials: credentialsOf(),
+      fetcher,
+      extraSources: () => [pluginSource()],
+    });
+    await provider.reload();
+
+    await provider.sample(
+      ["custom.mine.x", "custom.acme.weather.temp"],
+      Date.now(),
+    );
+    await settle();
+
+    // The user's own row dialled its loopback address; the plugin row did not.
+    expect(calls.map((call) => call.url)).toEqual(["http://127.0.0.1:9/mine"]);
+    const plugin = provider
+      .status()
+      .find((row) => row.sourceId === "acme.weather");
+    expect(plugin?.lastError).toMatch(/private or loopback address/i);
+    const mine = provider.status().find((row) => row.sourceId === "mine");
+    expect(mine?.lastError).toBeUndefined();
+  });
+
   it("reads extraSources again on every reload", async () => {
     let extras: readonly CustomSource[] = [pluginSource()];
     const provider = new CustomSourceProvider({

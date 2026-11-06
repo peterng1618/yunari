@@ -512,6 +512,62 @@ describe("fetchSource", () => {
     });
   });
 
+  describe("plugin-contributed rows", () => {
+    it("refuses a loopback destination the user's own row may reach", async () => {
+      const { fetchImpl, calls } = serve(() => json({}));
+      const source = sourceOf({ url: "http://127.0.0.1:8080/data" });
+
+      const plugin = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        undefined,
+        {
+          pluginContributed: true,
+        },
+      );
+      expect(plugin.ok).toBe(false);
+      if (!plugin.ok)
+        expect(plugin.reason).toContain("private or loopback address");
+      expect(calls).toHaveLength(0);
+
+      // The same address is still the user's to type in sources.json.
+      const user = await fetchSource(source, undefined, fetchImpl, () => 0);
+      expect(user.ok).toBe(true);
+      expect(calls).toHaveLength(1);
+    });
+
+    it("refuses a private hostname a user row may reach", async () => {
+      const { fetchImpl, calls } = serve(() => json({}));
+      const source = sourceOf({ url: "http://lan.example/data" });
+      const resolve = async () => [{ address: "192.168.1.20", family: 4 }];
+
+      const plugin = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+        { pluginContributed: true },
+      );
+      expect(plugin.ok).toBe(false);
+      if (!plugin.ok)
+        expect(plugin.reason).toContain("private or loopback address");
+      expect(calls).toHaveLength(0);
+
+      const user = await fetchSource(
+        source,
+        undefined,
+        fetchImpl,
+        () => 0,
+        resolve,
+      );
+      expect(user.ok).toBe(true);
+      expect(calls).toHaveLength(1);
+    });
+  });
+
   describe("a real loopback server", () => {
     it("fetches a JSON answer over a real socket", async () => {
       const origin = await listen((_request, response) => {

@@ -61,6 +61,9 @@ interface CachedReading {
 
 interface SourceRuntime {
   readonly source: CustomSource;
+  /** True for a row a plugin declared: it may not reach private addresses,
+   *  because the user did not type it. */
+  readonly pluginContributed: boolean;
   /** Keyed by semantic key, so a sample maps straight to its field. */
   readonly fields: ReadonlyMap<string, CustomField>;
   readonly descriptors: readonly SensorDescriptor[];
@@ -280,9 +283,11 @@ export class CustomSourceProvider implements SensorProvider {
     // the store already authored.
     const sources = [...file.sources];
     const ids = new Set(sources.map((source) => source.id));
+    const pluginIds = new Set<string>();
     for (const source of this.#extraSources()) {
       if (ids.has(source.id)) continue;
       ids.add(source.id);
+      pluginIds.add(source.id);
       sources.push(source);
     }
     this.#sourceCount = sources.length;
@@ -297,6 +302,7 @@ export class CustomSourceProvider implements SensorProvider {
 
       this.#runtimes.set(source.id, {
         source,
+        pluginContributed: pluginIds.has(source.id),
         fields,
         descriptors,
         active: true,
@@ -420,6 +426,8 @@ export class CustomSourceProvider implements SensorProvider {
       credential.value,
       this.#fetcher,
       this.#now,
+      undefined,
+      { pluginContributed: runtime.pluginContributed },
     );
     // A reload or stop retired this runtime while the fetch was in flight; its
     // answer belongs to a source the store no longer holds.
@@ -524,6 +532,8 @@ export class CustomSourceProvider implements SensorProvider {
         credential.value,
         this.#fetcherFor(abort),
         this.#now,
+        undefined,
+        { pluginContributed: runtime.pluginContributed },
       );
 
       // A reload or stop retired this runtime while the request was in flight.

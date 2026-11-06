@@ -456,6 +456,7 @@ async function run(
   fetchImpl: typeof fetch,
   resolve: HostLookup,
   page: number | undefined,
+  allowPrivateOrigin: boolean,
   fail: Fail,
 ): Promise<PageOutcome> {
   let destination: URL;
@@ -481,13 +482,15 @@ async function run(
 
   for (;;) {
     if (firstHop) {
-      // The user typed the first URL, so its private ranges are allowed; a
-      // redirect may only reach them when that first URL already did.
+      // A row the user typed may reach its own private ranges; a redirect may
+      // only reach them when that first URL already did. A plugin-contributed
+      // row is not the user typing it, so its first hop is checked exactly as a
+      // redirected hop is, and its private ranges stay closed.
       const resolved = await resolveDestination(destination, resolve);
       if (!resolved.ok) return fail(resolved.reason);
       const addresses = resolved.addresses.map((entry) => entry.address);
-      allowPrivate = addresses.every(isPrivateAddress);
-      const refused = refusalOf(addresses, true);
+      allowPrivate = allowPrivateOrigin && addresses.every(isPrivateAddress);
+      const refused = refusalOf(addresses, allowPrivateOrigin);
       if (refused !== undefined) return fail(refused);
       pinned = resolved.addresses;
       firstHop = false;
@@ -594,13 +597,21 @@ async function run(
   }
 }
 
+/** `pluginContributed` names who authored the row: a `sources.json` row is the
+ *  user's own and may reach private ranges; a plugin row may not. */
+export interface FetchSourceOptions {
+  readonly pluginContributed?: boolean;
+}
+
 export async function fetchSource(
   source: CustomSource,
   credential: string | undefined,
   fetchImpl: typeof fetch,
   nowMs: () => number,
   resolve: HostLookup = dnsLookup,
+  options: FetchSourceOptions = {},
 ): Promise<FetchOutcome> {
+  const allowPrivateOrigin = options.pluginContributed !== true;
   const fail: Fail = (reason, status) => {
     const clean = reasonOf(reason, credential);
     return status === undefined
@@ -621,6 +632,7 @@ export async function fetchSource(
           fetchImpl,
           resolve,
           undefined,
+          allowPrivateOrigin,
           fail,
         );
         return outcome.ok
@@ -638,6 +650,7 @@ export async function fetchSource(
           fetchImpl,
           resolve,
           paging.firstPage + offset,
+          allowPrivateOrigin,
           fail,
         );
         if (!outcome.ok) return outcome;
