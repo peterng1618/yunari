@@ -45,7 +45,7 @@ const UNREADABLE_ITEM =
 
 interface BuiltRequest {
   readonly url: string;
-  /** The search URL a result falls back to, without an inserted credential. */
+  /** The search URL a result falls back to. */
   readonly publicUrl: string;
   readonly headers: Readonly<Record<string, string>>;
 }
@@ -76,16 +76,14 @@ function filenameOf(url: URL): string {
  *
  * `fetchImpl` and `resolve` are test seams. Without a `fetchImpl` the adapter
  * builds the pinned fetch itself: falling back to the context's fetch would let
- * a second DNS answer reach a different address than the policy checked. A
- * credential comes from `SourceContext.credential` and is inserted only into
- * the outbound search request.
+ * a second DNS answer reach a different address than the policy checked.
  */
 export class DeclarativeAssetSourceAdapter implements AssetSource {
   readonly id: string;
   readonly label: string;
   readonly category: string;
   readonly body = "grid" as const;
-  readonly requires: string | undefined;
+  readonly requires = undefined;
   readonly configurable = true;
   readonly presetKind?: PresetKind;
   readonly host: string;
@@ -109,7 +107,6 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     this.id = options.contribution.id;
     this.label = options.contribution.label;
     this.category = options.contribution.category;
-    this.requires = options.contribution.requires;
     this.host = options.contribution.host;
     if (options.contribution.presetKind !== undefined) {
       this.presetKind = options.contribution.presetKind;
@@ -130,8 +127,7 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
   ): Promise<SearchPage> {
     if (ctx.signal.aborted) throw new Error(messageOf(ctx.signal.reason));
 
-    const credential = this.#credentialOf(ctx);
-    const built = this.#buildRequest(query, page, credential);
+    const built = this.#buildRequest(query, page);
     const outcome = await guardedFetch({
       url: built.url,
       allowedHosts: this.#allowedHosts,
@@ -146,7 +142,8 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
       allowPrivateOrigin: false,
     });
 
-    if (!outcome.ok) throw new Error(this.#clean(outcome.reason, credential));
+    if (!outcome.ok)
+      throw new Error(redactForBrowser(outcome.reason, DECLARATIVE_LOG_LIMIT));
 
     const items = resolvePointer(
       outcome.body,
@@ -217,22 +214,7 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     };
   }
 
-  #credentialOf(ctx: SourceContext): string | undefined {
-    const requires = this.#contribution.requires;
-    if (requires === undefined) return undefined;
-
-    const value = ctx.credential(requires);
-    if (value === undefined || value === "") {
-      throw new Error(`The "${requires}" credential is not set.`);
-    }
-    return value;
-  }
-
-  #buildRequest(
-    query: string,
-    page: number,
-    credential: string | undefined,
-  ): BuiltRequest {
+  #buildRequest(query: string, page: number): BuiltRequest {
     const request = this.#contribution.request;
     const apiPage = (request.firstPage ?? 1) + page - 1;
     const template = request.url;
@@ -250,22 +232,10 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     }
 
     const headers: Record<string, string> = { ...request.headers };
-    const auth = request.auth;
-    if (auth !== undefined && credential !== undefined) {
-      if (auth.kind === "header") headers[auth.name] = credential;
-      else url.searchParams.set(auth.name, credential);
-    }
-
-    // The fallback a result records must not carry the credential; a search
-    // URL is a result field, and a result is visible to the editor.
-    const publicUrl = new URL(url.href);
-    if (auth !== undefined && auth.kind === "query") {
-      publicUrl.searchParams.delete(auth.name);
-    }
 
     return {
       url: url.toString(),
-      publicUrl: publicUrl.toString(),
+      publicUrl: url.toString(),
       headers,
     };
   }
@@ -339,13 +309,5 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
       if (oldest === undefined) break;
       this.#sourceUrls.delete(oldest);
     }
-  }
-
-  #clean(reason: string, credential: string | undefined): string {
-    const withoutSecret =
-      credential === undefined || credential === ""
-        ? reason
-        : reason.split(credential).join("[redacted]");
-    return redactForBrowser(withoutSecret, DECLARATIVE_LOG_LIMIT);
   }
 }

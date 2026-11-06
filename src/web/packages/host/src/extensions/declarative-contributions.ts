@@ -25,17 +25,11 @@ const USERINFO_REFUSED =
 
 const PRESET_KINDS: ReadonlySet<string> = new Set(["palette", "gradient"]);
 
-export interface DeclarativeAssetSourceAuth {
-  readonly kind: "header" | "query";
-  readonly name: string;
-}
-
 export interface DeclarativeAssetSource {
   readonly id: string;
   readonly label: string;
   readonly category: string;
   readonly body: "grid";
-  readonly requires?: string;
   readonly presetKind?: PresetKind;
   readonly host: string;
   readonly request: {
@@ -44,7 +38,6 @@ export interface DeclarativeAssetSource {
     readonly pageParam?: string;
     readonly firstPage?: number;
     readonly totalPath?: string;
-    readonly auth?: DeclarativeAssetSourceAuth;
   };
   readonly result: {
     readonly itemsPath: string;
@@ -76,54 +69,6 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value !== "";
-}
-
-function readAuth(
-  value: unknown,
-  id: string,
-  requires: string | undefined,
-): Check<DeclarativeAssetSourceAuth | undefined> {
-  if (value === undefined) {
-    if (requires !== undefined) {
-      return {
-        ok: false,
-        message:
-          'A declarative asset source that names "requires" also needs request.auth.',
-      };
-    }
-    return { ok: true, value: undefined };
-  }
-
-  if (requires === undefined) {
-    return {
-      ok: false,
-      message:
-        'A declarative asset source that uses request.auth also needs "requires".',
-    };
-  }
-  if (!isRecord(value)) {
-    return {
-      ok: false,
-      message: `The declarative asset source "${id}" declares an unreadable request.auth.`,
-    };
-  }
-
-  const kind = value["kind"];
-  const name = value["name"];
-  if (kind !== "header" && kind !== "query") {
-    return {
-      ok: false,
-      message: `The declarative asset source "${id}" declares an unknown request.auth.kind.`,
-    };
-  }
-  if (!nonEmpty(name) || !HEADER_NAME.test(name)) {
-    return {
-      ok: false,
-      message: `The declarative asset source "${id}" needs a usable request.auth.name.`,
-    };
-  }
-
-  return { ok: true, value: { kind, name } };
 }
 
 function readHeaders(
@@ -218,13 +163,15 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
     );
   }
 
-  const requiresValue = value["requires"];
-  if (requiresValue !== undefined && !nonEmpty(requiresValue)) {
+  // Host credentials belong to the host. A declarative row that names one
+  // would turn it into data sent to the URL this manifest chose, with no
+  // consent binding that destination; only the host's own source rows may
+  // carry a credential.
+  if (value["requires"] !== undefined) {
     return refuse(
-      `The declarative asset source "${id}" declares an empty "requires".`,
+      `The declarative asset source "${id}" may not use a host credential; fetch with its own endpoint instead.`,
     );
   }
-  const requires = requiresValue as string | undefined;
 
   const presetKindValue = value["presetKind"];
   if (
@@ -249,6 +196,11 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
     );
   }
   const requestValue = value["request"];
+  if (requestValue["auth"] !== undefined) {
+    return refuse(
+      `The declarative asset source "${id}" may not declare request.auth.`,
+    );
+  }
 
   const url = readUrl(requestValue["url"]);
   if (!url.ok) return refuse(url.message);
@@ -281,9 +233,6 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
       `The declarative asset source "${id}" declares an unusable totalPath.`,
     );
   }
-
-  const auth = readAuth(requestValue["auth"], id, requires);
-  if (!auth.ok) return refuse(auth.message);
 
   if (!isRecord(value["result"])) {
     return refuse(
@@ -330,7 +279,6 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
       category,
       body: "grid",
       host,
-      ...(requires === undefined ? {} : { requires }),
       ...(presetKindValue === undefined
         ? {}
         : { presetKind: presetKindValue as PresetKind }),
@@ -340,7 +288,6 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
         ...(pageParam === undefined ? {} : { pageParam: pageParam as string }),
         ...(firstPage === undefined ? {} : { firstPage: firstPage as number }),
         ...(totalPath === undefined ? {} : { totalPath: totalPath as string }),
-        ...(auth.value === undefined ? {} : { auth: auth.value }),
       },
       result: {
         itemsPath,

@@ -80,11 +80,9 @@ function readSource(value: unknown): DeclarativeAssetSource {
   return read.source;
 }
 
-function context(
-  credential: (id: string) => string | undefined = () => undefined,
-): SourceContext {
+function context(): SourceContext {
   return {
-    credential,
+    credential: () => undefined,
     signal: new AbortController().signal,
     fetch: globalThis.fetch,
   };
@@ -138,7 +136,20 @@ describe("readDeclarativeAssetSource", () => {
     });
   });
 
-  it("refuses auth without requires and requires without auth", () => {
+  it("refuses a host credential or request.auth", () => {
+    expect(
+      readDeclarativeAssetSource(
+        declarativeSource({
+          requires: "acme-key",
+          request: { url: "https://api.acme.test/search" },
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      message:
+        'The declarative asset source "acme" may not use a host credential; fetch with its own endpoint instead.',
+    });
+
     expect(
       readDeclarativeAssetSource(
         declarativeSource({
@@ -151,20 +162,7 @@ describe("readDeclarativeAssetSource", () => {
     ).toEqual({
       ok: false,
       message:
-        'A declarative asset source that uses request.auth also needs "requires".',
-    });
-
-    expect(
-      readDeclarativeAssetSource(
-        declarativeSource({
-          requires: "acme-key",
-          request: { url: "https://api.acme.test/search" },
-        }),
-      ),
-    ).toEqual({
-      ok: false,
-      message:
-        'A declarative asset source that names "requires" also needs request.auth.',
+        'The declarative asset source "acme" may not declare request.auth.',
     });
   });
 
@@ -311,85 +309,6 @@ describe("DeclarativeAssetSourceAdapter.search", () => {
 
     expect(pinned.createPinnedFetch).toHaveBeenCalledWith({ lookup: resolve });
     expect(pinned.fetchImpl).toHaveBeenCalledTimes(2);
-  });
-
-  it("sends a header credential but never puts it in a result", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ total: 1, items: [{ id: "r1", name: "Glass" }] }),
-    ) as unknown as typeof fetch;
-    const source = adapter(
-      declarativeSource({
-        requires: "acme-key",
-        request: {
-          url: "https://api.acme.test/search?q={query}",
-          auth: { kind: "header", name: "x-api-key" },
-        },
-        result: { itemsPath: "/items", id: "/id", name: "/name" },
-      }),
-      fetchImpl,
-    );
-
-    const page = await source.search(
-      "glass",
-      1,
-      context((id) => (id === "acme-key" ? "sekrit-token" : undefined)),
-    );
-
-    const [, init] = vi.mocked(fetchImpl).mock.calls[0] ?? [];
-    expect(new Headers(init?.headers).get("x-api-key")).toBe("sekrit-token");
-    expect(page.results[0]?.sourceUrl).not.toContain("sekrit-token");
-  });
-
-  it("omits a query credential from a result's fallback sourceUrl", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ items: [{ id: "r1", name: "Glass" }] }),
-    ) as unknown as typeof fetch;
-    const source = adapter(
-      declarativeSource({
-        requires: "acme-key",
-        request: {
-          url: "https://api.acme.test/search?q={query}",
-          auth: { kind: "query", name: "key" },
-        },
-        result: { itemsPath: "/items", id: "/id", name: "/name" },
-      }),
-      fetchImpl,
-    );
-
-    const page = await source.search(
-      "glass",
-      1,
-      context(() => "sekrit-token"),
-    );
-
-    expect(page.results[0]?.sourceUrl).toBe(
-      "https://api.acme.test/search?q=glass",
-    );
-  });
-
-  it("redacts a query credential from a request's error", async () => {
-    const secret = "sekrit-token";
-    const fetchImpl = vi.fn(async () => {
-      throw new Error(`failed for key=${secret}`);
-    }) as unknown as typeof fetch;
-    const source = adapter(
-      declarativeSource({
-        requires: "acme-key",
-        request: {
-          url: "https://api.acme.test/search?q={query}",
-          auth: { kind: "query", name: "key" },
-        },
-      }),
-      fetchImpl,
-    );
-
-    await expect(
-      source.search(
-        "glass",
-        1,
-        context(() => secret),
-      ),
-    ).rejects.not.toThrow(secret);
   });
 });
 
