@@ -147,6 +147,20 @@ describe("PluginPanelDevice", () => {
     ]);
   });
 
+  it("ignores a still format it does not know", async () => {
+    const supervisor = fakeSupervisor(() => ({ stillFormat: "gif" }));
+    const device = deviceOf(supervisor, fakeBroker());
+
+    await device.open();
+    await device.present(new Uint8Array([5]));
+
+    expect(device.stillFormat).toBeUndefined();
+    expect(supervisor.calls[1]).toEqual([
+      "panel.present",
+      { format: "jpeg", bytes: new Uint8Array([5]) },
+    ]);
+  });
+
   it("refuses a cadence that is not a positive finite number", async () => {
     const supervisor = fakeSupervisor(() => ({ frameIntervalMs: 0 }));
     const broker = fakeBroker();

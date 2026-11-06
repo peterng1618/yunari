@@ -8,6 +8,12 @@ import type {
 } from "@yunari/extension-api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostLookup } from "../../providers/custom/fetch-source.js";
+import {
+  createDeviceBroker,
+  type DeviceBackend,
+  type DeviceBroker,
+  type DeviceHandle,
+} from "./device-broker.js";
 import { createHostApiDispatcher, type HostApiDispatcher } from "./host-api.js";
 
 const pinned = vi.hoisted(() => {
@@ -77,6 +83,7 @@ function dispatcherOf(options: {
   readonly settingsDir: string;
   readonly fetchImpl?: typeof fetch;
   readonly resolve?: HostLookup;
+  readonly broker?: DeviceBroker;
 }): HostApiDispatcher {
   return createHostApiDispatcher(options);
 }
@@ -428,5 +435,194 @@ describe("host API dispatcher", () => {
     expect(info.mock.calls[0]?.[0]).toBe("hello");
     expect(String(info.mock.calls[1]?.[0]).length).toBeLessThanOrEqual(2_048);
     info.mockRestore();
+  });
+});
+
+function fakeHandle(overrides: Partial<DeviceHandle> = {}): DeviceHandle {
+  return {
+    open: vi.fn(async () => undefined),
+    bulkTransferOut: vi.fn(async () => undefined),
+    controlTransferOut: vi.fn(async () => undefined),
+    interruptTransferIn: vi.fn(async () => new Uint8Array()),
+    hidWrite: vi.fn(async () => undefined),
+    hidRead: vi.fn(async () => new Uint8Array()),
+    serialWrite: vi.fn(async () => undefined),
+    serialRead: vi.fn(async () => new Uint8Array()),
+    serialDrain: vi.fn(async () => new Uint8Array()),
+    close: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
+function fakeBroker(overrides: Partial<DeviceBroker> = {}): DeviceBroker {
+  return {
+    list: vi.fn(async () => []),
+    open: vi.fn(async () => "token"),
+    call: vi.fn(async () => undefined),
+    close: vi.fn(async () => undefined),
+    closeAll: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
+/** A real broker over a fake backend, declaring one USB device. */
+function declaredBroker(): {
+  readonly broker: DeviceBroker;
+  readonly backend: DeviceBackend;
+  readonly handle: DeviceHandle;
+} {
+  const handle = fakeHandle();
+  const backend: DeviceBackend = {
+    list: vi.fn(async () => [
+      {
+        transport: "usb" as const,
+        vendorId: 0x1234,
+        productId: 0x5678,
+        path: "/dev/panel",
+        serial: "s",
+        product: "Acme",
+      },
+    ]),
+    open: vi.fn(async () => handle),
+  };
+  const broker = createDeviceBroker({
+    allowlists: () => [
+      { transport: "usb", vendorId: 0x1234, productId: 0x5678 },
+    ],
+    backend,
+  });
+  return { broker, backend, handle };
+}
+
+describe("device methods", () => {
+  let settingsDir: string;
+
+  beforeEach(async () => {
+    settingsDir = await mkdtemp(path.join(os.tmpdir(), "yunari-device-api-"));
+  });
+
+  afterEach(async () => {
+    await rm(settingsDir, { recursive: true, force: true });
+  });
+
+  it("refuses an undeclared device without opening the backend", async () => {
+    const { broker, backend } = declaredBroker();
+    const api = dispatcherOf({ settingsDir, broker });
+
+    const answer = await api.call({
+      plugin: plugin({ capabilities: ["usb:device"] }),
+      consent,
+      method: "usb.open",
+      params: { transport: "usb", vendorId: 0x9999, productId: 0x0001 },
+    });
+
+    expect(answer).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not declared"),
+    });
+    expect(backend.open).not.toHaveBeenCalled();
+  });
+
+  it("opens a declared device and returns the broker's token", async () => {
+    const { broker, backend } = declaredBroker();
+    const api = dispatcherOf({ settingsDir, broker });
+
+    const answer = await api.call({
+      plugin: plugin({ capabilities: ["usb:device"] }),
+      consent,
+      method: "usb.open",
+      params: { transport: "usb", vendorId: 0x1234, productId: 0x5678 },
+    });
+
+    expect(answer).toEqual(expect.any(String));
+    expect(backend.open).toHaveBeenCalledOnce();
+  });
+
+  it("refuses usb methods without the usb:device capability", async () => {
+    const api = dispatcherOf({ settingsDir, broker: fakeBroker() });
+
+    expect(
+      await api.call({
+        plugin: plugin(),
+        consent,
+        method: "usb.open",
+        params: { transport: "usb", vendorId: 1, productId: 2 },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "missing-capability",
+    });
+  });
+
+  it("refuses serial methods without the serial:device capability", async () => {
+    const api = dispatcherOf({ settingsDir, broker: fakeBroker() });
+
+    expect(
+      await api.call({
+        plugin: plugin({ capabilities: ["usb:device"] }),
+        consent,
+        method: "serial.read",
+        params: { token: "tok", timeoutMs: 100 },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "missing-capability",
+    });
+  });
+
+  it("answers not-supported when no broker is configured", async () => {
+    const api = dispatcherOf({ settingsDir });
+
+    expect(
+      await api.call({
+        plugin: plugin({ capabilities: ["usb:device"] }),
+        consent,
+        method: "usb.open",
+        params: { transport: "usb", vendorId: 1, productId: 2 },
+      }),
+    ).toEqual({ ok: false, reason: "not-supported" });
+  });
+
+  it.each([
+    ["a non-Uint8Array payload", { token: "tok", endpoint: 1, bytes: [1] }],
+    ["a missing token", { endpoint: 1, bytes: new Uint8Array([1]) }],
+    [
+      "an unknown key",
+      { token: "tok", endpoint: 1, bytes: new Uint8Array([1]), extra: true },
+    ],
+  ])("refuses %s as invalid params", async (_label, params) => {
+    const broker = fakeBroker();
+    const api = dispatcherOf({ settingsDir, broker });
+
+    expect(
+      await api.call({
+        plugin: plugin({ capabilities: ["usb:device"] }),
+        consent,
+        method: "usb.bulkTransfer",
+        params,
+      }),
+    ).toEqual({ ok: false, reason: "invalid-params" });
+    expect(broker.call).not.toHaveBeenCalled();
+  });
+
+  it("forwards a transfer under the same method name", async () => {
+    const broker = fakeBroker({ call: vi.fn(async () => undefined) });
+    const api = dispatcherOf({ settingsDir, broker });
+    const bytes = new Uint8Array([7, 8]);
+
+    const answer = await api.call({
+      plugin: plugin({ capabilities: ["usb:device"] }),
+      consent,
+      method: "usb.bulkTransfer",
+      params: { token: "tok", endpoint: 2, bytes },
+    });
+
+    expect(answer).toBeUndefined();
+    expect(broker.call).toHaveBeenCalledWith(
+      "acme/test-plugin",
+      "tok",
+      "usb.bulkTransfer",
+      { token: "tok", endpoint: 2, bytes },
+    );
   });
 });

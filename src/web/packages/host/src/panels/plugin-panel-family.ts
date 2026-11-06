@@ -141,7 +141,8 @@ export function pluginPanelFamily(
       try {
         await device.open();
       } catch (error) {
-        await device.close().catch(() => undefined);
+        // `PluginPanelDevice.open` already closed every broker handle for this
+        // plugin; closing again here would repeat the worker round trip.
         throw error;
       }
 

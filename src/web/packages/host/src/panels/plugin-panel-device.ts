@@ -50,24 +50,17 @@ function readOpenResult(value: unknown): PanelOpenResult {
     );
   }
 
-  const stillFormat = record["stillFormat"];
-  if (
-    stillFormat !== undefined &&
-    stillFormat !== "jpeg" &&
-    stillFormat !== "png"
-  ) {
-    throw new Error(
-      "panel.open stated a still format that is not jpeg or png.",
-    );
-  }
+  // An encoding this host does not know is ignored: the device then receives
+  // JPEG, the one format every family takes.
+  const stated = record["stillFormat"];
+  const stillFormat =
+    stated === "jpeg" || stated === "png" ? stated : undefined;
 
   return {
     ...(frameIntervalMs === undefined
       ? {}
       : { frameIntervalMs: frameIntervalMs as number }),
-    ...(stillFormat === undefined
-      ? {}
-      : { stillFormat: stillFormat as "jpeg" | "png" }),
+    ...(stillFormat === undefined ? {} : { stillFormat }),
   };
 }
 

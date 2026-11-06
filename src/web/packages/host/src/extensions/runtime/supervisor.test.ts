@@ -190,6 +190,40 @@ export async function describe() {
     ]);
   });
 
+  it("carries binary across IPC in both directions", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe(params) {
+  const fromHost = params.bytes;
+  const echoed = await api.call("storage.get", { bytes: fromHost });
+  return {
+    hostToChild: fromHost instanceof Uint8Array,
+    childToHost: echoed.bytes instanceof Uint8Array,
+    bytes: echoed.bytes,
+  };
+}
+`);
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "storage:own"],
+      hostApi: hostApi(async ({ params }) => ({
+        bytes: (params as { bytes: unknown }).bytes,
+      })),
+    });
+
+    await supervisor.start();
+    const answer = await supervisor.request<{
+      hostToChild: boolean;
+      childToHost: boolean;
+      bytes: unknown;
+    }>("describe", { bytes: new Uint8Array([1, 2, 3]) });
+
+    expect(answer.hostToChild).toBe(true);
+    expect(answer.childToHost).toBe(true);
+    expect(answer.bytes).toBeInstanceOf(Uint8Array);
+    expect([...(answer.bytes as Uint8Array)]).toEqual([1, 2, 3]);
+  });
+
   it("refuses plugin calls outside the plugin-callable table", async () => {
     const plugin = await writePlugin(`
 let api;

@@ -270,6 +270,10 @@ export function createPluginSupervisor(
 
     const running = fork(workerEntry, [], {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
+      // Default JSON IPC turns a `Uint8Array` into `{ "0": 1, ... }`, so a
+      // panel frame would reach the host as a plain object and every transfer
+      // would fail its own type check. Advanced serialization keeps binary.
+      serialization: "advanced",
       env: { PATH: process.env.PATH },
       ...(workerEntry.endsWith(".ts")
         ? { execArgv: ["--experimental-strip-types"] }
