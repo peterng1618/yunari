@@ -59,6 +59,14 @@ export type EditorThemeTokens = Readonly<Record<EditorThemeToken, string>>;
 /** The format's own name, in one place: a manifest is the only member that
  *  states which kind a package is. */
 const WIDGET_FORMAT = "yunari-widget-package";
+/** The manifest a widget package is written with, in one place: the reader's
+ *  admitted key set is derived from this object, so the writer cannot emit a
+ *  manifest its own reader refuses. */
+const WIDGET_MANIFEST_BASE = {
+  format: WIDGET_FORMAT,
+  version: 1,
+  widget: WIDGET,
+} as const;
 /**
  * The theme's picture, in a slot of its own beside the manifest and the
  * document. Not `assets/`: a declared asset is one the renderer loads, and a
@@ -368,8 +376,12 @@ export type WidgetPackageResult =
   | { readonly ok: false; readonly message: string };
 
 /** The manifest keys this reader admits; a package naming any other is not one
- *  it can understand well enough to open. */
-const WIDGET_MANIFEST_KEYS = new Set(["format", "version", "widget", "units"]);
+ *  it can understand well enough to open. Derived from the writer's own
+ *  manifest so the two cannot drift. */
+const WIDGET_MANIFEST_KEYS = new Set([
+  ...Object.keys(WIDGET_MANIFEST_BASE),
+  "units",
+]);
 const WIDGET_UNIT_KEYS = new Set(["id", "label", "objectId"]);
 
 type WidgetManifestResult =
@@ -389,9 +401,9 @@ function readWidgetManifest(value: unknown): WidgetManifestResult {
   if (
     !isRecord(value) ||
     Object.keys(value).some((key) => !WIDGET_MANIFEST_KEYS.has(key)) ||
-    value["format"] !== WIDGET_FORMAT ||
-    value["version"] !== 1 ||
-    value["widget"] !== WIDGET
+    value["format"] !== WIDGET_MANIFEST_BASE.format ||
+    value["version"] !== WIDGET_MANIFEST_BASE.version ||
+    value["widget"] !== WIDGET_MANIFEST_BASE.widget
   )
     return fail("Unsupported widget package manifest.");
   const declared = value["units"];
@@ -456,27 +468,40 @@ function referencedAssetIds(value: unknown): Set<string> {
 }
 
 /** The package's own units when authored, otherwise one unit per top-level
- *  object the editor stamped with provenance. */
+ *  object the editor stamped with provenance. Derived ids are made unique:
+ *  two copies of one card share a `widgetId`, and neither may lose its unit. */
 function unitRefs(
   objects: readonly Readonly<Record<string, unknown>>[],
   declared: readonly WidgetPackUnitRef[] | undefined,
 ): readonly WidgetPackUnitRef[] {
   if (declared !== undefined) return declared;
   const refs: WidgetPackUnitRef[] = [];
+  const taken = new Set<string>();
   for (const object of objects) {
     const provenance = object["provenance"];
     if (!isRecord(provenance)) continue;
     const widgetId = provenance["widgetId"];
+    // A blank id names no unit; provenance without one is not a unit at all.
     if (typeof widgetId !== "string" || widgetId.trim() === "") continue;
-    const widgetName = provenance["widgetName"];
+    // A validated top-level scene object always carries an id; without one
+    // there is no object to bind the unit to.
     const objectId = object["id"];
+    if (typeof objectId !== "string") continue;
+    const widgetName = provenance["widgetName"];
+    let id = widgetId;
+    let counter = 2;
+    while (taken.has(id)) {
+      id = `${widgetId}-${counter}`;
+      counter += 1;
+    }
+    taken.add(id);
     refs.push({
-      id: widgetId,
+      id,
       label:
         typeof widgetName === "string" && widgetName.trim() !== ""
           ? widgetName
           : widgetId,
-      objectId: typeof objectId === "string" ? objectId : widgetId,
+      objectId,
     });
   }
   return refs;
@@ -511,6 +536,11 @@ function deriveUnits(
       );
     const ids = subtreeIds(object);
     const assetIds = referencedAssetIds(object);
+    // The unit keeps the package globals, so every face those tokens name
+    // travels with it: a type-token face pointing at a filtered-out declaration
+    // would make the unit document invalid.
+    for (const token of Object.values(document.globals?.typeTokens ?? {}))
+      if (token.face !== undefined) assetIds.add(token.face.assetId);
     const declarations = (document.assets ?? []).filter((asset) =>
       assetIds.has(asset.id),
     );
@@ -519,16 +549,25 @@ function deriveUnits(
       const bytes = files[declaration.path];
       if (bytes !== undefined) assets[declaration.path] = bytes;
     }
+    const bindings = Object.fromEntries(
+      Object.entries(document.bindings ?? {}).filter(([id]) => ids.has(id)),
+    );
     units.push({
       id: ref.id,
       label: ref.label,
       document: {
-        ...document,
+        schemaVersion: document.schemaVersion,
+        fabricVersion: document.fabricVersion,
+        id: document.id,
         scene: { ...document.scene, objects: [object] },
-        bindings: Object.fromEntries(
-          Object.entries(document.bindings ?? {}).filter(([id]) => ids.has(id)),
-        ),
-        assets: declarations,
+        ...(document.metadata === undefined
+          ? {}
+          : { metadata: document.metadata }),
+        ...(document.globals === undefined
+          ? {}
+          : { globals: document.globals }),
+        ...(Object.keys(bindings).length === 0 ? {} : { bindings }),
+        ...(declarations.length === 0 ? {} : { assets: declarations }),
       },
       declarations,
       assets,
@@ -652,13 +691,7 @@ export function writeWidgetPackage(input: {
     ok: true,
     bytes: zipSync(
       {
-        [MANIFEST]: strToU8(
-          JSON.stringify({
-            format: WIDGET_FORMAT,
-            version: 1,
-            widget: WIDGET,
-          }),
-        ),
+        [MANIFEST]: strToU8(JSON.stringify(WIDGET_MANIFEST_BASE)),
         [WIDGET]: strToU8(JSON.stringify(input.document)),
         ...input.assets,
       },

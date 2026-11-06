@@ -76,17 +76,31 @@ function widgetFiles(options: {
     readonly objectId: string;
   }[];
   readonly assets?: readonly Readonly<Record<string, unknown>>[];
+  readonly assetBytes?: Readonly<Record<string, Uint8Array>>;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly globals?: Readonly<Record<string, unknown>>;
+  readonly background?: Readonly<Record<string, unknown>>;
+  readonly bindings?: Readonly<
+    Record<string, readonly Readonly<Record<string, unknown>>[]>
+  >;
 }): Readonly<Record<string, Uint8Array>> {
   const document = {
     ...widget,
     scene: { version: "7.4.0", objects: options.objects },
-    bindings: Object.fromEntries(
-      options.objects.map((object) => [
-        String(object["id"]),
-        [{ id: `${String(object["id"])}-binding`, semanticKey: "cpu.load" }],
-      ]),
-    ),
+    bindings:
+      options.bindings ??
+      Object.fromEntries(
+        options.objects.map((object) => [
+          String(object["id"]),
+          [{ id: `${String(object["id"])}-binding`, semanticKey: "cpu.load" }],
+        ]),
+      ),
     assets: options.assets ?? [],
+    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
+    ...(options.globals === undefined ? {} : { globals: options.globals }),
+    ...(options.background === undefined
+      ? {}
+      : { background: options.background }),
   };
   return {
     "manifest.json": strToU8(
@@ -103,7 +117,7 @@ function widgetFiles(options: {
     ...Object.fromEntries(
       (options.assets ?? []).map((asset) => [
         String(asset["path"]),
-        new Uint8Array([1]),
+        options.assetBytes?.[String(asset["path"])] ?? new Uint8Array([1]),
       ]),
     ),
   };
@@ -241,6 +255,8 @@ describe("widget package", () => {
   });
 
   it("keeps only the asset declarations a unit's subtree references", () => {
+    const usedBytes = new Uint8Array([7, 8, 9]);
+    const unusedBytes = new Uint8Array([4, 5, 6]);
     const result = readWidgetPackageFiles(
       widgetFiles({
         objects: [
@@ -253,6 +269,10 @@ describe("widget package", () => {
           { id: "used", kind: "image", path: "assets/used.png" },
           { id: "unused", kind: "image", path: "assets/unused.png" },
         ],
+        assetBytes: {
+          "assets/used.png": usedBytes,
+          "assets/unused.png": unusedBytes,
+        },
       }),
     );
     assert(result.ok);
@@ -262,5 +282,139 @@ describe("widget package", () => {
     expect(Object.keys(result.units[0]?.assets ?? {})).toEqual([
       "assets/used.png",
     ]);
+    expect(result.units[0]?.assets["assets/used.png"]).toEqual(usedBytes);
+  });
+
+  it("keeps a type-token face the kept globals name", () => {
+    const face = new Uint8Array([9, 9, 9]);
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [groupWithProvenance("a", "Alpha")],
+        globals: {
+          typeTokens: { body: { family: "Inter", face: { assetId: "face" } } },
+        },
+        assets: [
+          {
+            id: "face",
+            kind: "font",
+            path: "assets/face.woff2",
+            family: "Inter",
+            weight: 400,
+            style: "normal",
+            format: "woff2",
+          },
+        ],
+        assetBytes: { "assets/face.woff2": face },
+      }),
+    );
+    assert(result.ok);
+    const unit = result.units[0]!;
+    expect(unit.declarations.map((asset) => asset.id)).toEqual(["face"]);
+    expect(unit.assets["assets/face.woff2"]).toEqual(face);
+    expect(
+      writeWidgetPackage({ document: unit.document, assets: unit.assets }).ok,
+    ).toBe(true);
+  });
+
+  it("drops a media background from the derived unit", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [groupWithProvenance("a", "Alpha")],
+        background: { media: { assetId: "clip", bounds: "theme" } },
+        assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+      }),
+    );
+    assert(result.ok);
+    const unit = result.units[0]!;
+    expect(unit.document).not.toHaveProperty("background");
+    expect(
+      writeWidgetPackage({ document: unit.document, assets: unit.assets }).ok,
+    ).toBe(true);
+  });
+
+  it("derives unique ids for two copies of one card", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          {
+            ...groupWithProvenance("a", "Alpha"),
+            id: "a-1",
+            objects: [{ type: "Rect", id: "a-1-value" }],
+          },
+          {
+            ...groupWithProvenance("a", "Alpha"),
+            id: "a-2",
+            objects: [{ type: "Rect", id: "a-2-value" }],
+          },
+        ],
+      }),
+    );
+    assert(result.ok);
+    expect(result.units.map((unit) => [unit.id, unit.label])).toEqual([
+      ["a", "Alpha"],
+      ["a-2", "Alpha"],
+    ]);
+  });
+
+  it("falls back to the widget id when provenance carries no name", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          {
+            type: "Group",
+            id: "a",
+            objects: [],
+            provenance: { widgetId: "a" },
+          },
+        ],
+      }),
+    );
+    assert(result.ok);
+    expect(result.units[0]?.label).toBe("a");
+  });
+
+  it("keeps the package identity fields on a unit", () => {
+    const metadata = { name: "Pack", version: "1.2.3", themeLanguage: "en" };
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [groupWithProvenance("a", "Alpha")],
+        metadata,
+        globals: widget.globals!,
+      }),
+    );
+    assert(result.ok);
+    const unit = result.units[0]!;
+    expect(unit.document.schemaVersion).toBe(widget.schemaVersion);
+    expect(unit.document.fabricVersion).toBe(widget.fabricVersion);
+    expect(unit.document.id).toBe(widget.id);
+    expect(unit.document.metadata).toEqual(metadata);
+    expect(unit.document.globals).toEqual(widget.globals);
+    expect(result.name).toBe("Pack");
+    expect(result.version).toBe("1.2.3");
+  });
+
+  it("keeps a child's binding and drops a sibling's", () => {
+    const result = readWidgetPackageFiles(
+      widgetFiles({
+        objects: [
+          {
+            type: "Group",
+            id: "a",
+            objects: [{ type: "Rect", id: "child" }],
+            provenance: { widgetId: "a", widgetName: "Alpha" },
+          },
+          groupWithProvenance("b", "Beta"),
+        ],
+        bindings: {
+          a: [{ id: "a-binding", semanticKey: "cpu.load" }],
+          child: [{ id: "child-binding", semanticKey: "cpu.load" }],
+          b: [{ id: "b-binding", semanticKey: "cpu.load" }],
+        },
+      }),
+    );
+    assert(result.ok);
+    expect(
+      Object.keys(result.units[0]?.document.bindings ?? {}).sort(),
+    ).toEqual(["a", "child"]);
   });
 });
