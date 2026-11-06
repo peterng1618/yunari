@@ -6,6 +6,8 @@ import {
   consentFingerprint,
   consentMatches,
   consentRequired,
+  deviceAllowlistOf,
+  deviceIdentity,
   type ExecutionProfile,
   type InstalledExtension,
   type InstalledPlugin,
@@ -56,8 +58,8 @@ export interface ExtensionService {
 /**
  * The authority-bearing contribution identities, in one place: Plan 3 reads
  * them from here rather than spelling a second list. `assetCategories` is
- * display-only and grants nothing; devices are reserved for the hardware
- * phase, so the list stays empty until a manifest can declare one.
+ * display-only and grants nothing; devices are their own list because the
+ * manifest declares them on the family, not as a contribution id.
  */
 function contributionIdentities(
   contributes: PluginContributions,
@@ -93,7 +95,9 @@ function bindingFor(plugin: InstalledPlugin): ConsentBinding {
     execution: plugin.manifest.execution,
     capabilities: plugin.manifest.capabilities,
     contributions: contributionIdentities(plugin.manifest.contributes),
-    devices: [],
+    // The exact devices the manifest declares: adding one to a later version
+    // changes the fingerprint, so the old grant cannot cover it.
+    devices: deviceAllowlistOf(plugin.manifest).map(deviceIdentity),
     hosts: plugin.manifest.networkHosts ?? [],
   };
 }
@@ -114,6 +118,7 @@ function extensionOf(
     execution: plugin.manifest.execution,
     capabilities: plugin.manifest.capabilities,
     contributions: plugin.manifest.contributes,
+    devices: deviceAllowlistOf(plugin.manifest).map(deviceIdentity),
     consent,
     fingerprint,
     ...(plugin.manifest.ui === undefined ? {} : { ui: plugin.manifest.ui }),

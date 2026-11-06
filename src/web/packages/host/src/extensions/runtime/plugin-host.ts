@@ -22,6 +22,7 @@
  * answer and exits with code 1, so a handler that keeps failing cannot serve
  * a stream of requests.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PluginMethod } from "@yunari/extension-api";
@@ -33,6 +34,7 @@ interface HostRequest {
   readonly id: string;
   readonly method: string;
   readonly params: unknown;
+  readonly scope?: string;
 }
 
 interface PluginResultMessage {
@@ -55,7 +57,17 @@ const HANDLERS = new Set([
   "stop",
   "asset.search",
   "asset.bytes",
+  "panel.attached",
+  "panel.open",
+  "panel.present",
+  "panel.command",
+  "panel.close",
 ]);
+
+/** The runner whose request is being answered. A host call the plugin makes
+ *  inside that handler carries the scope back, so the host can close exactly
+ *  that display's devices. Async-local, because two displays may interleave. */
+const runnerScope = new AsyncLocalStorage<string>();
 
 const pending = new Map<string, PendingCall>();
 let allowed: ReadonlySet<string> = new Set();
@@ -85,11 +97,13 @@ function readHostRequest(value: unknown): HostRequest | undefined {
   if (value["type"] !== "host.request") return undefined;
   if (typeof value["id"] !== "string") return undefined;
   if (typeof value["method"] !== "string") return undefined;
+  const scope = value["scope"];
   return {
     type: "host.request",
     id: value["id"],
     method: value["method"],
     params: value["params"],
+    ...(typeof scope === "string" ? { scope } : {}),
   };
 }
 
@@ -98,6 +112,7 @@ function hostCall(method: string, params?: unknown): Promise<unknown> {
     return Promise.reject(new Error("method-not-allowed"));
   }
   const id = `plugin-${++calls}`;
+  const scope = runnerScope.getStore();
   return new Promise((resolveCall, rejectCall) => {
     pending.set(id, { resolve: resolveCall, reject: rejectCall });
     send({
@@ -105,6 +120,7 @@ function hostCall(method: string, params?: unknown): Promise<unknown> {
       id,
       method,
       params,
+      ...(scope === undefined ? {} : { scope }),
     });
   });
 }
@@ -220,7 +236,12 @@ process.on("message", (value: unknown) => {
   }
 
   const request = readHostRequest(value);
-  if (request !== undefined) void handle(request);
+  if (request !== undefined) {
+    const run = (): Promise<void> => handle(request);
+    void (request.scope === undefined
+      ? run()
+      : runnerScope.run(request.scope, run));
+  }
 });
 
 send({ type: "plugin.ready", pluginApi: 1 });

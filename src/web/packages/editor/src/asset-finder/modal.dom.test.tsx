@@ -438,6 +438,7 @@ describe("AssetFinder tabs", () => {
               },
             ],
           },
+          devices: [],
           consent: "not-required",
           fingerprint: "yc1-test",
         } as const,

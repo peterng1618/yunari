@@ -328,6 +328,9 @@ export interface StartPluginSupervisorsOptions {
   readonly workerEntry?: string;
   /** One line per plugin that could not start; may reach the console. */
   readonly onFailure?: (pluginKey: string, reason: string) => void;
+  /** A worker that died after starting. Its devices are this host's to close:
+   *  a crash must not leave native handles open with no one to reach them. */
+  readonly onCrash?: (pluginKey: string) => void;
 }
 
 export interface CreatePluginProvidersOptions
@@ -342,15 +345,16 @@ export interface PluginSupervisors {
 }
 
 /** The one definition of "this plugin needs a forked worker": it contributes
- *  sensor providers or code asset sources, and only a trusted worker runs
- *  code. A plugin contributing both still gets one process. */
+ *  sensor providers, code asset sources or a panel family, and only a trusted
+ *  worker runs code. A plugin contributing several still gets one process. */
 export function needsCodeWorker(plugin: InstalledPlugin): boolean {
   return (
     plugin.manifest.execution === "trusted-worker" &&
     (isProviderPlugin(plugin) ||
       (plugin.manifest.contributes.assetSources ?? []).some(
         isCodeAssetSourceEntry,
-      ))
+      ) ||
+      (plugin.manifest.contributes.panelFamilies?.length ?? 0) > 0)
   );
 }
 
@@ -393,6 +397,7 @@ export async function startPluginSupervisors(
       onCrash: (reason) => {
         crashReported = true;
         options.onFailure?.(plugin.key, reason);
+        options.onCrash?.(plugin.key);
       },
       ...(options.workerEntry === undefined
         ? {}

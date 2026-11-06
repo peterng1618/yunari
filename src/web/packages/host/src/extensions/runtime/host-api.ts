@@ -12,6 +12,7 @@ import {
   type HostLookup,
 } from "../../providers/custom/fetch-source.js";
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
+import type { DeviceBroker } from "./device-broker.js";
 import { guardedFetch } from "./network.js";
 import {
   createScopedStores,
@@ -36,6 +37,9 @@ export interface HostApiCall {
   readonly consent: ConsentRecord;
   readonly method: string;
   readonly params: unknown;
+  /** The runner that caused this call, when the host knows it. Device tokens
+   *  opened under it close together and nothing else. */
+  readonly scope?: string;
 }
 
 export interface HostApiDispatcher {
@@ -46,6 +50,9 @@ export interface HostApiOptions {
   readonly settingsDir: string;
   readonly fetchImpl?: typeof fetch;
   readonly resolve?: HostLookup;
+  /** Present when hardware plugins may reach a device. Absent means every
+   *  device method answers `not-supported`. */
+  readonly broker?: DeviceBroker;
 }
 
 const INVALID = "invalid-params";
@@ -304,6 +311,167 @@ function logCall(params: unknown): unknown {
   return null;
 }
 
+const DEVICE_TRANSPORTS: ReadonlySet<string> = new Set([
+  "usb",
+  "hid",
+  "serial",
+]);
+
+/** A device id is a whole number in the wire's own range. */
+function integerParam(params: Params, key: string, max: number): number {
+  const value = params[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > max
+  ) {
+    throw new InvalidParamsError(
+      `"${key}" must be a whole number between 0 and ${max}`,
+    );
+  }
+  return value;
+}
+
+function bytesParam(params: Params): Uint8Array {
+  const value = params["bytes"];
+  if (!(value instanceof Uint8Array)) {
+    throw new InvalidParamsError('"bytes" must be a Uint8Array');
+  }
+  return value;
+}
+
+function tokenParam(params: Params): string {
+  const value = params["token"];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new InvalidParamsError('"token" must be a non-empty string');
+  }
+  return value;
+}
+
+/** The method-specific half of a transfer call, excluding its token. */
+interface TransferSpec {
+  readonly keys: readonly string[];
+  readonly read: (params: Params) => void;
+}
+
+const TRANSFER_CALLS: Readonly<Record<string, TransferSpec>> = {
+  "usb.bulkTransfer": {
+    keys: ["endpoint", "bytes"],
+    read: (params) => {
+      integerParam(params, "endpoint", 0xff);
+      bytesParam(params);
+    },
+  },
+  "usb.controlTransfer": {
+    keys: ["requestType", "request", "value", "index", "bytes"],
+    read: (params) => {
+      integerParam(params, "requestType", 0xff);
+      integerParam(params, "request", 0xff);
+      integerParam(params, "value", 0xffff);
+      integerParam(params, "index", 0xffff);
+      bytesParam(params);
+    },
+  },
+  "usb.interruptTransfer": {
+    keys: ["endpoint", "length"],
+    read: (params) => {
+      integerParam(params, "endpoint", 0xff);
+      integerParam(params, "length", 0xffff);
+    },
+  },
+  "hid.write": { keys: ["bytes"], read: bytesParam },
+  "hid.read": {
+    keys: ["length"],
+    read: (params) => {
+      integerParam(params, "length", 0xffff);
+    },
+  },
+  "serial.write": { keys: ["bytes"], read: bytesParam },
+  "serial.read": {
+    keys: ["timeoutMs"],
+    read: (params) => {
+      integerParam(params, "timeoutMs", 0x7fffffff);
+    },
+  },
+  "serial.drain": { keys: [], read: () => undefined },
+};
+
+/** Every device call reaches the broker; the broker's refusal is the plugin's
+ *  mistake, so it comes back as a reasoned value rather than a host fault. */
+async function deviceCall(
+  input: HostApiCall,
+  broker: DeviceBroker | undefined,
+): Promise<unknown> {
+  if (broker === undefined) return { ok: false, reason: "not-supported" };
+
+  try {
+    if (input.method === "usb.open") {
+      const read = strictParams(
+        input.params,
+        ["transport", "vendorId", "productId", "path", "interfaceNumber"],
+        ["transport", "vendorId", "productId"],
+      );
+      if (!read.ok) return read;
+
+      const transport = read.value["transport"];
+      if (typeof transport !== "string" || !DEVICE_TRANSPORTS.has(transport)) {
+        throw new InvalidParamsError('"transport" must be usb, hid or serial');
+      }
+      const vendorId = integerParam(read.value, "vendorId", 0xffff);
+      const productId = integerParam(read.value, "productId", 0xffff);
+      const path = read.value["path"];
+      if (path !== undefined && typeof path !== "string") {
+        throw new InvalidParamsError('"path" must be a string');
+      }
+      if (transport === "serial" && path === undefined) {
+        throw new InvalidParamsError('a serial device needs a "path"');
+      }
+      const interfaceNumber =
+        read.value["interfaceNumber"] === undefined
+          ? undefined
+          : integerParam(read.value, "interfaceNumber", 0xff);
+
+      return await broker.open(
+        input.plugin.key,
+        {
+          transport: transport as "usb" | "hid" | "serial",
+          vendorId,
+          productId,
+          ...(path === undefined ? {} : { path }),
+          ...(interfaceNumber === undefined ? {} : { interfaceNumber }),
+        },
+        input.scope,
+      );
+    }
+
+    if (input.method === "usb.close") {
+      const read = strictParams(input.params, ["token"], ["token"]);
+      if (!read.ok) return read;
+      await broker.close(input.plugin.key, tokenParam(read.value));
+      return null;
+    }
+
+    const spec = TRANSFER_CALLS[input.method];
+    if (spec === undefined) return { ok: false, reason: "not-supported" };
+
+    const read = strictParams(
+      input.params,
+      ["token", ...spec.keys],
+      ["token", ...spec.keys],
+    );
+    if (!read.ok) return read;
+
+    const token = tokenParam(read.value);
+    spec.read(read.value);
+    return await broker.call(input.plugin.key, token, input.method, read.value);
+  } catch (error) {
+    if (error instanceof InvalidParamsError) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason };
+  }
+}
+
 function dispatchCall(
   input: HostApiCall,
   stores: ScopedStores,
@@ -338,6 +506,17 @@ function dispatchCall(
       );
     case "log":
       return Promise.resolve(logCall(input.params));
+    case "usb.open":
+    case "usb.close":
+    case "usb.bulkTransfer":
+    case "usb.controlTransfer":
+    case "usb.interruptTransfer":
+    case "hid.read":
+    case "hid.write":
+    case "serial.read":
+    case "serial.write":
+    case "serial.drain":
+      return deviceCall(input, options.broker);
     default:
       return Promise.resolve({ ok: false, reason: "not-supported" });
   }

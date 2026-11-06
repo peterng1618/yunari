@@ -9,7 +9,7 @@ import type {
   PanelVideoSource,
 } from "./panel-device.js";
 import { samePanelVideo } from "./panel-device.js";
-import { familyFor } from "./panel-families.js";
+import type { PanelFamilyRegistry } from "./panel-families.js";
 import type { Rasterizer } from "./panel-raster.js";
 import {
   createRasterBrowser,
@@ -35,6 +35,9 @@ import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
 
 export interface PanelManagerOptions {
   readonly displays: DisplayStore;
+  /** The driver rows this host can open. One registry per server, so a plugin
+   *  row added for the routes is the same row the manager opens. */
+  readonly families: PanelFamilyRegistry;
   /** The page for a panel. `clip` says the device plays the theme's clip
    *  itself, so the page stands on one poster frame instead. `themeId` renders
    *  a theme the display is not assigned, for a preview. */
@@ -259,7 +262,10 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       throw new Error("The panel record names no device.");
     }
 
-    const family = familyFor(hardware.vendorId, hardware.productId);
+    const family = options.families.forDevice(
+      hardware.vendorId,
+      hardware.productId,
+    );
     if (family === undefined) {
       throw new Error(
         `No driver on this host claims ${hex(hardware.vendorId)}:${hex(hardware.productId)}.`,
@@ -321,7 +327,10 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       throw new Error("The panel record names no device.");
     }
 
-    const family = familyFor(hardware.vendorId, hardware.productId);
+    const family = options.families.forDevice(
+      hardware.vendorId,
+      hardware.productId,
+    );
     if (family === undefined) {
       throw new Error(
         `No driver on this host claims ${hex(hardware.vendorId)}:${hex(hardware.productId)}.`,

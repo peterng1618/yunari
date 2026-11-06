@@ -190,6 +190,86 @@ export async function describe() {
     ]);
   });
 
+  it("carries the runner's scope to a host call the plugin makes", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe() {
+  return await api.call("storage.get", { key: "one" });
+}
+`);
+    const scopes: (string | undefined)[] = [];
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "storage:own"],
+      hostApi: hostApi(async ({ scope }) => {
+        scopes.push(scope);
+        return null;
+      }),
+    });
+
+    await supervisor.start();
+    await supervisor.request("describe", {}, "display-1");
+    await supervisor.request("describe", {});
+
+    expect(scopes).toEqual(["display-1", undefined]);
+  });
+
+  it("lets a serial-only plugin call the device lifecycle pair", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe() {
+  return await api.call("usb.open", { transport: "serial", vendorId: 1, productId: 2, path: "COM3" });
+}
+`);
+    const methods: string[] = [];
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "serial:device"],
+      hostApi: hostApi(async ({ method }) => {
+        methods.push(method);
+        return "token";
+      }),
+    });
+
+    await supervisor.start();
+    expect(await supervisor.request("describe", {})).toBe("token");
+    expect(methods).toEqual(["usb.open"]);
+  });
+
+  it("carries binary across IPC in both directions", async () => {
+    const plugin = await writePlugin(`
+let api;
+export function setHostApi(value) { api = value; }
+export async function describe(params) {
+  const fromHost = params.bytes;
+  const echoed = await api.call("storage.get", { bytes: fromHost });
+  return {
+    hostToChild: fromHost instanceof Uint8Array,
+    childToHost: echoed.bytes instanceof Uint8Array,
+    bytes: echoed.bytes,
+  };
+}
+`);
+    const supervisor = supervise(plugin, {
+      granted: ["sensor:provide", "storage:own"],
+      hostApi: hostApi(async ({ params }) => ({
+        bytes: (params as { bytes: unknown }).bytes,
+      })),
+    });
+
+    await supervisor.start();
+    const answer = await supervisor.request<{
+      hostToChild: boolean;
+      childToHost: boolean;
+      bytes: unknown;
+    }>("describe", { bytes: new Uint8Array([1, 2, 3]) });
+
+    expect(answer.hostToChild).toBe(true);
+    expect(answer.childToHost).toBe(true);
+    expect(answer.bytes).toBeInstanceOf(Uint8Array);
+    expect([...(answer.bytes as Uint8Array)]).toEqual([1, 2, 3]);
+  });
+
   it("refuses plugin calls outside the plugin-callable table", async () => {
     const plugin = await writePlugin(`
 let api;

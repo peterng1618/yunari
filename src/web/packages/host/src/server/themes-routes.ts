@@ -4,7 +4,7 @@ import {
   type DisplayShape,
   themeAssetContentType,
 } from "@yunari/renderer-core";
-import { familyFor } from "../panels/panel-families.js";
+import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import type { ActiveThemeStore } from "../settings/active-theme.js";
 import {
   DEFAULT_DISPLAY,
@@ -74,6 +74,7 @@ export interface ThemeRouteDeps {
   readonly themeOrigins: ThemeOriginsStore | undefined;
   readonly thumbnails: ThumbnailStore | undefined;
   readonly themeMedia: ThemeMedia | undefined;
+  readonly panelFamilies: PanelFamilyRegistry;
 }
 
 /**
@@ -95,6 +96,7 @@ export function createThemeRoutes(
     themeOrigins,
     thumbnails,
     themeMedia,
+    panelFamilies,
   } = deps;
   const displays: DisplayStore | undefined = options.displays;
 
@@ -141,7 +143,10 @@ export function createThemeRoutes(
           const family =
             record.panel === undefined
               ? undefined
-              : familyFor(record.panel.vendorId, record.panel.productId);
+              : panelFamilies.forDevice(
+                  record.panel.vendorId,
+                  record.panel.productId,
+                );
 
           return {
             id: record.id,
@@ -618,6 +623,7 @@ export function createThemeRoutes(
         themeStore,
         displays,
         panels,
+        families: panelFamilies,
       });
       return true;
     }

@@ -12,7 +12,7 @@ import {
 } from "./catalogue/routes.js";
 import { DEFAULT_THEMES_DIR } from "./cli/args.js";
 import type { ListenableServer } from "./cli/net.js";
-import { attachedDevices } from "./panels/panel-families.js";
+import { createPanelFamilyRegistry } from "./panels/panel-families.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createPublishedStore } from "./serve/published.js";
 import { createDisplayRoutes } from "./server/displays-routes.js";
@@ -169,7 +169,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const now = options.now ?? (() => Date.now());
   const displays = options.displays;
   const monitors = options.monitors ?? listMonitors;
-  const panelsAttached = options.attachedPanels ?? attachedDevices;
+  /** The one registry this server resolves driver rows from: the routes, the
+   *  preview and the attached list must agree on which family owns a device. */
+  const panelFamilies = options.panelFamilies ?? createPanelFamilyRegistry();
+  const panelsAttached =
+    options.attachedPanels ?? (() => panelFamilies.attached());
   const pairingCodes = options.pairingCodes ?? createPairingCodeStore();
   const extensions = options.extensions;
   const pluginSettings = options.pluginSettings;
@@ -348,6 +352,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     options,
     monitors,
     panelsAttached,
+    panelFamilies,
     server,
   });
   const pairingRoutes = createPairingRoutes({ displays, pairingCodes });
@@ -390,6 +395,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     themeOrigins,
     thumbnails,
     themeMedia,
+    panelFamilies,
   });
   const themeWrites = createThemeWrites({
     options,

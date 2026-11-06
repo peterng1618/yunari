@@ -1,12 +1,19 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CONSENT_SCHEMA_TAG, consentFingerprint } from "@yunari/extension-api";
+import {
+  CONSENT_SCHEMA_TAG,
+  consentFingerprint,
+  deviceAllowlistOf,
+  deviceIdentity,
+  type PluginManifest,
+} from "@yunari/extension-api";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConsentStore } from "./consent-store";
 import { contentHash } from "./content-hash";
 import { createPluginInstaller } from "./install";
+import { createKillListStore } from "./kill-list";
 import { createExtensionService } from "./service";
 
 const MISMATCH = "That consent does not match the installed plugin.";
@@ -73,23 +80,83 @@ function validPluginBytes(): Uint8Array {
   return zipSync(validPluginFiles(), { level: 0 });
 }
 
+/** The authority-bearing contribution identities the fixture declares. */
+function contributionIds(value: PluginManifest): string[] {
+  const identities: string[] = [];
+  const groups = [
+    "sensorProviders",
+    "assetSources",
+    "panelFamilies",
+    "settingsPages",
+    "customSources",
+  ] as const;
+
+  for (const group of groups) {
+    for (const entry of value.contributes[group] ?? []) {
+      const id = (entry as Readonly<Record<string, unknown>>)["id"];
+      if (typeof id === "string") identities.push(`${group}:${id}`);
+    }
+  }
+
+  return identities;
+}
+
 /** The fingerprint the host should compute for the fixture, built here from
  *  the fixture's own parts rather than read back from `list()`. */
 function expectedFingerprint(
   manifestValue: unknown = manifest(),
 ): Promise<string> {
+  const value = manifestValue as PluginManifest;
+
   return consentFingerprint({
     schemaTag: CONSENT_SCHEMA_TAG,
     pluginApi: 1,
-    pluginKey: "local/acme-sensors",
-    version: "1.0.0",
+    pluginKey: `local/${value.id}`,
+    version: value.version,
     contentHash: contentHash(validPluginFiles(manifestValue)),
-    execution: "trusted-worker",
-    capabilities: [],
-    contributions: [],
-    devices: [],
-    hosts: [],
+    execution: value.execution,
+    capabilities: value.capabilities,
+    contributions: contributionIds(value),
+    devices: deviceAllowlistOf(value).map(deviceIdentity),
+    hosts: value.networkHosts ?? [],
   });
+}
+
+/** A trusted worker that drives one USB panel. */
+function hardwareManifest(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Readonly<Record<string, unknown>> {
+  return manifest({
+    id: "acme-panel",
+    name: "Acme Panel",
+    capabilities: ["panel:drive", "usb:device"],
+    contributes: {
+      panelFamilies: [
+        {
+          id: "acme-panel",
+          label: "Acme panel",
+          vendorId: 0x1234,
+          productId: 0x5678,
+          geometry: { width: 480, height: 1920 },
+          support: {
+            maker: "Acme",
+            hardwareRevision: "1",
+            supportedFirmware: ["1.0"],
+            updatedAt: "2026-11-07",
+          },
+          commands: ["brightness"],
+          transports: ["usb"],
+        },
+      ],
+    },
+    ...overrides,
+  });
+}
+
+function hardwarePluginBytes(
+  manifestValue: unknown = hardwareManifest(),
+): Uint8Array {
+  return zipWith({ "main.js": "export default {};" }, manifestValue);
 }
 
 describe("extension service", () => {
@@ -301,5 +368,92 @@ describe("extension service", () => {
 
     await notifying.remove(listed.key);
     expect(onChange).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not load a hardware plugin without hardware consent", async () => {
+    await service.install(hardwarePluginBytes());
+
+    const [listed] = await service.list();
+    if (listed === undefined) throw new Error("no extension listed");
+    expect(listed.devices).toEqual(["usb:1234:5678"]);
+    expect(await service.mayLoad("local/acme-panel")).toBe(false);
+
+    const expected = await expectedFingerprint(hardwareManifest());
+    expect(await service.grantConsent("local/acme-panel", expected)).toEqual({
+      ok: true,
+    });
+    expect(await service.mayLoad("local/acme-panel")).toBe(true);
+  });
+
+  it("holds an update that adds a device id", async () => {
+    await service.install(hardwarePluginBytes());
+    const [before] = await service.list();
+    if (before === undefined) throw new Error("no extension listed");
+    await service.grantConsent(before.key, before.fingerprint);
+    expect(await service.mayLoad(before.key)).toBe(true);
+
+    const widened = hardwareManifest({
+      version: "1.1.0",
+      contributes: {
+        panelFamilies: [
+          {
+            id: "acme-panel",
+            label: "Acme panel",
+            vendorId: 0x1234,
+            productId: 0x5678,
+            geometry: { width: 480, height: 1920 },
+            support: {
+              maker: "Acme",
+              hardwareRevision: "1",
+              supportedFirmware: ["1.0"],
+              updatedAt: "2026-11-07",
+            },
+            commands: ["brightness"],
+            transports: ["usb", "hid"],
+          },
+        ],
+      },
+    });
+    await service.install(hardwarePluginBytes(widened));
+
+    const [after] = await service.list();
+    if (after === undefined) throw new Error("no extension listed");
+    expect(after.devices).toEqual(["usb:1234:5678", "hid:1234:5678"]);
+    expect(after.fingerprint).not.toBe(before.fingerprint);
+    expect(await service.mayLoad(after.key)).toBe(false);
+  });
+
+  it("does not load a killed hardware plugin", async () => {
+    const directory = path.join(dir, "extensions");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "kill-list.json"),
+      JSON.stringify({
+        version: 1,
+        generatedAt: "2026-11-06T00:00:00Z",
+        plugins: { "local/acme-panel": {} },
+      }),
+    );
+    const killed = createExtensionService({
+      installer: createPluginInstaller(directory),
+      consent,
+      now: () => "2026-11-06T00:00:00Z",
+      providerOrder: orderStore(),
+      killList: createKillListStore({
+        directory,
+        origin: undefined,
+        fetch,
+        now: () => "2026-11-06T00:00:00Z",
+      }),
+    });
+
+    await killed.install(hardwarePluginBytes());
+    const [listed] = await killed.list();
+    if (listed === undefined) throw new Error("no extension listed");
+    expect(await killed.grantConsent(listed.key, listed.fingerprint)).toEqual({
+      ok: true,
+    });
+
+    expect(await killed.mayLoad(listed.key)).toBe(false);
   });
 });

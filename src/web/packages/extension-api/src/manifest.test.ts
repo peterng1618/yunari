@@ -45,8 +45,23 @@ const PANEL_FAMILY = {
   productId: 1,
   geometry: { width: 320, height: 320 },
   support: PANEL_SUPPORT,
-  commands: ["init"],
+  commands: ["hello"],
+  transports: ["usb"] as const,
 };
+
+/** A panel manifest that passes admission, so one family change is the only
+ *  difference under test. */
+function panelManifest(
+  family: Readonly<Record<string, unknown>> = {},
+  overrides: Readonly<Record<string, unknown>> = {},
+): Readonly<Record<string, unknown>> {
+  return {
+    ...validManifest(),
+    capabilities: ["panel:drive", "usb:device"],
+    contributes: { panelFamilies: [{ ...PANEL_FAMILY, ...family }] },
+    ...overrides,
+  };
+}
 
 /** A manifest whose own execution needs nothing, so a required profile can
  *  only come from the contributions under test. */
@@ -187,7 +202,8 @@ describe("readPluginManifest", () => {
               productId: 1,
               geometry: { width: 320, height: 320 },
               support: PANEL_SUPPORT,
-              commands: ["init"],
+              commands: ["hello"],
+              transports: ["usb"],
             },
           ],
         },
@@ -297,6 +313,63 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("requires transports on a panel family", () => {
+    const { transports, ...rest } = PANEL_FAMILY;
+    expect(transports).toEqual(["usb"]);
+    expect(
+      readPluginManifest({
+        ...validManifest(),
+        capabilities: ["panel:drive", "usb:device"],
+        contributes: { panelFamilies: [rest] },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "contributes.panelFamilies[0].transports is required.",
+    });
+  });
+
+  it("deduplicates renderModes", () => {
+    const manifest = panelManifest({ renderModes: ["wave", "wave", "static"] });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: true,
+      manifest: {
+        ...manifest,
+        contributes: {
+          panelFamilies: [{ ...PANEL_FAMILY, renderModes: ["wave", "static"] }],
+        },
+      },
+    });
+  });
+
+  it("admits nine identical renderModes as one", () => {
+    const manifest = panelManifest({
+      renderModes: Array.from({ length: 9 }, () => "wave"),
+    });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: true,
+      manifest: {
+        ...manifest,
+        contributes: {
+          panelFamilies: [{ ...PANEL_FAMILY, renderModes: ["wave"] }],
+        },
+      },
+    });
+  });
+
+  it("refuses more than 8 renderModes", () => {
+    expect(
+      readPluginManifest(
+        panelManifest({
+          renderModes: Array.from({ length: 9 }, (_, index) => `mode-${index}`),
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        "contributes.panelFamilies[0].renderModes carries at most 8 entries.",
+    });
+  });
+
   it("refuses a non-positive geometry dimension", () => {
     expect(
       readPluginManifest({
@@ -310,7 +383,8 @@ describe("readPluginManifest", () => {
               productId: 1,
               geometry: { width: 0, height: 320 },
               support: PANEL_SUPPORT,
-              commands: ["init"],
+              commands: ["hello"],
+              transports: ["usb"],
             },
           ],
         },
@@ -318,7 +392,7 @@ describe("readPluginManifest", () => {
     ).toEqual({
       ok: false,
       reason:
-        "contributes.panelFamilies[0].geometry.width must be a positive number.",
+        "contributes.panelFamilies[0].geometry.width must be a whole number between 1 and 16384.",
     });
   });
 });

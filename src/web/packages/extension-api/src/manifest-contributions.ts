@@ -1,14 +1,22 @@
+import {
+  canonicalSerialPath,
+  isSerialPath,
+  PANEL_COMMAND_KINDS,
+  PANEL_TRANSPORTS,
+  type PanelCommand,
+  type PanelTransport,
+} from "./device";
 import type { PluginContributions, SettingsField } from "./manifest";
 import {
   type Check,
   checkKeys,
   isRecord,
   MAX_CONTRIBUTIONS,
+  MAX_ENTRY_PATH,
   MAX_NAME,
   readIdentifier,
   readList,
   readOptionalList,
-  readPositiveNumber,
   readRecord,
   readRelativePath,
   readString,
@@ -39,6 +47,14 @@ const CONTRIBUTION_KEYS = [
   "customSources",
 ] as const;
 
+/** A family's stream choice is a short menu, not a catalogue. */
+const MAX_RENDER_MODES = 8;
+
+/** A panel raster is a bounded size. The largest shipping panels are under
+ *  4K; 16K leaves room and keeps a manifest from asking for an unbounded
+ *  frame buffer the host would have to allocate. */
+const MAX_PANEL_DIMENSION = 16_384;
+
 const SENSOR_PROVIDER_KEYS = ["id", "label"] as const;
 const ASSET_CATEGORY_KEYS = [
   "id",
@@ -56,6 +72,9 @@ const PANEL_FAMILY_KEYS = [
   "support",
   "commands",
   "renderModes",
+  "transports",
+  "serialPath",
+  "interfaceNumber",
 ] as const;
 const PANEL_SUPPORT_KEYS = [
   "maker",
@@ -131,6 +150,21 @@ function readAssetSource(
   return { ok: true, value: { ...entry } };
 }
 
+/** A panel dimension is a whole number of pixels in a bounded range: a
+ *  fractional or unbounded value is not a raster the host can render into. */
+function readPanelDimension(value: unknown, subject: string): Check<number> {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_PANEL_DIMENSION
+  )
+    return refuse(
+      `${subject} must be a whole number between 1 and ${MAX_PANEL_DIMENSION}.`,
+    );
+  return { ok: true, value };
+}
+
 function readGeometry(
   value: unknown,
   subject: string,
@@ -138,9 +172,9 @@ function readGeometry(
   if (!isRecord(value)) return refuse(`${subject} must be an object.`);
   const unknown = checkKeys(value, ["width", "height"], subject);
   if (unknown !== undefined) return refuse(unknown);
-  const width = readPositiveNumber(value["width"], `${subject}.width`);
+  const width = readPanelDimension(value["width"], `${subject}.width`);
   if (!width.ok) return width;
-  const height = readPositiveNumber(value["height"], `${subject}.height`);
+  const height = readPanelDimension(value["height"], `${subject}.height`);
   if (!height.ok) return height;
   return { ok: true, value: { width: width.value, height: height.value } };
 }
@@ -183,6 +217,49 @@ function readPanelSupport(
   };
 }
 
+/** A family reaches its device on one or more of the three buses. The order is
+ *  the declaration's; a repeat is a typo, not a second reach. */
+function readPanelTransports(
+  value: unknown,
+  subject: string,
+): Check<readonly PanelTransport[]> {
+  if (value === undefined) return refuse(`${subject} is required.`);
+  if (!Array.isArray(value)) return refuse(`${subject} must be an array.`);
+  if (value.length === 0)
+    return refuse(`${subject} must declare at least one transport.`);
+  if (value.length > PANEL_TRANSPORTS.size)
+    return refuse(
+      `${subject} carries at most ${PANEL_TRANSPORTS.size} entries.`,
+    );
+  const seen = new Set<string>();
+  const transports: PanelTransport[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (
+      typeof entry !== "string" ||
+      !PANEL_TRANSPORTS.has(entry as PanelTransport)
+    )
+      return refuse(`${subject}[${index}] must be "usb", "hid" or "serial".`);
+    if (seen.has(entry))
+      return refuse(`${subject} lists ${JSON.stringify(entry)} twice.`);
+    seen.add(entry);
+    transports.push(entry as PanelTransport);
+  }
+  return { ok: true, value: transports };
+}
+
+/** A USB interface is one byte on the wire. It is refused when the family
+ *  declares no bus that has interfaces: a serial port has none. */
+function readInterfaceNumber(value: unknown, subject: string): Check<number> {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 0xff
+  )
+    return refuse(`${subject} must be a whole number between 0 and 255.`);
+  return { ok: true, value };
+}
+
 function readPanelFamily(
   entry: unknown,
   subject: string,
@@ -208,6 +285,13 @@ function readPanelFamily(
     MAX_CONTRIBUTIONS,
   );
   if (!commands.ok) return commands;
+  const unknownCommand = commands.value.findIndex(
+    (kind) => !PANEL_COMMAND_KINDS.has(kind as PanelCommand["kind"]),
+  );
+  if (unknownCommand !== -1)
+    return refuse(
+      `${subject}.commands[${unknownCommand}] is not a panel command.`,
+    );
   let renderModes: readonly string[] | undefined;
   if (entry["renderModes"] !== undefined) {
     const read = readStringList(
@@ -216,8 +300,54 @@ function readPanelFamily(
       MAX_CONTRIBUTIONS,
     );
     if (!read.ok) return read;
-    renderModes = read.value;
+    // One stream has one row in a surface's choice; a repeat is not a second
+    // mode. Dedupe first, so a repeated list is measured by its distinct
+    // entries.
+    renderModes = [...new Set(read.value)];
+    if (renderModes.length > MAX_RENDER_MODES)
+      return refuse(
+        `${subject}.renderModes carries at most ${MAX_RENDER_MODES} entries.`,
+      );
   }
+  const transports = readPanelTransports(
+    entry["transports"],
+    `${subject}.transports`,
+  );
+  if (!transports.ok) return transports;
+  let serialPath: string | undefined;
+  if (entry["serialPath"] !== undefined) {
+    const read = readString(
+      entry["serialPath"],
+      `${subject}.serialPath`,
+      MAX_ENTRY_PATH,
+    );
+    if (!read.ok) return read;
+    if (!isSerialPath(read.value))
+      return refuse(
+        `${subject}.serialPath must be a COM port or an absolute POSIX path.`,
+      );
+    serialPath = canonicalSerialPath(read.value);
+  }
+  let interfaceNumber: number | undefined;
+  if (entry["interfaceNumber"] !== undefined) {
+    const read = readInterfaceNumber(
+      entry["interfaceNumber"],
+      `${subject}.interfaceNumber`,
+    );
+    if (!read.ok) return read;
+    if (!transports.value.some((transport) => transport !== "serial"))
+      return refuse(
+        `${subject}.interfaceNumber requires the "usb" or "hid" transport.`,
+      );
+    interfaceNumber = read.value;
+  }
+  const declaresSerial = transports.value.includes("serial");
+  if (declaresSerial && serialPath === undefined)
+    return refuse(
+      `${subject}.serialPath is required for the "serial" transport.`,
+    );
+  if (!declaresSerial && serialPath !== undefined)
+    return refuse(`${subject}.serialPath requires the "serial" transport.`);
   return {
     ok: true,
     value: {
@@ -229,6 +359,9 @@ function readPanelFamily(
       support: support.value,
       commands: commands.value,
       ...(renderModes === undefined ? {} : { renderModes }),
+      transports: transports.value,
+      ...(serialPath === undefined ? {} : { serialPath }),
+      ...(interfaceNumber === undefined ? {} : { interfaceNumber }),
     },
   };
 }

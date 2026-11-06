@@ -13,6 +13,8 @@ export interface InstalledExtension {
   readonly execution: ExecutionProfile;
   readonly capabilities: readonly Capability[];
   readonly contributions: PluginContributions;
+  /** Every device identity the manifest asks the host to reach. */
+  readonly devices: readonly string[];
   readonly consent: ConsentState;
   readonly fingerprint: string;
   /** The frame entry this plugin's UI is served from, when it declares one. */

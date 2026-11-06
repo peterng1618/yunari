@@ -78,6 +78,17 @@ Every other provider and source keeps answering; the failed plugin's keys
 appear as gaps with a reason, never as zero. Restarting the host retries the
 worker.
 
+A hardware plugin's consent fingerprint includes its declared device allowlist
+(`usb:<vid>:<pid>`, `hid:<vid>:<pid>`, `serial:<path>`). Adding a device id
+changes the fingerprint, so the new version installs but does not load until the
+new device set is consented; a hardware plugin with no matching grant stays
+installed but does not load.
+
+The host owns device handles through the broker, and the plugin receives an
+opaque token. A revoked or consent-stale plugin's worker is stopped and its
+handles are closed; its panel-family rows are removed from the live registry,
+and the display disconnects rather than being driven by a stale worker.
+
 A trusted-worker plugin is ordinary Node code with this account's privileges:
 the fork is not an OS sandbox, and the host mediates only what the plugin does
 through the host API. Through that API a plugin never receives a host
@@ -237,8 +248,10 @@ curl -X DELETE https://<worker>/api/admin/kill-list/acme/acme-sensors \
 
 The host fetches `GET /kill-list.json` at startup and after an install, caches
 it under `<settingsDir>/extensions/kill-list.json`, and stops a listed plugin
-from loading even when its consent matches. A failed fetch keeps the cached
-list; with no cache, nothing is killed.
+from loading even when its consent matches. A listed plugin that is already
+running is stopped, its device handles are closed and its panel-family rows are
+removed from the live registry at the next install or host start. A failed fetch
+keeps the cached list; with no cache, nothing is killed.
 
 The host's store install route is `/api/store/install`, loopback and
 same-origin only. It downloads over https from `YUNARI_STORE_ORIGIN` (the

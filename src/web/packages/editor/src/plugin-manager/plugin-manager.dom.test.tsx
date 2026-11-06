@@ -47,6 +47,7 @@ function extension(
     contributions: { sensorProviders: [{ id: "acme", label: "Acme" }] },
     consent: "missing",
     fingerprint: "yc1-abc123",
+    devices: [],
     ...overrides,
   };
 }

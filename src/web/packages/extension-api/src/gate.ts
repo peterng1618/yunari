@@ -35,8 +35,17 @@ export function gateExtensionCall(context: CallContext): GateDecision {
   if (!method.surfaces.includes(context.surface))
     return { ok: false, reason: "wrong-surface" };
   if (context.consent === null) return { ok: false, reason: "no-consent" };
-  const capability = method.capability;
-  if (capability !== null && !context.granted.includes(capability))
-    return { ok: false, reason: "missing-capability", capability };
+  const capabilities = method.capabilities;
+  if (
+    capabilities !== null &&
+    !capabilities.some((capability) => context.granted.includes(capability))
+  )
+    return {
+      ok: false,
+      reason: "missing-capability",
+      // A declared method always names at least one capability; the spread
+      // keeps the denial valid if a hand-built table row does not.
+      ...(capabilities[0] === undefined ? {} : { capability: capabilities[0] }),
+    };
   return { ok: true, method };
 }

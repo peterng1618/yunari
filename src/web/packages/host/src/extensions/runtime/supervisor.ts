@@ -19,6 +19,8 @@ export interface HostApiCall {
   readonly consent: ConsentRecord;
   readonly method: PluginMethod;
   readonly params: unknown;
+  /** The display runner whose request the plugin is answering. */
+  readonly scope?: string;
 }
 
 export interface HostApiDispatcher {
@@ -38,7 +40,9 @@ export interface PluginSupervisorOptions {
 export interface PluginSupervisor {
   readonly alive: boolean;
   start(): Promise<void>;
-  request<T>(method: HostMethod, params: unknown): Promise<T>;
+  /** `scope` names the runner the request belongs to; a host call the plugin
+   *  makes while answering it carries the same scope. */
+  request<T>(method: HostMethod, params: unknown, scope?: string): Promise<T>;
   stop(): Promise<void>;
 }
 
@@ -71,7 +75,8 @@ function allowedPluginMethods(granted: readonly Capability[]): PluginMethod[] {
     const spec = HOST_API_METHODS[name];
     return (
       spec.surfaces.includes("worker") &&
-      (spec.capability === null || held.has(spec.capability))
+      (spec.capabilities === null ||
+        spec.capabilities.some((capability) => held.has(capability)))
     );
   });
 }
@@ -140,6 +145,7 @@ export function createPluginSupervisor(
     method: string,
     params: unknown,
     timeoutMs = requestTimeoutMs,
+    scope?: string,
   ): Promise<T> {
     const running = child;
     if (running === undefined)
@@ -162,7 +168,13 @@ export function createPluginSupervisor(
         timer,
       });
       try {
-        running.send({ type: "host.request", id, method, params });
+        running.send({
+          type: "host.request",
+          id,
+          method,
+          params,
+          ...(scope === undefined ? {} : { scope }),
+        });
       } catch (error) {
         pending.delete(id);
         clearTimeout(timer);
@@ -196,6 +208,7 @@ export function createPluginSupervisor(
     id: string,
     method: PluginMethod,
     params: unknown,
+    scope: string | undefined,
   ): Promise<void> {
     try {
       const value = await options.hostApi.call({
@@ -203,6 +216,7 @@ export function createPluginSupervisor(
         consent: options.consent,
         method,
         params,
+        ...(scope === undefined ? {} : { scope }),
       });
       sendTo(
         running,
@@ -245,7 +259,13 @@ export function createPluginSupervisor(
     }
 
     if (message.type === "plugin.request") {
-      void forward(running, message.id, message.method, message.params);
+      void forward(
+        running,
+        message.id,
+        message.method,
+        message.params,
+        message.scope,
+      );
     }
   }
 
@@ -270,6 +290,10 @@ export function createPluginSupervisor(
 
     const running = fork(workerEntry, [], {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
+      // Default JSON IPC turns a `Uint8Array` into `{ "0": 1, ... }`, so a
+      // panel frame would reach the host as a plain object and every transfer
+      // would fail its own type check. Advanced serialization keeps binary.
+      serialization: "advanced",
       env: { PATH: process.env.PATH },
       ...(workerEntry.endsWith(".ts")
         ? { execArgv: ["--experimental-strip-types"] }
@@ -330,10 +354,14 @@ export function createPluginSupervisor(
     alive = true;
   }
 
-  function request<T>(method: HostMethod, params: unknown): Promise<T> {
+  function request<T>(
+    method: HostMethod,
+    params: unknown,
+    scope?: string,
+  ): Promise<T> {
     if (!alive)
       return Promise.reject(new Error("Plugin supervisor is not running."));
-    return sendRequest<T>(method, params);
+    return sendRequest<T>(method, params, requestTimeoutMs, scope);
   }
 
   async function stop(): Promise<void> {

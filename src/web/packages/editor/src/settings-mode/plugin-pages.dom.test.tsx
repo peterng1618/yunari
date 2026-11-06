@@ -54,6 +54,7 @@ function extension(
     contributions: { settingsPages: [page] },
     consent: "not-required",
     fingerprint: "yc1-abc123",
+    devices: [],
   };
 }
 

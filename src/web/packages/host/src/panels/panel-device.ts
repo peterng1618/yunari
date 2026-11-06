@@ -6,6 +6,7 @@
  * module exporting its own rows; nothing above changes.
  */
 
+import type { PanelCommand } from "@yunari/extension-api";
 import type {
   BackgroundMediaComposition,
   DisplayRenderMode,
@@ -54,22 +55,9 @@ export interface PanelHint {
   readonly reason?: string;
 }
 
-/** A command a panel's control channel accepts. */
-export type PanelControlCommand =
-  | { readonly kind: "brightness"; readonly level: number }
-  | { readonly kind: "screen"; readonly on: boolean }
-  | {
-      readonly kind: "panel-settings";
-      /** What the panel shows when it powers on: 0 default, 1 image, 2 video. */
-      readonly startMode: 0 | 1 | 2;
-      /** One byte; the adapter sends the image upside down when true. */
-      readonly flip: boolean;
-      /** Whole steps: 0 is no sleep, 1..10 are the firmware's own. */
-      readonly sleepDelay: number;
-    }
-  | { readonly kind: "restart" }
-  | { readonly kind: "status" }
-  | { readonly kind: "hello" };
+/** A command a panel's control channel accepts. The manifest declares the same
+ *  union, so admission and the driver cannot disagree on the vocabulary. */
+export type PanelControlCommand = PanelCommand;
 
 /**
  * What a panel beyond its picture can do, when it can do more.
@@ -181,7 +169,7 @@ export interface PanelDevice {
    * encoding is what its own decoder takes: a panel that decodes the still to
    * raw pixels pays JPEG artifacts for nothing.
    */
-  readonly stillFormat?: "jpeg" | "png";
+  readonly stillFormat?: "jpeg" | "png" | undefined;
   /**
    * How often the runner should ask this device for a frame, when it states a
    * rate.
@@ -192,11 +180,11 @@ export interface PanelDevice {
    * A tick that finds the previous capture still running is skipped, so this is
    * a target the pipeline can fall short of, not a promise.
    */
-  readonly frameIntervalMs?: number;
+  readonly frameIntervalMs?: number | undefined;
   /** Present when the device accepts commands beyond the picture. */
-  readonly controls?: PanelControls;
+  readonly controls?: PanelControls | undefined;
   /** Present when the device takes video as well as stills. */
-  readonly video?: PanelVideo;
+  readonly video?: PanelVideo | undefined;
   close(): Promise<void>;
 }
 
