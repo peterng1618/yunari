@@ -165,6 +165,25 @@ describe("widget package", () => {
     });
   });
 
+  it("refuses to write a declaration with no SHA-256 digest", () => {
+    // The reader refuses such a package, so the writer must not produce one:
+    // a theme may declare an asset without a digest, and exporting a selection
+    // from such a theme would be a package its own importer rejects.
+    const undigested: WidgetDocument = {
+      ...widget,
+      assets: [{ id: "photo", kind: "image", path: "assets/photo.png" }],
+    };
+    expect(
+      writeWidgetPackage({
+        document: undigested,
+        assets: { "assets/photo.png": photo },
+      }),
+    ).toEqual({
+      ok: false,
+      message: "Package asset assets/photo.png declares no SHA-256 digest.",
+    });
+  });
+
   it("refuses an archive that is not a widget package", () => {
     const themeManifest = zipSync({
       "manifest.json": strToU8(

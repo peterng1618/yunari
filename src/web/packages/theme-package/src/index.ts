@@ -588,6 +588,20 @@ function deriveUnits(
 }
 
 /**
+ * The first declaration carrying no digest, or `undefined`.
+ *
+ * A digest is the package's proof that the bytes are the ones it declares. The
+ * reader refuses one it cannot verify, and the writer refuses to produce one:
+ * a theme may declare an asset without a digest, so an export taken from such a
+ * theme would otherwise be a package its own importer rejects.
+ */
+function undigestedAsset(
+  assets: readonly AssetReference[] | undefined,
+): AssetReference | undefined {
+  return assets?.find((asset) => asset.sha256 === undefined);
+}
+
+/**
  * Reads a widget package from its unpacked member map. The archive gate lives
  * in `readWidgetPackage`; this owner decides the manifest, the document, the
  * asset declaration and every unit the package offers.
@@ -632,9 +646,7 @@ export function readWidgetPackageFiles(
   // A digest is the package's proof that the bytes are the ones it declares.
   // Insertion verifies it, so a declaration without one would install, list,
   // and only then fail when an author tried to use the unit.
-  const undigested = validation.envelope.assets?.find(
-    (asset) => asset.sha256 === undefined,
-  );
+  const undigested = undigestedAsset(validation.envelope.assets);
   if (undigested !== undefined)
     return fail(`Package asset ${undigested.path} declares no SHA-256 digest.`);
   const paths = new Set(
@@ -703,6 +715,12 @@ export function writeWidgetPackage(input: {
     return {
       ok: false,
       message: validation.issues[0]?.message ?? "Invalid widget.",
+    };
+  const undigested = undigestedAsset(validation.envelope.assets);
+  if (undigested !== undefined)
+    return {
+      ok: false,
+      message: `Package asset ${undigested.path} declares no SHA-256 digest.`,
     };
   const assetsCheck = checkDeclaredAssets(validation.envelope, input.assets);
   if (!assetsCheck.ok) return assetsCheck;
