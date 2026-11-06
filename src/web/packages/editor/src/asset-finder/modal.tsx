@@ -8,7 +8,7 @@ import {
   type PresetKind,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { finderTabGlyph, Glyph } from "../editor-shell/icons.js";
 import { VideoTrimModal } from "../panes/assets/video-trim-modal.js";
 import { uiCopy } from "../ui-copy.js";
@@ -109,6 +109,9 @@ export function AssetFinder({
   /** The categories the installed extensions declare. A host that cannot list
    *  extensions leaves this empty, so the finder keeps its built-in tabs. */
   const [declared, setDeclared] = useState<readonly DeclarativeCategory[]>([]);
+  /** The declared ids, readable from an effect callback that may have started
+   *  before the extension listing arrived. */
+  const declaredIdsRef = useRef<ReadonlySet<string>>(new Set());
   const [listing, setListing] = useState<"loading" | "ok" | "failed">(
     "loading",
   );
@@ -127,12 +130,13 @@ export function AssetFinder({
   const [previewing, setPreviewing] = useState<PreviewTarget | undefined>();
   const [runningAsset, setRunningAsset] = useState<string | undefined>();
 
-  /** A category exists when the registry lists one, or when the session offers
-   *  the writes a pane needs. */
+  /** A category exists when an extension declares it, the registry lists one,
+   *  or the session offers the writes a pane needs. */
   const present = (
     category: ListingCategory,
     listing: readonly AssetSourceListing[],
   ): boolean =>
+    declaredIdsRef.current.has(category) ||
     listing.some((source) => source.category === category) ||
     (category === "font" && font !== undefined) ||
     (category === "local" && wallpaper !== undefined);
@@ -141,39 +145,56 @@ export function AssetFinder({
     if (!open) return;
 
     let live = true;
-    // The sources decide the dialog; the extensions only add tabs. A host that
-    // cannot list extensions is not a failed listing.
-    void Promise.all([listSources(client), listExtensions(client)]).then(
-      ([next, extensions]) => {
-        if (!live) return;
-        setDeclared(
-          extensions.ok ? declarativeCategories(extensions.extensions) : [],
-        );
-        // A host that cannot be reached is a sentence, not an empty dialog: a
-        // build without the asset routes and an absent host read the same here,
-        // and both mean the finder cannot work.
-        if (!next.ok) {
-          setListing("failed");
-          setSources([]);
-          return;
+    // The sources decide the dialog and are the only answer that can fail it;
+    // the extension listing only adds tabs, so it never gates the finder and a
+    // refused or slow extensions route leaves the built-in categories drawn.
+    void listSources(client).then((next) => {
+      if (!live) return;
+      // A host that cannot be reached is a sentence, not an empty dialog: a
+      // build without the asset routes and an absent host read the same here,
+      // and both mean the finder cannot work.
+      if (!next.ok) {
+        setListing("failed");
+        setSources([]);
+        return;
+      }
+      setListing("ok");
+      setSources(next.sources);
+      const listed = next.sources;
+      setActive((current) => {
+        // A caller that names a category wins over the last one: the font
+        // field opens Fonts every time, not only the first time.
+        if (initialCategory !== undefined && present(initialCategory, listed)) {
+          return initialCategory;
         }
-        setListing("ok");
-        setSources(next.sources);
-        const listed = next.sources;
-        setActive((current) => {
-          // A caller that names a category wins over the last one: the font
-          // field opens Fonts every time, not only the first time.
-          if (
-            initialCategory !== undefined &&
-            present(initialCategory, listed)
-          ) {
-            return initialCategory;
-          }
-          if (current !== undefined && present(current, listed)) return current;
-          return listed[0]?.category ?? (font !== undefined ? "font" : "local");
-        });
-      },
-    );
+        if (current !== undefined && present(current, listed)) return current;
+        return listed[0]?.category ?? (font !== undefined ? "font" : "local");
+      });
+    });
+
+    void listExtensions(client)
+      .then((extensions) => {
+        if (!live) return;
+        const categories = extensions.ok
+          ? declarativeCategories(extensions.extensions)
+          : [];
+        declaredIdsRef.current = new Set(
+          categories.map((category) => category.id),
+        );
+        setDeclared(categories);
+        // The caller's named tab may be one only an extension declares, and
+        // the sources answer may already have picked another.
+        if (
+          initialCategory !== undefined &&
+          declaredIdsRef.current.has(initialCategory)
+        ) {
+          setActive(initialCategory);
+        }
+      })
+      .catch(() => {
+        if (live) setDeclared([]);
+      });
+
     return () => {
       live = false;
     };
@@ -194,6 +215,9 @@ export function AssetFinder({
   /** A declared category is a tab even before a source serves it: the
    *  extension registered the place, and its grid says it has nothing yet. */
   const declaredIds = new Set(declared.map((category) => category.id));
+  const declaredLabels = new Map(
+    declared.map((category) => [category.id, category.label]),
+  );
   const categories = categoryTabs(declared, sources).filter(
     (category) => present(category, sources) || declaredIds.has(category),
   );
@@ -445,7 +469,7 @@ export function AssetFinder({
         className="editor-shell-dialog--finder"
         tabs={categories.map((category) => ({
           id: category,
-          label: categoryLabel(category),
+          label: declaredLabels.get(category) ?? categoryLabel(category),
           icon: <Glyph icon={finderTabGlyph(category)} size={13} />,
         }))}
         active={active}

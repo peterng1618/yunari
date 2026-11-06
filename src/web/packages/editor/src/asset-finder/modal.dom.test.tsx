@@ -417,6 +417,40 @@ describe("AssetFinder tabs", () => {
     }
   });
 
+  it("draws a declared category's own label and opens on it when asked", async () => {
+    listExtensions.mockResolvedValue({
+      ok: true,
+      extensions: [
+        {
+          key: "local/acme",
+          name: "Acme",
+          version: "1.0.0",
+          execution: "declarative",
+          capabilities: ["asset:provide"],
+          contributions: {
+            assetCategories: [
+              {
+                id: "brand",
+                label: "Brand assets",
+                icon: "Shapes",
+                resultKind: "logo",
+                body: "grid",
+              },
+            ],
+          },
+          consent: "not-required",
+          fingerprint: "yc1-test",
+        } as const,
+      ],
+    });
+
+    await render([lucide], { initialCategory: "brand" });
+    await settle();
+
+    expect(tab("brand").textContent).toContain("Brand assets");
+    expect(tab("brand").getAttribute("aria-selected")).toBe("true");
+  });
+
   it("opens on the category a caller asked for", async () => {
     // The font field's button opens the finder on Fonts, so the modal honours
     // `initialCategory` over the listing's own first entry.

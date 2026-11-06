@@ -1,4 +1,7 @@
-import { BUILTIN_LISTING_CATEGORIES } from "@yunari/renderer-core";
+import {
+  BUILTIN_LISTING_CATEGORIES,
+  type DeclarativeCategory,
+} from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import { uiCopy } from "../ui-copy.js";
 import {
@@ -8,6 +11,10 @@ import {
   categoryTabs,
 } from "./finder-model.js";
 
+function declared(id: string): DeclarativeCategory {
+  return { id, label: id, icon: "Shapes", resultKind: id, body: "grid" };
+}
+
 describe("the asset finder's tab order", () => {
   it("is alphabetical by the word each tab shows", () => {
     const labels = CATEGORY_ORDER.map((category) => categoryLabel(category));
@@ -15,20 +22,33 @@ describe("the asset finder's tab order", () => {
   });
 
   it("keeps built-in order and appends an unknown category", () => {
-    expect(categoryTabs({ category: "brand", label: "Brand" }, [])).toEqual([
-      ...BUILTIN_LISTING_CATEGORIES,
-      "brand",
-    ]);
+    expect(
+      categoryTabs(
+        [
+          {
+            id: "brand",
+            label: "Brand",
+            icon: "Shapes",
+            resultKind: "logo",
+            body: "grid",
+          },
+        ],
+        [],
+      ),
+    ).toEqual([...BUILTIN_LISTING_CATEGORIES, "brand"]);
   });
 
   it("sorts declared ids that are not built-in", () => {
     expect(
-      categoryTabs([{ id: "logo" }, { id: "brand" }], [{ category: "stock" }]),
+      categoryTabs(
+        [declared("logo"), declared("brand")],
+        [{ category: "stock" }],
+      ),
     ).toEqual([...BUILTIN_LISTING_CATEGORIES, "brand", "logo", "stock"]);
   });
 
   it("does not repeat a built-in category a listing names", () => {
-    expect(categoryTabs([{ id: "font" }], [{ category: "font" }])).toEqual([
+    expect(categoryTabs([declared("font")], [{ category: "font" }])).toEqual([
       ...BUILTIN_LISTING_CATEGORIES,
     ]);
   });

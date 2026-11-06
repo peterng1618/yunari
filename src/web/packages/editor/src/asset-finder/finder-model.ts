@@ -3,6 +3,7 @@ import {
   type AssetSourceListing,
   BUILTIN_LISTING_CATEGORIES,
   type BuiltinListingCategory,
+  type DeclarativeCategory,
   type ListingCategory,
   type PresetKind,
 } from "@yunari/renderer-core";
@@ -24,27 +25,20 @@ export type KindFilter = "all" | PresetKind;
 export const CATEGORY_ORDER: readonly ListingCategory[] =
   BUILTIN_LISTING_CATEGORIES;
 
-/** A category declaration, or the source listing entry naming one. */
-type CategoryRef =
-  | { readonly id: string }
-  | { readonly category: ListingCategory; readonly label?: string };
-
 /**
  * The open tab list: every built-in category in its own order, then the ids
  * this build does not name — declared by a plugin or listed by a source —
  * sorted. A built-in id keeps its place however it was reached.
  */
 export function categoryTabs(
-  declared: CategoryRef | readonly CategoryRef[],
+  declared: readonly DeclarativeCategory[],
   listing: readonly { readonly category: ListingCategory }[],
 ): readonly ListingCategory[] {
   const builtin = new Set<string>(BUILTIN_LISTING_CATEGORIES);
   const appendix = new Set<string>();
 
-  const declaredList = Array.isArray(declared) ? declared : [declared];
-  for (const entry of declaredList) {
-    const id = "id" in entry ? entry.id : entry.category;
-    if (!builtin.has(id)) appendix.add(id);
+  for (const entry of declared) {
+    if (!builtin.has(entry.id)) appendix.add(entry.id);
   }
   for (const source of listing) {
     if (!builtin.has(source.category)) appendix.add(source.category);
