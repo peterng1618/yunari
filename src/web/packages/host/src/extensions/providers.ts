@@ -351,7 +351,7 @@ export function needsCodeWorker(plugin: InstalledPlugin): boolean {
       (plugin.manifest.contributes.assetSources ?? []).some(
         isCodeAssetSourceEntry,
       ) ||
-      plugin.manifest.contributes.panelFamilies !== undefined)
+      (plugin.manifest.contributes.panelFamilies?.length ?? 0) > 0)
   );
 }
 

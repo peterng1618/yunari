@@ -201,12 +201,28 @@ describe("fake plugin panel family", () => {
     expect(backend.transfers[0]?.bytes).toEqual(FAKE_JPEG);
     expect(pluginFamily.geometry).toEqual({ width: 480, height: 1920 });
 
+    // The host sends the plugin a real raster and nothing else: no handle and
+    // no host object travels over the worker boundary.
+    const present = supervisor.requests.find(
+      (request) => request.method === "panel.present",
+    );
+    if (present === undefined) throw new Error("no panel.present request");
+    const params = present.params as {
+      readonly format: string;
+      readonly bytes: unknown;
+    };
+    expect(params.format).toBe("jpeg");
+    expect(params.bytes).toBeInstanceOf(Uint8Array);
+    expect(params.bytes).toEqual(FAKE_JPEG);
+
+    for (const request of supervisor.requests) {
+      expect(() => structuredClone(request.params)).not.toThrow();
+    }
+
     // The plugin's side holds the broker's opaque token, not a device handle.
     expect(typeof supervisor.token).toBe("string");
+    expect(supervisor.token).not.toBe("");
     expect(supervisor.token).not.toBe(backend.opened[0]);
-    expect(JSON.stringify(supervisor.requests)).not.toContain(
-      "bulkTransferOut",
-    );
 
     await device.close();
   });

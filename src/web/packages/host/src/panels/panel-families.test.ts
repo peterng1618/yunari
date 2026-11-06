@@ -161,6 +161,83 @@ describe("PanelFamilyRegistry", () => {
     ).toHaveLength(1);
   });
 
+  it("removes a revoked plugin's row from every surface and keeps the built-ins", async () => {
+    const builtinHint: PanelHint = {
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      serial: "builtin",
+      label: "Built-in panel",
+    };
+    const pluginHint: PanelHint = {
+      vendorId: 0x1234,
+      productId: 0x5678,
+      serial: "revoked",
+      label: "Plugin panel",
+    };
+    // A stand-in built-in row: the real ones enumerate hardware in `attached`.
+    const builtin = pluginFamily({
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      id: "builtin",
+      attached: async () => [builtinHint],
+    });
+    const plugin = pluginFamily({
+      vendorId: 0x1234,
+      productId: 0x5678,
+      id: "plugin",
+      attached: async () => [pluginHint],
+    });
+    const registry = new PanelFamilyRegistry([builtin]).withBuiltinsFirst([
+      plugin,
+    ]);
+
+    expect(registry.all()).toContain(plugin);
+    expect(registry.forDevice(0x1234, 0x5678)).toBe(plugin);
+    expect(await registry.attached()).toContainEqual(pluginHint);
+
+    registry.setPlugins([]);
+
+    expect(registry.all()).not.toContain(plugin);
+    expect(registry.forDevice(0x1234, 0x5678)).toBeUndefined();
+    expect(await registry.attached()).not.toContainEqual(pluginHint);
+    // The built-in row survives the plugin's removal.
+    expect(registry.all()).toContain(builtin);
+    expect(registry.forDevice(0x1cbe, 0xa092)).toBe(builtin);
+    expect(await registry.attached()).toContainEqual(builtinHint);
+  });
+
+  it("drops a shadowing plugin row set after the fact", () => {
+    const registry = createPanelFamilyRegistry();
+    const shadow = pluginFamily({
+      vendorId: 0x1cbe,
+      productId: 0xa092,
+      id: "shadow",
+    });
+    const first = pluginFamily({
+      vendorId: 0x1234,
+      productId: 0x5678,
+      id: "first",
+    });
+    const second = pluginFamily({
+      vendorId: 0x1234,
+      productId: 0x5678,
+      id: "second",
+    });
+
+    registry.setPlugins([shadow, first, second]);
+
+    expect(registry.forDevice(0x1cbe, 0xa092)?.id).toBe("lianli-9-2");
+    expect(registry.forDevice(0x1234, 0x5678)?.id).toBe("first");
+    expect(registry.all().some((family) => family.id === "shadow")).toBe(false);
+    expect(
+      registry
+        .all()
+        .filter(
+          (family) => family.vendorId === 0x1234 && family.productId === 0x5678,
+        ),
+    ).toHaveLength(1);
+  });
+
   it("reaches a plugin-only family through forDevice", () => {
     const registry = createPanelFamilyRegistry([
       pluginFamily({ vendorId: 0x1234, productId: 0x5678, id: "plugin" }),

@@ -477,6 +477,12 @@ describe("needsCodeWorker", () => {
   it("does not need a worker for a plugin with no code contribution", () => {
     expect(needsCodeWorker(plugin({ contributes: {} }))).toBe(false);
   });
+
+  it("does not need a worker for an empty panel family list", () => {
+    expect(
+      needsCodeWorker(plugin({ contributes: { panelFamilies: [] } })),
+    ).toBe(false);
+  });
 });
 
 describe("orderProviders", () => {

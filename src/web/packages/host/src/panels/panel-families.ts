@@ -50,26 +50,59 @@ export interface PanelFamilyContribution {
 /**
  * The families this host can drive, built-in rows first.
  *
+ * Built-ins and plugin rows are kept apart so a revoked plugin's rows can be
+ * removed without rebuilding the registry: every surface reads the current
+ * rows, so a removed family disappears from all of them at once.
+ *
  * `forDevice` is the only lookup: a second path to the same answer is how two
  * surfaces come to disagree about which driver owns a pair of USB ids.
  */
 export class PanelFamilyRegistry {
-  readonly #families: readonly PanelFamily[];
+  readonly #builtins: readonly PanelFamily[];
+  #plugins: readonly PanelFamily[];
 
-  constructor(families: readonly PanelFamily[]) {
-    this.#families = families;
+  constructor(
+    families: readonly PanelFamily[],
+    plugins: readonly PanelFamily[] = [],
+  ) {
+    this.#builtins = families;
+    this.#plugins = this.#accepted(plugins);
   }
 
   all(): readonly PanelFamily[] {
-    return this.#families;
+    return [...this.#builtins, ...this.#plugins];
   }
 
   /** The family claiming a pair of USB ids, if any. */
   forDevice(vendorId: number, productId: number): PanelFamily | undefined {
-    return this.#families.find(
+    return this.all().find(
       (family) =>
         family.vendorId === vendorId && family.productId === productId,
     );
+  }
+
+  /** Replaces the plugin rows. A row shadowing a built-in or an earlier plugin
+   *  row is dropped by the same rule the initial build uses. */
+  setPlugins(plugins: readonly PanelFamily[]): void {
+    this.#plugins = this.#accepted(plugins);
+  }
+
+  /** The plugin rows that do not shadow a built-in or an earlier plugin row. */
+  #accepted(plugins: readonly PanelFamily[]): readonly PanelFamily[] {
+    const seen = new Set(
+      this.#builtins.map((family) => `${family.vendorId}:${family.productId}`),
+    );
+    const accepted: PanelFamily[] = [];
+
+    for (const plugin of plugins) {
+      const key = `${plugin.vendorId}:${plugin.productId}`;
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      accepted.push(plugin);
+    }
+
+    return accepted;
   }
 
   /**
@@ -87,7 +120,7 @@ export class PanelFamilyRegistry {
     const seen = new Set<string>();
     const hints: PanelHint[] = [];
 
-    for (const family of this.#families) {
+    for (const family of this.all()) {
       let found: readonly PanelHint[];
 
       try {
@@ -119,20 +152,7 @@ export class PanelFamilyRegistry {
    * an earlier one that claimed the same pair.
    */
   withBuiltinsFirst(plugins: readonly PanelFamily[]): PanelFamilyRegistry {
-    const seen = new Set(
-      this.#families.map((family) => `${family.vendorId}:${family.productId}`),
-    );
-    const accepted: PanelFamily[] = [];
-
-    for (const plugin of plugins) {
-      const key = `${plugin.vendorId}:${plugin.productId}`;
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      accepted.push(plugin);
-    }
-
-    return new PanelFamilyRegistry([...this.#families, ...accepted]);
+    return new PanelFamilyRegistry(this.#builtins, plugins);
   }
 }
 

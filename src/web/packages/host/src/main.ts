@@ -308,6 +308,13 @@ export async function run(argv: readonly string[]): Promise<number> {
     backend: createNativeDeviceBackend(),
   });
 
+  // Plugin rows tagged with the key that owns them, so a revoked plugin's
+  // families can be removed without touching the built-in rows.
+  const pluginPanelFamilies: {
+    readonly pluginKey: string;
+    readonly family: PanelFamily;
+  }[] = [];
+
   recheckPluginSupervisors = async () => {
     const running = pluginSupervisors;
     if (running === undefined) return;
@@ -327,6 +334,18 @@ export async function run(argv: readonly string[]): Promise<number> {
         // One worker that will not stop must not strand the others.
       }
       (running.supervisors as Map<string, PluginSupervisor>).delete(key);
+      // A revoked plugin's devices and panel rows go with its worker: a
+      // surface must not offer a panel the host will refuse to drive.
+      deviceAllowlists.delete(key);
+
+      const remaining = pluginPanelFamilies.filter(
+        (row) => row.pluginKey !== key,
+      );
+      if (remaining.length !== pluginPanelFamilies.length) {
+        pluginPanelFamilies.splice(0, pluginPanelFamilies.length, ...remaining);
+        panelFamilies.setPlugins(pluginPanelFamilies.map((row) => row.family));
+      }
+
       await deviceBroker.closeAll(key);
     }
   };
@@ -352,7 +371,6 @@ export async function run(argv: readonly string[]): Promise<number> {
 
   // One panel family per manifest entry whose plugin got a worker. A command
   // this build does not know is dropped with a line, not guessed at.
-  const pluginPanelFamilies: PanelFamily[] = [];
   for (const plugin of installedPlugins) {
     const supervisor = runningSupervisors.supervisors.get(plugin.key);
     if (supervisor === undefined) continue;
@@ -382,14 +400,15 @@ export async function run(argv: readonly string[]): Promise<number> {
           : { renderModes: entry.renderModes }),
       };
 
-      pluginPanelFamilies.push(
-        pluginPanelFamily({
+      pluginPanelFamilies.push({
+        pluginKey: plugin.key,
+        family: pluginPanelFamily({
           plugin,
           contribution,
           supervisor,
           broker: deviceBroker,
         }),
-      );
+      });
     }
   }
 
@@ -651,7 +670,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The one registry the server and the panel manager share: a family the
   // routes offer a record for is the same row the manager opens, plugin rows
   // included.
-  const panelFamilies = createPanelFamilyRegistry(pluginPanelFamilies);
+  const panelFamilies = createPanelFamilyRegistry(
+    pluginPanelFamilies.map((row) => row.family),
+  );
 
   const hosted = createHostServer({
     registry,

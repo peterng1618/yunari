@@ -129,6 +129,26 @@ describe("createDeviceBroker", () => {
     expect(listCalls()).toBe(0);
   });
 
+  it("refuses a device the allowlist no longer declares", async () => {
+    const { backend, opened } = fakeBackend();
+    let allowlist = [declared()];
+    const broker = createDeviceBroker({
+      allowlists: () => allowlist,
+      backend,
+    });
+
+    await broker.open(PLUGIN, declaredSelector());
+    expect(opened).toHaveLength(1);
+
+    // A revocation removes the entry while the worker may still be running.
+    allowlist = [];
+
+    await expect(broker.open(PLUGIN, declaredSelector())).rejects.toThrow(
+      "not declared",
+    );
+    expect(opened).toHaveLength(1);
+  });
+
   it("opens the descriptor whose path the selector names", async () => {
     const { backend, opened } = fakeBackend([
       descriptor(),
