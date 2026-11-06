@@ -71,7 +71,8 @@ function allowedPluginMethods(granted: readonly Capability[]): PluginMethod[] {
     const spec = HOST_API_METHODS[name];
     return (
       spec.surfaces.includes("worker") &&
-      (spec.capability === null || held.has(spec.capability))
+      (spec.capabilities === null ||
+        spec.capabilities.some((capability) => held.has(capability)))
     );
   });
 }

@@ -114,8 +114,7 @@ describe("gateExtensionCall", () => {
 describe("HOST_API_METHODS", () => {
   it("allows every declared method on every surface it declares", () => {
     for (const [name, method] of TABLE) {
-      const granted: readonly Capability[] =
-        method.capability === null ? [] : [method.capability];
+      const granted: readonly Capability[] = method.capabilities ?? [];
       for (const surface of method.surfaces) {
         expect(
           gateExtensionCall({
@@ -150,7 +149,8 @@ describe("HOST_API_METHODS", () => {
 
   it("requires each non-null capability", () => {
     for (const [name, method] of TABLE) {
-      if (method.capability === null) continue;
+      const capabilities = method.capabilities;
+      if (capabilities === null) continue;
       const surface = firstSurface(method);
       if (surface === undefined) continue;
       expect(
@@ -164,7 +164,7 @@ describe("HOST_API_METHODS", () => {
       ).toEqual({
         ok: false,
         reason: "missing-capability",
-        capability: method.capability,
+        capability: capabilities[0],
       });
     }
   });

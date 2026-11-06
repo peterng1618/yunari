@@ -9,7 +9,10 @@ export interface ReadResult<T> {
 }
 
 export interface HostApiMethod {
-  readonly capability: Capability | null;
+  /** The capabilities that may reach this method. `null` needs none; otherwise
+   *  holding any one of them is enough, which is how a transport-agnostic call
+   *  (`usb.open`) is reachable under either device grant. */
+  readonly capabilities: readonly Capability[] | null;
   readonly surfaces: readonly ExtensionSurface[];
   readonly scope: "plugin" | "device";
   readonly since: string;
@@ -71,11 +74,11 @@ function readResult(value: unknown): ReadResult<unknown> {
 }
 
 function method(
-  capability: Capability | null,
+  capabilities: readonly Capability[] | null,
   surfaces: readonly ExtensionSurface[],
 ): HostApiMethod {
   return {
-    capability,
+    capabilities,
     surfaces,
     scope: "plugin",
     since: "0.1.0",
@@ -88,31 +91,34 @@ const WORKER: readonly ExtensionSurface[] = ["worker"];
 
 /** A device method reaches hardware through the host's broker, so its scope is
  *  the device the plugin opened rather than the plugin's own data. */
-function deviceMethod(capability: Capability): HostApiMethod {
-  return { ...method(capability, WORKER), scope: "device" };
+function deviceMethod(...capabilities: Capability[]): HostApiMethod {
+  return { ...method(capabilities, WORKER), scope: "device" };
 }
 
 export const HOST_API_METHODS: Readonly<
   Record<HostApiMethodName, HostApiMethod>
 > = {
   init: method(null, WORKER),
-  describe: method("sensor:provide", WORKER),
-  sample: method("sensor:provide", WORKER),
-  health: method("sensor:provide", WORKER),
+  describe: method(["sensor:provide"], WORKER),
+  sample: method(["sensor:provide"], WORKER),
+  health: method(["sensor:provide"], WORKER),
   stop: method(null, WORKER),
-  "network.fetch": method("network:fetch", WORKER),
-  "storage.get": method("storage:own", WORKER),
-  "storage.set": method("storage:own", WORKER),
-  "storage.remove": method("storage:own", WORKER),
-  "storage.list": method("storage:own", WORKER),
-  "secrets.get": method("secrets:own", WORKER),
-  "secrets.set": method("secrets:own", WORKER),
-  "secrets.remove": method("secrets:own", WORKER),
-  "settings.get": method("settings:own", WORKER),
-  "settings.set": method("settings:own", WORKER),
+  "network.fetch": method(["network:fetch"], WORKER),
+  "storage.get": method(["storage:own"], WORKER),
+  "storage.set": method(["storage:own"], WORKER),
+  "storage.remove": method(["storage:own"], WORKER),
+  "storage.list": method(["storage:own"], WORKER),
+  "secrets.get": method(["secrets:own"], WORKER),
+  "secrets.set": method(["secrets:own"], WORKER),
+  "secrets.remove": method(["secrets:own"], WORKER),
+  "settings.get": method(["settings:own"], WORKER),
+  "settings.set": method(["settings:own"], WORKER),
   log: method(null, ["worker", "frame"]),
-  "usb.open": deviceMethod("usb:device"),
-  "usb.close": deviceMethod("usb:device"),
+  // The transport is a parameter, so either device grant reaches the
+  // lifecycle pair; the broker still refuses a device this plugin did not
+  // declare and consent to.
+  "usb.open": deviceMethod("usb:device", "serial:device"),
+  "usb.close": deviceMethod("usb:device", "serial:device"),
   "usb.bulkTransfer": deviceMethod("usb:device"),
   "usb.controlTransfer": deviceMethod("usb:device"),
   "usb.interruptTransfer": deviceMethod("usb:device"),

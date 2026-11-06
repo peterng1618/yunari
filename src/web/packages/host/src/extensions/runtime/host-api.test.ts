@@ -570,6 +570,34 @@ describe("device methods", () => {
     });
   });
 
+  it("lets a serial-only plugin open and close its host handle", async () => {
+    const broker = fakeBroker();
+    const api = dispatcherOf({ settingsDir, broker });
+    const serialPlugin = plugin({ capabilities: ["serial:device"] });
+
+    expect(
+      await api.call({
+        plugin: serialPlugin,
+        consent,
+        method: "usb.open",
+        params: { transport: "serial", vendorId: 1, productId: 2, path: "COM3" },
+      }),
+    ).toEqual("token");
+    expect(
+      await api.call({
+        plugin: serialPlugin,
+        consent,
+        method: "usb.close",
+        params: { token: "token" },
+      }),
+    ).toBeNull();
+    expect(broker.open).toHaveBeenCalledOnce();
+    expect(broker.close).toHaveBeenCalledWith(
+      "acme/test-plugin",
+      "token",
+    );
+  });
+
   it("answers not-supported when no broker is configured", async () => {
     const api = dispatcherOf({ settingsDir });
 
