@@ -25,9 +25,9 @@ function zipWith(
   files: Readonly<Record<string, string>>,
   manifestValue: unknown = manifest(),
 ): Uint8Array {
-  const members: Record<string, Uint8Array> = {
-    "yunari-plugin.json": strToU8(JSON.stringify(manifestValue)),
-  };
+  // A null prototype keeps a hostile member name an own key of the fixture.
+  const members = Object.create(null) as Record<string, Uint8Array>;
+  members["yunari-plugin.json"] = strToU8(JSON.stringify(manifestValue));
   for (const [name, content] of Object.entries(files))
     members[name] = strToU8(content);
   return zipSync(members, { level: 0 });
@@ -44,22 +44,30 @@ function concatenate(chunks: readonly Uint8Array[]): Uint8Array {
   return bytes;
 }
 
-/** fflate's object form cannot repeat a name, so the streaming writer does. */
-function zipWithDuplicate(name: string): Uint8Array {
+/** fflate's object form cannot repeat a name or write `__proto__`, so the
+ *  streaming writer names every member explicitly. */
+function zipEntries(
+  entries: ReadonlyArray<readonly [string, string]>,
+): Uint8Array {
   const chunks: Uint8Array[] = [];
   const zip = new Zip((_error, chunk) => {
     chunks.push(chunk);
   });
-  const add = (filename: string, content: string): void => {
-    const entry = new ZipPassThrough(filename);
+  for (const [name, content] of entries) {
+    const entry = new ZipPassThrough(name);
     zip.add(entry);
     entry.push(strToU8(content), true);
-  };
-  add("yunari-plugin.json", JSON.stringify(manifest()));
-  add("main.js", "a");
-  add(name, "b");
+  }
   zip.end();
   return concatenate(chunks);
+}
+
+function zipWithDuplicate(name: string): Uint8Array {
+  return zipEntries([
+    ["yunari-plugin.json", JSON.stringify(manifest())],
+    ["main.js", "a"],
+    [name, "b"],
+  ]);
 }
 
 describe("plugin package reader", () => {
@@ -136,12 +144,16 @@ describe("plugin package reader", () => {
     });
   });
 
-  it("refuses a package that expands past the cap", () => {
+  it("refuses a package that expands past the cap across entries", () => {
+    // Each entry sits under the 64 MiB per-entry cap; together they exceed the
+    // 64 MiB expanded cap, so the total is what refuses the package.
+    const piece = new Uint8Array(33 * 1024 * 1024);
     const bytes = zipSync(
       {
         "yunari-plugin.json": strToU8(JSON.stringify(manifest())),
         "main.js": strToU8("x"),
-        "big.bin": new Uint8Array(64 * 1024 * 1024 + 1),
+        "first.bin": piece,
+        "second.bin": piece.slice(),
       },
       { level: 6 },
     );
@@ -149,6 +161,55 @@ describe("plugin package reader", () => {
     expect(readPluginPackage(bytes)).toEqual({
       ok: false,
       message: "That package contains unsafe archive entries.",
+    });
+  });
+
+  it("refuses an entry path longer than 512 bytes", () => {
+    const name = `${"a".repeat(513)}.js`;
+    expect(readPluginPackage(zipWith({ [name]: "x" }))).toEqual({
+      ok: false,
+      message: `Plugin package path ${JSON.stringify(name)} is longer than 512 bytes.`,
+    });
+  });
+
+  it("refuses an entry nested deeper than 16 segments", () => {
+    const name = `${Array.from({ length: 17 }, (_, index) => `d${index}`).join("/")}/x.js`;
+    expect(readPluginPackage(zipWith({ [name]: "x" }))).toEqual({
+      ok: false,
+      message: `Plugin package path ${JSON.stringify(name)} has more than 16 path segments.`,
+    });
+  });
+
+  it("counts a directory marker's depth", () => {
+    const name = `${Array.from({ length: 17 }, (_, index) => `d${index}`).join("/")}/`;
+    expect(readPluginPackage(zipWith({ [name]: "", "main.js": "x" }))).toEqual({
+      ok: false,
+      message: `Plugin package path ${JSON.stringify(name)} has more than 16 path segments.`,
+    });
+  });
+
+  it.each(["real.js:evil", "name.", "name ", "CON"])(
+    "refuses the Windows-invalid entry %s",
+    (name) => {
+      expect(readPluginPackage(zipWith({ [name]: "x" }))).toEqual({
+        ok: false,
+        message: `Plugin package path ${JSON.stringify(name)} is not a valid file name.`,
+      });
+    },
+  );
+
+  it("refuses a __proto__ entry", () => {
+    expect(
+      readPluginPackage(
+        zipEntries([
+          ["yunari-plugin.json", JSON.stringify(manifest())],
+          ["main.js", "x"],
+          ["__proto__", "x"],
+        ]),
+      ),
+    ).toEqual({
+      ok: false,
+      message: 'Plugin package path "__proto__" is not a valid file name.',
     });
   });
 

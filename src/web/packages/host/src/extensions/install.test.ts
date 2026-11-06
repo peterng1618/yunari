@@ -1,4 +1,5 @@
 import {
+  mkdir,
   mkdtemp,
   readdir,
   readFile,
@@ -10,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { contentHash } from "./content-hash";
 import { createPluginInstaller } from "./install";
 
 function manifest(
@@ -168,5 +170,99 @@ describe("plugin installer", () => {
 
     await installer.remove("local/not-installed");
     expect(await installer.list()).toHaveLength(1);
+  });
+
+  it("hashes a known file set to a fixed vector", () => {
+    expect(
+      contentHash({
+        "a.txt": new TextEncoder().encode("hello"),
+        "b/c.bin": new Uint8Array([0, 1, 2]),
+      }),
+    ).toBe("33095a8af70e1f971ad8442ecc882696230211b1624dbd7254e4c304e7726978");
+  });
+
+  it("never trusts a tampered index directory when removing", async () => {
+    const installer = createPluginInstaller(dir);
+    const installed = await installer.install(validPluginBytes());
+    if (!installed.ok || installed.plugin === undefined)
+      throw new Error("install failed");
+
+    const indexFile = path.join(dir, "installed.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8")) as {
+      plugins: Record<string, { directory: string }>;
+    };
+    const elsewhere = path.join(dir, "somewhere");
+    index.plugins["local/acme-sensors"]!.directory = elsewhere;
+    await writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    await mkdir(elsewhere);
+    await writeFile(path.join(elsewhere, "sentinel.txt"), "x", "utf8");
+
+    // The record disagrees with the key, so the index is unreadable and neither
+    // tree is removed.
+    await installer.remove("local/acme-sensors");
+
+    expect(await readFile(path.join(elsewhere, "sentinel.txt"), "utf8")).toBe(
+      "x",
+    );
+    expect(
+      await readFile(path.join(installed.plugin.directory, "main.js"), "utf8"),
+    ).toBe("export default {};");
+  });
+
+  it("restores the old tree when the index write fails", async () => {
+    const installer = createPluginInstaller(dir);
+    const installed = await installer.install(validPluginBytes());
+    if (!installed.ok || installed.plugin === undefined)
+      throw new Error("install failed");
+    const versionDir = installed.plugin.directory;
+
+    // Corrupt the index so the next mutation cannot be written.
+    await writeFile(path.join(dir, "installed.json"), "{ not json", "utf8");
+
+    const second = await installer.install(zipWith({ "main.js": "changed" }));
+
+    expect(second.ok).toBe(false);
+    expect(await readFile(path.join(versionDir, "main.js"), "utf8")).toBe(
+      "export default {};",
+    );
+    expect(await readdir(path.dirname(versionDir))).toEqual(["1.0.0"]);
+  });
+
+  it("replaces a different version and removes the superseded tree", async () => {
+    const installer = createPluginInstaller(dir);
+    const first = await installer.install(validPluginBytes());
+    if (!first.ok) throw new Error(first.message);
+
+    const second = await installer.install(
+      zipWith({ "main.js": "second" }, manifest({ version: "1.1.0" })),
+    );
+    if (!second.ok || second.plugin === undefined)
+      throw new Error(second.ok ? "no plugin recorded" : second.message);
+
+    expect(second.plugin.directory).toBe(
+      path.join(dir, "local", "acme-sensors", "1.1.0"),
+    );
+    expect(
+      await readFile(path.join(second.plugin.directory, "main.js"), "utf8"),
+    ).toBe("second");
+    await expect(
+      stat(path.join(dir, "local", "acme-sensors", "1.0.0")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(path.join(dir, "local", "acme-sensors"))).toEqual([
+      "1.1.0",
+    ]);
+  });
+
+  it("cleans the temp directory and the id tree when writing a file fails", async () => {
+    const installer = createPluginInstaller(dir);
+    // `clash` is a file; `clash/inside.js` then needs it to be a directory.
+    const result = await installer.install(
+      zipWith({ clash: "x", "clash/inside.js": "y", "main.js": "z" }),
+    );
+
+    expect(result.ok).toBe(false);
+    await expect(
+      stat(path.join(dir, "local", "acme-sensors")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, open, rename, rm, stat } from "node:fs/promises";
+import { mkdir, open, rename, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   type InstalledPlugin,
@@ -16,6 +16,7 @@ import { contentHash } from "./content-hash.js";
  *  published-plugin field and never decides where a local package lives. */
 const LOCAL_PUBLISHER = "local";
 const INDEX_FILE = "installed.json";
+const CONTENT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
 interface InstalledIndex {
   readonly version: 1;
@@ -35,19 +36,6 @@ function isMissing(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     (error as { code?: unknown }).code === "ENOENT"
-  );
-}
-
-/** True when `target` is strictly below `root`, in the platform's own path
- *  grammar. The index is host-written, but a hand-edited path must not make
- *  `remove` delete a tree outside the extensions folder. */
-function within(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  return (
-    relative !== "" &&
-    relative !== ".." &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
   );
 }
 
@@ -124,17 +112,30 @@ function createIndex(root: string) {
           `Plugin index refused: entry ${JSON.stringify(key)} disagrees with its plugin key.`,
         );
 
-      const resolved = path.resolve(directory);
-      if (!within(root, resolved))
+      if (!CONTENT_HASH_PATTERN.test(hash))
         throw new Error(
-          `Plugin index refused: entry ${JSON.stringify(key)} points outside the extensions folder.`,
+          `Plugin index refused: entry ${JSON.stringify(key)} carries an invalid content hash.`,
+        );
+
+      // The directory is not caller data: it is exactly where this installer
+      // puts that publisher, id and version. A record that disagrees is not a
+      // tree this index may remove or trust.
+      const expected = path.join(
+        root,
+        publisher,
+        manifest.manifest.id,
+        manifest.manifest.version,
+      );
+      if (path.resolve(directory) !== path.resolve(expected))
+        throw new Error(
+          `Plugin index refused: entry ${JSON.stringify(key)} names a directory it does not own.`,
         );
 
       plugins[key] = {
         key,
         publisher,
         manifest: manifest.manifest,
-        directory: resolved,
+        directory: expected,
         contentHash: hash,
       };
     }
@@ -188,38 +189,12 @@ export function createPluginInstaller(directory: string): PluginInstaller {
       )
         return { ok: true, plugin: current };
 
+      const parent = path.dirname(target);
       // A sibling temp directory makes the rename atomic within one volume.
       const temporary = path.join(
-        path.dirname(target),
+        parent,
         `.${manifest.version}.${randomBytes(6).toString("hex")}.tmp`,
       );
-
-      try {
-        await writeTree(temporary, files);
-        let aside: string | undefined;
-        if (await exists(target)) {
-          aside = `${target}.${randomBytes(6).toString("hex")}.old`;
-          await rename(target, aside);
-        }
-        try {
-          await rename(temporary, target);
-        } catch (error) {
-          if (aside !== undefined)
-            await rename(aside, target).catch(() => undefined);
-          throw error;
-        }
-        if (aside !== undefined)
-          await rm(aside, { recursive: true, force: true });
-      } catch (error) {
-        await rm(temporary, { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-        return {
-          ok: false,
-          message: `The plugin could not be installed: ${reason(error)}`,
-        };
-      }
-
       const plugin: InstalledPlugin = {
         key,
         publisher: LOCAL_PUBLISHER,
@@ -227,6 +202,43 @@ export function createPluginInstaller(directory: string): PluginInstaller {
         directory: target,
         contentHash: hash,
       };
+
+      try {
+        await writeTree(temporary, files);
+      } catch (error) {
+        await rm(temporary, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+        // Non-recursive: removes `<publisher>/<id>` only when this attempt left
+        // it empty, never another version's tree.
+        await rmdir(parent).catch(() => undefined);
+        return {
+          ok: false,
+          message: `The plugin could not be installed: ${reason(error)}`,
+        };
+      }
+
+      // Move any previous tree aside, place the new one, then record it. The
+      // index write is what makes the install live; until it succeeds the
+      // previous tree is restored.
+      const aside = (await exists(target))
+        ? `${target}.old-${randomBytes(6).toString("hex")}`
+        : undefined;
+      try {
+        if (aside !== undefined) await rename(target, aside);
+        await rename(temporary, target);
+      } catch (error) {
+        if (aside !== undefined)
+          await rename(aside, target).catch(() => undefined);
+        await rm(temporary, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+        await rmdir(parent).catch(() => undefined);
+        return {
+          ok: false,
+          message: `The plugin could not be installed: ${reason(error)}`,
+        };
+      }
 
       try {
         await stored.mutate((index) => ({
@@ -237,14 +249,28 @@ export function createPluginInstaller(directory: string): PluginInstaller {
           result: undefined,
         }));
       } catch (error) {
+        // Not live until the index names it: remove the new tree and put the
+        // superseded version back.
+        await rm(target, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+        if (aside !== undefined)
+          await rename(aside, target).catch(() => undefined);
         return {
           ok: false,
-          message: `The plugin was written but not recorded: ${reason(error)}`,
+          message: `The plugin was not installed: ${reason(error)}`,
         };
       }
 
-      // One directory per key is the installed version; a superseded one is
-      // removed only after the index names the replacement.
+      // An aside that cannot be removed is an orphan, not live state; the
+      // install itself succeeded.
+      if (aside !== undefined)
+        await rm(aside, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+
+      // One directory per key is the installed version; a superseded version
+      // directory is removed only after the index names the replacement.
       if (current !== undefined && current.directory !== target)
         await rm(current.directory, { recursive: true, force: true }).catch(
           () => undefined,
