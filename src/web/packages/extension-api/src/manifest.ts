@@ -258,8 +258,10 @@ export function readPluginManifest(value: unknown): ManifestResult {
   if (value["publisher"] !== undefined) {
     const read = readIdentifier(value["publisher"], "Publisher", undefined);
     if (!read.ok) return refuse(read.reason);
-    if (isReservedPublisher(read.value))
-      return refuse(`Publisher ${JSON.stringify(read.value)} is reserved.`);
+    // The field is carried but never trusted: a local install keys under
+    // `local` and the store uses the account's publisher. A reserved *name* is
+    // refused where it would be claimed (the account slug), not here, so a
+    // package that names one is admitted and the claim is ignored.
     publisher = read.value;
   }
 
