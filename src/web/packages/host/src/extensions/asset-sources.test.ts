@@ -200,6 +200,7 @@ function fakeExtensions(
     grantConsent: () => Promise.resolve({ ok: false }),
     remove: () => Promise.resolve(),
     mayLoad: () => Promise.resolve(true),
+    installedPlugin: () => Promise.resolve(undefined),
     readProviderOrder: () => Promise.resolve({ version: 1, pluginOrder: [] }),
     writeProviderOrder: () => Promise.resolve({ ok: true }),
     consentRecord: (key) => {

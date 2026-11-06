@@ -214,6 +214,7 @@ describe("installCatalogueItem", () => {
             grantConsent: async () => ({ ok: true }),
             remove: async () => undefined,
             mayLoad: async () => false,
+            installedPlugin: async () => undefined,
             consentRecord: async () => undefined,
             readProviderOrder: async () => ({ version: 1, pluginOrder: [] }),
             writeProviderOrder: async () => ({ ok: true }),
