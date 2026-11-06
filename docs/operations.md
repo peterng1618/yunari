@@ -53,10 +53,23 @@ and the executable profiles' grants live in `settings/extension-consent.json`:
 
 Installing, granting consent and removing are host API calls on loopback:
 `POST /api/extensions/install`, `POST /api/extensions/<publisher>/<id>/consent`
-and `DELETE /api/extensions/<publisher>/<id>`. No editor control ships for them
-yet. The delete removes the install tree and its grant, but leaves the plugin's
-`data/`, `secrets/` and `settings/` scopes in place; delete those directories
-under `settings/extensions/` when the data should go too.
+and `DELETE /api/extensions/<publisher>/<id>`. Settings → Extensions wraps them:
+it lists each install, installs a `.zip`, approves a missing consent with the
+host-computed fingerprint, removes an install and reorders plugin providers. The
+delete removes the install tree and its grant, but leaves the plugin's `data/`,
+`secrets/` and `settings/` scopes in place; delete those directories under
+`settings/extensions/` when the data should go too.
+
+A sandboxed UI runs in `<iframe sandbox="allow-scripts">`: an opaque origin with
+scripts only, no same-origin access, forms, popups or top navigation, and
+`postMessage` as its only channel. The frame is served from the plugin's install
+directory under `/api/extensions/<publisher>/<id>/ui/*`; the route refuses a
+traversal or symlink escape before reading a file and answers under `default-src
+'none'`, `connect-src 'none'`, `nosniff` and `no-store`. Requests carry a
+per-mount nonce, a write also needs a host control's one-use 30 s gesture token,
+and the plugin sees only its own settings. A plugin that declares a UI file the
+route cannot serve, or a custom asset body without the `ui:frame` capability,
+gets a refusal or a failed-to-load message rather than a blank surface.
 
 A plugin that cannot start or crashes is reported once on the host console as
 `Plugin worker <publisher>/<id>: <reason>`. A start failure contributes no

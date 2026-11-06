@@ -116,6 +116,14 @@ const ITEM = {
 };
 
 describe("readDeclarativeAssetSource", () => {
+  it("refuses a custom body unless the extension may draw a frame", () => {
+    const value = declarativeSource({ body: "melody" });
+
+    expect(readDeclarativeAssetSource(value).ok).toBe(false);
+    const read = readDeclarativeAssetSource(value, true);
+    expect(read.ok && read.source.body).toBe("melody");
+  });
+
   it("refuses a plain-http source and a userinfo URL", () => {
     expect(
       readDeclarativeAssetSource(

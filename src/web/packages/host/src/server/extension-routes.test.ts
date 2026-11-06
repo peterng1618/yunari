@@ -153,9 +153,11 @@ function orderStore(): {
 describe("extension routes", () => {
   let dir: string;
   let handle: ReturnType<typeof createExtensionRoutes>;
+  let saved: Record<string, unknown>;
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), "yunari-routes-"));
+    saved = {};
     handle = createExtensionRoutes({
       extensions: createExtensionService({
         installer: createPluginInstaller(path.join(dir, "extensions")),
@@ -163,6 +165,15 @@ describe("extension routes", () => {
         now: () => "2026-11-06T00:00:00Z",
         providerOrder: orderStore(),
       }),
+      settings: {
+        read: async () => saved,
+        write: async (_key, values) => {
+          if ("bad" in values)
+            return { ok: false, message: "That value is not declared." };
+          saved = { ...saved, ...values };
+          return { ok: true };
+        },
+      },
     });
   });
 
@@ -177,6 +188,12 @@ describe("extension routes", () => {
       ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
       ["DELETE", "/api/extensions/local/acme-sensors", undefined],
       ["GET", "/api/extensions/provider-order", undefined],
+      ["GET", "/api/extensions/local/acme-settings/settings", undefined],
+      [
+        "PUT",
+        "/api/extensions/local/acme-settings/settings",
+        JSON.stringify({ label: "x" }),
+      ],
       [
         "PUT",
         "/api/extensions/provider-order",
@@ -200,6 +217,12 @@ describe("extension routes", () => {
       ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
       ["DELETE", "/api/extensions/local/acme-sensors", undefined],
       ["GET", "/api/extensions/provider-order", undefined],
+      ["GET", "/api/extensions/local/acme-settings/settings", undefined],
+      [
+        "PUT",
+        "/api/extensions/local/acme-settings/settings",
+        JSON.stringify({ label: "x" }),
+      ],
       [
         "PUT",
         "/api/extensions/provider-order",
@@ -418,5 +441,57 @@ describe("extension routes", () => {
       { body: "x".repeat(64 * 1024 + 1), chunked: true },
     );
     expect(chunked.status).toBe(413);
+  });
+
+  it("reads and writes declarative plugin settings", async () => {
+    const before = await call(
+      handle,
+      "GET",
+      "/api/extensions/local/acme-settings/settings",
+    );
+    expect(before.status).toBe(200);
+    expect(before.json()).toEqual({ settings: {} });
+
+    const write = await call(
+      handle,
+      "PUT",
+      "/api/extensions/local/acme-settings/settings",
+      { body: JSON.stringify({ label: "hello" }) },
+    );
+    expect(write.status).toBe(200);
+    expect(write.json()).toEqual({ ok: true });
+    expect(saved).toEqual({ label: "hello" });
+
+    const after = await call(
+      handle,
+      "GET",
+      "/api/extensions/local/acme-settings/settings",
+    );
+    expect(after.json()).toEqual({ settings: { label: "hello" } });
+  });
+
+  it("answers a refused settings write with the store's sentence", async () => {
+    const response = await call(
+      handle,
+      "PUT",
+      "/api/extensions/local/acme-settings/settings",
+      { body: JSON.stringify({ bad: true }) },
+    );
+    expect(response.status).toBe(400);
+    expect(response.json()).toEqual({
+      ok: false,
+      message: "That value is not declared.",
+    });
+    expect(saved).toEqual({});
+  });
+
+  it("refuses a settings body that is not an object", async () => {
+    const response = await call(
+      handle,
+      "PUT",
+      "/api/extensions/local/acme-settings/settings",
+      { body: "[]" },
+    );
+    expect(response.status).toBe(400);
   });
 });

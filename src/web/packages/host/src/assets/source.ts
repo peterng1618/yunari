@@ -36,8 +36,15 @@ export interface AssetSource {
   readonly id: string;
   readonly label: string;
   readonly category: ListingCategory;
-  /** "grid" searches; "font-picker" and "wallpaper-engine" are editor bodies. */
-  readonly body: "grid" | "font-picker" | "wallpaper-engine";
+  /** "grid" searches; "font-picker" and "wallpaper-engine" are editor bodies,
+   *  and any other value is a plugin frame body. */
+  readonly body: string;
+  /** The plugin that owns this source and the frame entry its body draws, or
+   *  absent for the host's own rows. */
+  readonly plugin?: {
+    readonly key: string;
+    readonly ui: string;
+  };
   readonly requires: string | undefined;
   readonly configurable: boolean;
   /** The kind of preset this source yields; absent when it yields none. */

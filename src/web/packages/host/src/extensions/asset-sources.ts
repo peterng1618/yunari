@@ -320,6 +320,7 @@ export class PluginAssetSource implements AssetSource {
   readonly label: string;
   readonly category: string;
   readonly body: AssetSource["body"];
+  readonly plugin?: { readonly key: string; readonly ui: string };
   readonly requires: string | undefined = undefined;
   readonly configurable = false;
   readonly presetKind?: PresetKind;
@@ -337,6 +338,14 @@ export class PluginAssetSource implements AssetSource {
     this.label = options.contribution.label;
     this.category = options.contribution.category;
     this.body = options.contribution.body as AssetSource["body"];
+    if (
+      options.contribution.body !== "grid" &&
+      options.plugin.manifest.ui !== undefined
+    )
+      this.plugin = {
+        key: options.plugin.key,
+        ui: options.plugin.manifest.ui,
+      };
     this.#supervisor = options.supervisor;
     this.#pluginKey = options.plugin.key;
     if (options.contribution.presetKind !== undefined)

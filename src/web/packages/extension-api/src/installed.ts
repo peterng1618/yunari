@@ -17,4 +17,6 @@ export interface InstalledExtension {
   readonly devices: readonly string[];
   readonly consent: ConsentState;
   readonly fingerprint: string;
+  /** The frame entry this plugin's UI is served from, when it declares one. */
+  readonly ui?: string;
 }

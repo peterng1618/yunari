@@ -1,6 +1,7 @@
 import type http from "node:http";
 import type { ProviderOrder } from "../extensions/provider-order.js";
 import type { ExtensionService } from "../extensions/service.js";
+import type { PluginSettingsStore } from "../extensions/settings.js";
 import { readBody, readBytes, sendJson, sendText } from "./http.js";
 import { isForeignOrigin, isLoopbackRemote } from "./identity.js";
 
@@ -10,10 +11,14 @@ const PREFIX = "/api/extensions";
  *  is the package cap. */
 export const MAX_EXTENSION_INSTALL_BYTES = 64 * 1024 * 1024;
 const MAX_CONSENT_BYTES = 64 * 1024;
+const MAX_SETTINGS_BYTES = 64 * 1024;
 const MAX_PROVIDER_ORDER_BYTES = 64 * 1024;
 
 export interface ExtensionRouteDeps {
   readonly extensions: ExtensionService | undefined;
+  /** Declarative plugin settings. Omitted when this host stores none; the
+   *  settings routes then say so rather than accepting values nowhere keeps. */
+  readonly settings?: PluginSettingsStore | undefined;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -54,7 +59,6 @@ export function createExtensionRoutes(
   url: URL,
 ) => Promise<boolean> {
   const { extensions } = deps;
-
   return async function handleExtensionRoutes(
     request: http.IncomingMessage,
     response: http.ServerResponse,
@@ -228,6 +232,73 @@ export function createExtensionRoutes(
       }
 
       sendJson(response, 200, await extensions.grantConsent(key, fingerprint));
+      return true;
+    }
+
+    const settings =
+      segments.length === 3 && segments[2] === "settings" && segments[1] !== "";
+
+    if (settings) {
+      if (request.method !== "GET" && request.method !== "PUT") {
+        sendText(response, 405, "Only GET and PUT are supported.");
+        return true;
+      }
+
+      const key = keyOf(segments);
+      if (key === undefined) {
+        sendJson(response, 400, {
+          ok: false,
+          message: "That is not a plugin key.",
+        });
+        return true;
+      }
+
+      if (deps.settings === undefined) {
+        sendJson(response, 503, {
+          ok: false,
+          message: "This host stores no plugin settings.",
+        });
+        return true;
+      }
+
+      if (request.method === "GET") {
+        sendJson(response, 200, {
+          settings: await deps.settings.read(key),
+        });
+        return true;
+      }
+
+      const declared = declaredLength(request);
+      if (declared !== undefined && declared > MAX_SETTINGS_BYTES) {
+        sendText(response, 413, "That settings body is too large.");
+        return true;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await readBody(request, MAX_SETTINGS_BYTES));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("too large")) {
+          sendText(response, 413, "That settings body is too large.");
+          return true;
+        }
+        sendJson(response, 400, {
+          ok: false,
+          message: "That settings body is not readable JSON.",
+        });
+        return true;
+      }
+
+      if (!isRecord(parsed)) {
+        sendJson(response, 400, {
+          ok: false,
+          message: "That settings body is not an object.",
+        });
+        return true;
+      }
+
+      const result = await deps.settings.write(key, parsed);
+      sendJson(response, result.ok ? 200 : 400, result);
       return true;
     }
 

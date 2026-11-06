@@ -2,6 +2,7 @@ import type { AssetRouteOptions } from "../assets/routes.js";
 import type { HostBinding } from "../cli/hosting.js";
 import type { ListenableServer } from "../cli/net.js";
 import type { ExtensionService } from "../extensions/service.js";
+import type { PluginSettingsStore } from "../extensions/settings.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { PanelHint } from "../panels/panel-device.js";
 import type { PanelFamilyRegistry } from "../panels/panel-families.js";
@@ -82,6 +83,9 @@ export interface HostServerOptions {
   /** Installed plugins and their grants. Omitted when this host manages none:
    *  the extension routes then say so rather than serving an empty list. */
   readonly extensions?: ExtensionService;
+  /** Declarative plugin settings. Omitted when this host keeps none: the
+   *  settings routes then say so rather than accepting a value nowhere keeps. */
+  readonly pluginSettings?: PluginSettingsStore;
   /** Device assignments (§145). Omit to keep defaults with no configuration. */
   readonly devices?: DeviceSettingsStore;
   /** Per-theme answers. Omitted when the host stores none. */

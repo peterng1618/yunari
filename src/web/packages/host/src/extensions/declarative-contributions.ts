@@ -24,12 +24,19 @@ const USERINFO_REFUSED =
   "A declarative asset source URL may not carry user information.";
 
 const PRESET_KINDS: ReadonlySet<string> = new Set(["palette", "gradient"]);
+/** Bodies the editor draws itself. A source declaring one of these instead of
+ *  "grid" would be handed to a body that expects a different result shape. */
+const EDITOR_BODIES: ReadonlySet<string> = new Set([
+  "font-picker",
+  "wallpaper-engine",
+]);
+const CUSTOM_BODY_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 
 export interface DeclarativeAssetSource {
   readonly id: string;
   readonly label: string;
   readonly category: string;
-  readonly body: "grid";
+  readonly body: string;
   readonly presetKind?: PresetKind;
   readonly host: string;
   readonly request: {
@@ -131,7 +138,10 @@ function readUrl(value: unknown): Check<URL> {
  * `declarativeAssetSources` reports it and the rest of the extension still
  * loads.
  */
-export function readDeclarativeAssetSource(value: unknown): ReadResult {
+export function readDeclarativeAssetSource(
+  value: unknown,
+  allowFrameBody = false,
+): ReadResult {
   if (!isRecord(value)) {
     return refuse("A declarative asset source must be an object.");
   }
@@ -157,10 +167,23 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
     );
   }
 
-  if (value["body"] !== "grid") {
+  const body = value["body"];
+  if (typeof body !== "string" || !CUSTOM_BODY_PATTERN.test(body)) {
     return refuse(
-      `The declarative asset source "${id}" declares a body the editor does not draw; use "grid".`,
+      `The declarative asset source "${id}" needs a lowercase "body".`,
     );
+  }
+  if (body !== "grid") {
+    if (EDITOR_BODIES.has(body)) {
+      return refuse(
+        `The declarative asset source "${id}" declares the built-in "${body}" body; use "grid" or a custom body with "ui:frame".`,
+      );
+    }
+    if (!allowFrameBody) {
+      return refuse(
+        `The declarative asset source "${id}" declares a body the editor cannot draw; use "grid" or declare the "ui:frame" capability.`,
+      );
+    }
   }
 
   // Host credentials belong to the host. A declarative row that names one
@@ -277,7 +300,7 @@ export function readDeclarativeAssetSource(value: unknown): ReadResult {
       id,
       label,
       category,
-      body: "grid",
+      body,
       host,
       ...(presetKindValue === undefined
         ? {}
@@ -347,7 +370,11 @@ export function declarativeAssetSources(
         break;
       }
 
-      const read = readDeclarativeAssetSource(entry);
+      const read = readDeclarativeAssetSource(
+        entry,
+        extension.capabilities.includes("ui:frame") &&
+          extension.execution === "sandboxed-ui",
+      );
       if (!read.ok) {
         warnDeclarativeSource(extension.key, read.message);
         continue;

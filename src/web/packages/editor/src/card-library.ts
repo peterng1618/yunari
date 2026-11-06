@@ -64,11 +64,7 @@ export async function insertCard(
      */
     readonly assetManager?: Pick<
       AssetManager,
-      | "planPackaged"
-      | "commitPackaged"
-      | "captureAssetState"
-      | "restoreAssetState"
-      | "previewUrl"
+      "planPackaged" | "commitPackaged" | "rollbackPackaged" | "previewUrl"
     >;
   },
 ): Promise<FabricObject> {
@@ -98,17 +94,15 @@ export async function insertCard(
 
   // The copy can be built, so the package's declarations and bytes may land.
   // Adopting before this point would leave an orphan on a refused insert.
-  const before =
-    adopted !== undefined && manager !== undefined
-      ? manager.captureAssetState()
-      : undefined;
   if (adopted !== undefined && manager !== undefined) {
     manager.commitPackaged(adopted);
   }
 
   // The preview URL resolves through the manager, so the adoption has to be in
-  // place first. It is undone if revival discovers, say, an object type this
-  // build does not register — the validator only requires a non-empty string.
+  // place first. It is undone — and only it: an import made during this await
+  // keeps its declaration and bytes — if revival discovers, say, an object type
+  // this build does not register, which the validator only requires to be a
+  // non-empty string.
   let object: FabricObject;
   try {
     // Fabric enlivens an image from `src` alone, and a persisted asset
@@ -126,8 +120,8 @@ export async function insertCard(
     }
     object = revived;
   } catch (error) {
-    if (before !== undefined && manager !== undefined) {
-      manager.restoreAssetState(before);
+    if (adopted !== undefined && manager !== undefined) {
+      manager.rollbackPackaged(adopted);
     }
     throw error;
   }

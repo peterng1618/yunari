@@ -163,6 +163,7 @@ export const uiCopy = {
       keyboard: "Keyboard",
       assetSources: "Asset sources",
       about: "About",
+      extensions: "Extensions",
     } as const,
     /** A page's one-sentence promise, under its heading. The host pages reuse
      *  the hints their sections already owned; the two editor pages that had a
@@ -185,6 +186,8 @@ export const uiCopy = {
       assetSources:
         "Keys stay on this machine. Stored values are never shown again, only the last four characters.",
       about: "Yunari, a dashboard theme editor.",
+      extensions:
+        "Installed plugins, what each one asks for, and which provider answers a shared reading first.",
     } as const,
     /** The Connections tab: the one place a provider key is entered, because
      *  every remote source reads from here rather than growing its own field. */
@@ -201,6 +204,29 @@ export const uiCopy = {
     connectionsWhereToGetKey: "Where to get a key",
     connectionsFooter:
       "Keys are stored in a local settings file and sent only to the source that owns them.",
+    /** The Extensions page. A capability name is the manifest's own word and
+     *  is never translated; these are the labels around it. */
+    extensions: {
+      installHeading: "Install",
+      installHint:
+        "Choose one .zip package. Its contents are validated on this PC before anything is installed.",
+      installLabel: "Extension package",
+      installedHeading: "Installed extensions",
+      empty: "No extensions are installed.",
+      capabilities: "Capabilities",
+      contributions: "Contributions",
+      devices: "Device ids",
+      commands: "Panel commands",
+      consent: {
+        "not-required": "No consent needed · descriptor only",
+        granted: "Approved",
+        missing: "Not approved",
+      },
+      providerHeading: "Provider order",
+      providerHint:
+        "When two providers answer the same reading, the first one listed answers. Built-in providers are not part of this list.",
+      noProviders: "No extension provides sensor readings.",
+    },
     /** The About tab: what the editor is, and the facts this build can read.
      *  The provenance is one sentence naming the product; the three fact labels
      *  say which fact each row is, and the release fact's *label* is the
