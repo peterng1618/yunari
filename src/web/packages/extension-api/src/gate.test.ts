@@ -8,6 +8,10 @@ import {
   type HostApiMethodName,
   hostApiMethod,
 } from "./host-api";
+import {
+  gateExtensionCall as gateFromEntry,
+  hostApiMethod as methodFromEntry,
+} from "./index";
 
 function consent(): { fingerprint: string } {
   return { fingerprint: "sha256:abc" };
@@ -166,12 +170,54 @@ describe("HOST_API_METHODS", () => {
   });
 });
 
+describe("readParams", () => {
+  const readParams = HOST_API_METHODS.init.readParams;
+
+  it("refuses a Map", () => {
+    expect(readParams(new Map())).toMatchObject({ ok: false });
+  });
+
+  it("refuses a Date", () => {
+    expect(readParams(new Date())).toMatchObject({ ok: false });
+  });
+
+  it("accepts a null-prototype object", () => {
+    const params = Object.create(null) as Record<string, unknown>;
+    params["key"] = "value";
+    expect(readParams(params)).toMatchObject({ ok: true, value: params });
+  });
+});
+
 describe("hostApiMethod", () => {
   it("returns undefined for an unknown name", () => {
     expect(hostApiMethod("process.spawn")).toBeUndefined();
   });
 
+  it("returns undefined for an inherited Object key", () => {
+    expect(hostApiMethod("toString")).toBeUndefined();
+  });
+
   it("returns the table entry for a known name", () => {
     expect(hostApiMethod("sample")).toBe(HOST_API_METHODS.sample);
+  });
+});
+
+describe("prototype guard", () => {
+  it("denies a method named after an inherited Object key", () => {
+    expect(
+      gateExtensionCall({
+        method: "toString",
+        surface: "worker",
+        consent: consent(),
+        granted: [],
+      }),
+    ).toEqual({ ok: false, reason: "unknown-method" });
+  });
+});
+
+describe("package entry", () => {
+  it("re-exports the gate and the table", () => {
+    expect(gateFromEntry).toBe(gateExtensionCall);
+    expect(methodFromEntry).toBe(hostApiMethod);
   });
 });

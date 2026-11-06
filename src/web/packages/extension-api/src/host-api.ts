@@ -37,8 +37,13 @@ export type HostApiMethodName =
   | "settings.set"
   | "log";
 
+/** Plain means an object literal or a null-prototype bag; a Date, Map, Set or
+ *  class instance is not JSON params and is refused. */
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /** Params are absent or one plain JSON object. Key-level schemas land with each
