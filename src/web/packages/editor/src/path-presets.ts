@@ -521,11 +521,22 @@ export async function removeBuiltinPathPreset(id: string): Promise<void> {
 }
 
 export async function restoreBuiltinPathPresets(): Promise<void> {
-  await mutatePathPresets(
-    `${LIST_PATH}/builtins/restore`,
-    "POST",
-    "The shipped path presets could not be restored",
-  );
+  const response = await clientFetcher(`${LIST_PATH}/builtins/restore`, {
+    method: "POST",
+  });
+  await requireOk(response, "The shipped path presets could not be restored");
+  // A retained removal is unioned back into the live list by the refresh, so
+  // the host's accepted restore only becomes visible once this browser's
+  // pending removals are gone too.
+  if (
+    readRemovedPathPresetIds(clientStorage).length > 0 &&
+    !clearRemovedPathPresetIds(clientStorage)
+  ) {
+    throw new Error(
+      "The shipped path presets were restored, but this browser's removed list could not be updated.",
+    );
+  }
+  await refreshPathPresets();
 }
 
 export async function installPathPresetPack(bytes: Uint8Array): Promise<void> {

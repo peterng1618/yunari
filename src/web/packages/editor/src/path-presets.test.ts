@@ -17,6 +17,7 @@ import {
   removeBuiltinPathPreset,
   removedPathPresetIdsKey,
   removePathPreset,
+  restoreBuiltinPathPresets,
   setActiveRemovedPathPresetIds,
   setActiveUserPathPresets,
   subscribeRemovedPathPresetIds,
@@ -108,6 +109,10 @@ function hostRetainingLocalRows(): typeof fetch {
     }
     if (url === "/api/path-presets/builtins/arc/remove" && method === "POST") {
       removed = ["arc"];
+      return jsonAnswer({ ok: true });
+    }
+    if (url === "/api/path-presets/builtins/restore" && method === "POST") {
+      removed = [];
       return jsonAnswer({ ok: true });
     }
     if (url === "/api/path-presets" && method === "GET") {
@@ -209,6 +214,19 @@ describe("loading the host's preset list at boot", () => {
     expect(storage.getItem(USER_PATH_PRESETS_STORAGE_KEY)).toBe(
       JSON.stringify([stored]),
     );
+  });
+
+  it("restores a built-in while a local removal is pending", async () => {
+    const storage = memoryStorage({
+      [REMOVED_PATH_PRESETS_STORAGE_KEY]: JSON.stringify(["arc"]),
+    });
+    await loadPathPresets(hostRetainingLocalRows(), storage);
+    expect(activeRemovedPathPresetIds()).toEqual(["arc"]);
+
+    await restoreBuiltinPathPresets();
+
+    expect(activeRemovedPathPresetIds()).toEqual([]);
+    expect(storage.getItem(REMOVED_PATH_PRESETS_STORAGE_KEY)).toBeNull();
   });
 
   it("removes a retained local row from its key and the live list", async () => {
