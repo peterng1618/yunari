@@ -16,7 +16,12 @@ import {
   refuse,
 } from "./manifest-values";
 
-export { MAX_CAPABILITIES, MAX_CONTRIBUTIONS } from "./manifest-values";
+export {
+  IDENTIFIER_PATTERN,
+  isWindowsReservedName,
+  MAX_CAPABILITIES,
+  MAX_CONTRIBUTIONS,
+} from "./manifest-values";
 
 export const MANIFEST_VERSION = 1;
 export const PLUGIN_API_MAJOR = 1;

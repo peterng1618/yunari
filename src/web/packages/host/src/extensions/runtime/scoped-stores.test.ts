@@ -41,6 +41,20 @@ describe("scoped stores", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("refuses a plugin whose publisher or id would steer the path", () => {
+    const base = plugin();
+
+    expect(() =>
+      createScopedStores(root, { ...base, publisher: "../escape" }),
+    ).toThrow(/valid plugin publisher/);
+    expect(() =>
+      createScopedStores(root, {
+        ...base,
+        manifest: { ...base.manifest, id: "CON" },
+      }),
+    ).toThrow(/valid plugin id/);
+  });
+
   describe("storage", () => {
     it("round-trips values and lists keys in sorted order", async () => {
       const stores = createScopedStores(root, plugin());

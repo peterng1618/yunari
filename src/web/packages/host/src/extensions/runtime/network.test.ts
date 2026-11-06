@@ -191,7 +191,10 @@ describe("guardedFetch", () => {
       resolve: publicResolve(),
     });
 
-    expect(outcome).toMatchObject({ ok: false, reason: /http/i });
+    expect(outcome).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/http/i),
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -207,55 +210,70 @@ describe("guardedFetch", () => {
       resolve: publicResolve(),
     });
 
-    expect(outcome).toMatchObject({ ok: false, reason: /credentials/i });
+    expect(outcome).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/credentials/i),
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("refuses link-local and metadata addresses even when private is allowed", async () => {
-    for (const url of [
-      "http://169.254.169.254/latest/meta-data",
-      "http://[fe80::1]/",
-    ]) {
-      const { fetchImpl, calls } = serve(() => json({}));
+  it("refuses a declared host that resolves to link-local or metadata", async () => {
+    const cases = [
+      { host: "metadata.test", address: "169.254.169.254", family: 4 },
+      { host: "link-local.test", address: "fe80::1", family: 6 },
+    ] as const;
+
+    for (const entry of cases) {
+      const fetchImpl = vi.fn<typeof fetch>();
+      const resolve = async () => [
+        { address: entry.address, family: entry.family },
+      ];
 
       const outcome = await guardedFetch({
-        url,
-        allowedHosts: ["169.254.169.254", "fe80::1"],
+        url: `http://${entry.host}/x`,
+        allowedHosts: [entry.host],
         signal: signal(),
         maxBytes: 1024,
         fetchImpl,
         allowPrivateOrigin: true,
-        resolve: publicResolve(),
+        resolve,
       });
 
       expect(outcome).toMatchObject({
         ok: false,
-        reason: /link-local/i,
+        reason: expect.stringMatching(/link-local/i),
       });
-      expect(calls).toHaveLength(0);
+      expect(fetchImpl, entry.host).not.toHaveBeenCalled();
     }
   });
 
-  it("refuses a private address unless the origin is allowed", async () => {
+  it("refuses a declared host that resolves to a private address unless allowed", async () => {
+    const resolve = async () => [{ address: "10.0.0.1", family: 4 }];
+    const refusedFetch = vi.fn<typeof fetch>();
+
     const refused = await guardedFetch({
-      url: "https://127.0.0.1/x",
-      allowedHosts: ["127.0.0.1"],
+      url: "https://private.test/x",
+      allowedHosts: ["private.test"],
       signal: signal(),
       maxBytes: 1024,
-      fetchImpl: vi.fn<typeof fetch>(),
-      resolve: publicResolve(),
+      fetchImpl: refusedFetch,
+      resolve,
     });
-    expect(refused).toMatchObject({ ok: false, reason: /private|loopback/i });
+    expect(refused).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/private|loopback/i),
+    });
+    expect(refusedFetch).not.toHaveBeenCalled();
 
     const { fetchImpl, calls } = serve(() => json({ ok: true }));
     const allowed = await guardedFetch({
-      url: "https://127.0.0.1/x",
-      allowedHosts: ["127.0.0.1"],
+      url: "https://private.test/x",
+      allowedHosts: ["private.test"],
       signal: signal(),
       maxBytes: 1024,
       fetchImpl,
       allowPrivateOrigin: true,
-      resolve: publicResolve(),
+      resolve,
     });
     expect(allowed).toMatchObject({ ok: true, body: { ok: true } });
     expect(calls).toHaveLength(1);
@@ -311,6 +329,32 @@ describe("guardedFetch", () => {
     const headers = new Headers(call?.init.headers);
     expect(headers.get("x-api-key")).toBe("plugin's own");
     expect(headers.get("authorization")).toBeNull();
+  });
+
+  it("drops the plugin's body and headers on a cross-origin redirect", async () => {
+    const { fetchImpl, calls } = serve(({ url }) =>
+      url.hostname === "api.acme.test"
+        ? redirect("https://cdn.acme.test/next")
+        : json({ ok: true }),
+    );
+
+    const outcome = await guardedFetch({
+      url: "https://api.acme.test/start",
+      allowedHosts: ["api.acme.test", "cdn.acme.test"],
+      signal: signal(),
+      maxBytes: 1024,
+      method: "POST",
+      headers: { "x-api-key": "plugin's own" },
+      body: "token=abc",
+      fetchImpl,
+      resolve: publicResolve(),
+    });
+
+    expect(outcome).toMatchObject({ ok: true, body: { ok: true } });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.init.body).toBe("token=abc");
+    expect(calls[1]?.init.body).toBeUndefined();
+    expect(new Headers(calls[1]?.init.headers).get("x-api-key")).toBeNull();
   });
 
   it("refuses a non-JSON answer", async () => {

@@ -608,7 +608,7 @@ export interface GuardedFetchOptions {
   readonly headers?: Readonly<Record<string, string>>;
   readonly signal: AbortSignal;
   readonly maxBytes: number;
-  readonly fetchImpl?: typeof fetch;
+  readonly fetchImpl: typeof fetch;
   readonly method?: "GET" | "POST";
   readonly body?: string;
   readonly allowPrivateOrigin?: boolean;
@@ -631,13 +631,29 @@ function isDeclaredHost(
  * reader uses: the manifest-declared host is checked before any dial and again
  * on every hop, link-local and metadata addresses are refused outright, and a
  * private address needs the caller's explicit permission. The plugin's headers
- * are its own; no host credential is added.
+ * and body are its own; no host credential is added. `fetchImpl` must pin the
+ * checked address (see `createPinnedFetch`), so a second resolution cannot
+ * redirect the connection.
+ *
+ * The request takes one of the host's four fetch slots, so a plugin cannot
+ * hold more stalled connections than every other source combined.
  */
 export async function guardedFetch(
   options: GuardedFetchOptions,
 ): Promise<FetchOutcome> {
+  await acquireSlot();
+  try {
+    return await runGuardedFetch(options);
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function runGuardedFetch(
+  options: GuardedFetchOptions,
+): Promise<FetchOutcome> {
   const startedAt = Date.now();
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl;
   const resolve = options.resolve ?? dnsLookup;
   const maxRedirects = options.redirects ?? MAX_REDIRECTS;
   const allowPrivate = options.allowPrivateOrigin === true;
@@ -699,7 +715,9 @@ export async function guardedFetch(
       [PINNED_ADDRESSES]: checked.addresses,
     };
     if (options.method !== undefined) init.method = options.method;
-    if (options.body !== undefined) init.body = options.body;
+    // A cross-origin hop carries neither the plugin's headers nor its body: a
+    // body can hold the plugin's own credential.
+    if (sameOrigin && options.body !== undefined) init.body = options.body;
 
     let response: Response;
     try {

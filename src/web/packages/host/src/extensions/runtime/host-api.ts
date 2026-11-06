@@ -8,9 +8,11 @@ import {
   type PluginMethod,
 } from "@yunari/extension-api";
 import {
+  dnsLookup,
   guardedFetch,
   type HostLookup,
 } from "../../providers/custom/fetch-source.js";
+import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
 import {
   createScopedStores,
   type PluginSettingsScope,
@@ -46,6 +48,8 @@ export interface HostApiOptions {
 const INVALID = "invalid-params";
 const LOG_LIMIT = 2_048;
 const NETWORK_BODY_BYTES = 1024 * 1024;
+const CALL_TIMEOUT_MS = 30_000;
+const TIMEOUT_ANSWER = { ok: false, reason: "timeout" };
 const LOG_LEVELS: ReadonlySet<string> = new Set(["info", "warn", "error"]);
 
 type Params = Readonly<Record<string, unknown>>;
@@ -135,19 +139,21 @@ async function networkFetch(
     return { ok: false, reason: "the request URL carries credentials" };
   }
 
+  // The checked address must be the connected address: a plain global fetch
+  // would resolve again at connect time, so the plugin path always pins.
+  const fetchImpl =
+    options.fetchImpl ??
+    createPinnedFetch({ lookup: options.resolve ?? dnsLookup });
+
   return guardedFetch({
     url,
     allowedHosts: plugin.manifest.networkHosts ?? [],
     maxBytes: NETWORK_BODY_BYTES,
-    // The plugin call has no caller signal of its own; the host owns the
-    // abort controller so a future supervisor timeout can cancel the request.
-    signal: new AbortController().signal,
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    fetchImpl,
     ...(method === undefined ? {} : { method }),
     ...(body === undefined ? {} : { body }),
     ...(headers === undefined ? {} : { headers }),
-    ...(options.fetchImpl === undefined
-      ? {}
-      : { fetchImpl: options.fetchImpl }),
     ...(options.resolve === undefined ? {} : { resolve: options.resolve }),
   });
 }
@@ -267,12 +273,65 @@ function logCall(params: unknown): unknown {
   return null;
 }
 
+function dispatchCall(
+  input: HostApiCall,
+  stores: ScopedStores,
+  options: HostApiOptions,
+): Promise<unknown> {
+  switch (input.method as PluginMethod) {
+    case "network.fetch":
+      return networkFetch(input.plugin, input.params, options);
+    case "storage.get":
+    case "storage.set":
+    case "storage.remove":
+    case "storage.list":
+      return storageCall(
+        stores.storage,
+        input.method as PluginMethod,
+        input.params,
+      );
+    case "secrets.get":
+    case "secrets.set":
+    case "secrets.remove":
+      return secretCall(
+        stores.secrets,
+        input.method as PluginMethod,
+        input.params,
+      );
+    case "settings.get":
+    case "settings.set":
+      return settingsCall(
+        stores.settings,
+        input.method as PluginMethod,
+        input.params,
+      );
+    case "log":
+      return Promise.resolve(logCall(input.params));
+    default:
+      return Promise.resolve({ ok: false, reason: "not-supported" });
+  }
+}
+
+/** A plugin cannot hold a host call open for ever. The inner request carries
+ *  the same deadline, so a stalled socket is aborted rather than orphaned. */
+function withDeadline(work: Promise<unknown>): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<unknown>((resolve) => {
+    timer = setTimeout(() => resolve(TIMEOUT_ANSWER), CALL_TIMEOUT_MS);
+    (timer as { unref?: () => void }).unref?.();
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export function createHostApiDispatcher(
   options: HostApiOptions,
 ): HostApiDispatcher {
   const root = path.join(options.settingsDir, "extensions");
-  /** One store object per installed content: an update gets a fresh tree, so a
-   *  stale object cannot keep writing under the previous version's path. */
+  /** One store object per installed content: the data tree stays
+   *  `<publisher>/<id>`, but an update gets a fresh object so no stale one
+   *  serves the previous version. */
   const storesByPlugin = new Map<string, ScopedStores>();
   const storesFor = (plugin: InstalledPlugin): ScopedStores => {
     const key = `${plugin.key}${plugin.contentHash}`;
@@ -305,28 +364,13 @@ export function createHostApiDispatcher(
         return { ok: false, reason: "not-supported" };
       }
 
-      const method = input.method as PluginMethod;
-      const stores = storesFor(input.plugin);
-
-      switch (method) {
-        case "network.fetch":
-          return networkFetch(input.plugin, input.params, options);
-        case "storage.get":
-        case "storage.set":
-        case "storage.remove":
-        case "storage.list":
-          return storageCall(stores.storage, method, input.params);
-        case "secrets.get":
-        case "secrets.set":
-        case "secrets.remove":
-          return secretCall(stores.secrets, method, input.params);
-        case "settings.get":
-        case "settings.set":
-          return settingsCall(stores.settings, method, input.params);
-        case "log":
-          return logCall(input.params);
-        default:
-          return { ok: false, reason: "not-supported" };
+      try {
+        const stores = storesFor(input.plugin);
+        return await withDeadline(dispatchCall(input, stores, options));
+      } catch {
+        // Bad params (for example a header name `Headers` refuses) must answer
+        // rather than reject the dispatch promise.
+        return { ok: false, reason: INVALID };
       }
     },
   };

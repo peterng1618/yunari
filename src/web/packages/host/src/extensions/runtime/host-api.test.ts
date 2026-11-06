@@ -10,6 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostLookup } from "../../providers/custom/fetch-source.js";
 import { createHostApiDispatcher, type HostApiDispatcher } from "./host-api.js";
 
+const pinned = vi.hoisted(() => {
+  const fetchImpl = vi.fn<typeof fetch>();
+  return { fetchImpl, createPinnedFetch: vi.fn(() => fetchImpl) };
+});
+
+vi.mock("../../providers/custom/pinned-fetch.js", () => ({
+  createPinnedFetch: pinned.createPinnedFetch,
+}));
+
 const consent: ConsentRecord = {
   pluginKey: "acme/test-plugin",
   version: "1.0.0",
@@ -189,6 +198,47 @@ describe("host API dispatcher", () => {
     expect(new Headers(init?.headers).get("authorization")).toBeNull();
   });
 
+  it("defaults a network call to the pinned fetch", async () => {
+    pinned.fetchImpl.mockReset();
+    pinned.createPinnedFetch.mockClear();
+    pinned.fetchImpl.mockResolvedValue(json({ value: 1 }));
+    const resolve = publicResolve();
+    const api = dispatcherOf({ settingsDir, resolve });
+
+    const answer = await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetch",
+      params: { url: "https://api.acme.test/data" },
+    });
+
+    expect(answer).toMatchObject({ ok: true, body: { value: 1 } });
+    expect(pinned.createPinnedFetch).toHaveBeenCalledWith({ lookup: resolve });
+    expect(pinned.fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("answers invalid-params when a handler throws on bad params", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const api = dispatcherOf({
+      settingsDir,
+      fetchImpl,
+      resolve: publicResolve(),
+    });
+
+    const answer = await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetch",
+      params: {
+        url: "https://api.acme.test/x",
+        headers: { "bad name": "x" },
+      },
+    });
+
+    expect(answer).toEqual({ ok: false, reason: "invalid-params" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("refuses unknown params", async () => {
     const api = dispatcherOf({ settingsDir });
 
@@ -301,14 +351,14 @@ describe("host API dispatcher", () => {
         params: { key: "absent" },
       }),
     ).toBeNull();
-    await expect(
-      api.call({
+    expect(
+      await api.call({
         plugin: owner,
         consent,
         method: "secrets.set",
         params: { key: "../x", value: "v" },
       }),
-    ).rejects.toThrow("not a storage key");
+    ).toEqual({ ok: false, reason: "invalid-params" });
   });
 
   it("logs the message only and bounds it", async () => {

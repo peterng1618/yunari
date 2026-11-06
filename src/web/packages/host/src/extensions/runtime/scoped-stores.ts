@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { InstalledPlugin } from "@yunari/extension-api";
+import {
+  IDENTIFIER_PATTERN,
+  isWindowsReservedName,
+} from "@yunari/extension-api";
 import { createJsonFile } from "../../settings/json-file.js";
 import { createSecretStore } from "../../settings/secret-store.js";
 
@@ -44,6 +48,15 @@ export interface ScopedStores {
 function checkKey(key: string): void {
   if (!KEY_PATTERN.test(key) || key === "." || key === "..") {
     throw new Error(`"${key}" is not a storage key`);
+  }
+}
+
+/** Publisher and id become path segments below. The manifest owns this
+ *  grammar; re-asserting it here keeps a hostile or hand-built `InstalledPlugin`
+ *  from steering the join. */
+function checkSegment(value: string, label: string): void {
+  if (!IDENTIFIER_PATTERN.test(value) || isWindowsReservedName(value)) {
+    throw new Error(`"${value}" is not a valid plugin ${label}`);
   }
 }
 
@@ -183,6 +196,8 @@ export function createScopedStores(
 ): ScopedStores {
   const { publisher } = plugin;
   const id = plugin.manifest.id;
+  checkSegment(publisher, "publisher");
+  checkSegment(id, "id");
 
   return {
     storage: createStorageScope(path.join(root, "data", publisher, id)),
