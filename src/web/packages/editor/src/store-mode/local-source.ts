@@ -86,6 +86,12 @@ export interface CatalogueFacts {
   readonly favorites: number;
   readonly packageUrl: string;
   readonly installedVersion: string | undefined;
+  /** The store's facts about the package an install must verify. Absent on a
+   *  catalogue written before the store recorded them, which is an item the
+   *  host refuses to install. */
+  readonly sha256?: string;
+  readonly bytes?: number;
+  readonly publisher?: string;
 }
 
 /** One kind's list, as the gallery reads it. `kind` is on the source rather than

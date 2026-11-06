@@ -140,9 +140,24 @@ async function installOnce(
     };
   }
 
+  return installThemeBytes(request, downloaded.bytes, options);
+}
+
+/**
+ * The half after the download: validate, write, then record the origin.
+ *
+ * Split out because the store's dispatcher holds the bytes already, and a
+ * second download of the same package would pay the network twice and could
+ * land different bytes than the digest it checked.
+ */
+export async function installThemeBytes(
+  request: Pick<InstallRequest, "catalogueId" | "version">,
+  bytes: Uint8Array,
+  options: InstallOptions,
+): Promise<InstallResult> {
   // The envelope is checked before either write path runs, so a refused video
   // leaves the library and the origins file exactly as they were.
-  const parsed = readThemePackage(downloaded.bytes);
+  const parsed = readThemePackage(bytes);
   if (!parsed.ok) {
     return { ok: false, stage: "package", message: parsed.message };
   }
@@ -154,8 +169,8 @@ async function installOnce(
   const replaceId = await catalogueCopyId(request.catalogueId, options);
   const replacing = replaceId !== undefined;
   const imported = replacing
-    ? await replaceCatalogueCopy(downloaded.bytes, replaceId, options)
-    : await importThemePackage(downloaded.bytes, {
+    ? await replaceCatalogueCopy(bytes, replaceId, options)
+    : await importThemePackage(bytes, {
         store: options.store,
         ...(options.thumbnails === undefined
           ? {}

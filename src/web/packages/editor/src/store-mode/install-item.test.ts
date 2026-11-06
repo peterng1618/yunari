@@ -15,13 +15,16 @@ const ITEM = fixtureItem(
     favorites: 7,
     packageUrl: "https://store.test/office-wall.zip",
     installedVersion: undefined,
+    sha256: "a".repeat(64),
+    bytes: 1024,
   } satisfies CatalogueFacts,
 );
 
 /**
- * **The browser posts the four facts and reads no bytes**:
- * the host owns the download, so the request carries only what names the item —
- * the package address, the catalogue's id, the version and the kind.
+ * **The browser posts the catalogue's facts and reads no bytes**:
+ * the host owns the download, so the request carries only what names the item
+ * and what verifies it — the package address, the catalogue's id, the version,
+ * the kind, and the digest and size the store recorded.
  */
 it("posts the item to the host's install route", async () => {
   const calls: {
@@ -42,7 +45,7 @@ it("posts the item to the host's install route", async () => {
   expect(
     calls[0]?.url,
     "the install reaches a route the host does not serve",
-  ).toBe("/api/themes/install");
+  ).toBe("/api/store/install");
   expect(calls[0]?.init?.method).toBe("POST");
   expect(
     calls[0]?.init?.headers,
@@ -53,6 +56,8 @@ it("posts the item to the host's install route", async () => {
     catalogueId: "office-wall",
     version: "1.3.0",
     kind: "dashboard-theme",
+    sha256: "a".repeat(64),
+    bytes: 1024,
   });
 });
 

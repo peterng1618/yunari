@@ -474,6 +474,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     // here so the settings folder's subtree is the one place they live.
     widgetPacks,
     pathPresets,
+    // Where the store's editor themes land; the settings import control reads
+    // them back through the route of the same name.
+    editorThemesDirectory: path.join(settingsDir, "editor-themes"),
     // The host's own windows on its local monitors.
     get launcher() {
       return launcher;

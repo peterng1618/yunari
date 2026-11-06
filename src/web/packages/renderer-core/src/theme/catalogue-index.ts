@@ -74,6 +74,11 @@ export interface CatalogueEntry {
   /** Derived by the producer from the envelope. Checked as a record and never
    *  re-derived: deriving it again would be a second owner of one fact. */
   readonly facets: FacetRecord;
+  /** The stored package's SHA-256 and exact size, so an installer verifies the
+   *  bytes it downloaded. Absent on an entry written before the store recorded
+   *  them, which is an item the host cannot install. */
+  readonly sha256?: string;
+  readonly bytes?: number;
   /** The store account's publisher slug. Absent on a legacy dashboard theme,
    *  which had no publisher before the account owned it. */
   readonly publisher?: string;
@@ -185,6 +190,11 @@ export function parseCatalogueItemFile(
   if (publisher === null) return refusedText("publisher");
   const executionProfile = optionalText(value, "executionProfile");
   if (executionProfile === null) return refusedText("executionProfile");
+  const sha256 = optionalText(value, "sha256");
+  if (sha256 === null || (sha256 !== undefined && !isSha256(sha256)))
+    return refusedDigest();
+  const bytes = optionalBytes(value);
+  if (bytes === null) return refusedBytes();
   const remixOf = field(value, "remixOf");
   if (remixOf !== undefined && !isThemeRemix(remixOf)) return refusedRemix();
 
@@ -202,6 +212,8 @@ export function parseCatalogueItemFile(
       thumbnail,
       ...(publisher === undefined ? {} : { publisher }),
       ...(executionProfile === undefined ? {} : { executionProfile }),
+      ...(sha256 === undefined ? {} : { sha256 }),
+      ...(bytes === undefined ? {} : { bytes }),
       ...(remixOf === undefined ? {} : { remixOf }),
     },
   };
@@ -216,6 +228,36 @@ function optionalText(
   const value = field(record, key);
   if (value === undefined) return undefined;
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** An optional package size: `undefined` when absent, `null` when present and
+ *  not a count. A size of zero is a count a package cannot have. */
+function optionalBytes(
+  record: Record<string, unknown>,
+): number | undefined | null {
+  const value = field(record, "bytes");
+  if (value === undefined) return undefined;
+  const bytes = countField(record, "bytes");
+  return bytes === undefined || bytes === 0 ? null : bytes;
+}
+
+/** Lowercase hex, exactly SHA-256's width. */
+function isSha256(text: string): boolean {
+  return /^[0-9a-f]{64}$/.test(text);
+}
+
+function refusedDigest(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason: 'item.json\'s "sha256" must be a lowercase hex SHA-256.',
+  };
+}
+
+function refusedBytes(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason: 'item.json\'s "bytes" must be a positive whole number.',
+  };
 }
 
 function refusedKind(): CatalogueItemFileResult {
@@ -348,9 +390,14 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
   const remixOf = field(value, "remixOf");
   const publisher = optionalText(value, "publisher");
   const executionProfile = optionalText(value, "executionProfile");
+  const sha256 = optionalText(value, "sha256");
+  const bytes = optionalBytes(value);
 
   if (remixOf !== undefined && !isThemeRemix(remixOf)) return undefined;
   if (publisher === null || executionProfile === null) return undefined;
+  if (sha256 === null || (sha256 !== undefined && !isSha256(sha256)))
+    return undefined;
+  if (bytes === null) return undefined;
 
   if (
     id === undefined ||
@@ -382,6 +429,8 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
     facets,
     ...(publisher === undefined ? {} : { publisher }),
     ...(executionProfile === undefined ? {} : { executionProfile }),
+    ...(sha256 === undefined ? {} : { sha256 }),
+    ...(bytes === undefined ? {} : { bytes }),
     ...(remixOf === undefined ? {} : { remixOf }),
   };
 }

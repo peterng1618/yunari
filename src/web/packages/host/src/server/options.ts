@@ -218,6 +218,9 @@ export interface HostServerOptions {
    *  serves none; the routes then say so rather than falling through to the
    *  static 404. */
   readonly pathPresets?: PathPresetStore;
+  /** Where an installed editor theme package is kept, and served back from.
+   *  Omitted, the store route refuses editor themes. */
+  readonly editorThemesDirectory?: string;
 }
 
 export interface HostingState {

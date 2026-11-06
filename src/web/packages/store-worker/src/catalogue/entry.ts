@@ -39,6 +39,8 @@ export function entryOf(
     packageUrl,
     thumbnail: thumbnailUrl,
     facets,
+    sha256: version.sha256,
+    bytes: version.bytes,
     ...(item.publisher === "" ? {} : { publisher: item.publisher }),
     ...(version.execution_profile === null
       ? {}

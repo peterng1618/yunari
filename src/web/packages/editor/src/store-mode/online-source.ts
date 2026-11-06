@@ -70,6 +70,9 @@ export function catalogueItemOf(entry: CatalogueEntry): StoreItem {
       packageUrl: entry.packageUrl,
       // What this PC has installed is the library's fact, not the catalogue's.
       installedVersion: undefined,
+      ...(entry.sha256 === undefined ? {} : { sha256: entry.sha256 }),
+      ...(entry.bytes === undefined ? {} : { bytes: entry.bytes }),
+      ...(entry.publisher === undefined ? {} : { publisher: entry.publisher }),
     },
     facets: entry.facets,
   };
