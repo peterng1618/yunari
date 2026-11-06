@@ -401,12 +401,12 @@ export async function discard(response: Response): Promise<void> {
 
 /** Counts bytes as they arrive and races the deadline, so neither an upstream
  *  that ignores `content-length` nor a stalled body can outlast the cap. */
-export async function readBody(
+export async function readBodyBytes(
   response: Response,
   signal: AbortSignal,
   maxBytes: number,
-): Promise<string> {
-  if (response.body === null) return "";
+): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array();
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -435,7 +435,16 @@ export async function readBody(
     await reader.cancel().catch(() => undefined);
   }
 
-  return Buffer.concat(chunks).toString("utf8");
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+export async function readBody(
+  response: Response,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<string> {
+  const bytes = await readBodyBytes(response, signal, maxBytes);
+  return Buffer.from(bytes).toString("utf8");
 }
 
 export function messageOf(error: unknown): string {
