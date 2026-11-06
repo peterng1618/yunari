@@ -7,9 +7,9 @@
   64-byte reports; **bulk** data on interface 0, endpoint `0x02`
 - **Driver:** `src/web/packages/host/src/panels/kraken-z3-panel.ts`
 - **Last hardware verification:** 2026-11-06
-- **Last known good revision:** `2e64685d93af` (2026-11-06) — playing well on
-  the attached Z73. Mode B (CAM's paletted stream) runs at CAM's cadence and
-  the owner judged the picture indistinguishable from CAM on the glass;
+- **Last known good revision:** `a738b21c01b4` (2026-11-06) — playing well on
+  the attached Z73. Mode B (CAM's paletted stream) samples at 100 ms so a
+  30 fps video background advances exactly three source frames per frame;
   Mode A remains the default. Compare a future playback regression against
   this revision.
 
