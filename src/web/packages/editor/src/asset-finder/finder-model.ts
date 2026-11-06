@@ -55,7 +55,11 @@ export function categoryWord(
   table: Readonly<Record<BuiltinListingCategory, string>>,
   category: ListingCategory,
 ): string | undefined {
-  return (table as Readonly<Record<string, string | undefined>>)[category];
+  // A plugin id may be `constructor`, which is inherited from `Object` rather
+  // than named by the table. Only an own key is the table's word.
+  return Object.hasOwn(table, category)
+    ? (table as Readonly<Record<string, string | undefined>>)[category]
+    : undefined;
 }
 
 /** The word a tab shows: the copy table's own word for a built-in category,
@@ -91,11 +95,23 @@ export const EMPTY_VIEW: TabView = {
 };
 
 /** Only the built-in tabs start with a view; a declared category is read
- *  through `?? EMPTY_VIEW` rather than pre-populated for an id nothing knows. */
+ *  through `viewOf` rather than pre-populated for an id nothing knows. */
 export function emptyViews(): Record<string, TabView> {
   const views: Record<string, TabView> = {};
   for (const category of CATEGORY_ORDER) views[category] = EMPTY_VIEW;
   return views;
+}
+
+/** A tab's own view, or the empty one for a category nothing has drawn yet. A
+ *  plugin id may be `constructor` or `toString`; an inherited `Object` key is
+ *  not a view, so only an own key is returned. */
+export function viewOf(
+  views: Readonly<Record<string, TabView>>,
+  category: ListingCategory,
+): TabView {
+  return Object.hasOwn(views, category)
+    ? (views[category] as TabView)
+    : EMPTY_VIEW;
 }
 
 export type ActionOutcome =

@@ -9,6 +9,9 @@ import {
   CATEGORY_ORDER,
   categoryLabel,
   categoryTabs,
+  EMPTY_VIEW,
+  emptyViews,
+  viewOf,
 } from "./finder-model.js";
 
 function declared(id: string): DeclarativeCategory {
@@ -71,5 +74,20 @@ describe("the asset finder's labels", () => {
 
   it("falls back to the category id for an unknown category", () => {
     expect(categoryLabel("brand")).toBe("brand");
+  });
+
+  it("does not read an inherited Object key as a category word", () => {
+    for (const category of ["constructor", "toString", "valueOf"] as const) {
+      expect(categoryLabel(category)).toBe(category);
+    }
+  });
+});
+
+describe("the asset finder's tab views", () => {
+  it("does not read an inherited Object key as a view", () => {
+    for (const category of ["constructor", "toString", "valueOf"] as const) {
+      expect(viewOf({}, category)).toBe(EMPTY_VIEW);
+      expect(viewOf(emptyViews(), category)).toBe(EMPTY_VIEW);
+    }
   });
 });

@@ -10,6 +10,7 @@ import {
   emptyViews,
   SEARCH_DEBOUNCE_MS,
   type TabView,
+  viewOf,
 } from "./finder-model.js";
 import {
   appendAnswer,
@@ -46,8 +47,7 @@ export function useTabSearches(props: {
   const announced = useRef(false);
   // A category this session has not drawn yet reads as the empty view rather
   // than being pre-populated for an id nothing knows.
-  const view =
-    active === undefined ? EMPTY_VIEW : (views[active] ?? EMPTY_VIEW);
+  const view = active === undefined ? EMPTY_VIEW : viewOf(views, active);
 
   // A closed finder is not a status surface: the sentence a write left belongs
   // to the session that ran it, so reopening starts without one.
@@ -78,7 +78,7 @@ export function useTabSearches(props: {
   ): void => {
     setViews((current) => ({
       ...current,
-      [category]: update(current[category] ?? EMPTY_VIEW),
+      [category]: update(viewOf(current, category)),
     }));
   };
 
@@ -149,7 +149,7 @@ export function useTabSearches(props: {
   const loadMore = (): void => {
     if (active === undefined) return;
     const category = active;
-    const current = views[category] ?? EMPTY_VIEW;
+    const current = viewOf(views, category);
     if (current.loading !== undefined || !current.browsed) return;
     const pages = nextPages(current.data, enabled);
     if (Object.keys(pages).length === 0) return;
@@ -179,7 +179,7 @@ export function useTabSearches(props: {
   const retry = (): void => {
     if (active === undefined) return;
     const category = active;
-    const current = views[category] ?? EMPTY_VIEW;
+    const current = viewOf(views, category);
     const pages = retryPages(current.data, enabled);
     if (Object.keys(pages).length === 0) return;
 

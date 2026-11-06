@@ -467,9 +467,12 @@ export const FINDER_TAB_GLYPHS: Readonly<Record<string, LucideIcon>> = {
 export const FINDER_TAB_FALLBACK_GLYPH: LucideIcon = ImageIcon;
 
 /** The one glyph lookup, so the fallback is decided here rather than at each
- *  call site. */
+ *  call site. A plugin id may be `constructor` or `toString`, which the map
+ *  inherits from `Object`; only its own keys are glyphs. */
 export function finderTabGlyph(category: string): LucideIcon {
-  return FINDER_TAB_GLYPHS[category] ?? FINDER_TAB_FALLBACK_GLYPH;
+  return Object.hasOwn(FINDER_TAB_GLYPHS, category)
+    ? (FINDER_TAB_GLYPHS[category] as LucideIcon)
+    : FINDER_TAB_FALLBACK_GLYPH;
 }
 
 /** The tree's open/closed chevrons. Each points the way the press goes, and the

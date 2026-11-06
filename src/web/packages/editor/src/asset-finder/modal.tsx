@@ -42,6 +42,7 @@ import {
   type PreviewTarget,
   sourceIdOf,
   storedDisabled,
+  viewOf,
 } from "./finder-model.js";
 import { previewModel } from "./finder-preview.js";
 import { FinderFilters, FinderSourceChips } from "./finder-toolbar.js";
@@ -252,8 +253,7 @@ export function AssetFinder({
     client,
     onNotice: setNotice,
   });
-  const view =
-    active === undefined ? EMPTY_VIEW : (views[active] ?? EMPTY_VIEW);
+  const view = active === undefined ? EMPTY_VIEW : viewOf(views, active);
   const fontTab = useFontTab({
     open,
     active,
