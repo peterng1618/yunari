@@ -100,8 +100,10 @@ Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
   bytes cross the worker boundary as buffers, never a handle.
 - A panel-family plugin runs only as `trusted-worker`. A hardware plugin needs
   store review before publish and exact-device hardware consent before load. A
-  driver crash or timeout stops only that display's runner; the kill list unloads
-  the plugin and closes its handles.
+  driver crash or timeout stops that display's runner; for a plugin family the
+  failure also closes the plugin's handles, so that plugin's displays stop,
+  while built-in families and other plugins' displays keep running. The kill
+  list unloads the plugin and closes its handles.
 - Node cannot sandbox a native USB stack. Host mediation, store review, hardware
   consent and revocation are the controls, not an OS sandbox.
 - `panel-manager.ts` owns one serialized runner per display. It opens attached

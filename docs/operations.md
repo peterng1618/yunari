@@ -67,8 +67,9 @@ worker.
 
 A hardware plugin's consent fingerprint includes its declared device allowlist
 (`usb:<vid>:<pid>`, `hid:<vid>:<pid>`, `serial:<path>`). Adding a device id
-changes the fingerprint and holds the update; a hardware plugin with no matching
-grant stays installed but does not load.
+changes the fingerprint, so the new version installs but does not load until the
+new device set is consented; a hardware plugin with no matching grant stays
+installed but does not load.
 
 The host owns device handles through the broker, and the plugin receives an
 opaque token. A revoked or consent-stale plugin's worker is stopped and its
