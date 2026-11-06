@@ -6,6 +6,7 @@ import {
   INFO_GLYPH,
   KEYBOARD_GLYPH,
   type LucideIcon,
+  PACKAGE_GLYPH,
   PALETTE_GLYPH,
   PREVIEW_RATIOS_GLYPH,
   READINGS_GLYPH,
@@ -13,9 +14,9 @@ import {
 } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
 
-/** The eight Settings destinations. The type is also the active-page state the
- *  shell holds, so a page added here and not handled there fails to compile. */
-export type SettingsPage =
+/** The pages this build ships. The type is also the active-page state the shell
+ *  holds, so a page added here and not handled there fails to compile. */
+export type BuiltinSettingsPage =
   | "displays"
   | "hardware"
   | "units"
@@ -25,14 +26,25 @@ export type SettingsPage =
   | "path-presets"
   | "keyboard"
   | "asset-sources"
+  | "extensions"
   | "about";
+
+/** A built-in destination or an installed plugin's page. A plugin page id keeps
+ *  the `plugin:` prefix so it can never collide with a built-in word. */
+export type SettingsPage = BuiltinSettingsPage | `plugin:${string}`;
+
+export function isBuiltinSettingsPage(
+  page: SettingsPage,
+): page is BuiltinSettingsPage {
+  return SETTINGS_PAGES.some((entry) => entry.id === page);
+}
 
 /** The two headings the column groups its rows under. This PC is the machine
  *  and its screens; Editor is how the author works on it. */
 export type SettingsGroup = "this-pc" | "editor";
 
 export interface SettingsPageEntry {
-  readonly id: SettingsPage;
+  readonly id: BuiltinSettingsPage;
   readonly group: SettingsGroup;
   readonly label: string;
   readonly glyph: LucideIcon;
@@ -102,6 +114,12 @@ export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
     label: uiCopy.settings.pages.about,
     glyph: INFO_GLYPH,
   },
+  {
+    id: "extensions",
+    group: "editor",
+    label: uiCopy.settings.pages.extensions,
+    glyph: PACKAGE_GLYPH,
+  },
 ];
 
 /** Each group heading, in the order it draws. */
@@ -114,7 +132,7 @@ export const SETTINGS_GROUPS: readonly {
 ];
 
 /** The page's own label and hint, by id. */
-export function pageCopy(page: SettingsPage): {
+export function pageCopy(page: BuiltinSettingsPage): {
   readonly title: string;
   readonly hint: string;
 } {
@@ -125,7 +143,9 @@ export function pageCopy(page: SettingsPage): {
 }
 
 /** The copy keys use camel case; the page ids use the shell's kebab case. */
-function pageKey(page: SettingsPage): keyof typeof uiCopy.settings.pages {
+function pageKey(
+  page: BuiltinSettingsPage,
+): keyof typeof uiCopy.settings.pages {
   return page === "asset-sources"
     ? "assetSources"
     : page === "path-presets"

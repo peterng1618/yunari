@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Glyph } from "../editor-shell/icons.js";
 import type { ShellPalette } from "../editor-shell/palette.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
+import { ExtensionsPage } from "../plugin-manager/plugin-manager.js";
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
 import type { ThemeLibraryClient } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
@@ -236,6 +237,7 @@ function Settings(props: {
                     />
                   ) : null}
                   {page.id === "asset-sources" ? <AssetSourcesPage /> : null}
+                  {page.id === "extensions" ? <ExtensionsPage /> : null}
                   {page.id === "about" ? (
                     <AboutPage releaseVersion={props.releaseVersion} />
                   ) : null}
