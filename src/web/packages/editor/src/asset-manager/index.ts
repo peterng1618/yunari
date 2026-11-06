@@ -5,6 +5,7 @@ import {
   FONT_ASSET_FORMATS,
   type FontAssetFormat,
   type FontAssetReference,
+  isSafeAssetPath,
   themeAssetContentType,
 } from "@yunari/renderer-core";
 import {
@@ -217,6 +218,122 @@ export class AssetManager {
     }
     this.#mutated();
     return reference;
+  }
+
+  /**
+   * Declares the assets a widget pack carries, without letting the pack
+   * overwrite this document's.
+   *
+   * The document owns its ids and paths, so a collision in either renames the
+   * arrival rather than the resident. Every declaration is verified before the
+   * first write — a pack whose bytes disagree with its digests is refused
+   * whole, because a half-adopted set is a scene whose references are missing.
+   */
+  async adoptPackaged(
+    declarations: readonly AssetReference[],
+    assets: Readonly<Record<string, Uint8Array>>,
+  ): Promise<ReadonlyMap<string, string>> {
+    const verified: {
+      readonly declaration: AssetReference;
+      readonly bytes: Uint8Array;
+      readonly kind: AssetKind;
+      readonly extension: AssetExtension;
+      readonly digest: string;
+      readonly font?: ReturnType<typeof fontFactsOf>;
+    }[] = [];
+
+    for (const declaration of declarations) {
+      if (!isSafeAssetPath(declaration.path))
+        throw new Error(
+          `Package asset path is not package-relative: ${declaration.path}.`,
+        );
+      const bytes = Object.hasOwn(assets, declaration.path)
+        ? assets[declaration.path]
+        : undefined;
+      if (bytes === undefined)
+        throw new Error(`Package asset has no bytes: ${declaration.path}.`);
+
+      // An extension this editor does not package is refused rather than
+      // guessed into a neighbouring kind: a file the manager cannot type would
+      // otherwise be declared with a kind its own `typeOf` disagrees with.
+      const extension = extensionOf(declaration.path);
+      if (extension === undefined)
+        throw new Error(`Unsupported asset file type: ${declaration.path}.`);
+      const type = typeOf(extension);
+      if (type.kind !== declaration.kind)
+        throw new Error(
+          `Package asset ${declaration.path} declares kind "${declaration.kind}" but its extension is a ${type.kind}.`,
+        );
+
+      const font =
+        type.kind === "font" ? fontFactsOf(declaration, extension) : undefined;
+
+      if (declaration.sha256 === undefined)
+        throw new Error(
+          `Package asset ${declaration.path} declares no SHA-256 digest.`,
+        );
+      const digest = await sha256(bytes);
+      if (declaration.sha256 !== digest)
+        throw new Error(
+          `Package asset ${declaration.path} does not match its declared SHA-256 digest.`,
+        );
+      verified.push({
+        declaration,
+        bytes,
+        kind: type.kind,
+        extension,
+        digest,
+        ...(font === undefined ? {} : { font }),
+      });
+    }
+
+    const adopted = new Map<string, string>();
+    if (verified.length === 0) return adopted;
+
+    for (const {
+      declaration,
+      bytes,
+      kind,
+      extension,
+      digest,
+      font,
+    } of verified) {
+      const collides = this.#declarations.some(
+        (asset) =>
+          asset.id === declaration.id || asset.path === declaration.path,
+      );
+      const placed = collides
+        ? this.#allocate(
+            declaration.path.slice(declaration.path.lastIndexOf("/") + 1),
+            extension,
+          )
+        : { id: declaration.id, path: declaration.path };
+
+      const credit = creditOf(declaration);
+      const reference: LocalAssetReference =
+        kind === "font" && font !== undefined
+          ? {
+              id: placed.id,
+              kind: "font",
+              path: placed.path,
+              sha256: digest,
+              ...font,
+              ...credit,
+            }
+          : {
+              id: placed.id,
+              kind,
+              path: placed.path,
+              sha256: digest,
+              ...credit,
+            };
+      this.#assets[placed.path] = bytes;
+      this.#declarations.push(reference);
+      adopted.set(declaration.id, placed.id);
+    }
+    // One insertion is one mutation, however many assets the pack carried.
+    this.#mutated();
+    return adopted;
   }
 
   async adoptFont(
@@ -652,6 +769,56 @@ function assertFileFormat(
     signature.every((byte, index) => bytes[index] === byte),
   );
   if (!matches) throw new Error("The file's bytes do not match its extension.");
+}
+
+/** The credit a pack wrote for an asset travels with the bytes it names. */
+function creditOf(declaration: AssetReference): {
+  readonly sourceUrl?: string;
+  readonly license?: AssetLicense;
+} {
+  return {
+    ...(declaration.sourceUrl === undefined
+      ? {}
+      : { sourceUrl: declaration.sourceUrl }),
+    ...(declaration.license === undefined
+      ? {}
+      : { license: declaration.license }),
+  };
+}
+
+/** A packaged face's facts, refused rather than guessed when any is missing:
+ *  registration reads the family and format, and a declaration that lacks them
+ *  cannot become a `FontAssetReference`. The path's extension and the declared
+ *  format are the same rule the envelope validator holds. */
+function fontFactsOf(
+  declaration: AssetReference,
+  extension: AssetExtension,
+): Pick<
+  FontAssetReference,
+  "family" | "weight" | "style" | "format" | "subset"
+> {
+  const font = declaration as FontAssetReference;
+  if (
+    typeof font.family !== "string" ||
+    font.family.trim() === "" ||
+    (typeof font.weight !== "string" && typeof font.weight !== "number") ||
+    (font.style !== "normal" && font.style !== "italic") ||
+    !(FONT_ASSET_FORMATS as readonly string[]).includes(font.format)
+  )
+    throw new Error(
+      `Package font ${declaration.path} is missing its family, weight, style or format.`,
+    );
+  if (font.format !== extension)
+    throw new Error(
+      `Package font ${declaration.path} declares format "${String(font.format)}" but its path is a .${extension} file.`,
+    );
+  return {
+    family: font.family,
+    weight: font.weight,
+    style: font.style,
+    format: font.format,
+    ...(font.subset === undefined ? {} : { subset: font.subset }),
+  };
 }
 
 /** The form's values, trimmed and refused where unusable — never coerced. An
