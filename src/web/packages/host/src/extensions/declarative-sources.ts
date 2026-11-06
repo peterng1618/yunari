@@ -45,8 +45,6 @@ const UNREADABLE_ITEM =
 
 interface BuiltRequest {
   readonly url: string;
-  /** The search URL a result falls back to. */
-  readonly publicUrl: string;
   readonly headers: Readonly<Record<string, string>>;
 }
 
@@ -154,7 +152,7 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     }
 
     const results = items.value.map((entry) =>
-      this.#readItem(entry, built.publicUrl),
+      this.#readItem(entry, built.url),
     );
     for (const result of results) this.#remember(result.id, result.sourceUrl);
 
@@ -235,7 +233,6 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
 
     return {
       url: url.toString(),
-      publicUrl: url.toString(),
       headers,
     };
   }

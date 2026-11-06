@@ -226,7 +226,8 @@ from the manifest and the grant captured when the worker started on every call;
 a caller cannot widen what the gate sees. Parameters are checked against a closed key
 set per method, denials name the method and the gate's reason only, and no
 method returns a host credential. `network.fetch` is `https` only and reaches
-only the hosts the manifest declares. Every hop re-checks the host, refuseslink-local and metadata addresses, re-checks a redirect and refuses a scheme
+only the hosts the manifest declares. Every hop re-checks the host, refuses
+link-local and metadata addresses, re-checks a redirect and refuses a scheme
 change, caps the body at 1 MiB, and pins the checked address through
 `createPinnedFetch` so a second DNS answer cannot redirect the socket. A plugin
 uses its own secrets for its own requests; the host adds no credential, and a
