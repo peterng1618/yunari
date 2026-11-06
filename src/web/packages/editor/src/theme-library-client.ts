@@ -1,7 +1,9 @@
 import {
+  type DisplayRenderMode,
   type DisplayShape,
   type FabricThemeEnvelope,
   type FacetRecord,
+  readRenderMode,
   STABLE_ID_PATTERN,
   type ThemeRemix,
   type ValidationIssue,
@@ -172,6 +174,10 @@ export interface ThemedPanel {
   /** The command kinds the family accepts. Spelled as strings here because this
    *  seam reads the wire; the controls surface filters them. */
   readonly commands: readonly string[];
+  /** The stream this display is fed; `mode-a` when the host named none. */
+  readonly renderMode: DisplayRenderMode;
+  /** The streams the family offers, empty when it has one. */
+  readonly renderModes: readonly DisplayRenderMode[];
 }
 
 export type PanelConnectionStatus = "connected" | "connecting" | "disconnected";
@@ -312,10 +318,12 @@ function readDisplayKind(value: unknown): ThemedDisplay["kind"] {
 function readPanelState(value: unknown): { readonly panel?: ThemedPanel } {
   if (typeof value !== "object" || value === null) return {};
 
-  const { status, stopped, commands } = value as {
+  const { status, stopped, commands, renderMode, renderModes } = value as {
     readonly status?: unknown;
     readonly stopped?: unknown;
     readonly commands?: unknown;
+    readonly renderMode?: unknown;
+    readonly renderModes?: unknown;
   };
   if (
     status !== "connected" &&
@@ -331,6 +339,13 @@ function readPanelState(value: unknown): { readonly panel?: ThemedPanel } {
       ...(stopped === true ? { stopped: true } : {}),
       commands: Array.isArray(commands)
         ? commands.filter((kind): kind is string => typeof kind === "string")
+        : [],
+      renderMode: readRenderMode(renderMode),
+      renderModes: Array.isArray(renderModes)
+        ? renderModes.filter(
+            (mode): mode is DisplayRenderMode =>
+              mode === "mode-a" || mode === "mode-b",
+          )
         : [],
     },
   };

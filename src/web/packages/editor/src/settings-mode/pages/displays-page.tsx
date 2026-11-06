@@ -50,6 +50,10 @@ export function DisplaysPage(state: HostState): React.JSX.Element {
             write={state.write}
             save={state.settingsClient.updateDisplayPresentation}
             onSaved={(id, saved) => state.replacePresentation(id, saved)}
+            saveRenderMode={state.settingsClient.setDisplayRenderMode}
+            onRenderModeSaved={(id, saved) =>
+              state.replaceRenderMode(id, saved)
+            }
             rename={state.settingsClient.renameDisplay}
             onRenamed={(id, label) => state.replaceName(id, label)}
           />

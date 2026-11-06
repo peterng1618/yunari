@@ -1,6 +1,8 @@
+import type { DisplayRenderMode } from "@yunari/renderer-core";
 import HID from "node-hid";
 import { usb } from "usb";
 import { reportedSerial } from "../settings/displays.js";
+import { toPalettedFrame } from "./kraken-palette.js";
 import type {
   PanelDevice,
   PanelFamily,
@@ -10,27 +12,32 @@ import type {
 import { decodePngRgba } from "./png-raster.js";
 
 /**
- * The NZXT Kraken Z LCD: a **round 320x320 screen fed one 32-bit RGBA frame
- * into a bucket that is not on the glass, then switched to**.
+ * The NZXT Kraken Z LCD: a **round 320x320 screen fed one frame into a bucket
+ * that is not on the glass, then switched to**.
+ *
+ * **Two streams paint through the same ring, and the owner chooses one.**
+ *
+ * - **Mode A** is the 32-bit RGBA frame this driver has always sent: 409,600
+ *   bytes of bulk, full colour, and the firmware takes about 140 ms to put a
+ *   bucket on the glass. Its bucket is 401 slots (a 20-byte header plus the
+ *   pixels) and it needs two buckets.
+ * - **Mode B** is CAM's own stream: a 256-entry palette plus one 8-bit index
+ *   per pixel, 103,424 bytes, exactly 101 slots. CAM sends it from all 16
+ *   buckets, deletes the target twice, and never waits before switching; its
+ *   frame starts are 110 ms apart. Relaying CAM's sequence is what closes the
+ *   cadence gap, and the picture is the 256-colour one CAM shows.
+ *
+ * Mode A stays the default because every panel family accepts it and a record
+ * that names nothing plays it.
  *
  * **The firmware refuses the bucket it is displaying.** Deleting or starting a
  * write on the bucket that is currently shown answers status `9`,
  * `BucketIsBeingDisplayed`, and the transfer that follows stores nothing; every
- * write still succeeds on the wire. So the driver keeps two buckets and always
- * writes the one that is not displayed, which is what makes the picture move.
+ * write still succeeds on the wire. So the driver writes a bucket that is not
+ * displayed, which is what makes the picture move.
  *
- * **The live stream is 24-bit RGBA, not the 8-bit paletted mode `0x03`.** Both
- * modes paint when fed through a bucket ring, and a mode-3 frame is a quarter
- * of the bytes. But 256 colours are the whole colour space the panel then has,
- * and on a theme with a gradient or a photograph that is large flat bands —
- * visibly worse than the frame the browser composed. A mode-2 frame costs
- * 409,600 bytes of bulk; the firmware then takes about 140 ms to put the bucket
- * on the glass, so the cadence below is the glass's, not the wire's. The
- * palette would buy a faster glass, not wire time.
- *
- * **The payload goes out in one bulk write.** The endpoint took all 409,600
- * bytes in 36–52 ms across runs (51.6 ms mean on 2026-10-31); splitting it into
- * liquidctl's 512-byte writes costs 800 USB round trips for the same bytes.
+ * **The payload goes out in one bulk write.** Splitting it into liquidctl's
+ * 512-byte writes costs 800 USB round trips for the same bytes.
  *
  * The transport is two interfaces on one device, and neither alone is enough:
  * **control is HID** (interface 1, 64-byte reports) and **data is bulk**
@@ -45,7 +52,9 @@ import { decodePngRgba } from "./png-raster.js";
  *
  * **The bytes here were measured, not guessed** against firmware 5.11.0:
  * firmware answers `11 01` with its version, and LCD info answers `31 01` with
- * brightness and the mount's quarter turns in byte `0x1A`.
+ * brightness and the mount's quarter turns in byte `0x1A`. The mode-B sequence
+ * and cadence are from a capture of CAM's own traffic; `docs/hardware/`
+ * records both.
  */
 
 const VENDOR_ID = 0x1e71;
@@ -61,6 +70,8 @@ const HEADER_MAGIC = [
 ];
 /** Upload type `0x02`: one still, 32 bits per pixel, alpha ignored. */
 const RGBA_MODE = 0x02;
+/** Upload type `0x03`: a 256-entry RGBA palette, then 8-bit indices. */
+const PALETTED_MODE = 0x03;
 /** The unit a bucket's start and size are counted in, both on the device. */
 const SLOT_BYTES = 1024;
 /** The device's bucket table; every index in it can hold one frame. */
@@ -70,6 +81,14 @@ const BUCKET_COUNT = 16;
 const FRAME_BYTES = SIZE * SIZE * 4;
 const HEADER_BYTES = HEADER_MAGIC.length + 8;
 const BUCKET_SLOTS = Math.ceil((HEADER_BYTES + FRAME_BYTES) / SLOT_BYTES);
+/**
+ * **CAM's paletted bucket is exactly its payload.** 101 slots cover the 1,024
+ * palette bytes and 102,400 indices with nothing left for the transfer header,
+ * and CAM writes the header anyway — the 20 bytes land in the next region,
+ * which the next frame deletes and recreates. Copying that keeps all 16 buckets
+ * inside the frame memory CAM itself addresses.
+ */
+const PALETTED_SLOTS = 101;
 /** A single blocking read's timeout. */
 const READ_TIMEOUT_MS = 120;
 /**
@@ -83,10 +102,11 @@ const READ_TIMEOUT_MS = 120;
  * "no reply" for answers that were already on their way.
  */
 const REPLY_WINDOW_MS = 1_000;
-/** How long the firmware gets to finish storing a bucket before it is shown. */
+/** How long the firmware gets to finish storing a mode-A bucket before it is
+ *  shown. CAM's paletted stream needs no wait and this never applies to it. */
 const UPLOAD_SETTLE_MS = 10;
 /**
- * **The glass honours a switch only about every 140 ms on mode-2 frames.**
+ * **The glass honours a mode-A switch only about every 140 ms.**
  *
  * The wire carries a 400 KB frame in ~90 ms, so the ring can be driven at
  * ~11 frames a second — but the firmware answers every command with status 1
@@ -97,12 +117,14 @@ const UPLOAD_SETTLE_MS = 10;
  * judder and the pull-back read as a frozen jump. At 130–135 ms a few per cent
  * of frames still vanished; from 140 ms every frame landed (129 sent, 130
  * pictures, no pull-back, no held tear).
- *
- * CAM lands nine a second because its paletted frame is a quarter of the bytes
- * (0020). This driver streams 24-bit frames, so the glass, not the wire, sets
- * the cadence.
  */
 export const KRAKEN_FRAME_INTERVAL_MS = 140;
+/**
+ * **A paletted switch costs the glass about 110 ms.** CAM's captured frame
+ * starts are 110 ms apart (median; p10 108, p90 114) — about 9.1 fps. The
+ * quarter-size frame leaves the wire and the glass both inside that budget.
+ */
+export const KRAKEN_PALETTED_FRAME_INTERVAL_MS = 110;
 
 /**
  * The header that precedes a frame: the 12-byte magic, the transfer type, and
@@ -200,12 +222,12 @@ class KrakenPanel implements PanelDevice {
   readonly geometry: PanelGeometry = { width: SIZE, height: SIZE };
   /**
    * The glass drops a switch that arrives before it has put the previous frame
-   * up, so this is the fastest cadence that shows every frame; see
-   * `KRAKEN_FRAME_INTERVAL_MS`. The runner skips a tick whose capture is still
-   * in flight and overlaps capture with send, so this is a ceiling the
+   * up, so this is the fastest cadence that shows every frame for the stream in
+   * use; see the two interval constants. The runner skips a tick whose capture
+   * is still in flight and overlaps capture with send, so this is a ceiling the
    * pipeline can fall short of, not a promise.
    */
-  readonly frameIntervalMs = KRAKEN_FRAME_INTERVAL_MS;
+  readonly frameIntervalMs: number;
   /** The still is decoded here, so the rasteriser can skip a lossy step. */
   readonly stillFormat = "png";
   /** Whether the bucket table has been cleared for this driver. */
@@ -217,7 +239,13 @@ class KrakenPanel implements PanelDevice {
     private readonly control: KrakenControl,
     private readonly bulk: BulkUploader,
     private readonly hid: HID.HID,
-  ) {}
+    private readonly renderMode: DisplayRenderMode,
+  ) {
+    this.frameIntervalMs =
+      renderMode === "mode-b"
+        ? KRAKEN_PALETTED_FRAME_INTERVAL_MS
+        : KRAKEN_FRAME_INTERVAL_MS;
+  }
 
   /**
    * Proves the control channel answers before anything is written.
@@ -241,11 +269,11 @@ class KrakenPanel implements PanelDevice {
   }
 
   /**
-   * Sends one frame into the bucket that is not on the glass, then shows it.
+   * Sends one frame into a bucket that is not on the glass, then shows it.
    *
    * The first frame also clears the bucket table — whatever CAM or a previous
-   * run left there — because this driver addresses its two buckets at fixed
-   * offsets and another object in that range would be overwritten.
+   * run left there — because this driver addresses fixed regions and another
+   * object there would be overwritten.
    */
   async present(image: Uint8Array): Promise<void> {
     const rgba = decodePngRgba(image, SIZE, SIZE);
@@ -257,7 +285,7 @@ class KrakenPanel implements PanelDevice {
 
     // `prepare` leaves bucket 0 on the glass (in liquid mode), and every later
     // frame targets the bucket `shown` is not.
-    const target = this.shown === 0 ? 1 : 0;
+    const target = this.nextBucket();
 
     try {
       await this.writeFrame(target, rgba);
@@ -270,7 +298,7 @@ class KrakenPanel implements PanelDevice {
       // setup or switch to `target` is the firmware saying that bucket is on
       // the glass. The bucket `shown` names is therefore the one not displayed:
       // write it again, which recovers without liquefying the glass.
-      const other = target === 0 ? 1 : 0;
+      const other = this.bucketAfter(target);
 
       try {
         await this.writeFrame(other, rgba);
@@ -282,6 +310,21 @@ class KrakenPanel implements PanelDevice {
         throw retry;
       }
     }
+  }
+
+  /** The bucket this frame goes into: the one not on the glass. Mode A keeps a
+   *  two-bucket ring because the firmware's 140 ms glass only fits two; mode B
+   *  uses CAM's full 16, each holding exactly one paletted frame. */
+  private nextBucket(): number {
+    if (this.renderMode === "mode-a") return this.shown === 0 ? 1 : 0;
+
+    return this.bucketAfter(this.shown ?? BUCKET_COUNT - 1);
+  }
+
+  /** The bucket after `index`, wrapping — mode A is a two-bucket ring. */
+  private bucketAfter(index: number): number {
+    const count = this.renderMode === "mode-a" ? 2 : BUCKET_COUNT;
+    return (index + 1) % count;
   }
 
   /**
@@ -315,14 +358,19 @@ class KrakenPanel implements PanelDevice {
    * the first graphic it stored there.
    */
   private async writeFrame(index: number, rgba: Uint8Array): Promise<void> {
+    const paletted = this.renderMode === "mode-b";
+    const mode = paletted ? PALETTED_MODE : RGBA_MODE;
+    const slots = paletted ? PALETTED_SLOTS : BUCKET_SLOTS;
+    const payload = paletted ? toPalettedFrame(rgba) : rgba;
+
     let status = this.deleteBucket(index);
     // **A refused delete must never be written over or shown.** The firmware
     // keeps the first graphic a bucket stored, so a bucket whose delete was
     // refused still holds the previous frame, and the switch that follows
     // would put that older picture on the glass. A second delete is the retry
-    // for a refusal the firmware answers once (liquidctl deletes a bucket that
-    // held data twice for the same reason).
-    if (status !== 0x01) status = this.deleteBucket(index);
+    // for a refusal the firmware answers once, and CAM deletes twice on every
+    // paletted frame regardless.
+    if (paletted || status !== 0x01) status = this.deleteBucket(index);
     if (status !== 0x01) throw new FrameRefused(status, "delete");
 
     // **Never stream into a bucket the firmware refused to set up.** liquidctl
@@ -330,7 +378,7 @@ class KrakenPanel implements PanelDevice {
     // that produced wrong pictures and wedged the device into its bootloader.
     // Nothing can be shown from a setup that failed, so the frame is refused
     // instead and the glass keeps the frame it already has.
-    status = this.createBucket(index);
+    status = this.createBucket(index, slots);
     if (status !== 0x01) throw new FrameRefused(status, "create");
 
     this.control.write([0x36, 0x01, index]);
@@ -346,23 +394,27 @@ class KrakenPanel implements PanelDevice {
       if (begin === undefined || begin === 0x02) this.endTransfer(index);
 
       // **Only status 9 means the table is wrong**, and `present` repairs that
-      // by addressing the other bucket. A busy device (18) left the table
+      // by addressing the next bucket. A busy device (18) left the table
       // intact, and the next tick's delete/create retries the same bucket.
       // Rebuilding for it liquefied the glass — a visible blank — every time
       // the device missed one frame (2026-11-04).
       throw new FrameRefused(begin, "begin");
     }
 
-    await this.bulk.write(transferHeader(RGBA_MODE, rgba.length));
-    await this.bulk.write(rgba);
+    await this.bulk.write(transferHeader(mode, payload.length));
+    await this.bulk.write(payload);
 
     this.control.write([0x36, 0x02, index]);
     this.control.readUntil(0x37, 0x02);
-    // **The switch races the write.** `36 02` answers before the glass has the
-    // bucket's last tiles; switching on its heels shows a partly old picture,
-    // which on a moving theme reads as a tear. Every command still reports
-    // success, so no status check can see it.
-    await new Promise((resolve) => setTimeout(resolve, UPLOAD_SETTLE_MS));
+    // **Mode A's switch races the write.** `36 02` answers before the glass has
+    // the bucket's last tiles; switching on its heels shows a partly old
+    // picture, which on a moving theme reads as a tear. Every command still
+    // reports success, so no status check can see it. CAM's paletted stream
+    // carries a quarter of the tiles and needs no settle; adding one there
+    // would eat the frame budget it exists to fit.
+    if (!paletted) {
+      await new Promise((resolve) => setTimeout(resolve, UPLOAD_SETTLE_MS));
+    }
     status = this.switchBucket(index);
     // The frame is in the bucket but not on the glass, so `shown` must not
     // move: the next tick rewrites this bucket and tries the switch again.
@@ -390,8 +442,8 @@ class KrakenPanel implements PanelDevice {
     return this.control.readUntil(0x33, 0x02)?.report[14];
   }
 
-  private createBucket(index: number): number | undefined {
-    const start = index * BUCKET_SLOTS;
+  private createBucket(index: number, slots: number): number | undefined {
+    const start = index * slots;
     this.control.write([
       0x32,
       0x01,
@@ -399,8 +451,8 @@ class KrakenPanel implements PanelDevice {
       index + 1,
       start & 0xff,
       (start >>> 8) & 0xff,
-      BUCKET_SLOTS & 0xff,
-      (BUCKET_SLOTS >>> 8) & 0xff,
+      slots & 0xff,
+      (slots >>> 8) & 0xff,
       0x01,
     ]);
 
@@ -501,7 +553,10 @@ export function attachedKrakens(): readonly KrakenHint[] {
 }
 
 /** Opens the attached Kraken, or refuses with the reason it could not. */
-export async function openKraken(label: string): Promise<PanelDevice> {
+export async function openKraken(
+  label: string,
+  renderMode: DisplayRenderMode = "mode-a",
+): Promise<PanelDevice> {
   const [info] = HID.devices().filter(
     (device) =>
       device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID,
@@ -514,7 +569,7 @@ export async function openKraken(label: string): Promise<PanelDevice> {
   const hid = new HID.HID(info.path);
   const control = new KrakenControl(hid);
   const bulk = await openBulk();
-  const panel = new KrakenPanel(control, bulk, hid);
+  const panel = new KrakenPanel(control, bulk, hid, renderMode);
 
   try {
     await panel.open();
@@ -530,7 +585,7 @@ export async function openKraken(label: string): Promise<PanelDevice> {
   return panel;
 }
 
-/** The Kraken Z: HID control, a two-bucket ring, a picture that follows the host. */
+/** The Kraken Z: HID control, a bucket ring, a picture that follows the host. */
 export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
   {
     id: "kraken-z3",
@@ -543,11 +598,13 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
       // The firmware the opcode-10 probe reported on the hardware this driver
       // was measured against.
       supportedFirmware: ["5.11.0"],
-      updatedAt: "2026-10-31",
+      updatedAt: "2026-11-06",
     },
     commands: [],
     geometry: { width: SIZE, height: SIZE },
+    renderModes: ["mode-a", "mode-b"],
     attached: () => Promise.resolve(attachedKrakens()),
-    open: () => openKraken("The NZXT Kraken"),
+    open: (options) =>
+      openKraken("The NZXT Kraken", options?.renderMode ?? "mode-a"),
   },
 ];

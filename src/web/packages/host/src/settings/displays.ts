@@ -1,9 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { DisplayPresentation, DisplayShape } from "@yunari/renderer-core";
+import type {
+  DisplayPresentation,
+  DisplayRenderMode,
+  DisplayShape,
+} from "@yunari/renderer-core";
+import { readRenderMode } from "@yunari/renderer-core";
 import { DEVICE_ID_PATTERN } from "./devices.js";
 import {
+  displayRenderMode,
   displayShape,
   normalizePresentation,
   snapRotation,
@@ -104,6 +110,9 @@ export interface DisplayRecord {
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; omitted when upright, which every reader answers as 0. */
   readonly rotation?: number;
+  /** Which stream a panel's device is fed. Omitted for `mode-a`, the stream
+   *  every family accepts, so only the alternative is ever written. */
+  readonly renderMode?: DisplayRenderMode;
 }
 
 /** The things a person edits. None may touch the id. */
@@ -111,6 +120,7 @@ export interface DisplayPatch {
   readonly label?: string;
   readonly shape?: DisplayShape;
   readonly rotation?: number;
+  readonly renderMode?: DisplayRenderMode;
 }
 
 export interface DisplayStore {
@@ -426,6 +436,7 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
   // dropped with it.
   const shape: DisplayShape = raw["shape"] === "circle" ? "circle" : "rect";
   const rotation = storedRotation(shape, raw["rotation"]);
+  const renderMode = readRenderMode(raw["renderMode"]);
 
   return {
     id,
@@ -435,6 +446,7 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
     lastSeenAt,
     shape,
     ...(rotation === undefined ? {} : { rotation }),
+    ...(renderMode === "mode-a" ? {} : { renderMode }),
     ...(typeof tokenHash === "string" ? { tokenHash } : {}),
     ...(monitor !== undefined ? { monitor } : {}),
     ...(panel !== undefined ? { panel } : {}),
@@ -535,11 +547,16 @@ export function normalizePatch(patch: DisplayPatch): DisplayPatch {
     patch.shape === undefined ? undefined : displayShape(patch.shape);
   const rotation =
     patch.rotation === undefined ? undefined : wholeDegrees(patch.rotation);
+  const renderMode =
+    patch.renderMode === undefined
+      ? undefined
+      : displayRenderMode(patch.renderMode);
 
   return {
     ...(label === undefined ? {} : { label }),
     ...(shape === undefined ? {} : { shape }),
     ...(rotation === undefined ? {} : { rotation }),
+    ...(renderMode === undefined ? {} : { renderMode }),
   };
 }
 
@@ -829,7 +846,9 @@ export function createDisplayStore(
         // else is keyed by the id, so a rename that moved it would orphan them.
         // `rotation` is taken out of the spread because omitting it must clear
         // the stored one rather than leave the found record's angle behind.
-        const { rotation: _old, ...rest } = found;
+        // `renderMode` goes the same way, and `mode-a` is stored as absence.
+        const { rotation: _old, renderMode: _mode, ...rest } = found;
+        const renderMode = patch.renderMode ?? found.renderMode ?? "mode-a";
         const record: DisplayRecord = {
           ...rest,
           label,
@@ -837,6 +856,7 @@ export function createDisplayStore(
           ...(presentation.rotation === undefined
             ? {}
             : { rotation: presentation.rotation }),
+          ...(renderMode === "mode-a" ? {} : { renderMode }),
         };
 
         displays[index] = record;

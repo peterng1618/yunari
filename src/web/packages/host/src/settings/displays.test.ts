@@ -22,6 +22,7 @@ import {
   normalizeLabel,
   normalizeMonitor,
   normalizePanel,
+  normalizePatch,
   PanelAlreadyHeldError,
 } from "./displays.js";
 import { createThemeSettingsStore } from "./theme-settings.js";
@@ -801,6 +802,26 @@ describe("createDisplayStore", () => {
         ?.rotation,
     ).toBe(45);
     expect((await store.find(record.id))?.shape).toBe("circle");
+  });
+
+  it("stores a rendering mode and clears it back to mode A", async () => {
+    const record = await store.create("Panel", "token");
+    expect(record.renderMode).toBeUndefined();
+
+    const chosen = await store.update(record.id, { renderMode: "mode-b" });
+    expect(chosen?.renderMode).toBe("mode-b");
+    // A stored record keeps it across a fresh read of the same file.
+    expect((await store.find(record.id))?.renderMode).toBe("mode-b");
+
+    // Mode A is the default, so it is stored as absence rather than a word.
+    const cleared = await store.update(record.id, { renderMode: "mode-a" });
+    expect(cleared?.renderMode).toBeUndefined();
+  });
+
+  it("refuses a rendering mode it does not know", async () => {
+    expect(() => normalizePatch({ renderMode: "mode-c" as never })).toThrow(
+      DisplaySettingError,
+    );
   });
 
   it("reads an invalid stored shape as rect and drops its rotation", async () => {

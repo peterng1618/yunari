@@ -229,6 +229,8 @@ export type { SampleSource } from "./data/source.js";
 export { emptySampleSource } from "./data/source.js";
 export type { SampleStoreOptions } from "./data/store.js";
 export { defaultSampleStoreOptions, SampleStore } from "./data/store.js";
+export type { DisplayRenderMode } from "./render-mode.js";
+export { readRenderMode } from "./render-mode.js";
 export { formatInstant } from "./scene/datetime/format.js";
 export {
   instantIn,

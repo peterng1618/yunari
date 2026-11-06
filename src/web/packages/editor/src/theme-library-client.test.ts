@@ -629,9 +629,51 @@ describe("ThemeLibraryClient", () => {
             status: "disconnected",
             stopped: true,
             commands: ["brightness", "restart"],
+            // A host that named no stream reads as mode A, the one every
+            // family accepts, and offers no choice until it lists one.
+            renderMode: "mode-a",
+            renderModes: [],
           },
         },
       ],
+    });
+  });
+
+  it("reads the rendering streams a panel reports", async () => {
+    const mockFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            default: null,
+            displays: [
+              {
+                id: "z73",
+                label: "Kraken Z73",
+                kind: "panel",
+                theme: null,
+                shape: "circle",
+                rotation: 0,
+                panel: {
+                  status: "connected",
+                  commands: [],
+                  renderMode: "mode-b",
+                  renderModes: ["mode-a", "mode-b", "mode-c"],
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const client = createThemeLibraryClient({
+      fetch: mockFetch as unknown as typeof fetch,
+    });
+
+    const { displays } = await client.listDisplays();
+    expect(displays[0]?.panel).toMatchObject({
+      renderMode: "mode-b",
+      // An unknown stream is not offered: the host would refuse it.
+      renderModes: ["mode-a", "mode-b"],
     });
   });
 

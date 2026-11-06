@@ -350,6 +350,19 @@ export function createDisplayRoutes(
         );
       }
 
+      // A rendering mode is chosen when the device is opened, so the running
+      // one is holding the old stream. The surface sends this field only when
+      // the owner changed it, so a restart here is the toggle's own.
+      if (patch.renderMode !== undefined) {
+        try {
+          await options.panels?.refresh(id);
+        } catch (error) {
+          console.error(
+            `Panel ${id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
       // The answer is the record itself, so a surface redraws one row without
       // refetching the list it already has.
       sendJson(response, 200, peerOf(updated));

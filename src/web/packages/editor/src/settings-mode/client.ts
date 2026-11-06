@@ -1,11 +1,13 @@
 import {
   ASSIGNABLE_GROUPS,
   type AssignableGroup,
+  type DisplayRenderMode,
   type DisplayShape,
   isMeasurementSystem,
   isTimeZoneName,
   type MeasurementSystem,
   normalizeUnitPreferences,
+  readRenderMode,
   type UnitPreferences,
 } from "@yunari/renderer-core";
 import {
@@ -197,6 +199,12 @@ export interface HostSettingsClient {
     id: string,
     next: { readonly shape: DisplayShape; readonly rotation: number },
   ): Promise<{ readonly shape: DisplayShape; readonly rotation: number }>;
+  /** Chooses the stream a panel display is fed, and answers the one the host
+   *  stored. The host restarts the panel so the new stream takes effect. */
+  setDisplayRenderMode(
+    id: string,
+    next: DisplayRenderMode,
+  ): Promise<DisplayRenderMode>;
   /** Renames a paired display and answers the name the host stored. The id does
    *  not move with it: assignments and themes are keyed by the id minted when
    *  the display was created. */
@@ -869,6 +877,25 @@ export function createHostSettingsClient(options?: {
         readonly rotation?: unknown;
       };
       return readDisplayPresentation(body?.shape, body?.rotation);
+    },
+
+    async setDisplayRenderMode(id, next) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ renderMode: next }),
+        },
+      );
+      if (!response.ok) {
+        throw await refusal(
+          response,
+          "Could not save the display's rendering mode",
+        );
+      }
+      const body = (await response.json()) as { readonly renderMode?: unknown };
+      return readRenderMode(body?.renderMode);
     },
 
     async renameDisplay(id, label) {

@@ -1,4 +1,8 @@
-import { type DisplayShape, snapRotation } from "@yunari/renderer-core";
+import {
+  type DisplayRenderMode,
+  type DisplayShape,
+  snapRotation,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
@@ -50,6 +54,13 @@ export function DisplayPresentationSection(props: {
     next: DisplayPresentation,
   ) => Promise<DisplayPresentation>;
   readonly onSaved: (id: string, saved: DisplayPresentation) => void;
+  /** Writes the stream a panel display is fed. Only a family that offers more
+   *  than one draws the control. */
+  readonly saveRenderMode: (
+    id: string,
+    next: DisplayRenderMode,
+  ) => Promise<DisplayRenderMode>;
+  readonly onRenderModeSaved: (id: string, saved: DisplayRenderMode) => void;
   readonly rename: (id: string, label: string) => Promise<string>;
   readonly onRenamed: (id: string, label: string) => void;
 }): React.JSX.Element {
@@ -76,6 +87,17 @@ export function DisplayPresentationSection(props: {
       shape,
       rotation:
         shape === "rect" ? snapQuarterTurn(display.rotation) : display.rotation,
+    });
+  };
+
+  const changeRenderMode = (
+    display: ThemedDisplay,
+    renderMode: DisplayRenderMode,
+  ): void => {
+    props.write(async () => {
+      const saved = await props.saveRenderMode(display.id, renderMode);
+      props.onRenderModeSaved(display.id, saved);
+      return uiCopy.hostSettings.displays.savedRenderMode;
     });
   };
 
@@ -156,6 +178,28 @@ export function DisplayPresentationSection(props: {
               })
             }
           />
+          {/* Only a family that offers two streams draws the choice; a panel
+              with one would get a control whose second option does nothing. */}
+          {editable.panel !== undefined &&
+          editable.panel.renderModes.length > 1 ? (
+            <>
+              <ControlSegmented
+                id="yunari-host-display-render-mode"
+                label={uiCopy.hostSettings.displays.renderMode}
+                density="settings"
+                data={{ "data-yunari-host-display-render-mode": "" }}
+                value={editable.panel.renderMode}
+                options={editable.panel.renderModes.map((mode) => ({
+                  id: mode,
+                  name: uiCopy.hostSettings.displays.renderModes[mode],
+                }))}
+                onChange={(mode) => changeRenderMode(editable, mode)}
+              />
+              <p className="text-xs text-muted">
+                {uiCopy.hostSettings.displays.renderModeHint}
+              </p>
+            </>
+          ) : null}
         </>
       )}
     </Group>

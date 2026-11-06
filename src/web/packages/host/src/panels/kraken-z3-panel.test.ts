@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openKraken } from "./kraken-z3-panel.js";
 
 /**
@@ -23,6 +23,8 @@ const fake = vi.hoisted(() => {
     createStatus: 1,
     /** Bulk transfers the driver made, so a refused setup can prove none ran. */
     transfers: 0,
+    /** The bytes of every bulk transfer, in order. */
+    bulkWrites: [] as Uint8Array[],
     /** Every control report the driver wrote, for assertions. */
     writes: [] as number[][],
   };
@@ -92,8 +94,13 @@ const fake = vi.hoisted(() => {
     open: () => Promise.resolve(),
     selectConfiguration: () => Promise.resolve(),
     claimInterface: () => Promise.resolve(),
-    nativeTransferOut: () => {
+    nativeTransferOut: (
+      _endpoint: number,
+      _timeout: number,
+      bytes: Uint8Array,
+    ) => {
       fake.state.transfers += 1;
+      fake.state.bulkWrites.push(Uint8Array.from(bytes));
       return Promise.resolve();
     },
     releaseInterface: () => Promise.resolve(),
@@ -193,6 +200,82 @@ describe("KrakenPanel transfers", () => {
     }
 
     await expect(panel.present(frame)).resolves.toBeUndefined();
+    await panel.close();
+  });
+});
+
+describe("KrakenPanel mode B", () => {
+  // The fake's ledger is module-level, so a case reads only its own writes.
+  beforeEach(() => {
+    fake.state.writes.length = 0;
+    fake.state.bulkWrites.length = 0;
+  });
+
+  const created = (): number[][] =>
+    fake.state.writes.filter(
+      ([first, second]) => first === 0x32 && second === 0x01,
+    );
+
+  it("streams CAM's paletted frame from all sixteen buckets", async () => {
+    const panel = await openKraken("The NZXT Kraken", "mode-b");
+    expect(panel.frameIntervalMs).toBe(110);
+
+    const frame = pngOf(320, 320);
+    await panel.present(frame);
+    await panel.present(frame);
+    await panel.present(frame);
+
+    // The ring advances across the whole table, one bucket per frame, and each
+    // bucket is exactly CAM's 101 slots.
+    const buckets = created();
+    expect(buckets.map((write) => write[2])).toEqual([1, 2, 3]);
+    for (const write of buckets) {
+      expect(write[6]).toBe(101);
+      expect(write[7]).toBe(0);
+    }
+    expect(
+      buckets.map((write) => (write[4] ?? 0) + ((write[5] ?? 0) << 8)),
+    ).toEqual([101, 202, 303]);
+
+    const headers = fake.state.bulkWrites.filter(
+      (bytes) => bytes.length === 20,
+    );
+    expect(headers).toHaveLength(3);
+    for (const header of headers) {
+      expect(header[12]).toBe(0x03);
+      expect(new DataView(header.buffer).getUint32(16, true)).toBe(103_424);
+    }
+
+    const payloads = fake.state.bulkWrites.filter(
+      (bytes) => bytes.length === 103_424,
+    );
+    expect(payloads).toHaveLength(3);
+    // The firmware ignores the fourth palette byte; CAM writes 0 and so do we.
+    for (let entry = 0; entry < 256; entry += 1) {
+      expect(payloads[0]?.[entry * 4 + 3]).toBe(0);
+    }
+
+    await panel.close();
+  });
+
+  it("deletes the target twice and switches without a settle", async () => {
+    const panel = await openKraken("The NZXT Kraken", "mode-b");
+    const frame = pngOf(320, 320);
+    await panel.present(frame);
+
+    const before = fake.state.writes.length;
+    await panel.present(frame);
+    const frameWrites = fake.state.writes.slice(before);
+    const deletes = frameWrites.filter(
+      ([first, second]) => first === 0x32 && second === 0x02,
+    );
+    expect(deletes).toHaveLength(2);
+    // End then switch are adjacent: nothing waits between them.
+    const end = frameWrites.findIndex(
+      ([first, second]) => first === 0x36 && second === 0x02,
+    );
+    expect(frameWrites[end + 1]?.slice(0, 2)).toEqual([0x38, 0x01]);
+
     await panel.close();
   });
 });

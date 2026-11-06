@@ -335,11 +335,16 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const device = await family.open(
-      options.videoCacheDir === undefined
-        ? undefined
-        : { cacheDir: options.videoCacheDir },
-    );
+    const device = await family.open({
+      ...(options.videoCacheDir === undefined
+        ? {}
+        : { cacheDir: options.videoCacheDir }),
+      // The stream is the display record's choice; a family that offers one
+      // reads it, and one with a single driver ignores it.
+      ...(record.renderMode === undefined
+        ? {}
+        : { renderMode: record.renderMode }),
+    });
 
     // A clip the device plays itself, when this display's theme has one. A
     // theme that cannot be read is a still panel, not a failed one.

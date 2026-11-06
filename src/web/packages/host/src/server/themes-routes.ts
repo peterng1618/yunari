@@ -1,5 +1,6 @@
 import type http from "node:http";
 import {
+  type DisplayRenderMode,
   type DisplayShape,
   themeAssetContentType,
 } from "@yunari/renderer-core";
@@ -49,6 +50,10 @@ interface ActiveDisplay {
     /** The raster size the family declares, so a consumer can size a preview
      *  without opening the device. Absent when no driver claims the ids. */
     readonly geometry?: { readonly width: number; readonly height: number };
+    /** The stream this display is fed, and the ones its family offers. A
+     *  surface draws the choice only when there is one. */
+    readonly renderMode: DisplayRenderMode;
+    readonly renderModes: readonly DisplayRenderMode[];
   };
 }
 
@@ -162,6 +167,8 @@ export function createThemeRoutes(
                     ...(family === undefined
                       ? {}
                       : { geometry: family.geometry }),
+                    renderMode: record.renderMode ?? "mode-a",
+                    renderModes: family?.renderModes ?? [],
                   },
                 }),
           };

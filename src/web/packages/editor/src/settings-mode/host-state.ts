@@ -1,4 +1,8 @@
-import type { AssignableGroup, UnitPreferences } from "@yunari/renderer-core";
+import type {
+  AssignableGroup,
+  DisplayRenderMode,
+  UnitPreferences,
+} from "@yunari/renderer-core";
 import { useEffect, useRef, useState } from "react";
 import {
   createThemeLibraryClient,
@@ -156,6 +160,9 @@ export interface HostState {
       readonly rotation: number;
     },
   ) => void;
+  /** Writes the stream a panel display is fed into the row the host answered,
+   *  so the toggle stands on what was stored rather than on the click. */
+  readonly replaceRenderMode: (id: string, saved: DisplayRenderMode) => void;
   readonly reconnectPanel: (id: string) => Promise<void>;
   readonly disconnectPanel: (id: string) => Promise<void>;
   readonly addPanel: (panel: PanelHint) => void;
@@ -486,6 +493,22 @@ export function useHostSettings(props: {
     );
   };
 
+  const replaceRenderMode = (id: string, saved: DisplayRenderMode): void => {
+    if (!mounted.current) return;
+    setMap((current) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            displays: current.displays.map((row) =>
+              row.id === id && row.panel !== undefined
+                ? { ...row, panel: { ...row.panel, renderMode: saved } }
+                : row,
+            ),
+          },
+    );
+  };
+
   const addPanel = (panel: PanelHint): void => {
     if (addingPanel) return;
     setAddingPanel(true);
@@ -630,6 +653,7 @@ export function useHostSettings(props: {
     answer,
     replaceName,
     replacePresentation,
+    replaceRenderMode,
     reconnectPanel,
     disconnectPanel,
     addPanel,

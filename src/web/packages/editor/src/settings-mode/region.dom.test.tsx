@@ -21,7 +21,11 @@
  * nothing, so nothing here is a claim about how the region looks. The layout it
  * follows is read by its own gate, not by this file.
  */
-import type { AssignableGroup, DisplayShape } from "@yunari/renderer-core";
+import type {
+  AssignableGroup,
+  DisplayRenderMode,
+  DisplayShape,
+} from "@yunari/renderer-core";
 import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -200,6 +204,10 @@ interface Written {
     readonly id: string;
     readonly next: { readonly shape: DisplayShape; readonly rotation: number };
   }[];
+  readonly renderModes: {
+    readonly id: string;
+    readonly next: DisplayRenderMode;
+  }[];
   /** The panels an add sent, in order: what the request carried. */
   readonly panels: {
     readonly vendorId: number;
@@ -272,6 +280,7 @@ function hostSettings(
     weather: [],
     searches: [],
     presentation: [],
+    renderModes: [],
     panels: [],
     reconnects: [],
     names: [],
@@ -345,6 +354,10 @@ function hostSettings(
           shape: next.shape,
           rotation: next.shape === "rect" ? 180 : 45,
         };
+      },
+      setDisplayRenderMode: async (id, next) => {
+        wrote.renderModes.push({ id, next });
+        return next;
       },
       // No panel attached is the ordinary machine, so the default fixture
       // answers an empty list rather than inventing one. A case that needs the
@@ -1272,9 +1285,76 @@ it("keeps the row's previous presentation when the write is refused", async () =
   );
 });
 
+it("offers the rendering mode only for a panel that has more than one", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      {
+        id: "z73",
+        label: "Kraken Z73",
+        kind: "panel",
+        theme: null,
+        shape: "circle",
+        rotation: 0,
+        panel: {
+          status: "connected",
+          commands: [],
+          renderMode: "mode-a",
+          renderModes: ["mode-a", "mode-b"],
+        },
+      },
+    ],
+  });
+  await act(async () => displayRow(container, "z73").click());
+
+  const segments = Array.from(
+    container.querySelectorAll<HTMLElement>(
+      "[data-yunari-host-display-render-mode]",
+    ),
+  );
+  expect(
+    segments.map((segment) => segment.textContent),
+    "the rendering control did not name both streams",
+  ).toEqual([
+    uiCopy.hostSettings.displays.renderModes["mode-a"],
+    uiCopy.hostSettings.displays.renderModes["mode-b"],
+  ]);
+
+  await act(async () => segments[1]?.click());
+
+  expect(wrote.renderModes, "the toggle did not write the chosen mode").toEqual(
+    [{ id: "z73", next: "mode-b" }],
+  );
+});
+
+it("draws no rendering control for a family with one stream", async () => {
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    displays: [
+      {
+        id: "panel-1",
+        label: 'TURZX 5" Panel',
+        kind: "panel",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+        panel: {
+          status: "connected",
+          commands: [],
+          renderMode: "mode-a",
+          renderModes: ["mode-a"],
+        },
+      },
+    ],
+  });
+  await act(async () => displayRow(container, "panel-1").click());
+
+  expect(
+    container.querySelector("[data-yunari-host-display-render-mode]"),
+  ).toBeNull();
+});
+
 /** No row has been read, so no display is the selection: the absence sentence
- *  states a fact about `this-pc` and would be a claim nobody made. */
-it("says nothing about presentation while no display has been read", async () => {
+ *  states a fact about `this-pc` and would be a claim nobody made. */ it("says nothing about presentation while no display has been read", async () => {
   const empty = await mountHost({ displays: [] });
   expect(empty.container.textContent).not.toContain(
     uiCopy.hostSettings.displays.presentationAbsent,
@@ -2715,7 +2795,12 @@ it("draws a panel display's connection and asks the host to reconnect it", async
         theme: null,
         shape: "rect",
         rotation: 0,
-        panel: { status: "disconnected", commands: ["brightness"] },
+        panel: {
+          status: "disconnected",
+          commands: ["brightness"],
+          renderMode: "mode-a",
+          renderModes: [],
+        },
       },
     ],
   });

@@ -8,6 +8,7 @@
 
 import type {
   BackgroundMediaComposition,
+  DisplayRenderMode,
   PalettePaint,
 } from "@yunari/renderer-core";
 
@@ -211,6 +212,9 @@ export interface PanelSupport {
 export interface PanelOpenOptions {
   /** The host's disposable cache directory, when it has one. */
   readonly cacheDir?: string;
+  /** The stream the owner chose for this display. Absent is the family's own
+   *  default, which is the one every family accepts. */
+  readonly renderMode?: DisplayRenderMode;
 }
 
 /**
@@ -230,6 +234,9 @@ export interface PanelFamily {
   /** The raster size every device of this family has. Declared here so a
    *  preview never opens hardware to learn it. */
   readonly geometry: PanelGeometry;
+  /** The streams this family offers, when it offers a choice. Absent means the
+   *  driver has one, and a surface then draws no control for it. */
+  readonly renderModes?: readonly DisplayRenderMode[];
   /** Panels of this family attached right now, as record hints. */
   readonly attached: () => Promise<readonly PanelHint[]>;
   readonly open: (options?: PanelOpenOptions) => Promise<PanelDevice>;

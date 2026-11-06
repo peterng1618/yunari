@@ -66,8 +66,12 @@ device's frame memory. A frame is uploaded into a bucket that is **not currently
 on the glass**, then the panel is switched to it.
 
 Units: start and size are counted in **1024-byte slots**. One 320×320 RGBA frame
-is 409,600 bytes plus a 20-byte transfer header = 409,620 bytes = **401 slots**.
-Bucket `i` therefore starts at slot `i * 401`.
+is 409,600 bytes plus a 20-byte transfer header = 409,620 bytes = **401 slots**;
+bucket `i` therefore starts at slot `i * 401`. A paletted frame is 103,424
+bytes — exactly **101 slots** — and CAM addresses bucket `i` at slot `i * 101`.
+CAM writes the 20-byte transfer header into a 101-slot bucket anyway; the 20
+bytes land in the next region, which the next frame deletes and recreates. All
+16 paletted buckets together are 1,616 slots, the range CAM itself uses.
 
 | Command | Bytes | Reply | Effect |
 |---|---|---|---|
@@ -123,16 +127,20 @@ A frame is a 20-byte transfer header followed by the pixels:
 Modes:
 
 - `0x02` — 320×320, 32 bits per pixel, RGBA, alpha ignored: **409,600 bytes**.
-- `0x03` — 256-colour paletted: **102,400 bytes** (8 bits per pixel).
+- `0x03` — 256-colour paletted: a **1,024-byte palette** (256 entries of
+  `R,G,B,A`; the firmware ignores the fourth byte and both CAM and this driver
+  write 0) followed by **102,400 8-bit indices** — **103,424 bytes** in all.
 
-The driver streams mode `0x02`. Mode `0x03` paints correctly through the same
-ring at a quarter of the bytes, but 256 colours over a gradient or a photograph
-is large flat banding, visibly worse than the frame the browser composed. A
-mode-2 frame costs ~52 ms of bulk on this host; the glass then needs about
-140 ms per switch (see *Cadence*), so the wire is not the limit.
+Two streams paint through the same ring, and the driver offers both: mode
+`0x02` is the full-colour frame, and mode `0x03` is CAM's own stream. Mode 3
+was rejected in 0020 for its 256 colours; the target is now CAM's actual
+output, which is this format. The display record's `renderMode` chooses
+(`mode-a` is `0x02` and the default, `mode-b` is `0x03`).
 
-The 401-slot bucket size is computed from the **mode-2** frame. A mode-3 frame
-would not fit the same bucket arithmetic.
+**The palette is rebuilt for every frame.** CAM's captured frames carry a
+different palette almost every time (343 of 350 differ), average 255.3 entries
+in use, and 42,715 low-distance neighbouring index pairs per frame — it
+dithers. A fixed palette bands on gradients and cannot follow a photograph.
 
 ## Frame sequence
 
@@ -147,13 +155,23 @@ The first frame also empties whatever CAM or a previous run left:
    delete → create → `36 01` → header + pixels → `36 02` → **wait 10 ms** →
    switch to it.
 
-**The 10 ms settle is required.** `36 02` answers before the glass has the
-bucket's last tiles; switching on its heels shows part of the old picture, which
-on a moving theme reads as a tear. Every command still reports success, so no
-status check can see this. The 10 ms is the measured gap that removes it.
+**The 10 ms settle is required for a mode-2 frame.** `36 02` answers before the
+glass has the bucket's last tiles; switching on its heels shows part of the old
+picture, which on a moving theme reads as a tear. Every command still reports
+success, so no status check can see this. The 10 ms is the measured gap that
+removes it.
 
-The panel alternates between two buckets. Writing the displayed one is refused;
-that is the invariant the two-bucket ring exists to satisfy.
+**CAM's paletted frame uses a different ring.** Captured from CAM 4.76.6
+(`camcap.pcap`, 142 frames): every frame deletes its target bucket **twice**,
+creates it at 101 slots, begins, writes the 20-byte header and 103,424 bytes,
+ends, switches with `38 01 04 <index>` — and **never waits**. It cycles all 16
+buckets, one frame per bucket, with no settle. Mode B relays that sequence; on
+a two-bucket ring at 110 ms the previous driver lost about 6% of switches, and
+the 16-bucket ring is what CAM's cadence depends on.
+
+The two-bucket ring alternates between buckets 0 and 1 because the firmware
+refuses the one on the glass. That invariant holds in both modes; only the ring
+length, the slot count and the settle differ.
 
 ## Cadence and rotation
 
@@ -173,13 +191,13 @@ that is the invariant the two-bucket ring exists to satisfy.
   bulk ~52 ms, the five bucket commands ~22 ms, the 10 ms settle and the PNG
   decode the rest. The glass's ~140 ms ceiling is the larger number, so the
   device, not the host, sets the rate.
-- **A mode-3 frame (103,424 bytes) reaches the glass about every 120 ms — a
-  20 ms faster ceiling than mode 2's.** Measured 2026-10-31 with the same
-  barcode harness: at 120 ms every index appeared (145 updates, no skips), at
-  115 ms 2 of ~145 were missing, and at 110 ms about 6%. The 10 ms settle made
-  no difference at mode 3. The same payload inside 401-slot buckets kept the
-  120 ms ceiling, so **the payload's bytes set it, not the bucket's slot
-  count**. That is ~8.3 FPS against mode 2's 7.1, still under CAM's ~9.
+- **A mode-3 frame (103,424 bytes) on CAM's 16-bucket ring reaches the glass
+  every ~110 ms.** CAM's captured frame starts are 110 ms apart (median; p10
+  108, p90 114) — about 9.1 FPS. The same payload on a two-bucket ring with the
+  settle measured 120 ms on 2026-10-31 (145 updates with no skips at 120 ms, 2
+  missing of ~145 at 115 ms, ~6% at 110 ms), so the ring, not only the bytes,
+  is part of the ceiling. Mode B uses CAM's ring and its 110 ms cadence
+  (`KRAKEN_PALETTED_FRAME_INTERVAL_MS`).
 - CAM's stream lands ~9 FPS with its 103,424-byte paletted frame (captured in
   0018).
 - Stills are sent as **PNG** and decoded to RGBA in the host

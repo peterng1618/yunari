@@ -557,6 +557,17 @@ export const uiCopy = {
       presentationAbsent:
         "The Host's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
+      /** The stream a panel's device is fed. Mode A is the full-colour frame;
+       *  Mode B is the paletted one the vendor app streams, which buys frame
+       *  rate at 256 colours. Drawn only for a family that offers both. */
+      renderMode: "Rendering mode",
+      renderModes: {
+        "mode-a": "Mode A (full colour)",
+        "mode-b": "Mode B (paletted)",
+      },
+      renderModeHint:
+        "Mode A sends full-colour frames and is the default. Mode B sends paletted frames the way NZXT CAM does: a higher frame rate, with 256 colours.",
+      savedRenderMode: "Saved the display's rendering mode.",
       /** The local display the owner adds by choosing a monitor the Host
        *  reports. The route needs both a name and a monitor, so the form offers
        *  both and says nothing when no monitor was found. */

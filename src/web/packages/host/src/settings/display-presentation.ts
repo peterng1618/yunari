@@ -1,5 +1,6 @@
 import {
   type DisplayPresentation,
+  type DisplayRenderMode,
   type DisplayShape,
   rotationAllowed,
   snapRotation as snapByRule,
@@ -51,6 +52,24 @@ export function displayShape(value: unknown): DisplayShape {
  *  renderer-core's, which owns the transform that consumes the angle. */
 export function snapRotation(shape: DisplayShape, rotation: number): number {
   return snapByRule(shape, rotation);
+}
+
+/**
+ * The stream a patch may choose, or a refusal in the store's own words.
+ *
+ * Refused rather than defaulted: a typo that silently played the other stream
+ * would put a visibly different picture on the owner's glass, and the reader
+ * (`readRenderMode`) already treats a *stored* unknown as `mode-a`, so a
+ * request is the one place a bad value can be named.
+ */
+export function displayRenderMode(value: unknown): DisplayRenderMode {
+  if (value !== "mode-a" && value !== "mode-b") {
+    throw new DisplaySettingError(
+      `A display rendering mode must be "mode-a" or "mode-b", not ${String(value)}.`,
+    );
+  }
+
+  return value;
 }
 
 /**
