@@ -59,15 +59,19 @@ yet. The delete removes the install tree and its grant, but leaves the plugin's
 under `settings/extensions/` when the data should go too.
 
 A plugin that cannot start or crashes is reported once on the host console as
-`Plugin worker <publisher>/<id>: <reason>` and contributes no readings or asset
-rows. Every other provider and source keeps answering; the failed plugin's keys
+`Plugin worker <publisher>/<id>: <reason>`. A start failure contributes no
+readings or asset rows; a crashed plugin keeps its rows and reports failures.
+Every other provider and source keeps answering; the failed plugin's keys
 appear as gaps with a reason, never as zero. Restarting the host retries the
 worker.
 
-A plugin never receives a host credential. It can reach only the HTTPS hosts its
-manifest declares, through the host's guarded fetch, and it keeps any credential
-it needs in its own secret scope. Extension routes stay loopback-only and
-origin-checked; the LAN and admin rules above are unchanged.
+A trusted-worker plugin is ordinary Node code with this account's privileges:
+the fork is not an OS sandbox, and the host mediates only what the plugin does
+through the host API. Through that API a plugin never receives a host
+credential. `network.fetch` reaches only the HTTPS hosts its manifest declares,
+through the host's guarded fetch, and the plugin keeps any credential it needs
+in its own secret scope. Extension routes stay loopback-only and origin-checked;
+the LAN and admin rules above are unchanged.
 
 ## Security posture
 

@@ -87,9 +87,13 @@ not contain a native fault or a runaway plugin.
 
 The chosen split keeps Yunari's existing seams intact: `ProviderRegistry` and
 the asset-source port stay in the parent and receive plugin results, the parent
-dispatcher reuses `fetchSource` for `network.fetch` and `createJsonFile` /
-`createSecretStore` for scoped stores, and consent from 0112 is checked before
-each call. The child learns no settings path and holds no credential.
+dispatcher reuses the fetch policy owned by `providers/custom/fetch-source.ts`
+through `runtime/network.ts` and `createJsonFile` / `createSecretStore` for
+scoped stores, and consent from 0112 is checked before each call. The child
+learns no settings path and holds no credential. A plugin-contributed
+declarative source may not name a host credential (`requires`/`request.auth`):
+the credential would travel to a host the manifest chose, and the spec keeps
+host credentials out of plugins.
 
 ## Rung 6 — smallest probe
 
