@@ -25,6 +25,7 @@ import {
   validateFinalizedPackage,
 } from "../catalogue/kinds.js";
 import { publisherFor } from "../catalogue/publisher.js";
+import { reviewStateFor } from "../catalogue/review.js";
 import { favoriteCount, toggleFavorite } from "../db/favorites.js";
 import {
   finalizeStoredVersion,
@@ -54,7 +55,7 @@ import {
   REPORT_CATEGORIES,
   reportAllowed,
 } from "../db/reports.js";
-import type { ItemRow, UploadRow } from "../db/types.js";
+import type { ItemRow, ReviewState, UploadRow } from "../db/types.js";
 import { uploadsForVersion } from "../db/uploads.js";
 import type { Env } from "../env.js";
 import { pendingKey, thumbnailKey } from "../storage/keys.js";
@@ -1171,6 +1172,12 @@ async function finalizePackVersion(
     await discardUpload(env, stored);
     return badRequest(finalized.message);
   }
+  // A hardware plugin is held for the owner whatever the author's state; the
+  // manifest review reads is the package's own, validated above.
+  const reviewState: ReviewState =
+    finalized.finalized.manifest === undefined
+      ? "none"
+      : reviewStateFor(finalized.finalized.manifest);
 
   const existing = await versionOf(env.DB, item.id, version);
   if (existing !== undefined) {
@@ -1178,7 +1185,7 @@ async function finalizePackVersion(
       return differentBytes(version);
     await releaseReservedUpload(env.DB, item.id, version, nowIso);
     if (item.updated_at < existing.created_at)
-      return await settle(env, session, item, version, nowIso);
+      return await settle(env, session, item, version, nowIso, reviewState);
     return Response.json({ ok: true, status: item.status, version });
   }
 
@@ -1200,7 +1207,7 @@ async function finalizePackVersion(
       facets_json: JSON.stringify(defaultFacetsFor(presign.kind as StoreItemKind)),
       metadata_json: JSON.stringify(finalized.finalized.metadata),
       execution_profile: finalized.finalized.executionProfile,
-      review_state: "none",
+      review_state: reviewState,
       package_key: stored.key,
       thumbnail_key: thumbnailKey(item.id),
       bytes: inspected.bytes,
@@ -1218,7 +1225,7 @@ async function finalizePackVersion(
     )
       return differentBytes(version);
   }
-  return await settle(env, session, item, version, nowIso);
+  return await settle(env, session, item, version, nowIso, reviewState);
 }
 
 /** Drops a refused submission's stored object and its reservation together. */
@@ -1254,12 +1261,13 @@ async function settle(
   item: ItemRow,
   version: string,
   now: string,
+  reviewState: ReviewState = "none",
 ): Promise<Response> {
-  const status = nextStatus(
-    item.status,
-    await isVerified(env.DB, session.userId),
-  );
-  if (!(await markFinalized(env.DB, item.id, status, now)))
+  const status =
+    reviewState === "pending"
+      ? "pending"
+      : nextStatus(item.status, await isVerified(env.DB, session.userId));
+  if (!(await markFinalized(env.DB, item.id, status, now, reviewState)))
     return await takenDown(env, item.id);
   return Response.json({ ok: true, status, version });
 }

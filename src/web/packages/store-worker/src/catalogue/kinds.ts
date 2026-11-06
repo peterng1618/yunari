@@ -127,6 +127,9 @@ export interface FinalizedPackage {
   readonly metadata: Readonly<Record<string, unknown>>;
   /** The plugin's execution profile; null for every data kind. */
   readonly executionProfile: ExecutionProfile | null;
+  /** The validated plugin manifest, so review reads the package's own bytes
+   *  rather than a second parse of the metadata column. */
+  readonly manifest?: PluginManifest;
 }
 
 export type FinalizedPackageResult =
@@ -223,6 +226,7 @@ export function validateFinalizedPackage(
         contributions: contributionIdentities(manifest),
       },
       executionProfile: manifest.execution,
+      manifest,
     },
   };
 }

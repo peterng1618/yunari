@@ -321,10 +321,11 @@ export async function markFinalized(
   itemId: string,
   status: CatalogueStatus,
   now: string,
+  reviewState: ReviewState = "none",
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      `UPDATE item SET status = ?, updated_at = ?,
+      `UPDATE item SET status = ?, updated_at = ?, review_state = ?,
          published_at = CASE
            WHEN ? = 'published' AND status <> 'published' THEN ?
            ELSE published_at
@@ -333,7 +334,7 @@ export async function markFinalized(
            ELSE status_reason END
        WHERE id = ? AND status <> 'removed'`,
     )
-    .bind(status, now, status, now, itemId)
+    .bind(status, now, reviewState, status, now, itemId)
     .run();
   return result.meta.changes > 0;
 }
