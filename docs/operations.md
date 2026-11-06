@@ -38,6 +38,36 @@ reference.
 Pairing issues a durable display credential. Remove the display on the host to
 revoke it.
 
+## Extensions
+
+Everything an extension owns lives under the app folder's `settings/extensions/`:
+
+- `local/<id>/<version>/` is one installed package tree; `installed.json` is the
+  live index and `extension-consent.json` holds the executable profiles' grants.
+- `data/<publisher>/<id>/` is the plugin's keyed data, `secrets/<publisher>/<id>/`
+  its secret store (wrapped by the same OS key protector as the TLS root) and
+  `settings/<publisher>/<id>.json` its settings document.
+- `provider-order.json` is the plugin provider precedence the host serves at
+  `/api/extensions/provider-order`.
+
+Installing, granting consent and removing are host API calls on loopback:
+`POST /api/extensions/install`, `POST /api/extensions/<publisher>/<id>/consent`
+and `DELETE /api/extensions/<publisher>/<id>`. No editor control ships for them
+yet. The delete removes the install tree and its grant, but leaves the plugin's
+`data/`, `secrets/` and `settings/` scopes in place; delete those directories
+under `settings/extensions/` when the data should go too.
+
+A plugin that cannot start or crashes is reported once on the host console as
+`Plugin worker <publisher>/<id>: <reason>` and contributes no readings or asset
+rows. Every other provider and source keeps answering; the failed plugin's keys
+appear as gaps with a reason, never as zero. Restarting the host retries the
+worker.
+
+A plugin never receives a host credential. It can reach only the HTTPS hosts its
+manifest declares, through the host's guarded fetch, and it keeps any credential
+it needs in its own secret scope. Extension routes stay loopback-only and
+origin-checked; the LAN and admin rules above are unchanged.
+
 ## Security posture
 
 - LAN serving is off by default. `--host 0.0.0.0` exposes hardware telemetry to
