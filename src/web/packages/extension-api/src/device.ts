@@ -77,11 +77,16 @@ function hexId(value: number): string {
 }
 
 /** The consent row's stable name. Vendor and product hex are lowercase and
- *  four digits wide, so one device has one identity. */
+ *  four digits wide, so one device has one identity. A declared interface is
+ *  part of that identity: the user consents to an interface, and an open that
+ *  asks for another is a different device. */
 export function deviceIdentity(device: DeviceAllowlist): string {
   if (device.transport === "serial")
     return `serial:${canonicalSerialPath(device.path)}`;
-  return `${device.transport}:${hexId(device.vendorId)}:${hexId(device.productId)}`;
+  const base = `${device.transport}:${hexId(device.vendorId)}:${hexId(device.productId)}`;
+  return device.interfaceNumber === undefined
+    ? base
+    : `${base}#${device.interfaceNumber}`;
 }
 
 /** Every device the manifest asks the host to reach, in declaration order.
@@ -115,6 +120,9 @@ export function deviceAllowlistOf(
         transport,
         vendorId: family.vendorId,
         productId: family.productId,
+        ...(family.interfaceNumber === undefined
+          ? {}
+          : { interfaceNumber: family.interfaceNumber }),
       });
     }
   }

@@ -140,10 +140,9 @@ function isDeclared(entry: DeviceAllowlist, selector: Selector): boolean {
     return false;
   }
 
-  return (
-    entry.interfaceNumber === undefined ||
-    selector.interfaceNumber === entry.interfaceNumber
-  );
+  // The interface is declared and consented, not chosen at open: a selector
+  // that names another interface is a different device.
+  return selector.interfaceNumber === entry.interfaceNumber;
 }
 
 /** Whether an attached descriptor is one this plugin declared. */

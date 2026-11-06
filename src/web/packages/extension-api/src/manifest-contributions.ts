@@ -70,6 +70,7 @@ const PANEL_FAMILY_KEYS = [
   "renderModes",
   "transports",
   "serialPath",
+  "interfaceNumber",
 ] as const;
 const PANEL_SUPPORT_KEYS = [
   "maker",
@@ -227,6 +228,22 @@ function readPanelTransports(
   return { ok: true, value: transports };
 }
 
+/** A USB interface is one byte on the wire. It is refused when the family
+ *  declares no bus that has interfaces: a serial port has none. */
+function readInterfaceNumber(
+  value: unknown,
+  subject: string,
+): Check<number> {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 0xff
+  )
+    return refuse(`${subject} must be a whole number between 0 and 255.`);
+  return { ok: true, value };
+}
+
 function readPanelFamily(
   entry: unknown,
   subject: string,
@@ -295,6 +312,19 @@ function readPanelFamily(
       );
     serialPath = canonicalSerialPath(read.value);
   }
+  let interfaceNumber: number | undefined;
+  if (entry["interfaceNumber"] !== undefined) {
+    const read = readInterfaceNumber(
+      entry["interfaceNumber"],
+      `${subject}.interfaceNumber`,
+    );
+    if (!read.ok) return read;
+    if (!transports.value.some((transport) => transport !== "serial"))
+      return refuse(
+        `${subject}.interfaceNumber requires the "usb" or "hid" transport.`,
+      );
+    interfaceNumber = read.value;
+  }
   const declaresSerial = transports.value.includes("serial");
   if (declaresSerial && serialPath === undefined)
     return refuse(
@@ -315,6 +345,7 @@ function readPanelFamily(
       ...(renderModes === undefined ? {} : { renderModes }),
       transports: transports.value,
       ...(serialPath === undefined ? {} : { serialPath }),
+      ...(interfaceNumber === undefined ? {} : { interfaceNumber }),
     },
   };
 }

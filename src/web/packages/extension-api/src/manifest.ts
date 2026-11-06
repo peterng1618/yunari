@@ -124,6 +124,9 @@ export interface PluginContributions {
     /** The declared serial address; required exactly when `transports`
      *  includes `"serial"`. */
     readonly serialPath?: string;
+    /** The USB interface this family claims. Declared, so it is part of the
+     *  device the user consents to and an open cannot pick another. */
+    readonly interfaceNumber?: number;
   }[];
   readonly settingsPages?: readonly SettingsPageContribution[];
   readonly customSources?: readonly Readonly<Record<string, unknown>>[];

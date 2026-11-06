@@ -830,3 +830,44 @@ describe("settings pages", () => {
     });
   });
 });
+
+describe("panel family interfaceNumber", () => {
+  it("admits and keeps a declared interface", () => {
+    const manifest = panelManifest({ interfaceNumber: 1 });
+    expect(readPluginManifest(manifest)).toEqual({
+      ok: true,
+      manifest: {
+        ...manifest,
+        contributes: {
+          panelFamilies: [{ ...PANEL_FAMILY, interfaceNumber: 1 }],
+        },
+      },
+    });
+  });
+
+  it("refuses an interface outside one byte", () => {
+    expect(readPluginManifest(panelManifest({ interfaceNumber: 256 }))).toEqual(
+      {
+        ok: false,
+        reason:
+          "contributes.panelFamilies[0].interfaceNumber must be a whole number between 0 and 255.",
+      },
+    );
+  });
+
+  it("refuses an interface on a serial-only family", () => {
+    expect(
+      readPluginManifest(
+        panelManifest({
+          transports: ["serial"],
+          serialPath: "COM3",
+          interfaceNumber: 0,
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        'contributes.panelFamilies[0].interfaceNumber requires the "usb" or "hid" transport.',
+    });
+  });
+});

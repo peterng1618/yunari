@@ -62,6 +62,17 @@ describe("deviceIdentity", () => {
     ).toBe("hid:0008:1e71");
   });
 
+  it("names the declared interface in a usb identity", () => {
+    expect(
+      deviceIdentity({
+        transport: "usb",
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        interfaceNumber: 1,
+      }),
+    ).toBe("usb:1cbe:a092#1");
+  });
+
   it("prints a serial identity as the declared path", () => {
     expect(
       deviceIdentity({
@@ -124,6 +135,21 @@ describe("deviceAllowlistOf", () => {
         path: "/dev/ttyUSB0",
         vendorId: 0x1cbe,
         productId: 0xa092,
+      },
+    ] satisfies readonly DeviceAllowlist[]);
+  });
+
+  it("declares the interface a family claims", () => {
+    const manifest = manifestWithFamilies([family({ interfaceNumber: 2 })]);
+    expect(deviceAllowlistOf(manifest).map(deviceIdentity)).toEqual([
+      "usb:1cbe:a092#2",
+    ]);
+    expect(deviceAllowlistOf(manifest)).toEqual([
+      {
+        transport: "usb",
+        vendorId: 0x1cbe,
+        productId: 0xa092,
+        interfaceNumber: 2,
       },
     ] satisfies readonly DeviceAllowlist[]);
   });

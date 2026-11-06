@@ -164,6 +164,26 @@ describe("createDeviceBroker", () => {
     expect(opened.map((device) => device.path)).toEqual(["1:3"]);
   });
 
+  it("refuses an interface the consent did not declare", async () => {
+    const { backend, opened } = fakeBackend();
+    const broker = createDeviceBroker({
+      allowlists: () => [{ ...declared(), interfaceNumber: 0 }],
+      backend,
+    });
+
+    await expect(
+      broker.open(PLUGIN, { ...declaredSelector(), interfaceNumber: 1 }),
+    ).rejects.toThrow("not declared");
+    // An interface-less selector is not the declared interface either.
+    await expect(broker.open(PLUGIN, declaredSelector())).rejects.toThrow(
+      "not declared",
+    );
+    expect(opened).toEqual([]);
+
+    await broker.open(PLUGIN, { ...declaredSelector(), interfaceNumber: 0 });
+    expect(opened[0]?.interfaceNumber).toBe(0);
+  });
+
   it("refuses a non-positive in-flight limit", () => {
     const { backend } = fakeBackend();
 
