@@ -11,6 +11,24 @@ import { createExtensionService } from "./service";
 
 const MISMATCH = "That consent does not match the installed plugin.";
 
+/** The provider-order store the service needs, in memory. */
+function orderStore(): {
+  read(): Promise<{ version: 1; pluginOrder: readonly string[] }>;
+  write(order: { version: 1; pluginOrder: readonly string[] }): Promise<void>;
+} {
+  let value: { version: 1; pluginOrder: readonly string[] } = {
+    version: 1,
+    pluginOrder: [],
+  };
+  return {
+    read: () => Promise.resolve(value),
+    write: (order) => {
+      value = order;
+      return Promise.resolve();
+    },
+  };
+}
+
 function manifest(
   overrides: Readonly<Record<string, unknown>> = {},
 ): Readonly<Record<string, unknown>> {
@@ -86,6 +104,7 @@ describe("extension service", () => {
       installer: createPluginInstaller(path.join(dir, "extensions")),
       consent,
       now: () => "2026-11-06T00:00:00Z",
+      providerOrder: orderStore(),
     });
   });
 
@@ -258,6 +277,7 @@ describe("extension service", () => {
       installer: createPluginInstaller(path.join(dir, "extensions")),
       consent,
       now: () => "2026-11-06T00:00:00Z",
+      providerOrder: orderStore(),
       onChange,
     });
 

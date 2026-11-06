@@ -1,5 +1,8 @@
+import type { InstalledPlugin } from "@yunari/extension-api";
 import type { Sample, SampleEntry } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import { PluginSensorProvider } from "../extensions/providers.js";
+import type { PluginSupervisor } from "../extensions/runtime/supervisor.js";
 import type {
   ProviderHealth,
   SampleContext,
@@ -323,6 +326,54 @@ describe("ProviderRegistry", () => {
 
       expect(cycle.entries).toEqual([]);
       expect(cycle.unmapped).toEqual(["cpu.temp.package"]);
+    });
+
+    it("keeps a built-in answering when a plugin provider fails", async () => {
+      const failing: PluginSupervisor = {
+        alive: true,
+        start: () => Promise.resolve(),
+        request: () => Promise.reject(new Error("plugin crashed")),
+        stop: () => Promise.resolve(),
+      };
+      const plugin: InstalledPlugin = {
+        key: "local/acme",
+        publisher: "local",
+        directory: "plugins/acme",
+        contentHash: "a".repeat(64),
+        manifest: {
+          manifestVersion: 1,
+          id: "acme",
+          name: "Acme",
+          version: "1.0.0",
+          description: "Acme sensors.",
+          engines: { yunari: ">=0.1.0" },
+          pluginApi: 1,
+          execution: "trusted-worker",
+          capabilities: ["sensor:provide"],
+          contributes: { sensorProviders: [{ id: "acme", label: "Acme" }] },
+          main: "main.js",
+        },
+      };
+      const registry = new ProviderRegistry([
+        stubProvider("os", { "cpu.load": 10 }),
+        new PluginSensorProvider({
+          plugin,
+          supervisor: failing,
+          contribution: { id: "acme", label: "Acme" },
+        }),
+      ]);
+
+      const cycle = await registry.sample(["cpu.load"], NOW);
+
+      expect(cycle.entries).toContainEqual(
+        expect.objectContaining({
+          semanticKey: "cpu.load",
+          sample: expect.objectContaining({ status: "ok" }),
+        }),
+      );
+      expect(cycle.failures).toEqual([
+        expect.objectContaining({ providerId: "acme" }),
+      ]);
     });
 
     it("survives a provider rejecting with a non-Error", async () => {

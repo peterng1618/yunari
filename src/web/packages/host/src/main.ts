@@ -18,6 +18,12 @@ import {
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
+import {
+  createProviderOrderStore,
+  orderProviders,
+} from "./extensions/provider-order.js";
+import { createPluginProviders } from "./extensions/providers.js";
+import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { createExtensionService } from "./extensions/service.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
@@ -212,6 +218,13 @@ export async function run(argv: readonly string[]): Promise<number> {
   const customSources = createSourceStore(settingsDir);
   // Plugins may declare custom sources, and an install, grant or remove can
   // change the rows the provider should hold.
+  const pluginInstaller = createPluginInstaller(
+    path.join(settingsDir, "extensions"),
+  );
+  // Which plugin provider answers a shared key first, kept beside the plugins.
+  const providerOrder = createProviderOrderStore(
+    path.join(settingsDir, "extensions", "provider-order.json"),
+  );
   let extensions: ReturnType<typeof createExtensionService>;
   let pluginSources: readonly CustomSource[] = [];
   const refreshPluginSources = async (): Promise<void> => {
@@ -227,9 +240,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     extraSources: () => pluginSources,
   });
   extensions = createExtensionService({
-    installer: createPluginInstaller(path.join(settingsDir, "extensions")),
+    installer: pluginInstaller,
     consent: createConsentStore(settingsDir),
     now: () => new Date().toISOString(),
+    providerOrder,
     onChange: async () => {
       await refreshPluginSources();
       await customProvider.reload();
@@ -237,6 +251,16 @@ export async function run(argv: readonly string[]): Promise<number> {
   });
   await refreshPluginSources();
   await customProvider.reload();
+  // One forked worker per loadable provider plugin. A plugin that will not
+  // start is reported and left out; the machine's own providers still answer.
+  const pluginRuntime = await createPluginProviders({
+    installer: pluginInstaller,
+    extensions,
+    hostApi: createHostApiDispatcher({ settingsDir }),
+    onFailure: (pluginKey, reason) => {
+      console.error(`Plugin provider ${pluginKey}: ${reason}`);
+    },
+  });
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle.
@@ -315,16 +339,22 @@ export async function run(argv: readonly string[]): Promise<number> {
           productName: () => Promise.resolve(undefined),
         }),
   });
-  const registry = new ProviderRegistry([
-    clockProvider,
-    lhmProvider,
-    libraryProvider,
-    weatherProvider,
-    mediaProvider,
-    frameProvider,
-    gameProvider,
-    customProvider,
-  ]);
+  const registry = new ProviderRegistry(
+    orderProviders(
+      [
+        clockProvider,
+        lhmProvider,
+        libraryProvider,
+        weatherProvider,
+        mediaProvider,
+        frameProvider,
+        gameProvider,
+        customProvider,
+      ],
+      pluginRuntime.providers,
+      await extensions.readProviderOrder(),
+    ),
+  );
   const packagesDir = path.resolve(here, "..", "..");
 
   // Displays and their credentials exist whether or not the LAN is on, because
@@ -894,6 +924,16 @@ export async function run(argv: readonly string[]): Promise<number> {
       } finally {
         // A throwing stop must not leave the server listening with no tray.
         void (async () => {
+          // Plugin workers stop before the panels: a child left polling would
+          // outlive the host that owned it.
+          try {
+            await pluginRuntime.stop();
+          } catch (error) {
+            console.error(
+              `The plugin workers could not stop: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
           // The panels before the server: a runner still opening has to be
           // awaited, or its device and STOP_VIDEO outlive the host that owned
           // them. A refusal is logged and the close continues.

@@ -103,6 +103,47 @@ function pluginBytes(): Uint8Array {
   );
 }
 
+function providerPluginBytes(): Uint8Array {
+  const manifest = {
+    manifestVersion: 1,
+    id: "acme-sensors",
+    name: "Acme Sensors",
+    version: "1.0.0",
+    description: "Reads the room's sensors.",
+    engines: { yunari: ">=0.1.0" },
+    pluginApi: 1,
+    execution: "trusted-worker",
+    capabilities: ["sensor:provide"],
+    contributes: { sensorProviders: [{ id: "acme", label: "Acme" }] },
+    main: "main.js",
+  };
+  return zipSync(
+    {
+      "yunari-plugin.json": strToU8(JSON.stringify(manifest)),
+      "main.js": strToU8("export default {};"),
+    },
+    { level: 0 },
+  );
+}
+
+/** The order store the routes read and write, in memory. */
+function orderStore(): {
+  read(): Promise<{ version: 1; pluginOrder: readonly string[] }>;
+  write(order: { version: 1; pluginOrder: readonly string[] }): Promise<void>;
+} {
+  let value: { version: 1; pluginOrder: readonly string[] } = {
+    version: 1,
+    pluginOrder: [],
+  };
+  return {
+    read: () => Promise.resolve(value),
+    write: (order) => {
+      value = order;
+      return Promise.resolve();
+    },
+  };
+}
+
 describe("extension routes", () => {
   let dir: string;
   let handle: ReturnType<typeof createExtensionRoutes>;
@@ -114,6 +155,7 @@ describe("extension routes", () => {
         installer: createPluginInstaller(path.join(dir, "extensions")),
         consent: createConsentStore(dir),
         now: () => "2026-11-06T00:00:00Z",
+        providerOrder: orderStore(),
       }),
     });
   });
@@ -128,6 +170,12 @@ describe("extension routes", () => {
       ["POST", "/api/extensions/install", pluginBytes()],
       ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
       ["DELETE", "/api/extensions/local/acme-sensors", undefined],
+      ["GET", "/api/extensions/provider-order", undefined],
+      [
+        "PUT",
+        "/api/extensions/provider-order",
+        JSON.stringify({ version: 1, pluginOrder: [] }),
+      ],
     ] as const;
 
     for (const [method, path, body] of routes) {
@@ -145,6 +193,12 @@ describe("extension routes", () => {
       ["POST", "/api/extensions/install", pluginBytes()],
       ["POST", "/api/extensions/local/acme-sensors/consent", "{}"],
       ["DELETE", "/api/extensions/local/acme-sensors", undefined],
+      ["GET", "/api/extensions/provider-order", undefined],
+      [
+        "PUT",
+        "/api/extensions/provider-order",
+        JSON.stringify({ version: 1, pluginOrder: [] }),
+      ],
     ] as const;
 
     for (const [method, path, body] of routes) {
@@ -268,6 +322,7 @@ describe("extension routes", () => {
       installer: createPluginInstaller(path.join(dir, "extensions")),
       consent: createConsentStore(dir),
       now: () => "2026-11-06T00:00:00Z",
+      providerOrder: orderStore(),
     });
     const broken = { ...real, list: async () => [] };
     const route = createExtensionRoutes({ extensions: broken });
@@ -285,5 +340,69 @@ describe("extension routes", () => {
   it("answers 503 when the host manages no extensions", async () => {
     const disabled = createExtensionRoutes({ extensions: undefined });
     expect((await call(disabled, "GET", "/api/extensions")).status).toBe(503);
+  });
+
+  it("reads and writes the provider order", async () => {
+    const installed = await call(handle, "POST", "/api/extensions/install", {
+      body: providerPluginBytes(),
+    });
+    expect(installed.status).toBe(200);
+
+    const empty = await call(handle, "GET", "/api/extensions/provider-order");
+    expect(empty.status).toBe(200);
+    expect(empty.json()).toEqual({ version: 1, pluginOrder: [] });
+
+    const written = await call(
+      handle,
+      "PUT",
+      "/api/extensions/provider-order",
+      {
+        body: JSON.stringify({
+          version: 1,
+          pluginOrder: ["local/acme-sensors"],
+        }),
+      },
+    );
+    expect(written.status).toBe(200);
+    expect(written.json()).toEqual({ ok: true });
+
+    const read = await call(handle, "GET", "/api/extensions/provider-order");
+    expect(read.json()).toEqual({
+      version: 1,
+      pluginOrder: ["local/acme-sensors"],
+    });
+  });
+
+  it("refuses a provider order naming an uninstalled plugin", async () => {
+    const answer = await call(handle, "PUT", "/api/extensions/provider-order", {
+      body: JSON.stringify({ version: 1, pluginOrder: ["local/gone"] }),
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json()).toEqual({
+      ok: false,
+      message: 'No installed extension provides the provider "local/gone".',
+    });
+  });
+
+  it("refuses an unreadable provider-order body", async () => {
+    const malformed = await call(
+      handle,
+      "PUT",
+      "/api/extensions/provider-order",
+      { body: "not json" },
+    );
+    expect(malformed.status).toBe(400);
+
+    const oversize = await call(
+      handle,
+      "PUT",
+      "/api/extensions/provider-order",
+      {
+        body: "x",
+        headers: { "content-length": String(64 * 1024 + 1) },
+      },
+    );
+    expect(oversize.status).toBe(413);
   });
 });

@@ -15,10 +15,19 @@ import {
   type PluginInstaller,
 } from "@yunari/extension-api";
 import type { ConsentStore } from "./consent-store.js";
+import {
+  type ProviderOrder,
+  readProviderOrder as parseProviderOrder,
+} from "./provider-order.js";
 
 export type { InstalledExtension } from "@yunari/extension-api";
 
 const MISMATCH = "That consent does not match the installed plugin.";
+
+export interface ProviderOrderStore {
+  read(): Promise<ProviderOrder>;
+  write(order: ProviderOrder): Promise<void>;
+}
 
 export interface ExtensionService {
   list(): Promise<readonly InstalledExtension[]>;
@@ -30,6 +39,13 @@ export interface ExtensionService {
   remove(key: string): Promise<void>;
   /** False when the plugin is killed, stale, or its consent is missing. */
   mayLoad(key: string): Promise<boolean>;
+  /** The stored grant, unread when there is none; fingerprints stay the
+   *  service's business. */
+  consentRecord(key: string): Promise<ConsentRecord | undefined>;
+  readProviderOrder(): Promise<ProviderOrder>;
+  writeProviderOrder(
+    order: ProviderOrder,
+  ): Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 /**
@@ -111,6 +127,8 @@ export function createExtensionService(options: {
   readonly installer: PluginInstaller;
   readonly consent: ConsentStore;
   readonly now: () => string;
+  /** Where the plugin provider precedence is kept. */
+  readonly providerOrder: ProviderOrderStore;
   /** Runs after a successful install, grant or remove, so the host can reload
    *  the managers that read plugin contributions. */
   readonly onChange?: () => Promise<void>;
@@ -198,6 +216,50 @@ export function createExtensionService(options: {
         // An unreadable grant is no grant.
         return false;
       }
+    },
+
+    async consentRecord(key) {
+      try {
+        return (await consent.read()).plugins[key];
+      } catch {
+        // An unreadable grant is no grant.
+        return undefined;
+      }
+    },
+
+    readProviderOrder() {
+      return options.providerOrder.read();
+    },
+
+    async writeProviderOrder(order) {
+      let parsed: ProviderOrder;
+      try {
+        parsed = parseProviderOrder(order);
+      } catch {
+        return { ok: false, message: "That provider order is not readable." };
+      }
+
+      const providerKeys = new Set(
+        (await installer.list())
+          .filter(
+            (plugin) =>
+              plugin.manifest.execution === "trusted-worker" &&
+              (plugin.manifest.contributes.sensorProviders?.length ?? 0) > 0,
+          )
+          .map((plugin) => plugin.key),
+      );
+
+      for (const key of parsed.pluginOrder) {
+        if (!providerKeys.has(key)) {
+          return {
+            ok: false,
+            message: `No installed extension provides the provider "${key}".`,
+          };
+        }
+      }
+
+      await options.providerOrder.write(parsed);
+      return { ok: true };
     },
   };
 }
