@@ -283,6 +283,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   const pluginAssetSources = await createPluginAssetSources({
     installer: pluginInstaller,
     supervisors: pluginSupervisors.supervisors,
+    taken: ASSET_SOURCES.map((source) => source.id),
     onFailure: onPluginFailure,
   });
   // A declarative source needs no worker: its manifest says where to search

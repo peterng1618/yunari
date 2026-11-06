@@ -405,6 +405,8 @@ export interface CreatePluginAssetSourcesOptions {
   readonly installer: PluginInstaller;
   /** The one worker per plugin, started once by `startPluginSupervisors`. */
   readonly supervisors: ReadonlyMap<string, PluginSupervisor>;
+  /** Source ids already registered by the host's own rows. */
+  readonly taken?: readonly string[];
   /** One line per contribution that was refused; may reach the console. */
   readonly onFailure?: (pluginKey: string, reason: string) => void;
 }
@@ -419,6 +421,7 @@ export async function createPluginAssetSources(
   options: CreatePluginAssetSourcesOptions,
 ): Promise<readonly PluginAssetSource[]> {
   const sources: PluginAssetSource[] = [];
+  const ids = new Set(options.taken ?? []);
 
   for (const plugin of await options.installer.list()) {
     const contributions = plugin.manifest.contributes.assetSources ?? [];
@@ -433,6 +436,17 @@ export async function createPluginAssetSources(
         options.onFailure?.(plugin.key, read.reason);
         continue;
       }
+
+      // A duplicate would make `createAssetSources` throw at startup, so it
+      // is refused here like a malformed contribution.
+      if (ids.has(read.contribution.id)) {
+        options.onFailure?.(
+          plugin.key,
+          `"${read.contribution.id}" is already an asset source.`,
+        );
+        continue;
+      }
+      ids.add(read.contribution.id);
 
       sources.push(
         new PluginAssetSource({

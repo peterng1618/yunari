@@ -505,6 +505,26 @@ describe("createPluginAssetSources", () => {
 
     expect(sources).toEqual([]);
   });
+
+  it("skips a contribution whose id another source already owns", async () => {
+    installed = [plugin()];
+    const onFailure = vi.fn();
+
+    const sources = await createPluginAssetSources({
+      installer: fakeInstaller(installed),
+      supervisors: new Map([
+        [installed[0]?.key ?? "", supervisorAnswering(() => undefined)],
+      ]),
+      taken: ["plugin-source"],
+      onFailure,
+    });
+
+    expect(sources).toEqual([]);
+    expect(onFailure).toHaveBeenCalledWith(
+      installed[0]?.key,
+      '"plugin-source" is already an asset source.',
+    );
+  });
 });
 
 describe("startPluginSupervisors", () => {

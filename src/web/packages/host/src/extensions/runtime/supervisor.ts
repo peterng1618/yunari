@@ -42,7 +42,10 @@ export interface PluginSupervisor {
   stop(): Promise<void>;
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
+/* A plugin call can wait on a host call, whose own deadline is 30 s
+ * (`runtime/host-api.ts` CALL_TIMEOUT_MS); killing the worker first would turn
+ * a slow fetch into a crash. Keep this above that deadline. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
 const STARTUP_TIMEOUT_MS = 5_000;
 const STOP_TIMEOUT_MS = 2_000;
 const STOP_GRACE_MS = 1_000;
