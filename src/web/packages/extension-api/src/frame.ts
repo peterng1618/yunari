@@ -103,7 +103,9 @@ function hasExactKeys(
   return true;
 }
 
-function readRequest(value: Readonly<Record<string, unknown>>): FrameRequest | undefined {
+function readRequest(
+  value: Readonly<Record<string, unknown>>,
+): FrameRequest | undefined {
   if (
     !hasExactKeys(
       value,
@@ -141,7 +143,9 @@ function readRequest(value: Readonly<Record<string, unknown>>): FrameRequest | u
   };
 }
 
-function readEvent(value: Readonly<Record<string, unknown>>): FrameEvent | undefined {
+function readEvent(
+  value: Readonly<Record<string, unknown>>,
+): FrameEvent | undefined {
   if (!hasExactKeys(value, ["type", "event", "height"], ["type", "event"]))
     return undefined;
   if (value["type"] !== "yunari.frame.event") return undefined;
@@ -155,11 +159,7 @@ function readEvent(value: Readonly<Record<string, unknown>>): FrameEvent | undef
   if (event !== "resize") return undefined;
 
   const height = value["height"];
-  if (
-    typeof height !== "number" ||
-    !Number.isFinite(height) ||
-    height <= 0
-  )
+  if (typeof height !== "number" || !Number.isFinite(height) || height <= 0)
     return undefined;
   return { type: "yunari.frame.event", event: "resize", height };
 }

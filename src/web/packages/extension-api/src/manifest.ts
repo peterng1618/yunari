@@ -355,10 +355,7 @@ export function readPluginManifest(value: unknown): ManifestResult {
   const sandboxedPage = contributes.value.settingsPages?.find(
     (page) => "ui" in page,
   );
-  if (
-    sandboxedPage !== undefined &&
-    !capabilities.value.includes("ui:frame")
-  )
+  if (sandboxedPage !== undefined && !capabilities.value.includes("ui:frame"))
     return refuse(
       `The settings page ${JSON.stringify(sandboxedPage.id)} requires the "ui:frame" capability.`,
     );

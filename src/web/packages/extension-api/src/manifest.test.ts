@@ -440,8 +440,7 @@ describe("settings pages", () => {
       ),
     ).toEqual({
       ok: false,
-      reason:
-        'The settings page "acme" requires the "ui:frame" capability.',
+      reason: 'The settings page "acme" requires the "ui:frame" capability.',
     });
   });
 
@@ -463,10 +462,9 @@ describe("settings pages", () => {
 
   it("refuses a page with neither fields nor ui", () => {
     expect(
-      pageManifest(
-        { settingsPages: [{ id: "acme", label: "Acme" }] },
-        ["settings:own"],
-      ),
+      pageManifest({ settingsPages: [{ id: "acme", label: "Acme" }] }, [
+        "settings:own",
+      ]),
     ).toEqual({
       ok: false,
       reason: 'The settings page "acme" needs "fields" or "ui".',
@@ -513,8 +511,7 @@ describe("settings pages", () => {
       ),
     ).toEqual({
       ok: false,
-      reason:
-        'The settings page "acme" declares the field "mode" twice.',
+      reason: 'The settings page "acme" declares the field "mode" twice.',
     });
   });
 
@@ -542,8 +539,7 @@ describe("settings pages", () => {
       ),
     ).toEqual({
       ok: false,
-      reason:
-        'The field "mode" has a default that is not one of its options.',
+      reason: 'The field "mode" has a default that is not one of its options.',
     });
   });
 
@@ -563,7 +559,7 @@ describe("settings pages", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: 'contributes.settingsPages[0].fields[0].type is unknown.',
+      reason: "contributes.settingsPages[0].fields[0].type is unknown.",
     });
   });
 

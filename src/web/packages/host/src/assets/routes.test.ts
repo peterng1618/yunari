@@ -170,6 +170,34 @@ describe("the asset routes", () => {
     expect(body.sources[0]?.id).toBe("lucide");
   });
 
+  it("lists a plugin frame body with the plugin that draws it", async () => {
+    const melody: AssetSource = {
+      id: "melody",
+      label: "Melody",
+      category: "audio",
+      body: "melody",
+      plugin: { key: "local/acme", ui: "ui/index.html" },
+      requires: undefined,
+      configurable: false,
+      search: async () => ({ results: [], totalPages: undefined }),
+      bytesOf: async () => undefined,
+    };
+    const base = await start({ sources: [melody, colourSource] });
+    const body = (await (await fetch(`${base}/api/assets/sources`)).json()) as {
+      sources: readonly Record<string, unknown>[];
+    };
+
+    expect(body.sources.find((source) => source.id === "melody")).toEqual(
+      expect.objectContaining({
+        body: "melody",
+        plugin: { key: "local/acme", ui: "ui/index.html" },
+      }),
+    );
+    expect(
+      body.sources.find((source) => source.id === "fake-palettes"),
+    ).toEqual(expect.objectContaining({ plugin: null }));
+  });
+
   it("lists the sources, with no credential needed", async () => {
     const base = await start({});
     const response = await fetch(`${base}/api/assets/sources`);

@@ -116,6 +116,7 @@ function extensionOf(
     contributions: plugin.manifest.contributes,
     consent,
     fingerprint,
+    ...(plugin.manifest.ui === undefined ? {} : { ui: plugin.manifest.ui }),
   };
 }
 

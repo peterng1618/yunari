@@ -1,3 +1,4 @@
+import { BUILT_IN_ASSET_BODIES } from "@yunari/extension-api";
 import {
   type AssetResult,
   type AssetSourceListing,
@@ -169,6 +170,19 @@ export function gridSourcesOf(
       source.category === category &&
       (source.body === "grid" ||
         (category === "font" && source.body === "font-picker")),
+  );
+}
+
+/** The sources whose body is the plugin's own frame rather than one the editor
+ *  draws. A source with an unknown body but no plugin is listed by the host and
+ *  cannot be drawn; the caller shows the stated refusal instead of a grid. */
+export function customSourcesOf(
+  sources: readonly AssetSourceListing[],
+  category: ListingCategory,
+): readonly AssetSourceListing[] {
+  return sources.filter(
+    (source) =>
+      source.category === category && !BUILT_IN_ASSET_BODIES.has(source.body),
   );
 }
 

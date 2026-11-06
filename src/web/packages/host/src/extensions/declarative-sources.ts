@@ -80,7 +80,8 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
   readonly id: string;
   readonly label: string;
   readonly category: string;
-  readonly body = "grid" as const;
+  readonly body: string;
+  readonly plugin?: { readonly key: string; readonly ui: string };
   readonly requires = undefined;
   readonly configurable = true;
   readonly presetKind?: PresetKind;
@@ -106,6 +107,9 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     this.label = options.contribution.label;
     this.category = options.contribution.category;
     this.host = options.contribution.host;
+    this.body = options.contribution.body;
+    if (this.body !== "grid" && options.plugin.ui !== undefined)
+      this.plugin = { key: options.plugin.key, ui: options.plugin.ui };
     if (options.contribution.presetKind !== undefined) {
       this.presetKind = options.contribution.presetKind;
     }

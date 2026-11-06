@@ -5,7 +5,9 @@ import {
   readPluginFrameMessage,
 } from "./frame";
 
-function request(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function request(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     type: "yunari.frame.request",
     nonce: "nonce-1",
@@ -66,7 +68,9 @@ describe("readPluginFrameMessage", () => {
   });
 
   it("refuses an unknown method", () => {
-    expect(readPluginFrameMessage(request({ method: "host.exec" }))).toBeUndefined();
+    expect(
+      readPluginFrameMessage(request({ method: "host.exec" })),
+    ).toBeUndefined();
   });
 
   it("refuses a wrong nonce type", () => {
@@ -115,6 +119,8 @@ describe("readPluginFrameMessage", () => {
   it("refuses a value that is not a frame message", () => {
     expect(readPluginFrameMessage(null)).toBeUndefined();
     expect(readPluginFrameMessage("ready")).toBeUndefined();
-    expect(readPluginFrameMessage({ type: "yunari.frame.result" })).toBeUndefined();
+    expect(
+      readPluginFrameMessage({ type: "yunari.frame.result" }),
+    ).toBeUndefined();
   });
 });

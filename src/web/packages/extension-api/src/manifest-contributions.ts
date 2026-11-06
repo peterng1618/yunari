@@ -321,7 +321,9 @@ function readSettingsField(
       max = read.value;
     }
     if (min !== undefined && max !== undefined && min > max)
-      return refuse(`The field ${JSON.stringify(key)} has a minimum above its maximum.`);
+      return refuse(
+        `The field ${JSON.stringify(key)} has a minimum above its maximum.`,
+      );
     let defaultValue: number | undefined;
     if (entry["default"] !== undefined) {
       const read = readFinite(entry["default"], `${subject}.default`);
@@ -382,7 +384,8 @@ function readSettingsField(
       entry["options"],
       `${subject}.options`,
       (option, optionSubject) => {
-        if (!isRecord(option)) return refuse(`${optionSubject} must be an object.`);
+        if (!isRecord(option))
+          return refuse(`${optionSubject} must be an object.`);
         const optionUnknown = checkKeys(
           option,
           ["value", "label"],

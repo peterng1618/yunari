@@ -309,6 +309,7 @@ function listingOf(source: AssetSource): AssetSourceListing {
     label: source.label,
     category: source.category,
     body: source.body,
+    plugin: source.plugin ?? null,
     // `null` rather than an omitted key: a reader distinguishes "needs no
     // credential" from a field the answer forgot to carry.
     requires: source.requires ?? null,
