@@ -249,10 +249,7 @@ function readPanelTransports(
 
 /** A USB interface is one byte on the wire. It is refused when the family
  *  declares no bus that has interfaces: a serial port has none. */
-function readInterfaceNumber(
-  value: unknown,
-  subject: string,
-): Check<number> {
+function readInterfaceNumber(value: unknown, subject: string): Check<number> {
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||

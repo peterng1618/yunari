@@ -12,11 +12,7 @@ const PLUGIN_KEY = "acme/panel";
 const VENDOR_ID = 0x1234;
 const PRODUCT_ID = 0x5678;
 
-function family(
-  vendorId: number,
-  productId: number,
-  id: string,
-): PanelFamily {
+function family(vendorId: number, productId: number, id: string): PanelFamily {
   return {
     id,
     label: id,
@@ -99,7 +95,13 @@ function mainWiring() {
   const allowlists = new Map([
     [
       PLUGIN_KEY,
-      [{ transport: "usb" as const, vendorId: VENDOR_ID, productId: PRODUCT_ID }],
+      [
+        {
+          transport: "usb" as const,
+          vendorId: VENDOR_ID,
+          productId: PRODUCT_ID,
+        },
+      ],
     ],
   ]);
   const broker = createDeviceBroker({

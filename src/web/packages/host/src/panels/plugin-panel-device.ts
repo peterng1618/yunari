@@ -163,8 +163,8 @@ export class PluginPanelDevice implements PanelDevice {
   }
 
   async #closeAll(): Promise<void> {
-    await this.#broker.closeScope(this.#pluginKey, this.#scope).catch(
-      () => undefined,
-    );
+    await this.#broker
+      .closeScope(this.#pluginKey, this.#scope)
+      .catch(() => undefined);
   }
 }

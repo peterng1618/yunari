@@ -47,7 +47,6 @@ import { createExtensionService } from "./extensions/service.js";
 import { createPluginSettingsStore } from "./extensions/settings.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
-import type { PanelFamily } from "./panels/panel-device.js";
 import {
   createPanelFamilyRegistry,
   type PanelFamilyContribution,

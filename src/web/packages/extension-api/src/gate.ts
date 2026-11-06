@@ -45,9 +45,7 @@ export function gateExtensionCall(context: CallContext): GateDecision {
       reason: "missing-capability",
       // A declared method always names at least one capability; the spread
       // keeps the denial valid if a hand-built table row does not.
-      ...(capabilities[0] === undefined
-        ? {}
-        : { capability: capabilities[0] }),
+      ...(capabilities[0] === undefined ? {} : { capability: capabilities[0] }),
     };
   return { ok: true, method };
 }

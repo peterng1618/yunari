@@ -581,7 +581,12 @@ describe("device methods", () => {
         plugin: serialPlugin,
         consent,
         method: "usb.open",
-        params: { transport: "serial", vendorId: 1, productId: 2, path: "COM3" },
+        params: {
+          transport: "serial",
+          vendorId: 1,
+          productId: 2,
+          path: "COM3",
+        },
       }),
     ).toEqual("token");
     expect(
@@ -593,10 +598,7 @@ describe("device methods", () => {
       }),
     ).toBeNull();
     expect(broker.open).toHaveBeenCalledOnce();
-    expect(broker.close).toHaveBeenCalledWith(
-      "acme/test-plugin",
-      "token",
-    );
+    expect(broker.close).toHaveBeenCalledWith("acme/test-plugin", "token");
   });
 
   it("answers not-supported when no broker is configured", async () => {
