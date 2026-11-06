@@ -51,6 +51,13 @@ a timing value that actually works, a new refusal mode:
 4. Update `Last hardware verification` only when the hardware was actually met.
 5. Leave a guess in *Open questions* until hardware proves it. A plausible
    inference presented as a fact is worse than an admitted gap.
+6. **`Last known good revision` is a human verdict, not a measurement.** Only
+   the owner saying a revision played well on the glass makes it that line;
+   probe timings, gate runs and accepted commands say nothing about the
+   picture. After any change to a panel's rendering, cadence, encoder or page,
+   state that it awaits visual review and ask the owner to look, and keep the
+   previously confirmed hash in that line with the new one under
+   `Awaiting visual review`. Move it up only on their explicit confirmation.
 
 ## Probing safely
 
