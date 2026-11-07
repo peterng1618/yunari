@@ -10,6 +10,7 @@ import {
   defaultPieSettings,
   settingsFieldsFor,
 } from "@yunari/renderer-core";
+import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { isSettingVisible } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
@@ -322,15 +323,21 @@ describe("every chart family's controls", () => {
     const row = control.closest(".flex-wrap");
     expect(row, "the control sits in a row").not.toBeNull();
 
-    // `focus` opens the tooltip immediately, where hover waits out the pointer
-    // delay this file cannot spend. Nothing React renders moves, so no `act`.
-    row?.dispatchEvent(new Event("focus"));
+    // Focus opens the tooltip immediately, where hover waits out the pointer
+    // delay this file cannot spend. Focus lands on the row's own control: the
+    // trigger is the row, and a child's focus reaches it by bubbling.
+    const focusable = row?.querySelector<HTMLElement>(
+      "[tabindex], button, input",
+    );
+    expect(focusable, "the row holds a focusable control").not.toBeNull();
+    await act(async () => focusable?.focus());
+    await flush();
 
     expect(
       document.querySelector(".editor-shell-tooltip")?.textContent,
       "the row's tooltip carries the hint",
     ).toBe(descriptor?.hint);
-    row?.dispatchEvent(new Event("blur"));
+    await act(async () => focusable?.blur());
   });
 });
 

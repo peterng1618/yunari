@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { AssetFinder } from "../asset-finder/modal.js";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { hitTargetClasses } from "../components/ui/control-well.js";
 import {
   readPreviewRatioTokens,
@@ -32,6 +31,7 @@ import { BackgroundPlayback } from "./background-playback.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { CanvasContextMenu } from "./canvas-context-menu.js";
 import { CanvasDock } from "./canvas-dock.js";
+import { ControlTooltip } from "./controls/tooltip.js";
 import { DiagnosticMessage } from "./diagnostic-message.js";
 import { DisplaySwitch } from "./display-switch.js";
 import { DocumentIdentity } from "./document-identity.js";
@@ -360,23 +360,22 @@ export function createShellLayout(
     const label = collapsed
       ? uiCopy.inspectorPanel.expand
       : uiCopy.inspectorPanel.collapse;
-    const ref = useRef<HTMLButtonElement>(null);
-    useControlTooltip(ref, label);
     return (
-      <button
-        ref={ref}
-        type="button"
-        className="editor-shell-inspector-toggle"
-        aria-label={label}
-        aria-expanded={!collapsed}
-        data-yunari-inspector-toggle=""
-        onClick={onToggle}
-      >
-        <Glyph
-          icon={collapsed ? INSPECTOR_EXPAND_GLYPH : INSPECTOR_COLLAPSE_GLYPH}
-          size={14}
-        />
-      </button>
+      <ControlTooltip label={label}>
+        <button
+          type="button"
+          className="editor-shell-inspector-toggle"
+          aria-label={label}
+          aria-expanded={!collapsed}
+          data-yunari-inspector-toggle=""
+          onClick={onToggle}
+        >
+          <Glyph
+            icon={collapsed ? INSPECTOR_EXPAND_GLYPH : INSPECTOR_COLLAPSE_GLYPH}
+            size={14}
+          />
+        </button>
+      </ControlTooltip>
     );
   }
 

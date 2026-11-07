@@ -16,6 +16,13 @@ import { uiCopy } from "../ui-copy.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { CanvasDock } from "./canvas-dock.js";
 
+// A closed popup is kept mounted through its closing transition, and jsdom has
+// no animations to finish; Base UI's own escape hatch completes the close
+// synchronously so a focused control's popup replaces the previous one.
+(
+  globalThis as { BASE_UI_ANIMATIONS_DISABLED?: boolean }
+).BASE_UI_ANIMATIONS_DISABLED = true;
+
 /** The bridge answers only what the dock's conversation needs: the selection
  *  gate (`snapshot`/`target`/`canArrange`) and the `run` a button calls. */
 function bridgeOver(
@@ -58,20 +65,23 @@ async function mount(
   return mounted;
 }
 
-/** Focus opens the tooltip (`tooltip.ts` listens for `focus`). The popup is
+/** Focus opens the tooltip, as it does for a keyboard user. The popup is
  *  portalled to `body`, so it is found there and never inside `container`. */
-function focusButton(container: HTMLElement, label: string): void {
+async function focusButton(
+  container: HTMLElement,
+  label: string,
+): Promise<void> {
   const button = container.querySelector<HTMLButtonElement>(
     `[aria-label="${label}"]`,
   );
   expect(button).not.toBeNull();
-  act(() => button?.dispatchEvent(new Event("focus")));
+  await act(async () => button?.focus());
 }
 
 describe("the canvas dock's tooltips", () => {
   it("carries the chord of an action the product binds", async () => {
     const container = await mount(bridgeOver("object"));
-    focusButton(container, uiCopy.actions.duplicate);
+    await focusButton(container, uiCopy.actions.duplicate);
 
     const chip = document.querySelector(".editor-shell-tooltip kbd");
     expect(chip?.textContent).toBe(shortcutLabel("edit.duplicate"));
@@ -79,7 +89,7 @@ describe("the canvas dock's tooltips", () => {
 
   it("omits the chip for an action the product does not bind", async () => {
     const container = await mount(bridgeOver("object"));
-    focusButton(container, uiCopy.actions.bringForward);
+    await focusButton(container, uiCopy.actions.bringForward);
 
     const popup = document.querySelector(".editor-shell-tooltip");
     expect(popup).not.toBeNull();
@@ -95,7 +105,7 @@ describe("the canvas dock's tooltips", () => {
     // render-time copy would keep printing the old mark, and the dock would
     // name a key that no longer runs the action beside it.
     const container = await mount(bridgeOver("object"));
-    focusButton(container, uiCopy.actions.duplicate);
+    await focusButton(container, uiCopy.actions.duplicate);
     expect(
       document.querySelector(".editor-shell-tooltip kbd")?.textContent,
     ).toBe(shortcutLabel("edit.duplicate"));
@@ -118,7 +128,7 @@ describe("the canvas dock's tooltips", () => {
     await act(async () => {
       button?.dispatchEvent(new Event("blur"));
     });
-    focusButton(container, uiCopy.actions.duplicate);
+    await focusButton(container, uiCopy.actions.duplicate);
 
     expect(
       document.querySelector(".editor-shell-tooltip kbd")?.textContent,

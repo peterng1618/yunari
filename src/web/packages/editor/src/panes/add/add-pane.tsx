@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef } from "react";
-import { tooltip } from "../../editor-shell/controls/tooltip.js";
+import { Fragment } from "react";
+import { ControlTooltip } from "../../editor-shell/controls/tooltip.js";
 import {
   CARD_UNIT_FALLBACK_GLYPH,
   CARD_UNIT_GLYPHS,
@@ -90,7 +90,6 @@ function InsertTile({
   readonly object: InsertableObject;
   readonly onInsert: (object: InsertableObject) => void;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
   // A card's and Text's names are on the tile; a shape's and a chart family's
   // are not. The *disclosure* follows the surface rather than the label's
   // presence, because a grid tile's label can clip — "Performance trends" is
@@ -100,15 +99,8 @@ function InsertTile({
   // already on screen.
   const named = object.kind === "card" || object.kind === "text";
   const disclosed = object.kind !== "text";
-  useEffect(() => {
-    const button = ref.current;
-    if (button === null || !disclosed) return;
-    return tooltip({ trigger: button, text: object.label }).destroy;
-  }, [disclosed, object.label]);
-
-  return (
+  const button = (
     <button
-      ref={ref}
       type="button"
       className={object.kind === "text" ? "yunari-add-text" : "yunari-add-tile"}
       aria-label={object.label}
@@ -123,6 +115,12 @@ function InsertTile({
       {tileMark(object)}
       {named ? <span className="yunari-add-label">{object.label}</span> : null}
     </button>
+  );
+
+  return disclosed ? (
+    <ControlTooltip label={object.label}>{button}</ControlTooltip>
+  ) : (
+    button
   );
 }
 

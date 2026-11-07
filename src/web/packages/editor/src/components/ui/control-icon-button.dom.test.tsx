@@ -24,6 +24,12 @@ globalThis.ResizeObserver ??= class {
 } as never;
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
+// A closed popup is kept mounted through its closing transition, and jsdom has
+// no animations to finish; Base UI's own escape hatch completes the close
+// synchronously so the next control's popup is the only one in the document.
+(
+  globalThis as { BASE_UI_ANIMATIONS_DISABLED?: boolean }
+).BASE_UI_ANIMATIONS_DISABLED = true;
 
 beforeAll(() => {
   const matches = Element.prototype.matches;
@@ -53,7 +59,7 @@ beforeAll(() => {
  * of the component would say nothing about the dock, the rail or a layer row,
  * each of which draws its own button. They are driven the way a person reaches
  * them: focus, which opens a popup immediately, where hover waits out
- * `tooltip.ts`'s 220ms.
+ * `ControlTooltip`'s 220ms.
  *
  * The surfaces mounted here are the ones the census found carrying an icon-only
  * control: the rail and its gear, the canvas dock's two halves, and a pane's
@@ -119,21 +125,21 @@ function iconOnly(scope: ParentNode): readonly HTMLElement[] {
 /**
  * The popup a control shows when a person reaches it, or null for none.
  *
- * Only one tooltip is open at a time — `tooltip.ts` destroys the open one before
- * showing the next — and the popup is portalled to `body`, so this reads the
- * document rather than the mounted tree.
+ * Only one tooltip is open at a time — `ControlTooltip` closes the open one
+ * before showing the next — and the popup is portalled to `body`, so this reads
+ * the document rather than the mounted tree.
  *
  * The `pointerdown` is the dismissal a person's move from the last control
- * would make, and it is not decoration: dispatching `focus` alone leaves the
- * previous popup in the document, so the next control — one with no tooltip of
- * its own — reads *that* popup and looks like it has one. Without it the census
- * below counts only the controls before the first popup and reports 0 whatever
- * the population.
+ * would make, and it is not decoration: focusing alone leaves the previous
+ * popup in the document, so the next control — one with no tooltip of its own —
+ * reads *that* popup and looks like it has one. Without it the census below
+ * counts only the controls before the first popup and reports 0 whatever the
+ * population.
  */
 function tooltipFor(control: HTMLElement): HTMLElement | null {
   act(() => {
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    control.dispatchEvent(new Event("focus"));
+    control.focus();
   });
   return document.querySelector<HTMLElement>(".editor-shell-tooltip");
 }

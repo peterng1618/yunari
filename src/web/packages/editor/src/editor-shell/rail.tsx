@@ -1,6 +1,5 @@
-import { useRef } from "react";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { uiCopy } from "../ui-copy.js";
+import { ControlTooltip } from "./controls/tooltip.js";
 import { Glyph, RAIL_GLYPHS, SETTINGS_GLYPH } from "./icons.js";
 
 /** The rail's five slots. Named here rather than in
@@ -29,10 +28,9 @@ export const RAIL_SLOTS: readonly RailSlot[] = [
  *  its accessible name, so the two cannot disagree.
  *
  *  The tooltip is the control set's one owner of the pairing
- *  (`useControlTooltip`), mounted on the same `label` the `aria-label` takes:
- *  the selection inspector is not React and calls the same DOM control
- *  underneath, and a second owner for "what a tooltip is" is the drift this
- *  avoids. The rail renders its own button rather than `ControlIconButton`
+ *  (`ControlTooltip`), rendered around the button on the same `label` the
+ *  `aria-label` takes, so the two cannot disagree. The rail renders its own
+ *  button rather than `ControlIconButton`
  *  because a slot carries `aria-pressed` — which one is chosen — and the
  *  control set's icon button, a plain 26px action, has no such state.
  *
@@ -56,23 +54,22 @@ function RailSlotButton({
   readonly disabled: boolean;
   readonly onChoose: (slot: RailSlot) => void;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  useControlTooltip(ref, label);
   return (
-    <button
-      ref={ref}
-      type="button"
-      className="editor-shell-rail-slot"
-      data-rail-slot={slot}
-      aria-label={label}
-      // Pressed says which slot is chosen and stays true while the pane is
-      // closed, so the rail still shows what reopening restores.
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={() => onChoose(slot)}
-    >
-      <Glyph icon={RAIL_GLYPHS[slot]} size={17} />
-    </button>
+    <ControlTooltip label={label}>
+      <button
+        type="button"
+        className="editor-shell-rail-slot"
+        data-rail-slot={slot}
+        aria-label={label}
+        // Pressed says which slot is chosen and stays true while the pane is
+        // closed, so the rail still shows what reopening restores.
+        aria-pressed={pressed}
+        disabled={disabled}
+        onClick={() => onChoose(slot)}
+      >
+        <Glyph icon={RAIL_GLYPHS[slot]} size={17} />
+      </button>
+    </ControlTooltip>
   );
 }
 
@@ -90,20 +87,19 @@ function SettingsGear({
   readonly label: string;
   readonly onClick: () => void;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  useControlTooltip(ref, label);
   return (
-    <button
-      ref={ref}
-      id={SETTINGS_TRIGGER_ID}
-      type="button"
-      className="editor-shell-rail-settings"
-      data-rail-settings=""
-      aria-label={label}
-      onClick={onClick}
-    >
-      <Glyph icon={SETTINGS_GLYPH} size={17} />
-    </button>
+    <ControlTooltip label={label}>
+      <button
+        id={SETTINGS_TRIGGER_ID}
+        type="button"
+        className="editor-shell-rail-settings"
+        data-rail-settings=""
+        aria-label={label}
+        onClick={onClick}
+      >
+        <Glyph icon={SETTINGS_GLYPH} size={17} />
+      </button>
+    </ControlTooltip>
   );
 }
 

@@ -224,6 +224,12 @@ globalThis.ResizeObserver ??= class {
 } as never;
 Element.prototype.getAnimations ??= (): never[] => [];
 window.PointerEvent ??= MouseEvent as never;
+// A closed popup is kept mounted through its closing transition, and jsdom has
+// no animations to finish; Base UI's own escape hatch completes the close
+// synchronously.
+(
+  globalThis as { BASE_UI_ANIMATIONS_DISABLED?: boolean }
+).BASE_UI_ANIMATIONS_DISABLED = true;
 
 // React only flushes work scheduled inside `act` when it has been told it is in
 // a test; without this, `act` warns and the update lands after the assertion.
@@ -1432,6 +1438,11 @@ it("gives an icon button its name and its tooltip from one label", async () => {
   expect(description(button)).toContain("Delete layer");
 
   await act(async () => button.blur());
+  // The focus arm closes on a zero-delay timer rather than on the blur itself,
+  // so the dismissal lands on the next task rather than the next microtask.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
 
   // Teardown: unmounting the control takes the popup and its listeners with it.

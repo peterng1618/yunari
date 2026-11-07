@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
+import { useEffect, useState } from "react";
 import {
   destructiveMarker,
   type ObjectActionId,
@@ -12,13 +11,13 @@ import {
 } from "../shortcut-manager/display.js";
 import { uiCopy } from "../ui-copy.js";
 import type { EditorShellBridge } from "./bridge.js";
+import { ControlTooltip } from "./controls/tooltip.js";
 import { Glyph } from "./icons.js";
 
 /**
- * One dock button. The tooltip is a DOM control, so React owns the button and
- * the control set's `useControlTooltip` owns the popup — a React tooltip here
- * would be a second owner for something the selection inspector, which never
- * sees React, also has to use.
+ * One dock button. The control set's `ControlTooltip` is the one owner of the
+ * name/tooltip pairing, so a rebind reaches the printed chord the same way it
+ * reaches the dispatcher.
  */
 function Action({
   bridge,
@@ -39,23 +38,23 @@ function Action({
   readonly mark: Readonly<Record<`data-${string}`, string>>;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  // The chord is part of the popup, so a rebind has to rebuild it — the control
-  // set's one tooltip owner re-runs on the chord rather than only on the label.
-  useControlTooltip(ref, label, shortcut);
   return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label={label}
-      // A `data-*` hook is the mark, not an ARIA state: nothing about a
-      // destructive action is a toggle or a pressed state to announce. The
-      // registry decides which actions carry it, not the dock.
-      {...mark}
-      onClick={() => bridge?.run(id)}
-    >
-      {children}
-    </button>
+    // The chord is part of the popup, so a rebind has to rebuild it — the
+    // control set's one tooltip owner re-runs on the chord rather than only on
+    // the label.
+    <ControlTooltip label={label} shortcut={shortcut}>
+      <button
+        type="button"
+        aria-label={label}
+        // A `data-*` hook is the mark, not an ARIA state: nothing about a
+        // destructive action is a toggle or a pressed state to announce. The
+        // registry decides which actions carry it, not the dock.
+        {...mark}
+        onClick={() => bridge?.run(id)}
+      >
+        {children}
+      </button>
+    </ControlTooltip>
   );
 }
 

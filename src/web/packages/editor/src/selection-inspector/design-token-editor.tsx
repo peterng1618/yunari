@@ -5,9 +5,8 @@ import type {
   TypeToken,
 } from "@yunari/renderer-core";
 import type { ReactNode } from "react";
-import { useRef } from "react";
 import { ColourPickerPanel } from "../components/ui/colour-picker.js";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
+import { ControlTooltip } from "../editor-shell/controls/tooltip.js";
 import { Glyph, PENCIL_GLYPH } from "../editor-shell/icons.js";
 import type { TokenRef } from "../editor-shell/shell-stores.js";
 import {
@@ -49,28 +48,27 @@ export interface DesignTokenPort {
  * The row's right-aligned edit action: an icon button that is its popover's
  * anchor, so the editor opens where the reference is read.
  *
- * The name and the tooltip are one string, `useControlTooltip`'s rule: the
- * action edits a token the row already names, so the accessible name repeats
- * that token rather than saying "Edit" twice in one run.
+ * The name and the tooltip are one string, `ControlTooltip`'s rule: the action
+ * edits a token the row already names, so the accessible name repeats that
+ * token rather than saying "Edit" twice in one run.
  */
 function EditAction(props: {
   readonly label: string;
   readonly hook: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  useControlTooltip(ref, props.label);
   return (
     <Popover.Root>
-      <Popover.Trigger
-        ref={ref}
-        type="button"
-        aria-label={props.label}
-        {...{ [props.hook]: "" }}
-        className="inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent text-muted enabled:hover:border-muted enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        <Glyph icon={PENCIL_GLYPH} size={14} />
-      </Popover.Trigger>
+      <ControlTooltip label={props.label}>
+        <Popover.Trigger
+          type="button"
+          aria-label={props.label}
+          {...{ [props.hook]: "" }}
+          className="inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent text-muted enabled:hover:border-muted enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <Glyph icon={PENCIL_GLYPH} size={14} />
+        </Popover.Trigger>
+      </ControlTooltip>
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} align="end" className="z-50">
           <Popover.Popup

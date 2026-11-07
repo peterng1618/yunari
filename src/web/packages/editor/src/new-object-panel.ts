@@ -35,12 +35,12 @@ export interface NewObjectPanel {
    * Releases the panel: unmounts the React tree, then removes its host node.
    *
    * Both halves, in that order. The tree's effects own resources outside the
-   * node — each glyph-led tile registers a tooltip whose dismissal is a
-   * `document`-level `pointerdown` (`editor-shell/controls/tooltip.ts:134`), and
-   * only `unmount()` runs the cleanup that removes it. Removing the node alone
-   * was complete disposal while this panel was hand-built DOM; it strands twelve
-   * listeners now, once per session teardown. `shell-layout.tsx`'s own
-   * `destroy()` is the precedent for the release path.
+   * node — each glyph-led tile carries a tooltip, whose popup and its
+   * dismissal behaviour belong to the tree and leave only when it unmounts.
+   * Removing the node alone was complete disposal while this panel was
+   * hand-built DOM; it strands a focused tile's open popup now, once per
+   * session teardown. `shell-layout.tsx`'s own `destroy()` is the precedent
+   * for the release path.
    */
   destroy(): void;
 }

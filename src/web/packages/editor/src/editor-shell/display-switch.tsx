@@ -1,11 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import {
-  type ReactNode,
-  useCallback,
-  useRef,
-  useSyncExternalStore,
-} from "react";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
+import { type ReactNode, useCallback, useSyncExternalStore } from "react";
 import {
   type DisplayLens,
   displayLensGroups,
@@ -15,6 +9,7 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { ZOOM_STEP } from "../viewport-manager/navigation.js";
+import { ControlTooltip } from "./controls/tooltip.js";
 import {
   FIT_GLYPH,
   Glyph,
@@ -226,10 +221,8 @@ export function DisplaySwitch({
   );
 }
 
-/** One of the cluster's icon controls. The tooltip is a DOM control, so React
- *  owns the button and the control set's `useControlTooltip` owns the popup —
- *  the split `canvas-dock.tsx` uses, for the same reason: the selection
- *  inspector builds the same popup without ever seeing React.
+/** One of the cluster's icon controls. The control set's `ControlTooltip` is
+ *  the one owner of the name/tooltip pairing, as it is for the dock's actions.
  *
  *  `fitted` is omitted rather than `false` on the two stepping commands: it is
  *  the fitted camera's mark, and they hold no such state. */
@@ -244,19 +237,18 @@ function ViewButton({
   readonly onClick: () => void;
   readonly children: ReactNode;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  useControlTooltip(ref, label);
   return (
-    <button
-      ref={ref}
-      type="button"
-      className="editor-shell-view-step"
-      aria-label={label}
-      data-fitted={fitted}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <ControlTooltip label={label}>
+      <button
+        type="button"
+        className="editor-shell-view-step"
+        aria-label={label}
+        data-fitted={fitted}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    </ControlTooltip>
   );
 }
 

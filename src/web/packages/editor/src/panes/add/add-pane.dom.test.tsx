@@ -12,6 +12,7 @@
  * it inserts, and no two units share one; a shape's is its kind and nothing
  * more.
  */
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
 import {
@@ -22,6 +23,19 @@ import {
 } from "../../testing/widget-units.js";
 import { uiCopy } from "../../ui-copy.js";
 import { activeWidgetUnits } from "../../widget-packs.js";
+
+// The tiles' tooltips are Base UI popups: the suite drives focus and hover, so
+// React is told it is in a test, and a closed popup completes its close without
+// waiting for an animation jsdom does not have.
+(
+  globalThis as {
+    BASE_UI_ANIMATIONS_DISABLED?: boolean;
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).BASE_UI_ANIMATIONS_DISABLED = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 /** A unit's label, as the installed pack declares it. */
 function unitLabel(id: string): string {
@@ -224,7 +238,7 @@ describe("the Add pane's insert surface", () => {
     }
   });
 
-  it("discloses a grid tile's whole label on focus and on hover, where that label may clip", () => {
+  it("discloses a grid tile's whole label on focus and on hover, where that label may clip", async () => {
     const { pane } = mount();
     const tile = cardTile(pane, TRENDS_CARD);
 
@@ -235,27 +249,34 @@ describe("the Add pane's insert surface", () => {
     // one string.
     expect(tile.getAttribute("aria-label")).toBe(unitLabel(TRENDS_CARD));
 
-    tile.focus();
+    await act(async () => tile.focus());
     expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
       unitLabel(TRENDS_CARD),
     );
-    tile.blur();
+    // The focus arm closes on a zero-delay task rather than on the blur itself.
+    await act(async () => {
+      tile.blur();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
 
-    // The hover arm of the same registration. Hover waits rather than opening at
-    // once, so the clock is controlled instead of waited on — 600 is a wait
-    // longer than the delay, not a reading of it.
-    vi.useFakeTimers();
-    try {
-      tile.dispatchEvent(new Event("pointerenter"));
-      vi.advanceTimersByTime(600);
-      expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
-        unitLabel(TRENDS_CARD),
+    // The hover arm of the same registration opens on a rest: the pointer type
+    // arrives with the enter, and the rest timer is armed by the first move
+    // after it. 250 is a wait longer than the 220ms delay, not a reading of it.
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("mouseenter"));
+      tile.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          movementX: 0,
+          movementY: 0,
+        }),
       );
-    } finally {
-      vi.useRealTimers();
-      tile.dispatchEvent(new Event("pointerleave"));
-    }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+    expect(document.querySelector(".editor-shell-tooltip")?.textContent).toBe(
+      unitLabel(TRENDS_CARD),
+    );
   });
 
   it("refuses, in words, before a document is open, rather than offering tiles that insert nothing", async () => {
@@ -272,46 +293,18 @@ describe("the Add pane's insert surface", () => {
     ]);
   });
 
-  it("releases the document listeners its tiles registered, on the panel's own disposal path", () => {
-    const added: Record<string, number> = {};
-    const removed: Record<string, number> = {};
-    const tally =
-      (into: Record<string, number>) =>
-      (type: string): void => {
-        into[type] = (into[type] ?? 0) + 1;
-      };
-    const addSpy = vi
-      .spyOn(document, "addEventListener")
-      .mockImplementation(
-        tally(added) as unknown as typeof document.addEventListener,
-      );
-    const removeSpy = vi
-      .spyOn(document, "removeEventListener")
-      .mockImplementation(
-        tally(removed) as unknown as typeof document.removeEventListener,
-      );
+  it("takes its tiles' tooltips with it on the panel's own disposal path", async () => {
+    const { pane, panel } = mount();
+    const tile = cardTile(pane, TRENDS_CARD);
+    await act(async () => tile.focus());
+    expect(document.querySelector(".editor-shell-tooltip")).not.toBeNull();
 
-    try {
-      const { panel } = mount();
-      release(panel);
-
-      // Every grid tile carries a tooltip, and the tooltip's press-elsewhere
-      // dismissal is a `document`-level `pointerdown`
-      // (`editor-shell/controls/tooltip.ts:134`) removed only by its `destroy`.
-      // Derived from the owner rather than a count: every offered object but
-      // the Text row registers one. Asserted as added *and* removed: a count of
-      // 0 removed would pass vacuously against a pane that registered none, and
-      // a panel that removed its host node without unmounting the tree left the
-      // listeners behind, once per session teardown.
-      const tiles = insertGroups()
-        .flatMap((group) => group.objects)
-        .filter((object) => object.kind !== "text").length;
-      expect(added["pointerdown"]).toBe(tiles);
-      expect(removed["pointerdown"]).toBe(tiles);
-    } finally {
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
-    }
+    // Every grid tile carries a tooltip, and the popup is portalled to `body`,
+    // so it outlives the tile's DOM node unless the panel's React root is
+    // unmounted. A panel that removed its host node without releasing its tree
+    // left an open popup over the editor, once per session teardown.
+    release(panel);
+    expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
   });
 
   it("inserts a pack preset the host installed", async () => {

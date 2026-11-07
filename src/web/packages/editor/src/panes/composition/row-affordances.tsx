@@ -1,5 +1,4 @@
-import { useRef } from "react";
-import { useControlTooltip } from "../../components/ui/control-icon-button.js";
+import { ControlTooltip } from "../../editor-shell/controls/tooltip.js";
 import {
   Glyph,
   HIDDEN_GLYPH,
@@ -37,8 +36,9 @@ import { uiCopy } from "../../ui-copy.js";
  * the whole of a visibility or lock control's state, and the control set's icon
  * button is a plain action with no `aria-pressed` to carry it. They take the
  * control set's one owner of the name/tooltip pairing instead
- * (`useControlTooltip`), so their name and their tooltip are one string
- * exactly as an icon button's are.
+ * (`ControlTooltip`), so their name and their tooltip are one string exactly as
+ * an icon button's are. It renders no element of its own, so the buttons stay
+ * direct children.
  *
  * They are also direct children of `.yunari-layer-state`, never wrapped: the
  * stylesheet asks that slot's own buttons how much room beside the key they
@@ -108,23 +108,22 @@ function RowControl({
   readonly onClick: () => void;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
-  useControlTooltip(ref, label);
   return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      onClick={(event) => {
-        // The control sits inside the row, and the row's own click selects the
-        // layer. Pressing a control is not pressing the row under it.
-        event.stopPropagation();
-        onClick();
-      }}
-    >
-      {children}
-    </button>
+    <ControlTooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        onClick={(event) => {
+          // The control sits inside the row, and the row's own click selects the
+          // layer. Pressing a control is not pressing the row under it.
+          event.stopPropagation();
+          onClick();
+        }}
+      >
+        {children}
+      </button>
+    </ControlTooltip>
   );
 }
 

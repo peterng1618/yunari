@@ -1,7 +1,7 @@
 import type { AssetResult, FontCut, FontTrioInfo } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useMemo, useRef } from "react";
-import { useControlTooltip } from "../components/ui/control-icon-button.js";
+import { useEffect, useMemo } from "react";
+import { ControlTooltip } from "../editor-shell/controls/tooltip.js";
 import { Glyph, STAR_GLYPH } from "../editor-shell/icons.js";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
@@ -98,23 +98,22 @@ function TrioFavoriteButton({
   readonly favorite: boolean;
   readonly onToggle: () => void;
 }): React.JSX.Element {
-  const ref = useRef<HTMLButtonElement>(null);
   const label = favorite
     ? uiCopy.assets.fontPreview.unfavorite
     : uiCopy.assets.fontPreview.favorite;
-  useControlTooltip(ref, label);
   return (
-    <button
-      ref={ref}
-      type="button"
-      aria-pressed={favorite}
-      aria-label={label}
-      data-yunari-font-favorite=""
-      onClick={onToggle}
-      className="ml-auto inline-flex size-[26px] flex-none items-center justify-center rounded-[var(--radius-md)] border border-transparent text-muted enabled:hover:border-edge enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-    >
-      <Glyph icon={STAR_GLYPH} size={13} filled={favorite} />
-    </button>
+    <ControlTooltip label={label}>
+      <button
+        type="button"
+        aria-pressed={favorite}
+        aria-label={label}
+        data-yunari-font-favorite=""
+        onClick={onToggle}
+        className="ml-auto inline-flex size-[26px] flex-none items-center justify-center rounded-[var(--radius-md)] border border-transparent text-muted enabled:hover:border-edge enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <Glyph icon={STAR_GLYPH} size={13} filled={favorite} />
+      </button>
+    </ControlTooltip>
   );
 }
 

@@ -1,6 +1,6 @@
 import type * as React from "react";
-import { useEffect, useId, useRef } from "react";
-import { tooltip } from "../../editor-shell/controls/tooltip.js";
+import { useId, useRef } from "react";
+import { ControlTooltip } from "../../editor-shell/controls/tooltip.js";
 
 /**
  * What every control in the one control set carries.
@@ -221,9 +221,10 @@ export type ControlShape = "column" | "boxed" | "headed";
  * The hint reaches the author two ways, neither of them a line of text under
  * every field: a note the control describes itself by, hidden from the eye, and
  * the row's tooltip — the pointer's copy of the same words. The tooltip is
- * `tooltip()`'s, the one owner of what a tooltip is, armed and torn down with
- * the row exactly as `ControlIconButton` arms its own. It carries the refusal
- * when there is one, so a row that both refuses and explains says why first.
+ * `ControlTooltip`'s, the one owner of what a tooltip is, rendered around the
+ * row exactly as `ControlIconButton` renders it around its button. It carries
+ * the refusal when there is one, so a row that both refuses and explains says
+ * why first.
  *
  * With `shape` at its default, the control slot is the row's **one value
  * track**. It is a fixed-width label column and a flexible cell, which is what
@@ -286,17 +287,10 @@ export function ControlRow(props: {
     boxed: "flex flex-none items-center gap-[var(--space-6)]",
     headed: "flex min-w-0 items-center gap-[var(--space-6)]",
   }[shape];
-  const row = useRef<HTMLDivElement>(null);
   const tip = hint === undefined ? undefined : (refused ?? hint);
 
-  useEffect(() => {
-    const element = row.current;
-    if (element === null || tip === undefined) return;
-    return tooltip({ trigger: element, text: tip }).destroy;
-  }, [tip]);
-
-  return (
-    <div ref={row} className={rowClasses}>
+  const drawn = (
+    <div className={rowClasses}>
       {labelFor === undefined ? (
         <span id={ids.label} className={labelClasses}>
           {label}
@@ -318,6 +312,12 @@ export function ControlRow(props: {
         </p>
       )}
     </div>
+  );
+
+  return tip === undefined ? (
+    drawn
+  ) : (
+    <ControlTooltip label={tip}>{drawn}</ControlTooltip>
   );
 }
 
