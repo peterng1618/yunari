@@ -183,6 +183,52 @@ test("opens the preview at the Finder's box and gives an image one primary verb"
   await expect(page.locator('[data-yunari-panel="assets"]')).toBeVisible();
 });
 
+test("shows a visible hover on a dialog's close control", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await importLogo(page);
+  await cardRow(page, "logo.png")
+    .getByRole("button", {
+      name: uiCopy.panels.assetCard.preview,
+      exact: true,
+    })
+    .click();
+  await expect(page.locator(MODAL)).toBeVisible();
+
+  const close = page.locator(".editor-shell-dialog-close");
+  // Off the control first, so `before` is the resting style rather than the
+  // style left by the click that opened the dialog.
+  await page.mouse.move(0, 0);
+  const read = (): Promise<{ background: string; border: string }> =>
+    close.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        border: style.borderTopColor,
+      };
+    });
+  const before = await read();
+  await close.hover();
+  const after = await read();
+
+  const reading = `dialog close before ${JSON.stringify(before)} after ${JSON.stringify(after)}`;
+  console.log(reading);
+  testInfo.annotations.push({
+    type: "dialog-close-hover",
+    description: reading,
+  });
+
+  expect(
+    after.background,
+    `hovering the dialog's close painted no wash (${reading})`,
+  ).not.toBe(before.background);
+  expect(
+    after.border,
+    `hovering the dialog's close raised no border (${reading})`,
+  ).not.toBe(before.border);
+});
+
 test("closes the Add image choice on a press outside it", async ({
   page,
 }, testInfo) => {

@@ -1,5 +1,6 @@
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
+import { controlStateAttributes } from "../../components/ui/control-state.js";
 import { ControlWell } from "../../components/ui/control-well.js";
 import { ACTION_BUTTON } from "../../components/ui/dialog.js";
 import { Glyph, MINUS_GLYPH } from "../../editor-shell/icons.js";
@@ -59,6 +60,26 @@ function PathPresetsSection(): React.JSX.Element {
   const [name, setName] = useState("");
   const [data, setData] = useState("");
   const [reason, setReason] = useState<string | undefined>(undefined);
+  /** The one write that is out, so a second press cannot ride it. The reason
+   *  line is where its refusal is read; the controls carry busy only. */
+  const [busy, setBusy] = useState<string | undefined>(undefined);
+  /** The same guard in a form two clicks in one frame both read. */
+  const busyRef = useRef(false);
+
+  const run = async (id: string, work: () => Promise<void>): Promise<void> => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(id);
+    setReason(undefined);
+    try {
+      await work();
+    } catch (error) {
+      setReason(failureText(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(undefined);
+    }
+  };
 
   const add = async (): Promise<void> => {
     const candidate = userPathPresetFrom(name, data);
@@ -74,44 +95,23 @@ function PathPresetsSection(): React.JSX.Element {
       );
       return;
     }
-    setReason(undefined);
-    try {
+    await run("add", async () => {
       await addPathPreset(candidate.label, candidate.data);
       setName("");
       setData("");
-    } catch (error) {
-      setReason(failureText(error));
-    }
+    });
   };
 
-  const remove = async (id: string): Promise<void> => {
-    setReason(undefined);
-    try {
-      await removePathPreset(id);
-    } catch (error) {
-      setReason(failureText(error));
-    }
-  };
+  const remove = (id: string): Promise<void> =>
+    run(`user:${id}`, () => removePathPreset(id));
 
   /** Removing a built-in records the removal, not the stored rows. */
-  const removeBuiltin = async (id: string): Promise<void> => {
-    setReason(undefined);
-    try {
-      await removeBuiltinPathPreset(id);
-    } catch (error) {
-      setReason(failureText(error));
-    }
-  };
+  const removeBuiltin = (id: string): Promise<void> =>
+    run(`builtin:${id}`, () => removeBuiltinPathPreset(id));
 
   /** Every built-in back, the stored rows as they were. */
-  const restoreDefaults = async (): Promise<void> => {
-    setReason(undefined);
-    try {
-      await restoreBuiltinPathPresets();
-    } catch (error) {
-      setReason(failureText(error));
-    }
-  };
+  const restoreDefaults = (): Promise<void> =>
+    run("restore", () => restoreBuiltinPathPresets());
 
   return (
     <div
@@ -137,6 +137,8 @@ function PathPresetsSection(): React.JSX.Element {
             <ControlIconButton
               label={`${uiCopy.settings.pathPresetRemoveBuiltin} ${uiCopy.pathPresets[id]}`}
               data={{ "data-yunari-path-preset-builtin-remove": id }}
+              disabled={busy !== undefined}
+              state={busy === `builtin:${id}` ? "busy" : undefined}
               onClick={() => void removeBuiltin(id)}
             >
               <Glyph icon={MINUS_GLYPH} size={14} />
@@ -158,6 +160,8 @@ function PathPresetsSection(): React.JSX.Element {
             <ControlIconButton
               label={`${uiCopy.settings.pathPresetRemove} ${preset.label}`}
               data={{ "data-yunari-path-preset-remove": preset.id }}
+              disabled={busy !== undefined}
+              state={busy === `user:${preset.id}` ? "busy" : undefined}
               onClick={() => void remove(preset.id)}
             >
               <Glyph icon={MINUS_GLYPH} size={14} />
@@ -201,6 +205,8 @@ function PathPresetsSection(): React.JSX.Element {
         </ControlWell>
         <button
           type="button"
+          disabled={busy !== undefined}
+          {...controlStateAttributes(busy === "add" ? "busy" : undefined)}
           onClick={() => void add()}
           data-yunari-path-preset-add=""
           className={ACTION_BUTTON}
@@ -209,7 +215,8 @@ function PathPresetsSection(): React.JSX.Element {
         </button>
         <button
           type="button"
-          disabled={removed.length === 0}
+          disabled={busy !== undefined || removed.length === 0}
+          {...controlStateAttributes(busy === "restore" ? "busy" : undefined)}
           onClick={() => void restoreDefaults()}
           data-yunari-path-preset-restore=""
           className={ACTION_BUTTON}

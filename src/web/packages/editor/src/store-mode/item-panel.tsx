@@ -344,7 +344,7 @@ export function PanelBody(props: {
               type="button"
               data-yunari-store-item-remix=""
               onClick={() => onOpenItem(remixParent.id)}
-              className="text-xs text-faint underline"
+              className="text-xs text-faint underline hover:text-text"
             >
               {uiCopy.store.item.remixedFrom(remixOf.name)}
             </button>

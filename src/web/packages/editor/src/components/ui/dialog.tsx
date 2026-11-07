@@ -6,7 +6,6 @@ import {
   type LucideIcon,
 } from "../../editor-shell/icons.js";
 import { destructiveMarker } from "../../object-actions.js";
-import { type ControlState, controlStateAttributes } from "./control-state.js";
 
 /** The one control treatment a dialog's own buttons share, in tokens.
  *
@@ -42,9 +41,6 @@ export function ActionBox(props: {
   readonly tone?: "plain" | "accent";
   readonly destructive?: boolean;
   readonly disabled?: boolean;
-  /** An action that is out, or an outcome it keeps. A synchronous action omits
-   *  it; a caller that sets `busy` also passes `disabled`. */
-  readonly state?: ControlState;
   readonly describedById?: string;
   readonly onClick: () => void;
 }): React.JSX.Element {
@@ -56,7 +52,6 @@ export function ActionBox(props: {
     tone = "plain",
     destructive,
     disabled,
-    state,
   } = props;
   // Plain tone raises its resting `--edge` to `--muted` on hover. The accent
   // tone already sits at the stronger boundary the hover rule raises to, so it
@@ -66,7 +61,6 @@ export function ActionBox(props: {
       {...data}
       type="button"
       {...(id === undefined ? {} : { id })}
-      {...controlStateAttributes(state)}
       {...(destructive === true
         ? destructiveMarker({ destructive: true })
         : {})}

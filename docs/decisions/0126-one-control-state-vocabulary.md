@@ -76,7 +76,7 @@ sampling, scheduling or lifecycle mechanism.
 ## Decision
 
 Build the minimum: `control-state.ts` owns the type and attribute spelling, the
-`@theme static` block owns the five state tokens, and one unlayered rule paints
+`@theme static` block owns the three state tokens, and one unlayered rule paints
 `busy`/`success`/`failure` for every surface. Hover, focus and selected stay with
 the controls that already own them. The host's separate bundles reuse the
 documented attribute and CSS surface locally, because they cannot import the

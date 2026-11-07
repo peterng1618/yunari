@@ -774,27 +774,6 @@ body,
   color: var(--hot);
 }
 
-/* The **one** rule that paints a control's caller-set state, keyed on the
-   shared `data-yunari-control-state` (`components/ui/control-state.ts` owns the
-   attribute and the state names). It is deliberately not a control's own class:
-   the state reaches every button on every surface, including a portalled dialog
-   and the finder's footer, without a second spelling.
-
-   Busy is the one state a disabled control keeps: the caller disables it so it
-   cannot be pressed twice, and this rule outranks the `disabled:text-faint`
-   utilities (they are layered; this is not), so work in flight stays
-   `--attention` rather than reading as unavailable. The destructive mark still
-   wins a control carrying both, because its selector is more specific. */
-[data-yunari-control-state="busy"] {
-  color: var(--control-state-busy);
-}
-[data-yunari-control-state="success"] {
-  color: var(--control-state-success);
-}
-[data-yunari-control-state="failure"] {
-  color: var(--control-state-failure);
-}
-
 /* ── One treatment; elevation is the whole difference. ──────────────────────
    the elevation table gives row 0 — no shadow, a 1px `--edge` hairline — to
    the panels, the rail, the header and the inspector, and row 1
@@ -1032,7 +1011,8 @@ body,
 .editor-shell-publish-mint {
   border: 1px solid var(--shell-edge);
   background: var(--shell-surface-strong);
-  color: var(--shell-text);
+  /* The ink is the dialog's, inherited: a declaration here would beat the
+     shared state rule when the control is busy or has failed. */
   border-radius: 8px;
   padding: 8px 12px;
   cursor: pointer;
@@ -2064,15 +2044,18 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   height: 28px;
   margin: 0;
   padding: 0;
+  /* The glyph-only hover rule: no resting border, so the control acquires the
+     1px one on hover. Transparent at rest keeps the 28px box from growing. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
 }
 /* A close is synchronous and has no outcome; hover is the one state beyond
-   rest and focus it can carry. The preview's boxed variant also raises its
-   resting boundary. */
+   rest and focus it can carry. The wash is the visible half where the close
+   already inherits `--shell-text`, so setting the ink alone would change
+   nothing. */
 .editor-shell-dialog-close:hover {
-  color: var(--shell-text);
-}
-.editor-shell-dialog--asset-preview .editor-shell-dialog-close:hover {
   border-color: var(--shell-muted);
+  background: color-mix(in srgb, var(--shell-text) 8%, transparent);
   color: var(--shell-text);
 }
 
@@ -2109,6 +2092,15 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   border-radius: var(--radius-md);
   background: var(--panel);
   color: var(--muted);
+}
+/* The viewer's close sets its border and fill at rest with three class names,
+   so its hover has to name the same three: the shared close hover is two and
+   loses to the rest rule whatever the source order. */
+.editor-shell-dialog.editor-shell-dialog--asset-preview
+  .editor-shell-dialog-close:hover {
+  border-color: var(--shell-muted);
+  background: color-mix(in srgb, var(--shell-text) 8%, transparent);
+  color: var(--shell-text);
 }
 
 /* The finder's rail is also the way out's row: the mark centres in it rather
@@ -3406,4 +3398,34 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   .editor-shell-inspector {
     display: none;
   }
+}
+
+/* The **one** rule that paints a control's caller-set state, keyed on the
+   shared `data-yunari-control-state` (`components/ui/control-state.ts` owns the
+   attribute and the state names). It is deliberately not a control's own class:
+   the state reaches every button on every surface, including a portalled dialog
+   and the finder's footer, without a second spelling.
+
+   **Last, and with the attribute repeated.** Specificity, not source order,
+   decides against a surface rule that sets `color` on its own control: the
+   publish toggle's pressed rule is `(0,2,0)`, and a bare attribute is `(0,1,0)`,
+   so an earlier strong rule would keep painting and a busy/failed state would
+   never show. `button[data-…][data-…]` is `(0,2,1)` — above every class-and-
+   element surface rule and level with the dialog's direct-button rule, which
+   this block then beats by sitting last. The doubled attribute is the
+   specificity floor, not a second state.
+
+   Busy is the one state a disabled control keeps: the caller disables it so it
+   cannot be pressed twice, and this rule outranks the `disabled:text-faint`
+   utilities (they are layered; this is not), so work in flight stays
+   `--attention` rather than reading as unavailable. The destructive mark still
+   wins a control carrying both, because its selector is more specific. */
+button[data-yunari-control-state][data-yunari-control-state="busy"] {
+  color: var(--control-state-busy);
+}
+button[data-yunari-control-state][data-yunari-control-state="success"] {
+  color: var(--control-state-success);
+}
+button[data-yunari-control-state][data-yunari-control-state="failure"] {
+  color: var(--control-state-failure);
 }

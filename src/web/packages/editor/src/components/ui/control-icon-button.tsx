@@ -61,7 +61,7 @@ export function ControlIconButton(
     /** An action that is out, or an outcome it keeps. A synchronous action
      *  omits this and says why at its call site; a caller that sets `busy`
      *  also passes `disabled`. */
-    readonly state?: ControlState;
+    readonly state?: ControlState | undefined;
     readonly onClick: () => void;
     readonly children: React.ReactNode;
   },

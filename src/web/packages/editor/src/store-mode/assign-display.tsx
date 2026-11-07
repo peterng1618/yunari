@@ -114,6 +114,9 @@ export function AssignChoice(props: {
   /** Whether this choice's own assignment is out. One write at a time, so a
    *  second press cannot ride the same select twice. */
   const [busy, setBusy] = useState(false);
+  /** Whether the *assignment* was refused. `refusal` also carries a failed
+   *  pair-row URL read, and that belongs to the pair route, not this button. */
+  const [assignFailed, setAssignFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -161,6 +164,7 @@ export function AssignChoice(props: {
   const choose = (display: string): void => {
     setRefusal(undefined);
     setConfirmation(undefined);
+    setAssignFailed(false);
 
     if (display === PAIR_DISPLAY) {
       if (pairNew === undefined) return;
@@ -190,6 +194,7 @@ export function AssignChoice(props: {
     setBusy(true);
     setRefusal(undefined);
     setConfirmation(undefined);
+    setAssignFailed(false);
     const display = value;
     void client.assign(display, themeId).then(
       () => {
@@ -202,6 +207,7 @@ export function AssignChoice(props: {
       },
       (error: unknown) => {
         setBusy(false);
+        setAssignFailed(true);
         setRefusal(reason(error));
       },
     );
@@ -224,9 +230,10 @@ export function AssignChoice(props: {
             disabled={busy}
           />
           <div className="flex items-center justify-end">
-            {/* The one command carries all three caller-set states. A refusal
-                from reading the list never reaches here: the form is drawn
-                only after an answer, so `refusal` is this press's outcome. */}
+            {/* The one command carries all three caller-set states.
+                `assignFailed` is this press's refusal; `refusal` alone can also
+                carry a failed pair-row URL read, which belongs to that route
+                and must not paint this button. */}
             <button
               type="button"
               data-yunari-store-assign-confirm=""
@@ -235,7 +242,7 @@ export function AssignChoice(props: {
               {...controlStateAttributes(
                 busy
                   ? "busy"
-                  : refusal !== undefined
+                  : assignFailed
                     ? "failure"
                     : confirmation === undefined
                       ? undefined

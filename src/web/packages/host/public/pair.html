@@ -21,7 +21,6 @@
         /* DESIGN.md's control state roles, for the shared
            `data-yunari-control-state` contract. */
         --attention: #8a5a2b;
-        --ok: #2f6d3a;
         --error: #a4291f;
         color-scheme: light dark;
       }
@@ -32,7 +31,6 @@
           --line: #2a3242;
           --muted: #8a97ab;
           --attention: #ffab00;
-          --ok: #7fd894;
           --error: #ff7e6e;
         }
       }
@@ -101,9 +99,6 @@
       }
       button[data-yunari-control-state="busy"] {
         border-color: var(--attention);
-      }
-      button[data-yunari-control-state="success"] {
-        border-color: var(--ok);
       }
       button[data-yunari-control-state="failure"] {
         border-color: var(--error);
@@ -318,7 +313,8 @@
             // Quota or a private window; the exchange still succeeded.
           }
 
-          state("success");
+          // Success leaves the page, so there is no rendered success state:
+          // only busy and a refusal are ever on screen here.
           location.replace("/");
         } catch {
           say("The host did not answer.");

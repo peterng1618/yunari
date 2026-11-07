@@ -4,6 +4,7 @@ import {
   type ControlOption,
   ControlSelect,
 } from "./components/ui/control-select.js";
+import { controlStateAttributes } from "./components/ui/control-state.js";
 import { ControlText } from "./components/ui/control-text.js";
 import { ACTION_BUTTON, Dialog } from "./components/ui/dialog.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
@@ -125,6 +126,9 @@ export function ThemeLibraryChooser({
   const [confirming, setConfirming] = useState<string | undefined>(undefined);
   /** Why the last removal did not happen, read by the author, not swallowed. */
   const [status, setStatus] = useState<string | undefined>(undefined);
+  /** Whether a removal is out. The confirmation stays mounted until it lands,
+   *  so without this the same Delete could be pressed twice. */
+  const [removing, setRemoving] = useState(false);
 
   // Read once: a per-render client would be a new one every time, and the
   // removal would reach a host the session never talked to.
@@ -182,7 +186,8 @@ export function ThemeLibraryChooser({
    *  closing the chooser, so the author carries on with the themes that are
    *  still theirs; a failure keeps the row and puts the reason on screen. */
   const remove = async (id: string): Promise<void> => {
-    if (canRemove === undefined) return;
+    if (canRemove === undefined || removing) return;
+    setRemoving(true);
     try {
       await canRemove(id);
       onRemoved?.(id);
@@ -203,6 +208,7 @@ export function ThemeLibraryChooser({
       // silent failure here is indistinguishable from a successful delete.
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
+      setRemoving(false);
       setConfirming(undefined);
     }
   };
@@ -316,10 +322,13 @@ export function ThemeLibraryChooser({
             {uiCopy.library.confirmRemoval(confirming, confirmEntry?.name)}
           </p>
           <div className="yunari-dialog-actions">
+            {/* A removal is one write; the status line is where its refusal is
+                read, so these controls carry busy and keep no outcome. */}
             <button
               type="button"
               className={ACTION_BUTTON}
               data-yunari-library-cancel=""
+              disabled={removing}
               onClick={() => setConfirming(undefined)}
             >
               {uiCopy.library.cancel}
@@ -328,6 +337,8 @@ export function ThemeLibraryChooser({
               type="button"
               className={ACTION_BUTTON}
               data-yunari-library-delete-confirm=""
+              disabled={removing}
+              {...controlStateAttributes(removing ? "busy" : undefined)}
               onClick={() => void remove(confirming)}
             >
               {DELETE_LABEL}

@@ -197,6 +197,13 @@ function colourBearingMarkableControls(): readonly string[] {
  * three arrived with the mode switch and the source toggle.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
+  // The three control-state rules. They paint every button from the shared
+  // attribute, including a control that also carries the destructive mark; the
+  // mark's own rule is more specific (`(0,3,0)` against `(0,2,1)`), so Destroy
+  // still reads `--hot` while it works.
+  'button[data-yunari-control-state][data-yunari-control-state="busy"]',
+  'button[data-yunari-control-state][data-yunari-control-state="success"]',
+  'button[data-yunari-control-state][data-yunari-control-state="failure"]',
   ".editor-shell-dialog > button:not(.editor-shell-dialog-close)",
   ".editor-shell-dialog > button:not(.editor-shell-dialog-close):hover",
   ".editor-shell-mode-switch button",
@@ -295,7 +302,8 @@ describe("the control state set", () => {
       const painters = [
         ...cssNoComments.matchAll(
           new RegExp(
-            `^\\[data-yunari-control-state="${state}"\\]\\s*\\{([^}]*)\\}`,
+            `^button\\[data-yunari-control-state\\]` +
+              `\\[data-yunari-control-state="${state}"\\]\\s*\\{([^}]*)\\}`,
             "gm",
           ),
         ),
@@ -323,11 +331,47 @@ describe("the control state set", () => {
     }
   });
 
-  it("gives the modal close the hover state it was missing", () => {
+  it("gives the modal close a visible hover state", () => {
+    // The close already inherits `--shell-text` at rest, so setting that ink
+    // again changes nothing on screen. The wash and the raised border are the
+    // visible half; the rendered proof is the browser case that reads the
+    // computed style before and after a hover.
+    const hover = ruleBodies(".editor-shell-dialog-close:hover");
+    expect(hover, "the dialog's close control has no hover rule").not.toBe("");
     expect(
-      ruleBodies(".editor-shell-dialog-close:hover"),
-      "the dialog's close control has no hover rule",
-    ).toContain("color: var(--shell-text);");
+      hover,
+      "the close's hover sets only its inherited ink, so hovering changes nothing",
+    ).toMatch(/background:\s*color-mix\(/);
+    expect(hover).toContain("border-color: var(--shell-muted);");
+  });
+
+  it("is the last unlayered rule that paints a button", () => {
+    // The state block has to lose to nothing later in the cascade. A rule
+    // appended after it that declares `color` on a button would beat the
+    // state rules by source order whenever their specificity ties — the
+    // publish toggle's own pressed rule did exactly that before this was
+    // moved. The destructive mark's selector is deliberately more specific
+    // and sits above the block; that is the one rule allowed to win.
+    const text = unlayered();
+    const stateAt = text.indexOf(
+      'button[data-yunari-control-state][data-yunari-control-state="busy"]',
+    );
+    expect(stateAt, "the control state block is gone").toBeGreaterThan(-1);
+
+    const later = [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((match) => (match.index ?? 0) > stateAt)
+      .filter(([, , body]) => PAINTS_COLOUR.test(body ?? ""))
+      .flatMap(([, selectors]) => (selectors ?? "").split(","))
+      .map((part) => part.trim().replace(/\s+/g, " "))
+      .filter((part) => NAMES_A_MARKABLE_CONTROL.test(part))
+      // The block's own three rules: the later siblings are not later paint.
+      .filter((part) => !part.includes("data-yunari-control-state"));
+
+    expect(
+      later,
+      "an unlayered rule after the control state block paints a button, so a " +
+        "busy or failed control can keep that later ink",
+    ).toEqual([]);
   });
 });
 

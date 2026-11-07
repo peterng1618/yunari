@@ -215,6 +215,7 @@ export function PluginSettingsForm(props: {
     const payload = payloadOf(fields, values);
     if (!payload.ok) {
       setMessage(payload.message);
+      setControlState("failure");
       return;
     }
 

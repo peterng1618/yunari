@@ -63,7 +63,7 @@ export function FinderStatus(props: {
             type="button"
             data-yunari-asset-retry=""
             onClick={props.onRetry}
-            className="underline"
+            className="underline hover:text-text"
           >
             {uiCopy.assets.retry}
           </button>

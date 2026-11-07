@@ -576,6 +576,9 @@ export function AssetsPane({
       >
         <Glyph icon={REPLACE_ASSET_GLYPH} size={13} />
       </ControlIconButton>,
+      // A local manager removal, not a host write: `submit` guards the double
+      // press with a ref, and a refusal is `message` above the card, so this
+      // control has no busy or outcome state of its own.
       <ControlIconButton
         key="remove"
         label={uiCopy.panels.assetCard.remove}

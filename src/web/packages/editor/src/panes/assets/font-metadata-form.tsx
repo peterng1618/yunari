@@ -128,7 +128,7 @@ export function FontMetadataForm(props: {
   readonly busy: boolean;
   /** The last commit's outcome, where the caller keeps one. A refused commit
    *  leaves the form open so the Create press can carry the failure state. */
-  readonly state?: ControlState;
+  readonly state?: ControlState | undefined;
   readonly onCommit: (
     metadata: FontMetadata,
     role: FontTrioRole | null,
@@ -272,7 +272,7 @@ export function FontMetadataForm(props: {
           type="button"
           data-yunari-font-create=""
           disabled={busy}
-          {...controlStateAttributes(state ?? (busy ? "busy" : undefined))}
+          {...controlStateAttributes(busy ? "busy" : state)}
           onClick={() => {
             const candidate = current();
             const reason = refusalOf(family, weight);

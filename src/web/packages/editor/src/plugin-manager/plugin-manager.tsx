@@ -4,6 +4,7 @@ import type {
 } from "@yunari/extension-api";
 import type * as React from "react";
 import { HeldUpdateNotice } from "../components/held-update-notice.js";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
 import { Page } from "../settings-mode/page.js";
 import { Group } from "../settings-mode/section-group.js";
@@ -139,11 +140,14 @@ function ExtensionRow(props: {
         {uiCopy.settings.extensions.commands}:{" "}
         {commands.length === 0 ? "none" : commands.join(", ")}
       </p>
+      {/* One manager write at a time. Its refusal is the page's own notice, so
+          these controls carry the busy state and keep no outcome. */}
       <div className="flex flex-wrap items-center gap-[var(--space-8)]">
         {extension.consent === "missing" ? (
           <button
             type="button"
             disabled={props.busy}
+            {...controlStateAttributes(props.busy ? "busy" : undefined)}
             className={ACTION_BUTTON}
             onClick={() => props.onGrant(extension.key, extension.fingerprint)}
           >
@@ -157,6 +161,7 @@ function ExtensionRow(props: {
         <button
           type="button"
           disabled={props.busy}
+          {...controlStateAttributes(props.busy ? "busy" : undefined)}
           className={ACTION_BUTTON}
           onClick={() => {
             if (window.confirm(`Remove ${extension.name} (${extension.key})?`))
@@ -255,6 +260,7 @@ export function PluginManager(props: PluginManagerProps): React.JSX.Element {
                 type="button"
                 disabled={props.busy}
                 aria-label={`Move ${key} up`}
+                {...controlStateAttributes(props.busy ? "busy" : undefined)}
                 className={ACTION_BUTTON}
                 onClick={() => props.onReorderProvider(key, -1)}
               >
@@ -264,6 +270,7 @@ export function PluginManager(props: PluginManagerProps): React.JSX.Element {
                 type="button"
                 disabled={props.busy}
                 aria-label={`Move ${key} down`}
+                {...controlStateAttributes(props.busy ? "busy" : undefined)}
                 className={ACTION_BUTTON}
                 onClick={() => props.onReorderProvider(key, 1)}
               >

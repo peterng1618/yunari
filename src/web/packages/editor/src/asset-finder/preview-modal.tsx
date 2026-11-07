@@ -107,7 +107,7 @@ export function FinderPreviewModal(props: {
                     {copy.source}
                   </span>
                   <a
-                    className="break-all font-mono text-muted underline"
+                    className="break-all font-mono text-muted underline hover:text-text"
                     href={preview.sourceUrl}
                     target="_blank"
                     rel="noreferrer"

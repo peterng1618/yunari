@@ -48,6 +48,9 @@ export function FontImportDialog(props: {
     commit: FontImportCommit,
   ): Promise<void> => {
     setBusy(true);
+    // A retry starts from no outcome: the previous refusal describes a commit
+    // that is no longer the one on its way, and leaving it would mask busy.
+    setMessage("");
     let closed = false;
     try {
       const outcome = await commit(metadata);

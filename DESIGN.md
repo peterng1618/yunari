@@ -703,7 +703,9 @@ one owner rather than one spelling per surface:
 The caller sets the last three through `controlStateAttributes` in
 `components/ui/control-state.ts`. One stylesheet rule keyed on
 `data-yunari-control-state` paints them for every surface, and the `@theme
-static` block owns the three state tokens. A control that cannot carry a state,
+static` block owns the three state tokens: `--control-state-busy` (resolving
+`--attention`), `--control-state-success` (`--ok`) and `--control-state-failure`
+(`--error`). A control that cannot carry a state,
 or draws it differently, says why in a comment beside it: a synchronous action
 has no busy or outcome, a dismissal has no outcome, and a state that is a
 *reading of something else* — a source's health — is drawn as that reading

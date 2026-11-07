@@ -24,11 +24,13 @@ export function FontFaceField(props: {
       <h3 className="m-0 text-xs font-semibold text-muted">
         {uiCopy.panels.fontFace}
       </h3>
+      {/* Opening the picker is synchronous; hover raises the resting boundary
+          and the press has no busy or outcome. */}
       <button
         type="button"
         data-yunari-open-font-picker=""
         onClick={() => props.onOpenFontPicker?.()}
-        className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-left text-sm"
+        className="rounded-[var(--radius-sm)] border border-edge px-[var(--space-10)] py-[var(--space-6)] text-left text-sm enabled:hover:border-muted"
       >
         {uiCopy.assets.openFontPicker}
       </button>

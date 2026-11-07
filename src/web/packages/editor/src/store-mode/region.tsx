@@ -422,7 +422,7 @@ function Failure(props: {
         type="button"
         data-yunari-store-retry=""
         onClick={props.onRetry}
-        className="text-xs text-accent underline"
+        className="text-xs text-accent underline hover:text-text"
       >
         {uiCopy.store.retry}
       </button>

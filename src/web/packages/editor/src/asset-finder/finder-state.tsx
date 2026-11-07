@@ -22,7 +22,7 @@ export function FinderState(props: {
           type="button"
           data-yunari-asset-state-action=""
           onClick={props.action.onClick}
-          className="underline"
+          className="underline hover:text-text"
         >
           {props.action.label}
         </button>
