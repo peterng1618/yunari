@@ -43,6 +43,7 @@ reading appears in the readings picker and can be bound in a theme.
   `unitKind` and value kind into the descriptor and the reading.
 - Another host API: `setHostApi((api) => …)` and call `api.call(method, params)`.
   Only the methods listed in the manifest's capabilities are forwarded.
-- Two handler throws in one process is a crash, not a retry: the platform stops
-  a worker that keeps failing. Return `status: "unavailable"` for an expected
-  failure.
+- A handler throw answers that one request with its reason and the worker keeps
+  serving, so a throw is a retryable answer. Return `status: "unavailable"` for
+  an expected failure rather than throwing, because the reason identifies the
+  request rather than the reading.

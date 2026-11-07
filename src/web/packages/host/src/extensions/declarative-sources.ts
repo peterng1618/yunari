@@ -14,6 +14,7 @@ import {
 import { createPinnedFetch } from "../providers/custom/pinned-fetch.js";
 import { resolvePointer } from "../providers/custom/pointer.js";
 import { redactForBrowser } from "../providers/provider.js";
+import { MAX_ASSET_BYTES } from "./asset-bytes.js";
 import {
   DECLARATIVE_LOG_LIMIT,
   type DeclarativeAssetSource,
@@ -34,7 +35,6 @@ const REMEMBERED_RESULTS = 1_000;
 const SEARCH_TIMEOUT_MS = 15_000;
 const SEARCH_MAX_BYTES = 1024 * 1024;
 const BYTES_TIMEOUT_MS = 30_000;
-const BYTES_MAX_BYTES = 32 * 1024 * 1024;
 /** A page count past this is not a pager a grid can draw. */
 const TOTAL_PAGE_CEILING = 10_000;
 
@@ -196,7 +196,7 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     const outcome = await guardedFetchBytes({
       url,
       allowedHosts: this.#allowedHosts,
-      maxBytes: BYTES_MAX_BYTES,
+      maxBytes: MAX_ASSET_BYTES,
       signal: AbortSignal.any([
         ctx.signal,
         AbortSignal.timeout(BYTES_TIMEOUT_MS),

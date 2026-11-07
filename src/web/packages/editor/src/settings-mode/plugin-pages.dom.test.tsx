@@ -176,6 +176,8 @@ it("renders a sandboxed page as a frame", () => {
   // A settings frame saves through `settings.set`, a write method: the host
   // draws the only control that may mint its gesture token.
   expect(
-    [...document.querySelectorAll("button")].map((button) => button.textContent),
+    [...document.querySelectorAll("button")].map(
+      (button) => button.textContent,
+    ),
   ).toContain(uiCopy.settings.extensions.frameEnableControls);
 });

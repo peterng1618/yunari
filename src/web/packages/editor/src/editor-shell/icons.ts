@@ -1,3 +1,4 @@
+import * as LucideGlyphs from "lucide-react";
 import {
   Activity,
   ArrowDown,
@@ -83,7 +84,6 @@ import {
   Wallpaper,
   X,
 } from "lucide-react";
-import * as LucideGlyphs from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
 import type { PathPresetId, ShapeKind } from "../new-object-defaults.js";

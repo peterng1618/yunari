@@ -12,6 +12,7 @@ import type {
   SourceContext,
 } from "../assets/source.js";
 import { redactForBrowser } from "../providers/provider.js";
+import { MAX_ASSET_BYTES } from "./asset-bytes.js";
 import type { PluginSupervisor } from "./runtime/supervisor.js";
 
 /**
@@ -26,8 +27,6 @@ import type { PluginSupervisor } from "./runtime/supervisor.js";
 
 const PRESET_KINDS: ReadonlySet<string> = new Set(["palette", "gradient"]);
 
-/** 32 MiB of decoded bytes: the largest asset a plugin may hand the host. */
-const MAX_PLUGIN_ASSET_BYTES = 32 * 1024 * 1024;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 const LOG_LIMIT = 200;
@@ -274,7 +273,7 @@ function readBytes(value: unknown): BytesRead {
     };
 
   const decoded = Buffer.from(encoded, "base64");
-  if (decoded.byteLength > MAX_PLUGIN_ASSET_BYTES)
+  if (decoded.byteLength > MAX_ASSET_BYTES)
     return {
       ok: false,
       reason: `${UNREADABLE_BYTES} Its bytes are past the host's limit.`,

@@ -46,8 +46,9 @@
     <dl id="values"></dl>
     <script>
       // A settings frame may read its own settings and ask the editor to
-      // resize it. Writing needs a gesture token minted by a host control, so
-      // this page stays read-only until the editor grows one.
+      // resize it. A write needs the one-use token the editor posts as
+      // `yunari.frame.gesture` after the host's Enable controls press; this
+      // page only reads.
       let nonce = "";
       let nextId = 0;
       const pending = new Map();

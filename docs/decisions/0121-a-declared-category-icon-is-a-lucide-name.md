@@ -29,10 +29,13 @@ and is the only caller. `readAssetCategory` accepted any string for `icon`.
 Searched: `lucide-react` 1.66 `dist/lucide-react.d.ts` and
 `dist/esm/createLucideIcon.mjs`.
 
-Found: the package exports every icon under its PascalCase component name; a
-component it created carries `displayName`, while its non-icon exports (`Icon`,
-`createLucideIcon`) do not. There is no exported name→component map, so the
-package's own export namespace is the registry.
+Found: the package exports every icon under its PascalCase component name, plus
+an `icons` record that collects the same components. A component it created
+carries `displayName`, while its non-icon exports (`Icon`, `createLucideIcon`)
+do not. The `icons` record and the package's root namespace both re-export the
+whole icon set, so neither is tree-shakeable; the root namespace additionally
+carries the package's documented aliases (`ImageIcon`), so it is the registry
+this lookup reads.
 
 ## Rung 3 — native platform
 
@@ -59,7 +62,8 @@ names dead, which is the reported defect.
 
 | Option | Fit | Unsolved work | Verdict |
 |---|---|---|---|
-| Resolve the name through the `lucide-react` export namespace in `icons.ts` | Complete, one family, one weight through `Glyph` | Bundle includes the full icon set | Chosen |
+| Resolve the name through the `lucide-react` export namespace in `icons.ts` | Complete, one family, one weight through `Glyph`; keeps the package's aliases | Bundle includes the full icon set | Chosen |
+| Use the package's `icons` record | The same components and the same bundle cost | Drops the documented alias names | Rejected |
 | A hand-maintained name→glyph subset | Small bundle | Most declared names still dead | Rejected |
 | Render the declared string as an image URL | No | A manifest-controlled URL in chrome; second visual family | Rejected |
 | Delete the field from the manifest reader | No new code | Existing manifests with `icon` become unknown-key refusals | Rejected |

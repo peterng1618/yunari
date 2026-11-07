@@ -25,8 +25,13 @@ for data; do not reach the network yourself.
 2. The editor answers `yunari.frame.init` with the nonce, the plugin key, the
    settings and the theme.
 3. The frame posts `yunari.frame.request` with `{nonce, id, method, params}`.
+   A write method also carries the one-use `gestureToken` the editor posted.
 4. The editor answers `yunari.frame.result` with `{id, ok, value}` or
    `{id, ok:false, reason}`.
+
+Before a person presses the host's **Enable controls** button, the editor posts
+`yunari.frame.gesture` with `{nonce, token}`. The token is good for one write
+request or 30 seconds. No pointer event inside the frame can mint one.
 
 A frame body may call `asset.search` (`{query, page}` → `{results, totalPages}`)
 and `asset.bytes` (`{id}`). `asset.bytes` is the import action: the editor
@@ -34,9 +39,10 @@ fetches the bytes through the host route and places them, so the frame receives
 no bytes and never sees the host's own asset pipeline.
 
 A settings frame may call `settings.get`, `settings.set` and `ui.resize`.
-`settings.set` is a write and needs a gesture token the editor mints from a
-host control; the editor does not mint one for settings pages yet, so this
-template reads settings and does not write them.
+`settings.set` is a write: the host's **Enable controls** button mints a
+gesture, the editor posts it as `yunari.frame.gesture`, and the frame sends it
+back as `gestureToken` on that one write. This template reads settings and does
+not write them.
 
 ## Build and install
 

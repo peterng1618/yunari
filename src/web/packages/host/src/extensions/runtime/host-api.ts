@@ -12,6 +12,7 @@ import {
   type HostLookup,
 } from "../../providers/custom/fetch-source.js";
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
+import { MAX_ASSET_BYTES } from "../asset-bytes.js";
 import type { DeviceBroker } from "./device-broker.js";
 import { guardedFetch, guardedFetchBytes } from "./network.js";
 import {
@@ -63,8 +64,6 @@ const INVALID = "invalid-params";
 const HOST_ERROR = "host-error";
 const LOG_LIMIT = 2_048;
 const NETWORK_BODY_BYTES = 1024 * 1024;
-/** The same ceiling a declared asset source's artwork is held to. */
-const NETWORK_BYTES_MAX_BYTES = 32 * 1024 * 1024;
 const CALL_TIMEOUT_MS = 30_000;
 const TIMEOUT_ANSWER = { ok: false, reason: "timeout" };
 const LOG_LEVELS: ReadonlySet<string> = new Set(["info", "warn", "error"]);
@@ -237,7 +236,7 @@ async function networkFetchBytes(
   return guardedFetchBytes({
     url: target.url.toString(),
     allowedHosts: plugin.manifest.networkHosts ?? [],
-    maxBytes: NETWORK_BYTES_MAX_BYTES,
+    maxBytes: MAX_ASSET_BYTES,
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     fetchImpl: target.fetchImpl,
     ...(options.resolve === undefined ? {} : { resolve: options.resolve }),

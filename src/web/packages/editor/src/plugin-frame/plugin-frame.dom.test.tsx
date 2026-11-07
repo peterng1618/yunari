@@ -91,7 +91,10 @@ it("mints the gesture a sandboxed settings write needs", async () => {
   });
 
   const gesture = post.mock.calls
-    .map(([message]) => message as { type?: string; nonce?: string; token?: string })
+    .map(
+      ([message]) =>
+        message as { type?: string; nonce?: string; token?: string },
+    )
     .find((message) => message.type === "yunari.frame.gesture");
   expect(gesture).toMatchObject({
     nonce: expect.any(String),
