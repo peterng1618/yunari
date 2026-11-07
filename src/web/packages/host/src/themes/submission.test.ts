@@ -51,7 +51,7 @@ function themeOf(
   version: string | undefined,
 ): ThemeContent {
   const envelope: FabricThemeEnvelope = {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },

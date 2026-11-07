@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://yunari.local/schema/theme-document/2.0.0.json",
+  "$id": "https://yunari.local/schema/theme-document/2.1.0.json",
   "title": "Yunari Fabric theme envelope",
   "description": "The published Yunari theme format. Fabric owns scene geometry and object state; Yunari owns the versioned semantic envelope.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "fabricVersion", "id", "artboard", "scene"],
   "properties": {
-    "schemaVersion": { "const": "2.0.0" },
+    "schemaVersion": { "const": "2.1.0" },
     "fabricVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "id": { "$ref": "#/$defs/stableId" },
     "metadata": { "$ref": "#/$defs/metadata" },
@@ -62,30 +62,45 @@
       }
     },
     "background": {
-      "description": "The bottom-most layer: one colour behind the board and the media clipped to its bounds.",
+      "description": "The bottom-most layer: one paint behind the board, and the media clipped to its bounds. The paint belongs to the media when one is declared, and to the background only when there is none.",
       "type": "object", "additionalProperties": false,
       "properties": {
         "mode": {
           "enum": ["simple", "advanced"],
           "description": "The background model. Absent is simple: full-cover media over a colour. Only an advanced background may carry a media composition."
         },
-        "color": { "$ref": "#/$defs/paletteReference" },
+        "color": {
+          "$ref": "#/$defs/paletteReference",
+          "description": "The page paint for a background with no media. Refused when media is declared."
+        },
         "media": { "$ref": "#/$defs/backgroundMedia" }
       },
-      "if": {
-        "not": {
-          "required": ["mode"],
-          "properties": { "mode": { "const": "advanced" } }
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "required": ["mode"],
+              "properties": { "mode": { "const": "advanced" } }
+            }
+          },
+          "then": {
+            "properties": { "media": { "properties": { "composition": false } } }
+          }
+        },
+        {
+          "if": { "required": ["media"] },
+          "then": { "not": { "required": ["color"] } }
         }
-      },
-      "then": {
-        "properties": { "media": { "properties": { "composition": false } } }
-      }
+      ]
     },
     "backgroundMedia": {
       "type": "object", "additionalProperties": false, "required": ["assetId", "bounds"],
       "properties": {
         "assetId": { "$ref": "#/$defs/stableId" },
+        "color": {
+          "$ref": "#/$defs/paletteReference",
+          "description": "The paint behind this media. Absent means no authored ground."
+        },
         "bounds": { "enum": ["theme", "display"] },
         "scale": { "type": "number", "minimum": 1, "maximum": 5 },
         "offsetX": { "type": "number", "minimum": -5, "maximum": 5 },

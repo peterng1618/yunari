@@ -58,7 +58,7 @@ describe("runSchemaMigrations", () => {
     const migrations: Record<number, EnvelopeMigration> = {
       1: (input) => {
         order.push(1);
-        return { ...input, schemaVersion: "2.0.0", addedIn2: true };
+        return { ...input, schemaVersion: "2.1.0", addedIn2: true };
       },
       2: (input) => {
         order.push(2);
@@ -87,7 +87,7 @@ describe("runSchemaMigrations", () => {
 
   it("refuses a missing step without returning a partial document", () => {
     const result = runSchemaMigrations({ schemaVersion: "1.0.0" }, 1, 3, {
-      1: (input) => ({ ...input, schemaVersion: "2.0.0" }),
+      1: (input) => ({ ...input, schemaVersion: "2.1.0" }),
     });
 
     expect(result.ok).toBe(false);
@@ -99,7 +99,7 @@ describe("runSchemaMigrations", () => {
   });
 
   it("refuses a migration that does not set the target major", () => {
-    const result = runSchemaMigrations({ schemaVersion: "2.0.0" }, 2, 3, {
+    const result = runSchemaMigrations({ schemaVersion: "2.1.0" }, 2, 3, {
       2: (input) => ({ ...input, touched: true }),
     });
 

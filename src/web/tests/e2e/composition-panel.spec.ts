@@ -937,7 +937,7 @@ function packageBytes(
 ): Buffer {
   const result = writeThemePackage({
     envelope: withRoleTokens({
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       fabricVersion: "7.4.0",
       id,
       metadata: { themeLanguage: "en" },

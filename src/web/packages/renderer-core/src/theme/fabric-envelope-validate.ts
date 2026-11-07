@@ -616,7 +616,12 @@ function v2Globals(value: unknown, issues: ValidationIssue[]): void {
   );
 }
 
-/** Background paint is authored through palette tokens, never a local literal. */
+/**
+ * Background paint is authored through palette tokens, never a local literal.
+ * The colour lives on the media when one is declared and on the background
+ * otherwise; both slots are checked because the exclusivity rule is the
+ * semantic validator's, and this check must not fail open on either shape.
+ */
 function backgroundPaintReferences(
   background: unknown,
   globals: unknown,
@@ -627,22 +632,27 @@ function backgroundPaintReferences(
     isRecord(globals) && isRecord(globals["palette"])
       ? globals["palette"]
       : undefined;
-  const value = background["color"];
-  if (value === undefined) return;
-  const ref = isRecord(value) ? value["ref"] : undefined;
-  if (
-    typeof ref !== "string" ||
-    !ref.startsWith("palette.") ||
-    palette?.[ref.slice("palette.".length)] === undefined
-  ) {
+  const check = (value: unknown, path: string): void => {
+    if (value === undefined) return;
+    const ref = isRecord(value) ? value["ref"] : undefined;
+    if (
+      typeof ref === "string" &&
+      ref.startsWith("palette.") &&
+      palette?.[ref.slice("palette.".length)] !== undefined
+    ) {
+      return;
+    }
     issues.push(
       issue(
         "unresolved-global-ref",
-        "/background/color",
+        path,
         "background must reference an existing palette token.",
       ),
     );
-  }
+  };
+  check(background["color"], "/background/color");
+  const media = background["media"];
+  if (isRecord(media)) check(media["color"], "/background/media/color");
 }
 
 /** Resolved Fabric paint is a cache; its authored owner is always a palette token. */

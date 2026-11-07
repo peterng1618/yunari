@@ -18,7 +18,7 @@ function envelope(
   background: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en" },
@@ -44,7 +44,11 @@ const MEDIA = { assetId: "clip", bounds: "theme" } as const;
 
 describe("background modes", () => {
   it("reads an absent mode as simple", () => {
-    expect(codes({ color: { ref: "palette.ink" }, media: MEDIA })).toEqual([]);
+    expect(
+      codes({
+        media: { ...MEDIA, color: { ref: "palette.ink" } },
+      }),
+    ).toEqual([]);
   });
 
   it("accepts a simple background that says so", () => {

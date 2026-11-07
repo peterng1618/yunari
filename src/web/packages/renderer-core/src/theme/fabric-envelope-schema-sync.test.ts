@@ -39,7 +39,7 @@ describe("published Fabric theme schema", () => {
   it("publishes the v2 envelope rather than the obsolete node tree", () => {
     const document = schema();
 
-    expect(document.$id).toContain("/2.0.0.json");
+    expect(document.$id).toContain(`/${SUPPORTED_SCHEMA_VERSION}.json`);
     // The version is stated twice — here and in `SUPPORTED_SCHEMA_VERSION` —
     // and the About row reports the code's copy, so a theme published under
     // one and opened under the other would be refused for no reason.
@@ -124,6 +124,13 @@ describe("published Fabric theme schema", () => {
         media: { $ref: "#/$defs/backgroundMedia" },
       },
     });
+    // A background that carries media must not also carry the page paint: the
+    // media owns the colour then, and a document restating it at both levels is
+    // refused rather than given two owners.
+    expect(document.$defs["background"]!["allOf"]).toContainEqual({
+      if: { required: ["media"] },
+      then: { not: { required: ["color"] } },
+    });
     expect(document.$defs["metadata"]?.["properties"]).toMatchObject({
       version: { type: "string", pattern: "^\\d+\\.\\d+\\.\\d+$" },
     });
@@ -187,6 +194,12 @@ describe("published Fabric theme schema", () => {
     >;
 
     expect(media["assetId"]).toEqual({ $ref: "#/$defs/stableId" });
+    // The media carries its own paint. `background.color` is the page paint for
+    // a background with no media, so the two slots publish the same reference
+    // and the exclusivity below is the schema's half of "one owner".
+    expect(media["color"]).toMatchObject({
+      $ref: "#/$defs/paletteReference",
+    });
     expect(media["bounds"]).toEqual({ enum: [...BACKGROUND_MEDIA_BOUNDS] });
     expect(media["fit"]).toBeUndefined();
     expect(media["scale"]).toEqual({

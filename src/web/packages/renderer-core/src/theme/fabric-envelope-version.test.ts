@@ -34,7 +34,7 @@ function firstIssue(result: ReturnType<typeof validateFabricThemeEnvelope>) {
 
 describe("the schema version is semantic", () => {
   it("pins the supported version and derives its major rather than writing it twice", () => {
-    expect(SUPPORTED_SCHEMA_VERSION).toBe("2.0.0");
+    expect(SUPPORTED_SCHEMA_VERSION).toBe("2.1.0");
     expect(SUPPORTED_SCHEMA_MAJOR).toBe(2);
     expect(parseSchemaMajor(SUPPORTED_SCHEMA_VERSION)).toBe(
       SUPPORTED_SCHEMA_MAJOR,
@@ -42,7 +42,7 @@ describe("the schema version is semantic", () => {
   });
 
   it("accepts the current version", () => {
-    expect(validateFabricThemeEnvelope(envelope("2.0.0")).ok).toBe(true);
+    expect(validateFabricThemeEnvelope(envelope("2.1.0")).ok).toBe(true);
   });
 
   it("accepts a later minor and patch of the same major", () => {
@@ -86,7 +86,7 @@ describe("the schema version is semantic", () => {
     expect(issue.code).toBe("unsupported-schema-version");
     expect(issue.path).toBe("/schemaVersion");
     expect(issue.message).toContain("1.0.0");
-    expect(issue.message).toContain("2.0.0");
+    expect(issue.message).toContain("2.1.0");
   });
 
   it("reads a major numerically, and nothing else", () => {

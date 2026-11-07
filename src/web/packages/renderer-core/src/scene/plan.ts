@@ -30,6 +30,7 @@ import type {
   TextRun,
   TypeToken,
 } from "../theme/document.js";
+import { backgroundPaintValue } from "../theme/document.js";
 import { defaultTypeSize } from "../theme/type-size.js";
 import type { Sample, SensorStatus } from "../types.js";
 import { formatInstant } from "./datetime/format.js";
@@ -210,9 +211,11 @@ export type ChartPlanContext = Pick<
  * nothing at all. Keep both on this.
  *
  * The background is its own envelope section, so its colour arrives beside the
- * artboard rather than inside it. `scene-fabric` accepts the resolved forms
- * only: a CSS string or a `{ kind: "solid" | "gradient" }` object, never a
- * reference.
+ * artboard rather than inside it. The colour has two slots: the media's own
+ * when a picture is declared, the background's page paint otherwise. The
+ * discriminator is presence, never a fallback — the validator refuses a
+ * document carrying both. `scene-fabric` accepts the resolved forms only: a
+ * CSS string or a `{ kind: "solid" | "gradient" }` object, never a reference.
  */
 export function planArtboard(
   artboard: Artboard,
@@ -220,16 +223,12 @@ export function planArtboard(
   globals: Globals,
   issues: PlanIssue[],
 ): ScenePlan["artboard"] {
+  const color = backgroundPaintValue(background);
   return {
     width: artboard.width,
     height: artboard.height,
     contentFit: artboard.contentFit ?? "contain",
-    background: resolveStyleValue(
-      background?.color,
-      globals,
-      "background",
-      issues,
-    ),
+    background: resolveStyleValue(color, globals, "background", issues),
   };
 }
 

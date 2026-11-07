@@ -305,6 +305,7 @@ function backgroundMediaFor(
   const flipY = input.flipY ?? base?.flipY;
   return {
     assetId: asset.id,
+    ...(base?.color === undefined ? {} : { color: base.color }),
     bounds: input.bounds ?? base?.bounds ?? DEFAULT_BACKGROUND_MEDIA_BOUNDS,
     ...(fallbackFrame === undefined || asset.kind !== "video"
       ? {}
@@ -382,19 +383,7 @@ export async function setBackground(
       color = { ref: `palette.${token}` };
     }
 
-    let media:
-      | {
-          assetId: string;
-          bounds: "theme" | "display";
-          fallbackFrame?: number;
-          offsetX?: number;
-          offsetY?: number;
-          scale?: number;
-          flipX?: boolean;
-          flipY?: boolean;
-          composition?: BackgroundMediaComposition;
-        }
-      | undefined;
+    let media: BackgroundMedia | undefined;
     if (input.mediaAssetId !== undefined) {
       const asset = (draft.envelope.assets ?? []).find(
         (candidate) => candidate.id === input.mediaAssetId,
@@ -438,12 +427,25 @@ export async function setBackground(
       const { composition: _composition, ...plain } = media;
       kept = plain;
     }
-    const { mode: _mode, ...simple } = existing ?? {};
+
+    // One colour owner, the same rule the editor writes by: a declared media
+    // carries the paint, a background with no media carries the page paint.
+    // A colour stated beside a media moves onto it, and the first picture a
+    // blank theme gains inherits the page's paint.
+    let pageColor = existing?.color;
+    if (kept !== undefined) {
+      const chosen = color ?? kept.color ?? pageColor;
+      pageColor = undefined;
+      kept = chosen === undefined ? kept : { ...kept, color: chosen };
+    } else if (color !== undefined) {
+      pageColor = color;
+    }
+
+    const nextMode = returning ? undefined : (input.mode ?? existing?.mode);
     const background = {
-      ...(returning ? simple : (existing ?? {})),
-      ...(color === undefined ? {} : { color }),
+      ...(pageColor === undefined ? {} : { color: pageColor }),
       ...(kept === undefined ? {} : { media: kept }),
-      ...(input.mode === undefined || returning ? {} : { mode: input.mode }),
+      ...(nextMode === undefined ? {} : { mode: nextMode }),
     };
     draft.envelope = kitSetBackground(draft.envelope, background);
     return { themeId: draft.id, background };

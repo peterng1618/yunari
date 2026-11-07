@@ -18,7 +18,7 @@ import type { FabricThemeEnvelope } from "./fabric-envelope.js";
 /** A minimal valid envelope. Tests mutate clones of this. */
 function baseEnvelope(): Record<string, unknown> {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en" },
@@ -364,9 +364,9 @@ describe("the background layer", () => {
     expect(
       codes(
         withBackground({
-          color: { ref: "palette.ink" },
           media: {
             assetId: "clip",
+            color: { ref: "palette.ink" },
             bounds: "display",
             flipX: true,
             flipY: false,
@@ -441,9 +441,9 @@ describe("the background layer", () => {
 
   it("refuses the old artboard keys", () => {
     // Both removed keys are refused by name: `background` was the colour and
-    // `backgroundMedia` its media, and `schemaVersion` stays 2.0.0 precisely
-    // because an old document is rejected here rather than silently read with
-    // its background dropped.
+    // `backgroundMedia` its media. The schema is `2.1.0`: an old document that
+    // still carries both a colour and a media is refused by the exclusivity
+    // check rather than read with one owner silently dropped.
     for (const artboard of [
       { width: 10, height: 10, background: { ref: "palette.ink" } },
       { width: 10, height: 10, backgroundMedia: { assetId: "clip" } },
@@ -465,9 +465,9 @@ describe("the background layer", () => {
   it("accepts an anchored media band with a fade", () => {
     const envelope = withBackground({
       mode: "advanced",
-      color: { ref: "palette.ink" },
       media: {
         assetId: "clip",
+        color: { ref: "palette.ink" },
         bounds: "display",
         composition: { anchor: "left", extent: 0.35, fade: 0.12 },
       },

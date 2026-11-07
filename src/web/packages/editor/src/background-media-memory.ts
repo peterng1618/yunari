@@ -8,6 +8,7 @@ import {
   type BackgroundMediaComposition,
   type BackgroundMode,
   DEFAULT_BACKGROUND_MEDIA_BOUNDS,
+  type GlobalRef,
   MAX_BACKGROUND_EXTENT,
   MAX_BACKGROUND_FADE,
   MAX_BACKGROUND_OFFSET,
@@ -29,6 +30,9 @@ export const BACKGROUND_MEDIA_MEMORY_VERSION = 1;
  * the exported package or a display's read.
  */
 export interface BackgroundMediaMemoryEntry {
+  /** The paint this picture was authored against, kept with it so a switch
+   *  restores the colour and the fit together. */
+  readonly color?: { readonly ref: GlobalRef };
   readonly bounds: BackgroundMediaBounds;
   readonly offsetX?: number;
   readonly offsetY?: number;
@@ -80,6 +84,20 @@ function numberIn(
     return invalid;
   }
   return value;
+}
+
+/** The authored paint: a palette reference only, because that is the one form
+ *  the background's colour control writes. A literal colour is not memory: it
+ *  means the entry did not come from this editor, so it is refused rather than
+ *  restored under a different asset. */
+function readColor(
+  value: unknown,
+): { readonly ref: GlobalRef } | undefined | Invalid {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return invalid;
+  const ref = value["ref"];
+  if (typeof ref !== "string" || !ref.startsWith("palette.")) return invalid;
+  return { ref: ref as GlobalRef };
 }
 
 function readComposition(
@@ -137,6 +155,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
     MAX_BACKGROUND_SCALE,
   );
   const composition = readComposition(value["composition"]);
+  const color = readColor(value["color"]);
 
   const flipX = value["flipX"];
   const flipY = value["flipY"];
@@ -147,6 +166,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
     offsetY === invalid ||
     scale === invalid ||
     composition === invalid ||
+    color === invalid ||
     (flipX !== undefined && typeof flipX !== "boolean") ||
     (flipY !== undefined && typeof flipY !== "boolean") ||
     (frame !== undefined &&
@@ -157,6 +177,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
 
   return {
     bounds,
+    ...(color === undefined ? {} : { color }),
     ...(offsetX === undefined ? {} : { offsetX }),
     ...(offsetY === undefined ? {} : { offsetY }),
     ...(scale === undefined ? {} : { scale }),
@@ -213,13 +234,20 @@ export function rememberBackgroundMedia(
 ): BackgroundMediaMemory {
   if (media === undefined) return memory;
 
-  const { assetId, composition, ...geometry } = media;
+  const { assetId, composition, color: paint, ...geometry } = media;
+  const remembered = readColor(paint);
+  const rememberedColor = remembered === invalid ? undefined : remembered;
   const previous = memory[assetId]?.composition;
   const next: BackgroundMediaMemoryEntry =
     mode === "advanced"
-      ? { ...geometry, ...(composition === undefined ? {} : { composition }) }
+      ? {
+          ...geometry,
+          ...(rememberedColor === undefined ? {} : { color: rememberedColor }),
+          ...(composition === undefined ? {} : { composition }),
+        }
       : {
           ...geometry,
+          ...(rememberedColor === undefined ? {} : { color: rememberedColor }),
           ...(previous === undefined ? {} : { composition: previous }),
         };
 

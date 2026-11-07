@@ -192,7 +192,7 @@ const envelopeFor = (
   binding: { semanticKey: string; format?: string; precision?: number },
   themeLanguage = "en",
 ) => ({
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id,
   metadata: { name, themeLanguage },
@@ -365,7 +365,7 @@ const envelopeFor = (
  * (`chartPaintReferences`).
  */
 const chartEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_CHART_THEME_ID,
   metadata: { name: "E2E chart", themeLanguage: "en" },
@@ -488,7 +488,7 @@ export const BADGE_INK = { r: 232, g: 236, b: 243 } as const;
  *  An empty scene is deliberate: no authored node can contribute a light pixel,
  *  so what a test sees on the artboard is the host's bytes and nothing else. */
 const mediaEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_MEDIA_THEME_ID,
   metadata: { name: "E2E media", themeLanguage: "en" },
@@ -498,8 +498,11 @@ const mediaEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
-    media: { assetId: "badge", bounds: "display" as const },
+    media: {
+      assetId: "badge",
+      color: { ref: "palette.bar" as const },
+      bounds: "display" as const,
+    },
   },
   globals: {
     palette: {
@@ -533,7 +536,7 @@ const mediaEnvelope = {
  * panel inside it.
  */
 const backgroundLayerEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_LAYER_THEME_ID,
   metadata: { name: "E2E background layer", themeLanguage: "en" },
@@ -543,9 +546,9 @@ const backgroundLayerEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
     media: {
       assetId: "backdrop",
+      color: { ref: "palette.bar" as const },
       bounds: "theme" as const,
       offsetY: 0.25,
     },
@@ -616,7 +619,7 @@ const backgroundLayerEnvelope = {
  * be the paint.
  */
 const backgroundEdgeEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_EDGE_THEME_ID,
   metadata: { name: "E2E background edge", themeLanguage: "en" },
@@ -626,9 +629,9 @@ const backgroundEdgeEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
     media: {
       assetId: "edge",
+      color: { ref: "palette.bar" as const },
       bounds: "theme" as const,
       offsetY: 1,
     },
@@ -668,7 +671,7 @@ const backgroundEdgeEnvelope = {
  * colour.
  */
 const backgroundFlipEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_BACKGROUND_FLIP_THEME_ID,
   metadata: { name: "E2E background flip", themeLanguage: "en" },
@@ -678,9 +681,9 @@ const backgroundFlipEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
     media: {
       assetId: "flipward",
+      color: { ref: "palette.bar" as const },
       bounds: "theme" as const,
       flipX: true,
     },
@@ -744,7 +747,7 @@ const backgroundFlipEnvelope = {
 /** A two-tone source as the theme's own background, with nothing else drawing:
  *  the panel-free half of the rotation proof. */
 const twoToneThemeBoundsEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: TWO_TONE_THEME_BOUNDS,
   metadata: { name: "E2E two-tone theme bounds", themeLanguage: "en" },
@@ -754,8 +757,11 @@ const twoToneThemeBoundsEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
-    media: { assetId: "two-tone", bounds: "theme" as const },
+    media: {
+      assetId: "two-tone",
+      color: { ref: "palette.bar" as const },
+      bounds: "theme" as const,
+    },
   },
   globals: {
     palette: {
@@ -791,7 +797,7 @@ const twoToneThemeBoundsEnvelope = {
  * the paint.
  */
 const twoToneDisplayBoundsEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: TWO_TONE_DISPLAY_BOUNDS,
   metadata: { name: "E2E two-tone display bounds", themeLanguage: "en" },
@@ -801,8 +807,11 @@ const twoToneDisplayBoundsEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
-    media: { assetId: "two-tone", bounds: "display" as const },
+    media: {
+      assetId: "two-tone",
+      color: { ref: "palette.bar" as const },
+      bounds: "display" as const,
+    },
   },
   globals: {
     palette: {
@@ -877,7 +886,7 @@ const twoToneDisplayBoundsEnvelope = {
  * screen point maps back to readable.
  */
 const glassTwoToneEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: GLASS_TWO_TONE_THEME,
   metadata: { name: "E2E glass two-tone", themeLanguage: "en" },
@@ -887,8 +896,11 @@ const glassTwoToneEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
-    media: { assetId: "two-tone", bounds: "theme" as const },
+    media: {
+      assetId: "two-tone",
+      color: { ref: "palette.bar" as const },
+      bounds: "theme" as const,
+    },
   },
   globals: {
     palette: {
@@ -998,7 +1010,7 @@ const glassTwoToneEnvelope = {
  *  pixel on the display changes across two decoded frames. An empty scene, so
  *  the theme carries no glass and answers `video-background`. */
 export const videoEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_VIDEO_THEME_ID,
   metadata: { name: "E2E video", themeLanguage: "en" },
@@ -1008,8 +1020,11 @@ export const videoEnvelope = {
     contentFit: "contain" as const,
   },
   background: {
-    color: { ref: "palette.bar" as const },
-    media: { assetId: "loop", bounds: "theme" as const },
+    media: {
+      assetId: "loop",
+      color: { ref: "palette.bar" as const },
+      bounds: "theme" as const,
+    },
   },
   globals: {
     palette: {
@@ -1034,7 +1049,7 @@ export const videoEnvelope = {
 
 /** The overhang composition, unmarked: see {@link HOST_OVERHANG_THEME_ID}. */
 const overhangEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_OVERHANG_THEME_ID,
   metadata: { name: "E2E overhang", themeLanguage: "en" },
@@ -1173,7 +1188,7 @@ export const GROUPED_GROUP_ANGLE = -20;
  * is: an opaque artboard would cover the bars before any panel sampled them.
  */
 const groupedGlassEnvelope = {
-  schemaVersion: "2.0.0" as const,
+  schemaVersion: "2.1.0" as const,
   fabricVersion: "7.4.0",
   id: HOST_GROUPED_THEME_ID,
   metadata: { name: "E2E grouped glass", themeLanguage: "en" },

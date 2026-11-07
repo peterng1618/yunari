@@ -15,7 +15,7 @@ const THUMBNAIL = btoa(
 export function widgetPack(name = "Starter Cards"): Uint8Array {
   const written = writeWidgetPackage({
     document: {
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       fabricVersion: "7.4.0",
       id: "starter",
       metadata: { themeLanguage: "en", name, version: "1.0.0" },

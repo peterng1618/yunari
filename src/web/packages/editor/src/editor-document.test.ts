@@ -422,6 +422,63 @@ describe("EditorDocument background media memory", () => {
     document.destroy();
   });
 
+  it("restores each asset's own colour", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        color: { ref: "palette.ink" },
+      },
+    });
+
+    document.setBackgroundAsset("b");
+    expect(document.envelope.background?.media?.color).toBeUndefined();
+
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media?.color).toEqual({
+      ref: "palette.ink",
+    });
+    document.destroy();
+  });
+
+  it("moves the page paint onto the first picture and back when it is cleared", () => {
+    const document = memoryDocument();
+    document.setBackground({ color: { ref: "palette.page" } });
+
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.color).toBeUndefined();
+    expect(document.envelope.background?.media?.color).toEqual({
+      ref: "palette.page",
+    });
+
+    document.setBackgroundAsset(undefined);
+    expect(document.envelope.background?.media).toBeUndefined();
+    expect(document.envelope.background?.color).toEqual({
+      ref: "palette.page",
+    });
+    document.destroy();
+  });
+
+  it("turns a page colour restated beside a media into the media's own", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      color: { ref: "palette.paper" },
+      media: { assetId: "a", bounds: "theme" },
+    });
+
+    // One owner: the page slot is gone and the media carries the colour.
+    expect(document.envelope.background?.color).toBeUndefined();
+    expect(document.envelope.background?.media?.color).toEqual({
+      ref: "palette.paper",
+    });
+    document.destroy();
+  });
+
   it("captures a geometry edit made after a switch", () => {
     const document = memoryDocument();
     document.setBackgroundAsset("a");

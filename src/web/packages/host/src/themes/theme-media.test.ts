@@ -167,9 +167,9 @@ describe("panelVideoPlacement", () => {
       globals: palette,
       background: {
         mode: "advanced",
-        color: { ref: "palette.ink" },
         media: {
           assetId: "bg",
+          color: { ref: "palette.ink" },
           bounds: "display",
           composition: { anchor: "left", extent: 0.65, fade: 0.12 },
         },

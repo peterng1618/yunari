@@ -531,7 +531,7 @@ test.describe("the stage looks through a display", () => {
     // A 4:3 board under a 19.5:9 lens leaves side bars, and a horizontal
     // gradient makes the board's edge and the bar meet on one axis.
     const envelope = withRoleTokens({
-      schemaVersion: "2.0.0" as const,
+      schemaVersion: "2.1.0" as const,
       fabricVersion: "7.4.0" as const,
       id: "e2e-gradient-lens",
       metadata: { name: "Gradient lens", themeLanguage: "en" },

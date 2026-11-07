@@ -93,8 +93,11 @@ describe("set_background composition", () => {
     });
     expect(result.isError).toBeUndefined();
 
+    // The blank theme's page paint moves onto the first picture, as the
+    // editor's own asset switch does: one owner for the colour.
     expect(ctx.drafts.current().envelope.background?.media).toEqual({
       assetId: "clip",
+      color: { ref: "palette.chartTrack" },
       bounds: "display",
       offsetX: 0.25,
       scale: 2,

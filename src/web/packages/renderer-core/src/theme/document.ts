@@ -310,6 +310,14 @@ export const BACKGROUND_MEDIA_DEFAULTS = {
 
 export interface BackgroundMedia {
   readonly assetId: string;
+  /**
+   * The paint behind this media: it fills the board and the letterbox bars,
+   * and shows wherever an advanced composition leaves the box uncovered.
+   * Authored here rather than on the background so each picture carries the
+   * colour it was framed against; a background with no media keeps its own
+   * `color` instead, and a document carrying both is refused.
+   */
+  readonly color?: StyleValue;
   /** The box the layer is clipped to: the artboard rect or the display rect. */
   readonly bounds: BackgroundMediaBounds;
   /** Moves the centre by a fraction of the box's own dimensions; absent means 0.
@@ -345,17 +353,37 @@ export type BackgroundMode = (typeof BACKGROUND_MODES)[number];
 /**
  * The bottom-most layer of the composition.
  *
- * `color` fills the board and the letterbox bars around it — one paint, so the
- * two cannot disagree. It sits behind the media, so it also shows wherever an
- * anchored media region or fade leaves the box uncovered.
+ * The paint behind the board belongs to the picture it sits behind: with media
+ * declared, `media.color` is the one owner and `color` here is refused. A
+ * background with no media keeps its `color` as the page paint — a blank theme
+ * has nothing else to fill the board with.
  */
 export interface Background {
   /** Absent means simple. An advanced background is the only one allowed to
    *  carry the media's `composition`; the validator and the published schema
    *  refuse it under a simple one rather than ignoring it. */
   readonly mode?: BackgroundMode;
+  /** The page paint when no media is declared. Never a fallback for a media's
+   *  own colour. */
   readonly color?: StyleValue;
   readonly media?: BackgroundMedia;
+}
+
+/**
+ * The paint the background actually shows — one owner for "where the colour
+ * lives".
+ *
+ * With media declared the media carries it; without media the background does.
+ * Every reader resolves through here so a media's colour reaches the board and
+ * its letterbox, and the two slots cannot both be consulted as a fallback.
+ */
+export function backgroundPaintValue(
+  background: Background | undefined,
+): StyleValue | undefined {
+  if (background === undefined) return undefined;
+  return background.media === undefined
+    ? background.color
+    : background.media.color;
 }
 
 /** Themes bind semantic keys, never provider-instance IDs. */

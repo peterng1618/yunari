@@ -224,6 +224,21 @@ function backgroundModeOf(background: Background | undefined): BackgroundMode {
 }
 
 /**
+ * The background with its colour in the one slot the model allows.
+ *
+ * A declared media owns the paint; with no media the background holds the page
+ * paint. Every envelope write passes through here, so a caller that restates a
+ * page colour beside a media moves it onto the media instead of leaving two
+ * copies the validator would refuse.
+ */
+function withOneColorOwner(background: Background): Background {
+  const { media, color } = background;
+  if (media === undefined || color === undefined) return background;
+  const { color: _page, ...withoutPage } = background;
+  return { ...withoutPage, media: { ...media, color } };
+}
+
+/**
  * The theme this editor is authoring: what it says now, every write that
  * changes it, and the file protocol that opens, saves and releases it.
  *
@@ -699,13 +714,9 @@ export class EditorDocument {
     // The chooser first, then the replacement question: an author who opens
     // `New` and then thinks better of it must not be asked to confirm
     // discarding their work on the way to deciding they wanted none of it.
-    // It opens on the display the artboard being replaced is, so a document
-    // already settled on an upright lens is not thrown back to the 16:9 one
-    // without being asked.
-    //
-    // The whole answer travels, not just its size: the display the author
-    // picked is what the new document is shown through, and dropping it here
-    // is what left a portrait artboard inside a landscape frame.
+    // It opens on the size of the artboard being replaced, so a settled shape
+    // is offered back rather than reset. The preview lens is not a question:
+    // the camera derives it from whichever artboard this answer creates.
     const answer = await chooseArtboardSize(this.#envelope.artboard);
     if (answer === undefined) return;
     if (!(await this.confirmReplacement())) return;
@@ -1172,14 +1183,16 @@ export class EditorDocument {
       this.#envelope.background?.media,
       backgroundModeOf(this.#envelope.background),
     );
-    if (background === undefined) {
+    const next =
+      background === undefined ? undefined : withOneColorOwner(background);
+    if (next === undefined) {
       // Omitted rather than stored undefined, for `exactOptionalPropertyTypes`.
       const { background: _background, ...withoutBackground } = this.#envelope;
       this.#writeEnvelope(withoutBackground);
     } else {
-      this.#writeEnvelope({ ...this.#envelope, background });
+      this.#writeEnvelope({ ...this.#envelope, background: next });
     }
-    this.#shell.setBackground(background);
+    this.#shell.setBackground(next);
   }
 
   /**
@@ -1194,8 +1207,14 @@ export class EditorDocument {
     const background = this.#envelope.background;
     if (assetId === undefined) {
       if (background?.media === undefined) return;
-      const { media: _media, ...withoutMedia } = background;
-      this.setBackground(withoutMedia);
+      const { media, ...withoutMedia } = background;
+      // The page a cleared picture leaves keeps that picture's paint: the
+      // colour moves back to the background's own slot.
+      this.setBackground(
+        media?.color === undefined
+          ? withoutMedia
+          : { ...withoutMedia, color: media.color },
+      );
       return;
     }
 

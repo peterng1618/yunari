@@ -51,7 +51,8 @@ export type IssueCode =
   | "too-deep"
   | "too-many-nodes"
   | "invalid-fabric-scene"
-  | "composition-needs-advanced";
+  | "composition-needs-advanced"
+  | "duplicate-background-color";
 
 export interface ValidationIssue {
   readonly code: IssueCode;
@@ -397,7 +398,20 @@ function validateBackground(
     envelopeKeysFor("background"),
     "The background",
   );
-  validateStyleValue(issues, value["color"], "/background/color", globalKeys);
+
+  // The colour sits behind one picture, so it is authored on that picture.
+  // A media-plus-colour document is the old shape and is refused rather than
+  // read with one of the two copies silently ignored.
+  const declaredMedia = value["media"];
+  if (declaredMedia !== undefined && value["color"] !== undefined) {
+    issues.add(
+      "duplicate-background-color",
+      "/background/color",
+      'Declare the background colour on "media" when the background has media; "background.color" is only for a background with no media.',
+    );
+  } else {
+    validateStyleValue(issues, value["color"], "/background/color", globalKeys);
+  }
 
   // The composition keys belong to the advanced model only. Refused rather
   // than ignored: a simple document carrying one would draw a hard-edged cover
@@ -411,8 +425,7 @@ function validateBackground(
     );
   }
   if (value["mode"] !== "advanced") {
-    const media = value["media"];
-    if (isRecord(media) && media["composition"] !== undefined) {
+    if (isRecord(declaredMedia) && declaredMedia["composition"] !== undefined) {
       issues.add(
         "composition-needs-advanced",
         "/background/media/composition",
@@ -421,7 +434,7 @@ function validateBackground(
     }
   }
 
-  const media = value["media"];
+  const media = declaredMedia;
   if (media === undefined) return;
   if (!issues.object(media, "/background/media", "The background media"))
     return;
@@ -431,6 +444,12 @@ function validateBackground(
     "/background/media",
     envelopeKeysFor("backgroundMedia"),
     "The background media",
+  );
+  validateStyleValue(
+    issues,
+    media["color"],
+    "/background/media/color",
+    globalKeys,
   );
   issues.enumValue(
     media["bounds"],

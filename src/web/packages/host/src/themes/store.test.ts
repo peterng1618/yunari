@@ -38,7 +38,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 
 function envelopeFor(id: string, name: string): FabricThemeEnvelope {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },
@@ -275,7 +275,7 @@ describe("ThemeStore", () => {
     );
 
     const read = await store.read("legacy");
-    expect(read?.envelope.schemaVersion).toBe("2.0.0");
+    expect(read?.envelope.schemaVersion).toBe("2.1.0");
     expect(read?.envelope.metadata?.name).toBe("Legacy");
   });
 
@@ -291,7 +291,7 @@ describe("ThemeStore", () => {
     );
 
     await expect(store.read("ancient")).rejects.toThrow(
-      "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+      "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
     );
   });
 
@@ -892,8 +892,11 @@ describe("ThemeStore", () => {
           height: 1080,
         },
         background: {
-          color: { ref: "palette.night" },
-          media: { assetId: "loop", bounds: "theme" },
+          media: {
+            assetId: "loop",
+            color: { ref: "palette.night" },
+            bounds: "theme",
+          },
         },
         globals: {
           typeTokens: {

@@ -69,7 +69,11 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
     background,
   } = props;
   const uses = usage?.();
-  const color = background?.()?.color;
+  const themeBackground = background?.();
+  const color =
+    themeBackground?.media === undefined
+      ? themeBackground?.color
+      : themeBackground.media.color;
   const referenced =
     uses === undefined ||
     (uses[id]?.length ?? 0) > 0 ||

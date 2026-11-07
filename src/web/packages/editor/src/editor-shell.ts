@@ -2,6 +2,7 @@ import {
   type Artboard,
   type AssetReference,
   type Background,
+  backgroundPaintValue,
   cropsToDisc,
   cssArtboardPaint,
   cssArtboardPaintMapped,
@@ -310,7 +311,7 @@ function applyArtboardPaint(
   const resolve = (value: Parameters<typeof resolveStyleValue>[0]): unknown => {
     return backgroundStylePaint(value, globals);
   };
-  const paint = resolve(documentBackground?.color);
+  const paint = resolve(backgroundPaintValue(documentBackground));
   // A gradient is rebuilt only when the paint or the board's size changes, the
   // same memo the player keeps. The plate is rebuilt whenever it is missing,
   // because `loadFromJSON` clears the canvas it lived on.

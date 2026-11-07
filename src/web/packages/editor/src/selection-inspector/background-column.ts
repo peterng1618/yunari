@@ -47,9 +47,14 @@ type AnchorMode = "full" | BackgroundAnchor;
  */
 
 /** The palette reference the stored colour carries, or `""`. A literal is not a
-    token this control offers, so it reads as no colour at all. */
+    token this control offers, so it reads as no colour at all. The slot is
+    chosen by media presence: the media owns the colour when it exists, the
+    background's page paint otherwise — never a fallback between them. */
 function colourRef(background: Background | undefined): string {
-  const colour = background?.color;
+  const colour =
+    background?.media === undefined
+      ? background?.color
+      : background.media.color;
   return colour !== undefined &&
     "ref" in colour &&
     colour.ref.startsWith("palette.")
@@ -377,13 +382,29 @@ export function writeBackgroundField(
   switch (fieldId) {
     case "background.color": {
       if (typeof value !== "string") return undefined;
-      if (value === "") {
-        // Omit rather than store undefined, for `exactOptionalPropertyTypes`.
+      const paint =
+        value === ""
+          ? undefined
+          : value.startsWith("palette.")
+            ? ({ ref: value as GlobalRef } as const)
+            : undefined;
+      if (value !== "" && paint === undefined) return undefined;
+      if (media === undefined) {
+        // The page paint of a background with no picture. Omitted rather than
+        // stored undefined, for `exactOptionalPropertyTypes`.
         const { color: _color, ...withoutColor } = current;
-        return withoutColor;
+        return paint === undefined
+          ? withoutColor
+          : { ...current, color: paint };
       }
-      if (!value.startsWith("palette.")) return undefined;
-      return { ...current, color: { ref: value as GlobalRef } };
+      // The picture owns the colour: writing the media slot drops the page
+      // paint so the document cannot carry both.
+      const { color: _page, ...withoutPage } = current;
+      if (paint === undefined) {
+        const { color: _color, ...withoutColor } = media;
+        return { ...withoutPage, media: withoutColor };
+      }
+      return { ...withoutPage, media: { ...media, color: paint } };
     }
     case "background.bounds": {
       if (media === undefined || typeof value !== "string") return undefined;

@@ -58,6 +58,7 @@ describe("readBackgroundMediaMemory", () => {
         version: 1,
         media: {
           a: {
+            color: { ref: "palette.ink" },
             bounds: "display",
             offsetY: -0.5,
             flipY: true,
@@ -68,6 +69,7 @@ describe("readBackgroundMediaMemory", () => {
       }),
     ).toEqual({
       a: {
+        color: { ref: "palette.ink" },
         bounds: "display",
         offsetY: -0.5,
         flipY: true,
@@ -75,12 +77,26 @@ describe("readBackgroundMediaMemory", () => {
       },
     });
   });
+
+  it("drops an entry whose colour is not a palette reference", () => {
+    expect(
+      readBackgroundMediaMemory({
+        version: 1,
+        media: {
+          literal: { bounds: "theme", color: { value: "#000000" } },
+          bare: { bounds: "theme", color: "#000000" },
+          good: { bounds: "theme", color: { ref: "palette.ink" } },
+        },
+      }),
+    ).toEqual({ good: { bounds: "theme", color: { ref: "palette.ink" } } });
+  });
 });
 
 describe("rememberBackgroundMedia", () => {
   it("captures every field except the asset id", () => {
     const media: BackgroundMedia = {
       assetId: "a",
+      color: { ref: "palette.ink" },
       bounds: "display",
       offsetX: 0.25,
       scale: 2,
@@ -90,6 +106,7 @@ describe("rememberBackgroundMedia", () => {
     };
     expect(rememberBackgroundMedia({}, media, "advanced")).toEqual({
       a: {
+        color: { ref: "palette.ink" },
         bounds: "display",
         offsetX: 0.25,
         scale: 2,

@@ -130,7 +130,7 @@ async function openFixture(
   }
   const result = writeThemePackage({
     envelope: {
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       fabricVersion: "7.4.0",
       id: `snapping-${kind}-${mode}`,
       metadata: { themeLanguage: "en" },
@@ -973,7 +973,7 @@ async function openNestedFixture(page: Page): Promise<void> {
   });
   const result = writeThemePackage({
     envelope: {
-      schemaVersion: "2.0.0",
+      schemaVersion: "2.1.0",
       fabricVersion: "7.4.0",
       id: "snapping-part-level",
       metadata: { themeLanguage: "en" },

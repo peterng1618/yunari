@@ -67,6 +67,7 @@ describe("createNewFabricTheme", () => {
     expect(theme.assets).toHaveLength(1);
     expect(theme.background?.media).toEqual({
       assetId: "starter-backdrop",
+      color: { ref: "palette.none" },
       bounds: "theme",
     });
   });

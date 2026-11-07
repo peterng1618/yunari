@@ -110,6 +110,7 @@ const ENVELOPE_KEYS = {
   background: ["mode", "color", "media"],
   backgroundMedia: [
     "assetId",
+    "color",
     "bounds",
     "scale",
     "offsetX",

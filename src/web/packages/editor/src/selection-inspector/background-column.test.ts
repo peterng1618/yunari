@@ -499,6 +499,74 @@ describe("writeBackgroundField", () => {
     ).toBeUndefined();
   });
 
+  it("writes the colour on the picture that carries it", () => {
+    // With media, the media owns the paint; the page slot is dropped so the
+    // document never carries both.
+    const face: Background = {
+      color: { ref: "palette.page" },
+      media: { assetId: "photo", bounds: "theme" },
+    };
+    expect(
+      writeBackgroundField(face, "background.color", "palette.ink"),
+    ).toEqual({
+      media: {
+        assetId: "photo",
+        bounds: "theme",
+        color: { ref: "palette.ink" },
+      },
+    });
+    // Clearing removes only the media's colour and keeps the picture.
+    expect(writeBackgroundField(face, "background.color", "")).toEqual({
+      media: { assetId: "photo", bounds: "theme" },
+    });
+    // With no media the colour is the page paint.
+    expect(
+      writeBackgroundField(
+        { color: { ref: "palette.page" } },
+        "background.color",
+        "palette.ink",
+      ),
+    ).toEqual({ color: { ref: "palette.ink" } });
+    expect(
+      writeBackgroundField(
+        { color: { ref: "palette.page" } },
+        "background.color",
+        "",
+      ),
+    ).toEqual({});
+    // A literal is not a token this control offers.
+    expect(
+      writeBackgroundField(face, "background.color", "#000000"),
+    ).toBeUndefined();
+  });
+
+  it("reads the colour from the slot the media presence selects", () => {
+    const globals = {
+      palette: {
+        ink: { name: "Ink", value: { kind: "solid", color: "#e8ecf3" } },
+        page: { name: "Page", value: { kind: "solid", color: "#101318" } },
+      },
+    } as unknown as FabricGlobals;
+    const sections = backgroundColumn({
+      background: {
+        color: { ref: "palette.page" },
+        media: {
+          assetId: "photo",
+          bounds: "theme",
+          color: { ref: "palette.ink" },
+        },
+      },
+      assets: [],
+      globals,
+    });
+
+    // The media's colour wins because the media is the owner; the dormant page
+    // key is never read as a fallback.
+    expect(
+      sections[0]?.fields.find((field) => field.id === "background.color"),
+    ).toMatchObject({ value: "palette.ink", colour: "#e8ecf3" });
+  });
+
   it("leaves the media and mode ids to the document's switch seam", () => {
     const background: Background = {
       media: { assetId: "loop", bounds: "theme" },

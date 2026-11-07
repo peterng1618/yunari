@@ -137,7 +137,7 @@ describe("editor theme package", () => {
     expect(
       readEditorThemePackage(
         archive({
-          schemaVersion: "2.0.0",
+          schemaVersion: "2.1.0",
           name: "Newer",
           tokens,
         }),
@@ -145,7 +145,7 @@ describe("editor theme package", () => {
     ).toMatchObject({
       ok: false,
       message:
-        "Schema version 2.0.0 is not supported by this build (expected 1.0.0).",
+        "Schema version 2.1.0 is not supported by this build (expected 1.0.0).",
     });
   });
 

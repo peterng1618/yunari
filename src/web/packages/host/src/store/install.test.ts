@@ -24,7 +24,7 @@ const WIDGET_PACK_BYTES = zipSync(
   {
     "widget.json": strToU8(
       JSON.stringify({
-        schemaVersion: "2.0.0",
+        schemaVersion: "2.1.0",
         fabricVersion: "7.4.0",
         id: "starter",
         metadata: { themeLanguage: "en", name: "Starter Cards" },

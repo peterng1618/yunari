@@ -1,4 +1,8 @@
-import type { Background, FabricPalette } from "@yunari/renderer-core";
+import type {
+  Background,
+  FabricPalette,
+  StyleValue,
+} from "@yunari/renderer-core";
 import {
   objectPaletteReferences,
   reassignObjectPaletteReferences,
@@ -48,13 +52,25 @@ export function reassignPaletteToken(
   const from = `palette.${id}` as const;
   const to = `palette.${replacement}` as const;
   reassignObjectPaletteReferences(canvas, from, to);
-  const color = background?.color;
+  const swap = (value: StyleValue): StyleValue =>
+    "ref" in value && value.ref === from ? { ref: to } : value;
   const nextBackground: Background | undefined =
     background === undefined
       ? undefined
-      : color !== undefined && "ref" in color && color.ref === from
-        ? { ...background, color: { ref: to } }
-        : background;
+      : {
+          ...background,
+          ...(background.color === undefined
+            ? {}
+            : { color: swap(background.color) }),
+          ...(background.media?.color === undefined
+            ? {}
+            : {
+                media: {
+                  ...background.media,
+                  color: swap(background.media.color),
+                },
+              }),
+        };
   const nextPalette = { ...palette };
   delete nextPalette[id];
   return { from, to, background: nextBackground, palette: nextPalette };

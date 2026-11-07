@@ -19,7 +19,7 @@ type EnvelopeOverrides = Omit<Partial<FabricThemeEnvelope>, "schemaVersion"> & {
 /** A minimal valid envelope. Tests mutate clones of this. */
 function base(overrides: EnvelopeOverrides = {}): FabricThemeEnvelope {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id: "demo-theme",
     metadata: { themeLanguage: "en" },
