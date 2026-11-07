@@ -41,7 +41,9 @@ function fixture(withMedia: boolean) {
     ? GLASS_ENVELOPE
     : {
         ...GLASS_ENVELOPE,
-        background: { color: GLASS_ENVELOPE.background.color },
+        // The twin has no media, so the page slot owns the paint: the same
+        // transparent ground the media carries in the other arm.
+        background: { color: { ref: "palette.none" as const } },
       };
   const written = writeThemePackage({
     envelope: withRoleTokens({ ...envelope, artboard }),
