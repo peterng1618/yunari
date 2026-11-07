@@ -600,6 +600,33 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
       restoreDisplays(previous);
     }
   });
+
+  /**
+   * The removal dialog gives focus back to the Delete that opened it. This is
+   * the proof: jsdom has no `showModal`/`close`, so a DOM test there cannot tell
+   * an open dialog from an attribute, and the browser's own focus handling is
+   * what the component relies on.
+   */
+  test("returns focus to Delete when the removal is dismissed", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      !isDesktopSurface(testInfo),
+      "one desktop pass owns the shared host state",
+    );
+
+    resetStores();
+    await page.goto(`${HOST}/`);
+    await expect(page.locator("h1")).toHaveText("Choose a theme");
+
+    const remove = page.locator("button.theme-delete").first();
+    await remove.click();
+    await expect(page.locator("dialog.theme-confirm")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog.theme-confirm")).toHaveCount(0);
+    await expect(remove).toBeFocused();
+  });
 });
 
 test.describe("the settings page in a screenshot", () => {

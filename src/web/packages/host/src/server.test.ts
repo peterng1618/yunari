@@ -8098,6 +8098,32 @@ describe("The pages a consumer lands on", () => {
     }
   });
 
+  it("refuses the chooser when the built directory has no entry", async () => {
+    // The configured directory exists but the build never emitted the entry:
+    // the same blank-page trap as a missing directory, and the same refusal.
+    const empty = path.join(tmpDir, "empty-admin");
+    await fs.mkdir(empty, { recursive: true });
+    const unrunnable = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: {
+        player: tmpDir,
+        editor: tmpDir,
+        admin: ADMIN_DIR,
+        adminUi: empty,
+      },
+      themeStore: store,
+    });
+
+    try {
+      const res = await request(unrunnable.server, "GET", "/");
+
+      expect(res.status).toBe(404);
+      expect(res.text()).toContain("npm run build -w @yunari/host");
+    } finally {
+      await unrunnable.close();
+    }
+  });
+
   it("forwards settings to the editor's one settings surface", async () => {
     const res = await request(hosted.server, "GET", "/settings");
 
