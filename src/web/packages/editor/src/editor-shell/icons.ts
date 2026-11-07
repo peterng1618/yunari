@@ -83,6 +83,7 @@ import {
   Wallpaper,
   X,
 } from "lucide-react";
+import * as LucideGlyphs from "lucide-react";
 import type * as React from "react";
 import { createElement } from "react";
 import type { PathPresetId, ShapeKind } from "../new-object-defaults.js";
@@ -454,7 +455,8 @@ export const KIND_GLYPHS = {
 /** The asset finder's six built-in tabs, one glyph per category. The tab is a
  *  place, not a layer: `Type` for fonts, `Shapes` for icons, the picture and
  *  film for media, `Palette` for presets, and `Wallpaper` for this PC's own
- *  library. A category a plugin declares has no entry, so the lookup falls
+ *  library. A category a plugin declares names its own glyph in the manifest;
+ *  `declaredCategoryGlyph` resolves that name, and an unresolvable one falls
  *  back to the picture rather than drawing no mark at all. */
 export const FINDER_TAB_GLYPHS: Readonly<Record<string, LucideIcon>> = {
   font: Type,
@@ -468,13 +470,48 @@ export const FINDER_TAB_GLYPHS: Readonly<Record<string, LucideIcon>> = {
 /** A category this build does not name still wears a real mark. */
 export const FINDER_TAB_FALLBACK_GLYPH: LucideIcon = ImageIcon;
 
+/** The glyph a declared category names, or undefined when the name is not a
+ *  Lucide icon. Manifest names arrive in either casing (`users`, `Users`), so
+ *  the lookup converts to the package's own component name first. Only a
+ *  component the package created has a `displayName`: its non-icon exports
+ *  (`Icon`, `createLucideIcon`) do not, and are not glyphs. */
+export function declaredCategoryGlyph(icon: string): LucideIcon | undefined {
+  const pascal = icon
+    .split(/[-_\s]+/)
+    .filter((part) => part !== "")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(pascal)) return undefined;
+
+  const registry = LucideGlyphs as unknown as Readonly<Record<string, unknown>>;
+  if (!Object.hasOwn(registry, pascal)) return undefined;
+  const glyph = registry[pascal];
+  if (
+    glyph === null ||
+    (typeof glyph !== "function" && typeof glyph !== "object") ||
+    typeof (glyph as { displayName?: unknown }).displayName !== "string"
+  ) {
+    return undefined;
+  }
+  return glyph as LucideIcon;
+}
+
 /** The one glyph lookup, so the fallback is decided here rather than at each
- *  call site. A plugin id may be `constructor` or `toString`, which the map
- *  inherits from `Object`; only its own keys are glyphs. */
-export function finderTabGlyph(category: string): LucideIcon {
-  return Object.hasOwn(FINDER_TAB_GLYPHS, category)
-    ? (FINDER_TAB_GLYPHS[category] as LucideIcon)
-    : FINDER_TAB_FALLBACK_GLYPH;
+ *  call site. A built-in id owns its glyph; a declared category's manifest
+ *  `icon` is the second question. A plugin id may be `constructor` or
+ *  `toString`, which the map inherits from `Object`; only its own keys are
+ *  glyphs. */
+export function finderTabGlyph(
+  category: string,
+  declaredIcon?: string,
+): LucideIcon {
+  if (Object.hasOwn(FINDER_TAB_GLYPHS, category))
+    return FINDER_TAB_GLYPHS[category] as LucideIcon;
+  if (declaredIcon !== undefined) {
+    const declared = declaredCategoryGlyph(declaredIcon);
+    if (declared !== undefined) return declared;
+  }
+  return FINDER_TAB_FALLBACK_GLYPH;
 }
 
 /** The tree's open/closed chevrons. Each points the way the press goes, and the

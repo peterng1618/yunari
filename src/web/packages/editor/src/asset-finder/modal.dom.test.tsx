@@ -452,6 +452,10 @@ describe("AssetFinder tabs", () => {
 
     expect(tab("brand").textContent).toContain("Brand assets");
     expect(tab("brand").getAttribute("aria-selected")).toBe("true");
+    // The declared `icon` is the tab's mark, not the generic fallback.
+    expect(tab("brand").querySelector("svg")?.getAttribute("class")).toContain(
+      "lucide-shapes",
+    );
   });
 
   it("opens on the category a caller asked for", async () => {

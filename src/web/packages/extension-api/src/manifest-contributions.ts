@@ -86,6 +86,11 @@ const SETTINGS_PAGE_KEYS = ["id", "label", "section", "fields", "ui"] as const;
 
 /** The field key becomes a settings object key and a secret's name, so it is
  *  a dotted lower-case identifier with a bounded length. */
+/** A declared category's icon names a Lucide glyph, never a URL, data
+ *  reference or path: the editor resolves the name against the icon set it
+ *  already draws. */
+const CATEGORY_ICON_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/;
+
 const FIELD_KEY_PATTERN = /^[a-z][a-zA-Z0-9.]{0,63}$/;
 const MAX_FIELD_LENGTH = 100_000;
 
@@ -116,6 +121,10 @@ function readAssetCategory(
   if (!label.ok) return label;
   const icon = readString(entry["icon"], `${subject}.icon`, MAX_NAME);
   if (!icon.ok) return icon;
+  if (!CATEGORY_ICON_PATTERN.test(icon.value))
+    return refuse(
+      `${subject}.icon must be a Lucide icon name, not a URL or path.`,
+    );
   const resultKind = readString(
     entry["resultKind"],
     `${subject}.resultKind`,

@@ -148,6 +148,28 @@ describe("readPluginManifest", () => {
     });
   });
 
+  it("refuses a category icon that is a URL, data reference or path", () => {
+    for (const icon of [
+      "https://example.test/users.svg",
+      "data:image/svg+xml;base64,AAAA",
+      "images/users.svg",
+      "../users",
+    ]) {
+      expect(
+        readPluginManifest({
+          ...declarativeManifest(),
+          contributes: {
+            assetCategories: [{ ...ASSET_CATEGORY, icon }],
+          },
+        }),
+      ).toEqual({
+        ok: false,
+        reason:
+          "contributes.assetCategories[0].icon must be a Lucide icon name, not a URL or path.",
+      });
+    }
+  });
+
   it("refuses more than 32 capabilities", () => {
     expect(
       readPluginManifest({

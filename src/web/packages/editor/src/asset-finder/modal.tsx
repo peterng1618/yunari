@@ -245,6 +245,11 @@ export function AssetFinder({
   const declaredLabels = new Map(
     declared.map((category) => [category.id, category.label]),
   );
+  /** A declared category names its own glyph; a built-in id still reads the
+   *  built-in map inside `finderTabGlyph`. */
+  const declaredIcons = new Map(
+    declared.map((category) => [category.id, category.icon]),
+  );
   const categories = categoryTabs(declared, sources).filter(
     (category) => present(category, sources) || declaredIds.has(category),
   );
@@ -523,7 +528,12 @@ export function AssetFinder({
         tabs={categories.map((category) => ({
           id: category,
           label: declaredLabels.get(category) ?? categoryLabel(category),
-          icon: <Glyph icon={finderTabGlyph(category)} size={13} />,
+          icon: (
+            <Glyph
+              icon={finderTabGlyph(category, declaredIcons.get(category))}
+              size={13}
+            />
+          ),
         }))}
         active={active}
         onTabChange={(category) => {

@@ -371,6 +371,29 @@ it("falls back to the image glyph for a category the build does not name", () =>
   expect(FINDER_TAB_FALLBACK_GLYPH).toBe(FINDER_TAB_GLYPHS.image);
 });
 
+it("draws a declared category's own Lucide icon in either casing", () => {
+  // The manifest may spell the name as the icon's kebab name or as the
+  // component it exports; both resolve to the one vocabulary entry.
+  expect(finderTabGlyph("brand", "shapes")).toBe(FINDER_TAB_GLYPHS.icon);
+  expect(finderTabGlyph("brand", "Shapes")).toBe(FINDER_TAB_GLYPHS.icon);
+  expect(finderTabGlyph("brand", "image-icon")).toBe(FINDER_TAB_GLYPHS.image);
+});
+
+it("falls back when a declared icon is not a glyph name", () => {
+  // The manifest boundary refuses these; the lookup is total anyway, because
+  // a name it cannot draw must not take the tab's mark with it.
+  for (const icon of [
+    "https://example.test/users.svg",
+    "data:image/svg+xml;base64,AAAA",
+    "images/users.svg",
+    "constructor",
+    "toString",
+    "icon",
+  ]) {
+    expect(finderTabGlyph("brand", icon)).toBe(FINDER_TAB_FALLBACK_GLYPH);
+  }
+});
+
 it("gives every known card unit its own glyph, and an unknown id a fallback", () => {
   // The map is open because the unit set is installed rather than shipped; the
   // distinctness is still the rule a keyed map enforces for the units it knows,
