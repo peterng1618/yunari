@@ -89,6 +89,12 @@ opaque token. A revoked or consent-stale plugin's worker is stopped and its
 handles are closed; its panel-family rows are removed from the live registry,
 and the display disconnects rather than being driven by a stale worker.
 
+A worker exports one handler per host method it serves, named exactly as the
+method: `describe`, `sample`, `asset.search`, `panel.open` and so on. A dotted
+name is a string-literal export — `export { search as "asset.search" }` — because
+a JavaScript export name need not be an identifier. A plain
+`export function search()` does not serve `asset.search`.
+
 A trusted-worker plugin is ordinary Node code with this account's privileges:
 the fork is not an OS sandbox, and the host mediates only what the plugin does
 through the host API. Through that API a plugin never receives a host

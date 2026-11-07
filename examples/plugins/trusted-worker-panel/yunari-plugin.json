@@ -1,0 +1,32 @@
+{
+  "manifestVersion": 1,
+  "id": "example-panel",
+  "name": "Example panel family",
+  "version": "1.0.0",
+  "description": "Claims a placeholder USB panel and drives it from a trusted worker.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "trusted-worker",
+  "capabilities": ["panel:drive", "usb:device"],
+  "main": "main.mjs",
+  "contributes": {
+    "panelFamilies": [
+      {
+        "id": "example-panel",
+        "label": "Example 480×1280 panel",
+        "vendorId": 4660,
+        "productId": 22136,
+        "geometry": { "width": 480, "height": 1280 },
+        "support": {
+          "maker": "Example Corp",
+          "hardwareRevision": "v1",
+          "supportedFirmware": ["1.0.0"],
+          "updatedAt": "2026-11-07"
+        },
+        "commands": ["hello", "brightness", "screen"],
+        "transports": ["usb"],
+        "interfaceNumber": 0
+      }
+    ]
+  }
+}

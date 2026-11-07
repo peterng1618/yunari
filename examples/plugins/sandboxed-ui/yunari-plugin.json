@@ -1,0 +1,44 @@
+{
+  "manifestVersion": 1,
+  "id": "example-sandboxed-ui",
+  "name": "Example sandboxed UI",
+  "version": "1.0.0",
+  "description": "Draws a custom asset body and a settings page in the sandboxed frame.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "sandboxed-ui",
+  "capabilities": ["asset:provide", "settings:own", "ui:frame"],
+  "ui": "assets.html",
+  "contributes": {
+    "assetSources": [
+      {
+        "id": "example-characters",
+        "label": "Example characters",
+        "category": "image",
+        "body": "example-characters",
+        "host": "rickandmortyapi.com",
+        "request": {
+          "url": "https://rickandmortyapi.com/api/character?page={page}&name={query}",
+          "firstPage": 1,
+          "totalPath": "/info/pages"
+        },
+        "result": {
+          "itemsPath": "/results",
+          "id": "/url",
+          "name": "/name",
+          "preview": "/image",
+          "subtitle": "/species",
+          "kind": "/type",
+          "sourceUrl": "/url"
+        }
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "example-sandboxed-ui",
+        "label": "Example sandboxed UI",
+        "ui": "settings.html"
+      }
+    ]
+  }
+}

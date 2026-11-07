@@ -1,0 +1,87 @@
+{
+  "manifestVersion": 1,
+  "id": "example-declarative",
+  "name": "Example declarative plugin",
+  "version": "1.0.0",
+  "description": "Adds a finder category, a declarative asset source, a custom telemetry source and a settings form without running code.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "declarative",
+  "capabilities": ["asset:provide", "settings:own"],
+  "contributes": {
+    "assetCategories": [
+      {
+        "id": "example-characters",
+        "label": "Characters",
+        "icon": "users",
+        "resultKind": "image",
+        "body": "grid"
+      }
+    ],
+    "assetSources": [
+      {
+        "id": "example-characters",
+        "label": "Example characters",
+        "category": "example-characters",
+        "body": "grid",
+        "host": "rickandmortyapi.com",
+        "request": {
+          "url": "https://rickandmortyapi.com/api/character?page={page}&name={query}",
+          "pageParam": "page",
+          "firstPage": 1,
+          "totalPath": "/info/pages"
+        },
+        "result": {
+          "itemsPath": "/results",
+          "id": "/url",
+          "name": "/name",
+          "preview": "/image",
+          "subtitle": "/species",
+          "kind": "/type",
+          "sourceUrl": "/url"
+        }
+      }
+    ],
+    "customSources": [
+      {
+        "id": "example-gh-stars",
+        "name": "Example repository stars",
+        "url": "https://api.github.com/repos/nodejs/node",
+        "headers": {
+          "Accept": "application/vnd.github+json",
+          "User-Agent": "yunari-example"
+        },
+        "intervalMs": 3600000,
+        "timeoutMs": 5000,
+        "fields": [
+          {
+            "id": "stars",
+            "label": "Stars",
+            "pointer": "/stargazers_count",
+            "type": "number"
+          },
+          {
+            "id": "forks",
+            "label": "Forks",
+            "pointer": "/forks_count",
+            "type": "number"
+          }
+        ]
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "example-declarative",
+        "label": "Example declarative",
+        "fields": [
+          {
+            "key": "displayName",
+            "label": "Display name",
+            "type": "text",
+            "maxLength": 40
+          }
+        ]
+      }
+    ]
+  }
+}

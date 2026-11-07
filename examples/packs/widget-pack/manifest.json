@@ -1,0 +1,12 @@
+{
+  "format": "yunari-widget-package",
+  "version": 1,
+  "widget": "widget.json",
+  "units": [
+    {
+      "id": "example",
+      "label": "Example card",
+      "objectId": "group-example"
+    }
+  ]
+}

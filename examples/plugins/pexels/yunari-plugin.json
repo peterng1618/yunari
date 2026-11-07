@@ -1,0 +1,43 @@
+{
+  "manifestVersion": 1,
+  "id": "pexels",
+  "name": "Pexels",
+  "version": "1.0.0",
+  "description": "Searches Pexels for free stock photos.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "trusted-worker",
+  "capabilities": [
+    "asset:provide",
+    "network:fetch",
+    "secrets:own",
+    "settings:own"
+  ],
+  "networkHosts": ["api.pexels.com"],
+  "main": "main.mjs",
+  "contributes": {
+    "assetSources": [
+      {
+        "id": "pexels",
+        "label": "Pexels",
+        "category": "image",
+        "body": "grid",
+        "host": "api.pexels.com",
+        "entry": "main.mjs"
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "pexels",
+        "label": "Pexels",
+        "fields": [
+          {
+            "key": "apiKey",
+            "label": "Pexels API key",
+            "type": "secret"
+          }
+        ]
+      }
+    ]
+  }
+}

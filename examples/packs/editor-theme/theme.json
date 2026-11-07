@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "Example editor theme",
+  "tokens": {
+    "--bg": "#0e1116",
+    "--stage": "#141a21",
+    "--panel": "#1a222c",
+    "--panel-2": "#202a36",
+    "--yunari-control-bg": "#101720",
+    "--hdr": "#171f29",
+    "--edge": "#2b3644",
+    "--edge-2": "#394758",
+    "--text": "#e8eef5",
+    "--muted": "#a7b4c4",
+    "--faint": "#6d7c8f",
+    "--accent": "#5fb7ff",
+    "--attention": "#ffc861",
+    "--warn": "#ff9f5a",
+    "--hot": "#ff6b6b"
+  }
+}

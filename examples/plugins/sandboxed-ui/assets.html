@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Example characters</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        background: transparent;
+        color: #e8eef5;
+        font: 14px system-ui, sans-serif;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      input,
+      button {
+        border: 1px solid #2b3644;
+        border-radius: 6px;
+        background: #0d1117;
+        color: inherit;
+        font: inherit;
+        padding: 6px 8px;
+      }
+      input {
+        flex: 1;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+      #status {
+        margin-top: 8px;
+        min-height: 1.2em;
+        color: #a7b4c4;
+      }
+      #results {
+        display: grid;
+        gap: 6px;
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+      }
+      #results li {
+        align-items: baseline;
+        border: 1px solid #2b3644;
+        border-radius: 6px;
+        display: flex;
+        gap: 8px;
+        padding: 6px 8px;
+      }
+      #results span {
+        flex: 1;
+        min-width: 0;
+      }
+      #results small {
+        color: #a7b4c4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <input id="query" placeholder="Search characters" aria-label="Search" />
+      <button id="search" type="button">Search</button>
+    </div>
+    <p id="status" role="status"></p>
+    <ul id="results"></ul>
+    <script>
+      // The frame protocol: the editor mints a nonce for this mount and sends
+      // it in `yunari.frame.init`. Every request is answered by one result with
+      // the same id. See packages/extension-api/src/frame.ts.
+      let nonce = "";
+      let nextId = 0;
+      const pending = new Map();
+
+      function post(message) {
+        window.parent.postMessage(message, "*");
+      }
+
+      function request(method, params) {
+        return new Promise((resolve, reject) => {
+          const id = `req-${++nextId}`;
+          pending.set(id, { resolve, reject });
+          post({ type: "yunari.frame.request", nonce, id, method, params });
+        });
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) return;
+        const message = event.data;
+        if (message === null || typeof message !== "object") return;
+
+        if (message.type === "yunari.frame.init") {
+          nonce = message.nonce;
+          return;
+        }
+        if (message.type !== "yunari.frame.result") return;
+
+        const call = pending.get(message.id);
+        if (call === undefined) return;
+        pending.delete(message.id);
+        if (message.ok) call.resolve(message.value);
+        else call.reject(new Error(message.reason));
+      });
+
+      const input = document.getElementById("query");
+      const searchButton = document.getElementById("search");
+      const status = document.getElementById("status");
+      const results = document.getElementById("results");
+
+      function row(result) {
+        const item = document.createElement("li");
+        const label = document.createElement("span");
+        const name = document.createElement("span");
+        name.textContent = result.name;
+        const subtitle = document.createElement("small");
+        subtitle.textContent = [result.subtitle, result.kind]
+          .filter(Boolean)
+          .join(" · ");
+        label.append(name, " ", subtitle);
+
+        const use = document.createElement("button");
+        use.type = "button";
+        use.textContent = "Use";
+        use.addEventListener("click", async () => {
+          // `asset.bytes` is the finder's import action: the editor fetches the
+          // bytes through the host route and places them on the canvas.
+          status.textContent = "Importing…";
+          try {
+            await request("asset.bytes", { id: result.id });
+            status.textContent = "Imported.";
+          } catch (error) {
+            status.textContent = error.message;
+          }
+        });
+
+        item.append(label, use);
+        return item;
+      }
+
+      async function search() {
+        if (nonce === "") {
+          status.textContent = "Still loading.";
+          return;
+        }
+        status.textContent = "Searching…";
+        results.replaceChildren();
+        try {
+          const page = await request("asset.search", {
+            query: input.value,
+            page: 1,
+          });
+          for (const result of page.results) results.append(row(result));
+          status.textContent =
+            page.results.length === 0 ? "No characters matched." : "";
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      }
+
+      searchButton.addEventListener("click", () => {
+        void search();
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") void search();
+      });
+
+      post({ type: "yunari.frame.event", event: "ready" });
+    </script>
+  </body>
+</html>

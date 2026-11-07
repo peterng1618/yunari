@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "2.0.0",
+  "fabricVersion": "7.4.0",
+  "id": "example-widget",
+  "metadata": {
+    "name": "Example widget",
+    "version": "1.0.0",
+    "themeLanguage": "en"
+  },
+  "background": {
+    "color": {
+      "ref": "palette.chartTrack"
+    }
+  },
+  "globals": {
+    "palette": {
+      "none": {
+        "name": "None",
+        "value": {
+          "kind": "solid",
+          "color": "transparent"
+        }
+      },
+      "text": {
+        "name": "Text",
+        "value": {
+          "kind": "solid",
+          "color": "#ecf5ff"
+        }
+      },
+      "dim": {
+        "name": "Muted text",
+        "value": {
+          "kind": "solid",
+          "color": "#a8bed0"
+        }
+      },
+      "panel": {
+        "name": "Panel",
+        "value": {
+          "kind": "solid",
+          "color": "#081523d9"
+        }
+      },
+      "frost": {
+        "name": "Frosted panel",
+        "value": {
+          "kind": "solid",
+          "color": "#0815234d"
+        }
+      },
+      "panelStroke": {
+        "name": "Panel outline",
+        "value": {
+          "kind": "solid",
+          "color": "#9fc7e52b"
+        }
+      },
+      "rule": {
+        "name": "Rule",
+        "value": {
+          "kind": "solid",
+          "color": "#7dbde0"
+        }
+      },
+      "chartTrack": {
+        "name": "Chart track",
+        "value": {
+          "kind": "solid",
+          "color": "#223047"
+        }
+      },
+      "frostInk": {
+        "name": "Chart ink on glass",
+        "value": {
+          "kind": "solid",
+          "color": "#dbeafe"
+        }
+      },
+      "frostArea": {
+        "name": "Chart area on glass",
+        "value": {
+          "kind": "gradient",
+          "angle": 90,
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#dbeafe59"
+            },
+            {
+              "offset": 1,
+              "color": "#dbeafe00"
+            }
+          ]
+        }
+      }
+    },
+    "typeTokens": {
+      "body": {
+        "family": "Segoe UI, sans-serif",
+        "weight": "400"
+      },
+      "heading": {
+        "family": "Segoe UI, sans-serif",
+        "weight": "600"
+      },
+      "mono": {
+        "family": "Consolas, monospace",
+        "weight": "400"
+      }
+    }
+  },
+  "assets": [],
+  "bindings": {},
+  "scene": {
+    "version": "7.4.0",
+    "objects": [
+      {
+        "type": "Group",
+        "id": "group-example",
+        "name": "group-example",
+        "provenance": {
+          "widgetId": "group-example",
+          "widgetName": "Example"
+        },
+        "left": 40,
+        "top": 40,
+        "width": 320,
+        "height": 96,
+        "originX": "left",
+        "originY": "top",
+        "objects": [
+          {
+            "type": "Rect",
+            "id": "example-card",
+            "name": "example-card",
+            "left": -160,
+            "top": -48,
+            "width": 320,
+            "height": 96,
+            "fill": "#0815234d",
+            "rx": 10,
+            "ry": 10,
+            "yunariPaint": {
+              "fill": "palette.frost",
+              "stroke": "palette.panelStroke"
+            },
+            "originX": "left",
+            "originY": "top",
+            "stroke": "#9fc7e52b",
+            "strokeWidth": 2
+          },
+          {
+            "type": "Textbox",
+            "id": "example-label",
+            "name": "example-label",
+            "left": -130,
+            "top": -14,
+            "width": 260,
+            "text": "Hello",
+            "fontFamily": "Segoe UI, sans-serif",
+            "fontSize": 28,
+            "fontWeight": "400",
+            "fill": "#ecf5ff",
+            "lineHeight": 1.18,
+            "yunariPaint": {
+              "fill": "palette.text"
+            },
+            "yunariText": {
+              "box": {
+                "width": 260,
+                "height": 34.1
+              },
+              "overflow": "ellipsis",
+              "runs": [
+                {
+                  "kind": "literal",
+                  "text": "Hello",
+                  "typeToken": "typeTokens.body",
+                  "style": {
+                    "color": {
+                      "ref": "palette.text"
+                    },
+                    "fontSize": {
+                      "value": 28
+                    },
+                    "lineHeight": {
+                      "value": 1.18
+                    }
+                  }
+                }
+              ]
+            },
+            "originX": "left",
+            "originY": "top"
+          }
+        ]
+      }
+    ]
+  }
+}

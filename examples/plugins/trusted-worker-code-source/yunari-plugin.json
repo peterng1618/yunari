@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 1,
+  "id": "example-code-source",
+  "name": "Example code asset source",
+  "version": "1.0.0",
+  "description": "Serves three offline SVG rows from a trusted worker.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "trusted-worker",
+  "capabilities": ["asset:provide"],
+  "main": "main.mjs",
+  "contributes": {
+    "assetSources": [
+      {
+        "id": "example-shapes",
+        "label": "Example shapes",
+        "category": "image",
+        "body": "grid",
+        "entry": "main.mjs"
+      }
+    ]
+  }
+}

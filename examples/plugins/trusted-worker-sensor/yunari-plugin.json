@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "id": "example-sensor",
+  "name": "Example sensor provider",
+  "version": "1.0.0",
+  "description": "Reports this PC's RAM used share from a forked worker.",
+  "engines": { "yunari": ">=0.1.0" },
+  "pluginApi": 1,
+  "execution": "trusted-worker",
+  "capabilities": ["sensor:provide"],
+  "main": "main.mjs",
+  "contributes": {
+    "sensorProviders": [
+      { "id": "example-memory", "label": "Example memory provider" }
+    ]
+  }
+}

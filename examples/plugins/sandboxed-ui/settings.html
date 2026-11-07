@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Example sandboxed settings</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        background: transparent;
+        color: #e8eef5;
+        font: 14px system-ui, sans-serif;
+      }
+      button {
+        border: 1px solid #2b3644;
+        border-radius: 6px;
+        background: #0d1117;
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        padding: 6px 8px;
+      }
+      #status {
+        margin: 8px 0 0;
+        min-height: 1.2em;
+        color: #a7b4c4;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 6px 12px;
+        margin: 12px 0 0;
+      }
+      dt {
+        color: #a7b4c4;
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="refresh" type="button">Refresh</button>
+    <p id="status" role="status">Loading…</p>
+    <dl id="values"></dl>
+    <script>
+      // A settings frame may read its own settings and ask the editor to
+      // resize it. Writing needs a gesture token minted by a host control, so
+      // this page stays read-only until the editor grows one.
+      let nonce = "";
+      let nextId = 0;
+      const pending = new Map();
+
+      function post(message) {
+        window.parent.postMessage(message, "*");
+      }
+
+      function request(method, params) {
+        return new Promise((resolve, reject) => {
+          const id = `req-${++nextId}`;
+          pending.set(id, { resolve, reject });
+          post({ type: "yunari.frame.request", nonce, id, method, params });
+        });
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.source !== window.parent) return;
+        const message = event.data;
+        if (message === null || typeof message !== "object") return;
+
+        if (message.type === "yunari.frame.init") {
+          nonce = message.nonce;
+          // The editor sends settings with the init; reading them back is the
+          // fresh value and the only one this page should trust.
+          void load();
+          return;
+        }
+        if (message.type !== "yunari.frame.result") return;
+
+        const call = pending.get(message.id);
+        if (call === undefined) return;
+        pending.delete(message.id);
+        if (message.ok) call.resolve(message.value);
+        else call.reject(new Error(message.reason));
+      });
+
+      const status = document.getElementById("status");
+      const values = document.getElementById("values");
+
+      async function load() {
+        status.textContent = "Loading…";
+        try {
+          const stored = await request("settings.get", {});
+          const entries = Object.entries(stored ?? {});
+          values.replaceChildren(
+            ...entries.flatMap(([key, value]) => {
+              const term = document.createElement("dt");
+              term.textContent = key;
+              const detail = document.createElement("dd");
+              detail.textContent = String(value);
+              return [term, detail];
+            }),
+          );
+          status.textContent = entries.length === 0 ? "No settings stored." : "";
+          await request("ui.resize", { height: document.body.scrollHeight });
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      }
+
+      document.getElementById("refresh").addEventListener("click", () => {
+        void load();
+      });
+
+      post({ type: "yunari.frame.event", event: "ready" });
+    </script>
+  </body>
+</html>

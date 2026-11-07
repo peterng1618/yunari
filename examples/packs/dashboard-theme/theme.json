@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "2.0.0",
+  "fabricVersion": "7.4.0",
+  "id": "example-dashboard",
+  "metadata": {
+    "name": "Example dashboard theme",
+    "description": "A blank theme at 800 x 480.",
+    "themeLanguage": "en"
+  },
+  "artboard": {
+    "width": 800,
+    "height": 480
+  },
+  "background": {
+    "color": {
+      "ref": "palette.chartTrack"
+    }
+  },
+  "globals": {
+    "palette": {
+      "none": {
+        "name": "None",
+        "value": {
+          "kind": "solid",
+          "color": "transparent"
+        }
+      },
+      "text": {
+        "name": "Text",
+        "value": {
+          "kind": "solid",
+          "color": "#ecf5ff"
+        }
+      },
+      "dim": {
+        "name": "Muted text",
+        "value": {
+          "kind": "solid",
+          "color": "#a8bed0"
+        }
+      },
+      "panel": {
+        "name": "Panel",
+        "value": {
+          "kind": "solid",
+          "color": "#081523d9"
+        }
+      },
+      "frost": {
+        "name": "Frosted panel",
+        "value": {
+          "kind": "solid",
+          "color": "#0815234d"
+        }
+      },
+      "panelStroke": {
+        "name": "Panel outline",
+        "value": {
+          "kind": "solid",
+          "color": "#9fc7e52b"
+        }
+      },
+      "rule": {
+        "name": "Rule",
+        "value": {
+          "kind": "solid",
+          "color": "#7dbde0"
+        }
+      },
+      "chartTrack": {
+        "name": "Chart track",
+        "value": {
+          "kind": "solid",
+          "color": "#223047"
+        }
+      },
+      "frostInk": {
+        "name": "Chart ink on glass",
+        "value": {
+          "kind": "solid",
+          "color": "#dbeafe"
+        }
+      },
+      "frostArea": {
+        "name": "Chart area on glass",
+        "value": {
+          "kind": "gradient",
+          "angle": 90,
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#dbeafe59"
+            },
+            {
+              "offset": 1,
+              "color": "#dbeafe00"
+            }
+          ]
+        }
+      }
+    },
+    "typeTokens": {
+      "body": {
+        "family": "Segoe UI, sans-serif",
+        "weight": "400"
+      },
+      "heading": {
+        "family": "Segoe UI, sans-serif",
+        "weight": "600"
+      },
+      "mono": {
+        "family": "Consolas, monospace",
+        "weight": "400"
+      }
+    }
+  },
+  "assets": [],
+  "bindings": {},
+  "scene": {
+    "version": "7.4.0",
+    "objects": []
+  }
+}
