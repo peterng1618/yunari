@@ -330,6 +330,40 @@ it("drops a restored facet value the listing no longer offers", async () => {
   ).toBeNull();
 });
 
+it("keeps a facet the viewer chose when the other half does not offer it", async () => {
+  // The two halves answer with different authors. A filter chosen on Local is
+  // the viewer's, so listing the catalogue must not read as the library having
+  // lost it and overwrite the choice with the reduced set.
+  vi.stubGlobal(
+    "fetch",
+    catalogueServing([catalogueEntry("office-wall", "1.3.0")]),
+  );
+  await mountStore([
+    fixtureEntry({
+      id: "dark-one",
+      name: "A",
+      ground: DARK_GROUND,
+      author: "Ada",
+    }),
+  ]);
+
+  await openFacet("author", uiCopy.store.facets.author);
+  await clickFacetOption("Ada");
+  expect(drawnIds()).toEqual(["dark-one"]);
+
+  await showOnline();
+  await act(async () => halves(headerRow(document.body))[0]?.click());
+
+  expect(
+    drawnIds(),
+    "the other half's vocabulary dropped the viewer's filter",
+  ).toEqual(["dark-one"]);
+  expect(
+    JSON.parse(window.sessionStorage.getItem(STORE_FACETS_KEY) ?? "{}"),
+    "the viewer's choice was overwritten by the other half",
+  ).toEqual({ author: ["Ada"] });
+});
+
 it("keeps the viewer's sort and facets for the session", async () => {
   const themes = [
     fixtureEntry({ id: "dark-one", name: "A", ground: DARK_GROUND }),

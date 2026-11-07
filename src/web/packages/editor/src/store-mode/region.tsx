@@ -4,7 +4,7 @@ import {
   semanticKeysByFamily,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { ControlSelect } from "../components/ui/control-select.js";
@@ -517,6 +517,10 @@ function StoreRegion(props: {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Record<StoreTab, string>>(readStoreSort);
   const [chosen, setChosen] = useState<FacetSelection>(readStoreFacets);
+  /** The set this visit restored, held until a listing answers it. Only that
+   *  set is held to the listing's vocabulary; what the viewer picks afterwards
+   *  is theirs. */
+  const restoredFacets = useRef<FacetSelection | undefined>(chosen);
   /** The viewer's density level, or the default until they choose one. The
    *  level is the choice; the column count is the width's answer for it inside
    *  `Gallery`, so a resize re-derives the count rather than freezing it. */
@@ -695,14 +699,22 @@ function StoreRegion(props: {
     (item) => matchesFacets(item, chosen) && matchesQuery(item, query),
   );
   /** What the facet row offers, and the authority a restored choice is held to. */
-  const facets = storeFacets(listed ?? []);
+  const facets = useMemo(() => storeFacets(listed ?? []), [listed]);
   // A stored choice survives the visit, but not the option it named: a value
   // the listing no longer offers would filter every row out, and a popover that
-  // no longer draws it gives the viewer nothing to un-tick.
+  // no longer draws it gives the viewer nothing to un-tick. That reading is
+  // taken once, against the listing that answers the restore — a value chosen
+  // afterwards belongs to whichever half the viewer is on and is never dropped
+  // because the other half's vocabulary differs.
   useEffect(() => {
     if (listed === undefined) return;
-    const pruned = pruneStoreFacets(chosen, facets);
-    if (pruned === chosen) return;
+    const restored = restoredFacets.current;
+    if (restored === undefined) return;
+    restoredFacets.current = undefined;
+    // The viewer already changed the set in this visit; leave their choice be.
+    if (chosen !== restored) return;
+    const pruned = pruneStoreFacets(restored, facets);
+    if (pruned === restored) return;
     setChosen(pruned);
     rememberStoreFacets(pruned);
   }, [listed, facets, chosen]);
