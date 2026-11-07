@@ -105,3 +105,16 @@ per-kind validation. Publisher is derived from the store account and written to
 `item.publisher`; hardware plugins enter review. The host gains a kill-list
 store and a kind-dispatching installer that reuses the existing theme, widget,
 preset and plugin installers. No second catalogue, no new runtime dependency.
+
+## Held-update surface
+
+An update that grows what a plugin may reach is answered by the install
+request itself, never written and never persisted as a pending file. The host
+previews the package (`PluginInstaller.preview`) before it writes, compares the
+old and new `ConsentBinding`s through the existing `decideUpdate`, and answers a
+hold with `{ ok: false, held: { key, name, publisher, reasons } }`; both install
+routes carry that payload to the browser (HTTP 409). The editor keeps the
+package it already chose and draws one review notice; its approval press repeats
+the request with an explicit `approveUpdate` flag, which is the only thing that
+lets the installer write. A first install and an update that grows nothing stay
+automatic.

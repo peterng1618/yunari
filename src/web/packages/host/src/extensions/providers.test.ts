@@ -189,6 +189,7 @@ function fakeInstaller(plugins: readonly InstalledPlugin[]): PluginInstaller {
   return {
     list: () => Promise.resolve(plugins),
     read: (key) => Promise.resolve(plugins.find((p) => p.key === key)),
+    preview: () => Promise.resolve({ ok: false }),
     install: () => Promise.resolve({ ok: false }),
     remove: () => Promise.resolve(),
   };

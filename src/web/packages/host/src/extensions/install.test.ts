@@ -60,6 +60,31 @@ describe("plugin installer", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("previews the record install writes without writing anything", async () => {
+    const installer = createPluginInstaller(dir);
+    const preview = await installer.preview(validPluginBytes());
+
+    expect(preview.ok).toBe(true);
+    if (!preview.ok || preview.plugin === undefined)
+      throw new Error("no plugin previewed");
+    // The preview wrote no tree and recorded nothing.
+    expect(await installer.list()).toEqual([]);
+    expect(await readdir(dir)).not.toContain("local");
+
+    const installed = await installer.install(validPluginBytes());
+    expect(installed).toEqual({ ok: true, plugin: preview.plugin });
+  });
+
+  it("refuses a preview the reader refuses, with the reader's sentence", async () => {
+    const installer = createPluginInstaller(dir);
+    expect(await installer.preview(zipWith({ "../main.js": "x" }))).toEqual({
+      ok: false,
+      message:
+        'Plugin package path "../main.js" is not relative to the package root.',
+    });
+    expect(await readdir(dir)).not.toContain("local");
+  });
+
   it("installs and removes one plugin tree", async () => {
     const installer = createPluginInstaller(dir);
     const installed = await installer.install(validPluginBytes());

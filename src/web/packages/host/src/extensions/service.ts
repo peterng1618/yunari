@@ -16,6 +16,7 @@ import {
   type PluginContributions,
   type PluginInstaller,
 } from "@yunari/extension-api";
+import { decideUpdate } from "../store/update-policy.js";
 import type { ConsentStore } from "./consent-store.js";
 import type { KillListStore } from "./kill-list.js";
 import {
@@ -35,7 +36,10 @@ export interface ProviderOrderStore {
 
 export interface ExtensionService {
   list(): Promise<readonly InstalledExtension[]>;
-  install(bytes: Uint8Array): Promise<InstallResult>;
+  install(
+    bytes: Uint8Array,
+    options?: { readonly approveUpdate?: boolean },
+  ): Promise<InstallResult>;
   grantConsent(
     key: string,
     fingerprint: string,
@@ -114,6 +118,7 @@ function extensionOf(
   return {
     key: plugin.key,
     name: plugin.manifest.name,
+    publisher: plugin.publisher,
     version: plugin.manifest.version,
     execution: plugin.manifest.execution,
     capabilities: plugin.manifest.capabilities,
@@ -165,11 +170,12 @@ export function createExtensionService(options: {
     async list() {
       const file = await consent.read();
       const plugins = await installer.list();
+      const killed = await options.killList?.load();
 
       return Promise.all(
         plugins.map(async (plugin) => {
           const fingerprint = await fingerprintFor(plugin);
-          return extensionOf(
+          const extension = extensionOf(
             plugin,
             fingerprint,
             consentStateFor(
@@ -178,11 +184,42 @@ export function createExtensionService(options: {
               fingerprint,
             ),
           );
+          const revoked = killed?.plugins[plugin.key];
+          return revoked === undefined ? extension : { ...extension, revoked };
         }),
       );
     },
 
-    async install(bytes) {
+    async install(bytes, installOptions) {
+      const preview = await installer.preview(bytes);
+      // A package the reader refuses is the installer's sentence to give, and
+      // its install path already carries it unchanged.
+      if (!preview.ok || preview.plugin === undefined)
+        return installer.install(bytes);
+
+      const incoming = preview.plugin;
+      const current = await read(incoming.key);
+      // A key names its publisher, so an unchanged key cannot change one.
+      // First installs and no-growth updates keep the automatic path.
+      if (current !== undefined && installOptions?.approveUpdate !== true) {
+        const decision = decideUpdate(
+          bindingFor(current),
+          bindingFor(incoming),
+          false,
+        );
+        if (decision.action === "hold") {
+          return {
+            ok: false,
+            held: {
+              key: incoming.key,
+              name: incoming.manifest.name,
+              publisher: incoming.publisher,
+              reasons: decision.reasons,
+            },
+          };
+        }
+      }
+
       const result = await installer.install(bytes);
       if (result.ok) {
         // A plugin that arrived after the last refresh may already be revoked;

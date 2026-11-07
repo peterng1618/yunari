@@ -43,7 +43,11 @@ export interface CatalogueInstallRequest {
   readonly bytes: number;
   readonly publisher: string;
   readonly executionProfile?: ExecutionProfile;
+  /** The approval press for an update the update policy held. */
+  readonly approveUpdate?: boolean;
 }
+
+export type HeldUpdate = NonNullable<PluginInstallResult["held"]>;
 
 export type CatalogueInstallResult =
   | {
@@ -59,7 +63,11 @@ export type CatalogueInstallResult =
         | "download"
         | "integrity"
         | "package"
-        | "store";
+        | "store"
+        /** An update held for review; nothing was written. */
+        | "review";
+      /** Present only for the `review` stage. */
+      readonly held?: HeldUpdate;
     };
 
 export interface CatalogueInstallStores {
@@ -173,8 +181,18 @@ async function installByKind(
     case "plugin": {
       if (stores.extensions === undefined)
         return refuse("store", "This host keeps no plugins.");
-      const installed: PluginInstallResult =
-        await stores.extensions.install(bytes);
+      const installed: PluginInstallResult = await stores.extensions.install(
+        bytes,
+        { approveUpdate: request.approveUpdate === true },
+      );
+      if (installed.held !== undefined) {
+        return {
+          ok: false,
+          stage: "review",
+          message: "This update asks for access the installed version did not.",
+          held: installed.held,
+        };
+      }
       if (!installed.ok || installed.plugin === undefined) {
         return refuse(
           "package",
@@ -220,6 +238,7 @@ export function parseCatalogueInstallRequest(
   const bytes = body["bytes"];
   const publisher = body["publisher"];
   const executionProfile = body["executionProfile"];
+  const approveUpdate = body["approveUpdate"];
 
   if (
     typeof packageUrl !== "string" ||
@@ -235,7 +254,8 @@ export function parseCatalogueInstallRequest(
     !Number.isInteger(bytes) ||
     bytes <= 0 ||
     (publisher !== undefined && typeof publisher !== "string") ||
-    (executionProfile !== undefined && typeof executionProfile !== "string")
+    (executionProfile !== undefined && typeof executionProfile !== "string") ||
+    (approveUpdate !== undefined && typeof approveUpdate !== "boolean")
   ) {
     return undefined;
   }
@@ -251,6 +271,7 @@ export function parseCatalogueInstallRequest(
     ...(executionProfile === undefined
       ? {}
       : { executionProfile: executionProfile as ExecutionProfile }),
+    ...(approveUpdate === undefined ? {} : { approveUpdate }),
   };
 }
 

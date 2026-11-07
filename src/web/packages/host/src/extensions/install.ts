@@ -163,6 +163,22 @@ function createIndex(root: string) {
   });
 }
 
+/** The record both `install` and `preview` derive from one package: one read
+ *  step, so a preview and the install it precedes cannot disagree. */
+function bindPackage(
+  root: string,
+  manifest: InstalledPlugin["manifest"],
+  files: Readonly<Record<string, Uint8Array>>,
+): InstalledPlugin {
+  return {
+    key: qualifiedPluginKey(LOCAL_PUBLISHER, manifest.id),
+    publisher: LOCAL_PUBLISHER,
+    manifest,
+    directory: path.join(root, LOCAL_PUBLISHER, manifest.id, manifest.version),
+    contentHash: contentHash(files),
+  };
+}
+
 /** The plugins installed under this PC's extensions folder. */
 export function createPluginInstaller(directory: string): PluginInstaller {
   const root = path.resolve(directory);
@@ -180,19 +196,22 @@ export function createPluginInstaller(directory: string): PluginInstaller {
       return (await stored.read()).plugins[key];
     },
 
+    async preview(bytes): Promise<InstallResult> {
+      const read = readPluginPackage(bytes);
+      if (!read.ok) return { ok: false, message: read.message };
+      return {
+        ok: true,
+        plugin: bindPackage(root, read.package.manifest, read.package.files),
+      };
+    },
+
     async install(bytes): Promise<InstallResult> {
       const read = readPluginPackage(bytes);
       if (!read.ok) return { ok: false, message: read.message };
 
       const { manifest, files } = read.package;
-      const key = qualifiedPluginKey(LOCAL_PUBLISHER, manifest.id);
-      const hash = contentHash(files);
-      const target = path.join(
-        root,
-        LOCAL_PUBLISHER,
-        manifest.id,
-        manifest.version,
-      );
+      const plugin = bindPackage(root, manifest, files);
+      const { key, contentHash: hash, directory: target } = plugin;
 
       const current = (await stored.read()).plugins[key];
       if (
@@ -209,13 +228,6 @@ export function createPluginInstaller(directory: string): PluginInstaller {
         parent,
         `.${manifest.version}.${randomBytes(6).toString("hex")}.tmp`,
       );
-      const plugin: InstalledPlugin = {
-        key,
-        publisher: LOCAL_PUBLISHER,
-        manifest,
-        directory: target,
-        contentHash: hash,
-      };
 
       try {
         await writeTree(temporary, files);

@@ -163,7 +163,15 @@ export function createExtensionRoutes(
         return true;
       }
 
-      const installed = await extensions.install(bytes);
+      const installed = await extensions.install(bytes, {
+        approveUpdate: url.searchParams.get("approve") === "1",
+      });
+      if (installed.held !== undefined) {
+        // A held update is an answer, not a refusal: the browser draws the
+        // review notice and presses again with `?approve=1`.
+        sendJson(response, 409, { ok: false, held: installed.held });
+        return true;
+      }
       if (!installed.ok) {
         // The installer's message is bounded but can name a real path or an
         // internal file; it stays on this machine.

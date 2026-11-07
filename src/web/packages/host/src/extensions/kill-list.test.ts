@@ -163,6 +163,7 @@ function installerOf(plugin: InstalledPlugin): PluginInstaller {
   return {
     list: async () => [plugin],
     read: async (key) => (key === plugin.key ? plugin : undefined),
+    preview: async () => ({ ok: false, message: "not used" }),
     install: async () => ({ ok: false, message: "not used" }),
     remove: async () => undefined,
   };

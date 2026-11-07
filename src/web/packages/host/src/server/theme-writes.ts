@@ -386,6 +386,15 @@ export function createThemeWrites(
         ...(fetcher === undefined ? {} : { fetch: fetcher }),
         ...(storeOrigin === undefined ? {} : { storeOrigin }),
       });
+      if (!installed.ok && installed.stage === "review") {
+        // A held update is an answer the browser draws as a review notice; its
+        // approval press re-posts with this item's approveUpdate flag.
+        sendJson(response, 409, {
+          ok: false,
+          ...(installed.held === undefined ? {} : { held: installed.held }),
+        });
+        return true;
+      }
       if (!installed.ok) {
         const status =
           installed.stage === "download"

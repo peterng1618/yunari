@@ -61,6 +61,7 @@ function installerFor(value: PluginManifest): PluginInstaller {
     list: async () => [],
     read: async (key) =>
       key === `local/${value.id}` ? pluginFor(value) : undefined,
+    preview: async () => ({ ok: false }),
     install: async () => ({ ok: false }),
     remove: async () => undefined,
   };

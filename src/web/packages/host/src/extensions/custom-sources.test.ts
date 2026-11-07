@@ -11,6 +11,7 @@ function extensionOf(options: {
   return {
     key: options.key,
     name: options.key,
+    publisher: "local",
     version: "1.0.0",
     execution: "declarative",
     capabilities: [],

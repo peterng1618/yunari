@@ -385,14 +385,10 @@ describe("extension service", () => {
     expect(await service.mayLoad("local/acme-panel")).toBe(true);
   });
 
-  it("holds an update that adds a device id", async () => {
-    await service.install(hardwarePluginBytes());
-    const [before] = await service.list();
-    if (before === undefined) throw new Error("no extension listed");
-    await service.grantConsent(before.key, before.fingerprint);
-    expect(await service.mayLoad(before.key)).toBe(true);
-
-    const widened = hardwareManifest({
+  /** The same hardware plugin with one extra transport: the device allowlist
+   *  grows, which is the update the policy must hold. */
+  function widenedHardwareManifest(): Readonly<Record<string, unknown>> {
+    return hardwareManifest({
       version: "1.1.0",
       contributes: {
         panelFamilies: [
@@ -414,13 +410,66 @@ describe("extension service", () => {
         ],
       },
     });
-    await service.install(hardwarePluginBytes(widened));
+  }
+
+  it("holds an update that adds access and writes nothing until approved", async () => {
+    await service.install(hardwarePluginBytes());
+    const [before] = await service.list();
+    if (before === undefined) throw new Error("no extension listed");
+    await service.grantConsent(before.key, before.fingerprint);
+    expect(await service.mayLoad(before.key)).toBe(true);
+
+    const widened = widenedHardwareManifest();
+    const held = await service.install(hardwarePluginBytes(widened));
+
+    expect(held).toEqual({
+      ok: false,
+      held: {
+        key: "local/acme-panel",
+        name: "Acme Panel",
+        publisher: "local",
+        reasons: ["device:hid:1234:5678"],
+      },
+    });
+
+    // Nothing was written: the installed version and its tree are unchanged,
+    // so the old grant still covers what is on disk.
+    const [unchanged] = await service.list();
+    expect(unchanged).toMatchObject({
+      version: "1.0.0",
+      devices: ["usb:1234:5678"],
+    });
+    expect(await service.mayLoad(before.key)).toBe(true);
+
+    expect(
+      await service.install(hardwarePluginBytes(widened), {
+        approveUpdate: true,
+      }),
+    ).toMatchObject({ ok: true });
 
     const [after] = await service.list();
-    if (after === undefined) throw new Error("no extension listed");
-    expect(after.devices).toEqual(["usb:1234:5678", "hid:1234:5678"]);
-    expect(after.fingerprint).not.toBe(before.fingerprint);
-    expect(await service.mayLoad(after.key)).toBe(false);
+    expect(after).toMatchObject({ version: "1.1.0" });
+    expect(after?.devices).toEqual(["usb:1234:5678", "hid:1234:5678"]);
+  });
+
+  it("installs an update that asks for nothing new", async () => {
+    await service.install(hardwarePluginBytes());
+    const [before] = await service.list();
+    if (before === undefined) throw new Error("no extension listed");
+
+    // A version bump with different bytes still asks for the same access; only
+    // the content hash moves, which is not growth.
+    const updated = await service.install(
+      zipWith(
+        { "main.js": "export default { changed: true };" },
+        hardwareManifest({ version: "1.1.0" }),
+      ),
+    );
+
+    expect(updated).toMatchObject({ ok: true });
+    const [after] = await service.list();
+    expect(after?.version).toBe("1.1.0");
+    expect(after?.key).toBe(before.key);
   });
 
   it("does not load a killed hardware plugin", async () => {
@@ -431,7 +480,11 @@ describe("extension service", () => {
       JSON.stringify({
         version: 1,
         generatedAt: "2026-11-06T00:00:00Z",
-        plugins: { "local/acme-panel": {} },
+        plugins: {
+          "local/acme-panel": {
+            advisory: "https://store.test/advisories/acme-panel",
+          },
+        },
       }),
     );
     const killed = createExtensionService({
@@ -455,5 +508,9 @@ describe("extension service", () => {
     });
 
     expect(await killed.mayLoad(listed.key)).toBe(false);
+    // The listing carries the store's advisory so the editor can link to it.
+    expect(listed.revoked).toEqual({
+      advisory: "https://store.test/advisories/acme-panel",
+    });
   });
 });

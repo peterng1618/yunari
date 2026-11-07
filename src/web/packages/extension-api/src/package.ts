@@ -42,11 +42,22 @@ export interface InstallResult {
   readonly ok: boolean;
   readonly plugin?: InstalledPlugin;
   readonly message?: string;
+  /** An update the consent binding says must be reviewed before it lands. The
+   *  result is not ok and nothing was written. */
+  readonly held?: {
+    readonly key: string;
+    readonly name: string;
+    readonly publisher: string;
+    readonly reasons: readonly string[];
+  };
 }
 
 export interface PluginInstaller {
   list(): Promise<readonly InstalledPlugin[]>;
   read(key: string): Promise<InstalledPlugin | undefined>;
+  /** The record `install` would write, read from the same package bytes without
+   *  writing anything. */
+  preview(bytes: Uint8Array): Promise<InstallResult>;
   install(bytes: Uint8Array): Promise<InstallResult>;
   remove(key: string): Promise<void>;
 }

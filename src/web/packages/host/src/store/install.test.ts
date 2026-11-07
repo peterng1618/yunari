@@ -9,6 +9,7 @@ import {
 } from "@yunari/theme-package";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeStore } from "../themes/store.js";
@@ -69,6 +70,23 @@ function stores(
         units: [],
       },
     })),
+    ...overrides,
+  };
+}
+
+function extensionService(
+  overrides: Partial<ExtensionService> = {},
+): ExtensionService {
+  return {
+    list: async () => [],
+    install: async () => ({ ok: false, message: "not used" }),
+    grantConsent: async () => ({ ok: false }),
+    remove: async () => undefined,
+    mayLoad: async () => false,
+    installedPlugin: async () => undefined,
+    consentRecord: async () => undefined,
+    readProviderOrder: async () => ({ version: 1, pluginOrder: [] }),
+    writeProviderOrder: async () => ({ ok: true }),
     ...overrides,
   };
 }
@@ -228,6 +246,74 @@ describe("installCatalogueItem", () => {
       id: "acme/acme-sensors",
       consentRequired: true,
     });
+  });
+
+  it("carries a held update out as the review stage", async () => {
+    const bytes = pluginPackage();
+    const held = {
+      key: "local/acme-sensors",
+      name: "Acme Sensors",
+      publisher: "local",
+      reasons: ["capability:sensor:provide"],
+    };
+    const result = await installCatalogueItem(
+      request("plugin", {
+        sha256: await digestOf(bytes),
+        bytes: bytes.byteLength,
+      }),
+      {
+        fetch: fetchBytes(bytes),
+        storeOrigin: ORIGIN,
+        stores: stores({
+          extensions: extensionService({
+            install: async () => ({ ok: false, held }),
+          }),
+        }),
+      },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      stage: "review",
+      message: expect.any(String),
+      held,
+    });
+  });
+
+  it("passes the approval press through to the plugin installer", async () => {
+    const bytes = pluginPackage();
+    const calls: unknown[] = [];
+    const result = await installCatalogueItem(
+      request("plugin", {
+        sha256: await digestOf(bytes),
+        bytes: bytes.byteLength,
+        approveUpdate: true,
+      }),
+      {
+        fetch: fetchBytes(bytes),
+        storeOrigin: ORIGIN,
+        stores: stores({
+          extensions: extensionService({
+            install: async (_bytes, options) => {
+              calls.push(options);
+              return {
+                ok: true,
+                plugin: {
+                  key: "local/acme-sensors",
+                  publisher: "local",
+                  manifest: manifest(),
+                  directory: "/nowhere",
+                  contentHash: "hash",
+                },
+              };
+            },
+          }),
+        }),
+      },
+    );
+
+    expect(result).toMatchObject({ ok: true, id: "local/acme-sensors" });
+    expect(calls).toEqual([{ approveUpdate: true }]);
   });
 
   it("writes an editor theme package where the import control reads it", async () => {

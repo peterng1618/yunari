@@ -86,7 +86,9 @@ function call(
   });
 }
 
-function pluginBytes(): Uint8Array {
+function pluginBytes(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Uint8Array {
   const manifest = {
     manifestVersion: 1,
     id: "acme-sensors",
@@ -99,6 +101,7 @@ function pluginBytes(): Uint8Array {
     capabilities: [],
     contributes: {},
     main: "main.js",
+    ...overrides,
   };
   return zipSync(
     {
@@ -305,6 +308,52 @@ describe("extension routes", () => {
     expect(
       await call(handle, "GET", "/api/extensions").then((a) => a.json()),
     ).toEqual({ extensions: [] });
+  });
+
+  it("answers a held update with 409 and installs it on ?approve=1", async () => {
+    const first = await call(handle, "POST", "/api/extensions/install", {
+      body: pluginBytes(),
+    });
+    expect(first.status).toBe(200);
+
+    // The update adds a capability, so the policy holds it before writing.
+    const widened = pluginBytes({ capabilities: ["sensor:provide"] });
+    const held = await call(handle, "POST", "/api/extensions/install", {
+      body: widened,
+    });
+    expect(held.status).toBe(409);
+    expect(held.json()).toEqual({
+      ok: false,
+      held: {
+        key: "local/acme-sensors",
+        name: "Acme Sensors",
+        publisher: "local",
+        reasons: ["capability:sensor:provide"],
+      },
+    });
+
+    // Nothing was written by the hold: the installed version is still 1.0.0
+    // with no capability.
+    const listed = await call(handle, "GET", "/api/extensions");
+    expect(
+      (listed.json() as { extensions: { capabilities: string[] }[] })
+        .extensions[0]?.capabilities,
+    ).toEqual([]);
+
+    const approved = await call(
+      handle,
+      "POST",
+      "/api/extensions/install?approve=1",
+      { body: widened },
+    );
+    expect(approved.status).toBe(200);
+    expect(approved.json()).toMatchObject({
+      ok: true,
+      plugin: {
+        key: "local/acme-sensors",
+        capabilities: ["sensor:provide"],
+      },
+    });
   });
 
   it("answers 413 before reading an oversize install body", async () => {
