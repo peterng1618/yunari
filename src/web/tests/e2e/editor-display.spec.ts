@@ -583,8 +583,10 @@ test.describe("the stage looks through a display", () => {
     // any layout can keep them apart. That is the editor's desktop-only frame,
     // not a corner collision, and the desktop project asserts it.
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+    // The slot id, not its label: the Document slot's visible name is "Theme
+    // settings", and a selector on that text would break on the next copy edit.
     await page
-      .locator('.editor-shell-rail button[aria-label="Document"]')
+      .locator('.editor-shell-rail button[data-rail-slot="document"]')
       .click();
     const field = page.locator("[data-yunari-theme-name]");
     await expect(field).toBeVisible();
