@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   InstalledPlugin,
   PluginInstaller,
@@ -94,6 +95,10 @@ vi.mock("./runtime/supervisor.js", () => ({
 
 const NOW = Date.parse("2026-01-01T00:00:10Z");
 const CONTRIBUTION = { id: "acme", label: "Acme" };
+/** The real worker entry, forked by the real supervisor in the budget test. */
+const WORKER_ENTRY = fileURLToPath(
+  new URL("./runtime/plugin-host.ts", import.meta.url),
+);
 
 function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -440,6 +445,87 @@ describe("PluginSensorProvider", () => {
     await expect(provider.sample(["cpu.load"], NOW)).rejects.toThrow();
     expect(provider.health().available).toBe(false);
     expect(provider.health().message).not.toContain("10.0.0.5");
+  });
+
+  it("fails a hung sample at the provider budget and recovers after restart", async () => {
+    const actual = await vi.importActual<
+      typeof import("./runtime/supervisor.js")
+    >("./runtime/supervisor.js");
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "yunari-provider-budget-"),
+    );
+    const allowed = path.join(directory, "allowed.txt");
+    await writeFile(
+      path.join(directory, "plugin.mjs"),
+      `
+import { existsSync } from "node:fs";
+export async function describe() {
+  return [{ sensorId: "acme:cpu.load", semanticKey: "cpu.load", label: "Load", tier: "baseline" }];
+}
+export async function sample() {
+  if (!existsSync(${JSON.stringify(allowed)})) return new Promise(() => {});
+  return [{
+    semanticKey: "cpu.load",
+    sample: {
+      sensorId: "acme:cpu.load",
+      timestamp: new Date().toISOString(),
+      status: "ok",
+      value: 42,
+    },
+  }];
+}
+`,
+      "utf8",
+    );
+
+    const target: InstalledPlugin = {
+      key: "local/acme-sensors",
+      publisher: "local",
+      directory,
+      contentHash: "a".repeat(64),
+      manifest: manifest({ main: "plugin.mjs" }),
+    };
+    const restarts: number[] = [];
+    const supervisor = actual.createPluginSupervisor({
+      plugin: target,
+      granted: ["sensor:provide"],
+      consent: consentOf(target),
+      hostApi,
+      workerEntry: WORKER_ENTRY,
+      restartBaseMs: 20,
+      restartMaxMs: 20,
+      onRestart: (attempt) => restarts.push(attempt),
+    });
+    const provider = new PluginSensorProvider({
+      plugin: target,
+      supervisor,
+      contribution: CONTRIBUTION,
+      requestTimeoutMs: 50,
+    });
+
+    try {
+      await supervisor.start();
+      await provider.describe();
+
+      await expect(provider.sample(["cpu.load"], NOW)).rejects.toThrow(
+        "did not answer within 50 ms",
+      );
+      expect(supervisor.alive).toBe(false);
+
+      await vi.waitFor(() => expect(restarts).toEqual([1]), {
+        timeout: 5_000,
+      });
+      await vi.waitFor(() => expect(supervisor.alive).toBe(true), {
+        timeout: 5_000,
+      });
+
+      await writeFile(allowed, "x");
+      const [entry] = await provider.sample(["cpu.load"], NOW);
+      expect(entry?.sample.value).toBe(42);
+    } finally {
+      await supervisor.stop();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

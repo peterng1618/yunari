@@ -83,8 +83,11 @@ describe("plugin supervisor", () => {
       readonly granted?: readonly Capability[];
       readonly hostApi?: HostApiDispatcher;
       readonly requestTimeoutMs?: number;
+      readonly restartBaseMs?: number;
+      readonly restartMaxMs?: number;
       readonly consent?: ConsentRecord;
       readonly onCrash?: (reason: string) => void;
+      readonly onRestart?: (attempt: number, delayMs: number) => void;
     } = {},
   ): PluginSupervisor {
     const supervisor = createPluginSupervisor({
@@ -96,7 +99,16 @@ describe("plugin supervisor", () => {
       ...(options.requestTimeoutMs === undefined
         ? {}
         : { requestTimeoutMs: options.requestTimeoutMs }),
+      ...(options.restartBaseMs === undefined
+        ? {}
+        : { restartBaseMs: options.restartBaseMs }),
+      ...(options.restartMaxMs === undefined
+        ? {}
+        : { restartMaxMs: options.restartMaxMs }),
       ...(options.onCrash === undefined ? {} : { onCrash: options.onCrash }),
+      ...(options.onRestart === undefined
+        ? {}
+        : { onRestart: options.onRestart }),
     });
     supervisors.push(supervisor);
     return supervisor;
@@ -434,6 +446,136 @@ export async function describe() {
 
     expect(await fromB).toEqual(["answer-B"]);
     expect(await fromA).toBe("Plugin supervisor stopped.");
+  });
+
+  it("restarts a child that exits after a successful start", async () => {
+    const spawns = path.join(root, "spawns.txt");
+    const exited = path.join(root, "exited.txt");
+    const plugin = await writePlugin(`
+import { appendFileSync, existsSync } from "node:fs";
+appendFileSync(${JSON.stringify(spawns)}, "x");
+export async function health() {
+  if (!existsSync(${JSON.stringify(exited)})) {
+    appendFileSync(${JSON.stringify(exited)}, "x");
+    process.exit(1);
+  }
+  return "ok";
+}
+`);
+    const restarts: { attempt: number; delayMs: number }[] = [];
+    const supervisor = supervise(plugin, {
+      restartBaseMs: 10,
+      restartMaxMs: 10,
+      onRestart: (attempt, delayMs) => restarts.push({ attempt, delayMs }),
+    });
+
+    await supervisor.start();
+    await expect(supervisor.request("health", {})).rejects.toThrow(
+      "exited with code 1",
+    );
+
+    await vi.waitFor(() => expect(restarts).toHaveLength(1), {
+      timeout: 5_000,
+    });
+    await vi.waitFor(() => expect(supervisor.alive).toBe(true), {
+      timeout: 5_000,
+    });
+    expect(await supervisor.request("health", {})).toBe("ok");
+
+    // The replacement is a second fork of the same worker entry.
+    expect((await readFile(spawns, "utf8")).length).toBe(2);
+  });
+
+  it("grows restart delays while attempts keep failing and caps them", async () => {
+    const plugin = await writePlugin(
+      `export async function health() { process.exit(2); }`,
+    );
+    const delays: number[] = [];
+    const supervisor = supervise(plugin, {
+      restartBaseMs: 20,
+      restartMaxMs: 50,
+      onRestart: (_attempt, delayMs) => delays.push(delayMs),
+    });
+
+    await supervisor.start();
+    // Every replacement now fails to start, so the attempt count keeps
+    // climbing; a successful start would reset it to 1.
+    await rm(path.join(plugin.directory, "plugin.mjs"));
+    await expect(supervisor.request("health", {})).rejects.toThrow(
+      "exited with code 2",
+    );
+
+    await vi.waitFor(() => expect(delays.length).toBeGreaterThanOrEqual(4), {
+      timeout: 10_000,
+    });
+    expect(delays.slice(0, 4)).toEqual([20, 40, 50, 50]);
+  });
+
+  it("cancels a pending restart on stop", async () => {
+    const spawns = path.join(root, "spawns.txt");
+    const plugin = await writePlugin(`
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(spawns)}, "x");
+export async function health() { process.exit(4); }
+`);
+    const restarts: number[] = [];
+    const supervisor = supervise(plugin, {
+      restartBaseMs: 150,
+      restartMaxMs: 150,
+      onRestart: (attempt) => restarts.push(attempt),
+    });
+
+    await supervisor.start();
+    await expect(supervisor.request("health", {})).rejects.toThrow(
+      "exited with code 4",
+    );
+    await vi.waitFor(() => expect(restarts).toEqual([1]), { timeout: 5_000 });
+
+    await supervisor.stop();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(restarts).toEqual([1]);
+    expect((await readFile(spawns, "utf8")).length).toBe(1);
+  });
+
+  it("does not restart after an initial start failure", async () => {
+    const restarts: number[] = [];
+    const plugin = await writePlugin(`throw new Error("boom-import");`);
+    const supervisor = supervise(plugin, {
+      restartBaseMs: 10,
+      restartMaxMs: 10,
+      onRestart: (attempt) => restarts.push(attempt),
+    });
+
+    await expect(supervisor.start()).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(restarts).toEqual([]);
+    expect(supervisor.alive).toBe(false);
+  });
+
+  it("retries a restart that fails instead of leaving the worker dead", async () => {
+    const plugin = await writePlugin(
+      `export async function health() { process.exit(5); }`,
+    );
+    const restarts: number[] = [];
+    const supervisor = supervise(plugin, {
+      restartBaseMs: 10,
+      restartMaxMs: 10,
+      onRestart: (attempt) => restarts.push(attempt),
+    });
+
+    await supervisor.start();
+    // The replacement cannot start, so only the retry path can reach attempt 2.
+    await rm(path.join(plugin.directory, "plugin.mjs"));
+    await expect(supervisor.request("health", {})).rejects.toThrow(
+      "exited with code 5",
+    );
+
+    await vi.waitFor(() => expect(restarts.length).toBeGreaterThanOrEqual(2), {
+      timeout: 5_000,
+    });
+    expect(supervisor.alive).toBe(false);
   });
 
   it("restarts after stop and reports a later crash", async () => {

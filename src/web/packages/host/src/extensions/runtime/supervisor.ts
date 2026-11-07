@@ -34,15 +34,25 @@ export interface PluginSupervisorOptions {
   readonly hostApi: HostApiDispatcher;
   readonly workerEntry?: string;
   readonly requestTimeoutMs?: number;
+  readonly restartBaseMs?: number;
+  readonly restartMaxMs?: number;
   readonly onCrash?: (reason: string) => void;
+  /** A healthy worker that died is replaced; this reports the wait first. */
+  readonly onRestart?: (attempt: number, delayMs: number) => void;
 }
 
 export interface PluginSupervisor {
   readonly alive: boolean;
   start(): Promise<void>;
   /** `scope` names the runner the request belongs to; a host call the plugin
-   *  makes while answering it carries the same scope. */
-  request<T>(method: HostMethod, params: unknown, scope?: string): Promise<T>;
+   *  makes while answering it carries the same scope. `timeoutMs` bounds this
+   *  one request; it defaults to the supervisor's request deadline. */
+  request<T>(
+    method: HostMethod,
+    params: unknown,
+    scope?: string,
+    timeoutMs?: number,
+  ): Promise<T>;
   stop(): Promise<void>;
 }
 
@@ -50,6 +60,10 @@ export interface PluginSupervisor {
  * (`runtime/host-api.ts` CALL_TIMEOUT_MS); killing the worker first would turn
  * a slow fetch into a crash. Keep this above that deadline. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
+/* A crashed worker is replaced after this base delay; the delay doubles per
+ * attempt and stops growing at the cap. */
+const DEFAULT_RESTART_BASE_MS = 1_000;
+const DEFAULT_RESTART_MAX_MS = 60_000;
 const STARTUP_TIMEOUT_MS = 5_000;
 const STOP_TIMEOUT_MS = 2_000;
 const STOP_GRACE_MS = 1_000;
@@ -86,6 +100,8 @@ export function createPluginSupervisor(
 ): PluginSupervisor {
   const requestTimeoutMs =
     options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const restartBaseMs = options.restartBaseMs ?? DEFAULT_RESTART_BASE_MS;
+  const restartMaxMs = options.restartMaxMs ?? DEFAULT_RESTART_MAX_MS;
   const workerEntry =
     options.workerEntry ??
     fileURLToPath(new URL("./plugin-host.js", import.meta.url));
@@ -94,6 +110,10 @@ export function createPluginSupervisor(
   let alive = false;
   let stopped = false;
   let crashed = false;
+  /** This process generation completed `start()`; an initial failure stays out. */
+  let started = false;
+  let restartAttempt = 0;
+  let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let ready:
     | { resolve: () => void; reject: (error: Error) => void }
     | undefined;
@@ -183,6 +203,29 @@ export function createPluginSupervisor(
     });
   }
 
+  /** Only a process that had become healthy is replaced. An initial start
+   *  failure is the caller's to report and leave out; retrying it here would
+   *  keep a rejected plugin alive behind the caller's back. */
+  function scheduleRestart(): void {
+    if (stopped) return;
+    restartAttempt += 1;
+    const delayMs = Math.min(
+      restartBaseMs * 2 ** (restartAttempt - 1),
+      restartMaxMs,
+    );
+    options.onRestart?.(restartAttempt, delayMs);
+    restartTimer = setTimeout(() => {
+      restartTimer = undefined;
+      // A manual start may have taken over while the timer was pending.
+      if (stopped || alive || child !== undefined) return;
+      void start().catch(() => {
+        // This generation had been healthy, so a failed replacement is
+        // retried rather than leaving the worker permanently dead.
+        scheduleRestart();
+      });
+    }, delayMs);
+  }
+
   function onExit(
     running: ChildProcess,
     code: number | null,
@@ -201,6 +244,7 @@ export function createPluginSupervisor(
     }
     crash(detail);
     ready?.reject(new Error(detail));
+    if (started) scheduleRestart();
   }
 
   async function forward(
@@ -286,6 +330,7 @@ export function createPluginSupervisor(
 
     stopped = false;
     crashed = false;
+    started = false;
     stderr = "";
 
     const running = fork(workerEntry, [], {
@@ -352,22 +397,29 @@ export function createPluginSupervisor(
     }
 
     alive = true;
+    started = true;
+    restartAttempt = 0;
   }
 
   function request<T>(
     method: HostMethod,
     params: unknown,
     scope?: string,
+    timeoutMs = requestTimeoutMs,
   ): Promise<T> {
     if (!alive)
       return Promise.reject(new Error("Plugin supervisor is not running."));
-    return sendRequest<T>(method, params, requestTimeoutMs, scope);
+    return sendRequest<T>(method, params, timeoutMs, scope);
   }
 
   async function stop(): Promise<void> {
     if (stopped) return;
     stopped = true;
     alive = false;
+    if (restartTimer !== undefined) {
+      clearTimeout(restartTimer);
+      restartTimer = undefined;
+    }
     // A startup that is still waiting settles here; its child is killed below.
     ready?.reject(new Error("Plugin supervisor stopped."));
     ready = undefined;

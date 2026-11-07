@@ -363,11 +363,21 @@ export async function run(argv: readonly string[]): Promise<number> {
   const onPluginFailure = (pluginKey: string, reason: string): void => {
     console.error(`Plugin worker ${pluginKey}: ${reason}`);
   };
+  const onPluginRestart = (
+    pluginKey: string,
+    attempt: number,
+    delayMs: number,
+  ): void => {
+    console.error(
+      `Plugin worker ${pluginKey}: restarting (attempt ${attempt} in ${delayMs} ms).`,
+    );
+  };
   const runningSupervisors = await startPluginSupervisors({
     installer: pluginInstaller,
     extensions,
     hostApi: pluginHostApi,
     onFailure: onPluginFailure,
+    onRestart: onPluginRestart,
     // A crashed worker cannot close the handles it opened; the host closes
     // them here rather than waiting for a later call or shutdown.
     onCrash: (pluginKey) => {

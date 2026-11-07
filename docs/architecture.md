@@ -226,8 +226,13 @@ environment beyond `PATH`. Its method allowlist refuses a call before IPC; the
 parent rechecks every plugin call through `gateExtensionCall` against the
 manifest's capabilities and the grant the worker started with, so the allowlist
 is early refusal, not the authority. A running worker keeps the grant it was
-started with: installing, revoking consent or removing the extension affects
-that worker only at the next host start.
+started with. Revocation does reach a running host: an install, a consent
+change or a removal triggers a recheck, and a worker whose plugin no longer
+passes `mayLoad` is stopped with its devices and panel rows. Starting a worker
+is not reconciled live, though: the provider, asset-source and panel-family
+registries are built once at host start, so a new install, an approved update
+or a newly granted plugin begins its worker at the next host start. Declarative
+contributions reload as they change.
 
 The fork is a consent boundary, not a sandbox: the child is ordinary Node code
 with this account's privileges, and the gate and guarded fetch constrain what
@@ -236,11 +241,16 @@ consent-gated for that reason.
 
 The parent bounds the child. Startup and the `init` answer have 5 s, a request
 has a 35 s default (above the 30 s host API deadline, so a slow fetch does not
-kill the worker), a host API call has a 30 s deadline, and `stop` gets 2 s
-before the parent kills the process. At most the last 2 KiB of stderr is kept,
-redacted for machine addresses, and that text is the crash detail. A start
-failure, an unexpected exit and an unanswered request are the same one crash
-report: pending calls settle as failures, and stopping is idempotent.
+kill the worker), a provider `describe`/`sample` poll has a 10 s budget of its
+own (panel commands and asset operations keep the default), a host API call has
+a 30 s deadline, and `stop` gets 2 s before the parent kills the process. At
+most the last 2 KiB of stderr is kept, redacted for machine addresses, and that
+text is the crash detail. A start failure, an unexpected exit and an
+unanswered request are the same one crash report: pending calls settle as
+failures, and stopping is idempotent. A worker that had started and then exits
+unexpectedly is replaced after a capped exponential backoff (1 s doubling to
+60 s); `stop()` cancels a pending replacement, and an initial start failure is
+reported and left out rather than retried.
 
 A plugin's calls land in `runtime/host-api.ts`, which rebuilds the gate context
 from the manifest and the grant captured when the worker started on every call;

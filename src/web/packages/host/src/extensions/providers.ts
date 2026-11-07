@@ -48,6 +48,13 @@ const UNIT_KIND_SET: ReadonlySet<string> = new Set(UNIT_KINDS);
 const VALUE_KINDS: ReadonlySet<string> = new Set(["number", "text", "boolean"]);
 const TIERS: ReadonlySet<string> = new Set(["baseline", "extended"]);
 
+/* A provider poll is a short read, not a panel frame or an asset transfer.
+ * Panel commands and asset operations keep the supervisor's 35 s default, and
+ * the host API's own 30 s deadline (`runtime/host-api.ts` CALL_TIMEOUT_MS) is
+ * unchanged. A poll that hits this budget crashes and kills its worker; the
+ * supervisor restarts it, and no other provider waits behind it. */
+const PROVIDER_REQUEST_TIMEOUT_MS = 10_000;
+
 const WAITING_MESSAGE = "Waiting for the first reading.";
 const INVALID_MESSAGE = "The plugin returned an unreadable reading.";
 const UNREADABLE_RESPONSE = "The plugin returned an unreadable response.";
@@ -196,6 +203,7 @@ export class PluginSensorProvider implements SensorProvider {
   readonly pluginKey: string;
 
   readonly #supervisor: PluginSupervisor;
+  readonly #requestTimeoutMs: number;
   #health: ProviderHealth = { available: true };
   #descriptors: readonly SensorDescriptor[] | undefined;
 
@@ -203,11 +211,15 @@ export class PluginSensorProvider implements SensorProvider {
     readonly plugin: InstalledPlugin;
     readonly supervisor: PluginSupervisor;
     readonly contribution: { readonly id: string; readonly label: string };
+    /** Defaults to `PROVIDER_REQUEST_TIMEOUT_MS`. */
+    readonly requestTimeoutMs?: number;
   }) {
     this.id = options.contribution.id;
     this.label = options.contribution.label;
     this.pluginKey = options.plugin.key;
     this.#supervisor = options.supervisor;
+    this.#requestTimeoutMs =
+      options.requestTimeoutMs ?? PROVIDER_REQUEST_TIMEOUT_MS;
   }
 
   health(): ProviderHealth {
@@ -218,7 +230,12 @@ export class PluginSensorProvider implements SensorProvider {
     let answer: unknown;
 
     try {
-      answer = await this.#supervisor.request<unknown>("describe", {});
+      answer = await this.#supervisor.request<unknown>(
+        "describe",
+        {},
+        undefined,
+        this.#requestTimeoutMs,
+      );
     } catch (error) {
       this.#health = failureOf(error);
       throw new Error(this.#health.message);
@@ -262,11 +279,16 @@ export class PluginSensorProvider implements SensorProvider {
     let answer: unknown;
 
     try {
-      answer = await this.#supervisor.request<unknown>("sample", {
-        semanticKeys: wanted,
-        nowMs,
-        context,
-      });
+      answer = await this.#supervisor.request<unknown>(
+        "sample",
+        {
+          semanticKeys: wanted,
+          nowMs,
+          context,
+        },
+        undefined,
+        this.#requestTimeoutMs,
+      );
     } catch (error) {
       this.#health = failureOf(error);
       throw new Error(this.#health.message);
@@ -331,6 +353,12 @@ export interface StartPluginSupervisorsOptions {
   /** A worker that died after starting. Its devices are this host's to close:
    *  a crash must not leave native handles open with no one to reach them. */
   readonly onCrash?: (pluginKey: string) => void;
+  /** A healthy worker is being replaced after this delay. */
+  readonly onRestart?: (
+    pluginKey: string,
+    attempt: number,
+    delayMs: number,
+  ) => void;
 }
 
 export interface CreatePluginProvidersOptions
@@ -398,6 +426,9 @@ export async function startPluginSupervisors(
         crashReported = true;
         options.onFailure?.(plugin.key, reason);
         options.onCrash?.(plugin.key);
+      },
+      onRestart: (attempt, delayMs) => {
+        options.onRestart?.(plugin.key, attempt, delayMs);
       },
       ...(options.workerEntry === undefined
         ? {}
