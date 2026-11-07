@@ -104,6 +104,11 @@ export interface EditorSessionOptions {
    *  so a session built without chrome draws plain names rather than dead
    *  links. */
   readonly onRevealLayer?: (objectId: string) => void;
+  /** Shows the Tokens pane. A run row's "Add new token" creates and applies a
+   *  token, then opens the pane that owns its inspector; the pane column is the
+   *  shell's, so the gesture leaves through the shell's own door. Optional, so
+   *  a session built without chrome still creates and applies. */
+  readonly onShowTokens?: () => void;
   /** The Assets pane's title count. The store is the shell chrome's, so the
    *  session reports the manager's declaration count rather than the shell
    *  reaching for a manager it does not hold. */

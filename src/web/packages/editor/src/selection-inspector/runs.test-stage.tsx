@@ -11,6 +11,7 @@ import { Canvas, IText, Textbox } from "fabric/es";
 import { act } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import type { DesignTokenPort } from "./design-token-editor.js";
 import {
   appendRun,
   dropRun,
@@ -25,7 +26,6 @@ import {
   writeTextLayout,
   writeUnitDisplay,
 } from "./run-edits.js";
-import type { DesignTokenPort } from "./design-token-editor.js";
 import { projectRuns, RunEditor } from "./runs.js";
 import type { RunEdits, RunOptionView, RunsView } from "./view.js";
 

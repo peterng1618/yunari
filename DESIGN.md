@@ -390,7 +390,10 @@ thing actually raises**, and describes what the thing *is*:
   for the token it edits, opening the value's editor in a popover anchored at
   that row — the colour area, channels and presets for a paint, family and
   weight for a type token. The button edits the referenced token, not the
-  reference; it is the same write the token inspector performs.
+  reference; it is the same write the token inspector performs. The token lists
+  end with an **Add new token** entry, the action-row grammar the font rows
+  already use: it creates through the Tokens pane's own rule, applies the new
+  token to the run, and opens the Tokens pane with the token selected.
 - With nothing selected the column is empty and says where to choose from.
 
 ### The stage

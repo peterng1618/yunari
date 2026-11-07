@@ -11,8 +11,8 @@ import type { ChartEdits } from "../chart-manager/chart-fields.js";
 import type { EditorInteraction } from "../editor-interaction.js";
 import type { FavoritesClient } from "../favorites-client.js";
 import type { TypeTokenFontActions } from "../type-preset-manager/panel.js";
-import type { ChartFieldsPort } from "./per-kind-column.js";
 import type { DesignTokenPort } from "./design-token-editor.js";
+import type { ChartFieldsPort } from "./per-kind-column.js";
 
 /**
  * What the inspector asks the session for. Every optional entry is a capability

@@ -198,7 +198,10 @@ export function ColourPicker({
                 backgroundSize: "0.5rem 0.5rem",
               }}
             >
-              <span className="absolute inset-0" style={{ background: value }} />
+              <span
+                className="absolute inset-0"
+                style={{ background: value }}
+              />
             </span>
             <span
               data-yunari-value=""

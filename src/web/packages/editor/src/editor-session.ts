@@ -27,6 +27,8 @@ import {
 import type { EditorSessionOptions } from "./editor-session-options.js";
 import { registerSessionShortcuts } from "./editor-session-shortcuts.js";
 import {
+  addPaintToken,
+  addTypeToken,
   deletePalette,
   deleteType,
   tokenExists,
@@ -385,6 +387,30 @@ export class EditorSession {
       typeTokens: () =>
         (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
       palette: () => this.#document.envelope.globals?.palette ?? {},
+      create: (kind) => {
+        if (kind === "paint") {
+          const added = addPaintToken(
+            this.#document.envelope.globals?.palette ?? {},
+          );
+          this.#document.setPalette(added.palette);
+          // `setPalette` is the live write; adding a token is a discrete edit,
+          // so the entry is settled here as the pane's add settles it.
+          options.shell.editor.historyManager.saveState();
+          return { kind: "paint", id: added.id };
+        }
+        const added = addTypeToken(
+          (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
+        );
+        // `setTypes` settles history itself.
+        if (added.created) this.#document.setTypes(added.presets);
+        return { kind: "preset", id: added.id };
+      },
+      reveal: (ref) => {
+        // Show the pane first, then select: the token inspector is the pane's
+        // own surface, and selecting the token is what the store owns.
+        options.onShowTokens?.();
+        options.tokenSelection?.set(ref);
+      },
     };
     this.#selection = createSelectionInspector(options.panelHosts.selection, {
       editor: options.shell.editor,

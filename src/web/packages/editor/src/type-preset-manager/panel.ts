@@ -1,14 +1,12 @@
 import type { TypeToken } from "@yunari/renderer-core";
-import { newTypeToken } from "@yunari/theme-kit";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { addTypeToken } from "../editor-session-tokens.js";
 import type { TokenSelectionStore } from "../editor-shell/shell-stores.js";
 import type { CuratedFontFace } from "../font-catalog.js";
 import { TokenList } from "../panes/tokens/token-list.js";
 import type { TokenUsage } from "../panes/tokens/token-use.js";
-import { freePresetId } from "../type-preset-apply.js";
-import { tokenIdOfFace } from "../type-token-manager/name.js";
 
 export type TypeTokens = Readonly<Record<string, TypeToken>>;
 
@@ -76,23 +74,13 @@ export function createTypeTokenPanel(
       reactRoot.render(
         createElement(TokenList, {
           presets: current,
-          // The duplicate rule and the id both live here: the panel owns the
-          // write port and knows every token, so a second token for a face the
-          // theme already has is refused and the existing one is selected.
+          // The duplicate rule and the id both live in the one creation
+          // function: a second token for a face the theme already has is refused
+          // and the existing one is selected.
           onAdd: () => {
-            const existing = tokenIdOfFace(
-              current,
-              newTypeToken.family,
-              newTypeToken.weight,
-            );
-            if (existing !== undefined) {
-              tokenSelection?.set({ kind: "preset", id: existing });
-              return;
-            }
-            onChange({
-              ...current,
-              [freePresetId(current)]: newTypeToken,
-            });
+            const added = addTypeToken(current);
+            if (added.created) onChange(added.presets);
+            tokenSelection?.set({ kind: "preset", id: added.id });
           },
           tokenSelection,
           usage,

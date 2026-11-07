@@ -236,6 +236,10 @@ export interface ShellLayout {
    *  they select the layer through the bridge and then ask to see it, which is
    *  a *show* and never a toggle — a link cannot close the pane it points at. */
   showLayers(): void;
+  /** Shows the Tokens pane. A run row's "Add new token" arrives here after it
+   *  creates and applies the token, so the pane that owns the token inspector
+   *  is showing by the next commit. A show, never a toggle. */
+  showTokens(): void;
   destroy(): void;
 }
 
@@ -1045,6 +1049,11 @@ export function createShellLayout(
       // own React event, so the request belongs to that render's batch. The
       // shell's effect applies it and the pane is showing by the next commit.
       paneRequests.show("composition");
+    },
+    showTokens() {
+      // The same request shape as `showLayers`: the run row is React's, so the
+      // shell's effect applies the request without a synchronous flush.
+      paneRequests.show("tokens");
     },
     destroy() {
       store.bridge?.destroy();

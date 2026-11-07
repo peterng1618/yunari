@@ -9,6 +9,7 @@ import { useRef } from "react";
 import { ColourPickerPanel } from "../components/ui/colour-picker.js";
 import { useControlTooltip } from "../components/ui/control-icon-button.js";
 import { Glyph, PENCIL_GLYPH } from "../editor-shell/icons.js";
+import type { TokenRef } from "../editor-shell/shell-stores.js";
 import {
   GradientFields,
   PaintKindField,
@@ -21,6 +22,9 @@ import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { tokenName } from "../type-token-manager/name.js";
 import { uiCopy } from "../ui-copy.js";
 
+/** The token dropdown's last entry: create, apply, and reveal a token. */
+export const ADD_NEW_TOKEN_ID = "@yunari:add-new-token";
+
 /**
  * The design-token editor the run rows reach.
  *
@@ -28,12 +32,17 @@ import { uiCopy } from "../ui-copy.js";
  * copy taken when the inspector was built would go stale on the first write.
  * `actions` is the *same* object the design token inspector receives, so a
  * family, weight or paint written here takes the one mutation path and the one
- * history entry.
+ * history entry. `reveal` is the shell's own request, so this surface never
+ * reaches a pane it does not own.
  */
 export interface DesignTokenPort {
   readonly actions: TokenInspectorActions;
   readonly typeTokens: () => TypeTokens;
   readonly palette: () => FabricPalette;
+  /** Creates a token through the pane's own creation rule and returns its ref. */
+  readonly create: (kind: TokenRef["kind"]) => TokenRef;
+  /** Shows the Tokens pane and selects the token's inspector. */
+  readonly reveal: (ref: TokenRef) => void;
 }
 
 /**

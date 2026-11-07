@@ -346,9 +346,7 @@ function Section(props: {
                 key={`${revision}:runs`}
                 runs={extra.runs}
                 edits={runs}
-                {...(designTokens === undefined
-                  ? {}
-                  : { designTokens })}
+                {...(designTokens === undefined ? {} : { designTokens })}
               />
             );
           case "chartContent":

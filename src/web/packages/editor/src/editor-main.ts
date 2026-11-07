@@ -373,6 +373,9 @@ async function start(): Promise<void> {
         layout.showLayers();
         layout.selection.bridge?.selectLayer(objectId);
       },
+      // A created token opens the pane that owns its inspector; the session has
+      // already applied it to the run and selected it.
+      onShowTokens: () => layout.showTokens(),
       // The Assets pane's count is the session's manager's list, and the title
       // bar is the shell's, so the reading crosses back through the store that
       // already carries the document's own facts.

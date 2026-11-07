@@ -3,9 +3,9 @@ import {
   type PalettePaint,
   paletteTokenIds,
 } from "@yunari/renderer-core";
-import { newTokenPaint } from "@yunari/theme-kit";
 import { ControlIconButton } from "../../components/ui/control-icon-button.js";
 import { gradientCss } from "../../components/ui/gradient-css.js";
+import { addPaintToken } from "../../editor-session-tokens.js";
 import { ADD_GLYPH, Glyph } from "../../editor-shell/icons.js";
 import {
   type TokenSelectionStore,
@@ -80,17 +80,11 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
   };
 
   const add = (): void => {
-    const id = nextId(palette);
-    onChange({
-      ...palette,
-      [id]: {
-        name: uiCopy.panels.newColour,
-        value: { kind: "solid", color: newTokenPaint },
-      },
-    });
+    const added = addPaintToken(palette);
+    onChange(added.palette);
     // Selected here so the new token's fields open beside the list; a list with
     // no session behind it still adds.
-    tokenSelection?.set({ kind: "paint", id });
+    tokenSelection?.set({ kind: "paint", id: added.id });
     onSettled?.();
   };
 
@@ -145,13 +139,4 @@ export function PaintList(props: PaintListProps): React.JSX.Element {
 function paintCss(value: PalettePaint): string {
   if (value.kind === "solid") return value.color;
   return gradientCss(value.stops, value.angle);
-}
-
-/** The first free `colour`, `colour-2`, … — the ids are stable keys references
- *  are written against, so a new token never reuses a deleted one's name. */
-function nextId(palette: FabricPalette): string {
-  for (let suffix = 1; ; suffix += 1) {
-    const id = suffix === 1 ? "colour" : `colour-${suffix}`;
-    if (palette[id] === undefined) return id;
-  }
 }

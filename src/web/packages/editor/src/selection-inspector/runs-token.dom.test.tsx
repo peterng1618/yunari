@@ -6,6 +6,7 @@ import type {
 } from "@yunari/renderer-core";
 import { formatColor } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
+import type { TokenRef } from "../editor-shell/shell-stores.js";
 import type { TypeTokens } from "../type-preset-manager/panel.js";
 import { uiCopy } from "../ui-copy.js";
 import type { DesignTokenPort } from "./design-token-editor.js";
@@ -15,6 +16,7 @@ import {
   clickHook,
   flush,
   mountRunEditor,
+  optionsOf,
   typeInto,
 } from "./runs.test-stage.js";
 
@@ -45,6 +47,8 @@ const PALETTE: FabricPalette = {
 function stage(tokens: {
   readonly onType: (presets: TypeTokens) => void;
   readonly onPaint: (palette: FabricPalette) => void;
+  readonly create: (kind: TokenRef["kind"]) => TokenRef;
+  readonly reveal: (ref: TokenRef) => void;
   readonly familiesOf?: () => readonly string[];
   readonly rerender: () => void;
 }): DesignTokenPort {
@@ -78,6 +82,8 @@ function stage(tokens: {
     },
     typeTokens: () => presets,
     palette: () => palette,
+    create: tokens.create,
+    reveal: tokens.reveal,
   };
 }
 
@@ -90,6 +96,8 @@ describe("editing the type token a run is set in", () => {
     const designTokens = stage({
       onType: (presets) => written.push(presets),
       onPaint: () => {},
+      create: () => ({ kind: "preset", id: "type" }),
+      reveal: () => {},
       familiesOf: () => ["Inter", "Manrope"],
       rerender: () => box?.render(),
     });
@@ -131,6 +139,8 @@ describe("editing the type token a run is set in", () => {
       designTokens: stage({
         onType: () => {},
         onPaint: () => {},
+        create: () => ({ kind: "preset", id: "type" }),
+        reveal: () => {},
         rerender: () => {},
       }),
     });
@@ -151,6 +161,8 @@ describe("editing the paint token a run is set in", () => {
     const designTokens = stage({
       onType: () => {},
       onPaint: (palette) => written.push(palette),
+      create: () => ({ kind: "paint", id: "colour" }),
+      reveal: () => {},
       rerender: () => box?.render(),
     });
     box = mountRunEditor({
@@ -194,6 +206,8 @@ describe("editing the paint token a run is set in", () => {
     const designTokens = stage({
       onType: () => {},
       onPaint: (palette) => written.push(palette),
+      create: () => ({ kind: "paint", id: "colour" }),
+      reveal: () => {},
       rerender: () => box?.render(),
     });
     box = mountRunEditor({
@@ -220,6 +234,97 @@ describe("editing the paint token a run is set in", () => {
     expect(
       document.querySelector("[data-yunari-palette-gradient]"),
     ).not.toBeNull();
+    return box.dispose();
+  });
+});
+
+describe("adding a design token from a run's token list", () => {
+  it("ends the list with the add entry, creates the token, applies it and reveals it", async () => {
+    const revealed: TokenRef[] = [];
+    let created: TokenRef["kind"] | undefined;
+    let box: ReturnType<typeof mountRunEditor> | undefined;
+    const designTokens = stage({
+      onType: () => {},
+      onPaint: () => {},
+      create: (kind) => {
+        created = kind;
+        return { kind, id: kind === "preset" ? "type" : "colour" };
+      },
+      reveal: (ref) => revealed.push(ref),
+      rerender: () => box?.render(),
+    });
+    box = mountRunEditor({
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
+      globals,
+      designTokens,
+    });
+
+    expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
+      "[Heading] Inter 600",
+      "[Body] Inter 400",
+      uiCopy.inspectorFields.addNewToken,
+    ]);
+
+    await choose(
+      box.host,
+      'data-yunari-run-preset="0"',
+      uiCopy.inspectorFields.addNewToken,
+    );
+
+    expect(created).toBe("preset");
+    expect(box.runs()[0]?.typeToken).toBe("typeTokens.type");
+    expect(revealed.at(-1)).toEqual({ kind: "preset", id: "type" });
+    return box.dispose();
+  });
+
+  it("does the same from the colour list, with a paint token", async () => {
+    const revealed: TokenRef[] = [];
+    let box: ReturnType<typeof mountRunEditor> | undefined;
+    const designTokens = stage({
+      onType: () => {},
+      onPaint: () => {},
+      create: (kind) => ({ kind, id: "colour" }),
+      reveal: (ref) => revealed.push(ref),
+      rerender: () => box?.render(),
+    });
+    box = mountRunEditor({
+      runs: [
+        {
+          kind: "literal",
+          text: "Hi",
+          typeToken: "typeTokens.body",
+          style: { color: { ref: "palette.bars" } },
+        },
+      ],
+      globals,
+      designTokens,
+    });
+
+    await choose(
+      box.host,
+      'data-yunari-run-colour="0"',
+      uiCopy.inspectorFields.addNewToken,
+    );
+
+    expect(box.runs()[0]?.style?.["color"]).toEqual({
+      ref: "palette.colour",
+    });
+    expect(revealed.at(-1)).toEqual({ kind: "paint", id: "colour" });
+    return box.dispose();
+  });
+
+  it("draws neither the edit action nor the add entry without a token port", async () => {
+    const box = mountRunEditor({
+      runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.heading" }],
+      globals,
+    });
+
+    expect(box.host.querySelector("[data-yunari-run-token-edit]")).toBeNull();
+    expect(box.host.querySelector("[data-yunari-run-colour-edit]")).toBeNull();
+    expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
+      "[Heading] Inter 600",
+      "[Body] Inter 400",
+    ]);
     return box.dispose();
   });
 });

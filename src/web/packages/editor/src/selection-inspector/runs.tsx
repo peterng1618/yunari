@@ -57,6 +57,7 @@ import {
   textRunsOf,
 } from "./authored-text.js";
 import {
+  ADD_NEW_TOKEN_ID,
   type DesignTokenPort,
   PaintTokenEditAction,
   TypeTokenEditAction,
@@ -559,8 +560,8 @@ function RunRow(props: {
   readonly view: RunsView;
   readonly edits: RunEdits;
   /** The design token editor, when the session has one behind this column.
-   *  Absent leaves the row's edit action off rather than drawing a control
-   *  whose write would go nowhere. */
+   *  Absent leaves the row's edit action and add entry off rather than drawing
+   *  controls whose writes would go nowhere. */
   readonly tokens?: DesignTokenPort | undefined;
   /**
    * Called before the write, so the editor can stop following the last run:
@@ -579,12 +580,28 @@ function RunRow(props: {
   const paintId = row.colour.startsWith("palette.")
     ? row.colour.slice("palette.".length)
     : undefined;
+  const typeTokenOptions: readonly ControlOption[] =
+    tokens === undefined
+      ? [...view.presets, ...fontActionOptions(edits)]
+      : [
+          ...view.presets,
+          ...fontActionOptions(edits),
+          { id: ADD_NEW_TOKEN_ID, name: uiCopy.inspectorFields.addNewToken },
+        ];
+  const colourOptions: readonly ControlOption[] =
+    tokens === undefined
+      ? view.palettes
+      : [
+          ...view.palettes,
+          { id: ADD_NEW_TOKEN_ID, name: uiCopy.inspectorFields.addNewToken },
+        ];
 
   /**
    * Picking a token writes that run; picking an action row runs it instead.
    * Neither action writes the run's reference by itself — the import points the
    * run only once its commit names the token it produced, and the finder writes
-   * its own target.
+   * its own target. Creating a token is the pane's own creation, applied to
+   * this run and then revealed in the pane that owns it.
    */
   const chooseToken = (ref: string): void => {
     if (ref === IMPORT_LOCAL_FONT_ID) {
@@ -595,6 +612,12 @@ function RunRow(props: {
     }
     if (ref === FONT_FINDER_ID) {
       edits.openFontFinder?.();
+      return;
+    }
+    if (ref === ADD_NEW_TOKEN_ID && tokens !== undefined) {
+      const created = tokens.create("preset");
+      edits.setRunPreset(index, `typeTokens.${created.id}`);
+      tokens.reveal(created);
       return;
     }
     edits.setRunPreset(index, ref);
@@ -622,7 +645,7 @@ function RunRow(props: {
         label={uiCopy.inspectorFields.runToken}
         data={{ "data-yunari-run-preset": String(index) }}
         value={row.typeToken}
-        options={[...view.presets, ...fontActionOptions(edits)]}
+        options={typeTokenOptions}
         onChange={chooseToken}
         action={
           tokens === undefined || typeTokenId === undefined ? undefined : (
@@ -671,7 +694,7 @@ function RunRow(props: {
         label={uiCopy.inspectorFields.runColour}
         data={{ "data-yunari-run-colour": String(index) }}
         value={row.colour}
-        options={view.palettes}
+        options={colourOptions}
         swatch={
           <span
             aria-hidden
@@ -679,7 +702,15 @@ function RunRow(props: {
             style={{ background: colourValueOf(view, row.colour) }}
           />
         }
-        onChange={(ref) => edits.setRunColour(index, ref)}
+        onChange={(ref) => {
+          if (ref === ADD_NEW_TOKEN_ID && tokens !== undefined) {
+            const created = tokens.create("paint");
+            edits.setRunColour(index, `palette.${created.id}`);
+            tokens.reveal(created);
+            return;
+          }
+          edits.setRunColour(index, ref);
+        }}
         action={
           tokens === undefined || paintId === undefined ? undefined : (
             <PaintTokenEditAction
