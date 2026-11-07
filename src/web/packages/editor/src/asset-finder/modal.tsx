@@ -36,11 +36,14 @@ import {
   categoryTabs,
   categoryWord,
   customSourcesOf,
+  DEFAULT_FINDER_TAB,
   DISABLED_KEY,
   EMPTY_VIEW,
   gridSourcesOf,
   type KindFilter,
   type PreviewTarget,
+  rememberedFinderTab,
+  rememberFinderTab,
   sourceIdOf,
   storedDisabled,
   viewOf,
@@ -117,7 +120,9 @@ export function AssetFinder({
   const [listing, setListing] = useState<"loading" | "ok" | "failed">(
     "loading",
   );
-  const [active, setActive] = useState<ListingCategory | undefined>(undefined);
+  const [active, setActive] = useState<ListingCategory | undefined>(
+    rememberedFinderTab,
+  );
   const [disabled, setDisabled] = useState<ReadonlySet<string>>(storedDisabled);
   /** The Colours tab's kind filter. A palette and a gradient are different
    *  presets, so a question about one must not be answered with the other. */
@@ -179,6 +184,9 @@ export function AssetFinder({
           return initialCategory;
         }
         if (current !== undefined && present(current, listed)) return current;
+        // Icons are where a person starts when no call names a tab and no
+        // choice was made this session.
+        if (present(DEFAULT_FINDER_TAB, listed)) return DEFAULT_FINDER_TAB;
         return listed[0]?.category ?? (font !== undefined ? "font" : "local");
       });
     });
@@ -527,6 +535,7 @@ export function AssetFinder({
             askNew("colour", views.colour?.data.query ?? "");
           }
           setActive(category);
+          rememberFinderTab(category);
         }}
         {...(isGrid && customSource === undefined
           ? isLocal

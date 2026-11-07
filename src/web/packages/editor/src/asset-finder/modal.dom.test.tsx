@@ -373,6 +373,7 @@ function kindButton(kind: string): HTMLButtonElement {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.useFakeTimers();
   listSources.mockReset();
   listExtensions.mockReset();
@@ -473,6 +474,29 @@ describe("AssetFinder tabs", () => {
 
     await rerender({ open: false });
     await rerender({ open: true, initialCategory: "font" });
+
+    expect(tab("font").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens on Icons when the listing reaches another category first", async () => {
+    await render([curatedFonts, lucide]);
+    await settle();
+
+    expect(tab("icon").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("keeps the viewer's tab for the session across a remount", async () => {
+    await render([lucide, curatedFonts]);
+    await settle();
+    await act(async () => tab("font").click());
+
+    await act(async () => container?.unmount());
+    root?.remove();
+    root = undefined;
+    container = undefined;
+
+    await render([lucide, curatedFonts]);
+    await settle();
 
     expect(tab("font").getAttribute("aria-selected")).toBe("true");
   });
@@ -1012,7 +1036,7 @@ describe("AssetFinder's Colours tab", () => {
       ],
     });
 
-    await render([colorhunt, lucide]);
+    await render([colorhunt, lucide], { initialCategory: "colour" });
     await settle();
 
     const licence = document.querySelector(

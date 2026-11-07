@@ -8,6 +8,7 @@ import {
   type ListingCategory,
   type PresetKind,
 } from "@yunari/renderer-core";
+import { readSessionView, writeSessionView } from "../session-view.js";
 import { uiCopy } from "../ui-copy.js";
 import type { WallpaperEngineItem } from "../wallpaper-engine/client.js";
 import { EMPTY_TAB, type FinderRow, type TabData } from "./tab-data.js";
@@ -16,6 +17,25 @@ import { EMPTY_TAB, type FinderRow, type TabData } from "./tab-data.js";
 export const SEARCH_DEBOUNCE_MS = 200;
 
 export const DISABLED_KEY = "yunari.asset-finder.disabled";
+
+/** The tab the viewer last chose. **Session storage, not local**: which tab a
+ *  person was browsing is a fact about this sitting, not a preference that
+ *  should greet them a week later. */
+const SELECTED_TAB_KEY = "yunari.asset-finder.tab";
+
+/** The tab to open on when the viewer has not chosen one yet. */
+export const DEFAULT_FINDER_TAB: ListingCategory = "icon";
+
+/** The viewer's last tab this session, or nothing where no tab was chosen,
+ *  storage is refused, or the stored word is empty. */
+export function rememberedFinderTab(): ListingCategory | undefined {
+  const stored = readSessionView(SELECTED_TAB_KEY);
+  return stored === undefined || stored === "" ? undefined : stored;
+}
+
+export function rememberFinderTab(category: ListingCategory): void {
+  writeSessionView(SELECTED_TAB_KEY, category);
+}
 
 /** The kind filter's own value: every source, or one preset kind. */
 export type KindFilter = "all" | PresetKind;
