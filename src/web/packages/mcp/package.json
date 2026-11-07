@@ -20,7 +20,7 @@
     "@yunari/theme-kit": "*",
     "@yunari/theme-package": "*",
     "add-mcp": "2.6.1",
-    "skills": "1.7.5",
+    "skills": "1.7.6",
     "zod": "4.6.7"
   },
   "devDependencies": {

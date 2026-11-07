@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "@yunari/extension-api": "*",
     "@yunari/renderer-core": "*",
     "@yunari/scene-fabric": "*",
@@ -21,7 +21,7 @@
     "@yunari/theme-package": "*",
     "echarts": "6.1.0",
     "fontkit": "2.0.4",
-    "lucide-react": "1.66.0",
+    "lucide-react": "1.68.0",
     "qr": "^0.7.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
