@@ -68,23 +68,36 @@ export class IndicatorStore {
     this.publish("size", undefined);
   }
 
-  /** Places one readout at the pointer, measured and clamped to the viewport.
-   *  The element keeps a laid-out width while hidden, so this measures the text
-   *  it will draw rather than a collapsed box. */
+  /** Places one readout at the pointer, measured and clamped to the stage it
+   *  overlays — the box the old wrapper clamp used.
+   *
+   *  The element keeps its layout while hidden, so this measures a real box
+   *  rather than a collapsed one. **A text change lands on React's next
+   *  commit, one write later than this call**: the first show of a longer
+   *  label clamps against the previous reading's width for that one move. The
+   *  alternative is a render per pointer move, which is the cost the store
+   *  exists to avoid. */
   place(kind: IndicatorKind, point: { x: number; y: number }): void {
     const element = this.#elements.get(kind);
     if (element === undefined) return;
     const box = element.getBoundingClientRect();
+    // The stage is the overlay's parent. jsdom lays nothing out and reports a
+    // zero box, so an empty boundary falls back to the viewport.
+    const stage = element.parentElement?.getBoundingClientRect();
+    const bounded =
+      stage !== undefined && (stage.width > 0 || stage.height > 0);
+    const leftEdge = bounded ? stage.left : 0;
+    const topEdge = bounded ? stage.top : 0;
+    const rightEdge = bounded ? stage.right : window.innerWidth;
+    const bottomEdge = bounded ? stage.bottom : window.innerHeight;
     let left = point.x + OFFSET;
     let top = point.y + OFFSET;
-    if (left + box.width > window.innerWidth)
-      left = point.x - box.width - OFFSET;
-    if (top + box.height > window.innerHeight)
-      top = point.y - box.height - OFFSET;
-    const maxLeft = Math.max(0, window.innerWidth - box.width);
-    const maxTop = Math.max(0, window.innerHeight - box.height);
+    if (left + box.width > rightEdge) left = point.x - box.width - OFFSET;
+    if (top + box.height > bottomEdge) top = point.y - box.height - OFFSET;
+    const maxLeft = Math.max(leftEdge, rightEdge - box.width);
+    const maxTop = Math.max(topEdge, bottomEdge - box.height);
     element.style.transform = `translate(${Math.round(
-      Math.min(Math.max(0, left), maxLeft),
-    )}px, ${Math.round(Math.min(Math.max(0, top), maxTop))}px)`;
+      Math.min(Math.max(leftEdge, left), maxLeft),
+    )}px, ${Math.round(Math.min(Math.max(topEdge, top), maxTop))}px)`;
   }
 }

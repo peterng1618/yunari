@@ -13,10 +13,16 @@ import {
  *
  * Every caller is React, so the popup is React's: the trigger is handed to
  * Base UI's `Tooltip.Trigger`, which donates the behaviour this surface needs —
- * a popup portalled to `body` above the trigger, opened by hover after a delay
- * or by focus at once, dismissed by leaving, blurring, Escape or a press
- * elsewhere, and positioned with floating-ui so it is measured at its final
- * width before it is placed.
+ * a popup portalled out of the trigger's stacking context (the surrounding
+ * dialog's portal node inside a dialog, `document.body` otherwise), opened by
+ * hover after a delay or by focus at once, dismissed by leaving, blurring,
+ * Escape or a press elsewhere, and positioned with floating-ui so it is
+ * measured at its final width before it is placed.
+ *
+ * **The layer lives on the positioner.** Base UI's positioner is the positioned,
+ * body-level element; the popup inside it is a static child, so a `z-index`
+ * declared on the popup would never apply. The class that raises the tooltip
+ * above every dialog is `editor-shell-tooltip-positioner`.
  *
  * **The width is the popup's own.** `max-content` is declared here rather than
  * left to the content: a popup that sizes against the space from its static
@@ -124,6 +130,7 @@ export function ControlTooltip({
       <Tooltip.Trigger delay={HOVER_DELAY_MS} render={trigger} />
       <Tooltip.Portal>
         <Tooltip.Positioner
+          className="editor-shell-tooltip-positioner"
           side="top"
           sideOffset={SIDE_OFFSET}
           collisionPadding={EDGE_MARGIN}

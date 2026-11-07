@@ -37,8 +37,10 @@ const READING_STYLES: CSSProperties = {
 };
 
 /** One readout. Both are always mounted and laid out — a hidden one is
- *  `visibility: hidden`, not `display: none` — so a clamp measures the text it
- *  will draw rather than a collapsed box. */
+ *  `visibility: hidden`, not `display: none` — so a clamp measures a real box
+ *  rather than a collapsed one. Text is state, so a new reading reaches the
+ *  layout on React's next commit: a clamp on the move that first shows a
+ *  longer label uses the previous width for that one write. */
 function Reading({
   store,
   kind,

@@ -99,6 +99,33 @@ it("clamps a reading inside the viewport's right and bottom edges", async () => 
   expect(angle.style.transform.startsWith("translate(")).toBe(true);
 });
 
+it("clamps to the stage it overlays, not to the viewport behind it", async () => {
+  const { store, angle } = await mount();
+  // The stage is the overlay's parent; jsdom reports a zero box, so this is the
+  // one case that supplies the real geometry the old wrapper clamp used.
+  angle.parentElement!.getBoundingClientRect = () =>
+    ({
+      left: 0,
+      top: 0,
+      right: 400,
+      bottom: 300,
+      width: 400,
+      height: 300,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+
+  await act(async () => {
+    store.publish("angle", "30°");
+    // Past the stage's right edge: the readout flips to the pointer's left
+    // rather than crossing into the pane beside it.
+    store.place("angle", { x: 390, y: 20 });
+  });
+
+  expect(angle.style.transform).toBe(`translate(${390 - 16}px, ${20 + 16}px)`);
+});
+
 it("hides and clears a reading when the gesture stops", async () => {
   const { store, angle } = await mount();
   await act(async () => {

@@ -1,7 +1,10 @@
 # 0004 — the tooltip layer sits above every dialog
 
 - **Date:** 2026-10-30
-- **Status:** accepted
+- **Status:** superseded by 0125 — the tooltip is a Base UI composition now, so the
+  layer lives on `.editor-shell-tooltip-positioner` (the portalled, positioned
+  element), not on `.editor-shell-tooltip` (its static child, where a `z-index`
+  does nothing). Number and placement below are unchanged.
 - **Paths:** `src/web/packages/editor/src/components/ui/control-select.tsx` and `src/web/packages/editor/src/editor-shell/editor-shell.css`
 
 ## Problem

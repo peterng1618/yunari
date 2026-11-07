@@ -103,3 +103,12 @@ the same Fabric handlers (formatting stays in `indicator-manager/index.ts`), and
 a React `CursorIndicator` renders the two elements inside the shell; position is
 written through a ref, text and visibility through the store.
 `cursor-indicator.ts` (the element factory) is deleted.
+
+**The tooltip's layer belongs to the positioner.** 0004 raised `.editor-shell-tooltip`
+to `90` because the DOM function owned and portalled the popup element itself.
+Base UI's popup is a static child of a positioned `Tooltip.Positioner`, so the
+`z-index` moves to `.editor-shell-tooltip-positioner`; a number on the popup
+would be inert. The scale (`90` above the dialog pair `70`/`71` and the select
+positioner `80`) and the `pointer-events: none` reasoning are unchanged. jsdom
+cannot see stacking or portal layering, so the proof for this rule is a
+browser check, not a unit test.

@@ -1904,8 +1904,8 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   .editor-shell-menu-popup *,
   .editor-shell-positioner,
   .editor-shell-positioner *,
-  .editor-shell-tooltip,
-  .editor-shell-tooltip * {
+  .editor-shell-tooltip-positioner,
+  .editor-shell-tooltip-positioner * {
     transition: none !important;
     animation: none !important;
   }
@@ -1922,14 +1922,14 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   margin-top: 20px;
 }
 
-/* The `?` reference is a Base UI dialog, portalled to `body` like the menu popup
-   and the tooltip, so its classes are named here rather than reached by a
-   descendant selector. The scrim sits above the menu positioner's `60` and
-   below the select positioner's `80`, because a `ControlSelect` opened inside a
-   dialog is a sibling of this scrim rather than a descendant of the popup
-   above it, and faces the wrong way round the list is unclickable. The tooltip
-   is `90`: a control inside a dialog mounts one as a `body` sibling too, and at
-   `50` its label sat behind the popup it belonged to.
+/* The `?` reference is a Base UI dialog, portalled out of the shell, so its
+   classes are named here rather than reached by a descendant selector. The
+   scrim sits above the menu positioner's `60` and below the select
+   positioner's `80`, because a `ControlSelect` opened inside a dialog is a
+   sibling of this scrim rather than a descendant of the popup above it, and
+   faces the wrong way round the list is unclickable. The tooltip's positioner
+   is `90`: a control inside a dialog mounts one as a sibling of the dialog
+   too, and at `50` its label sat behind the popup it belonged to.
 
    **Every dialog layer shares one index, and DOM order does the nesting.** A
    popup is its scrim's later sibling, so it paints above it. A dialog opened
@@ -3238,10 +3238,13 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .editor-shell-inspector {
   padding: 12px;
 }
-.editor-shell-tooltip {
-  /* Above every dialog scrim and select: a control inside a modal mounts its
-     tooltip as a `body` sibling, so the dialog's `70` would otherwise cover it. */
+.editor-shell-tooltip-positioner {
+  /* Above every dialog scrim and select. The index lives here rather than on
+     `.editor-shell-tooltip` because this is the positioned, portalled element;
+     the popup inside it is static, where a z-index does nothing. */
   z-index: 90;
+}
+.editor-shell-tooltip {
   /* A tooltip is a reading, not a control: it must never take a pointer event
      from the thing it describes. On the rail's vertical stack a slot's popup
      lands over its neighbour, and capturing there made the neighbour

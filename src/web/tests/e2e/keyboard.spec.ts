@@ -399,7 +399,9 @@ test("every canvas action's tooltip names the chord that runs it", async ({
   // cannot be asked to report somebody else's keyboard.
   await expect(tooltip.locator("kbd")).toHaveText("Ctrl+D");
   // One popup, and not sitting on the control that opened it — the failure
-  // `tooltip.ts:20-31` records, which jsdom cannot see because it has no layout.
+  // `ControlTooltip` records (a popup measured before its final width lands on
+  // its trigger and dismisses it), which jsdom cannot see because it has no
+  // layout.
   await expect(tooltip).toHaveCount(1);
   const [trigger, popup] = await Promise.all([
     toolbar

@@ -299,12 +299,16 @@ describe("the Add pane's insert surface", () => {
     await act(async () => tile.focus());
     expect(document.querySelector(".editor-shell-tooltip")).not.toBeNull();
 
-    // Every grid tile carries a tooltip, and the popup is portalled to `body`,
-    // so it outlives the tile's DOM node unless the panel's React root is
-    // unmounted. A panel that removed its host node without releasing its tree
-    // left an open popup over the editor, once per session teardown.
+    // Every grid tile carries a tooltip, and the popup is portalled outside the
+    // tile's node, so it outlives a host that is merely detached. A panel that
+    // removed its host node without releasing its tree left an open popup over
+    // the editor, once per session teardown.
     release(panel);
     expect(document.querySelector(".editor-shell-tooltip")).toBeNull();
+    // The same leak without an open popup: a node removed under a live root
+    // keeps its rendered children. Unmounting empties them first, so this is the
+    // half that distinguishes disposal from detaching.
+    expect(panel.root.childElementCount).toBe(0);
   });
 
   it("inserts a pack preset the host installed", async () => {

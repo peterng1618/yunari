@@ -66,8 +66,9 @@ afterEach(() => {
   root = undefined;
   host?.remove();
   host = undefined;
-  // A focus-opened tooltip is portalled to `body`, so unmounting the rail does
-  // not take it with the tree; blur is what the control hears.
+  // The popup is Base UI's, portalled to the surrounding document and removed
+  // with the rail's tree; the sweep only catches a close still in flight, since
+  // jsdom has no animation to end it.
   for (const popup of document.querySelectorAll(".editor-shell-tooltip"))
     popup.remove();
 });
