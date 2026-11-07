@@ -41,6 +41,18 @@ async function themeWithClip() {
 }
 
 describe("set_background composition", () => {
+  it("starts a newly chosen asset at the display bounds", async () => {
+    const { ctx } = await themeWithClip();
+
+    await setBackground(ctx, { mediaAssetId: "clip" });
+
+    // The MCP surface reads the same default the editor's switch does; a
+    // second literal here is what this assertion keeps from coming back.
+    expect(ctx.drafts.current().envelope.background?.media?.bounds).toBe(
+      "display",
+    );
+  });
+
   it("writes an anchored, faded media", async () => {
     const { ctx } = await themeWithClip();
 

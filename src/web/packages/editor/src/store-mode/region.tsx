@@ -50,6 +50,7 @@ import { SORT_KEYS, SORT_ORDERS } from "./sort-orders.js";
 import { useInstall } from "./use-install.js";
 import { useSubmit } from "./use-submit.js";
 import {
+  pruneStoreFacets,
   readStoreFacets,
   readStoreSort,
   rememberStoreFacets,
@@ -693,6 +694,18 @@ function StoreRegion(props: {
   const matching = (listed ?? []).filter(
     (item) => matchesFacets(item, chosen) && matchesQuery(item, query),
   );
+  /** What the facet row offers, and the authority a restored choice is held to. */
+  const facets = storeFacets(listed ?? []);
+  // A stored choice survives the visit, but not the option it named: a value
+  // the listing no longer offers would filter every row out, and a popover that
+  // no longer draws it gives the viewer nothing to un-tick.
+  useEffect(() => {
+    if (listed === undefined) return;
+    const pruned = pruneStoreFacets(chosen, facets);
+    if (pruned === chosen) return;
+    setChosen(pruned);
+    rememberStoreFacets(pruned);
+  }, [listed, facets, chosen]);
   // **The half's own key**, not the library's: the two halves share no key, so
   // the order read is the one the drawn half declared.
   const sorted = [...matching].sort(SORT_ORDERS[sort[tab]] ?? (() => 0));
@@ -950,7 +963,7 @@ function StoreRegion(props: {
           />
         </ControlWell>
         <FacetRow
-          facets={storeFacets(listed ?? [])}
+          facets={facets}
           chosen={chosen}
           onToggle={(facetId, optionId) => {
             const next = toggleFacet(chosen, facetId, optionId);

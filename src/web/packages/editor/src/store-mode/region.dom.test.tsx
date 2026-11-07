@@ -41,6 +41,7 @@ import {
 } from "./item-fixture.js";
 import type { CellAction, FacetSelection } from "./local-source.js";
 import { StoreModeRegion } from "./region.js";
+import { STORE_FACETS_KEY } from "./view-preferences.js";
 
 // Base UI's popup needs three browser APIs jsdom has none of: floating-ui
 // observes its anchor, the popup waits for its own open transition, and it asks
@@ -308,6 +309,27 @@ it("draws the search well and the sort well, and the sort follows the half", asy
  * editor** (#457). The region unmounts when another mode is shown, so the
  * choice is kept in the browser's session store rather than in its own state.
  */
+it("drops a restored facet value the listing no longer offers", async () => {
+  // The editor that stored this choice had an author called "gone"; this
+  // library has none. Keeping it would filter every row out and leave no
+  // option to un-tick, so the listing's own vocabulary wins.
+  window.sessionStorage.setItem(
+    STORE_FACETS_KEY,
+    JSON.stringify({ author: ["gone"] }),
+  );
+  const container = await mountStore([
+    fixtureEntry({ id: "dark-one", name: "A", ground: DARK_GROUND }),
+  ]);
+
+  expect(drawnIds()).toEqual(["dark-one"]);
+  expect(
+    headerRow(container).querySelector(
+      '[data-yunari-facet="author"] [data-yunari-facet-count]',
+    ),
+    "the stale value still counts as chosen",
+  ).toBeNull();
+});
+
 it("keeps the viewer's sort and facets for the session", async () => {
   const themes = [
     fixtureEntry({ id: "dark-one", name: "A", ground: DARK_GROUND }),

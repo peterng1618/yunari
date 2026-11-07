@@ -232,6 +232,14 @@ export function AssetFinder({
   }, [disabled]);
 
   useEffect(() => {
+    // A caller-named tab belongs to the open that asked for it. A later open
+    // that names none starts from the viewer's own last choice (or Icons),
+    // never from a category the open before happened to be shown.
+    if (open) return;
+    setActive(rememberedFinderTab());
+  }, [open]);
+
+  useEffect(() => {
     // Each tab's plugin body is its own frame; a question and page from the
     // previous tab are not this one's.
     setCustomQuery("");

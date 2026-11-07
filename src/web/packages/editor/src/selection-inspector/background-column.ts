@@ -9,6 +9,7 @@ import {
   type BackgroundMedia,
   type BackgroundMediaComposition,
   DEFAULT_BACKGROUND_EXTENT,
+  DEFAULT_BACKGROUND_MEDIA_BOUNDS,
   type FabricGlobals,
   type GlobalRef,
   MAX_BACKGROUND_EXTENT,
@@ -126,14 +127,15 @@ function mediaField(
   };
 }
 
-/** The box the media is clipped to; a background with no media reads the model's
-    default box so the row still says what a first picture would fill. */
+/** The box the media is clipped to; a background with no media reads the
+    background media's own default box, so the row says what a first picture
+    would fill without spelling a second default. */
 function boundsField(media: BackgroundMedia | undefined): FieldView {
   return {
     id: "background.bounds",
     control: "select",
     label: uiCopy.panels.backgroundBounds,
-    value: media?.bounds ?? "theme",
+    value: media?.bounds ?? DEFAULT_BACKGROUND_MEDIA_BOUNDS,
     options: BACKGROUND_MEDIA_BOUNDS.map((bounds) => ({
       id: bounds,
       name: uiCopy.backgroundBounds[bounds],

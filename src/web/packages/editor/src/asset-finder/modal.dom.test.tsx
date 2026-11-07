@@ -482,6 +482,20 @@ describe("AssetFinder tabs", () => {
     expect(tab("font").getAttribute("aria-selected")).toBe("true");
   });
 
+  it("does not keep a caller-named tab for the next plain open", async () => {
+    await render([lucide, curatedFonts], { initialCategory: "font" });
+    await settle();
+    expect(tab("font").getAttribute("aria-selected")).toBe("true");
+
+    await rerender({ open: false });
+    await rerender({ open: true });
+    await settle();
+
+    // The caller's category belonged to that open; the viewer chose none, so
+    // the generic open starts on Icons.
+    expect(tab("icon").getAttribute("aria-selected")).toBe("true");
+  });
+
   it("opens on Icons when the listing reaches another category first", async () => {
     await render([curatedFonts, lucide]);
     await settle();
@@ -629,16 +643,16 @@ describe("AssetFinder's Wallpaper Engine tab", () => {
               install: "D:/Steam/wallpaper_engine",
               items: [
                 {
-                  workshopId: "older",
-                  title: "Older",
+                  workshopId: "alpha",
+                  title: "Alpha",
                   kind: "scene",
                   filesize: 1,
                   updatedAt: 1_000,
                   tags: [],
                 },
                 {
-                  workshopId: "newer",
-                  title: "Newer",
+                  workshopId: "zeta",
+                  title: "Zeta",
                   kind: "scene",
                   filesize: 1,
                   updatedAt: 2_000,
@@ -654,7 +668,9 @@ describe("AssetFinder's Wallpaper Engine tab", () => {
     await render([wallpaperEngine]);
     await settle();
 
-    expect(rowIds()).toEqual(["newer", "older"]);
+    // Name-ascending would draw Alpha first, so this asserts the update order
+    // rather than the listing's own order.
+    expect(rowIds()).toEqual(["zeta", "alpha"]);
   });
 
   it("reads the library once, on the tab's first activation", async () => {

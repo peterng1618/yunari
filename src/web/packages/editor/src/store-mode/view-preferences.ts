@@ -1,4 +1,5 @@
 import { readSessionView, writeSessionView } from "../session-view.js";
+import type { Facet } from "./facet-row.js";
 import { type FacetSelection, STORE_FACET_IDS } from "./local-source.js";
 import type { StoreTab } from "./region.js";
 import { DEFAULT_SORT, SORT_KEYS } from "./sort-orders.js";
@@ -9,8 +10,8 @@ import { DEFAULT_SORT, SORT_KEYS } from "./sort-orders.js";
  * shown, so these cannot live in its own state alone; they are view choices and
  * never enter a theme document.
  */
-const SORT_KEY = "yunari.editor.store-sort";
-const FACETS_KEY = "yunari.editor.store-facets";
+export const STORE_SORT_KEY = "yunari.editor.store-sort";
+export const STORE_FACETS_KEY = "yunari.editor.store-facets";
 
 const TABS: readonly StoreTab[] = ["local", "online"];
 
@@ -31,7 +32,7 @@ function parse(raw: string | undefined): unknown {
  *  default**, because a key that half does not offer would order by nothing. */
 export function readStoreSort(): Record<StoreTab, string> {
   const sort: Record<StoreTab, string> = { ...DEFAULT_SORT };
-  const parsed = parse(readSessionView(SORT_KEY));
+  const parsed = parse(readSessionView(STORE_SORT_KEY));
   if (!isRecord(parsed)) return sort;
 
   for (const tab of TABS) {
@@ -47,7 +48,7 @@ export function readStoreSort(): Record<StoreTab, string> {
 }
 
 export function rememberStoreSort(sort: Record<StoreTab, string>): void {
-  writeSessionView(SORT_KEY, JSON.stringify(sort));
+  writeSessionView(STORE_SORT_KEY, JSON.stringify(sort));
 }
 
 /** The chosen facets, keeping only these rules: a facet id this build does not
@@ -55,7 +56,7 @@ export function rememberStoreSort(sort: Record<StoreTab, string>): void {
  *  offers. */
 export function readStoreFacets(): FacetSelection {
   const chosen: Record<string, readonly string[]> = {};
-  const parsed = parse(readSessionView(FACETS_KEY));
+  const parsed = parse(readSessionView(STORE_FACETS_KEY));
   if (!isRecord(parsed)) return chosen;
 
   for (const [facet, values] of Object.entries(parsed)) {
@@ -69,5 +70,36 @@ export function readStoreFacets(): FacetSelection {
 }
 
 export function rememberStoreFacets(chosen: FacetSelection): void {
-  writeSessionView(FACETS_KEY, JSON.stringify(chosen));
+  writeSessionView(STORE_FACETS_KEY, JSON.stringify(chosen));
+}
+
+/**
+ * Drops a restored choice the current listing no longer offers.
+ *
+ * A value that vanished from the library — the one theme carrying an author
+ * was deleted, or another build wrote the choice — would filter every row out,
+ * and the popover that no longer draws it offers nothing to un-tick. The
+ * listing is therefore the authority, read once it has answered. The same
+ * object comes back when nothing was dropped, so a caller can tell without
+ * comparing values.
+ */
+export function pruneStoreFacets(
+  chosen: FacetSelection,
+  facets: readonly Facet[],
+): FacetSelection {
+  const offered = new Map(
+    facets.map((facet) => [
+      facet.id,
+      new Set(facet.options.map((option) => option.id)),
+    ]),
+  );
+  let changed = false;
+  const next: Record<string, readonly string[]> = {};
+  for (const [facetId, values] of Object.entries(chosen)) {
+    const options = offered.get(facetId);
+    const kept = values.filter((value) => options?.has(value) === true);
+    if (kept.length !== values.length) changed = true;
+    if (kept.length > 0) next[facetId] = kept;
+  }
+  return changed ? next : chosen;
 }
