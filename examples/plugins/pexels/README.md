@@ -31,7 +31,7 @@ Compress-Archive -Path examples/plugins/pexels/* -DestinationPath "$env:TEMP/pex
    search shows Pexels' curated feed.
 
 Set the key before the first search: the worker reports a missing key as a
-failed page, and the platform stops a worker after repeated handler failures.
+failed page.
 
 ## What it talks to
 

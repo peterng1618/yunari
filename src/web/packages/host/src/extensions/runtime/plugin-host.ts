@@ -17,10 +17,10 @@
  * child forwards only the method names the init message listed in
  * `allowedPluginMethods`; the host rechecks every call.
  *
- * A request handler that throws answers `ok: false` with a short reason. The
- * second such throw in the same process is a crash: the child sends that
- * answer and exits with code 1, so a handler that keeps failing cannot serve
- * a stream of requests.
+ * A request handler that throws answers `ok: false` with a short reason and the
+ * worker keeps serving: an expected gap (a missing key, a provider outage) is
+ * the plugin's answer, not a crash. Only a genuine crash exits the process —
+ * an uncaught exception, an unhandled rejection, or an entry that cannot load.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { resolve, sep } from "node:path";
@@ -72,7 +72,6 @@ const runnerScope = new AsyncLocalStorage<string>();
 const pending = new Map<string, PendingCall>();
 let allowed: ReadonlySet<string> = new Set();
 let pluginModule: PluginModule | undefined;
-let handlerThrows = 0;
 let calls = 0;
 
 function send(message: unknown, after?: () => void): void {
@@ -176,7 +175,6 @@ async function dispatch(method: string, params: unknown): Promise<unknown> {
 
 async function handle(request: HostRequest): Promise<void> {
   let result: PluginResultMessage;
-  let exitCode: number | undefined;
   try {
     const value =
       request.method === "init"
@@ -184,24 +182,17 @@ async function handle(request: HostRequest): Promise<void> {
         : await dispatch(request.method, request.params);
     result = { type: "plugin.result", id: request.id, ok: true, value };
   } catch (error) {
-    const reason = reasonOf(error);
+    // A handler's throw, an unknown method and a failed init are all answers
+    // to this request. Initialise exits on its own only for an entry that
+    // cannot load.
     result = {
       type: "plugin.result",
       id: request.id,
       ok: false,
-      reason,
+      reason: reasonOf(error),
     };
-    // An unknown method is a protocol refusal, not a failing handler.
-    if (request.method !== "init" && reason !== "unknown-method") {
-      handlerThrows += 1;
-      if (handlerThrows >= 2) exitCode = 1;
-    }
   }
 
-  if (exitCode !== undefined) {
-    send(result, () => process.exit(exitCode));
-    return;
-  }
   if (request.method === "stop") {
     send(result, () => process.exit(0));
     return;

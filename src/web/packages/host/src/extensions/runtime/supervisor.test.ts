@@ -385,7 +385,7 @@ export async function describe() {
     expect(crashes).toEqual([]);
   });
 
-  it("crashes non-zero after the second handler throw", async () => {
+  it("keeps serving after repeated handler throws", async () => {
     const crashes: string[] = [];
     const plugin = await writePlugin(
       `export async function health() { throw new Error("boom-handler"); }`,
@@ -401,8 +401,14 @@ export async function describe() {
     await expect(supervisor.request("health", {})).rejects.toThrow(
       "boom-handler",
     );
-    await vi.waitFor(() => expect(supervisor.alive).toBe(false));
-    expect(crashes).toHaveLength(1);
+    expect(supervisor.alive).toBe(true);
+
+    // The third throw is still an answer to its own request, not an exit.
+    await expect(supervisor.request("health", {})).rejects.toThrow(
+      "boom-handler",
+    );
+    expect(supervisor.alive).toBe(true);
+    expect(crashes).toEqual([]);
   });
 
   it("drops a dead child's late host answer instead of its replacement", async () => {
@@ -581,7 +587,7 @@ export async function health() { process.exit(4); }
   it("restarts after stop and reports a later crash", async () => {
     const crashes: string[] = [];
     const plugin = await writePlugin(
-      `export async function health() { throw new Error("boom-handler"); }`,
+      `export async function health() { process.exit(1); }`,
     );
     const supervisor = supervise(plugin, {
       onCrash: (reason) => crashes.push(reason),
@@ -592,10 +598,7 @@ export async function health() { process.exit(4); }
     await supervisor.start();
     expect(supervisor.alive).toBe(true);
     await expect(supervisor.request("health", {})).rejects.toThrow(
-      "boom-handler",
-    );
-    await expect(supervisor.request("health", {})).rejects.toThrow(
-      "boom-handler",
+      "exited with code 1",
     );
     await vi.waitFor(() => expect(crashes).toHaveLength(1));
   });
