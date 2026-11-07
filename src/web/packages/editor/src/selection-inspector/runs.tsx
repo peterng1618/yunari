@@ -615,9 +615,13 @@ function RunRow(props: {
       return;
     }
     if (ref === ADD_NEW_TOKEN_ID && tokens !== undefined) {
-      const created = tokens.create("preset");
-      edits.setRunPreset(index, `typeTokens.${created.id}`);
-      tokens.reveal(created);
+      // The session writes the token and this run's reference in one suspended
+      // history gesture. A refused run write returns nothing, so the pane is
+      // not revealed over a token the run did not take.
+      const created = tokens.create("preset", (token) =>
+        edits.setRunPreset(index, `typeTokens.${token.id}`),
+      );
+      if (created !== undefined) tokens.reveal(created);
       return;
     }
     edits.setRunPreset(index, ref);
@@ -704,9 +708,10 @@ function RunRow(props: {
         }
         onChange={(ref) => {
           if (ref === ADD_NEW_TOKEN_ID && tokens !== undefined) {
-            const created = tokens.create("paint");
-            edits.setRunColour(index, `palette.${created.id}`);
-            tokens.reveal(created);
+            const created = tokens.create("paint", (token) =>
+              edits.setRunColour(index, `palette.${token.id}`),
+            );
+            if (created !== undefined) tokens.reveal(created);
             return;
           }
           edits.setRunColour(index, ref);

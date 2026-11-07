@@ -14,7 +14,7 @@ import { uiCopy } from "./ui-copy.js";
  * The first free `colour`, `colour-2`, … — the ids are stable keys references
  * are written against, so a new token never reuses a deleted one's name.
  */
-export function nextPaintId(palette: FabricPalette): string {
+function nextPaintId(palette: FabricPalette): string {
   for (let suffix = 1; ; suffix += 1) {
     const id = suffix === 1 ? "colour" : `colour-${suffix}`;
     if (palette[id] === undefined) return id;

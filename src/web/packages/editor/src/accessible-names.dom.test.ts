@@ -696,6 +696,32 @@ function mountSelectionInspector(root: HTMLElement): void {
       globals: globals as never,
       nodeBindings: () => [{ id: "clock-time", semanticKey: "date.today" }],
       refreshGlass: vi.fn(),
+      // The run rows' token edit and add entry are controls too: the audit only
+      // reads them when the session's port is behind the column.
+      designTokens: {
+        actions: {
+          onChange: () => undefined,
+          onDelete: () => undefined,
+          unbindFace: () => undefined,
+          paints: {
+            palette: () => ({}),
+            onChange: () => undefined,
+            onDelete: undefined,
+            usage: undefined,
+          },
+        },
+        typeTokens: () => ({
+          body: { family: "Inter", weight: 400 },
+        }),
+        palette: () => ({
+          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+        }),
+        create: (kind, apply) => {
+          const ref = { kind, id: "colour" };
+          return apply(ref) ? ref : undefined;
+        },
+        reveal: () => undefined,
+      },
     });
   }
 }

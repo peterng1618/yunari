@@ -57,6 +57,19 @@ export interface PaintFieldsProps {
   readonly background?: (() => Background | undefined) | undefined;
 }
 
+/**
+ * One palette entry replaced by id, for every surface that edits a paint token:
+ * the token inspector's fields and the run row's edit popover write through the
+ * same closure rather than each restating the spread.
+ */
+export function paintCommitter(
+  palette: FabricPalette,
+  id: string,
+  onChange: (palette: FabricPalette) => void,
+): (entry: FabricPaletteEntry) => void {
+  return (next) => onChange({ ...palette, [id]: next });
+}
+
 export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
   const {
     id,
@@ -76,9 +89,7 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
     uses === undefined ||
     (uses[id]?.length ?? 0) > 0 ||
     (color !== undefined && "ref" in color && color.ref === `palette.${id}`);
-  const commit = (next: FabricPaletteEntry): void => {
-    onChange({ ...palette, [id]: next });
-  };
+  const commit = paintCommitter(palette, id, onChange);
 
   return (
     <div
@@ -164,7 +175,7 @@ export function PaintKindField(props: {
  * The pane used to carry a second field and a swatch beside the picker. Two
  * controls for one value meant two draft states, two refusals and two routes to
  * the same token. */
-export function SolidFields(props: {
+function SolidFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "solid" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
@@ -249,7 +260,7 @@ function DeletionControls(props: {
  * loses nothing, and going back to a solid takes the gradient's first stop,
  * because that is the one colour a gradient can still name.
  */
-export function seedPaint(value: PalettePaint): PalettePaint {
+function seedPaint(value: PalettePaint): PalettePaint {
   if (value.kind === "solid") {
     return {
       kind: "gradient",

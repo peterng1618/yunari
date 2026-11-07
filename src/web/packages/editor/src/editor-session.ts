@@ -40,6 +40,7 @@ import {
   type VideoImportHost,
 } from "./editor-session-video.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
+import type { TokenRef } from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import { type CuratedFontFace } from "./font-catalog.js";
 import {
@@ -391,23 +392,39 @@ export class EditorSession {
       typeTokens: () =>
         (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
       palette: () => this.#document.envelope.globals?.palette ?? {},
-      create: (kind) => {
-        if (kind === "paint") {
-          const added = addPaintToken(
-            this.#document.envelope.globals?.palette ?? {},
-          );
-          this.#document.setPalette(added.palette);
-          // `setPalette` is the live write; adding a token is a discrete edit,
-          // so the entry is settled here as the pane's add settles it.
-          options.shell.editor.historyManager.saveState();
-          return { kind: "paint", id: added.id };
+      create: (kind, apply) => {
+        const history = options.shell.editor.historyManager;
+        // One gesture, one entry: the creation and the run's new reference both
+        // write while history is suspended, so a later undo removes the token
+        // and restores the run together rather than in two steps.
+        const release = history.suspend();
+        const ref: TokenRef =
+          kind === "paint"
+            ? (() => {
+                const added = addPaintToken(
+                  this.#document.envelope.globals?.palette ?? {},
+                );
+                this.#document.setPalette(added.palette);
+                return { kind: "paint", id: added.id };
+              })()
+            : (() => {
+                const added = addTypeToken(
+                  (this.#document.envelope.globals?.typeTokens ??
+                    {}) as TypeTokens,
+                );
+                if (added.created) this.#document.setTypes(added.presets);
+                return { kind: "preset", id: added.id };
+              })();
+        let applied = false;
+        try {
+          applied = apply(ref);
+        } finally {
+          release();
+          // The entry is settled after the suspension lifts, so it captures
+          // both writes; a refused apply leaves the creation itself undoable.
+          history.saveState();
         }
-        const added = addTypeToken(
-          (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
-        );
-        // `setTypes` settles history itself.
-        if (added.created) this.#document.setTypes(added.presets);
-        return { kind: "preset", id: added.id };
+        return applied ? ref : undefined;
       },
       reveal: (ref) => {
         // Show the pane first, then select: the token inspector is the pane's

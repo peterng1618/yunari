@@ -144,7 +144,7 @@ export function createProjection(args: {
       chartEdits(),
       cropEdits,
       fontEdits,
-      options.onOpenFontPicker,
+      undefined,
       options.designTokens,
     );
   };

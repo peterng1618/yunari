@@ -37,17 +37,20 @@ new behaviour.
 
 ## Rung 2 — installed dependencies
 
-Searched: `@base-ui/react` 1.8 Popover (`Popover.Root/Trigger/Portal/Positioner/
-Popup`, controlled `open`/`onOpenChange`) and the installed `useDismiss` source;
-`Select`'s option list and its portalled popup; `ContextMenu`'s controlled portal.
+Searched: the installed `@base-ui/react` 1.9.0 (declared `^1.8.0`) Popover
+(`Popover.Root/Trigger/Portal/Positioner/Popup`, controlled `open`/`onOpenChange`)
+and its `useDismiss`/`FloatingNode` source; `Select`'s option list and its
+portalled popup; `ContextMenu`'s controlled portal.
 
 Found: Base UI popovers anchor to their trigger through `Positioner`, return
-focus to it on close, and treat presses inside child popups in the same floating
-tree as inside the parent. That is exactly the nested surface needed: an edit
-popover anchored at the row, holding a `Select` whose own list portals above it.
-The existing preset context menu is a controlled portal, which Base UI does not
-classify as a child popup; the existing `menu !== undefined` guard in
-`ColourPicker` remains necessary when the menu is used inside the picker.
+focus to it on close, and `useDismiss` treats a node registered in the same
+floating tree as inside. The installed source registers `Popover.Positioner` as
+a `FloatingNode` and a `ContextMenu.Popup`'s node takes that positioner as its
+parent, which suggests the preset context menu opened inside the row popover is
+treated as a child and does not dismiss it. **That nested-menu case is
+source-read, not exercised in a browser here**, so it is recorded as unverified;
+the existing `menu !== undefined` guard in `ColourPicker` is kept until a
+browser probe says it is unnecessary.
 
 ## Rung 3 — native platform
 
@@ -97,4 +100,7 @@ mutation path. Creation moves to `addPaintToken` / `addTypeToken` in
 `editor-session-tokens.ts`, and the Tokens pane and the run row both call them.
 Selection stays `TokenSelectionStore.set`, and the Tokens pane is revealed
 through a new `ShellLayout.showTokens()` that asks the same
-`PaneRequestStore` as `showLayers`.
+`PaneRequestStore` as `showLayers`. The session runs creation and the run's new
+reference inside `historyManager.suspend()` and settles one entry afterwards, so
+the gesture is one undo step; the pane is revealed only when the run accepted
+the reference.

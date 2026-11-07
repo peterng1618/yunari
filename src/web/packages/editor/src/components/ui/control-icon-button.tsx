@@ -22,6 +22,15 @@ import {
  */
 
 /**
+ * The 26px icon action's treatment, shared by the button and a control that is
+ * its own popover trigger: the run row's token edit sits inside a `Popover`
+ * whose trigger it supplies, and rendering the same classes there keeps one
+ * owner for the size, tone transition and focus ring.
+ */
+export const controlIconButtonClass =
+  "inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent enabled:hover:border-muted enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+
+/**
  * An action whose glyph is unambiguous: a 26px square at `--radius-md`, the
  * glyph and nothing else.
  *
@@ -100,7 +109,7 @@ export function ControlIconButton(
             if (blocked) return;
             onClick();
           }}
-          className={`inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent ${tone} enabled:hover:border-muted enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+          className={`${controlIconButtonClass} ${tone}`}
         >
           {children}
         </button>

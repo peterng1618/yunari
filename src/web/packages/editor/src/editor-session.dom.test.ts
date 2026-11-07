@@ -1393,6 +1393,136 @@ describe("EditorSession", () => {
     extensions.destroy();
   });
 
+  it("adds a token from the run row as one undo entry, applies it and reveals it", async () => {
+    // The row's "Add new token" is the session's creation rule, not a second
+    // one: the token write and the run's new reference happen inside one
+    // suspended history gesture, then the Tokens pane is shown over the new
+    // token. Reading the surface the author reads keeps the check on behaviour
+    // rather than on a call count that a refactor can satisfy while the row
+    // still points at nothing.
+    const text = new IText("Hi", { left: 0, top: 0 });
+    text.set({
+      yunariText: {
+        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
+      },
+    });
+    const selectionHost = document.createElement("div");
+    document.body.append(selectionHost);
+    const tokenSelection = new TokenSelectionStore(new SelectionStore());
+    const onShowTokens = vi.fn();
+    let suspended = 0;
+    const recorded: number[] = [];
+    const saveState = vi.fn(() => {
+      if (suspended === 0) recorded.push(1);
+    });
+    const setTypes = vi.spyOn(EditorDocument.prototype, "setTypes");
+    const extensions = new EditorSession({
+      assetManager: new AssetManager(),
+      shell: {
+        editor: {
+          canvas: {
+            on: vi.fn(),
+            off: vi.fn(),
+            getActiveObject: () => text,
+            getObjects: () => [text],
+            requestRenderAll: vi.fn(),
+            fire: vi.fn(),
+          },
+          artboard: () => ({ width: 100, height: 100 }),
+          clipboardManager: {
+            setImageImporter: vi.fn(),
+            setBindings: vi.fn(),
+            setAssets: vi.fn(),
+          },
+          textManager: {
+            addText: vi.fn(),
+            setAuthoringView: vi.fn(),
+            setRepaint: vi.fn(),
+            setMentions: vi.fn(),
+          },
+          cropManager: idleCrop(),
+          historyManager: {
+            attachEnvelope: () => {},
+            saveState,
+            suspend: () => {
+              suspended += 1;
+              let released = false;
+              return () => {
+                if (released) return;
+                released = true;
+                suspended -= 1;
+              };
+            },
+          },
+          errorManager: { warn: vi.fn(), error: vi.fn() },
+        },
+        scene: {},
+        snapshot: vi.fn((input) => ({ ...envelope, ...input })),
+        setBackground: vi.fn(),
+        setBackgroundMedia: vi.fn(),
+        setGlobals: vi.fn(),
+        refreshGlass: vi.fn(),
+      } as never,
+      source: {} as never,
+      envelope,
+      panelHosts: {
+        add: document.body,
+        assets: document.body,
+        document: document.body,
+        tokens: document.body,
+        selection: selectionHost,
+      },
+      tokenSelection,
+      onShowTokens,
+      onNew: vi.fn(),
+      onNewFromStarter: vi.fn(),
+      onSaved: vi.fn(),
+    });
+
+    const select = selectionHost.querySelector<HTMLElement>(
+      '[data-yunari-run-preset="0"]',
+    );
+    if (select === null) throw new Error("the run's token list is missing");
+    select.click();
+    await flushPopups();
+    const option = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find(
+      (candidate) =>
+        (candidate.textContent ?? "").trim() ===
+        uiCopy.inspectorFields.addNewToken,
+    );
+    if (option === undefined) throw new Error("the add entry is missing");
+    option.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerType: "mouse",
+        button: 0,
+      }),
+    );
+    option.click();
+    await flushPopups();
+
+    const addedId = Object.keys(
+      extensions.envelope.globals?.typeTokens ?? {},
+    ).find((id) => !(id in (envelope.globals?.typeTokens ?? {})));
+    expect(addedId).toBeDefined();
+    expect(
+      (text.get("yunariText") as { runs: { typeToken?: string }[] }).runs[0]
+        ?.typeToken,
+    ).toBe(`typeTokens.${addedId}`);
+    expect(tokenSelection.get()).toEqual({ kind: "preset", id: addedId });
+    expect(onShowTokens).toHaveBeenCalledTimes(1);
+    expect(recorded).toHaveLength(1);
+    expect(setTypes).toHaveBeenCalledWith(
+      expect.objectContaining({ [addedId as string]: expect.anything() }),
+    );
+
+    setTypes.mockRestore();
+    extensions.destroy();
+  });
+
   it("gives the selected token its own column, and gives the object column back", async () => {
     // The right column has one owner at a time. The session
     // owns both halves — the token panel's mounts and the suppression — because

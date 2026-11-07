@@ -6,12 +6,14 @@ import type {
 } from "@yunari/renderer-core";
 import type { ReactNode } from "react";
 import { ColourPickerPanel } from "../components/ui/colour-picker.js";
+import { controlIconButtonClass } from "../components/ui/control-icon-button.js";
 import { ControlTooltip } from "../editor-shell/controls/tooltip.js";
 import { Glyph, PENCIL_GLYPH } from "../editor-shell/icons.js";
 import type { TokenRef } from "../editor-shell/shell-stores.js";
 import {
   GradientFields,
   PaintKindField,
+  paintCommitter,
 } from "../panes/tokens/paint-fields.js";
 import {
   TokenFaceFields,
@@ -38,8 +40,14 @@ export interface DesignTokenPort {
   readonly actions: TokenInspectorActions;
   readonly typeTokens: () => TypeTokens;
   readonly palette: () => FabricPalette;
-  /** Creates a token through the pane's own creation rule and returns its ref. */
-  readonly create: (kind: TokenRef["kind"]) => TokenRef;
+  /** Creates a token through the pane's own rule and runs `apply` inside the
+   *  same suspended history gesture, so the creation and the run's new
+   *  reference are one undo entry. Returns the new ref only when `apply`
+   *  accepted it; a refused run write leaves nothing to reveal. */
+  readonly create: (
+    kind: TokenRef["kind"],
+    apply: (ref: TokenRef) => boolean,
+  ) => TokenRef | undefined;
   /** Shows the Tokens pane and selects the token's inspector. */
   readonly reveal: (ref: TokenRef) => void;
 }
@@ -54,6 +62,7 @@ export interface DesignTokenPort {
  */
 function EditAction(props: {
   readonly label: string;
+  readonly title: string;
   readonly hook: string;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -64,7 +73,7 @@ function EditAction(props: {
           type="button"
           aria-label={props.label}
           {...{ [props.hook]: "" }}
-          className="inline-flex size-[26px] flex-none items-center justify-center rounded-md border border-transparent bg-transparent text-muted enabled:hover:border-muted enabled:hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          className={`${controlIconButtonClass} text-muted`}
         >
           <Glyph icon={PENCIL_GLYPH} size={14} />
         </Popover.Trigger>
@@ -72,6 +81,7 @@ function EditAction(props: {
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} align="end" className="z-50">
           <Popover.Popup
+            aria-label={props.title}
             data-yunari-token-edit-popover=""
             className="max-h-[var(--available-height)] w-72 space-y-2 overflow-y-auto rounded-md border border-edge bg-[var(--shell-popover)] p-3 text-sm text-text shadow-[var(--elev-2)]"
           >
@@ -95,6 +105,7 @@ export function TypeTokenEditAction(props: {
   return (
     <EditAction
       label={uiCopy.inspectorFields.editToken(tokenName(id, value))}
+      title={tokenName(id, value)}
       hook="data-yunari-run-token-edit"
     >
       <TokenFaceFields
@@ -122,13 +133,12 @@ export function PaintTokenEditAction(props: {
   const paints = actions.paints;
   if (entry === undefined || paints === undefined) return null;
 
-  const commit = (next: FabricPaletteEntry): void => {
-    paints.onChange({ ...palette, [id]: next });
-  };
+  const commit = paintCommitter(palette, id, paints.onChange);
 
   return (
     <EditAction
       label={uiCopy.inspectorFields.editToken(entry.name)}
+      title={entry.name}
       hook="data-yunari-run-colour-edit"
     >
       <PaintKindField
