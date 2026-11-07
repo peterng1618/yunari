@@ -18,6 +18,7 @@ import { MAX_ASSET_BYTES } from "./asset-bytes.js";
 import {
   DECLARATIVE_LOG_LIMIT,
   type DeclarativeAssetSource,
+  declarativeAssetSources,
   warnDeclarativeSource,
 } from "./declarative-contributions.js";
 import { guardedFetch, guardedFetchBytes } from "./runtime/network.js";
@@ -67,6 +68,50 @@ function filenameOf(url: URL): string {
   if (!/^[\x20-\x7e]+$/.test(name)) return "asset";
   if (name.includes("/") || name.includes("\\")) return "asset";
   return name;
+}
+
+/**
+ * One adapter per declarative contribution whose id no built-in or code source
+ * already owns, in the installer's order.
+ *
+ * A later duplicate is refused with a line rather than reaching
+ * `createAssetSources`, whose duplicate check throws and would fail the change
+ * that installed it. This is the one collision rule for declarative rows, used
+ * at startup and after a live change alike.
+ */
+export function declarativeAssetAdapters(
+  extensions: readonly InstalledExtension[],
+  taken: ReadonlySet<string>,
+): readonly DeclarativeAssetSourceAdapter[] {
+  const owners = new Map<string, InstalledExtension>();
+  for (const extension of extensions) {
+    for (const row of extension.contributions.assetSources ?? []) {
+      const id = row["id"];
+      if (typeof id === "string" && !owners.has(id)) {
+        owners.set(id, extension);
+      }
+    }
+  }
+
+  const ids = new Set(taken);
+  const adapters: DeclarativeAssetSourceAdapter[] = [];
+  for (const contribution of declarativeAssetSources(extensions)) {
+    const owner = owners.get(contribution.id);
+    if (owner === undefined) continue;
+    if (ids.has(contribution.id)) {
+      warnDeclarativeSource(
+        owner.key,
+        `the asset source "${contribution.id}" is already an asset source.`,
+      );
+      continue;
+    }
+    ids.add(contribution.id);
+    adapters.push(
+      new DeclarativeAssetSourceAdapter({ plugin: owner, contribution }),
+    );
+  }
+
+  return adapters;
 }
 
 /**

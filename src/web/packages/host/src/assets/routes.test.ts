@@ -113,6 +113,32 @@ describe("the asset routes", () => {
     expect(body.sources.find((s) => s.id === "lucide")?.presetKind).toBeNull();
   });
 
+  it("reads a live source list again on the next request", async () => {
+    // A plugin that joins the runtime after startup is a row the next request
+    // must list; the getter is the seam that makes that possible.
+    const rows: AssetSource[] = [colourSource];
+    const base = await start({ sources: () => rows });
+
+    const first = (await (
+      await fetch(`${base}/api/assets/sources`)
+    ).json()) as {
+      sources: readonly { id: string }[];
+    };
+    expect(first.sources.map((source) => source.id)).toEqual(["fake-palettes"]);
+
+    rows.push(lucideSource);
+
+    const second = (await (
+      await fetch(`${base}/api/assets/sources`)
+    ).json()) as {
+      sources: readonly { id: string }[];
+    };
+    expect(second.sources.map((source) => source.id)).toEqual([
+      "fake-palettes",
+      "lucide",
+    ]);
+  });
+
   it("lists a plugin asset source beside the built-ins", async () => {
     const contribution: CodeAssetSourceContribution = {
       id: "plugin-source",

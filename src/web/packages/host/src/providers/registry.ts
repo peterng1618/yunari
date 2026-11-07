@@ -119,7 +119,13 @@ export interface MeasuredCatalogue {
 
 export class ProviderRegistry {
   /** Providers are ordered by precedence; the first provider to answer a key owns it. */
-  constructor(private readonly providers: readonly SensorProvider[]) {}
+  constructor(private providers: readonly SensorProvider[]) {}
+
+  /** Replaces the provider list. The live plugin runtime calls this when a
+   *  plugin's provider joins or leaves, so a poll reads the current list. */
+  setProviders(providers: readonly SensorProvider[]): void {
+    this.providers = providers;
+  }
 
   async describe(): Promise<readonly DescribedSensor[]> {
     const settled = await Promise.allSettled(

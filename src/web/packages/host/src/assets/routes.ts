@@ -16,7 +16,9 @@ import { ASSET_SOURCES } from "./sources.js";
 /** What the host serves at `/api/assets`, or nothing when it serves none. */
 export interface AssetRouteOptions {
   readonly credentials?: CredentialStore;
-  readonly sources?: readonly AssetSource[];
+  /** The rows the finder lists. A function is read per request, so a plugin
+   *  that joins the runtime after startup appears without a restart. */
+  readonly sources?: AssetSourceList;
   /** Supplied so a test can search without a network. */
   readonly fetch?: typeof fetch;
   /** Where a trash request stages its copies. Defaults to `os.tmpdir()`; the
@@ -25,6 +27,19 @@ export interface AssetRouteOptions {
   /** The platform trash. Defaults to the real one; supplied so a route test
    *  never moves a copy in its own machine's trash. */
   readonly trash?: (paths: readonly string[]) => Promise<void>;
+}
+
+/** Fixed rows, or the live runtime's rows read once per request. */
+export type AssetSourceList =
+  | readonly AssetSource[]
+  | (() => readonly AssetSource[]);
+
+/** The one read of the source list; every route path and the credential reader
+ *  takes its rows from here so a live change is seen everywhere at once. */
+function sourcesOf(assets: AssetRouteOptions): readonly AssetSource[] {
+  const sources = assets.sources;
+  if (sources === undefined) return ASSET_SOURCES;
+  return typeof sources === "function" ? sources() : sources;
 }
 
 export interface AssetRouteInput {
@@ -328,7 +343,7 @@ async function credentialReader(
 
   if (store !== undefined) {
     const wanted = new Set(
-      (assets.sources ?? ASSET_SOURCES)
+      sourcesOf(assets)
         .map((source) => source.requires)
         .filter((id): id is string => id !== undefined),
     );
@@ -393,7 +408,7 @@ export async function handleAssetRoutes(
     return true;
   }
 
-  const sources = assets.sources ?? ASSET_SOURCES;
+  const sources = sourcesOf(assets);
 
   if (url.pathname === sourcesPath) {
     if (request.method !== "GET") {

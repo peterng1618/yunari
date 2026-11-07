@@ -32,6 +32,13 @@ export class PluginPanelRows {
     this.#sync();
   }
 
+  /** Replaces every row. The live runtime builds the whole list after a
+   *  change, so a plugin that just started appears in one step. */
+  replace(rows: readonly PluginPanelRow[]): void {
+    this.#rows = rows;
+    this.#sync();
+  }
+
   /** Removes every row the plugin owns. Answers whether any row was removed. */
   remove(pluginKey: string): boolean {
     const remaining = this.#rows.filter((row) => row.pluginKey !== pluginKey);

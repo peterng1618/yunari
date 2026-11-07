@@ -343,8 +343,7 @@ export class PluginSensorProvider implements SensorProvider {
   }
 }
 
-export interface StartPluginSupervisorsOptions {
-  readonly installer: PluginInstaller;
+export interface StartPluginSupervisorOptions {
   readonly extensions: ExtensionService;
   readonly hostApi: HostApiDispatcher;
   readonly workerEntry?: string;
@@ -359,6 +358,11 @@ export interface StartPluginSupervisorsOptions {
     attempt: number,
     delayMs: number,
   ) => void;
+}
+
+export interface StartPluginSupervisorsOptions
+  extends StartPluginSupervisorOptions {
+  readonly installer: PluginInstaller;
 }
 
 export interface CreatePluginProvidersOptions
@@ -387,6 +391,71 @@ export function needsCodeWorker(plugin: InstalledPlugin): boolean {
 }
 
 /**
+ * Starts the one worker a plugin needs, or answers undefined when the plugin
+ * contributes no code or may not load.
+ *
+ * A plugin that fails to start is reported and left out; a refused start may
+ * have left a child behind, so that child is released here. The live runtime
+ * calls this for a plugin that became loadable after startup; the startup path
+ * calls it for every installed plugin through `startPluginSupervisors`.
+ */
+export async function startPluginSupervisor(
+  options: StartPluginSupervisorOptions,
+  plugin: InstalledPlugin,
+): Promise<PluginSupervisor | undefined> {
+  if (!needsCodeWorker(plugin)) return undefined;
+
+  let loadable = false;
+  let consent: ConsentRecord | undefined;
+
+  try {
+    loadable = await options.extensions.mayLoad(plugin.key);
+    if (loadable) {
+      consent = await options.extensions.consentRecord(plugin.key);
+    }
+  } catch {
+    // A plugin whose consent cannot be read is not loadable; only this one
+    // loses its worker.
+    loadable = false;
+  }
+  if (!loadable || consent === undefined) return undefined;
+
+  let crashReported = false;
+  const supervisor = createPluginSupervisor({
+    plugin,
+    granted: plugin.manifest.capabilities,
+    consent,
+    hostApi: options.hostApi,
+    onCrash: (reason) => {
+      crashReported = true;
+      options.onFailure?.(plugin.key, reason);
+      options.onCrash?.(plugin.key);
+    },
+    onRestart: (attempt, delayMs) => {
+      options.onRestart?.(plugin.key, attempt, delayMs);
+    },
+    ...(options.workerEntry === undefined
+      ? {}
+      : { workerEntry: options.workerEntry }),
+  });
+
+  try {
+    await supervisor.start();
+  } catch (error) {
+    // A crash during startup already reported through onCrash; a refused
+    // start (no main entry, mismatched consent) reports here instead.
+    if (!crashReported) {
+      options.onFailure?.(plugin.key, redactForBrowser(reasonOf(error)));
+    }
+    // A start that failed may have left a child behind; release it.
+    await supervisor.stop().catch(() => undefined);
+    return undefined;
+  }
+
+  return supervisor;
+}
+
+/**
  * Starts one supervisor per loadable plugin that needs code.
  *
  * A plugin that fails to start is reported and left out; the rest keep
@@ -399,56 +468,8 @@ export async function startPluginSupervisors(
   const supervisors = new Map<string, PluginSupervisor>();
 
   for (const plugin of await options.installer.list()) {
-    if (!needsCodeWorker(plugin)) continue;
-
-    let loadable = false;
-    let consent: ConsentRecord | undefined;
-
-    try {
-      loadable = await options.extensions.mayLoad(plugin.key);
-      if (loadable) {
-        consent = await options.extensions.consentRecord(plugin.key);
-      }
-    } catch {
-      // A plugin whose consent cannot be read is not loadable; only this one
-      // loses its worker.
-      loadable = false;
-    }
-    if (!loadable || consent === undefined) continue;
-
-    let crashReported = false;
-    const supervisor = createPluginSupervisor({
-      plugin,
-      granted: plugin.manifest.capabilities,
-      consent,
-      hostApi: options.hostApi,
-      onCrash: (reason) => {
-        crashReported = true;
-        options.onFailure?.(plugin.key, reason);
-        options.onCrash?.(plugin.key);
-      },
-      onRestart: (attempt, delayMs) => {
-        options.onRestart?.(plugin.key, attempt, delayMs);
-      },
-      ...(options.workerEntry === undefined
-        ? {}
-        : { workerEntry: options.workerEntry }),
-    });
-
-    try {
-      await supervisor.start();
-    } catch (error) {
-      // A crash during startup already reported through onCrash; a refused
-      // start (no main entry, mismatched consent) reports here instead.
-      if (!crashReported) {
-        options.onFailure?.(plugin.key, redactForBrowser(reasonOf(error)));
-      }
-      // A start that failed may have left a child behind; release it.
-      await supervisor.stop().catch(() => undefined);
-      continue;
-    }
-
-    supervisors.set(plugin.key, supervisor);
+    const supervisor = await startPluginSupervisor(options, plugin);
+    if (supervisor !== undefined) supervisors.set(plugin.key, supervisor);
   }
 
   let stopped = false;

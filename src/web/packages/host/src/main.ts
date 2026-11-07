@@ -2,14 +2,9 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  deviceAllowlistOf,
-  type InstalledExtension,
-  PANEL_COMMAND_KINDS,
-  type PanelCommand,
-} from "@yunari/extension-api";
+import type { DeviceAllowlist } from "@yunari/extension-api";
 import { BUILTIN_PATH_PRESETS } from "@yunari/theme-package";
-import { ASSET_SOURCES, createAssetSources } from "./assets/sources.js";
+import { ASSET_SOURCES } from "./assets/sources.js";
 import { buildCatalogueIndexCommand } from "./catalogue/build-index.js";
 import { DEFAULT_HOST, isLoopbackHost, parseArgs } from "./cli/args.js";
 import { createHostBinding, type HostBinding } from "./cli/hosting.js";
@@ -22,42 +17,26 @@ import {
   stableName,
   waitUntilReachable,
 } from "./cli/net.js";
-import { createPluginAssetSources } from "./extensions/asset-sources.js";
 import { createConsentStore } from "./extensions/consent-store.js";
 import { pluginSourceRows } from "./extensions/custom-sources.js";
-import { declarativeAssetSources } from "./extensions/declarative-contributions.js";
-import { DeclarativeAssetSourceAdapter } from "./extensions/declarative-sources.js";
 import { createPluginInstaller } from "./extensions/install.js";
 import { createKillListStore } from "./extensions/kill-list.js";
-import {
-  createProviderOrderStore,
-  orderProviders,
-} from "./extensions/provider-order.js";
-import {
-  createPluginProviders,
-  type PluginSupervisors,
-  startPluginSupervisors,
-} from "./extensions/providers.js";
+import { createPluginRuntime } from "./extensions/plugin-runtime.js";
+import { createProviderOrderStore } from "./extensions/provider-order.js";
 import { createDeviceBroker } from "./extensions/runtime/device-broker.js";
 import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
-import { revokePluginRuntime } from "./extensions/runtime/plugin-revocation.js";
 import { createPluginScopes } from "./extensions/runtime/scoped-stores.js";
-import type { PluginSupervisor } from "./extensions/runtime/supervisor.js";
 import { createNativeDeviceBackend } from "./extensions/runtime/usb-backend.js";
 import { createExtensionService } from "./extensions/service.js";
 import { createPluginSettingsStore } from "./extensions/settings.js";
 import { defaultWidgetPackBytes } from "./packs/bundled-default-pack.js";
 import { createWidgetPackStore } from "./packs/widget-packs.js";
-import {
-  createPanelFamilyRegistry,
-  type PanelFamilyContribution,
-} from "./panels/panel-families.js";
+import { createPanelFamilyRegistry } from "./panels/panel-families.js";
 import {
   createPanelManager,
   type PanelManager,
 } from "./panels/panel-manager.js";
 import { panelPageUrl, themePageUrl } from "./panels/panel-page.js";
-import { pluginPanelFamily } from "./panels/plugin-panel-family.js";
 import { PluginPanelRows } from "./panels/plugin-panel-rows.js";
 import { createPathPresetStore } from "./presets/path-presets.js";
 import { ClockSensorProvider } from "./providers/clock.js";
@@ -262,10 +241,8 @@ export async function run(argv: readonly string[]): Promise<number> {
     path.join(settingsDir, "extensions", "provider-order.json"),
   );
   let extensions: ReturnType<typeof createExtensionService>;
-  /** The running workers, once they start; an install rechecks this map. */
-  let pluginSupervisors: PluginSupervisors | undefined;
-  /** Assigned once the device broker exists; the service's onChange calls it. */
-  let recheckPluginSupervisors = async (): Promise<void> => undefined;
+  /** Built after the broker and panel registry exist; onChange reconciles it. */
+  let pluginRuntime: ReturnType<typeof createPluginRuntime> | undefined;
   let pluginSources: readonly CustomSource[] = [];
   const refreshPluginSources = async (): Promise<void> => {
     try {
@@ -297,23 +274,19 @@ export async function run(argv: readonly string[]): Promise<number> {
     onChange: async () => {
       await refreshPluginSources();
       await customProvider.reload();
-      // An install can change what a plugin asks for. A worker whose plugin no
-      // longer may load is stopped and its devices closed; the panel-family
-      // row it backed is rebuilt on the next host start, never mutated here.
-      await recheckPluginSupervisors();
+      // An install, grant or revoke changes which plugins may load. The live
+      // runtime starts or stops the workers and updates every registry the
+      // server and the panel manager read.
+      await pluginRuntime?.reconcile();
     },
   });
   await refreshPluginSources();
   await customProvider.reload();
 
-  // The devices every installed plugin declares, in one map the broker reads.
-  const installedPlugins = await pluginInstaller.list();
-  const deviceAllowlists = new Map(
-    installedPlugins.map((plugin) => [
-      plugin.key,
-      deviceAllowlistOf(plugin.manifest),
-    ]),
-  );
+  // The devices each running plugin declares, in one map the broker reads.
+  // The live runtime fills it, so a plugin that becomes loadable after start
+  // gains its devices and a revoked one loses them.
+  const deviceAllowlists = new Map<string, readonly DeviceAllowlist[]>();
   const deviceBroker = createDeviceBroker({
     allowlists: (key) => deviceAllowlists.get(key) ?? [],
     backend: createNativeDeviceBackend(),
@@ -326,35 +299,8 @@ export async function run(argv: readonly string[]): Promise<number> {
   const panelFamilies = createPanelFamilyRegistry();
   const pluginPanelFamilies = new PluginPanelRows(panelFamilies);
 
-  recheckPluginSupervisors = async () => {
-    const running = pluginSupervisors;
-    if (running === undefined) return;
-
-    for (const key of running.supervisors.keys()) {
-      let loadable = false;
-      try {
-        loadable = await extensions.mayLoad(key);
-      } catch {
-        loadable = false;
-      }
-      if (loadable) continue;
-
-      // A revoked plugin's worker, devices and panel rows go together: a
-      // surface must not offer a panel the host will refuse to drive.
-      await revokePluginRuntime({
-        pluginKey: key,
-        supervisors: running.supervisors as Map<string, PluginSupervisor>,
-        allowlists: deviceAllowlists,
-        panelRows: pluginPanelFamilies,
-        broker: deviceBroker,
-      });
-    }
-  };
-
-  // One forked worker per loadable plugin that needs code. A plugin that will
-  // not start is reported and left out; the machine's own providers still
-  // answer, and a plugin contributing both providers and asset sources is one
-  // process. The supervisors are started once and shared by both adapters.
+  // One host-API dispatcher and one supervisor per plugin are shared by every
+  // adapter a plugin contributes: one process, however many contributions.
   const pluginHostApi = createHostApiDispatcher({
     settingsDir,
     scopes: pluginScopes,
@@ -372,116 +318,7 @@ export async function run(argv: readonly string[]): Promise<number> {
       `Plugin worker ${pluginKey}: restarting (attempt ${attempt} in ${delayMs} ms).`,
     );
   };
-  const runningSupervisors = await startPluginSupervisors({
-    installer: pluginInstaller,
-    extensions,
-    hostApi: pluginHostApi,
-    onFailure: onPluginFailure,
-    onRestart: onPluginRestart,
-    // A crashed worker cannot close the handles it opened; the host closes
-    // them here rather than waiting for a later call or shutdown.
-    onCrash: (pluginKey) => {
-      void deviceBroker.closeAll(pluginKey);
-    },
-  });
-  pluginSupervisors = runningSupervisors;
 
-  // One panel family per manifest entry whose plugin got a worker. A command
-  // this build does not know is dropped with a line, not guessed at.
-  for (const plugin of installedPlugins) {
-    const supervisor = runningSupervisors.supervisors.get(plugin.key);
-    if (supervisor === undefined) continue;
-
-    for (const entry of plugin.manifest.contributes.panelFamilies ?? []) {
-      const commands: PanelCommand["kind"][] = [];
-      for (const command of entry.commands) {
-        if (PANEL_COMMAND_KINDS.has(command as PanelCommand["kind"])) {
-          commands.push(command as PanelCommand["kind"]);
-        } else {
-          console.error(
-            `Panel family ${entry.id} in ${plugin.key}: this host does not know the command "${command}".`,
-          );
-        }
-      }
-
-      const contribution: PanelFamilyContribution = {
-        id: entry.id,
-        label: entry.label,
-        vendorId: entry.vendorId,
-        productId: entry.productId,
-        geometry: entry.geometry,
-        support: entry.support,
-        commands,
-        ...(entry.renderModes === undefined
-          ? {}
-          : { renderModes: entry.renderModes }),
-      };
-
-      // One bad row is reported and skipped: a plugin's manifest error must
-      // not take the host down before its own displays start.
-      try {
-        pluginPanelFamilies.add({
-          pluginKey: plugin.key,
-          family: pluginPanelFamily({
-            plugin,
-            contribution,
-            supervisor,
-            broker: deviceBroker,
-          }),
-        });
-      } catch (error) {
-        console.error(
-          `Panel family ${entry.id} in ${plugin.key}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-
-  const pluginRuntime = await createPluginProviders({
-    installer: pluginInstaller,
-    extensions,
-    hostApi: pluginHostApi,
-    supervisors: runningSupervisors.supervisors,
-    onFailure: onPluginFailure,
-  });
-  const pluginAssetSources = await createPluginAssetSources({
-    installer: pluginInstaller,
-    supervisors: runningSupervisors.supervisors,
-    taken: ASSET_SOURCES.map((source) => source.id),
-    onFailure: onPluginFailure,
-  });
-  // A declarative source needs no worker: its manifest says where to search
-  // and how to read the answer. A row that collides with a built-in or a code
-  // source is refused here rather than reaching `createAssetSources`, whose
-  // duplicate check throws and would take the host down at startup.
-  const installedExtensions = await extensions.list();
-  const declaredAssetSources = declarativeAssetSources(installedExtensions);
-  const declarativeOwners = new Map<string, InstalledExtension>();
-  for (const extension of installedExtensions) {
-    for (const row of extension.contributions.assetSources ?? []) {
-      const id = row["id"];
-      if (typeof id === "string") declarativeOwners.set(id, extension);
-    }
-  }
-  const assetSourceIds = new Set([
-    ...ASSET_SOURCES.map((source) => source.id),
-    ...pluginAssetSources.map((source) => source.id),
-  ]);
-  const declarativeAssetAdapters: DeclarativeAssetSourceAdapter[] = [];
-  for (const contribution of declaredAssetSources) {
-    const owner = declarativeOwners.get(contribution.id);
-    if (owner === undefined) continue;
-    if (assetSourceIds.has(contribution.id)) {
-      console.warn(
-        `Declarative asset source ${owner.key}: "${contribution.id}" is already an asset source.`,
-      );
-      continue;
-    }
-    assetSourceIds.add(contribution.id);
-    declarativeAssetAdapters.push(
-      new DeclarativeAssetSourceAdapter({ plugin: owner, contribution }),
-    );
-  }
   // Weather's place, backend and cadence are this PC's own settings, and the
   // provider owns its timer: it is built here with the providers, not by the
   // registry's cycle.
@@ -560,22 +397,42 @@ export async function run(argv: readonly string[]): Promise<number> {
           productName: () => Promise.resolve(undefined),
         }),
   });
-  const registry = new ProviderRegistry(
-    orderProviders(
-      [
-        clockProvider,
-        lhmProvider,
-        libraryProvider,
-        weatherProvider,
-        mediaProvider,
-        frameProvider,
-        gameProvider,
-        customProvider,
-      ],
-      pluginRuntime.providers,
-      await extensions.readProviderOrder(),
-    ),
-  );
+  // The host's own providers, in their fixed precedence. Plugin providers join
+  // through the live runtime, which installs the ordered list on the same
+  // registry a poll reads.
+  const builtinProviders = [
+    clockProvider,
+    lhmProvider,
+    libraryProvider,
+    weatherProvider,
+    mediaProvider,
+    frameProvider,
+    gameProvider,
+    customProvider,
+  ];
+  const registry = new ProviderRegistry(builtinProviders);
+  const runtime = createPluginRuntime({
+    installer: pluginInstaller,
+    extensions,
+    hostApi: pluginHostApi,
+    builtinProviders,
+    registry,
+    builtinAssetSources: ASSET_SOURCES,
+    panelRows: pluginPanelFamilies,
+    broker: deviceBroker,
+    allowlists: deviceAllowlists,
+    onFailure: onPluginFailure,
+    onRestart: onPluginRestart,
+    // A crashed worker cannot close the handles it opened; the host closes
+    // them here rather than waiting for a later call or shutdown.
+    onCrash: (pluginKey) => {
+      void deviceBroker.closeAll(pluginKey);
+    },
+  });
+  pluginRuntime = runtime;
+  // Start this run's workers and publish their contributions before the
+  // server exists, so the first request already sees them.
+  await runtime.reconcile();
   const packagesDir = path.resolve(here, "..", "..");
 
   // Displays and their credentials exist whether or not the LAN is on, because
@@ -793,10 +650,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     sources: { store: customSources, provider: customProvider },
     assets: {
       credentials,
-      sources: createAssetSources(ASSET_SOURCES, [
-        ...pluginAssetSources,
-        ...declarativeAssetAdapters,
-      ]),
+      // Read per request: a plugin that joined the runtime after the server
+      // started is listed without a restart.
+      sources: () => runtime.assetSources(),
     },
     artwork: mediaArtwork,
     gameArtwork: createGameArtwork({
@@ -1163,15 +1019,16 @@ export async function run(argv: readonly string[]): Promise<number> {
           // outlive the host that owned it. The supervisors are shared by the
           // provider and asset-source adapters, so they are stopped once here.
           try {
-            await runningSupervisors.stop();
+            await runtime.stop();
           } catch (error) {
             console.error(
               `The plugin workers could not stop: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
 
-          // Every device handle a plugin still holds goes with its worker.
-          for (const plugin of installedPlugins) {
+          // Every device handle a plugin still holds goes with its worker. The
+          // list is read now, so a plugin installed during this run is closed.
+          for (const plugin of await pluginInstaller.list().catch(() => [])) {
             await deviceBroker.closeAll(plugin.key);
           }
 
