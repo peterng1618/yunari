@@ -2097,7 +2097,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    so its hover has to name the same three: the shared close hover is two and
    loses to the rest rule whatever the source order. */
 .editor-shell-dialog.editor-shell-dialog--asset-preview
-  .editor-shell-dialog-close:hover {
+.editor-shell-dialog-close:hover {
   border-color: var(--shell-muted);
   background: color-mix(in srgb, var(--shell-text) 8%, transparent);
   color: var(--shell-text);
