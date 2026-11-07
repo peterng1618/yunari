@@ -13,7 +13,7 @@ import {
 } from "../../providers/custom/fetch-source.js";
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
 import type { DeviceBroker } from "./device-broker.js";
-import { guardedFetch } from "./network.js";
+import { guardedFetch, guardedFetchBytes } from "./network.js";
 import {
   createPluginScopes,
   isStorageKey,
@@ -63,6 +63,8 @@ const INVALID = "invalid-params";
 const HOST_ERROR = "host-error";
 const LOG_LIMIT = 2_048;
 const NETWORK_BODY_BYTES = 1024 * 1024;
+/** The same ceiling a declared asset source's artwork is held to. */
+const NETWORK_BYTES_MAX_BYTES = 32 * 1024 * 1024;
 const CALL_TIMEOUT_MS = 30_000;
 const TIMEOUT_ANSWER = { ok: false, reason: "timeout" };
 const LOG_LEVELS: ReadonlySet<string> = new Set(["info", "warn", "error"]);
@@ -169,9 +171,34 @@ async function networkFetch(
     headers = Object.fromEntries(entries) as Record<string, string>;
   }
 
+  const target = networkDestination(url, options);
+  if (!target.ok) return target;
+
+  return guardedFetch({
+    url: target.url.toString(),
+    allowedHosts: plugin.manifest.networkHosts ?? [],
+    maxBytes: NETWORK_BODY_BYTES,
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    fetchImpl: target.fetchImpl,
+    ...(method === undefined ? {} : { method }),
+    ...(body === undefined ? {} : { body }),
+    ...(headers === undefined ? {} : { headers }),
+    ...(options.resolve === undefined ? {} : { resolve: options.resolve }),
+  });
+}
+
+/** The checks both network methods share before any request exists: the
+ *  destination must be an https URL carrying no credentials, and the fetch
+ *  implementation must pin the address the destination policy checked. */
+function networkDestination(
+  rawUrl: string,
+  options: HostApiOptions,
+):
+  | { readonly ok: true; readonly url: URL; readonly fetchImpl: typeof fetch }
+  | { readonly ok: false; readonly reason: string } {
   let destination: URL;
   try {
-    destination = new URL(url);
+    destination = new URL(rawUrl);
   } catch {
     return { ok: false, reason: "the request URL is not a URL" };
   }
@@ -187,16 +214,32 @@ async function networkFetch(
   const fetchImpl =
     options.fetchImpl ??
     createPinnedFetch({ lookup: options.resolve ?? dnsLookup });
+  return { ok: true, url: destination, fetchImpl };
+}
 
-  return guardedFetch({
-    url,
+/** An image or other asset an asset source serves. The bytes answer is a
+ *  `Uint8Array`, which the worker IPC carries as binary (advanced
+ *  serialization), so the plugin receives what the host fetched. */
+async function networkFetchBytes(
+  plugin: InstalledPlugin,
+  params: unknown,
+  options: HostApiOptions,
+): Promise<unknown> {
+  const read = strictParams(params, ["url"], ["url"]);
+  if (!read.ok) return read;
+
+  const url = stringOf(read.value, "url");
+  if (url === undefined) return invalid();
+
+  const target = networkDestination(url, options);
+  if (!target.ok) return target;
+
+  return guardedFetchBytes({
+    url: target.url.toString(),
     allowedHosts: plugin.manifest.networkHosts ?? [],
-    maxBytes: NETWORK_BODY_BYTES,
+    maxBytes: NETWORK_BYTES_MAX_BYTES,
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-    fetchImpl,
-    ...(method === undefined ? {} : { method }),
-    ...(body === undefined ? {} : { body }),
-    ...(headers === undefined ? {} : { headers }),
+    fetchImpl: target.fetchImpl,
     ...(options.resolve === undefined ? {} : { resolve: options.resolve }),
   });
 }
@@ -484,6 +527,8 @@ function dispatchCall(
   switch (input.method as PluginMethod) {
     case "network.fetch":
       return networkFetch(input.plugin, input.params, options);
+    case "network.fetchBytes":
+      return networkFetchBytes(input.plugin, input.params, options);
     case "storage.get":
     case "storage.set":
     case "storage.remove":

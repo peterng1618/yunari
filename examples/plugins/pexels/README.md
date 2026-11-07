@@ -21,9 +21,9 @@ Compress-Archive -Path examples/plugins/pexels/* -DestinationPath "$env:TEMP/pex
 ## Install and enable
 
 1. Settings → Extensions → install `pexels.zip`.
-2. Approve the consent prompt. It names the host `api.pexels.com`, the
-   `asset:provide`, `network:fetch`, `secrets:own` and `settings:own`
-   capabilities, and the `pexels` source.
+2. Approve the consent prompt. It names the hosts `api.pexels.com` and
+   `images.pexels.com`, the `asset:provide`, `network:fetch`, `secrets:own` and
+   `settings:own` capabilities, and the `pexels` source.
 3. Get a free key at <https://www.pexels.com/api/>.
 4. Settings → Extensions → Pexels → paste the key → Save. The key goes to the
    plugin's encrypted secret store and is never returned to the browser.
@@ -36,8 +36,8 @@ failed page, and the platform stops a worker after repeated handler failures.
 ## What it talks to
 
 - `api.pexels.com` receives the search term and the key.
-- `images.pexels.com` serves the photo bytes. That download happens in the
-  worker because the host API has no binary fetch method yet.
+- `images.pexels.com` serves the photo bytes, which arrive through the host's
+  `network.fetchBytes` under the same declared-host policy as the search.
 
 Pexels allows 200 requests an hour and 20,000 a month. Photos are used under
 the [Pexels license](https://www.pexels.com/license/); the finder records the

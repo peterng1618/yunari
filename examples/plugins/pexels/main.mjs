@@ -3,8 +3,9 @@
  *
  * Search runs through the host's `network.fetch` so the term reaches only the
  * declared host. The API key is the plugin's own secret, read through
- * `secrets.get`; it never enters a result or a log. Photo bytes have no binary
- * host method yet, so the worker downloads the CDN URL itself.
+ * `secrets.get`; it never enters a result or a log. Photo bytes arrive through
+ * `network.fetchBytes`, which reaches the same declared hosts under the same
+ * destination policy and the host's own size cap.
  */
 
 const API = "https://api.pexels.com/v1";
@@ -111,19 +112,17 @@ async function bytes(params) {
     throw new Error("Pexels did not name image bytes for that photo.");
   }
 
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Pexels image answered ${response.status}.`);
+  const response = await host.call("network.fetchBytes", { url });
+  if (response === null || typeof response !== "object" || response.ok !== true) {
+    throw new Error(response?.reason ?? "Pexels did not answer that image.");
   }
 
-  const image = Buffer.from(await response.arrayBuffer());
+  const image = Buffer.from(response.bytes);
   if (image.byteLength > MAX_BYTES) {
     throw new Error("That image is larger than the host accepts.");
   }
 
-  const type = (response.headers.get("content-type") ?? "").trim();
+  const type = String(response.contentType ?? "").trim();
   return {
     bytes: image.toString("base64"),
     contentType: /^image\/[\w.+-]+$/i.test(type) ? type : "image/jpeg",

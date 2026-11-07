@@ -29,6 +29,7 @@ export type HostApiMethodName =
   | "health"
   | "stop"
   | "network.fetch"
+  | "network.fetchBytes"
   | "storage.get"
   | "storage.set"
   | "storage.remove"
@@ -104,6 +105,9 @@ export const HOST_API_METHODS: Readonly<
   health: method(["sensor:provide"], WORKER),
   stop: method(null, WORKER),
   "network.fetch": method(["network:fetch"], WORKER),
+  // The same destination policy and the same declared hosts; only the answer
+  // is bytes (an image an asset source serves) rather than parsed JSON.
+  "network.fetchBytes": method(["network:fetch"], WORKER),
   "storage.get": method(["storage:own"], WORKER),
   "storage.set": method(["storage:own"], WORKER),
   "storage.remove": method(["storage:own"], WORKER),

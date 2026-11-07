@@ -13,7 +13,7 @@
     "secrets:own",
     "settings:own"
   ],
-  "networkHosts": ["api.pexels.com"],
+  "networkHosts": ["api.pexels.com", "images.pexels.com"],
   "main": "main.mjs",
   "contributes": {
     "assetSources": [

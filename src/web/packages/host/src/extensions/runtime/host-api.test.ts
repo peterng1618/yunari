@@ -259,6 +259,69 @@ describe("host API dispatcher", () => {
     ).toEqual({ ok: false, reason: "invalid-params" });
   });
 
+  it("fetches binary bytes from a declared host through the guarded path", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    const api = dispatcherOf({
+      settingsDir,
+      fetchImpl,
+      resolve: publicResolve(),
+    });
+
+    const answer = (await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetchBytes",
+      params: { url: "https://api.acme.test/art.png" },
+    })) as { readonly ok: true; readonly bytes: Uint8Array };
+
+    expect(answer.ok).toBe(true);
+    expect(answer.bytes).toBeInstanceOf(Uint8Array);
+    expect([...answer.bytes]).toEqual([1, 2, 3]);
+  });
+
+  it("applies the declared-host policy to a byte fetch", async () => {
+    const resolve = publicResolve();
+    const fetchImpl = vi.fn<typeof fetch>();
+    const api = dispatcherOf({ settingsDir, fetchImpl, resolve });
+
+    const undeclared = await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetchBytes",
+      params: { url: "https://evil.test/art.png" },
+    });
+    expect(undeclared).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not declared"),
+    });
+
+    const plain = await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetchBytes",
+      params: { url: "http://api.acme.test/art.png" },
+    });
+    expect(plain).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/https/i),
+    });
+
+    const extra = await api.call({
+      plugin: plugin({ capabilities: ["network:fetch"] }),
+      consent,
+      method: "network.fetchBytes",
+      params: { url: "https://api.acme.test/art.png", body: "x" },
+    });
+    expect(extra).toEqual({ ok: false, reason: "invalid-params" });
+
+    expect(resolve.calls).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("keeps storage under the plugin's qualified key and across an update", async () => {
     const api = dispatcherOf({ settingsDir });
     const first = plugin({ capabilities: ["storage:own"] });

@@ -18,6 +18,12 @@ describe("readPluginMessage", () => {
     ).toBeUndefined();
   });
 
+  it("accepts the byte-fetch method as a plugin call", () => {
+    expect(
+      readPluginMessage({ ...REQUEST, method: "network.fetchBytes" }),
+    ).toMatchObject({ method: "network.fetchBytes" });
+  });
+
   it("refuses anything that is not a known message type", () => {
     expect(
       readPluginMessage({ type: "plugin.unknown", id: "1" }),

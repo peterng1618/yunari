@@ -100,7 +100,8 @@ the fork is not an OS sandbox, and the host mediates only what the plugin does
 through the host API. Through that API a plugin never receives a host
 credential. `network.fetch` reaches only the HTTPS hosts its manifest declares,
 through the host's guarded fetch, and the plugin keeps any credential it needs
-in its own secret scope. Extension routes stay loopback-only and origin-checked;
+in its own secret scope. `network.fetchBytes` adds the binary answer (asset
+artwork) under the same declared hosts and destination policy. Extension routes stay loopback-only and origin-checked;
 the LAN and admin rules above are unchanged.
 
 ## Security posture

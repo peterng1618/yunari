@@ -21,6 +21,7 @@ export type HostMethod =
 
 export type PluginMethod =
   | "network.fetch"
+  | "network.fetchBytes"
   | "usb.open"
   | "usb.close"
   | "usb.bulkTransfer"
@@ -99,6 +100,7 @@ const PLUGIN_LOG_KEYS = ["type", "level", "message"] as const;
  *  plugin naming one is refused rather than forwarded. */
 export const PLUGIN_METHODS: ReadonlySet<PluginMethod> = new Set<PluginMethod>([
   "network.fetch",
+  "network.fetchBytes",
   "usb.open",
   "usb.close",
   "usb.bulkTransfer",
