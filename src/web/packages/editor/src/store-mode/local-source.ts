@@ -251,6 +251,11 @@ const FACET_MATCHERS: Readonly<Record<string, FacetMatcher>> = {
     chosen.some((value) => item.facets.tags.includes(value)),
 };
 
+/** The facet ids this build can answer. A stored selection may name only these:
+ *  `matchesFacets` treats an unknown id as matching nothing, so a choice kept by
+ *  another build would otherwise hide the whole library rather than filter it. */
+export const STORE_FACET_IDS: readonly string[] = Object.keys(FACET_MATCHERS);
+
 /**
  * Whether an item survives what is chosen, and it is pure so a page can narrow a
  * list it already holds without asking a source again.

@@ -53,8 +53,11 @@ export function useWallpaperTab(props: {
   const { open, active, client, wallpaper, setPreviewing } = props;
   const [library, setLibrary] = useState<WallpaperEngineAnswer | undefined>();
   const [local, setLocal] = useState<LocalView>(EMPTY_LOCAL);
-  const [sort, setSort] = useState<WallpaperSort>("name");
-  const [direction, setDirection] = useState<WallpaperDirection>("asc");
+  const [sort, setSort] = useState<WallpaperSort>("updated");
+  /** Newest first on the field that changes: the wallpaper someone added last
+   *  is the one they are looking for. A field the host could not read sorts last
+   *  in both orders. */
+  const [direction, setDirection] = useState<WallpaperDirection>("desc");
   const [localRunning, setLocalRunning] = useState<string | undefined>();
   /** The Wallpaper Engine video whose span the author is choosing. A video's
    *  "set background" opens the trim surface before the host normalizer runs. */

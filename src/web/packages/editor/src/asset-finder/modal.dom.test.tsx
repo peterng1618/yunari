@@ -614,6 +614,45 @@ describe("AssetFinder's Wallpaper Engine tab", () => {
     );
   }
 
+  it("opens newest first on the wallpaper library", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              available: true,
+              install: "D:/Steam/wallpaper_engine",
+              items: [
+                {
+                  workshopId: "older",
+                  title: "Older",
+                  kind: "scene",
+                  filesize: 1,
+                  updatedAt: 1_000,
+                  tags: [],
+                },
+                {
+                  workshopId: "newer",
+                  title: "Newer",
+                  kind: "scene",
+                  filesize: 1,
+                  updatedAt: 2_000,
+                  tags: [],
+                },
+              ],
+              skipped: 0,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    await render([wallpaperEngine]);
+    await settle();
+
+    expect(rowIds()).toEqual(["newer", "older"]);
+  });
+
   it("reads the library once, on the tab's first activation", async () => {
     stubLibrary();
     await render([wallpaperEngine]);

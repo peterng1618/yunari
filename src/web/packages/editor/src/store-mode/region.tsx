@@ -46,9 +46,15 @@ import {
   settledTags,
 } from "./local-source.js";
 import { useMineListing } from "./mine-listing.js";
-import { DEFAULT_SORT, SORT_KEYS, SORT_ORDERS } from "./sort-orders.js";
+import { SORT_KEYS, SORT_ORDERS } from "./sort-orders.js";
 import { useInstall } from "./use-install.js";
 import { useSubmit } from "./use-submit.js";
+import {
+  readStoreFacets,
+  readStoreSort,
+  rememberStoreFacets,
+  rememberStoreSort,
+} from "./view-preferences.js";
 
 /**
  * The store's two halves. `local` is the host's own library — what the author
@@ -487,10 +493,10 @@ export function StoreModeRegion(props: {
 }
 
 /** The region's own state, in its own component so a mode that is not Themes
- *  holds none of it: the half, the search, the sort and the facet selection are
- *  the surface's, and none of them is persisted — leaving the mode and coming
- *  back opens on the same row a fresh mount does. The **grid density** is the
- *  one exception, because it is a view preference rather than a query. */
+ *  holds none of it: the half and the search are the visit's, and the sort and
+ *  the facet selection are kept for the session because a viewer who chose them
+ *  expects them back. The **grid density** is the one that outlives the session,
+ *  because it is a view preference rather than a query. */
 function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
@@ -508,10 +514,8 @@ function StoreRegion(props: {
   const tab = props.tab ?? innerTab;
   const setTab = props.onTab ?? setInnerTab;
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<Record<StoreTab, string>>({
-    ...DEFAULT_SORT,
-  });
-  const [chosen, setChosen] = useState<FacetSelection>({});
+  const [sort, setSort] = useState<Record<StoreTab, string>>(readStoreSort);
+  const [chosen, setChosen] = useState<FacetSelection>(readStoreFacets);
   /** The viewer's density level, or the default until they choose one. The
    *  level is the choice; the column count is the width's answer for it inside
    *  `Gallery`, so a resize re-derives the count rather than freezing it. */
@@ -949,7 +953,9 @@ function StoreRegion(props: {
           facets={storeFacets(listed ?? [])}
           chosen={chosen}
           onToggle={(facetId, optionId) => {
-            setChosen((current) => toggleFacet(current, facetId, optionId));
+            const next = toggleFacet(chosen, facetId, optionId);
+            setChosen(next);
+            rememberStoreFacets(next);
             showFromTop();
           }}
         />
@@ -983,7 +989,9 @@ function StoreRegion(props: {
             // written: a widened option list must not be able to set a sort
             // nothing reads.
             if (!SORT_KEYS[tab].some((key) => key.id === id)) return;
-            setSort((current) => ({ ...current, [tab]: id }));
+            const next = { ...sort, [tab]: id };
+            setSort(next);
+            rememberStoreSort(next);
             showFromTop();
           }}
         />

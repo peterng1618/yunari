@@ -36,11 +36,11 @@ export const SORT_KEYS: Readonly<Record<StoreTab, readonly ControlOption[]>> = {
   ],
 };
 
-/** What each half opens on: the library by name, and the catalogue by `updated`
- *  — **newest first**, the item that changed most recently — which is the order
- *  each half is browsed in. */
+/** What each half opens on: the library by `updatedAt` and the catalogue by
+ *  `updated` — **newest first**, the theme that changed most recently — which is
+ *  the order each half is browsed in. */
 export const DEFAULT_SORT: Readonly<Record<StoreTab, string>> = {
-  local: "name",
+  local: "updatedAt",
   online: "updated",
 };
 

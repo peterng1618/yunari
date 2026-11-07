@@ -124,10 +124,12 @@ afterEach(async () => {
 });
 
 beforeEach(() => {
-  // The grid density is the one thing this surface persists
-  // (`grid-density.ts`), and jsdom's storage outlives a test: without this, a
-  // case that chooses a wider level changes the next one's cards.
+  // The grid density is the one thing this surface persists across sessions
+  // (`grid-density.ts`), and the sort and facets persist within one
+  // (`view-preferences.ts`). jsdom's storage outlives a test: without this, a
+  // case that chooses a wider level or a filter changes the next one's cards.
   window.localStorage.clear();
+  window.sessionStorage.clear();
   // The region reads the catalogue when it mounts, and a case whose subject is
   // the library must not reach the network for it: the default is a failed
   // read, which leaves the online half unset.
@@ -262,10 +264,9 @@ it("keeps the facet row on one line and wraps rather than dropping a control", a
  *
  * The sort keys are per half and the two share no key: the catalogue knows when
  * an item was published and how often it was taken, and the host's own library
- * knows only what the author wrote. Read as
- * the words the well prints, because the two halves' first keys are different
- * words — `Name` against `Updated` — so a sort that did not follow the half
- * would print the same thing twice.
+ * knows only what the author wrote. The library opens **newest first**, and a
+ * key chosen on one half is not read by the other — so a sort that did not
+ * follow the half would leave `Name` on the catalogue.
  */
 it("draws the search well and the sort well, and the sort follows the half", async () => {
   const container = await mount(<StoreModeRegion mode="themes" />);
@@ -283,18 +284,53 @@ it("draws the search well and the sort well, and the sort follows the half", asy
     uiCopy.store.search,
   );
 
-  const sort = must(
-    header.querySelector<HTMLElement>("[data-yunari-store-sort]"),
-    "sort well",
+  const sortLabel = (): string | null | undefined =>
+    header.querySelector<HTMLElement>("[data-yunari-store-sort]")?.textContent;
+  expect(sortLabel(), "the library does not open newest first").toContain(
+    uiCopy.store.sort.local.updatedAt,
   );
-  expect(sort.textContent).toContain(uiCopy.store.sort.local.name);
+
+  await chooseSort("name");
+  expect(sortLabel(), "the library does not keep the chosen key").toContain(
+    uiCopy.store.sort.local.name,
+  );
 
   await act(async () => halves(header)[1]?.click());
 
   expect(
-    header.querySelector<HTMLElement>("[data-yunari-store-sort]")?.textContent,
+    sortLabel(),
     "the sort kept the local half's key on the online half",
   ).toContain(uiCopy.store.sort.online.updated);
+});
+
+/**
+ * **A sort and a filter the viewer chose come back after a visit to the
+ * editor** (#457). The region unmounts when another mode is shown, so the
+ * choice is kept in the browser's session store rather than in its own state.
+ */
+it("keeps the viewer's sort and facets for the session", async () => {
+  const themes = [
+    fixtureEntry({ id: "dark-one", name: "A", ground: DARK_GROUND }),
+    fixtureEntry({ id: "light-one", name: "B", ground: LIGHT_GROUND }),
+  ];
+  await mountStore(themes);
+
+  await chooseSort("name");
+  await openFacet("colour-mode", uiCopy.store.facets.colourMode);
+  await clickFacetOption("dark");
+  expect(drawnIds()).toEqual(["dark-one"]);
+
+  // Leaving the Themes page for the editor and coming back is a fresh mount.
+  const container = await mountStore(themes);
+
+  expect(drawnIds(), "the chosen filter did not survive the visit").toEqual([
+    "dark-one",
+  ]);
+  expect(
+    headerRow(container).querySelector<HTMLElement>("[data-yunari-store-sort]")
+      ?.textContent,
+    "the chosen sort did not survive the visit",
+  ).toContain(uiCopy.store.sort.local.name);
 });
 
 /**

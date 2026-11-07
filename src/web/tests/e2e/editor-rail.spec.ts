@@ -3222,9 +3222,10 @@ test("the store opens a library theme as the document, from the cell and its foo
     });
   const fromCell = themeOf("store-from-cell", CELL_NAME);
   const fromFooter = themeOf("store-from-footer", FOOTER_NAME);
-  // A fourth listing entry, never opened. The library sorts by name, so this
-  // one sorts last: the three before it fill one row and it is the short tail,
-  // which is the only way the ragged end is read in a browser.
+  // A fourth listing entry, never opened. No entry carries an updated time, so
+  // the library's newest-first order leaves the listing's own order alone and
+  // this one stays last: the three before it fill one row and it is the short
+  // tail, which is the only way the ragged end is read in a browser.
   const beside = themeOf("store-beside", "Zed theme");
   // A third listing entry, never opened: the card layout packs it beside the two
   // above, and its 32:9 artboard is what makes it a two-column card.
