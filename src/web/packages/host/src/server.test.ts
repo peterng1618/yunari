@@ -8034,19 +8034,30 @@ const ADMIN_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
 describe("The pages a consumer lands on", () => {
   let tmpDir: string;
+  let store: ReturnType<typeof createThemeStore>;
   let hosted: ReturnType<typeof createHostServer>;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-chooser-test-"));
-    const store = createThemeStore(tmpDir);
+    store = createThemeStore(tmpDir);
     await store.write(
       "living-room",
       createValidPackage("living-room", "Living Room"),
     );
     await store.write("studio", createValidPackage("studio", "Studio"));
+    // The built entry `/` serves the chooser from. Empty bytes are enough: the
+    // route only checks that the build produced it.
+    const adminUi = path.join(tmpDir, "admin");
+    await fs.mkdir(adminUi, { recursive: true });
+    await fs.writeFile(path.join(adminUi, "chooser.js"), "");
     hosted = createHostServer({
       registry: new ProviderRegistry([]),
-      bundles: { player: tmpDir, editor: tmpDir, admin: ADMIN_DIR },
+      bundles: {
+        player: tmpDir,
+        editor: tmpDir,
+        admin: ADMIN_DIR,
+        adminUi,
+      },
       themeStore: store,
     });
   });
@@ -8066,6 +8077,25 @@ describe("The pages a consumer lands on", () => {
     expect(html).toContain("/admin/chooser.js");
     expect(html).toContain("/admin/chooser.css");
     expect(html).not.toContain("data-theme=");
+  });
+
+  it("refuses the chooser when its React entry was not built", async () => {
+    // The document alone would load a missing script and present a blank page
+    // to a LAN display, so the route refuses instead.
+    const unbuilt = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir, admin: ADMIN_DIR },
+      themeStore: store,
+    });
+
+    try {
+      const res = await request(unbuilt.server, "GET", "/");
+
+      expect(res.status).toBe(404);
+      expect(res.text()).toContain("npm run build -w @yunari/host");
+    } finally {
+      await unbuilt.close();
+    }
   });
 
   it("forwards settings to the editor's one settings surface", async () => {

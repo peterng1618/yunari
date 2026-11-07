@@ -67,6 +67,7 @@ function ConfirmRemoval({
   name,
   id,
   busy,
+  returnFocus,
   onCancel,
   onConfirm,
 }: {
@@ -74,6 +75,8 @@ function ConfirmRemoval({
   readonly id: string;
   /** The removal is out: both answers wait for it, so neither can ride it. */
   readonly busy: boolean;
+  /** The Delete that opened it: closing hands focus back here. */
+  readonly returnFocus: React.RefObject<HTMLButtonElement | null>;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }): React.JSX.Element {
@@ -89,7 +92,14 @@ function ConfirmRemoval({
     // test can drive the buttons, and a real browser never takes this branch.
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
-  }, []);
+    return () => {
+      // Unmounting an open dialog leaves focus on the document body. A close
+      // hands it back in a browser; the explicit focus covers a DOM that has no
+      // dialog implementation, and the row's Delete still standing.
+      if (typeof dialog.close === "function" && dialog.open) dialog.close();
+      returnFocus.current?.focus();
+    };
+  }, [returnFocus]);
 
   return (
     <dialog
@@ -160,6 +170,10 @@ export function ThemeRow({
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
+  // State updates are not visible within the same tick, so two clicks in one
+  // tick would both pass a state-backed guard and send two DELETEs.
+  const inFlight = useRef(false);
+  const deleteRef = useRef<HTMLButtonElement>(null);
 
   const named = theme.name ?? theme.id;
   const label = shared ? `${named} (${theme.id})` : named;
@@ -167,7 +181,8 @@ export function ThemeRow({
   const current = theme.id === showing;
 
   const remove = async (): Promise<void> => {
-    if (removing) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setRemoving(true);
     try {
       await onRemove();
@@ -178,6 +193,7 @@ export function ThemeRow({
       setNote(error instanceof Error ? error.message : String(error));
       setRemoving(false);
       setConfirming(false);
+      inFlight.current = false;
     }
   };
 
@@ -227,6 +243,7 @@ export function ThemeRow({
           paints this button's failure ink; a successful one removes the row,
           so there is no success state left to draw here. */}
       <button
+        ref={deleteRef}
         type="button"
         className="theme-delete"
         aria-label={`Delete ${named} — moved to the recycle bin`}
@@ -253,6 +270,7 @@ export function ThemeRow({
           name={named}
           id={theme.id}
           busy={removing}
+          returnFocus={deleteRef}
           onCancel={() => setConfirming(false)}
           onConfirm={() => void remove()}
         />

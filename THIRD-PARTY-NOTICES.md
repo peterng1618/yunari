@@ -32,8 +32,8 @@ are provenance, not notice rows.
 | `fflate` | 0.8.3 | MIT | theme ZIP packages |
 | `ffmpeg-static` | 5.3.0 | GPL-3.0-or-later | host: re-encodes theme video; source offered at <https://github.com/eugeneware/ffmpeg-static> |
 | `fontkit` | 2.0.4 | MIT | editor: reads a packaged face's glyph outlines when text is converted to paths |
-| `react` | 19.3.1 | MIT | editor shell chrome |
-| `react-dom` | 19.3.1 | MIT | editor shell chrome |
+| `react` | 19.3.1 | MIT | editor shell chrome; also bundled into the host's theme chooser (`dist/admin/chooser.js`) |
+| `react-dom` | 19.3.1 | MIT | editor shell chrome; also bundled into the host's theme chooser (`dist/admin/chooser.js`) |
 | `@base-ui/react` | 1.9.0 | MIT | editor shell primitives |
 | `lucide-react` | 1.66.0 | ISC | editor action-bar icons; four Feather-derived icons are also MIT, see Runtime icons |
 | `lineicons` | 1.3.2 | MIT | development-only: generates the asset finder's Lineicons manifest; no runtime import |

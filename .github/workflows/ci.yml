@@ -84,8 +84,10 @@ jobs:
       - name: Build host
         # Not previewed by Playwright, so this is not the webServer trap — but
         # the bin shim refuses to start without dist/, so a build break here is
-        # invisible until someone runs `yunari`.
-        run: npx vite build packages/host
+        # invisible until someone runs `yunari`. The package script also builds
+        # the React admin entry into `dist/admin`, which `/` serves the chooser
+        # from; `vite build packages/host` alone would leave it missing.
+        run: npm run build -w @yunari/host
 
       - name: Enforce display-only bundle budget (§47)
         # Fails if an editor dependency leaks into the player.
@@ -292,7 +294,9 @@ jobs:
         run: npx vite build packages/editor
 
       - name: Build host
-        run: npx vite build packages/host
+        # The package script builds both the Node host and the React admin
+        # entry the display proof's chooser serves.
+        run: npm run build -w @yunari/host
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

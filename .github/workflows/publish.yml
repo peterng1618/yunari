@@ -173,9 +173,10 @@ jobs:
             package/THIRD-PARTY-NOTICES.md \
             package/packages/host/bin/yunari.js \
             package/packages/host/dist/main.js \
-            package/packages/host/public/library.html \
+            package/packages/host/dist/admin/chooser.js \
+            package/packages/host/dist/admin/chooser.css \
+            package/packages/host/public/chooser.html \
             package/packages/host/public/pair.html \
-            package/packages/host/public/settings.html \
             package/packages/player/dist/index.html \
             package/packages/editor/dist/index.html \
             package/packages/mcp/bin/yunari-mcp.js \

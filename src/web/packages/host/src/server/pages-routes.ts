@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import type http from "node:http";
+import path from "node:path";
 import { needsTrailingSlash } from "../serve/static-path.js";
 import type { ActiveThemeStore } from "../settings/active-theme.js";
 import type { ThemeStore } from "../themes/store.js";
@@ -327,7 +329,7 @@ export function createPageRoutes(deps: PageRouteDeps): {
         sendText(
           response,
           404,
-          "The admin bundle is not built. Run: npx vite build --config packages/host/vite.admin.config.ts",
+          "The admin bundle is not built. From the repository's src/web directory, run: npm run build -w @yunari/host",
         );
         return true;
       }
@@ -337,7 +339,7 @@ export function createPageRoutes(deps: PageRouteDeps): {
         response,
         bundles.adminUi,
         url.pathname.slice("/admin".length),
-        "The admin bundle is not built. Run: npx vite build --config packages/host/vite.admin.config.ts",
+        "The admin bundle is not built. From the repository's src/web directory, run: npm run build -w @yunari/host",
         false,
       );
       return true;
@@ -412,13 +414,30 @@ export function createPageRoutes(deps: PageRouteDeps): {
           // own pages: a source document that loads the React admin entry. Its
           // rows are the one owner of a theme row, so it draws the thumbnail
           // and the hatched stand-in nobody else re-spells.
-          if (bundles.admin !== undefined) {
+          //
+          // The document alone is not a chooser: its rows come from
+          // `/admin/chooser.js`. With that missing, the page would be blank and
+          // its `<noscript>` fallback hidden, so refuse instead of shipping an
+          // empty display to the LAN.
+          const built =
+            bundles.adminUi !== undefined &&
+            existsSync(path.join(bundles.adminUi, "chooser.js"));
+          if (bundles.admin !== undefined && built) {
             await serveStatic(
               request,
               response,
               bundles.admin,
               "/chooser.html",
               "The theme chooser is missing from this installation.",
+            );
+            return true;
+          }
+
+          if (bundles.admin !== undefined) {
+            sendText(
+              response,
+              404,
+              "The theme chooser is not built. From the repository's src/web directory, run: npm run build -w @yunari/host",
             );
             return true;
           }

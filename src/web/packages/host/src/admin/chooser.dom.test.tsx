@@ -201,6 +201,49 @@ it("removes a theme only after the confirmation, and drops its row", async () =>
   ).toBeNull();
 });
 
+it("returns focus to Delete when the confirmation is cancelled", async () => {
+  const { client, calls } = fake();
+  const page = await mount(client);
+  const control = page.querySelector<HTMLButtonElement>("button.theme-delete");
+  control?.focus();
+
+  await act(async () => {
+    control?.click();
+  });
+  expect(
+    page.querySelector("dialog.theme-confirm"),
+    "the confirmation is on screen",
+  ).not.toBeNull();
+
+  await act(async () => {
+    page.querySelector<HTMLElement>("[data-theme-delete-no]")?.click();
+  });
+
+  expect(page.querySelector("dialog.theme-confirm")).toBeNull();
+  expect(calls.removed).toEqual([]);
+  // Unmounting an open dialog would leave focus on the body.
+  expect(document.activeElement).toBe(control);
+});
+
+it("returns focus when Escape dismisses the confirmation", async () => {
+  const { client } = fake();
+  const page = await mount(client);
+  const control = page.querySelector<HTMLButtonElement>("button.theme-delete");
+  control?.focus();
+
+  await act(async () => {
+    control?.click();
+  });
+  const dialog = page.querySelector<HTMLDialogElement>("dialog.theme-confirm");
+
+  await act(async () => {
+    dialog?.dispatchEvent(new Event("cancel", { bubbles: true }));
+  });
+
+  expect(page.querySelector("dialog.theme-confirm")).toBeNull();
+  expect(document.activeElement).toBe(control);
+});
+
 it("keeps the row and says why a removal was refused", async () => {
   const { client } = fake({
     remove: async () => {

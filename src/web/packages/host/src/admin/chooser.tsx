@@ -73,12 +73,17 @@ function TemplateRow({
  * resolves the caller to the dashboard it asked for.
  */
 export function Chooser({
-  client = createChooserClient(),
+  client: provided,
   reload = () => window.location.reload(),
 }: {
   readonly client?: ChooserClient;
   readonly reload?: () => void;
 }): React.JSX.Element {
+  // Created once. A client rebuilt on every render would give the read effect a
+  // new dependency each time, and its `setData` would re-run it forever.
+  const [client] = useState<ChooserClient>(
+    () => provided ?? createChooserClient(),
+  );
   const [data, setData] = useState<ChooserData | undefined>(undefined);
   const [selected, setSelected] = useState(DEFAULT_KEY);
   const [status, setStatus] = useState<string | undefined>(undefined);
