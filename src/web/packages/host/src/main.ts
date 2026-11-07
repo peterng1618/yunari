@@ -41,6 +41,7 @@ import {
 import { createDeviceBroker } from "./extensions/runtime/device-broker.js";
 import { createHostApiDispatcher } from "./extensions/runtime/host-api.js";
 import { revokePluginRuntime } from "./extensions/runtime/plugin-revocation.js";
+import { createPluginScopes } from "./extensions/runtime/scoped-stores.js";
 import type { PluginSupervisor } from "./extensions/runtime/supervisor.js";
 import { createNativeDeviceBackend } from "./extensions/runtime/usb-backend.js";
 import { createExtensionService } from "./extensions/service.js";
@@ -96,10 +97,7 @@ import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
-import {
-  createSecretStore,
-  KeyProtectorUnavailable,
-} from "./settings/secret-store.js";
+import { KeyProtectorUnavailable } from "./settings/secret-store.js";
 import { type CustomSource, createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -251,12 +249,13 @@ export async function run(argv: readonly string[]): Promise<number> {
   const pluginInstaller = createPluginInstaller(
     path.join(settingsDir, "extensions"),
   );
-  // Declarative plugin settings stay beside the plugins they belong to. A
-  // secret field lands in the plugin's encrypted store, never in this JSON.
+  // One set of scopes for every plugin surface: the settings page and the
+  // worker must read one settings document, and a secret field must land where
+  // the worker's `secrets.get` reads it.
+  const pluginScopes = createPluginScopes(path.join(settingsDir, "extensions"));
   const pluginSettings = createPluginSettingsStore({
     installer: pluginInstaller,
-    directory: path.join(settingsDir, "extensions", "settings"),
-    secrets: createSecretStore(path.join(settingsDir, "extensions", "secrets")),
+    scopes: pluginScopes,
   });
   // Which plugin provider answers a shared key first, kept beside the plugins.
   const providerOrder = createProviderOrderStore(
@@ -358,6 +357,7 @@ export async function run(argv: readonly string[]): Promise<number> {
   // process. The supervisors are started once and shared by both adapters.
   const pluginHostApi = createHostApiDispatcher({
     settingsDir,
+    scopes: pluginScopes,
     broker: deviceBroker,
   });
   const onPluginFailure = (pluginKey: string, reason: string): void => {

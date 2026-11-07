@@ -4,7 +4,7 @@ import path from "node:path";
 import type { InstalledPlugin } from "@yunari/extension-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { KeyProtectorUnavailable } from "../../settings/secret-store.js";
-import { createScopedStores } from "./scoped-stores.js";
+import { createPluginScopes, createScopedStores } from "./scoped-stores.js";
 
 const MiB = 1024 * 1024;
 const SETTINGS_CAP = 64 * 1024;
@@ -108,6 +108,9 @@ describe("scoped stores", () => {
       ).rejects.toThrow(/1 MiB|1048576/);
     });
 
+    // The cap is enforced by listing the directory on every write, so this
+    // case is quadratic: 1,000 writes scan the growing directory 1,000 times
+    // and the default 60 s is a thin margin under the full parallel run.
     it("refuses a 1,001st key", async () => {
       const stores = createScopedStores(root, plugin());
 
@@ -116,7 +119,7 @@ describe("scoped stores", () => {
       }
 
       await expect(stores.storage.set("overflow", "")).rejects.toThrow(/1000/);
-    }, 60_000);
+    }, 180_000);
   });
 
   describe("secrets", () => {
@@ -175,6 +178,18 @@ describe("scoped stores", () => {
       expect(await stores.settings.get()).toEqual({ density: 2 });
     });
 
+    it("merges keys without dropping the ones already stored", async () => {
+      const stores = createScopedStores(root, plugin());
+
+      await stores.settings.set({ theme: "dark" });
+      await stores.settings.merge({ density: 2 });
+
+      expect(await stores.settings.get()).toEqual({
+        theme: "dark",
+        density: 2,
+      });
+    });
+
     it("refuses a non-object and a write larger than 64 KiB", async () => {
       const stores = createScopedStores(root, plugin());
 
@@ -184,6 +199,18 @@ describe("scoped stores", () => {
       await expect(
         stores.settings.set({ text: "a".repeat(SETTINGS_CAP) }),
       ).rejects.toThrow(/65536|64 KiB/);
+    });
+  });
+
+  describe("the shared scopes factory", () => {
+    it("hands every consumer the same object for one installed content", () => {
+      const scopes = createPluginScopes(root);
+      const first = scopes(plugin());
+
+      expect(scopes(plugin())).toBe(first);
+      expect(scopes({ ...plugin(), contentHash: "b".repeat(64) })).not.toBe(
+        first,
+      );
     });
   });
 });

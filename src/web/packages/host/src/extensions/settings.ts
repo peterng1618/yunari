@@ -1,19 +1,21 @@
-import { createHash } from "node:crypto";
 import type {
+  InstalledPlugin,
   PluginInstaller,
   PluginManifest,
   SettingsField,
 } from "@yunari/extension-api";
-import { createJsonFile } from "../settings/json-file.js";
+import type { ScopedStores } from "./runtime/scoped-stores.js";
 
 /**
- * Plugin-owned settings, in two halves.
+ * Plugin-owned settings, read and written through the plugin's own scopes.
  *
- * Declarative values are plain JSON in one host-owned file. A `secret` field is
- * written to the plugin's encrypted secret store and is never returned: the
- * host gives the browser only what a page may render. Every write is validated
- * against the same field declarations the editor draws, and an unknown key is
- * refused rather than stored for a later manifest to claim.
+ * A declarative page and the plugin's worker share one settings document and
+ * one secret store, so a value typed in Settings is the value `settings.get`
+ * and `secrets.get` answer. A `secret` field is written to the encrypted store
+ * and is never returned: the host gives the browser only what a page may
+ * render. Every write is validated against the same field declarations the
+ * editor draws, and an unknown key is refused rather than stored for a later
+ * manifest to claim.
  */
 export interface PluginSettingsStore {
   read(pluginKey: string): Promise<Readonly<Record<string, unknown>>>;
@@ -23,46 +25,11 @@ export interface PluginSettingsStore {
   ): Promise<{ readonly ok: boolean; readonly message?: string }>;
 }
 
-/** The part of `SecretStore` a settings write needs. */
-export interface PluginSettingsSecrets {
-  write(name: string, bytes: Uint8Array): Promise<void>;
-  remove(name: string): Promise<void>;
-}
-
 export interface PluginSettingsStoreOptions {
   readonly installer: PluginInstaller;
-  /** Where the JSON file lives. The secret store is a different directory. */
-  readonly directory: string;
-  readonly secrets: PluginSettingsSecrets;
-}
-
-interface StoredSettings {
-  readonly version: 1;
-  readonly plugins: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-}
-
-const FILE = "plugin-settings.json";
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalize(parsed: unknown): StoredSettings {
-  if (
-    !isRecord(parsed) ||
-    parsed["version"] !== 1 ||
-    !isRecord(parsed["plugins"])
-  )
-    throw new Error("Plugin settings refused: not version 1.");
-  const plugins: Record<string, Readonly<Record<string, unknown>>> = {};
-  for (const [key, value] of Object.entries(parsed["plugins"])) {
-    if (!isRecord(value))
-      throw new Error(
-        `Plugin settings refused: entry ${JSON.stringify(key)} is not an object.`,
-      );
-    plugins[key] = { ...value };
-  }
-  return { version: 1, plugins };
+  /** The plugin's own scopes. The same factory feeds the worker host API, so
+   *  both see one settings document and one secret. */
+  readonly scopes: (plugin: InstalledPlugin) => ScopedStores;
 }
 
 /** The declared fields, across every declarative page. A sandboxed page owns
@@ -125,38 +92,26 @@ function validate(field: SettingsField, value: unknown): string | undefined {
   }
 }
 
-/** A secret's file name. The key may contain dots, and the secret store only
- *  accepts a bounded `[A-Za-z0-9_-]` name, so the name is a digest: stable,
- *  bounded and not a readable copy of the field. */
-function secretName(key: string): string {
-  return createHash("sha256").update(key).digest("hex");
-}
-
 export function createPluginSettingsStore(
   options: PluginSettingsStoreOptions,
 ): PluginSettingsStore {
-  const stored = createJsonFile<StoredSettings>(options.directory, FILE, {
-    normalize,
-    empty: () => ({ version: 1, plugins: {} }),
-  });
-
   return {
     async read(pluginKey) {
       const plugin = await options.installer
         .read(pluginKey)
         .catch(() => undefined);
-      const fields =
-        plugin === undefined
-          ? new Map<string, SettingsField>()
-          : declaredFields(plugin.manifest);
-      const record = (await stored.read()).plugins[pluginKey] ?? {};
-      const values: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(record)) {
-        // A secret is never returned, even if a hand-edited file kept one.
+      if (plugin === undefined) return {};
+
+      const fields = declaredFields(plugin.manifest);
+      const values = await options.scopes(plugin).settings.get();
+      const visible: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(values)) {
+        // A secret lives in the encrypted store, but a hand-edited settings
+        // file must not turn one into a value this route returns.
         if (fields.get(key)?.type === "secret") continue;
-        values[key] = value;
+        visible[key] = value;
       }
-      return values;
+      return visible;
     },
 
     async write(pluginKey, values) {
@@ -171,7 +126,7 @@ export function createPluginSettingsStore(
         (page) => "ui" in page,
       );
       const accepted: Record<string, unknown> = {};
-      const secrets: { readonly name: string; readonly value: string }[] = [];
+      const secrets: { readonly key: string; readonly value: string }[] = [];
 
       if (Object.keys(values).length > 64)
         return {
@@ -180,7 +135,7 @@ export function createPluginSettingsStore(
         };
 
       // Validate every key before anything is written, so a refused body
-      // leaves both the JSON and the secret store as they were.
+      // leaves both the settings document and the secret store as they were.
       for (const [key, value] of Object.entries(values)) {
         const field = fields.get(key);
         if (field === undefined) {
@@ -204,34 +159,20 @@ export function createPluginSettingsStore(
         if (reason !== undefined) return { ok: false, message: reason };
 
         if (field.type === "secret") {
-          secrets.push({ name: secretName(key), value: value as string });
+          secrets.push({ key, value: value as string });
         } else {
           accepted[key] = value;
         }
       }
 
+      const scope = options.scopes(plugin);
       for (const secret of secrets) {
-        if (secret.value === "") await options.secrets.remove(secret.name);
-        else
-          await options.secrets.write(
-            secret.name,
-            new TextEncoder().encode(secret.value),
-          );
+        if (secret.value === "") await scope.secrets.remove(secret.key);
+        else await scope.secrets.set(secret.key, secret.value);
       }
 
-      await stored.mutate((current) => ({
-        next: {
-          version: 1,
-          plugins: {
-            ...current.plugins,
-            [pluginKey]: {
-              ...(current.plugins[pluginKey] ?? {}),
-              ...accepted,
-            },
-          },
-        },
-        result: undefined,
-      }));
+      if (Object.keys(accepted).length > 0)
+        await scope.settings.merge(accepted);
 
       return { ok: true };
     },

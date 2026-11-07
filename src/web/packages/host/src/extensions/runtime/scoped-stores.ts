@@ -43,6 +43,9 @@ export interface SecretScope {
 export interface PluginSettingsScope {
   get(): Promise<Record<string, unknown>>;
   set(value: Record<string, unknown>): Promise<void>;
+  /** Merge keys into the document as one queued read-modify-write, so a
+   *  declarative page and the worker cannot drop each other's values. */
+  merge(values: Record<string, unknown>): Promise<void>;
 }
 
 export interface ScopedStores {
@@ -192,6 +195,46 @@ function createSettingsScope(
       }
       await jsonFile.write(value);
     },
+
+    async merge(values) {
+      if (!isObject(values)) {
+        throw new Error("Plugin settings must be a JSON object.");
+      }
+      await jsonFile.mutate((current) => {
+        const next = { ...current, ...values };
+        if (
+          Buffer.byteLength(JSON.stringify(next), "utf8") > MAX_SETTINGS_BYTES
+        ) {
+          throw new Error(
+            `plugin settings are at most ${MAX_SETTINGS_BYTES} bytes (64 KiB)`,
+          );
+        }
+        return { next, result: undefined };
+      });
+    },
+  };
+}
+
+/**
+ * One cached set of scopes for an installed content, shared by every consumer.
+ *
+ * A declarative settings page and the plugin's worker must write and read the
+ * same settings document and the same secret; two objects over one file would
+ * each queue their own read-modify-write and could drop the other's value.
+ */
+export function createPluginScopes(
+  root: string,
+): (plugin: InstalledPlugin) => ScopedStores {
+  const cache = new Map<string, ScopedStores>();
+
+  return (plugin) => {
+    const key = `${plugin.key}${plugin.contentHash}`;
+    let stores = cache.get(key);
+    if (stores === undefined) {
+      stores = createScopedStores(root, plugin);
+      cache.set(key, stores);
+    }
+    return stores;
   };
 }
 

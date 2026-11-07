@@ -15,7 +15,7 @@ import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
 import type { DeviceBroker } from "./device-broker.js";
 import { guardedFetch } from "./network.js";
 import {
-  createScopedStores,
+  createPluginScopes,
   isStorageKey,
   MAX_SETTINGS_BYTES,
   MAX_STORAGE_VALUE_BYTES,
@@ -53,6 +53,10 @@ export interface HostApiOptions {
   /** Present when hardware plugins may reach a device. Absent means every
    *  device method answers `not-supported`. */
   readonly broker?: DeviceBroker;
+  /** The scopes every other plugin surface uses. Absent builds a private set,
+   *  which is only what a test wants: the host shares one set so a settings
+   *  page and the worker see the same document. */
+  readonly scopes?: (plugin: InstalledPlugin) => ScopedStores;
 }
 
 const INVALID = "invalid-params";
@@ -539,19 +543,7 @@ export function createHostApiDispatcher(
   options: HostApiOptions,
 ): HostApiDispatcher {
   const root = path.join(options.settingsDir, "extensions");
-  /** One store object per installed content: the data tree stays
-   *  `<publisher>/<id>`, but an update gets a fresh object so no stale one
-   *  serves the previous version. */
-  const storesByPlugin = new Map<string, ScopedStores>();
-  const storesFor = (plugin: InstalledPlugin): ScopedStores => {
-    const key = `${plugin.key}${plugin.contentHash}`;
-    let stores = storesByPlugin.get(key);
-    if (stores === undefined) {
-      stores = createScopedStores(root, plugin);
-      storesByPlugin.set(key, stores);
-    }
-    return stores;
-  };
+  const storesFor = options.scopes ?? createPluginScopes(root);
 
   return {
     async call(input) {

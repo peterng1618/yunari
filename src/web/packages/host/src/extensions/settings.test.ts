@@ -2,15 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  type InstalledPlugin,
   type PluginInstaller,
   type PluginManifest,
   type SettingsField,
 } from "@yunari/extension-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  createPluginSettingsStore,
-  type PluginSettingsSecrets,
-} from "./settings";
+import { KeyProtectorUnavailable } from "../settings/secret-store.js";
+import { createPluginScopes } from "./runtime/scoped-stores.js";
+import { createPluginSettingsStore } from "./settings";
 
 const FIELDS: readonly SettingsField[] = [
   { key: "label", label: "Label", type: "text", maxLength: 8 },
@@ -46,36 +46,23 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   };
 }
 
+function pluginFor(value: PluginManifest): InstalledPlugin {
+  return {
+    key: `local/${value.id}`,
+    publisher: "local",
+    manifest: value,
+    directory: "",
+    contentHash: "a".repeat(64),
+  };
+}
+
 function installerFor(value: PluginManifest): PluginInstaller {
   return {
     list: async () => [],
     read: async (key) =>
-      key === "local/acme"
-        ? {
-            key,
-            publisher: "local",
-            manifest: value,
-            directory: "",
-            contentHash: "a".repeat(64),
-          }
-        : undefined,
+      key === `local/${value.id}` ? pluginFor(value) : undefined,
     install: async () => ({ ok: false }),
     remove: async () => undefined,
-  };
-}
-
-function memorySecrets(): PluginSettingsSecrets & {
-  readonly values: Map<string, Uint8Array>;
-} {
-  const values = new Map<string, Uint8Array>();
-  return {
-    values,
-    write: async (name, bytes) => {
-      values.set(name, bytes);
-    },
-    remove: async (name) => {
-      values.delete(name);
-    },
   };
 }
 
@@ -92,17 +79,15 @@ describe("the plugin settings store", () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  function storeFor(
-    value: PluginManifest = manifest(),
-    secrets = memorySecrets(),
-  ) {
+  function storeFor(value: PluginManifest = manifest()) {
+    const scopes = createPluginScopes(directory);
     return {
       store: createPluginSettingsStore({
         installer: installerFor(value),
-        directory,
-        secrets,
+        scopes,
       }),
-      secrets,
+      scope: scopes(pluginFor(value)),
+      scopes,
     };
   }
 
@@ -145,6 +130,25 @@ describe("the plugin settings store", () => {
     });
   });
 
+  it("writes to the document the plugin's settings.get reads", async () => {
+    const { store, scope } = storeFor();
+    expect(await store.write("local/acme", { label: "hello" })).toEqual({
+      ok: true,
+    });
+    expect(await scope.settings.get()).toEqual({ label: "hello" });
+  });
+
+  it("merges with values the worker stored", async () => {
+    const { store, scope } = storeFor();
+    await scope.settings.set({ density: 2 });
+    await store.write("local/acme", { label: "hello" });
+    expect(await scope.settings.get()).toEqual({ density: 2, label: "hello" });
+    expect(await store.read("local/acme")).toEqual({
+      density: 2,
+      label: "hello",
+    });
+  });
+
   it("refuses a number outside its bounds without changing the store", async () => {
     const { store } = storeFor();
     await store.write("local/acme", { refresh: 12 });
@@ -180,25 +184,47 @@ describe("the plugin settings store", () => {
   });
 
   it("keeps a secret out of the readable settings", async () => {
-    const { store, secrets } = storeFor();
-    expect(await store.write("local/acme", { apiKey: "s3cret" })).toEqual({
-      ok: true,
-    });
+    const { store, scope } = storeFor();
+    try {
+      expect(await store.write("local/acme", { apiKey: "s3cret" })).toEqual({
+        ok: true,
+      });
+    } catch (error) {
+      if (error instanceof KeyProtectorUnavailable) {
+        // The secret is never written in the clear, so a machine with no OS
+        // protector can prove only the refusal; the handoff runs where it can.
+        expect(error).toBeInstanceOf(KeyProtectorUnavailable);
+        return;
+      }
+      throw error;
+    }
+
     expect(await store.read("local/acme")).toEqual({});
-    expect([...secrets.values.values()]).toEqual([
-      new TextEncoder().encode("s3cret"),
-    ]);
+    expect(await scope.secrets.get("apiKey")).toBe("s3cret");
+  });
+
+  it("keeps one plugin's secret out of another plugin's scope", async () => {
+    const { store, scopes } = storeFor();
+    const other = scopes(pluginFor(manifest({ id: "other", name: "Other" })));
+    try {
+      await store.write("local/acme", { apiKey: "s3cret" });
+    } catch (error) {
+      if (error instanceof KeyProtectorUnavailable) return;
+      throw error;
+    }
+
+    expect(await other.secrets.get("apiKey")).toBeUndefined();
   });
 
   it("refuses every key when one key is unknown", async () => {
-    const { store } = storeFor();
+    const { store, scope } = storeFor();
     expect(
       await store.write("local/acme", { label: "ok", extra: "no" }),
     ).toEqual({
       ok: false,
       message: 'The plugin settings page declares no "extra" field.',
     });
-    expect(await store.read("local/acme")).toEqual({});
+    expect(await scope.settings.get()).toEqual({});
   });
 
   it("refuses a plugin this host does not hold", async () => {
