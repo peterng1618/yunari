@@ -75,6 +75,16 @@ function eyeDropperConstructor(): ScreenEyeDropperConstructor | undefined {
 }
 
 /**
+ * The colour as the picker spells it: hex, with an unparseable value left as
+ * written. One derivation, so a trigger and the field above it cannot print two
+ * spellings of one colour.
+ */
+export function colourText(value: string): string {
+  const rgba = parseColor(value);
+  return rgba === undefined ? value : formatColor(rgba);
+}
+
+/**
  * The picker's one state owner: live changes during a gesture, one settled
  * commit when it ends. `text` is hook state because `ControlText` clears its own
  * draft before committing, so a rejected draft has nowhere else to live.

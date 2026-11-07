@@ -25,6 +25,7 @@ import {
   writeTextLayout,
   writeUnitDisplay,
 } from "./run-edits.js";
+import type { DesignTokenPort } from "./design-token-editor.js";
 import { projectRuns, RunEditor } from "./runs.js";
 import type { RunEdits, RunOptionView, RunsView } from "./view.js";
 
@@ -115,6 +116,9 @@ export function mountRunEditor(options: {
   /** The token list's action ports; absent leaves its action rows off. */
   readonly openFontFinder?: () => void;
   readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
+  /** The token editor behind the rows; absent leaves the edit action and the
+   *  add entry off, as a column with no Tokens pane does. */
+  readonly designTokens?: DesignTokenPort;
 }): RunEditorStage {
   // A popup renders into `document.body`, not the host, so a case that failed
   // before disposing would leave its list open for the next one to pick an
@@ -181,7 +185,15 @@ export function mountRunEditor(options: {
     }
     latest = view;
     flushSync(() => {
-      root.render(<RunEditor runs={view} edits={edits} />);
+      root.render(
+        <RunEditor
+          runs={view}
+          edits={edits}
+          {...(options.designTokens === undefined
+            ? {}
+            : { designTokens: options.designTokens })}
+        />,
+      );
     });
   };
 

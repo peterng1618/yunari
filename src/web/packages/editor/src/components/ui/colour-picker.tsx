@@ -1,7 +1,7 @@
 import { Popover } from "@base-ui/react/popover";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { formatColor, fromHsv } from "@yunari/renderer-core";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Glyph, PIPETTE_GLYPH } from "../../editor-shell/icons.js";
 import { presetLibrary } from "../../preset-library/index.js";
 import { usePresetLibrary } from "../../preset-library/use-preset-library.js";
@@ -24,7 +24,7 @@ import {
   PresetContextMenu,
   type PresetMenuTarget,
 } from "./preset-context-menu.js";
-import { useColourPicker } from "./use-colour-picker.js";
+import { colourText, useColourPicker } from "./use-colour-picker.js";
 
 /** A checkerboard in theme tokens, so a translucent paint reads as translucent. */
 const CHECKERBOARD =
@@ -136,6 +136,10 @@ function ChannelTrack({
  * state machine is `useColourPicker`'s, and the preset menu is
  * the canvas menu's controlled pattern. `<input type="color">` still cannot do
  * this: a theme paint carries alpha, and a native input has no alpha channel.
+ *
+ * The popover's body is `ColourPickerPanel`, so a surface that opens its own
+ * anchored popover — a design token's run row — renders the same editor rather
+ * than a second one.
  */
 export function ColourPicker({
   value,
@@ -154,15 +158,105 @@ export function ColourPicker({
   readonly open?: boolean | undefined;
   readonly onOpenChange?: ((next: boolean) => void) | undefined;
 }): React.JSX.Element {
-  const api = useColourPicker({ value, onValueChange, onValueCommit });
-  const presets = usePresetLibrary();
   const [ownOpen, setOwnOpen] = useState(false);
+  // The preset menu portals to `body`, so a press on its row is outside this
+  // popup's DOM. Without this guard deleting a preset would close the picker
+  // out from under the author mid-edit.
+  const [menuOpen, setMenuOpen] = useState(false);
   const open = controlledOpen ?? ownOpen;
   const setOpen = onOpenChange ?? setOwnOpen;
-  const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const ids = useControlIds(undefined);
   const trigger = useRef<HTMLButtonElement>(null);
+
+  return (
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && menuOpen) return;
+        setOpen(next);
+        // Escape and an outside press both land here; the trigger is where a
+        // keyboard author came from, so it is where they go back to.
+        if (!next) trigger.current?.focus();
+      }}
+    >
+      <ControlRow ids={ids} label={label} labelFor={ids.control}>
+        <ControlWell>
+          <Popover.Trigger
+            ref={trigger}
+            id={ids.control}
+            type="button"
+            data-testid="picker-trigger"
+            data-yunari-palette-picker=""
+            aria-label={label}
+            className="flex h-full w-full min-w-0 items-center gap-[var(--space-6)] bg-transparent text-left"
+          >
+            <span
+              aria-hidden
+              className="relative size-3.5 flex-none overflow-hidden rounded-sm border border-edge"
+              style={{
+                backgroundImage: CHECKERBOARD,
+                backgroundSize: "0.5rem 0.5rem",
+              }}
+            >
+              <span className="absolute inset-0" style={{ background: value }} />
+            </span>
+            <span
+              data-yunari-value=""
+              className="truncate font-mono text-xs text-text"
+            >
+              {/* The colour, not the document's spelling of it: an authored
+                  `rgb()` reads as the hex the field commits (Review Focus 1). */}
+              {colourText(value)}
+            </span>
+          </Popover.Trigger>
+        </ControlWell>
+      </ControlRow>
+      <Popover.Portal>
+        <Popover.Positioner sideOffset={6} align="start" className="z-50">
+          <Popover.Popup
+            data-testid="colour-picker"
+            className="w-64 space-y-3 rounded-md border border-edge bg-panel p-3 text-text shadow-lg"
+          >
+            <ColourPickerPanel
+              value={value}
+              onValueChange={onValueChange}
+              onValueCommit={onValueCommit}
+              onMenuActiveChange={setMenuOpen}
+            />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/**
+ * The picker's fields: the 2-D area, the hue and alpha strips, the exact-value
+ * field, the preset chips and the eyedropper. It owns the picker's state, so a
+ * caller rendering it inside its own popover gets the live/settled behaviour
+ * without a second trigger.
+ */
+export function ColourPickerPanel({
+  value,
+  onValueChange,
+  onValueCommit,
+  onMenuActiveChange,
+}: {
+  readonly value: string;
+  readonly onValueChange: (next: string) => void;
+  readonly onValueCommit: (next: string) => void;
+  /** Whether the preset menu is open. A wrapper that dismisses its own popover
+   *  on an outside press uses this to keep it open while the menu is up. */
+  readonly onMenuActiveChange?: ((active: boolean) => void) | undefined;
+}): React.JSX.Element {
+  const api = useColourPicker({ value, onValueChange, onValueCommit });
+  const presets = usePresetLibrary();
+  const [menu, setMenu] = useState<PresetMenuTarget | undefined>(undefined);
   const area = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onMenuActiveChange?.(menu !== undefined);
+  }, [menu, onMenuActiveChange]);
 
   const point = areaPoint(api.hsva);
   const saturation = channelValue("saturation", api.hsva);
@@ -221,206 +315,147 @@ export function ColourPicker({
 
   return (
     <>
-      <Popover.Root
-        open={open}
-        onOpenChange={(next) => {
-          // The preset menu portals to `body`, so a press on its row is outside
-          // this popup's DOM. Without this guard deleting a preset would close
-          // the picker out from under the author mid-edit.
-          if (!next && menu !== undefined) return;
-          setOpen(next);
-          // Escape and an outside press both land here; the trigger is where a
-          // keyboard author came from, so it is where they go back to.
-          if (!next) trigger.current?.focus();
+      <div
+        ref={area}
+        data-testid="picker-area"
+        role="slider"
+        tabIndex={0}
+        aria-label={uiCopy.panels.pickerArea}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(saturation)}
+        aria-valuetext={areaValueText(api.hsva, api.text)}
+        className="relative h-32 w-full touch-none rounded-sm border border-edge focus-visible:outline-2 focus-visible:outline-accent"
+        style={{
+          background: `linear-gradient(to top, hsl(0 0% 0%), transparent), linear-gradient(to right, hsl(0 0% 100%), hsl(${hue} 100% 50%))`,
         }}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          pickArea(event.clientX, event.clientY);
+        }}
+        onPointerMove={(event) => {
+          if (event.buttons !== 0) {
+            pickArea(event.clientX, event.clientY);
+          }
+        }}
+        onPointerUp={(event) => {
+          pickArea(event.clientX, event.clientY);
+          api.commit();
+        }}
+        onPointerCancel={() => api.commit()}
+        onKeyDown={areaKeys}
       >
-        <ControlRow ids={ids} label={label} labelFor={ids.control}>
-          <ControlWell>
-            <Popover.Trigger
-              ref={trigger}
-              id={ids.control}
-              type="button"
-              data-testid="picker-trigger"
-              data-yunari-palette-picker=""
-              aria-label={label}
-              className="flex h-full w-full min-w-0 items-center gap-[var(--space-6)] bg-transparent text-left"
+        <span
+          aria-hidden
+          className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-text"
+          style={{ left: `${point.x}%`, top: `${point.y}%` }}
+        />
+      </div>
+      <ChannelTrack
+        testId="picker-hue"
+        label={uiCopy.panels.pickerHue}
+        channel="hue"
+        value={hue}
+        background="linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))"
+        onValue={(next) => api.setChannel("hue", next)}
+        onCommit={() => api.commit()}
+      />
+      <ChannelTrack
+        testId="picker-alpha"
+        label={uiCopy.panels.pickerAlpha}
+        channel="alpha"
+        value={alpha}
+        background={`linear-gradient(to right, transparent, ${formatColor(
+          fromHsv({ ...api.hsva, a: 1 }),
+        )}), ${CHECKERBOARD} 0 0 / 0.5rem 0.5rem`}
+        onValue={(next) => api.setChannel("alpha", next)}
+        onCommit={() => api.commit()}
+      />
+      <ControlText
+        label={uiCopy.panels.pickerValueField}
+        data={{
+          "data-testid": "picker-hex",
+          "data-yunari-palette-color": "",
+        }}
+        value={api.text}
+        {...(api.invalid
+          ? { invalid: uiCopy.panels.colourUnpaintable(api.text) }
+          : {})}
+        onCommit={(next) => api.commitText(next)}
+      />
+      {presets.colours.length === 0 ? null : (
+        // An empty library states zero by drawing nothing: a labelled
+        // radiogroup with no members is a control the author can reach
+        // and not use, and the gradient row already hides.
+        <RadioGroup
+          value={api.text}
+          onValueChange={(next) => api.choosePreset(next)}
+          aria-label={uiCopy.panels.pickerPresets}
+          className="flex flex-wrap gap-[var(--space-4)]"
+        >
+          {presets.colours.map((preset) => (
+            <span
+              key={preset.id}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openMenu(preset, event.clientX, event.clientY);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Delete") {
+                  event.preventDefault();
+                  presetLibrary.deletePreset("colour", preset.id);
+                  return;
+                }
+                if (
+                  (event.key === "F10" && event.shiftKey) ||
+                  event.key === "ContextMenu"
+                ) {
+                  event.preventDefault();
+                  const box = event.currentTarget.getBoundingClientRect();
+                  openMenu(preset, box.left, box.top);
+                }
+              }}
             >
-              <span
-                aria-hidden
-                className="relative size-3.5 flex-none overflow-hidden rounded-sm border border-edge"
-                style={{
-                  backgroundImage: CHECKERBOARD,
-                  backgroundSize: "0.5rem 0.5rem",
-                }}
-              >
-                <span
-                  className="absolute inset-0"
-                  style={{ background: value }}
-                />
-              </span>
-              <span
-                data-yunari-value=""
-                className="truncate font-mono text-xs text-text"
-              >
-                {/* The colour, not the document's spelling of it: an authored
-                    `rgb()` reads as the hex the field commits (Review Focus 1). */}
-                {api.text}
-              </span>
-            </Popover.Trigger>
-          </ControlWell>
-        </ControlRow>
-        <Popover.Portal>
-          <Popover.Positioner sideOffset={6} align="start" className="z-50">
-            <Popover.Popup
-              data-testid="colour-picker"
-              className="w-64 space-y-3 rounded-md border border-edge bg-panel p-3 text-text shadow-lg"
-            >
-              <div
-                ref={area}
-                data-testid="picker-area"
-                role="slider"
-                tabIndex={0}
-                aria-label={uiCopy.panels.pickerArea}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(saturation)}
-                aria-valuetext={areaValueText(api.hsva, api.text)}
-                className="relative h-32 w-full touch-none rounded-sm border border-edge focus-visible:outline-2 focus-visible:outline-accent"
-                style={{
-                  background: `linear-gradient(to top, hsl(0 0% 0%), transparent), linear-gradient(to right, hsl(0 0% 100%), hsl(${hue} 100% 50%))`,
-                }}
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  pickArea(event.clientX, event.clientY);
-                }}
-                onPointerMove={(event) => {
-                  if (event.buttons !== 0) {
-                    pickArea(event.clientX, event.clientY);
-                  }
-                }}
-                onPointerUp={(event) => {
-                  pickArea(event.clientX, event.clientY);
-                  api.commit();
-                }}
-                onPointerCancel={() => api.commit()}
-                onKeyDown={areaKeys}
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-text"
-                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                />
-              </div>
-              <ChannelTrack
-                testId="picker-hue"
-                label={uiCopy.panels.pickerHue}
-                channel="hue"
-                value={hue}
-                background="linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))"
-                onValue={(next) => api.setChannel("hue", next)}
-                onCommit={() => api.commit()}
-              />
-              <ChannelTrack
-                testId="picker-alpha"
-                label={uiCopy.panels.pickerAlpha}
-                channel="alpha"
-                value={alpha}
-                background={`linear-gradient(to right, transparent, ${formatColor(
-                  fromHsv({ ...api.hsva, a: 1 }),
-                )}), ${CHECKERBOARD} 0 0 / 0.5rem 0.5rem`}
-                onValue={(next) => api.setChannel("alpha", next)}
-                onCommit={() => api.commit()}
-              />
-              <ControlText
-                label={uiCopy.panels.pickerValueField}
+              <ControlChoiceRow
+                shape="chip"
+                label={preset.name}
+                value={preset.value}
                 data={{
-                  "data-testid": "picker-hex",
-                  "data-yunari-palette-color": "",
+                  "data-testid": `picker-preset-${preset.id}`,
+                  "data-yunari-value": "",
                 }}
-                value={api.text}
-                {...(api.invalid
-                  ? { invalid: uiCopy.panels.colourUnpaintable(api.text) }
-                  : {})}
-                onCommit={(next) => api.commitText(next)}
-              />
-              {presets.colours.length === 0 ? null : (
-                // An empty library states zero by drawing nothing: a labelled
-                // radiogroup with no members is a control the author can reach
-                // and not use, and the gradient row already hides.
-                <RadioGroup
-                  value={api.text}
-                  onValueChange={(next) => api.choosePreset(next)}
-                  aria-label={uiCopy.panels.pickerPresets}
-                  className="flex flex-wrap gap-[var(--space-4)]"
-                >
-                  {presets.colours.map((preset) => (
+                swatch={
+                  <span
+                    aria-hidden
+                    data-yunari-value=""
+                    className="block size-full"
+                    style={{
+                      backgroundImage: `${CHECKERBOARD}`,
+                      backgroundSize: "0.5rem 0.5rem",
+                    }}
+                  >
                     <span
-                      key={preset.id}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        openMenu(preset, event.clientX, event.clientY);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Delete") {
-                          event.preventDefault();
-                          presetLibrary.deletePreset("colour", preset.id);
-                          return;
-                        }
-                        if (
-                          (event.key === "F10" && event.shiftKey) ||
-                          event.key === "ContextMenu"
-                        ) {
-                          event.preventDefault();
-                          const box =
-                            event.currentTarget.getBoundingClientRect();
-                          openMenu(preset, box.left, box.top);
-                        }
-                      }}
-                    >
-                      <ControlChoiceRow
-                        shape="chip"
-                        label={preset.name}
-                        value={preset.value}
-                        data={{
-                          "data-testid": `picker-preset-${preset.id}`,
-                          "data-yunari-value": "",
-                        }}
-                        swatch={
-                          <span
-                            aria-hidden
-                            data-yunari-value=""
-                            className="block size-full"
-                            style={{
-                              backgroundImage: `${CHECKERBOARD}`,
-                              backgroundSize: "0.5rem 0.5rem",
-                            }}
-                          >
-                            <span
-                              className="block size-full"
-                              style={{ background: preset.value }}
-                            />
-                          </span>
-                        }
-                      />
-                    </span>
-                  ))}
-                </RadioGroup>
-              )}
-              {api.eyedropper ? (
-                <ControlIconButton
-                  label={uiCopy.panels.pickerEyedropper}
-                  data={{ "data-testid": "picker-eyedropper" }}
-                  onClick={() => {
-                    void api.pickFromScreen();
-                  }}
-                >
-                  <Glyph icon={PIPETTE_GLYPH} size={14} />
-                </ControlIconButton>
-              ) : null}
-            </Popover.Popup>
-          </Popover.Positioner>
-        </Popover.Portal>
-      </Popover.Root>
+                      className="block size-full"
+                      style={{ background: preset.value }}
+                    />
+                  </span>
+                }
+              />
+            </span>
+          ))}
+        </RadioGroup>
+      )}
+      {api.eyedropper ? (
+        <ControlIconButton
+          label={uiCopy.panels.pickerEyedropper}
+          data={{ "data-testid": "picker-eyedropper" }}
+          onClick={() => {
+            void api.pickFromScreen();
+          }}
+        >
+          <Glyph icon={PIPETTE_GLYPH} size={14} />
+        </ControlIconButton>
+      ) : null}
       <PresetContextMenu
         target={menu}
         onClose={() => setMenu(undefined)}

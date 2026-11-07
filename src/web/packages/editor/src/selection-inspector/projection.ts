@@ -144,6 +144,8 @@ export function createProjection(args: {
       chartEdits(),
       cropEdits,
       fontEdits,
+      options.onOpenFontPicker,
+      options.designTokens,
     );
   };
 
@@ -208,6 +210,7 @@ export function createProjection(args: {
       cropEdits,
       fontEdits,
       options.onOpenFontPicker,
+      options.designTokens,
     );
   };
 

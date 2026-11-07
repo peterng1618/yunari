@@ -107,6 +107,7 @@ export function SelectControl(
     describedById,
     density,
     data,
+    action,
     shape,
     value,
     options,
@@ -159,7 +160,7 @@ export function SelectControl(
             hint === undefined ? undefined : ids.hint,
             refused === undefined ? undefined : ids.reason,
           )}
-          className={`${wellClasses(density, blocked)} w-full justify-between gap-[var(--space-6)] text-sm text-text`}
+          className={`${wellClasses(density, blocked)} w-full min-w-0 justify-between gap-[var(--space-6)] text-sm text-text`}
         >
           {adornment === undefined ? null : (
             <span aria-hidden className="flex flex-none items-center">
@@ -248,6 +249,7 @@ export function SelectControl(
           </Select.Positioner>
         </Select.Portal>
       </Select.Root>
+      {action}
     </ControlRow>
   );
 }

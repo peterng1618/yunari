@@ -18,6 +18,7 @@ import { ControlToggle } from "../components/ui/control-toggle.js";
 import { InspectorSection } from "../components/ui/inspector-section.js";
 import { uiCopy } from "../ui-copy.js";
 import { CROP_ASPECTS } from "./crop.js";
+import type { DesignTokenPort } from "./design-token-editor.js";
 import { FontFaceField } from "./font-face-field.js";
 import { rendersExtra } from "./per-kind-column.js";
 import { RunEditor } from "./runs.js";
@@ -300,6 +301,9 @@ function Section(props: {
   readonly font: FontFaceEdits;
   /** Opens the finder on Fonts; absent in a column built without one. */
   readonly onOpenFontPicker?: () => void;
+  /** The design token editor the run rows reach; absent in a column built
+   *  without the Tokens pane's session behind it. */
+  readonly designTokens?: DesignTokenPort | undefined;
   readonly revision: number;
   readonly idPrefix: string;
   /** The section's place in the column: the first one sits under the subject
@@ -314,6 +318,7 @@ function Section(props: {
     crop,
     font,
     onOpenFontPicker,
+    designTokens,
     revision,
     idPrefix,
     index,
@@ -341,6 +346,9 @@ function Section(props: {
                 key={`${revision}:runs`}
                 runs={extra.runs}
                 edits={runs}
+                {...(designTokens === undefined
+                  ? {}
+                  : { designTokens })}
               />
             );
           case "chartContent":
@@ -399,8 +407,18 @@ export function SelectionColumn(props: {
   readonly crop: CropEdits;
   readonly font: FontFaceEdits;
   readonly onOpenFontPicker?: () => void;
+  readonly designTokens?: DesignTokenPort | undefined;
 }): React.JSX.Element {
-  const { view, edits, runs, chart, crop, font, onOpenFontPicker } = props;
+  const {
+    view,
+    edits,
+    runs,
+    chart,
+    crop,
+    font,
+    onOpenFontPicker,
+    designTokens,
+  } = props;
   // A column is one selection's, and two columns can be mounted at once (the
   // accessibility audit mounts two). `${id}-header` is document-global, so the
   // aria pair is scoped to this instance or the second column's `aria-controls`
@@ -420,6 +438,7 @@ export function SelectionColumn(props: {
           crop={crop}
           font={font}
           {...(onOpenFontPicker === undefined ? {} : { onOpenFontPicker })}
+          {...(designTokens === undefined ? {} : { designTokens })}
           revision={view.targetRevision}
           idPrefix={idPrefix}
         />
@@ -444,13 +463,23 @@ export function createSelectionColumnRoot(host: HTMLElement): {
     crop: CropEdits,
     font: FontFaceEdits,
     onOpenFontPicker?: () => void,
+    designTokens?: DesignTokenPort,
   ) => void;
   readonly destroy: () => void;
 } {
   const root: Root = createRoot(host);
 
   return {
-    publish(view, edits, runs, chart, crop, font, onOpenFontPicker) {
+    publish(
+      view,
+      edits,
+      runs,
+      chart,
+      crop,
+      font,
+      onOpenFontPicker,
+      designTokens,
+    ) {
       flushSync(() => {
         root.render(
           <SelectionColumn
@@ -461,6 +490,7 @@ export function createSelectionColumnRoot(host: HTMLElement): {
             crop={crop}
             font={font}
             {...(onOpenFontPicker === undefined ? {} : { onOpenFontPicker })}
+            {...(designTokens === undefined ? {} : { designTokens })}
           />,
         );
       });

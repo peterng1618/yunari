@@ -385,6 +385,12 @@ thing actually raises**, and describes what the thing *is*:
 - **There is no per-card column.** A card is a `Group`; groups get name,
   transform and opacity. The question "which sensor" is asked on the element
   that carries the binding.
+- **A token row's edit action sits at the right of its value cell.** A run's
+  type-token and paint rows each carry one icon button after the select, named
+  for the token it edits, opening the value's editor in a popover anchored at
+  that row — the colour area, channels and presets for a paint, family and
+  weight for a type token. The button edits the referenced token, not the
+  reference; it is the same write the token inspector performs.
 - With nothing selected the column is empty and says where to choose from.
 
 ### The stage

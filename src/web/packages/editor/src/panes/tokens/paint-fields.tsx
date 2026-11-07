@@ -99,21 +99,7 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
           onSettled?.();
         }}
       />
-      <ControlSelect
-        label={uiCopy.panels.paint}
-        data={{ "data-yunari-palette-kind": "" }}
-        value={entry.value.kind}
-        options={(["solid", "gradient"] as const).map((kind) => ({
-          id: kind,
-          name: uiCopy.panels.paintKinds[kind],
-        }))}
-        onChange={(kind) => {
-          const wanted = kind === "gradient" ? "gradient" : "solid";
-          if (entry.value.kind === wanted) return;
-          commit({ ...entry, value: seedPaint(entry.value) });
-          onSettled?.();
-        }}
-      />
+      <PaintKindField entry={entry} commit={commit} onSettled={onSettled} />
       {entry.value.kind === "solid" ? (
         <SolidFields
           entry={entry}
@@ -142,13 +128,43 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
   );
 }
 
+/**
+ * The paint's kind. Extracted because the run row's token popover offers the
+ * same switch beside the same two editors; the write is the caller's, so both
+ * surfaces commit through the one document route.
+ */
+export function PaintKindField(props: {
+  readonly entry: FabricPaletteEntry;
+  readonly commit: (entry: FabricPaletteEntry) => void;
+  readonly onSettled?: (() => void) | undefined;
+}): React.JSX.Element {
+  const { entry, commit, onSettled } = props;
+  return (
+    <ControlSelect
+      label={uiCopy.panels.paint}
+      data={{ "data-yunari-palette-kind": "" }}
+      value={entry.value.kind}
+      options={(["solid", "gradient"] as const).map((kind) => ({
+        id: kind,
+        name: uiCopy.panels.paintKinds[kind],
+      }))}
+      onChange={(kind) => {
+        const wanted = kind === "gradient" ? "gradient" : "solid";
+        if (entry.value.kind === wanted) return;
+        commit({ ...entry, value: seedPaint(entry.value) });
+        onSettled?.();
+      }}
+    />
+  );
+}
+
 /** A solid token's colour: one trigger, and the picker's own popover holding
  *  the area, the channels, the one exact-value field and the presets.
  *
  * The pane used to carry a second field and a swatch beside the picker. Two
  * controls for one value meant two draft states, two refusals and two routes to
  * the same token. */
-function SolidFields(props: {
+export function SolidFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "solid" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
@@ -173,7 +189,7 @@ function SolidFields(props: {
 
 /** A gradient token: the one visual editor, which owns its own angle and stop
  *  wells, the track being both the preview and the manipulator. */
-function GradientFields(props: {
+export function GradientFields(props: {
   readonly entry: FabricPaletteEntry;
   readonly value: Extract<PalettePaint, { readonly kind: "gradient" }>;
   readonly commit: (entry: FabricPaletteEntry) => void;
@@ -233,7 +249,7 @@ function DeletionControls(props: {
  * loses nothing, and going back to a solid takes the gradient's first stop,
  * because that is the one colour a gradient can still name.
  */
-function seedPaint(value: PalettePaint): PalettePaint {
+export function seedPaint(value: PalettePaint): PalettePaint {
   if (value.kind === "solid") {
     return {
       kind: "gradient",

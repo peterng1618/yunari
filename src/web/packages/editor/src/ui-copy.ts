@@ -464,6 +464,9 @@ export const uiCopy = {
     runTrackingNotSeparate: (run: string) =>
       `Tracking on "${run}" is not shown separately — a text object carries one tracking value, from its first run.`,
     runColour: "Color",
+    /** The row action that edits the token a run references, named by the
+        token it opens so two runs' rows are not two identical buttons. */
+    editToken: (name: string) => `Edit ${name}`,
     runSource: "Reads",
     staticText: "Static text",
     /** What the dot before a reading says about this PC. The accessible name

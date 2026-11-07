@@ -56,6 +56,11 @@ import {
   type ObjectWithText,
   textRunsOf,
 } from "./authored-text.js";
+import {
+  type DesignTokenPort,
+  PaintTokenEditAction,
+  TypeTokenEditAction,
+} from "./design-token-editor.js";
 import { runIdentity } from "./run-identity.js";
 import type { RunEdits, RunOptionView, RunRowView, RunsView } from "./view.js";
 
@@ -553,6 +558,10 @@ function RunRow(props: {
   readonly row: RunRowView;
   readonly view: RunsView;
   readonly edits: RunEdits;
+  /** The design token editor, when the session has one behind this column.
+   *  Absent leaves the row's edit action off rather than drawing a control
+   *  whose write would go nowhere. */
+  readonly tokens?: DesignTokenPort | undefined;
   /**
    * Called before the write, so the editor can stop following the last run:
    * removing the selected last one must leave the *first* remaining run
@@ -560,8 +569,16 @@ function RunRow(props: {
    */
   readonly onRemove: (index: number) => void;
 }): React.JSX.Element {
-  const { row, view, edits, onRemove } = props;
+  const { row, view, edits, tokens, onRemove } = props;
   const index = row.index;
+  const typeTokenId = row.typeToken.startsWith("typeTokens.")
+    ? row.typeToken.slice("typeTokens.".length)
+    : undefined;
+  // The row carries the stored reference (`palette.<id>`); the editor names the
+  // palette entry itself.
+  const paintId = row.colour.startsWith("palette.")
+    ? row.colour.slice("palette.".length)
+    : undefined;
 
   /**
    * Picking a token writes that run; picking an action row runs it instead.
@@ -607,6 +624,15 @@ function RunRow(props: {
         value={row.typeToken}
         options={[...view.presets, ...fontActionOptions(edits)]}
         onChange={chooseToken}
+        action={
+          tokens === undefined || typeTokenId === undefined ? undefined : (
+            <TypeTokenEditAction
+              id={typeTokenId}
+              presets={tokens.typeTokens()}
+              actions={tokens.actions}
+            />
+          )
+        }
       />
 
       {/* The run's own type values, in the order a reader sets them. Clearing a
@@ -654,6 +680,15 @@ function RunRow(props: {
           />
         }
         onChange={(ref) => edits.setRunColour(index, ref)}
+        action={
+          tokens === undefined || paintId === undefined ? undefined : (
+            <PaintTokenEditAction
+              id={paintId}
+              palette={tokens.palette()}
+              actions={tokens.actions}
+            />
+          )
+        }
       />
 
       {view.bindable ? (
@@ -759,8 +794,9 @@ function sourceOptions(view: RunsView): readonly ControlOption[] {
 export function RunEditor(props: {
   readonly runs: RunsView;
   readonly edits: RunEdits;
+  readonly designTokens?: DesignTokenPort | undefined;
 }): React.JSX.Element {
-  const { runs: view, edits } = props;
+  const { runs: view, edits, designTokens } = props;
   // Which tab is showing is React's own: not authored, never in the view, the
   // envelope or history. Keyed by the row's runtime identity so removing a
   // different run does not move the selection off the run being edited.
@@ -875,6 +911,9 @@ export function RunEditor(props: {
                     row={row}
                     view={view}
                     edits={edits}
+                    {...(designTokens === undefined
+                      ? {}
+                      : { tokens: designTokens })}
                     onRemove={remove}
                   />
                 </Accordion.Panel>

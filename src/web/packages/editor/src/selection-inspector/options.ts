@@ -12,6 +12,7 @@ import type { EditorInteraction } from "../editor-interaction.js";
 import type { FavoritesClient } from "../favorites-client.js";
 import type { TypeTokenFontActions } from "../type-preset-manager/panel.js";
 import type { ChartFieldsPort } from "./per-kind-column.js";
+import type { DesignTokenPort } from "./design-token-editor.js";
 
 /**
  * What the inspector asks the session for. Every optional entry is a capability
@@ -126,4 +127,11 @@ export interface SelectionInspectorOptions {
    *  adopted, so the run that asked can point itself at it. Absent where the
    *  session has no import dialog behind the column. */
   readonly importLocalFont?: (onImported: (tokenId: string) => void) => void;
+  /**
+   * The design token editor the run rows reach: the same actions the token
+   * inspector uses, the live document read, creation and the pane reveal.
+   * Absent means no Tokens pane behind this column, and the rows then draw no
+   * edit action and no add entry rather than controls whose writes go nowhere.
+   */
+  readonly designTokens?: DesignTokenPort | undefined;
 }

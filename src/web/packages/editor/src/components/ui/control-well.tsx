@@ -46,6 +46,13 @@ export type ControlProps = {
   readonly describedById?: string;
   readonly density?: ControlDensity;
   readonly data?: Readonly<Record<`data-${string}`, string>>;
+  /**
+   * One action drawn at the right of the value cell, after the control. A
+   * control that edits the thing it references — not the reference itself —
+   * carries it, so the row keeps one value track and the action is visible
+   * without opening the value's list. The caller owns the node and its label.
+   */
+  readonly action?: React.ReactNode;
 };
 
 /**
