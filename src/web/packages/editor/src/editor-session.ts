@@ -398,27 +398,30 @@ export class EditorSession {
         // write while history is suspended, so a later undo removes the token
         // and restores the run together rather than in two steps.
         const release = history.suspend();
-        const ref: TokenRef =
-          kind === "paint"
-            ? (() => {
-                const added = addPaintToken(
-                  this.#document.envelope.globals?.palette ?? {},
-                );
-                this.#document.setPalette(added.palette);
-                return { kind: "paint", id: added.id };
-              })()
-            : (() => {
-                const added = addTypeToken(
-                  (this.#document.envelope.globals?.typeTokens ??
-                    {}) as TypeTokens,
-                );
-                if (added.created) this.#document.setTypes(added.presets);
-                return { kind: "preset", id: added.id };
-              })();
+        let ref: TokenRef | undefined;
         let applied = false;
         try {
+          ref =
+            kind === "paint"
+              ? (() => {
+                  const added = addPaintToken(
+                    this.#document.envelope.globals?.palette ?? {},
+                  );
+                  this.#document.setPalette(added.palette);
+                  return { kind: "paint", id: added.id } as const;
+                })()
+              : (() => {
+                  const added = addTypeToken(
+                    (this.#document.envelope.globals?.typeTokens ??
+                      {}) as TypeTokens,
+                  );
+                  if (added.created) this.#document.setTypes(added.presets);
+                  return { kind: "preset", id: added.id } as const;
+                })();
           applied = apply(ref);
         } finally {
+          // The suspension lifts even when a creation write throws, so a failed
+          // gesture cannot leave history deaf to every later edit.
           release();
           // The entry is settled after the suspension lifts, so it captures
           // both writes; a refused apply leaves the creation itself undoable.

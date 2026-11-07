@@ -1520,6 +1520,15 @@ describe("EditorSession", () => {
     );
 
     setTypes.mockRestore();
+    // The select's portalled list can still be in its dismiss transition. The
+    // session's root owns that portal, so destroying with the exit pending
+    // leaves React detaching a node the transition already removed (an
+    // intermittent `NotFoundError`). Dismiss and let the transition settle.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    await flushPopups();
     extensions.destroy();
   });
 
