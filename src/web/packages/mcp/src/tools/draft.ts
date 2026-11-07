@@ -11,6 +11,7 @@ import type {
 import {
   BACKGROUND_ANCHORS,
   BACKGROUND_MODES,
+  DEFAULT_BACKGROUND_MEDIA_BOUNDS,
   MAX_BACKGROUND_EXTENT,
   MAX_BACKGROUND_FADE,
   MAX_METADATA_NAME_BYTES,
@@ -304,7 +305,7 @@ function backgroundMediaFor(
   const flipY = input.flipY ?? base?.flipY;
   return {
     assetId: asset.id,
-    bounds: input.bounds ?? base?.bounds ?? "theme",
+    bounds: input.bounds ?? base?.bounds ?? DEFAULT_BACKGROUND_MEDIA_BOUNDS,
     ...(fallbackFrame === undefined || asset.kind !== "video"
       ? {}
       : { fallbackFrame }),

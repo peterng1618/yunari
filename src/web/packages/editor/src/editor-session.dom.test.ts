@@ -1757,7 +1757,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
     const written = (shells.last as { setBackground: ReturnType<typeof vi.fn> })
       .setBackground;
     expect(written.mock.calls.at(-1)?.[0]).toEqual({
-      media: { assetId: expect.any(String), bounds: "theme" },
+      media: { assetId: expect.any(String), bounds: "display" },
     });
     extensions.destroy();
   });
@@ -2736,7 +2736,7 @@ describe("the Wallpaper Engine import transaction", () => {
     });
     expect(extensions.envelope.background?.media).toEqual({
       assetId: expect.any(String),
-      bounds: "theme",
+      bounds: "display",
     });
     extensions.destroy();
     vi.unstubAllGlobals();
@@ -3850,7 +3850,7 @@ describe("the Assets pane background action", () => {
     await setBackground("b");
     expect(extensions.envelope.background?.media).toEqual({
       assetId: "b",
-      bounds: "theme",
+      bounds: "display",
     });
 
     await setBackground("a");

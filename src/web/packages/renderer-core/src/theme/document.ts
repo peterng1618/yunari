@@ -241,6 +241,12 @@ export interface Artboard {
 export const BACKGROUND_MEDIA_BOUNDS = ["theme", "display"] as const;
 export type BackgroundMediaBounds = (typeof BACKGROUND_MEDIA_BOUNDS)[number];
 
+/** The box a picture just chosen for the background starts in: the display it
+ *  is shown on, so a wall-sized picture is not letterboxed by the artboard
+ *  before the author has moved anything. An authored or remembered `bounds`
+ *  always wins over this. */
+export const DEFAULT_BACKGROUND_MEDIA_BOUNDS: BackgroundMediaBounds = "display";
+
 /** The five points a media band can be anchored to inside its bounds box. The
  *  media keeps the full perpendicular axis, so the fill only ever meets it on
  *  one side — or two opposite sides for `center`. */

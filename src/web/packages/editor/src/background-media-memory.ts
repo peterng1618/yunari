@@ -7,6 +7,7 @@ import {
   type BackgroundMediaBounds,
   type BackgroundMediaComposition,
   type BackgroundMode,
+  DEFAULT_BACKGROUND_MEDIA_BOUNDS,
   MAX_BACKGROUND_EXTENT,
   MAX_BACKGROUND_FADE,
   MAX_BACKGROUND_OFFSET,
@@ -240,7 +241,7 @@ export function restoreBackgroundMedia(
   mode: BackgroundMode,
 ): BackgroundMedia {
   const { composition, fallbackFrame, ...geometry } = entry ?? {
-    bounds: "theme" as const,
+    bounds: DEFAULT_BACKGROUND_MEDIA_BOUNDS,
   };
   return {
     assetId,

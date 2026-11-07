@@ -409,7 +409,7 @@ describe("EditorDocument background media memory", () => {
     document.setBackgroundAsset("b");
     expect(document.envelope.background?.media).toEqual({
       assetId: "b",
-      bounds: "theme",
+      bounds: "display",
     });
 
     document.setBackgroundAsset("a");
@@ -564,7 +564,7 @@ describe("EditorDocument background media memory", () => {
     document.setBackgroundAsset("a");
     expect(document.envelope.background?.media).toEqual({
       assetId: "b",
-      bounds: "theme",
+      bounds: "display",
     });
     document.destroy();
   });

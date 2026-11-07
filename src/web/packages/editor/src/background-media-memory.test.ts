@@ -149,10 +149,16 @@ describe("restoreBackgroundMedia", () => {
     composition: { anchor: "left" },
   } as const;
 
-  it("defaults an unseen asset to the theme bounds", () => {
+  it("defaults an unseen asset to the display bounds", () => {
     expect(restoreBackgroundMedia(undefined, "b", "image", "advanced")).toEqual(
-      { assetId: "b", bounds: "theme" },
+      { assetId: "b", bounds: "display" },
     );
+  });
+
+  it("keeps the bounds a remembered entry carries", () => {
+    expect(
+      restoreBackgroundMedia({ bounds: "theme" }, "a", "image", "simple"),
+    ).toMatchObject({ bounds: "theme" });
   });
 
   it("restores the remembered composition only in advanced", () => {
