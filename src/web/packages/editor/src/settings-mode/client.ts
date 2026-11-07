@@ -21,10 +21,10 @@ import {
  * reads.
  *
  * **Every call below is a route the host already serves** — `GET/PUT
- * /api/devices`, `GET/PUT /api/display`, `GET/PUT /api/themes/:id/answers` — and
- * these are the three routes `packages/host/public/settings.html` reads. The
- * shell's Host mode is that page rebuilt in React, so this adds no route and no
- * host-side read.
+ * /api/devices`, `GET/PUT /api/display`, `GET/PUT /api/themes/:id/answers`.
+ * The shell's Settings mode is the one settings surface: `/settings` forwards
+ * to it and the old hand-written host page is deleted, so this adds no route
+ * and no host-side read.
  *
  * **It is a separate client from `ThemeLibraryClient` on purpose.** That one is
  * the theme library's — listing, opening, saving, removing, and the display map

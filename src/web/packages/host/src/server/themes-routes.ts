@@ -62,7 +62,8 @@ interface ActiveDisplay {
  *
  * Never read from the display store: `this-pc` is the machine rather than a
  * client anyone paired, so it has no record whose label could be taken. The
- * word matches the heading the host's own pages already use (`public/settings.html`).
+ * word matches the one the editor's Settings surface uses for the same row
+ * (`uiCopy.hostSettings.displays`).
  */
 const LOCAL_DISPLAY_LABEL = "Host";
 

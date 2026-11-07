@@ -10,9 +10,9 @@
          opened by a device that has not paired yet, from the network. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
-      /* Its own sheet, not `/settings/yunari-page.css`: that route is an admin
-         surface and refuses the very device this page is for. The palette is
-         the host's, copied the way the first-run page copies it. */
+      /* Its own sheet, not a shared admin one: an unpaired device is refused
+         the admin surfaces, which is the whole reason this page exists. The
+         palette is the host's, copied the way the first-run page copies it. */
       :root {
         --paper: #f5f1e8;
         --ink: #14120e;

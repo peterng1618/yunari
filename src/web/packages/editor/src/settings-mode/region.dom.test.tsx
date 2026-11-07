@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 /**
- * The Host mode's region: the four sections `packages/host/public/settings.html`
- * is, rebuilt in the
- * shell's own React — and the two facts about them the plan names, plus the
- * decisions behind the writes.
+ * The Settings mode's region: the four sections the old hand-written host
+ * settings page held, now the shell's own React — and the two facts about them
+ * the plan names, plus the decisions behind the writes.
  *
  * **What this file owns.** That the displays are listed and that a display with
  * no theme of its own is shown the default's name; that only the slots the theme

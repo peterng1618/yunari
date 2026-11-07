@@ -9,7 +9,8 @@ stream. Everything a person sees is a built browser bundle served by that host:
 - `/` — player (display-only). When themes exist and none is chosen, the host
   serves its theme chooser at this address instead.
 - `/editor` — editor (localhost only)
-- `/settings` — settings page
+- `/settings` — forwards to the editor's Settings mode (localhost only)
+- `/admin/` — the chooser's React bundle (served with the chooser document)
 - `/pair` — display pairing page
 
 The editor and player can also run under `vite preview` for browser tests, but
@@ -382,8 +383,8 @@ served at `/yunari-ca.crt` before every gate so a display can trust it.
 
 | Surface | Reachability |
 |---|---|
-| `/`, `/settings`, `/pair`, `/api/health` | According to current LAN/hosting state |
-| `/editor` | Loopback only |
+| `/`, `/pair`, `/api/health` | According to current LAN/hosting state |
+| `/editor`, `/settings` (forwards to the editor) | Loopback only |
 | `/api/devices`, `PUT /api/display`, `/api/pairing/*` admin routes | Loopback only |
 | `POST /api/pairing/claim` | LAN, because an unpaired display must reach it |
 | `/ws` sample stream | A paired display credential |

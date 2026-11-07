@@ -558,14 +558,12 @@ export const uiCopy = {
   /**
    * The Host mode's own surface: the machine and its display.
    *
-   * **The words are `packages/host/public/settings.html`'s** — its hints, its
-   * device labels, its status line — taken rather than rewritten, because they
-   * are the same questions, and the committed page says so. Two things
-   * diverge. That page no longer lists themes (A.10): the listing is the store
-   * mode's local half, and an assignment is made from a theme's own row. And
-   * its questions hint carries a sentence this one does not — which display the
-   * answers are for — because this surface has its own display selector and
-   * must not claim the page's default (R153).
+   * **This surface is the one owner of those words now.** They were the old
+   * hand-written host settings page's — its hints, device labels and status
+   * line — taken rather than rewritten, because they are the same questions.
+   * That page is deleted and `/settings` forwards here. Unlike it, this surface
+   * names which display the answers are for, because it has its own display
+   * selector rather than claiming the default.
    */
   hostSettings: {
     displays: {
@@ -1515,8 +1513,8 @@ export const uiCopy = {
       display: "Display",
       /** The key the route gives the theme a display with no choice of its own
        *  falls to. It is offered *beside* the displays and never as one of them
-       *  — a theme id is not a display id — and the host's own page calls it
-       *  *Default* (`theme-list.js`). */
+       *  — a theme id is not a display id — and the host's chooser calls it
+       *  *Default* (`packages/host/src/admin/chooser.tsx`). */
       default: "Default",
       /** The way out of the choice, for a pointer or a touch screen reader. */
       close: "Close",

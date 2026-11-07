@@ -109,8 +109,8 @@ the LAN and admin rules above are unchanged.
 - LAN serving is off by default. `--host 0.0.0.0` exposes hardware telemetry to
   the local network; plain HTTP there has no confidentiality. Never expose the
   host to the internet.
-- The editor, settings page and pairing admin API are loopback-only even when
-  the LAN is open.
+- The editor (including its Settings mode, reached at `/settings`) and the
+  pairing admin API are loopback-only even when the LAN is open.
 - Provider credentials and the store session stay under `settings/` and are
   never sent to a browser.
 - The TLS root's private key is stored encrypted in `settings/tls/`; only the

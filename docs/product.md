@@ -19,7 +19,8 @@ Current release line: pre-release `0.1.0`. Theme documents carry
   on this PC only. It edits the Fabric scene inside Yunari's theme envelope,
   previews the result, saves to the local library and publishes to the store.
 
-The host also serves a settings page and a `/pair` page for displays.
+The host also forwards `/settings` to the editor's Settings mode and serves a
+`/pair` page for displays.
 
 ## What it does
 
