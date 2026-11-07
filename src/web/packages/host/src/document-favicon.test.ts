@@ -1,10 +1,13 @@
-import { readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry } from "./providers/registry.js";
 import { createHostServer } from "./server.js";
+import { createThemeStore } from "./themes/store.js";
 
 /**
  * Every page the host serves names an icon the host actually serves.
@@ -32,9 +35,14 @@ const FILES = [{ name: "chooser", document: join(ADMIN_DIR, "chooser.html") }];
  *  real host: the browser proof is that a page load fetches the icon, and this
  *  is the half of it that does not need a browser. */
 async function firstRunHtml(): Promise<string> {
+  // An empty store of its own: the host's default library is this machine's,
+  // and with a theme in it `/` serves the chooser instead of the first-run page.
+  const themesDir = mkdtempSync(join(tmpdir(), "yunari-first-run-"));
   const hosted = createHostServer({
     registry: new ProviderRegistry([]),
-    // No themes are stored, so `/` falls through to the first-run page.
+    themeStore: createThemeStore(themesDir),
+    // The admin entry is deliberately absent: the first-run page needs no
+    // chooser bundle, and the route must still serve it.
     bundles: { player: ADMIN_DIR, editor: ADMIN_DIR, admin: ADMIN_DIR },
   });
   // Port 0 asks the OS for a free one, so this never collides with a host
@@ -48,6 +56,7 @@ async function firstRunHtml(): Promise<string> {
     return response.ok ? await response.text() : "";
   } finally {
     await hosted.close();
+    await rm(themesDir, { recursive: true, force: true });
   }
 }
 
@@ -69,7 +78,11 @@ describe("the host's own pages name an icon", () => {
   it("the first-run page declares one a display on the LAN can fetch", async () => {
     // `/` is served to a paired display over the LAN, so the first-run page
     // must name the bundle-exempt root rather than a loopback-only path.
-    expect(href(await firstRunHtml())).toBe("/favicon.svg");
+    const html = await firstRunHtml();
+    expect(html, "the response is the first-run page").toContain(
+      "No dashboard yet",
+    );
+    expect(href(html)).toBe("/favicon.svg");
   });
 });
 
