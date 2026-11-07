@@ -984,7 +984,9 @@ it("renders the message editor-main publishes, and the footer owns the element",
   expect(root.querySelector("#status")?.contains(message)).toBe(true);
 
   await act(async () => layout.statusMessage.set("Theme saved"));
-  expect(root.querySelector("#status-message")?.textContent).toBe("Theme saved");
+  expect(root.querySelector("#status-message")?.textContent).toBe(
+    "Theme saved",
+  );
 
   layout.destroy();
 });

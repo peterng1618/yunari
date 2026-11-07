@@ -1,7 +1,4 @@
-import {
-  type StatusMessageStore,
-  useStatusMessage,
-} from "./shell-stores.js";
+import { type StatusMessageStore, useStatusMessage } from "./shell-stores.js";
 
 /**
  * The editor's one status message.
