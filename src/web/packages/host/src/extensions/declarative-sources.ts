@@ -85,6 +85,9 @@ export function declarativeAssetAdapters(
 ): readonly DeclarativeAssetSourceAdapter[] {
   const owners = new Map<string, InstalledExtension>();
   for (const extension of extensions) {
+    // `declarativeAssetSources` skips an extension whose consent is missing, so
+    // a row it does not serve must not own the id here either.
+    if (extension.consent === "missing") continue;
     for (const row of extension.contributions.assetSources ?? []) {
       const id = row["id"];
       if (typeof id === "string" && !owners.has(id)) {

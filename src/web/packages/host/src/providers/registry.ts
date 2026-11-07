@@ -128,8 +128,9 @@ export class ProviderRegistry {
   }
 
   async describe(): Promise<readonly DescribedSensor[]> {
+    const providers = this.providers;
     const settled = await Promise.allSettled(
-      this.providers.map(async (provider) => {
+      providers.map(async (provider) => {
         const descriptors = await provider.describe();
 
         return descriptors.map((descriptor) => ({
@@ -158,8 +159,12 @@ export class ProviderRegistry {
       return { entries: [], failures: [], unmapped: [] };
     }
 
+    // One snapshot for the whole cycle: a live change may replace the list
+    // while a poll is in flight, and `settled[i]` must still name the provider
+    // that answered.
+    const providers = this.providers;
     const settled = await Promise.allSettled(
-      this.providers.map((provider) =>
+      providers.map((provider) =>
         provider.sample(semanticKeys, nowMs, context),
       ),
     );
@@ -171,7 +176,7 @@ export class ProviderRegistry {
     const returned: SampleEntry[] = [];
 
     settled.forEach((result, index) => {
-      const provider = this.providers[index];
+      const provider = providers[index];
 
       if (provider === undefined) {
         return;

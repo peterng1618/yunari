@@ -366,8 +366,47 @@ describe("extension service", () => {
     ).toEqual({ ok: true });
     expect(onChange).toHaveBeenCalledTimes(2);
 
-    await notifying.remove(listed.key);
+    // A reorder is a live change too: the runtime re-reads the order it uses.
+    expect(
+      await notifying.writeProviderOrder({ version: 1, pluginOrder: [] }),
+    ).toEqual({ ok: true });
     expect(onChange).toHaveBeenCalledTimes(3);
+
+    await notifying.remove(listed.key);
+    expect(onChange).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps a landed grant when the reload throws", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const notifying = createExtensionService({
+      installer: createPluginInstaller(path.join(dir, "extensions")),
+      consent,
+      now: () => "2026-11-06T00:00:00Z",
+      providerOrder: orderStore(),
+      onChange: async () => {
+        throw new Error("the extension directory is unreadable");
+      },
+    });
+
+    try {
+      expect(await notifying.install(validPluginBytes())).toMatchObject({
+        ok: true,
+      });
+
+      const [listed] = await notifying.list();
+      if (listed === undefined) throw new Error("no extension listed");
+
+      await expect(
+        notifying.grantConsent(listed.key, listed.fingerprint),
+      ).resolves.toEqual({ ok: true });
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining("Extension reload failed"),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("does not load a hardware plugin without hardware consent", async () => {

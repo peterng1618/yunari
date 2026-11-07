@@ -216,6 +216,7 @@ export function createPluginRuntime(
       extensions: options.extensions,
       hostApi: options.hostApi,
       supervisors,
+      installed,
       ...(options.onFailure === undefined
         ? {}
         : { onFailure: options.onFailure }),
@@ -237,6 +238,7 @@ export function createPluginRuntime(
     const code = await createPluginAssetSources({
       installer: options.installer,
       supervisors,
+      installed,
       taken: builtinIds,
       ...(options.onFailure === undefined
         ? {}

@@ -369,6 +369,9 @@ export interface CreatePluginProvidersOptions
   extends StartPluginSupervisorsOptions {
   /** The one worker per plugin, already started and owned by the caller. */
   readonly supervisors?: ReadonlyMap<string, PluginSupervisor>;
+  /** The installed plugins the caller already listed; read from the installer
+   *  when absent, so a live change builds every list from one snapshot. */
+  readonly installed?: readonly InstalledPlugin[];
 }
 
 export interface PluginSupervisors {
@@ -512,7 +515,8 @@ export async function createPluginProviders(
   const providers: PluginSensorProvider[] = [];
 
   if (supervisors !== undefined) {
-    for (const plugin of await options.installer.list()) {
+    const installed = options.installed ?? (await options.installer.list());
+    for (const plugin of installed) {
       if (!isProviderPlugin(plugin)) continue;
 
       const supervisor = supervisors.get(plugin.key);

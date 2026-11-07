@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type {
   DeviceAllowlist,
   InstalledExtension,
@@ -5,16 +8,19 @@ import type {
   PluginInstaller,
   PluginManifest,
 } from "@yunari/extension-api";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { strToU8, zipSync } from "fflate";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssetSource } from "../assets/source.js";
 import { createPanelFamilyRegistry } from "../panels/panel-families.js";
 import { PluginPanelRows } from "../panels/plugin-panel-rows.js";
 import type { SensorProvider } from "../providers/provider.js";
 import { ProviderRegistry } from "../providers/registry.js";
+import { createConsentStore } from "./consent-store.js";
+import { createPluginInstaller } from "./install.js";
 import { createPluginRuntime } from "./plugin-runtime.js";
 import type { DeviceBroker } from "./runtime/device-broker.js";
 import type { HostApiDispatcher } from "./runtime/supervisor.js";
-import type { ExtensionService } from "./service.js";
+import { createExtensionService, type ExtensionService } from "./service.js";
 
 const supervisorMocks = vi.hoisted(() => {
   interface FakeSupervisor {
@@ -356,5 +362,120 @@ describe("createPluginRuntime", () => {
     expect(host.panelRegistry.forDevice(VENDOR_ID, PRODUCT_ID)).toBeUndefined();
     expect(host.allowlists.size).toBe(0);
     expect(host.broker.closeAll).toHaveBeenCalledWith(PLUGIN_KEY);
+  });
+});
+
+describe("the extension service's change event", () => {
+  let dir: string | undefined;
+
+  afterEach(async () => {
+    if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it("grants and revokes a real install through onChange", async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), "yunari-plugin-runtime-"));
+    const installer = createPluginInstaller(path.join(dir, "extensions"));
+    const consent = createConsentStore(dir);
+    let runtime: ReturnType<typeof createPluginRuntime> | undefined;
+
+    // The same join `main.ts` runs: the service reports a change and the live
+    // runtime reconciles.
+    const service = createExtensionService({
+      installer,
+      consent,
+      now: () => "2026-11-07T00:00:00Z",
+      providerOrder: {
+        read: () => Promise.resolve({ version: 1, pluginOrder: [] }),
+        write: () => Promise.resolve(),
+      },
+      onChange: async () => {
+        await runtime?.reconcile();
+      },
+    });
+
+    const panelRegistry = createPanelFamilyRegistry();
+    const allowlists = new Map<string, readonly DeviceAllowlist[]>();
+    const broker = fakeBroker();
+    runtime = createPluginRuntime({
+      installer,
+      extensions: service,
+      hostApi,
+      builtinProviders: [builtinProvider()],
+      registry: new ProviderRegistry([builtinProvider()]),
+      builtinAssetSources: [builtinSource()],
+      panelRows: new PluginPanelRows(panelRegistry),
+      broker,
+      allowlists,
+    });
+
+    const installed = await service.install(
+      zipSync(
+        {
+          "yunari-plugin.json": strToU8(JSON.stringify(manifest())),
+          "main.js": strToU8("export default {};"),
+        },
+        { level: 0 },
+      ),
+    );
+    expect(installed).toMatchObject({ ok: true });
+
+    // Installed but not consented: no worker, no rows.
+    expect(supervisorMocks.created).toHaveLength(0);
+    expect(runtime.assetSources().map((source) => source.id)).toEqual([
+      "builtin-source",
+    ]);
+
+    const [listed] = await service.list();
+    if (listed === undefined) throw new Error("no extension listed");
+    expect(await service.grantConsent(listed.key, listed.fingerprint)).toEqual({
+      ok: true,
+    });
+
+    expect(supervisorMocks.created).toHaveLength(1);
+    expect(runtime.providers().map((provider) => provider.id)).toEqual([
+      "builtin",
+      "acme-sensors",
+    ]);
+    expect(runtime.assetSources().map((source) => source.id)).toEqual([
+      "builtin-source",
+      CODE_SOURCE_ID,
+      DECLARATIVE_SOURCE_ID,
+    ]);
+    expect(panelRegistry.forDevice(VENDOR_ID, PRODUCT_ID)).toBeDefined();
+    expect(allowlists.get(PLUGIN_KEY)).toEqual([
+      { transport: "usb", vendorId: VENDOR_ID, productId: PRODUCT_ID },
+    ]);
+
+    // A reload that throws after the grant landed must not fail the request;
+    // the contribution lists are rebuilt by the next reconcile.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const failing = vi
+      .spyOn(installer, "list")
+      .mockRejectedValueOnce(new Error("reload failed"));
+    try {
+      await expect(
+        service.grantConsent(listed.key, listed.fingerprint),
+      ).resolves.toEqual({ ok: true });
+    } finally {
+      failing.mockRestore();
+      consoleError.mockRestore();
+    }
+
+    await service.remove(listed.key);
+
+    expect(supervisorMocks.created[0]?.stops).toBe(1);
+    expect(runtime.supervisors.size).toBe(0);
+    expect(runtime.providers().map((provider) => provider.id)).toEqual([
+      "builtin",
+    ]);
+    expect(runtime.assetSources().map((source) => source.id)).toEqual([
+      "builtin-source",
+    ]);
+    expect(panelRegistry.forDevice(VENDOR_ID, PRODUCT_ID)).toBeUndefined();
+    expect(allowlists.size).toBe(0);
+    expect(broker.closeAll).toHaveBeenCalledWith(PLUGIN_KEY);
   });
 });

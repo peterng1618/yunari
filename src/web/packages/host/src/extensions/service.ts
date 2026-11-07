@@ -16,6 +16,7 @@ import {
   type PluginContributions,
   type PluginInstaller,
 } from "@yunari/extension-api";
+import { redactForBrowser } from "../providers/provider.js";
 import { decideUpdate } from "../store/update-policy.js";
 import type { ConsentStore } from "./consent-store.js";
 import type { KillListStore } from "./kill-list.js";
@@ -153,8 +154,20 @@ export function createExtensionService(options: {
   readonly onChange?: () => Promise<void>;
 }): ExtensionService {
   const { installer, consent } = options;
-  const changed = (): Promise<void> =>
-    options.onChange?.() ?? Promise.resolve();
+  const changed = async (): Promise<void> => {
+    try {
+      await (options.onChange?.() ?? Promise.resolve());
+    } catch (error) {
+      // The install, grant or removal already landed. A reload that throws must
+      // not turn a completed store change into a failed request: the next
+      // change or the next host start rebuilds the contributions.
+      console.error(
+        `Extension reload failed: ${redactForBrowser(
+          error instanceof Error ? error.message : String(error),
+        )}`,
+      );
+    }
+  };
 
   /** A plugin the index cannot account for must not load, but its absence is a
    *  refusal rather than a failed request. */
@@ -319,6 +332,9 @@ export function createExtensionService(options: {
       }
 
       await options.providerOrder.write(parsed);
+      // A live provider list reads this order on the next cycle, so the same
+      // change notification an install uses is fired here.
+      await changed();
       return { ok: true };
     },
   };

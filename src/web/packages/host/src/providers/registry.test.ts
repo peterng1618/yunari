@@ -268,6 +268,35 @@ describe("ProviderRegistry", () => {
     expect(cycle.failures).toEqual([]);
   });
 
+  it("attributes a cycle to the providers it started with", async () => {
+    // A live plugin change may replace the list while a poll is in flight. The
+    // rejected result still belongs to the provider that answered it, not to
+    // whichever plugin now holds that index.
+    let release: (() => void) | undefined;
+    const slow: SensorProvider = {
+      id: "slow",
+      label: "Slow",
+      describe: () => Promise.resolve([]),
+      sample: () =>
+        new Promise((resolve) => {
+          release = () => resolve([]);
+        }),
+      health: () => ({ available: true }),
+    };
+    const registry = new ProviderRegistry([
+      slow,
+      stubProvider("lhm", {}, { failWith: "LHM not running" }),
+    ]);
+
+    const cycle = registry.sample(["cpu.load"], NOW);
+    registry.setProviders([stubProvider("replacement", { "cpu.load": 10 })]);
+    release?.();
+
+    expect((await cycle).failures).toEqual([
+      { providerId: "lhm", message: "LHM not running" },
+    ]);
+  });
+
   describe("failure isolation", () => {
     it("keeps baseline telemetry when the extended provider throws", async () => {
       const os = stubProvider("os", { "cpu.load": 10 });

@@ -413,6 +413,9 @@ export interface CreatePluginAssetSourcesOptions {
   readonly installer: PluginInstaller;
   /** The one worker per plugin, started once by `startPluginSupervisors`. */
   readonly supervisors: ReadonlyMap<string, PluginSupervisor>;
+  /** The installed plugins the caller already listed; read from the installer
+   *  when absent, so a live change builds every list from one snapshot. */
+  readonly installed?: readonly InstalledPlugin[];
   /** Source ids already registered by the host's own rows. */
   readonly taken?: readonly string[];
   /** One line per contribution that was refused; may reach the console. */
@@ -430,8 +433,9 @@ export async function createPluginAssetSources(
 ): Promise<readonly PluginAssetSource[]> {
   const sources: PluginAssetSource[] = [];
   const ids = new Set(options.taken ?? []);
+  const installed = options.installed ?? (await options.installer.list());
 
-  for (const plugin of await options.installer.list()) {
+  for (const plugin of installed) {
     const contributions = plugin.manifest.contributes.assetSources ?? [];
     const supervisor = options.supervisors.get(plugin.key);
 
