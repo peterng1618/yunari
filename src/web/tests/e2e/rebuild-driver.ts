@@ -121,7 +121,6 @@ export async function openBlank(
     hasText: "Choose an artboard size",
   });
   await expect(chooser).toBeVisible();
-  await chooseIn(page, "[data-yunari-new-document-display]", "");
   await chooseIn(page, "[data-yunari-new-document-ratio]", ratio);
   await chooseIn(page, "[data-yunari-new-document-resolution]", resolution);
   await page.locator("[data-yunari-new-document-create]").click();

@@ -1090,16 +1090,12 @@ export const uiCopy = {
      *  their bindings, the globals they use and the files they reference. */
     exportWidget: "Export selection as widget",
   },
-  /** The chooser `New` opens before the document exists. The first control is
-   *  the display a theme is for, and its entries are the display switch's own
-   *  names — one vocabulary, one place it is worded. The size controls beside it
-   *  are the artboard panel's own labels, so only this surface's words are
-   *  here. */
+  /** The chooser `New` opens before the document exists. It asks for a size and
+   *  nothing else; the size controls are the artboard panel's own labels, so
+   *  only this surface's words are here. The preview lens is read off the
+   *  artboard rather than asked. */
   newDocument: {
     chooseSize: "Choose an artboard size",
-    /** The first question. Named as what it decides — where this theme will be
-     *  seen — rather than by the aspect it derives. */
-    display: "Display",
     /** The authored canvas's outline, distinct from the ratio: a circle is
      *  drawn on a square artboard rather than being one. */
     shape: "Shape",

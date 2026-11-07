@@ -138,13 +138,11 @@ export async function chooseDisplay(page: Page, name: string): Promise<void> {
   await page.getByRole("menuitemradio", { name }).click();
 }
 
-/** The chooser's display control, by the hook the control itself carries. It is
- *  a `ControlSelect` now, so the list is a Base UI popup rather than a native
+/** The chooser's size controls, by the hooks the controls carry. They are
+ *  `ControlSelect`s now, so a list is a Base UI popup rather than a native
  *  `<select>` — `chooseIn` scopes to the popup the trigger's own `aria-controls`
- *  names. **Not a bare `[data-yunari-option]` lookup**: the display list and
- *  the ratio list are both keyed by aspect ratio, so an unscoped `9:19.5`
- *  resolves to two rows once either has been opened. */
-export const CHOOSER_DISPLAY = "[data-yunari-new-document-display]";
+ *  names. **Not a bare `[data-yunari-option]` lookup**: two lists can carry the
+ *  same key, so an unscoped value resolves to whichever row was opened last. */
 
 /** Where each menu label sits, in page px, measured on the live menu.
  *
@@ -340,10 +338,6 @@ export async function openNewDocument(page: Page): Promise<string> {
   });
   await expect(chooser).toBeVisible();
   return chooser.locator("[data-yunari-new-document-size]").innerText();
-}
-
-export async function pickPreview(page: Page, lens: string): Promise<void> {
-  await chooseIn(page, CHOOSER_DISPLAY, lens);
 }
 
 export async function chooserSize(page: Page): Promise<string> {

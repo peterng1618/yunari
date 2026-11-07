@@ -5,14 +5,11 @@ import { openDisplayStage } from "./editor-display-entry.js";
 import {
   aspect,
   type Bridge,
-  CHOOSER_DISPLAY,
   chooseDisplay,
-  chooserSize,
   labelOffsets,
   measure,
   openMenu,
   openNewDocument,
-  pickPreview,
   SCREEN,
   STARTER,
 } from "./editor-stage.js";
@@ -49,7 +46,7 @@ test.describe("the stage looks through a display", () => {
     // The starter is 1672 × 941 — 1.7768, which is 16:9. The default used to be
     // a 19.5:9 lens on the stated grounds that this was its shape; it is not,
     // and the mismatch cost ~287 px of a 1600 px stage on bars. The lens is now
-    // the active catalogue's first landscape entry, which is 16:9 by default.
+    // the catalogue entry nearest the artboard's aspect, which is 16:9 here.
     expect(
       m.display,
       "the default display is the one the starter is drawn in",
@@ -128,21 +125,21 @@ test.describe("the stage looks through a display", () => {
     ).toBeHidden();
   });
 
-  test("frames a new theme through the display the author asked for", async ({
+  test("opens a new theme fitted to the lens nearest its artboard", async ({
     page,
   }) => {
-    // **The answer to the first question is read, not written and dropped.**
-    // Before, `New` derived the artboard from the chosen display and then
-    // mounted without ever calling `showDisplay`, so a portrait artboard opened
-    // inside a landscape frame — the only place this branch removed a freedom
-    // rather than a step.
+    // #461: the chooser asks only how the document is measured. The camera
+    // reads the artboard the answer creates, picks the catalogue's nearest
+    // ratio and opens fitted — so a portrait artboard is framed portrait
+    // without a second question.
     //
     // Asserted on the **stage frame**, not on a call having been made. A spy
-    // proves the mechanism ran; this proves the author sees what they chose.
+    // proves the mechanism ran; this proves the author sees the fitted frame.
     await page.keyboard.press("Control+n");
     const chooser = page.locator('[role="dialog"]');
     await expect(chooser).toBeVisible();
-    await chooseIn(page, CHOOSER_DISPLAY, "9:19.5");
+    await chooseIn(page, "[data-yunari-new-document-orientation]", "portrait");
+    await chooseIn(page, "[data-yunari-new-document-ratio]", "19.5:9");
     await chooser.locator("[data-yunari-new-document-create]").click();
     // New asks in two steps, chooser first. **The second is answered only if it
     // comes**: a `New` mounts a fresh session whose baseline is the document it
@@ -159,11 +156,10 @@ test.describe("the stage looks through a display", () => {
 
     const after = await measure(page);
 
-    // **The frame first, and the drawn one.** Disabling the `showDisplay` call
-    // has to fail here rather than on an assertion about a call having been
-    // made: the camera's own `display()` reporting the old lens would be a
-    // mechanism reading, and a lens that reports correctly while the stage is
-    // framed wrongly is the defect this test exists to catch.
+    // **The frame first, and the drawn one.** The camera's own `display()`
+    // reporting the right lens would be a mechanism reading; a lens that
+    // reports correctly while the stage is framed wrongly is the defect this
+    // test exists to catch.
     expect(
       await page.evaluate(() => {
         const frame = document.querySelector<HTMLElement>(
@@ -177,7 +173,7 @@ test.describe("the stage looks through a display", () => {
           width: Number.parseFloat(frame.style.width),
         };
       }),
-      "the frame drawn on the stage carries the chosen display's aspect",
+      "the frame drawn on the stage carries the nearest lens's aspect",
     ).toMatchObject({ aspect: expect.closeTo(1 / (19.5 / 9), 2) });
     expect(
       aspect(after.screen),
@@ -185,18 +181,23 @@ test.describe("the stage looks through a display", () => {
     ).toBeCloseTo(1 / (19.5 / 9), 2);
     expect(
       after.display,
-      "the camera reports the display that was chosen",
+      "the camera reports the lens nearest the answered artboard",
     ).toBe("9:19.5");
-    // **The preview no longer rewrites the size.** The board is the nearest
-    // preset to the document it replaced — 16:9 at 1080p — seen through the
-    // portrait lens the author picked, so it leaves bars rather than filling
-    // the frame. Containment is "not cropped, not spilling"; the size is the
-    // technical controls' answer, and this is the browser proof that picking a
-    // preview did not move it.
+    expect(
+      await page.evaluate(() =>
+        (
+          window as unknown as { yunariEditorBridge: Bridge }
+        ).yunariEditorBridge.editor.viewport.isFitted(),
+      ),
+      "and the preview opens fitted rather than at raw identity",
+    ).toBe(true);
+    // **The preview no longer rewrites the size.** The board is exactly the
+    // portrait artboard the chooser answered, seen through the lens nearest it,
+    // so it fills the frame rather than leaving bars.
     expect(
       aspect(after.board),
-      "the artboard is still the landscape shape it opened on",
-    ).toBeCloseTo(16 / 9, 2);
+      "the artboard is the portrait shape the chooser answered",
+    ).toBeCloseTo(9 / 19.5, 2);
     expect(after.board.left, "not cropped at the left").toBeGreaterThanOrEqual(
       after.screen.left - 1,
     );
@@ -212,10 +213,8 @@ test.describe("the stage looks through a display", () => {
       "or bottom",
     ).toBeLessThanOrEqual(after.screen.top + after.screen.height + 1);
 
-    // The document is unchanged by the choice (§67, Review Focus 4), read
-    // through the same comparison the lens tests use: the scene before the New
-    // was the starter's, and this document is blank — so what is compared here
-    // is that framing it did not add anything to it.
+    // The artboard is the size the answer carried and nothing else — the lens
+    // is derived from it, never written back into it.
     expect(
       await page.evaluate(() => {
         const artboard = (
@@ -230,7 +229,7 @@ test.describe("the stage looks through a display", () => {
         return { width: artboard.width, height: artboard.height };
       }),
       "the artboard is the size the chooser answered, untouched by the preview",
-    ).toEqual({ width: 1920, height: 1080 });
+    ).toEqual({ width: 1080, height: 2340 });
   });
 
   test("the artboard's authored dimensions are untouched by the choice", async ({
@@ -338,10 +337,9 @@ test.describe("the stage looks through a display", () => {
     await page.keyboard.press("Control+n");
     const chooser = page.locator('[role="dialog"]');
     await expect(chooser).toBeVisible();
-    // **The size is the technical controls' answer now.** Picking a preview no
-    // longer turns the document portrait, so the orientation is chosen where it
-    // lives; the lens is picked too, to prove the two answers coexist.
-    await chooseIn(page, CHOOSER_DISPLAY, "9:19.5");
+    // **The size is the technical controls' answer now.** The chooser no longer
+    // asks for a lens: the camera reads the portrait artboard the answer
+    // creates and frames it through the matching portrait lens.
     await chooseIn(page, "[data-yunari-new-document-orientation]", "portrait");
     await chooser.locator("[data-yunari-new-document-create]").click();
     const prompt = page.locator('[role="dialog"]');
@@ -668,12 +666,20 @@ test.describe("the stage looks through a display", () => {
     assertNoCollision(await measureCorners());
   });
 
-  test("the chooser does not resize when a preview is picked", async ({
-    page,
-  }) => {
-    const size = await openNewDocument(page);
-    await pickPreview(page, "19.5:9");
-    expect(await chooserSize(page)).toBe(size);
+  test("the chooser holds no preview control", async ({ page }) => {
+    // #461: the lens is read off the artboard the answer creates, so the
+    // chooser offers no display question at all. A control here would be the
+    // second place a lens could be chosen, and the one that disagrees with the
+    // document.
+    await openNewDocument(page);
+    expect(
+      await page.locator("[data-yunari-new-document-display]").count(),
+      "no display control in the chooser",
+    ).toBe(0);
+    expect(
+      await page.locator("[data-yunari-new-document-ratio]").count(),
+      "but the size controls are still there",
+    ).toBe(1);
     await page.keyboard.press("Escape");
   });
 });

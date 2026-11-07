@@ -24,12 +24,10 @@ import {
 import { ACTION_BUTTON, Dialog } from "./components/ui/dialog.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
 import { openModal } from "./components/ui/modal-host.js";
-import { displayLensGroups, lensMatching } from "./display-lens.js";
 import { uiCopy } from "./ui-copy.js";
 
-/** The empty option id, read twice: the display control's **Fit** — no lens —
- *  and the technical selects' "not a preset". Both are the absence of a named
- *  choice rather than a choice with a name. */
+/** The empty option id: the technical selects' "not a preset". It is the
+ *  absence of a named choice rather than a choice with a name. */
 const CUSTOM = "";
 
 /** A reading, not a choice: an author cannot ask for a size that is not a preset
@@ -41,22 +39,23 @@ const CUSTOM_READING: ControlOption = {
   disabled: true,
 };
 
+/** What the chooser settles on: the artboard, and nothing about the preview. */
+export interface NewDocumentAnswer {
+  readonly size: ArtboardSize;
+  readonly shape: ArtboardShape;
+}
+
 /**
  * The artboard a new document opens at, chosen before the document exists.
  *
- * **What the theme is for, first, and the size beside it.** The display
- * control answers where the theme will be seen; the three selects and the free
- * width and height answer how it is measured. **The two are independent**: a
- * lens used to rewrite the artboard, so an author who had typed a size lost it
- * by glancing at a preview. Both questions are now on screen together, and each
- * answers only itself.
+ * **The size, and nothing else.** The display a theme is previewed through is
+ * read from the artboard it creates: the camera opens on the catalogue lens
+ * nearest that aspect, so the author is not asked a question the size already
+ * answers.
  *
  * It opens on the shape of the document it would replace, when there is one, for
  * the reason it always did: an author who has settled on 19.5:9 portrait and
- * presses **New theme** again has answered the size question already. The
- * preview opens on the catalogue's lens for that shape, or Fit when the
- * author's list holds none — a user-managed list cannot promise every shape a
- * preview, so the opening lens is optional rather than a throw.
+ * presses **New theme** again has answered the size question already.
  *
  * Every control is a `ControlSelect` or a `ControlPair`, and the modal shell is
  * `Dialog` — the surface is React rather than a hand-built `<dialog>`.
@@ -77,29 +76,15 @@ export function NewDocumentChooser({
   );
   const sizeId = `yunari-new-document-size-${useId().replace(/[^\w-]/g, "")}`;
 
-  /** The size the author has settled on, and the display they named. Two values
-   *  rather than one, because the display is a choice the technical controls do
-   *  not write back: picking a ratio leaves the author's own display alone. */
+  /** The size the author has settled on. */
   const [chosen, adopt] = useState<ArtboardSize>(opening);
   /** The authored canvas's outline, read from the document it would replace.
    *  Absent there means rect, the same reading the envelope uses. */
   const [shape, setShape] = useState<ArtboardShape>(current?.shape ?? "rect");
-  /** The preview, or `undefined` for Fit. `string` rather than a union of ids
-   *  because the catalogue is the author's: an id is whatever the stored list
-   *  derived, and only the camera resolves it. */
-  const [display, setDisplay] = useState<string | undefined>(
-    () => lensMatching(nearest, current?.shape)?.id,
-  );
 
   /** The three ids the size is at, or `undefined` for the author's own — the
    *  reading a control shows, not an answer it can commit. */
   const preset = artboardPresetFor(chosen);
-
-  /** The preview and nothing else. The size stays the technical controls'
-   *  answer, which is what makes the two questions independent. */
-  const pickDisplay = (id: string): void => {
-    setDisplay(id === CUSTOM ? undefined : id);
-  };
 
   /** A circle is drawn on a square, so switching to one narrows the current
    *  size to its shorter edge. Switching back keeps that square: it is the
@@ -156,7 +141,7 @@ export function NewDocumentChooser({
     adopt(artboardSize(next.ratio, next.resolution, next.orientation));
   };
 
-  const answer = (): NewDocumentAnswer => ({ size: chosen, shape, display });
+  const answer = (): NewDocumentAnswer => ({ size: chosen, shape });
 
   return (
     <Dialog
@@ -170,15 +155,8 @@ export function NewDocumentChooser({
         {uiCopy.newDocument.chooseSize}
       </p>
       <div className="flex flex-col gap-[var(--space-8)]">
-        <ControlSelect
-          label={uiCopy.newDocument.display}
-          data={{ "data-yunari-new-document-display": "" }}
-          value={display ?? CUSTOM}
-          options={displayOptions()}
-          onChange={pickDisplay}
-        />
-        {/* The technical question, always on screen: a hidden block is out of
-            the accessibility tree, and a size behind a choice is a size the
+        {/* The size, always on screen: a hidden block is out of the
+            accessibility tree, and a size behind a choice is a size the
             author loses by making an unrelated one. */}
         <div
           data-yunari-new-document-technical=""
@@ -296,26 +274,6 @@ export function NewDocumentChooser({
   );
 }
 
-/** Zoom to fit first, then the active catalogue in the display menu's own
- *  grouping. No Custom entry: the technical controls are their own answer
- *  and are always on screen, so one entry cannot stand for both fit and "not a
- *  preset". A lens is named by its id, the same word the menu prints. */
-function displayOptions(): readonly ControlOption[] {
-  const options: ControlOption[] = [
-    { id: CUSTOM, name: uiCopy.display.zoomToFit },
-  ];
-  for (const group of displayLensGroups()) {
-    for (const lens of group.lenses) {
-      options.push({
-        id: lens.id,
-        name: lens.id,
-        group: uiCopy.artboardOrientations[group.kind],
-      });
-    }
-  }
-  return options;
-}
-
 function shapeOptions(): readonly ControlOption[] {
   return (["rect", "circle"] as const).map((id) => ({
     id,
@@ -354,50 +312,17 @@ function resolutionOptions(): readonly ControlOption[] {
 }
 
 /**
- * What the author answered: the artboard to create, and the display to see it
- * through.
+ * What the author answered: the artboard to create.
  *
- * **Both halves travel together because both were asked.** The display is the
- * first question and was previously written and never read — a 1080 × 2340
- * document opened inside a landscape frame, wasting stage on bars the author had
- * already told us not to want. Carrying only the size made the answer to that
- * question unreachable from here.
+ * The lens is not part of it. The camera reads the lens off the artboard it is
+ * given — the catalogue lens nearest that aspect — so the preview is a
+ * consequence of the size rather than a second question. The lens stays a
+ * **view preference and never document content** (§67): it is nowhere in this
+ * answer or the theme it creates.
  *
- * The display is a **view preference and never document content** (§67), which
- * is why it is a separate field rather than something derived from the size:
- * nothing about `size` names a lens, and a caller that wants one has to ask.
- */
-export interface NewDocumentAnswer {
-  readonly size: ArtboardSize;
-  /** The authored canvas's outline. A circle is a square whose disc is
-   *  inscribed; absent would mean rect, so the chooser names it rather than
-   *  letting the caller infer one from the size. */
-  readonly shape: ArtboardShape;
-  /** The lens's id from the active catalogue, or `undefined` for Fit — see
-   *  `chooseArtboardSize`. An id rather than a `DisplayLens`: the catalogue is
-   *  the author's, so the answer names a stored choice and the camera resolves
-   *  it. */
-  readonly display: string | undefined;
-}
-
-/**
- * Asks for the artboard, and resolves the answer — or `undefined` when the
- * author dismissed it, which is how a `New` pressed by accident leaves the open
- * document alone.
- *
- * `current` is the artboard of the document about to be replaced; the dialog
- * opens on the catalogue's lens for that shape, so a settled shape is offered
- * back rather than reset.
- *
- * `display` is `undefined` when the author chose **Fit** (or the catalogue held
- * no lens for the opening shape), and the caller frames the new document with
- * Fit. That is the reading, not a gap: Fit is the author declining to name a
- * display. A document at a display's own shape, by contrast, is offered back
- * with that display already ticked.
- *
- * The size is not a preset: three of the four ways to reach one here are a
- * preset and one is an author's own dimensions, and a type that cannot carry
- * both would have the session guess which the author meant.
+ * The size is not a preset: three of the three preset controls reach one
+ * answer, and one path is an author's own dimensions, and a type that cannot
+ * carry both would have the session guess which the author meant.
  */
 export function chooseArtboardSize(
   current?: Artboard,

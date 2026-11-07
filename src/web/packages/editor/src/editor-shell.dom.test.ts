@@ -817,7 +817,7 @@ function envelopeWith(
   assets: readonly AssetReference[] = [],
 ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id: "background-probe",
     artboard: ARTBOARD,
@@ -847,7 +847,7 @@ function legacyTextEnvelope(): NonNullable<
   Parameters<typeof mountEditorShell>[0]["envelope"]
 > {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "2.1.0",
     fabricVersion: "7.4.0",
     id: "legacy-text",
     artboard: ARTBOARD,
@@ -1023,8 +1023,11 @@ describe("the background layer", () => {
       artboard: ARTBOARD,
       envelope: envelopeWith(
         {
-          color: { ref: "palette.ink" },
-          media: { assetId: "hero", bounds: "display" },
+          media: {
+            assetId: "hero",
+            color: { ref: "palette.ink" },
+            bounds: "display",
+          },
         },
         assets,
       ),
@@ -1057,8 +1060,11 @@ describe("the background layer", () => {
       artboard: ARTBOARD,
       envelope: envelopeWith(
         {
-          color: { ref: "palette.ink" },
-          media: { assetId: "loop", bounds: "theme" },
+          media: {
+            assetId: "loop",
+            color: { ref: "palette.ink" },
+            bounds: "theme",
+          },
         },
         assets,
       ),
@@ -1209,7 +1215,10 @@ describe("the circle theme preview", () => {
     const host = stageHost();
     const shell = await mount({ host, artboard: CIRCLE });
 
-    // The mount starts on the catalogue's landscape lens, which is a rect.
+    // A circle artboard opens on Circle, the catalogue lens nearest its shape,
+    // so a rect lens is chosen explicitly here. Under it the clip is the rect
+    // and the disc is a guide.
+    shell.viewport.showDisplay("16:9");
     expect(shell.editor.canvas.clipPath).toBeInstanceOf(Rect);
 
     const disc = host.querySelector<HTMLElement>("[data-yunari-theme-disc]");
@@ -1276,6 +1285,10 @@ describe("the circle theme preview", () => {
         envelope: envelopeWith({ media: { assetId: "hero", bounds } }, assets),
         resolveAsset: () => ({ url: "blob:hero" }),
       });
+      // A circle artboard opens on Circle, so a rect lens is chosen explicitly:
+      // the point is which layer the *artboard* rounds under a rect lens, not
+      // what the opening lens does to a display-bounded one.
+      shell.viewport.showDisplay("16:9");
       const layer = host.querySelector<HTMLElement>(
         "[data-yunari-background-media]",
       );
@@ -1702,7 +1715,7 @@ describe("editor shell schema versions", () => {
         envelope: documentWithVersion("1.0.0"),
       }),
     ).rejects.toThrow(
-      "Schema version 1.0.0 is not supported by this build (expected 2.0.0).",
+      "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
     );
   });
 

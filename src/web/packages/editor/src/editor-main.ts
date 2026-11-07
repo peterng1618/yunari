@@ -335,12 +335,10 @@ async function start(): Promise<void> {
           input: envelopeInputFor(fresh),
           envelope: fresh,
         });
-        // The lens the author answered, asked of the camera the new document is
-        // seen through — not written into the document (§67). This runs after
-        // the mount because the camera belongs to the shell the mount just
-        // built; the previous one is already destroyed. Fit for a Custom answer
-        // is `undefined`, the same reading the chooser gives it.
-        active?.shell.viewport.showDisplay(answer.display);
+        // The lens is not the author's answer: the camera the mount just built
+        // reads the catalogue lens nearest this artboard's aspect and opens
+        // fitted, so the new theme is never seen through the old document's
+        // frame.
         status.textContent = "New theme";
       },
       // The reference composition, reachable as what it is: a template the

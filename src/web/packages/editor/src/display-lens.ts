@@ -1,8 +1,5 @@
 import type { ArtboardShape } from "@yunari/renderer-core";
-import type {
-  ArtboardOrientation,
-  ArtboardPresetShape,
-} from "@yunari/theme-kit";
+import type { ArtboardOrientation } from "@yunari/theme-kit";
 
 /**
  * The preview ratios an author can look through: a stored list of `W:H` tokens
@@ -309,45 +306,38 @@ export function previewCatalogueKey(): string {
   return String(revision);
 }
 
-/** The catalogue's first landscape lens, or Fit when the catalogue is empty.
- *  Resolved from the live list rather than a module constant, because the list
- *  is the author's. */
-export function defaultPreviewLens(): DisplayLens | undefined {
-  return active.find((lens) => lens.orientation === "landscape");
-}
-
 export function resolveLens(id: string): DisplayLens | undefined {
   return active.find((lens) => lens.id === id);
 }
 
-/** The rect lens framing `shape`, or the first landscape circle lens when the
- *  artboard itself is round — or `undefined`. A user-managed list cannot
- *  guarantee every artboard shape a preview, so this never throws. */
-export function lensMatching(
-  shape: ArtboardPresetShape,
-  themeShape?: ArtboardShape,
-): DisplayLens | undefined {
-  if (themeShape === "circle") {
-    return active.find(
-      (lens) => lens.shape === "circle" && lens.orientation === "landscape",
-    );
+/**
+ * The catalogue lens whose aspect is closest to the artboard's, in log space so
+ * a ratio and its reciprocal sit the same distance from their own orientation.
+ *
+ * A circle theme sees circle lenses and a rect theme sees rect lenses: a disc
+ * and a 1:1 rect are different pictures, so a theme is never framed through the
+ * other shape. The live list is the author's and may hold no matching lens, so
+ * this answers `undefined` — Fit — rather than throwing.
+ */
+export function nearestPreviewLens(artboard: {
+  readonly width: number;
+  readonly height: number;
+  readonly shape?: ArtboardShape;
+}): DisplayLens | undefined {
+  if (!(artboard.width > 0) || !(artboard.height > 0)) return undefined;
+  const shape: PreviewShape = artboard.shape === "circle" ? "circle" : "rect";
+  const aspect = artboard.width / artboard.height;
+  let best: DisplayLens | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const lens of active) {
+    if (lens.shape !== shape) continue;
+    const distance = Math.abs(Math.log(lens.aspect / aspect));
+    if (distance < bestDistance) {
+      best = lens;
+      bestDistance = distance;
+    }
   }
-  let ratio: PreviewRatio;
-  try {
-    ratio = parsePreviewRatio(shape.ratio);
-  } catch {
-    return undefined;
-  }
-  const aspect =
-    shape.orientation === "portrait"
-      ? ratio.height / ratio.width
-      : ratio.width / ratio.height;
-  return active.find(
-    (lens) =>
-      lens.shape === "rect" &&
-      lens.orientation === shape.orientation &&
-      lens.aspect === aspect,
-  );
+  return best;
 }
 
 export type DisplayLensGroupKind = "landscape" | "square" | "portrait";

@@ -97,14 +97,13 @@ function setup(options: { lens?: string; fitted?: boolean } = {}) {
     artboard: () => ({ width: 1280, height: 720 }),
   });
   cameras.push(camera);
-  // The camera opens on a display, so a test that means "the whole stage" has
-  // to say Fit rather than inherit whatever the product ships. Left implicit,
-  // the numbers below would be describing the lens and a reader could not tell
-  // which of the two they were reading.
+  // The camera opens fitted to a display, so a test that means "the whole
+  // stage" has to say Fit rather than inherit whatever the product ships. Left
+  // implicit, the numbers below would be describing the lens and a reader could
+  // not tell which of the two they were reading.
   //
-  // `fitted: false` leaves the camera at construction instead, for the two
-  // tests whose subject *is* that state — one anchors on the identity
-  // transform and one asserts that construction performs no fit.
+  // `fitted: false` leaves the camera on the lens it chose at construction, for
+  // the tests whose subject is that opening state.
   if (options.fitted !== false) {
     camera.showDisplay(options.lens);
   }
@@ -195,8 +194,9 @@ describe("viewport camera", () => {
   });
 
   it("keeps the point under the cursor fixed while zooming", () => {
-    // Unfitted, because the anchor below reads the identity transform.
-    const { canvas, camera } = setup({ fitted: false });
+    // The camera opens fitted, so the point under the cursor is not its own
+    // pixel; that is what makes the invariant below more than an identity.
+    const { canvas, camera } = setup();
     // A real MouseEvent, not {x, y}: getScenePoint resolves through getPointer,
     // which reads event.clientX/clientY. A bare object yields NaN on both sides
     // and toBeCloseTo can never pass on NaN.
@@ -205,15 +205,9 @@ describe("viewport camera", () => {
         new MouseEvent("pointermove", { clientX: x, clientY: y }),
       );
 
-    // Anchor: at the identity transform the scene point IS the event's own
-    // coordinates. jsdom reports a zero-size, unlaid-out element, so without
-    // this the invariant below could hold by comparing 0 to 0.
-    const identity = at(400, 300);
-    expect(identity.x).toBe(400);
-    expect(identity.y).toBe(300);
-
-    camera.zoomToFit();
     const before = at(400, 300);
+    // Non-trivial: jsdom reports a zero-size, unlaid-out element, so without
+    // this the invariant below could hold by comparing 0 to 0.
     expect(before.x).not.toBe(400);
 
     camera.zoomToPoint(new Point(400, 300), camera.zoom() * 2);
@@ -367,20 +361,16 @@ describe("viewport camera on a host resize", () => {
     expect(canvas.getHeight()).toBe(480);
   });
 
-  it("refits nothing on the resize at construction", () => {
-    // There is no camera yet: the canvas still carries Fabric's own 300x150
-    // default and the identity transform, which is not a fit for this board. A
-    // predicate that read the host — already at its real size by the time the
-    // manager is built — would compare identity against that host and could
-    // claim a fit nobody chose. `zoomToFit` is what establishes the first view.
+  it("opens fitted, so a preview never starts at the canvas's raw identity", () => {
+    // The camera is the owner of the opening view: it chooses the lens nearest
+    // the artboard and performs the fit itself, rather than leaving a caller to
+    // remember `zoomToFit` after mount.
     const { camera } = setup({ fitted: false });
-    expect(camera.zoom()).toBe(1);
-    expect(camera.artboardScreenRect()).toEqual({
-      left: 0,
-      top: 0,
-      width: 1280,
-      height: 720,
-    });
+    expect(camera.isFitted()).toBe(true);
+    expect(camera.display()).toBe("16:9");
+    // The 16:9 screen inside this 1000×800 host, with the inset the fit gives a
+    // board that meets the window on two edges.
+    expect(camera.zoom()).toBeCloseTo(980 / 1280, 6);
   });
 });
 
@@ -391,14 +381,12 @@ describe("viewport camera on a host resize", () => {
  * screen — it is a lens that quietly becomes a document.
  */
 describe("the display lens", () => {
-  it("opens on 16:9, because the starter is drawn in that shape", () => {
-    // **One owner for "the default shape", not two constants that disagree.**
-    // The default used to be a 19.5:9 lens held beside a 16:9 document default,
-    // justified by a comment claiming the starter is drawn in a landscape
-    // phone. It is 1672 × 941 — 1.7768, which is 16:9 — so the claim was false
-    // and the stage spent ~287 px of a 1600 px one on bars. The lens is now read
-    // out of the artboard default; this pins what that resolves to and the
-    // arithmetic that makes the old comment false.
+  it("opens on 16:9 for a 16:9 artboard, the catalogue's nearest ratio", () => {
+    // **One owner for "the opening shape", not two constants that disagree.**
+    // The lens used to be a fixed 19.5:9 choice beside a 16:9 document default,
+    // which letterboxed the 16:9 starter on the first paint. The camera now
+    // reads the catalogue lens nearest the artboard; this pins what that
+    // resolves to and the arithmetic that makes the old choice false.
     const { camera } = setup({ fitted: false });
 
     // Not 19.5:9: the two differ by 0.39, so this is the whole claim.
@@ -720,8 +708,8 @@ describe("the display lens", () => {
     expect(rect?.height).toBeGreaterThan(0);
   });
 
-  it("opens on the first landscape lens or Fit", () => {
-    setActivePreviewRatios(["9:16"]);
+  it("opens Fit when the catalogue holds no lens of the artboard's shape", () => {
+    setActivePreviewRatios(["Circle"]);
     expect(
       createCamera({
         width: 800,

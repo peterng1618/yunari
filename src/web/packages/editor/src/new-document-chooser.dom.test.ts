@@ -6,12 +6,12 @@
  * The new-theme chooser, measured against the enumeration taken from the
  * imperative dialog before a line of it was rewritten.
  *
- * **The preview and the size are independent answers now.** The first control
- * lists Fit and the active catalogue, and picking one changes only the preview;
- * the ratio, orientation, resolution and free size stay on screen and stay the
- * one answer to how the document is measured. **No native `select` survives**:
- * every control is a `ControlSelect` or `ControlPair`, whose list is a Base UI
- * popup rather than the platform's.
+ * **The size is the only question.** The preview lens is read off the artboard
+ * the answer creates, so no display control exists here; the ratio,
+ * orientation, resolution and free size are the one answer to how the document
+ * is measured. **No native `select` survives**: every control is a
+ * `ControlSelect` or `ControlPair`, whose list is a Base UI popup rather than
+ * the platform's.
  *
  * The chooser is opened the way the session opens it — `chooseArtboardSize`,
  * which resolves with the answer or nothing for a dismissal — so an answer
@@ -82,73 +82,34 @@ describe("the new-document chooser", () => {
     }
   });
 
-  it("asks what the theme is for first, and offers Fit beside the catalogue", async () => {
-    // The first control is the question, and every display the catalogue holds
-    // is on it — every ratio, each way up — with Fit first because a theme may
-    // be made for no particular screen.
+  it("asks for a size, and never for a preview lens", () => {
+    // #461: the lens is read off the artboard the answer creates, so the
+    // chooser offers no display question at all.
     void open();
 
-    expect(await optionIds("display")).toEqual([
-      "",
-      "19.5:9",
-      "16:9",
-      "4:3",
-      "1:1",
-      "Circle",
-      "3:4",
-      "9:16",
-      "9:19.5",
-    ]);
-    expect(await optionName("display", ""), "Zoom to fit is the empty id").toBe(
-      "Zoom to fit",
-    );
-    // The size no longer hides behind a Custom *entry*: the technical controls
-    // are always on screen, so there is no second way to reach them.
-    expect(await optionName("display", "16:9")).toBe("16:9");
-  });
-
-  /** The headings the previews are grouped under, in the order offered.
-   *
-   *  A select cannot draw headings of its own, so a group is the only grouping
-   *  it can have — and without one, bare ratios read as one undifferentiated
-   *  list. The order is fixed — landscape, 1:1, portrait — so the list does not
-   *  reorder itself under the document being edited. */
-  it("groups the displays landscape, 1:1, portrait, whichever the artboard", async () => {
-    void open({ width: 1080, height: 2340 });
-    await openControl("display");
-
-    expect(displayGroups(), "the three groups, in order").toEqual([
-      "Landscape",
-      "1:1",
-      "Portrait",
-    ]);
-    expect(leadingPerGroup()).toEqual(["19.5:9", "1:1", "3:4"]);
+    expect(control("display")).toBeNull();
+    expect(control("ratio")).not.toBeNull();
+    expect(control("orientation")).not.toBeNull();
+    expect(control("resolution")).not.toBeNull();
   });
 
   it("opens a theme with no document on 16:9, at 1920 × 1080", async () => {
     // A product decision rather than an accident: `DEFAULT_ARTBOARD_PRESET` is
-    // 16:9 landscape, and it lands on the 16:9 lens. That is the honest frame
-    // because the starter theme is also 16:9.
+    // 16:9 landscape, and the camera derives the 16:9 lens from that artboard.
     const pending = open();
 
-    expect(read("display")).toBe("16:9");
     expect(size()).toContain("1920 × 1080");
 
     create();
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 1080 },
       shape: "rect",
-      display: "16:9",
     });
   });
 
-  it("opens on the display the document it would replace is at", async () => {
-    // 9:19.5 is 19.5:9 stood upright, so it is offered back rather than reset.
+  it("opens on the size of the document it would replace", async () => {
     const pending = open({ width: 1080, height: 2340 });
 
-    expect(read("display")).toBe("9:19.5");
-    // And the size it would actually produce, so the carry-over is visible
-    // rather than something the author has to infer from a dropdown.
     expect(size()).toContain("1080 × 2340");
     expect(size()).not.toContain("1920 × 1080");
 
@@ -156,24 +117,20 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1080, height: 2340 },
       shape: "rect",
-      display: "9:19.5",
     });
   });
 
-  it("opens a 4:3 document on the 4:3 preview, because there is one now", async () => {
+  it("opens a 4:3 document on its own preset", async () => {
     const pending = open({ width: 1280, height: 960 });
 
-    expect(read("display")).toBe("4:3");
     expect(read("ratio")).toBe("4:3");
     expect(read("orientation")).toBe("landscape");
 
     create();
-    // The nearest preset the shape has, at the resolution it always opened at,
-    // seen through the lens of that shape.
+    // The nearest preset the shape has, at the resolution it always opened at.
     await expect(pending).resolves.toEqual({
       size: { width: 1440, height: 1080 },
       shape: "rect",
-      display: "4:3",
     });
   });
 
@@ -182,14 +139,10 @@ describe("the new-document chooser", () => {
     // a square rectangular one on Rectangle.
     void open({ width: 1080, height: 1080, shape: "circle" });
     expect(read("shape")).toBe("circle");
-    expect(read("display"), "a circle artboard opens on the disc").toBe(
-      "Circle",
-    );
 
     document.body.replaceChildren();
     void open({ width: 1080, height: 1080 });
     expect(read("shape")).toBe("rect");
-    expect(read("display")).toBe("1:1");
   });
 
   it("creates a circle theme as a square at the current resolution", async () => {
@@ -202,7 +155,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1080, height: 1080 },
       shape: "circle",
-      display: "16:9",
     });
   });
 
@@ -228,7 +180,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1200, height: 1200 },
       shape: "circle",
-      display: "16:9",
     });
   });
 
@@ -261,62 +212,7 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1080, height: 1080 },
       shape: "rect",
-      display: "16:9",
     });
-  });
-
-  it.each([
-    ["19.5:9", { width: 1920, height: 1080 }],
-    ["9:19.5", { width: 1920, height: 1080 }],
-    ["4:3", { width: 1920, height: 1080 }],
-    ["9:16", { width: 1920, height: 1080 }],
-    ["3:4", { width: 1920, height: 1080 }],
-    ["Circle", { width: 1920, height: 1080 }],
-  ] as const)(
-    "picking %s changes the preview and leaves the size alone",
-    async (lens, expected) => {
-      const pending = open();
-
-      await chooseIn("display", lens);
-      create();
-
-      await expect(pending).resolves.toEqual({
-        size: expected,
-        shape: "rect",
-        display: lens,
-      });
-    },
-  );
-
-  it("keeps the technical question on screen, whichever preview is picked", async () => {
-    void open();
-
-    // A display answers what the theme is *for*; the ratio, orientation and
-    // resolution answer how it is measured. The second is not a corner of the
-    // first any more — both are always there.
-    expect(technicalQuestion().hidden).toBe(false);
-
-    await chooseIn("display", "");
-    expect(technicalQuestion().hidden).toBe(false);
-    expect(read("display"), "the control took Fit").toBe("");
-  });
-
-  it("leaves the technical controls naming the size, not the preview", async () => {
-    // The preview and the size are independent answers: picking a lens must not
-    // rewrite the size the author already has on screen.
-    void open();
-
-    await chooseIn("display", "9:19.5");
-    expect({
-      ratio: read("ratio"),
-      orientation: read("orientation"),
-      resolution: read("resolution"),
-    }).toEqual({
-      ratio: "16:9",
-      orientation: "landscape",
-      resolution: "1080p",
-    });
-    expect(size()).toContain("1920 × 1080");
   });
 
   it("offers every size the dropdowns could express before", async () => {
@@ -350,7 +246,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 2160, height: 4680 },
       shape: "rect",
-      display: "16:9",
     });
   });
 
@@ -372,7 +267,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 4000, height: 4000 },
       shape: "rect",
-      display: "16:9",
     });
   });
 
@@ -391,7 +285,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 2000 },
       shape: "rect",
-      display: "16:9",
     });
   });
 
@@ -432,7 +325,6 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 3000, height: 3000 },
       shape: "rect",
-      display: "16:9",
     });
   });
 
@@ -444,35 +336,6 @@ describe("the new-document chooser", () => {
     for (const marker of ["ratio", "orientation", "resolution"]) {
       expect(await optionDisabled(marker, ""), `${marker}'s Custom`).toBe(true);
     }
-  });
-
-  it("lists the active catalogue, and no Custom entry beside it", async () => {
-    setActivePreviewRatios(["1:1", "Circle"]);
-
-    void open();
-    expect(await optionIds("display")).toEqual(["", "1:1", "Circle"]);
-    expect(
-      await optionName("display", ""),
-      "Zoom to fit is the empty id rather than a Custom size",
-    ).toBe("Zoom to fit");
-    for (const id of await optionIds("display")) {
-      expect(await optionName("display", id)).not.toBe("Custom size");
-    }
-  });
-
-  it("opens on Fit when the catalogue holds no lens for the shape", async () => {
-    // A user-managed list cannot guarantee every artboard shape a preview, so
-    // the opening lens is optional rather than a throw.
-    setActivePreviewRatios(["1:1"]);
-    const pending = open({ width: 1280, height: 960 });
-
-    expect(read("display")).toBe("");
-    create();
-    await expect(pending).resolves.toEqual({
-      size: { width: 1440, height: 1080 },
-      shape: "rect",
-      display: undefined,
-    });
   });
 
   it("cancels to no choice and closes, so a New pressed by accident changes nothing", async () => {
@@ -613,16 +476,6 @@ async function optionIds(marker: string): Promise<string[]> {
   );
 }
 
-async function optionName(
-  marker: string,
-  id: string,
-): Promise<string | undefined> {
-  const options = await openControl(marker);
-  return options
-    .find((option) => option.getAttribute("data-yunari-option") === id)
-    ?.textContent?.trim();
-}
-
 async function optionDisabled(marker: string, id: string): Promise<boolean> {
   const options = await openControl(marker);
   const option = options.find(
@@ -631,32 +484,6 @@ async function optionDisabled(marker: string, id: string): Promise<boolean> {
   return (
     option?.getAttribute("aria-disabled") === "true" ||
     option?.hasAttribute("data-disabled") === true
-  );
-}
-
-/** Each group's own label, read through the id the group is named by — Base UI
- *  marks the label `aria-hidden` and points the group's `aria-labelledby` at
- *  it, so its `textContent` is the heading and not the options beneath it. */
-function displayGroups(): string[] {
-  return groupLabels().map((element) => element.textContent?.trim() ?? "");
-}
-
-function groupLabels(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('[role="group"]')].flatMap(
-    (group) => {
-      const id = group.getAttribute("aria-labelledby") ?? "";
-      const label = document.getElementById(id);
-      return label === null ? [] : [label];
-    },
-  );
-}
-
-function leadingPerGroup(): string[] {
-  return [...document.querySelectorAll<HTMLElement>('[role="group"]')].map(
-    (group) =>
-      group
-        .querySelector<HTMLElement>('[role="option"]')
-        ?.getAttribute("data-yunari-option") ?? "",
   );
 }
 
@@ -677,15 +504,6 @@ function read(marker: string): string {
       ?.querySelector("[data-yunari-value]")
       ?.getAttribute("data-yunari-value") ?? ""
   );
-}
-
-function technicalQuestion(): HTMLElement {
-  const technical = document.querySelector<HTMLElement>(
-    "[data-yunari-new-document-technical]",
-  );
-  if (technical === null)
-    throw new Error("the chooser has no technical question");
-  return technical;
 }
 
 /** What the readout says. */

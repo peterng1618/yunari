@@ -3,10 +3,9 @@ import {
   activePreviewLenses,
   activePreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
-  defaultPreviewLens,
   displayLensGroups,
   lensBox,
-  lensMatching,
+  nearestPreviewLens,
   normalisePreviewRatioTokens,
   parsePreviewRatio,
   previewCatalogueKey,
@@ -169,8 +168,6 @@ describe("a ratio derives its lenses", () => {
     expect(previewLenses(["9:16"])).toEqual([
       { id: "9:16", aspect: 9 / 16, orientation: "portrait", shape: "rect" },
     ]);
-    setActivePreviewRatios(["9:16"]);
-    expect(defaultPreviewLens()).toBeUndefined();
   });
 
   it("emits a derived lens id once", () => {
@@ -203,23 +200,37 @@ describe("the live catalogue is module state with a revision", () => {
     expect(calls).toBe(2);
   });
 
-  it("opens on the first landscape lens and finds a lens by id", () => {
+  it("finds a lens by id", () => {
     setActivePreviewRatios(["1:1", "19.5:9"]);
-    expect(defaultPreviewLens()?.id).toBe("1:1");
     expect(resolveLens("9:19.5")?.aspect).toBeCloseTo(9 / 19.5, 12);
     expect(resolveLens("nope")).toBeUndefined();
     expect(activePreviewRatioTokens()).toEqual(["1:1", "19.5:9"]);
     expect(activePreviewLenses().length).toBe(3);
   });
 
-  it("finds a rect lens for an artboard shape, or nothing", () => {
-    setActivePreviewRatios(["16:9", "Circle"]);
-    expect(lensMatching({ ratio: "16:9", orientation: "portrait" })?.id).toBe(
-      "9:16",
+  it("opens on the catalogue lens nearest the artboard's aspect", () => {
+    setActivePreviewRatios(["16:9", "19.5:9", "4:3", "1:1", "Circle"]);
+    expect(nearestPreviewLens({ width: 1920, height: 1080 })?.id).toBe("16:9");
+    expect(nearestPreviewLens({ width: 1280, height: 960 })?.id).toBe("4:3");
+    // A portrait artboard takes the portrait twin the catalogue derives.
+    expect(nearestPreviewLens({ width: 1080, height: 2340 })?.id).toBe(
+      "9:19.5",
     );
+    // Closest, not exact: a shape no token names takes the near one.
+    expect(nearestPreviewLens({ width: 1000, height: 1000 })?.id).toBe("1:1");
+    expect(nearestPreviewLens({ width: 2000, height: 1000 })?.id).toBe(
+      "19.5:9",
+    );
+  });
+
+  it("keeps a disc and a rect apart, and answers Fit when none fits", () => {
+    setActivePreviewRatios(["16:9", "Circle"]);
     expect(
-      lensMatching({ ratio: "4:3", orientation: "landscape" }),
-    ).toBeUndefined();
+      nearestPreviewLens({ width: 1080, height: 1080, shape: "circle" })?.id,
+    ).toBe("Circle");
+    setActivePreviewRatios(["Circle"]);
+    expect(nearestPreviewLens({ width: 1920, height: 1080 })).toBeUndefined();
+    expect(nearestPreviewLens({ width: 0, height: 0 })).toBeUndefined();
   });
 
   it("groups the lenses in the fixed order, each group widest first", () => {

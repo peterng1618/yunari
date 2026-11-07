@@ -5,8 +5,8 @@ import {
 } from "@yunari/renderer-core";
 import { type Canvas, Point } from "fabric/es";
 import {
-  defaultPreviewLens,
   lensBox,
+  nearestPreviewLens,
   type PreviewShape,
   resolveLens,
   type ScreenRect,
@@ -142,13 +142,13 @@ export function createViewportManager({
   /**
    * The display the stage looks through, or `undefined` for Fit.
    *
-   * Starts on the catalogue's default landscape lens rather than on Fit,
-   * because the starter is drawn in the shape that lens is and opening on Fit
-   * would letterbox the reference composition on the very first paint. Read
+   * Opens on the catalogue lens nearest the artboard's own aspect: the window
+   * the theme was drawn for, chosen without asking, rather than a fixed
+   * landscape frame that letterboxes a portrait theme on the first paint. Read
    * through the lens rather than mirrored into React: it is camera state, like
    * the zoom.
    */
-  let lens: string | undefined = defaultPreviewLens()?.id;
+  let lens: string | undefined = nearestPreviewLens(artboard())?.id;
 
   /** An unlaid-out host measures 0; writing that would collapse the canvas. */
   const viewportSize = (): Viewport | undefined => {
@@ -431,7 +431,11 @@ export function createViewportManager({
   };
 
   observer?.observe(host);
+  // The preview opens fitted: `resize` sizes the canvas and holds an unfitted
+  // camera, so the fit is the construction's own last word rather than a
+  // gesture the caller has to remember.
   resize();
+  zoomToFit();
 
   return {
     zoom,
