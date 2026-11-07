@@ -27,9 +27,7 @@ import {
 import type { EditorSessionOptions } from "./editor-session-options.js";
 import { registerSessionShortcuts } from "./editor-session-shortcuts.js";
 import {
-  addPaintToken,
-  addTypeToken,
-  deletePalette,
+  createTokenEditor,
   deleteType,
   tokenExists,
 } from "./editor-session-tokens.js";
@@ -40,7 +38,6 @@ import {
   type VideoImportHost,
 } from "./editor-session-video.js";
 import type { EditorActionFacade } from "./editor-shell/session-facade.js";
-import type { TokenRef } from "./editor-shell/shell-stores.js";
 import { type EditorShell } from "./editor-shell.js";
 import { type CuratedFontFace } from "./font-catalog.js";
 import {
@@ -63,12 +60,10 @@ import {
 import { createAssetsPane } from "./panes/assets/assets-pane.js";
 import {
   createTokenInspectorPanel,
-  type TokenInspectorActions,
   type TokenInspectorPanel,
 } from "./panes/tokens/token-inspector.js";
 import type { TokenUse } from "./panes/tokens/token-use.js";
 import { weightChoices } from "./panes/tokens/weight-choices.js";
-import type { DesignTokenPort } from "./selection-inspector/design-token-editor.js";
 import {
   createSelectionInspector,
   type SelectionInspector,
@@ -313,26 +308,12 @@ export class EditorSession {
       onBindingsChange: (id, bindings) =>
         this.#document.setBindings(id, bindings),
     });
-    // The selected token's own properties, in the same host as the object
-    // column — exactly one of the two draws. The session owns both halves: the
-    // document's writes (which reach history through `setTypes`) and the
-    // suppression the token selection drives. A new surface built in
-    // `shell-layout` would need a second copy of the document.
-    //
     // Built before the selection inspector so the run rows' in-place editor can
     // be handed the same actions: one write route whichever surface asked.
-    const tokenActions: TokenInspectorActions = {
-      onChange: (presets) => this.#document.setTypes(presets),
-      // The same port the preset library is handed: one delete route, so the
-      // reference reassignment and the token clear cannot disagree.
-      onDelete: (id, replacement) =>
-        deleteType(
-          this.#document,
-          this.#options.tokenSelection,
-          id,
-          replacement,
-        ),
-      unbindFace: (id) => this.#document.unbindPresetFace(id),
+    const { actions: tokenActions, designTokens } = createTokenEditor({
+      document: this.#document,
+      history: options.shell.editor.historyManager,
+      selection: options.tokenSelection,
       // The package's own faces, so a bound preset's weight is chosen from
       // what it holds rather than typed into a fallback. A packaged family
       // declares one face per subset, so the list collapses each
@@ -355,87 +336,14 @@ export class EditorSession {
               : [],
           ),
         ),
-      // The package's families for the family list, and the two action rows:
-      // each is drawn only where its port exists.
       familiesOf: () => declaredFamilies(options.assetManager.declarations),
       importLocalFont: () => pickFontFile(this.#fontHost()),
-      ...(options.onFindFontPicker === undefined
-        ? {}
-        : { openFontFinder: options.onFindFontPicker }),
-      // The paint half: the selected paint token's fields write through the
-      // same document and history ports as the pane's rows once did.
-      paints: {
-        palette: () => this.#document.envelope.globals?.palette ?? {},
-        onChange: (palette) => this.#document.setPalette(palette),
-        onSettled: () => options.shell.editor.historyManager.saveState(),
-        onDelete: (id, replacement) =>
-          deletePalette(
-            this.#document,
-            this.#options.tokenSelection,
-            id,
-            replacement,
-          ),
-        background: () => this.#document.envelope.background,
-        usage: paletteUsage,
-      },
-      // The type half: the same one walk, so the users list under the preset
-      // fields agrees with the figure beside the pane's row.
+      openFontFinder: options.onFindFontPicker,
+      onRevealLayer: options.onRevealLayer,
       typeUsage,
-      ...(options.onRevealLayer === undefined
-        ? {}
-        : { onRevealLayer: options.onRevealLayer }),
-    };
-    const designTokens: DesignTokenPort = {
-      actions: tokenActions,
-      // Getters, not copies: the document is the one owner of its globals, so
-      // a snapshot taken here would show a token the first write replaced.
-      typeTokens: () =>
-        (this.#document.envelope.globals?.typeTokens ?? {}) as TypeTokens,
-      palette: () => this.#document.envelope.globals?.palette ?? {},
-      create: (kind, apply) => {
-        const history = options.shell.editor.historyManager;
-        // One gesture, one entry: the creation and the run's new reference both
-        // write while history is suspended, so a later undo removes the token
-        // and restores the run together rather than in two steps.
-        const release = history.suspend();
-        let ref: TokenRef | undefined;
-        let applied = false;
-        try {
-          ref =
-            kind === "paint"
-              ? (() => {
-                  const added = addPaintToken(
-                    this.#document.envelope.globals?.palette ?? {},
-                  );
-                  this.#document.setPalette(added.palette);
-                  return { kind: "paint", id: added.id } as const;
-                })()
-              : (() => {
-                  const added = addTypeToken(
-                    (this.#document.envelope.globals?.typeTokens ??
-                      {}) as TypeTokens,
-                  );
-                  if (added.created) this.#document.setTypes(added.presets);
-                  return { kind: "preset", id: added.id } as const;
-                })();
-          applied = apply(ref);
-        } finally {
-          // The suspension lifts even when a creation write throws, so a failed
-          // gesture cannot leave history deaf to every later edit.
-          release();
-          // The entry is settled after the suspension lifts, so it captures
-          // both writes; a refused apply leaves the creation itself undoable.
-          history.saveState();
-        }
-        return applied ? ref : undefined;
-      },
-      reveal: (ref) => {
-        // Show the pane first, then select: the token inspector is the pane's
-        // own surface, and selecting the token is what the store owns.
-        options.onShowTokens?.();
-        options.tokenSelection?.set(ref);
-      },
-    };
+      paletteUsage,
+      onShowTokens: options.onShowTokens,
+    });
     this.#selection = createSelectionInspector(options.panelHosts.selection, {
       editor: options.shell.editor,
       ...(this.#document.envelope.globals === undefined
