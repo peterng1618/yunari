@@ -14,7 +14,7 @@ import {
 import { createPinnedFetch } from "../providers/custom/pinned-fetch.js";
 import { resolvePointer } from "../providers/custom/pointer.js";
 import { redactForBrowser } from "../providers/provider.js";
-import { MAX_ASSET_BYTES } from "./asset-bytes.js";
+import { MAX_EXTENSION_ASSET_BYTES } from "./asset-bytes.js";
 import {
   DECLARATIVE_LOG_LIMIT,
   type DeclarativeAssetSource,
@@ -241,7 +241,7 @@ export class DeclarativeAssetSourceAdapter implements AssetSource {
     const outcome = await guardedFetchBytes({
       url,
       allowedHosts: this.#allowedHosts,
-      maxBytes: MAX_ASSET_BYTES,
+      maxBytes: MAX_EXTENSION_ASSET_BYTES,
       signal: AbortSignal.any([
         ctx.signal,
         AbortSignal.timeout(BYTES_TIMEOUT_MS),

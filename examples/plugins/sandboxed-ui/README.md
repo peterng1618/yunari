@@ -29,7 +29,7 @@ for data; do not reach the network yourself.
 4. The editor answers `yunari.frame.result` with `{id, ok, value}` or
    `{id, ok:false, reason}`.
 
-Before a person presses the host's **Enable controls** button, the editor posts
+When a person presses the host's **Enable controls** button, the editor posts
 `yunari.frame.gesture` with `{nonce, token}`. The token is good for one write
 request or 30 seconds. No pointer event inside the frame can mint one.
 

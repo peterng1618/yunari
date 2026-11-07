@@ -73,7 +73,8 @@ The new dispatcher tests exercise a real `Response` body and assert the returned
 Add one closed method, `network.fetchBytes`, to the extension API table and the
 worker protocol, and dispatch it to the existing `guardedFetchBytes`. It takes
 `{ url }` only: the byte path has no header or body contract today, so no new
-authority is granted. The ceiling is `MAX_ASSET_BYTES` in `asset-bytes.ts`, the
+authority is granted. The ceiling is `MAX_EXTENSION_ASSET_BYTES` in
+`asset-bytes.ts`, the
 one owner of "the largest asset byte answer a plugin surface may deliver or
 receive"; the declarative artwork fetch, a code source's `asset.bytes` reply and
 this method all read it rather than spelling 32 MiB three times. The call takes

@@ -12,7 +12,7 @@ import type {
   SourceContext,
 } from "../assets/source.js";
 import { redactForBrowser } from "../providers/provider.js";
-import { MAX_ASSET_BYTES } from "./asset-bytes.js";
+import { MAX_EXTENSION_ASSET_BYTES } from "./asset-bytes.js";
 import type { PluginSupervisor } from "./runtime/supervisor.js";
 
 /**
@@ -273,7 +273,7 @@ function readBytes(value: unknown): BytesRead {
     };
 
   const decoded = Buffer.from(encoded, "base64");
-  if (decoded.byteLength > MAX_ASSET_BYTES)
+  if (decoded.byteLength > MAX_EXTENSION_ASSET_BYTES)
     return {
       ok: false,
       reason: `${UNREADABLE_BYTES} Its bytes are past the host's limit.`,

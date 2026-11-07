@@ -12,7 +12,7 @@ import {
   type HostLookup,
 } from "../../providers/custom/fetch-source.js";
 import { createPinnedFetch } from "../../providers/custom/pinned-fetch.js";
-import { MAX_ASSET_BYTES } from "../asset-bytes.js";
+import { MAX_EXTENSION_ASSET_BYTES } from "../asset-bytes.js";
 import type { DeviceBroker } from "./device-broker.js";
 import { guardedFetch, guardedFetchBytes } from "./network.js";
 import {
@@ -236,7 +236,7 @@ async function networkFetchBytes(
   return guardedFetchBytes({
     url: target.url.toString(),
     allowedHosts: plugin.manifest.networkHosts ?? [],
-    maxBytes: MAX_ASSET_BYTES,
+    maxBytes: MAX_EXTENSION_ASSET_BYTES,
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     fetchImpl: target.fetchImpl,
     ...(options.resolve === undefined ? {} : { resolve: options.resolve }),
