@@ -7,6 +7,12 @@
   --line: #14120e;
   --muted: #5a5449;
   --accent: #8a5a2b;
+  /* DESIGN.md's control state roles, for the shared `data-yunari-control-state`
+     contract the editor's buttons use. This page is its own bundle and owns its
+     palette; the vocabulary is the design's, not a second one. */
+  --attention: var(--accent);
+  --ok: #2f6d3a;
+  --error: #a4291f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -15,6 +21,9 @@
     --line: #2a3242;
     --muted: #8a97ab;
     --accent: #ffab00;
+    --attention: var(--accent);
+    --ok: #7fd894;
+    --error: #ff7e6e;
   }
 }
 * {
@@ -156,6 +165,13 @@ a {
   font-size: 13px;
   cursor: pointer;
 }
+.theme-confirm-actions button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.theme-confirm-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .theme-option {
   display: flex;
   align-items: center;
@@ -244,4 +260,18 @@ a {
   color: var(--muted);
   font-family: ui-monospace, monospace;
   font-size: 12px;
+}
+
+/* The one rule that paints a button's caller-set state here, keyed on the same
+   DESIGN.md attribute the editor's stylesheet uses. It sits last so it outranks
+   the row rules above at equal specificity. Busy keeps the disabled control
+   readable as work in flight rather than as unavailable. */
+button[data-yunari-control-state="busy"] {
+  color: var(--attention);
+}
+button[data-yunari-control-state="success"] {
+  color: var(--ok);
+}
+button[data-yunari-control-state="failure"] {
+  color: var(--error);
 }

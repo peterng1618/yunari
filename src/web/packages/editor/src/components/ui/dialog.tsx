@@ -6,6 +6,7 @@ import {
   type LucideIcon,
 } from "../../editor-shell/icons.js";
 import { destructiveMarker } from "../../object-actions.js";
+import { type ControlState, controlStateAttributes } from "./control-state.js";
 
 /** The one control treatment a dialog's own buttons share, in tokens.
  *
@@ -41,6 +42,9 @@ export function ActionBox(props: {
   readonly tone?: "plain" | "accent";
   readonly destructive?: boolean;
   readonly disabled?: boolean;
+  /** An action that is out, or an outcome it keeps. A synchronous action omits
+   *  it; a caller that sets `busy` also passes `disabled`. */
+  readonly state?: ControlState;
   readonly describedById?: string;
   readonly onClick: () => void;
 }): React.JSX.Element {
@@ -52,12 +56,17 @@ export function ActionBox(props: {
     tone = "plain",
     destructive,
     disabled,
+    state,
   } = props;
+  // Plain tone raises its resting `--edge` to `--muted` on hover. The accent
+  // tone already sits at the stronger boundary the hover rule raises to, so it
+  // keeps it rather than losing the command's one accent.
   return (
     <button
       {...data}
       type="button"
       {...(id === undefined ? {} : { id })}
+      {...controlStateAttributes(state)}
       {...(destructive === true
         ? destructiveMarker({ destructive: true })
         : {})}
@@ -69,7 +78,7 @@ export function ActionBox(props: {
       className={`flex min-w-0 items-center justify-center gap-[var(--space-6)] rounded-[var(--radius-md)] border bg-panel-2 px-[var(--space-8)] py-[var(--space-6)] text-xs disabled:text-faint ${
         tone === "accent"
           ? "border-accent text-accent"
-          : "border-edge text-text"
+          : "border-edge text-text enabled:hover:border-muted"
       }`}
     >
       <Glyph icon={icon} size={12} />

@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { useRef, useState } from "react";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import {
   plainButtonClasses,
   wellClasses,
@@ -234,6 +235,7 @@ export function PanelControlsSection(props: {
             data-yunari-panel-disconnect={props.displayId}
             className={plainButtonClasses}
             disabled={disconnecting || reconnecting}
+            {...controlStateAttributes(disconnecting ? "busy" : undefined)}
             onClick={disconnect}
           >
             {disconnecting ? copy.disconnecting : copy.disconnect}
@@ -244,6 +246,9 @@ export function PanelControlsSection(props: {
             data-yunari-panel-reconnect={props.displayId}
             className={plainButtonClasses}
             disabled={reconnecting || status === "connecting"}
+            {...controlStateAttributes(
+              reconnecting || status === "connecting" ? "busy" : undefined,
+            )}
             onClick={reconnect}
           >
             {reconnecting || status === "connecting"
@@ -321,10 +326,14 @@ export function PanelControlsSection(props: {
                         className="h-full w-full min-w-0 bg-transparent text-xs text-text outline-none"
                       />
                     </div>
+                    {/* One command is out at a time; the dialog's own alert is
+                        where its failure is read, so these controls carry the
+                        busy state and no outcome of their own. */}
                     <button
                       type="button"
                       className={ACTION_BUTTON}
                       disabled={inFlight}
+                      {...controlStateAttributes(inFlight ? "busy" : undefined)}
                       onClick={applyLevel}
                     >
                       {copy.apply}
@@ -351,6 +360,7 @@ export function PanelControlsSection(props: {
                     type="button"
                     className={ACTION_BUTTON}
                     disabled={inFlight}
+                    {...controlStateAttributes(inFlight ? "busy" : undefined)}
                     onClick={() => send({ kind: "screen", on: true })}
                   >
                     {copy.screenOn}
@@ -359,6 +369,7 @@ export function PanelControlsSection(props: {
                     type="button"
                     className={ACTION_BUTTON}
                     disabled={inFlight}
+                    {...controlStateAttributes(inFlight ? "busy" : undefined)}
                     onClick={() => send({ kind: "screen", on: false })}
                   >
                     {copy.screenOff}
@@ -440,6 +451,7 @@ export function PanelControlsSection(props: {
                     type="button"
                     className={ACTION_BUTTON}
                     disabled={inFlight}
+                    {...controlStateAttributes(inFlight ? "busy" : undefined)}
                     onClick={() =>
                       send({
                         kind: "panel-settings",
@@ -465,6 +477,9 @@ export function PanelControlsSection(props: {
                         type="button"
                         className={ACTION_BUTTON}
                         disabled={inFlight}
+                        {...controlStateAttributes(
+                          inFlight ? "busy" : undefined,
+                        )}
                         onClick={() => {
                           setConfirmingRestart(false);
                           send({ kind: "restart" });
@@ -499,6 +514,7 @@ export function PanelControlsSection(props: {
                       type="button"
                       className={ACTION_BUTTON}
                       disabled={inFlight}
+                      {...controlStateAttributes(inFlight ? "busy" : undefined)}
                       onClick={() => send({ kind: "status" })}
                     >
                       {copy.status}
@@ -509,6 +525,7 @@ export function PanelControlsSection(props: {
                       type="button"
                       className={ACTION_BUTTON}
                       disabled={inFlight}
+                      {...controlStateAttributes(inFlight ? "busy" : undefined)}
                       onClick={() => send({ kind: "hello" })}
                     >
                       {copy.hello}

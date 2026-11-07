@@ -1,4 +1,5 @@
 import type * as React from "react";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
 import type { PanelHint } from "./client.js";
@@ -145,6 +146,7 @@ export function PanelsSection(props: {
                   aria-label={copy.addPanel(panel.label)}
                   className={plainButtonClasses}
                   disabled={props.adding}
+                  {...controlStateAttributes(props.adding ? "busy" : undefined)}
                   onClick={() => props.onAdd(panel)}
                 >
                   {props.adding ? copy.adding : copy.add}

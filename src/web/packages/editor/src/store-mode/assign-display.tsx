@@ -4,6 +4,7 @@ import {
   type ControlOption,
   ControlSelect,
 } from "../components/ui/control-select.js";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import {
   DEFAULT_DISPLAY_KEY,
@@ -223,11 +224,23 @@ export function AssignChoice(props: {
             disabled={busy}
           />
           <div className="flex items-center justify-end">
+            {/* The one command carries all three caller-set states. A refusal
+                from reading the list never reaches here: the form is drawn
+                only after an answer, so `refusal` is this press's outcome. */}
             <button
               type="button"
               data-yunari-store-assign-confirm=""
               className={ACTION_BUTTON}
               disabled={!canAssign}
+              {...controlStateAttributes(
+                busy
+                  ? "busy"
+                  : refusal !== undefined
+                    ? "failure"
+                    : confirmation === undefined
+                      ? undefined
+                      : "success",
+              )}
               onClick={assign}
             >
               {busy

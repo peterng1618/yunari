@@ -566,6 +566,13 @@ body,
   --text-lg--line-height: 1.3;
   --text-xl: 19px;
   --text-xl--line-height: 1.2;
+  /* The control state set's three caller-set outcomes. Hover and selected keep
+     their existing roles (`--muted`, `--accent`) because every surface already
+     draws them; these three have no other owner, so a control reads the state
+     mapping here rather than each one spelling its own role. */
+  --control-state-busy: var(--attention);
+  --control-state-success: var(--ok);
+  --control-state-failure: var(--error);
   --elev-1: 0 8px 20px #00000059;
   --elev-2: 0 18px 44px #00000099;
   --elev-3: 0 24px 60px #000000b3;
@@ -765,6 +772,27 @@ body,
    rather than by no surface happening to pass `disabled`. */
 [data-yunari-destructive]:not([disabled]):not([aria-disabled="true"]) {
   color: var(--hot);
+}
+
+/* The **one** rule that paints a control's caller-set state, keyed on the
+   shared `data-yunari-control-state` (`components/ui/control-state.ts` owns the
+   attribute and the state names). It is deliberately not a control's own class:
+   the state reaches every button on every surface, including a portalled dialog
+   and the finder's footer, without a second spelling.
+
+   Busy is the one state a disabled control keeps: the caller disables it so it
+   cannot be pressed twice, and this rule outranks the `disabled:text-faint`
+   utilities (they are layered; this is not), so work in flight stays
+   `--attention` rather than reading as unavailable. The destructive mark still
+   wins a control carrying both, because its selector is more specific. */
+[data-yunari-control-state="busy"] {
+  color: var(--control-state-busy);
+}
+[data-yunari-control-state="success"] {
+  color: var(--control-state-success);
+}
+[data-yunari-control-state="failure"] {
+  color: var(--control-state-failure);
 }
 
 /* ── One treatment; elevation is the whole difference. ──────────────────────
@@ -1016,6 +1044,12 @@ body,
 .editor-shell-publish-toggle[aria-pressed="true"] {
   border-color: var(--shell-primary-bg);
   color: var(--shell-primary-bg);
+}
+/* Hover raises the resting `--edge` to `--muted`; a pressed toggle keeps its
+   primary boundary, which is already the stronger one. */
+.editor-shell-publish-toggle:hover:not(:disabled):not([aria-pressed="true"]),
+.editor-shell-publish-mint:hover:not(:disabled) {
+  border-color: var(--shell-muted);
 }
 .editor-shell-publish-toggle:disabled,
 .editor-shell-publish-mint:disabled {
@@ -2030,6 +2064,16 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
   height: 28px;
   margin: 0;
   padding: 0;
+}
+/* A close is synchronous and has no outcome; hover is the one state beyond
+   rest and focus it can carry. The preview's boxed variant also raises its
+   resting boundary. */
+.editor-shell-dialog-close:hover {
+  color: var(--shell-text);
+}
+.editor-shell-dialog--asset-preview .editor-shell-dialog-close:hover {
+  border-color: var(--shell-muted);
+  color: var(--shell-text);
 }
 
 /* The asset preview: the finder's inset-24 box, no title bar, and a fixed

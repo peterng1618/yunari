@@ -1528,6 +1528,14 @@ it("shows the assignment in flight and refuses a second press", async () => {
     true,
   );
   expect(
+    confirm().getAttribute("data-yunari-control-state"),
+    "the in-flight write does not carry the shared busy state",
+  ).toBe("busy");
+  expect(
+    confirm().getAttribute("aria-busy"),
+    "the busy control is not announced as busy",
+  ).toBe("true");
+  expect(
     assignSelect().hasAttribute("disabled"),
     "the select staged another display while the write was out",
   ).toBe(true);
@@ -1643,6 +1651,15 @@ it("reports the host's refusal in the host's own words", async () => {
   expect(assignStatus(), "the refusal is not the message the host sent").toBe(
     "No such display.",
   );
+  expect(
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-assign-confirm]",
+      ),
+      "the choice's assign button",
+    ).getAttribute("data-yunari-control-state"),
+    "a refused assignment does not carry the shared failure state",
+  ).toBe("failure");
   expect(assignIsOpen(), "a refused assignment closed the choice").toBe(true);
 });
 
@@ -1917,6 +1934,15 @@ it("confirms an assignment from the modal beside the choice it made", async () =
       "the assignment's confirmation",
     ).textContent?.trim(),
   ).toBe(uiCopy.store.assign.assigned("Kitchen tablet"));
+  expect(
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-assign-confirm]",
+      ),
+      "the choice's assign button",
+    ).getAttribute("data-yunari-control-state"),
+    "a landed assignment does not carry the shared success state",
+  ).toBe("success");
 });
 
 /**

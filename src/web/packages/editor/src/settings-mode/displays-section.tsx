@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ControlChoiceRow } from "../components/ui/control-choice-row.js";
 import { ControlSelect } from "../components/ui/control-select.js";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
 import {
   ControlRow,
@@ -180,11 +181,16 @@ export function DisplaysList(props: {
                       {copy.removeAsk(display.label)}
                     </p>
                     <div className="flex gap-[var(--space-6)]">
+                      {/* The removal's answer is the page's own status; this
+                          control keeps the busy state it can show. */}
                       <button
                         type="button"
                         data-yunari-host-display-confirm-remove={display.id}
                         className={plainButtonClasses}
                         disabled={removing === display.id}
+                        {...controlStateAttributes(
+                          removing === display.id ? "busy" : undefined,
+                        )}
                         onClick={() => void remove(display)}
                       >
                         {removing === display.id

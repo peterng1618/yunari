@@ -110,14 +110,17 @@ the primary button. Two accents in one region means neither is the accent.
 a disabled destructive control stays `--faint` rather than dimming red.
 
 **`--attention` marks work in flight, never an action or a fault.** It appears
-only on an unsaved or unpublished indicator, an operation still running, or a
-reading that is stale and waiting for the author. It never fills a button,
-never shares an element with `--accent`, and does not stand in for `--warn`
-(something needs attention) or `--hot` (destructive).
+only on an unsaved or unpublished indicator, an operation still running, a
+control whose action is out, or a reading that is stale and waiting for the
+author. It never fills a button, never shares an element with `--accent`, and
+does not stand in for `--warn` (something needs attention) or `--hot`
+(destructive).
 
 **`--ok` and `--error` are readings, not affordances.** They state a value's
 relation to its bound — a theme at 60% of its limit is `--ok`, one past 100% is
-`--error` — and never paint a control. A reading that blocks an action carries
+`--error` — and never *fill* a control. A control's success or failure is a
+reading of its action's result, so the state set below paints the control's
+ink; the fill stays the control's own. A reading that blocks an action carries
 `--error`; the control it blocks still uses its own vocabulary, and a fault that
 is not destructive never borrows `--hot`.
 
@@ -681,6 +684,31 @@ horizontal padding is 6, which is what `wellClasses` writes
    name as the control's programmatic label, wrapped in reading order, with the
    group's arrow keys unchanged.
 
+### Control states
+
+Every button on every editor surface carries the same states, and each state has
+one owner rather than one spelling per surface:
+
+| State | Set by | Drawn with |
+|---|---|---|
+| rest | — | the control's own surface and `--edge` |
+| hover | `:hover` | `--edge` raised to `--muted`; a glyph-only control acquires that border. Nothing moves or scales. |
+| focus | `:focus-visible` | the accent boundary (rule 4) |
+| selected | `aria-pressed="true"` / `aria-checked` | `--accent` ink over its 14% wash |
+| disabled | `disabled` / `aria-disabled` | `--faint` ink; a refused capability keeps its visible reason (rule 3) |
+| in progress | `data-yunari-control-state="busy"` + `aria-busy="true"` | `--attention` ink; the label names the work, and the control is natively disabled so a second press cannot ride the first |
+| success | `data-yunari-control-state="success"` | `--ok` ink |
+| failure | `data-yunari-control-state="failure"` | `--error` ink |
+
+The caller sets the last three through `controlStateAttributes` in
+`components/ui/control-state.ts`. One stylesheet rule keyed on
+`data-yunari-control-state` paints them for every surface, and the `@theme
+static` block owns the three state tokens. A control that cannot carry a state,
+or draws it differently, says why in a comment beside it: a synchronous action
+has no busy or outcome, a dismissal has no outcome, and a state that is a
+*reading of something else* — a source's health — is drawn as that reading
+rather than as the button's own outcome.
+
 ### Asset finder tabs
 
 The finder is one surface with one vocabulary. **A tab is a category of asset,
@@ -700,8 +728,8 @@ never a provider**, and it fills the frame rather than drawing its own.
    meta and the item's own licence — an icon library's single licence stays on
    its source. The preview renderer is the only permitted variation between
    kinds (`finder-card.tsx`).
-5. **Every control defines rest, hover, focus, selected or disabled, busy and
-   outcome.** Hover raises `--edge` to `--muted`; nothing moves or scales.
+5. **Every control carries the state set in Control states**, and a finder
+   control adds no state of its own.
 6. **One animated skeleton for every wait**, drawn as cards in the grid; an
    appended page adds skeleton cards rather than replacing the rows
    (`skeleton.tsx`).

@@ -7,6 +7,7 @@ import {
   saveCredential,
   verifyCredential,
 } from "../../asset-finder/credentials-client.js";
+import { controlStateAttributes } from "../../components/ui/control-state.js";
 import { ControlWell } from "../../components/ui/control-well.js";
 import { ACTION_BUTTON } from "../../components/ui/dialog.js";
 import { uiCopy } from "../../ui-copy.js";
@@ -109,9 +110,15 @@ export function AssetSourcesPage(): React.JSX.Element {
                       className="h-full w-full min-w-0 bg-transparent font-mono text-sm text-text outline-none"
                     />
                   </ControlWell>
+                  {/* One write per row, so every control in the row shares the
+                      busy state; the row's own message is where the outcome is
+                      read, because the three actions have one answer slot. */}
                   <button
                     type="button"
                     disabled={busy === row.id || (drafts[row.id] ?? "") === ""}
+                    {...controlStateAttributes(
+                      busy === row.id ? "busy" : undefined,
+                    )}
                     onClick={() => save(row.id)}
                     data-yunari-credential-save={row.id}
                     className={ACTION_BUTTON}
@@ -121,6 +128,9 @@ export function AssetSourcesPage(): React.JSX.Element {
                   <button
                     type="button"
                     disabled={!row.set || busy === row.id}
+                    {...controlStateAttributes(
+                      busy === row.id ? "busy" : undefined,
+                    )}
                     onClick={() =>
                       void run(row.id, () => clearCredential(row.id))
                     }
@@ -132,6 +142,9 @@ export function AssetSourcesPage(): React.JSX.Element {
                   <button
                     type="button"
                     disabled={!row.set || !row.verify || busy === row.id}
+                    {...controlStateAttributes(
+                      busy === row.id ? "busy" : undefined,
+                    )}
                     onClick={() =>
                       void run(row.id, () => verifyCredential(row.id))
                     }

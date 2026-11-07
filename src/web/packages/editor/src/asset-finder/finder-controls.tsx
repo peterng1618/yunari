@@ -2,6 +2,7 @@ import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import type * as React from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
 import type { LucideIcon } from "../editor-shell/icons.js";
 import { BUSY_GLYPH, CONNECTIONS_GLYPH, Glyph } from "../editor-shell/icons.js";
@@ -122,6 +123,9 @@ export function FinderChip(props: {
       }`}
     >
       {props.label}
+      {/* A source's health is a reading of the source, not the outcome of this
+          press: it keeps its own dot rather than taking the control's failure
+          ink, which belongs to a command that was run. */}
       {props.failed ? (
         <span
           data-yunari-asset-chip-failed=""
@@ -141,12 +145,17 @@ export function FinderActionButton(props: {
   readonly data?: Readonly<Record<`data-${string}`, string>>;
 }): React.JSX.Element {
   const { action, busy } = props;
+  // The shared busy state, plus the finder's own attribute the browser suite
+  // already locates. The outcome is the footer's one status line (states live
+  // where they are read) rather than this button, which is gone or reused by
+  // the next press.
   return (
     <button
       {...props.data}
       type="button"
       disabled={action.disabled || busy}
       onClick={props.onRun}
+      {...controlStateAttributes(busy ? "busy" : undefined)}
       data-yunari-asset-action-busy={busy ? "" : undefined}
       className={`${ACTION_BUTTON} inline-flex items-center gap-[var(--space-6)] ${
         action.tone === "accent" ? "border-accent text-accent" : ""

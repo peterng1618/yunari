@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { Dialog } from "../components/ui/dialog.js";
 import { displayUrl } from "../hosting-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
@@ -171,7 +172,9 @@ export function PublishControl({
           a second, detached label beside the button. */}
       {/* One name, whatever the host is doing: the control opens a surface, and
           a bar that said `Stop publishing` would be promising to stop rather
-          than to show. What the host is doing is the surface's own reading. */}
+          than to show. What the host is doing is the surface's own reading.
+          The press is synchronous (it opens this dialog), so it has no busy or
+          outcome state of its own. */}
       <button
         type="button"
         className="editor-shell-primary"
@@ -212,7 +215,9 @@ export function PublishControl({
           />
         )}
         {/* The choice the warning is about, so the warning is bound to the
-            control that makes it rather than to the one that opens this. */}
+            control that makes it rather than to the one that opens this.
+            A successful start is the pressed state itself, so there is no
+            separate success outcome to keep. */}
         <button
           type="button"
           className="editor-shell-publish-toggle"
@@ -220,6 +225,13 @@ export function PublishControl({
           aria-pressed={open}
           aria-describedby={WARNING_ID}
           disabled={pending !== undefined}
+          {...controlStateAttributes(
+            pending !== undefined
+              ? "busy"
+              : reason === undefined
+                ? undefined
+                : "failure",
+          )}
           onClick={() => {
             void hosting.toggle();
           }}
@@ -274,11 +286,15 @@ export function PublishControl({
                     ? uiCopy.publish.expired
                     : uiCopy.publish.expiresIn(left)}
                 </span>
+                {/* The renewed code appearing is the success answer, and a
+                    refusal is the dialog's own reason line; this control keeps
+                    only the busy state it can show. */}
                 <button
                   type="button"
                   className="editor-shell-publish-mint"
                   data-yunari-new-code=""
                   disabled={minting}
+                  {...controlStateAttributes(minting ? "busy" : undefined)}
                   onClick={() => {
                     setMinting(true);
                     void hosting.renew().finally(() => setMinting(false));

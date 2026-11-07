@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { useId } from "react";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
 import type { SourceRow } from "./sources-client.js";
@@ -186,11 +187,16 @@ export function SourceForm(props: {
       )}
 
       <div className="flex gap-[var(--space-6)]">
+        {/* The form's one write: busy while it is out, and the refusal the form
+            renders above is the failure outcome the same press keeps. */}
         <button
           type="submit"
           data-yunari-source-save=""
           className={plainButtonClasses}
           disabled={props.busy}
+          {...controlStateAttributes(
+            props.busy ? "busy" : refusal === undefined ? undefined : "failure",
+          )}
         >
           {props.busy ? uiCopy.hostSettings.status.saving : copy.save}
         </button>

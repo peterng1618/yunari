@@ -222,6 +222,12 @@ it("keeps the row and says why a removal was refused", async () => {
   expect(page.querySelector(".theme-delete-note")?.textContent).toBe(
     "No trash command is available on this PC.",
   );
+  expect(
+    page
+      .querySelector<HTMLButtonElement>("button.theme-delete")
+      ?.getAttribute("data-yunari-control-state"),
+    "a refused removal does not carry the shared failure state",
+  ).toBe("failure");
 });
 
 it("says what a theme costs the display it is being given to", () => {

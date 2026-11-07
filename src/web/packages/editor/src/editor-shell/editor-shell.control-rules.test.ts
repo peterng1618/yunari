@@ -269,6 +269,68 @@ describe("the destructive mark", () => {
   });
 });
 
+/** The control state set DESIGN.md makes normative.
+ *
+ *  One unlayered rule per state, keyed on the shared attribute
+ *  (`components/ui/control-state.ts`), and three tokens in `@theme static` that
+ *  own the mapping. The rendered half is the browser; jsdom resolves no cascade,
+ *  so this is the half that reddens when a rule or a token is reverted. */
+describe("the control state set", () => {
+  const theme =
+    /^[ \t]*@theme[ \t]+static[ \t]*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+
+  it("owns the three caller-set states in @theme static", () => {
+    expect(theme, "no `@theme static` block").not.toBe("");
+    expect(theme).toContain("--control-state-busy: var(--attention);");
+    expect(theme).toContain("--control-state-success: var(--ok);");
+    expect(theme).toContain("--control-state-failure: var(--error);");
+  });
+
+  it("paints each state from one unlayered rule", () => {
+    for (const [state, token] of [
+      ["busy", "--control-state-busy"],
+      ["success", "--control-state-success"],
+      ["failure", "--control-state-failure"],
+    ] as const) {
+      const painters = [
+        ...cssNoComments.matchAll(
+          new RegExp(
+            `^\\[data-yunari-control-state="${state}"\\]\\s*\\{([^}]*)\\}`,
+            "gm",
+          ),
+        ),
+      ].map((match) => match[1] ?? "");
+      expect(painters, `no single rule paints the ${state} state`).toHaveLength(
+        1,
+      );
+      expect(
+        painters[0],
+        `the ${state} state does not read its one token`,
+      ).toContain(`color: var(${token});`);
+    }
+  });
+
+  it("keeps the shared state rule out of a surface layer", () => {
+    // A layered rule loses to every utility, so `disabled:text-faint` would win
+    // over a busy control and work in flight would read as unavailable.
+    const rule = cssNoComments.indexOf('[data-yunari-control-state="busy"]');
+    expect(rule, "the busy rule is gone").toBeGreaterThan(-1);
+    for (const layer of layers()) {
+      expect(
+        layer.body.includes('[data-yunari-control-state="busy"]'),
+        "the control state rule sits inside an `@layer`, so a utility outranks it",
+      ).toBe(false);
+    }
+  });
+
+  it("gives the modal close the hover state it was missing", () => {
+    expect(
+      ruleBodies(".editor-shell-dialog-close:hover"),
+      "the dialog's close control has no hover rule",
+    ).toContain("color: var(--shell-text);");
+  });
+});
+
 /** Every `@layer <name> { … }` block, brace-matched rather than body-regexed:
  *  a layer's body contains whole rules, so a `[^}]*` body — what the reads above
  *  use — would stop at the first of them. `from`/`to` are offsets into `css`, so

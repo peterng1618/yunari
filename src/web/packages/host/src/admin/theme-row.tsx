@@ -66,11 +66,14 @@ const DELETE_LEAD = "Move this theme to the recycle bin?";
 function ConfirmRemoval({
   name,
   id,
+  busy,
   onCancel,
   onConfirm,
 }: {
   readonly name: string;
   readonly id: string;
+  /** The removal is out: both answers wait for it, so neither can ride it. */
+  readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }): React.JSX.Element {
@@ -100,10 +103,24 @@ function ConfirmRemoval({
     >
       <p className="theme-confirm-lead">{ask}</p>
       <div className="theme-confirm-actions">
-        <button type="button" data-theme-delete-no="" onClick={onCancel}>
+        <button
+          type="button"
+          data-theme-delete-no=""
+          disabled={busy}
+          onClick={onCancel}
+        >
           Cancel
         </button>
-        <button type="button" data-theme-delete-yes="" onClick={onConfirm}>
+        {/* The one state this page shares with the editor: the attribute is
+            DESIGN.md's control-state contract, and `admin.css` paints it. */}
+        <button
+          type="button"
+          data-theme-delete-yes=""
+          data-yunari-control-state={busy ? "busy" : undefined}
+          aria-busy={busy ? "true" : undefined}
+          disabled={busy}
+          onClick={onConfirm}
+        >
           Delete
         </button>
       </div>
@@ -206,10 +223,17 @@ export function ThemeRow({
         {cost ?? ""}
       </p>
 
+      {/* The same shared state contract. A failed removal keeps the row and
+          paints this button's failure ink; a successful one removes the row,
+          so there is no success state left to draw here. */}
       <button
         type="button"
         className="theme-delete"
         aria-label={`Delete ${named} — moved to the recycle bin`}
+        data-yunari-control-state={
+          removing ? "busy" : note === undefined ? undefined : "failure"
+        }
+        aria-busy={removing ? "true" : undefined}
         disabled={removing}
         onClick={() => setConfirming(true)}
       >
@@ -228,6 +252,7 @@ export function ThemeRow({
         <ConfirmRemoval
           name={named}
           id={theme.id}
+          busy={removing}
           onCancel={() => setConfirming(false)}
           onConfirm={() => void remove()}
         />

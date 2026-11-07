@@ -89,6 +89,7 @@ export function FontImportDialog(props: {
         filename={filename}
         initial={initial}
         busy={busy}
+        {...(message === "" ? {} : { state: "failure" as const })}
         showRole={false}
         onEdit={() => setMessage("")}
         onCommit={(metadata) => {

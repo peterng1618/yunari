@@ -7,6 +7,10 @@ import {
 } from "../../asset-manager/font-metadata.js";
 import { ControlNumber } from "../../components/ui/control-number.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
+import {
+  type ControlState,
+  controlStateAttributes,
+} from "../../components/ui/control-state.js";
 import { ControlText } from "../../components/ui/control-text.js";
 import {
   FONT_ROLES,
@@ -122,6 +126,9 @@ export function FontMetadataForm(props: {
   readonly filename: string;
   readonly initial: FontMetadata;
   readonly busy: boolean;
+  /** The last commit's outcome, where the caller keeps one. A refused commit
+   *  leaves the form open so the Create press can carry the failure state. */
+  readonly state?: ControlState;
   readonly onCommit: (
     metadata: FontMetadata,
     role: FontTrioRole | null,
@@ -139,6 +146,7 @@ export function FontMetadataForm(props: {
     filename,
     initial,
     busy,
+    state,
     onCommit,
     onCancel,
     showRole = true,
@@ -264,6 +272,7 @@ export function FontMetadataForm(props: {
           type="button"
           data-yunari-font-create=""
           disabled={busy}
+          {...controlStateAttributes(state ?? (busy ? "busy" : undefined))}
           onClick={() => {
             const candidate = current();
             const reason = refusalOf(family, weight);
@@ -277,6 +286,9 @@ export function FontMetadataForm(props: {
         >
           {uiCopy.panels.assetCard.createTypeToken}
         </button>
+        {/* Cancel is disabled while the one commit is out, but it is not the
+            action that state describes: the Create press is the one carrying
+            busy and the outcome, so this button has neither. */}
         <button
           type="button"
           data-yunari-font-cancel=""

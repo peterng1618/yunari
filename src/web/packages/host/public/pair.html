@@ -18,6 +18,11 @@
         --ink: #14120e;
         --line: #14120e;
         --muted: #5a5449;
+        /* DESIGN.md's control state roles, for the shared
+           `data-yunari-control-state` contract. */
+        --attention: #8a5a2b;
+        --ok: #2f6d3a;
+        --error: #a4291f;
         color-scheme: light dark;
       }
       @media (prefers-color-scheme: dark) {
@@ -26,6 +31,9 @@
           --ink: #e8ecf3;
           --line: #2a3242;
           --muted: #8a97ab;
+          --attention: #ffab00;
+          --ok: #7fd894;
+          --error: #ff7e6e;
         }
       }
       html,
@@ -81,9 +89,24 @@
         font-weight: 600;
         cursor: pointer;
       }
+      /* The one button is filled with the ink role, so its state paints the
+         border: a state colour on the label would invert against that fill.
+         Hover has no resting `--edge` to raise here, so it is a wash. */
+      button:hover:not(:disabled) {
+        opacity: 0.92;
+      }
       button:disabled {
         opacity: 0.6;
         cursor: default;
+      }
+      button[data-yunari-control-state="busy"] {
+        border-color: var(--attention);
+      }
+      button[data-yunari-control-state="success"] {
+        border-color: var(--ok);
+      }
+      button[data-yunari-control-state="failure"] {
+        border-color: var(--error);
       }
       #status {
         margin-top: 16px;
@@ -177,6 +200,16 @@
         status.hidden = false;
       };
 
+      // The shared control state contract. The button's state is the one
+      // `data-yunari-control-state` value and its `aria-busy` announcement; the
+      // disabled attribute stays the caller's own fact.
+      const state = (next) => {
+        if (next === undefined) delete submit.dataset.yunariControlState;
+        else submit.dataset.yunariControlState = next;
+        if (next === "busy") submit.setAttribute("aria-busy", "true");
+        else submit.removeAttribute("aria-busy");
+      };
+
       // The step follows the shape, and Rect is the destructive one: an angle it
       // cannot hold moves to the nearest quarter *here*, before the claim, so
       // the note can keep the number the author typed visible beside the one
@@ -236,6 +269,7 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         submit.disabled = true;
+        state("busy");
         say("Pairing…");
 
         try {
@@ -254,6 +288,7 @@
             // The host's own words, and the same words however the code failed:
             // a page that said more than the host does would be the leak.
             say((await answer.text()).trim() || "That did not pair.");
+            state("failure");
             return;
           }
 
@@ -269,6 +304,7 @@
 
           if (!exchanged.ok) {
             say((await exchanged.text()).trim() || "That did not pair.");
+            state("failure");
             return;
           }
 
@@ -282,11 +318,15 @@
             // Quota or a private window; the exchange still succeeded.
           }
 
+          state("success");
           location.replace("/");
         } catch {
           say("The host did not answer.");
+          state("failure");
         } finally {
           submit.disabled = false;
+          // An attempt that never answered leaves no outcome to keep.
+          if (submit.dataset.yunariControlState === "busy") state(undefined);
         }
       });
     </script>

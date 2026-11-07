@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { ControlTooltip } from "../../editor-shell/controls/tooltip.js";
 import { destructiveMarker } from "../../object-actions.js";
+import { type ControlState, controlStateAttributes } from "./control-state.js";
 import {
   type ControlProps,
   describedBy,
@@ -57,6 +58,10 @@ export function ControlIconButton(
     /** Whether this button is a toggle, and is on. Omitted for an action, which
      *  has no state for assistive technology to announce. */
     readonly pressed?: boolean;
+    /** An action that is out, or an outcome it keeps. A synchronous action
+     *  omits this and says why at its call site; a caller that sets `busy`
+     *  also passes `disabled`. */
+    readonly state?: ControlState;
     readonly onClick: () => void;
     readonly children: React.ReactNode;
   },
@@ -68,6 +73,7 @@ export function ControlIconButton(
     refused,
     ariaDisabled,
     pressed,
+    state,
     describedById,
     data,
     destructive,
@@ -85,6 +91,7 @@ export function ControlIconButton(
       <ControlTooltip label={label} shortcut={shortcut}>
         <button
           {...data}
+          {...controlStateAttributes(state)}
           {...(destructive === true
             ? destructiveMarker({ destructive: true })
             : {})}

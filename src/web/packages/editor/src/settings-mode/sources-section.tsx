@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { clearCredential } from "../asset-finder/credentials-client.js";
+import { controlStateAttributes } from "../components/ui/control-state.js";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
 import { Group } from "./section-group.js";
@@ -307,12 +308,24 @@ export function SourcesSection(props: {
               >
                 {copy.edit}
               </button>
+              {/* The test's own answer line is the outcome; its control
+                  carries the same state so the press that produced it reads as
+                  success or failure too. */}
               <button
                 type="button"
                 data-yunari-source-test={row.id}
                 aria-label={copy.testSource(row.name || row.id)}
                 className={plainButtonClasses}
                 disabled={testing === row.id}
+                {...controlStateAttributes(
+                  testing === row.id
+                    ? "busy"
+                    : tested?.id !== row.id
+                      ? undefined
+                      : tested.result.ok
+                        ? "success"
+                        : "failure",
+                )}
                 onClick={() => runTest(row)}
               >
                 {testing === row.id ? copy.testing : copy.test}

@@ -6,6 +6,10 @@ import type {
 } from "@yunari/extension-api";
 import { useEffect, useMemo, useState } from "react";
 import { ControlSelect } from "../components/ui/control-select.js";
+import {
+  type ControlState,
+  controlStateAttributes,
+} from "../components/ui/control-state.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
 import { ControlWell } from "../components/ui/control-well.js";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
@@ -183,6 +187,11 @@ export function PluginSettingsForm(props: {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  /** The last write's outcome, kept beside its sentence: a read failure fills
+   *  `message` before any press, so the button cannot infer its state from it. */
+  const [controlState, setControlState] = useState<ControlState | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     let live = true;
@@ -210,11 +219,14 @@ export function PluginSettingsForm(props: {
     }
 
     setBusy(true);
+    setControlState("busy");
     try {
       const result = await api.write(props.page.pluginKey, payload.values);
       setMessage(result.ok ? "Saved." : (result.message ?? "Not saved."));
+      setControlState(result.ok ? "success" : "failure");
     } catch (failure: unknown) {
       setMessage(failure instanceof Error ? failure.message : String(failure));
+      setControlState("failure");
     } finally {
       setBusy(false);
     }
@@ -241,6 +253,7 @@ export function PluginSettingsForm(props: {
             type="button"
             className={ACTION_BUTTON}
             disabled={busy}
+            {...controlStateAttributes(controlState)}
             onClick={() => {
               void save();
             }}
