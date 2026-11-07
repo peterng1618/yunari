@@ -8,6 +8,7 @@ import {
   type BackgroundAnchor,
   type BackgroundMedia,
   type BackgroundMediaComposition,
+  backgroundPaintValue,
   DEFAULT_BACKGROUND_EXTENT,
   DEFAULT_BACKGROUND_MEDIA_BOUNDS,
   type FabricGlobals,
@@ -48,13 +49,11 @@ type AnchorMode = "full" | BackgroundAnchor;
 
 /** The palette reference the stored colour carries, or `""`. A literal is not a
     token this control offers, so it reads as no colour at all. The slot is
-    chosen by media presence: the media owns the colour when it exists, the
-    background's page paint otherwise — never a fallback between them. */
+    chosen by the owner (`backgroundPaintValue`): the media owns the colour when
+    it exists, the background's page paint otherwise — never a fallback between
+    them. */
 function colourRef(background: Background | undefined): string {
-  const colour =
-    background?.media === undefined
-      ? background?.color
-      : background.media.color;
+  const colour = backgroundPaintValue(background);
   return colour !== undefined &&
     "ref" in colour &&
     colour.ref.startsWith("palette.")

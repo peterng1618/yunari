@@ -148,18 +148,22 @@ provider or display that falls behind is dropped rather than growing memory.
 - `scene` is Fabric JSON. There is no second scene representation.
 - `artboard` is `{ width, height, contentFit, shape? }`; `shape` is `rect` or
   `circle`, and absent means `rect`. A circle artboard is square and its glass
-  is the inscribed disc; the field is additive, so the schema stays `2.1.0`.
-- `background` is document state: `color` is the one style value behind the
-  board and its letterbox, and `media` declares the asset, its bounds and
-  transform. `mode` is `simple` or `advanced` and absent means `simple`: the
-  full-cover media every theme authored before composition has. Only an
+  is the inscribed disc.
+- `background` is document state. `media` declares the asset, its `bounds`
+  (the theme box or the display box), transform and its own `color`;
+  `background.color` is the page paint when no media is declared. With media
+  present the media's colour is the one owner, and a document carrying both
+  slots is refused rather than read with one silently dropped. Readers resolve
+  it through `backgroundPaintValue`, never a fallback between slots. `mode` is
+  `simple` or `advanced` and absent means `simple`: the full-cover media every
+  theme authored before composition has. Only an
   `advanced` background may carry a media `composition`; the validator and the
   published schema refuse it under a simple one rather than ignore it. A
   composition anchors the picture to `top`, `right`, `bottom`, `left` or
   `center`. An edge anchor makes a band whose size along that axis is `extent`
-  (`0.1`–`1`); `color` shows on the other side, and `1` lets the band cover the
-  box. A centre anchor fits the picture's long edge, so `color` shows in exactly
-  the two opposite gaps and never surrounds the media. `fade` is the length of
+  (`0.1`–`1`); the media's own `color` shows on the other side, and `1` lets
+  the band cover the box. A centre anchor fits the picture's long edge, so its
+  colour shows in exactly the two opposite gaps and never surrounds the media. `fade` is the length of
   the eased ramp that smooths each seam into `color`; its length is a fraction
   of the box, so `1` spans the whole box. The resolver
   `resolveBackgroundComposition` is the one geometry: the DOM

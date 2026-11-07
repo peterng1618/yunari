@@ -444,6 +444,39 @@ describe("EditorDocument background media memory", () => {
     document.destroy();
   });
 
+  it("keeps the restored media colour when a page colour is also present", () => {
+    const document = memoryDocument();
+    document.setBackgroundAsset("a");
+    document.setBackground({
+      ...document.envelope.background,
+      media: {
+        assetId: "a",
+        bounds: "theme",
+        color: { ref: "palette.ink" },
+      },
+    });
+    // Clear it: the picture's paint moves to the page slot.
+    document.setBackgroundAsset(undefined);
+    // The author then edits the page colour, and chooses the picture again.
+    document.setBackground({ color: { ref: "palette.page" } });
+    document.setBackgroundAsset("a");
+
+    // The restored media's own colour wins; the page value is dropped rather
+    // than written over it.
+    expect(document.envelope.background?.color).toBeUndefined();
+    expect(document.envelope.background?.media?.color).toEqual({
+      ref: "palette.ink",
+    });
+    // And the sidecar still remembers ink, so a later round trip cannot turn
+    // the page colour into this picture's own.
+    document.setBackgroundAsset("b");
+    document.setBackgroundAsset("a");
+    expect(document.envelope.background?.media?.color).toEqual({
+      ref: "palette.ink",
+    });
+    document.destroy();
+  });
+
   it("moves the page paint onto the first picture and back when it is cleared", () => {
     const document = memoryDocument();
     document.setBackground({ color: { ref: "palette.page" } });

@@ -90,6 +90,23 @@ describe("readBackgroundMediaMemory", () => {
       }),
     ).toEqual({ good: { bounds: "theme", color: { ref: "palette.ink" } } });
   });
+  it("drops an entry whose colour names a token the palette does not declare", () => {
+    // The sidecar can outlive a token deletion. Restoring the dangling ref
+    // would write a colour the document cannot resolve, so the entry is
+    // dropped and the asset falls back to its geometry without that paint.
+    expect(
+      readBackgroundMediaMemory(
+        {
+          version: 1,
+          media: {
+            dangling: { bounds: "theme", color: { ref: "palette.gone" } },
+            live: { bounds: "theme", color: { ref: "palette.ink" } },
+          },
+        },
+        { none: {}, ink: {} },
+      ),
+    ).toEqual({ live: { bounds: "theme", color: { ref: "palette.ink" } } });
+  });
 });
 
 describe("rememberBackgroundMedia", () => {

@@ -4,7 +4,10 @@ import {
   SUPPORTED_SCHEMA_MAJOR,
   SUPPORTED_SCHEMA_VERSION,
 } from "./fabric-envelope.js";
-import { validateFabricThemeEnvelope } from "./fabric-envelope-validate.js";
+import {
+  readFabricThemeEnvelope,
+  validateFabricThemeEnvelope,
+} from "./fabric-envelope-validate.js";
 
 /** The smallest document the strict validator accepts, with the version given. */
 function envelope(schemaVersion: unknown): Record<string, unknown> {
@@ -87,6 +90,33 @@ describe("the schema version is semantic", () => {
     expect(issue.path).toBe("/schemaVersion");
     expect(issue.message).toContain("1.0.0");
     expect(issue.message).toContain("2.1.0");
+  });
+
+  it("refuses a 2.0.0 document that declares the colour beside its media", () => {
+    // The shape this bump exists for. `2.0.0` is the same major, so the reader
+    // accepts the version and reaches the validator; the old combined
+    // background is what it refuses, at the load boundary a stored theme or a
+    // package crosses.
+    const result = readFabricThemeEnvelope({
+      ...envelope("2.0.0"),
+      globals: {
+        ...(envelope("2.0.0")["globals"] as Record<string, unknown>),
+        palette: {
+          ink: { name: "Ink", value: { kind: "solid", color: "#101216" } },
+        },
+      },
+      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+      background: {
+        color: { ref: "palette.ink" },
+        media: { assetId: "clip", bounds: "theme" },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.map((issue) => issue.code)).toContain(
+      "duplicate-background-color",
+    );
   });
 
   it("reads a major numerically, and nothing else", () => {

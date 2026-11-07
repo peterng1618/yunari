@@ -23,11 +23,12 @@ import {
 export const BACKGROUND_MEDIA_MEMORY_VERSION = 1;
 
 /**
- * One asset's working geometry, everything the document's media carries except
- * the id that keys it.
+ * One asset's working data: its colour and geometry, everything the document's
+ * media carries except the id that keys it.
  *
- * It is editor working data, not authored state: it never enters the envelope,
- * the exported package or a display's read.
+ * The colour is a restored copy of authored state, not a second owner: it is
+ * written back into the envelope when the asset returns. The sidecar itself
+ * never enters the envelope, an exported package or a display's read.
  */
 export interface BackgroundMediaMemoryEntry {
   /** The paint this picture was authored against, kept with it so a switch
@@ -86,17 +87,21 @@ function numberIn(
   return value;
 }
 
-/** The authored paint: a palette reference only, because that is the one form
- *  the background's colour control writes. A literal colour is not memory: it
- *  means the entry did not come from this editor, so it is refused rather than
- *  restored under a different asset. */
+/** The authored paint: a palette reference, and one the document's palette
+ *  actually declares. A literal or a dangling token is not memory: restoring it
+ *  would write a colour the document cannot resolve, so the entry is refused
+ *  rather than restored under a different asset. */
 function readColor(
   value: unknown,
+  palette: Readonly<Record<string, unknown>> | undefined,
 ): { readonly ref: GlobalRef } | undefined | Invalid {
   if (value === undefined) return undefined;
   if (!isRecord(value)) return invalid;
   const ref = value["ref"];
   if (typeof ref !== "string" || !ref.startsWith("palette.")) return invalid;
+  if (palette !== undefined && !(ref.slice("palette.".length) in palette)) {
+    return invalid;
+  }
   return { ref: ref as GlobalRef };
 }
 
@@ -134,7 +139,10 @@ function readComposition(
  * an entry carrying a value this editor would refuse is dropped whole rather
  * than half-restored into a document that then fails its validator.
  */
-function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
+function readEntry(
+  value: unknown,
+  palette: Readonly<Record<string, unknown>> | undefined,
+): BackgroundMediaMemoryEntry | undefined {
   if (!isRecord(value)) return undefined;
   const bounds = value["bounds"];
   if (!isBounds(bounds)) return undefined;
@@ -155,7 +163,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
     MAX_BACKGROUND_SCALE,
   );
   const composition = readComposition(value["composition"]);
-  const color = readColor(value["color"]);
+  const color = readColor(value["color"], palette);
 
   const flipX = value["flipX"];
   const flipY = value["flipY"];
@@ -197,6 +205,7 @@ function readEntry(value: unknown): BackgroundMediaMemoryEntry | undefined {
  */
 export function readBackgroundMediaMemory(
   value: unknown,
+  palette?: Readonly<Record<string, unknown>>,
 ): BackgroundMediaMemory {
   if (!isRecord(value)) return {};
   if (value["version"] !== BACKGROUND_MEDIA_MEMORY_VERSION) return {};
@@ -205,7 +214,7 @@ export function readBackgroundMediaMemory(
 
   const memory: Record<string, BackgroundMediaMemoryEntry> = {};
   for (const [assetId, raw] of Object.entries(media)) {
-    const entry = readEntry(raw);
+    const entry = readEntry(raw, palette);
     if (entry !== undefined) memory[assetId] = entry;
   }
   return memory;
@@ -235,7 +244,7 @@ export function rememberBackgroundMedia(
   if (media === undefined) return memory;
 
   const { assetId, composition, color: paint, ...geometry } = media;
-  const remembered = readColor(paint);
+  const remembered = readColor(paint, undefined);
   const rememberedColor = remembered === invalid ? undefined : remembered;
   const previous = memory[assetId]?.composition;
   const next: BackgroundMediaMemoryEntry =

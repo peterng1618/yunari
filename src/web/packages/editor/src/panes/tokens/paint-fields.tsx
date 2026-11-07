@@ -4,6 +4,7 @@ import type {
   FabricPaletteEntry,
   PalettePaint,
 } from "@yunari/renderer-core";
+import { backgroundPaintValue } from "@yunari/renderer-core";
 import { newTokenPaint } from "@yunari/theme-kit";
 import { ColourPicker } from "../../components/ui/colour-picker.js";
 import { ControlSelect } from "../../components/ui/control-select.js";
@@ -70,10 +71,7 @@ export function PaintFields(props: PaintFieldsProps): React.JSX.Element {
   } = props;
   const uses = usage?.();
   const themeBackground = background?.();
-  const color =
-    themeBackground?.media === undefined
-      ? themeBackground?.color
-      : themeBackground.media.color;
+  const color = backgroundPaintValue(themeBackground);
   const referenced =
     uses === undefined ||
     (uses[id]?.length ?? 0) > 0 ||

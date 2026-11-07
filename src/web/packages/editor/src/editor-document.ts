@@ -235,7 +235,13 @@ function withOneColorOwner(background: Background): Background {
   const { media, color } = background;
   if (media === undefined || color === undefined) return background;
   const { color: _page, ...withoutPage } = background;
-  return { ...withoutPage, media: { ...media, color } };
+  // A media that already carries its own paint keeps it: the page colour is
+  // only moved onto a media that has none. Writing the page value over a
+  // restored media would make a later switch remember the page colour as that
+  // picture's own.
+  return media.color === undefined
+    ? { ...withoutPage, media: { ...media, color } }
+    : withoutPage;
 }
 
 /**

@@ -256,15 +256,22 @@ function readContent(json: unknown): ThemeLibraryContent {
       : readThemeCredits(
           new TextEncoder().encode(JSON.stringify(body.credits)),
         );
+  const envelope = body?.envelope as FabricThemeEnvelope | undefined;
   return {
-    envelope: body?.envelope as FabricThemeEnvelope,
+    envelope: envelope as FabricThemeEnvelope,
     assets: Object.fromEntries(
       Object.entries((body?.assets ?? {}) as Record<string, string>).map(
         ([assetPath, encoded]) => [assetPath, fromBase64(encoded)],
       ),
     ),
     ...(credits === undefined ? {} : { credits }),
-    backgroundMedia: readBackgroundMediaMemory(body?.backgroundMedia),
+    // A colour naming a token this document's palette does not declare is
+    // dropped with its entry: restoring it would make a document its own
+    // validator refuses.
+    backgroundMedia: readBackgroundMediaMemory(
+      body?.backgroundMedia,
+      envelope?.globals?.palette,
+    ),
     // A host that reports no base leaves the content without one, so the save
     // that follows is ungated rather than refused for a reason it cannot fix.
     ...(typeof body?.base === "string" ? { base: body.base } : {}),

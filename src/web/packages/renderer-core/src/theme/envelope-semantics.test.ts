@@ -379,6 +379,36 @@ describe("the background layer", () => {
     ).toEqual([]);
   });
 
+  it("refuses a colour declared beside a media, naming the slot that owns it", () => {
+    // The old shape: one theme-level colour and a media. Both would claim the
+    // paint, so the document is refused rather than read with one owner
+    // silently dropped.
+    const issues = issuesFor(
+      withBackground({
+        color: { ref: "palette.ink" },
+        media: { assetId: "clip", bounds: "theme" },
+      }),
+    );
+    const duplicate = issues.find(
+      (issue) => issue.code === "duplicate-background-color",
+    );
+    expect(duplicate?.path).toBe("/background/color");
+    expect(duplicate?.message).toContain("background.color");
+    expect(duplicate?.message).toContain("media");
+    // And the media's own colour is where it belongs.
+    expect(
+      codes(
+        withBackground({
+          media: {
+            assetId: "clip",
+            color: { ref: "palette.ink" },
+            bounds: "theme",
+          },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it("refuses the removed fit, and a scale or offset outside its range", () => {
     // `cover` is not a field any more but the whole model; a scale is a zoom
     // over that cover, bounded so it can neither shrink below the box nor

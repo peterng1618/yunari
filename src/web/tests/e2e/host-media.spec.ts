@@ -1025,8 +1025,11 @@ test.describe("changing media on the real player", () => {
           contentFit: "cover",
         });
         handle.updateBackground({
-          color: { ref: "palette.none" },
-          media: { assetId: "badge", bounds: "display" },
+          media: {
+            assetId: "badge",
+            color: { ref: "palette.none" },
+            bounds: "display",
+          },
         });
         const layer = document.querySelector("[data-yunari-background-media]");
         const image = layer?.querySelector("img");

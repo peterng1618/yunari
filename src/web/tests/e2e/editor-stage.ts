@@ -340,13 +340,6 @@ export async function openNewDocument(page: Page): Promise<string> {
   return chooser.locator("[data-yunari-new-document-size]").innerText();
 }
 
-export async function chooserSize(page: Page): Promise<string> {
-  return page
-    .locator('[role="dialog"]')
-    .locator("[data-yunari-new-document-size]")
-    .innerText();
-}
-
 /** Imports a picture through the Assets pane's own background action, which is
  *  the one path that changes the background asset and so remounts the layer. */
 export async function importBackground(

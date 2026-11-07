@@ -42,17 +42,11 @@ export const ARTBOARD_ORIENTATIONS: ReadonlyArray<ArtboardOrientation> = [
 ];
 
 /**
- * The shape a new document opens at when it has no prior shape to inherit.
+ * The ratio, resolution and orientation a new document opens at when it has no
+ * prior artboard to inherit.
  *
- * **Not the lens's owner.** The stage's opening lens is resolved at mount from
- * the active catalogue — its own first landscape entry — so a fresh mount after
- * 16:9 is removed from the catalogue opens the stage on a different lens while
- * a new document with no prior shape still opens at this one. (Removing the
- * live lens clears to Fit instead.) The two are the same shape today only
- * because 16:9 is the catalogue's first landscape default.
- *
- * The ratio and resolution a new document opens at, and the orientation it is
- * held.
+ * The preview lens is not chosen here: the camera derives it from the artboard
+ * this preset produces, so the chooser asks one question rather than two.
  */
 export const DEFAULT_ARTBOARD_PRESET = {
   ratio: "16:9",
@@ -65,14 +59,6 @@ interface ArtboardPresetChoice {
   readonly resolution: ArtboardResolutionId;
   readonly orientation: ArtboardOrientation;
 }
-
-/** A ratio and an orientation with no resolution attached: the shape something
-    is measured in. Carries no resolution because a display says a shape and the
-    resolution is the author's later choice — argued at `DisplayLens.shape`. */
-export type ArtboardPresetShape = Pick<
-  ArtboardPresetChoice,
-  "ratio" | "orientation"
->;
 
 /** Portrait is landscape with the two edges swapped, so one number per entry
     covers both and the two orientations cannot drift apart. */
