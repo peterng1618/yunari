@@ -138,8 +138,11 @@ function envelope(fill: "panel" | "frost" | "none", withGlass: boolean) {
       contentFit: "contain" as const,
     },
     background: {
-      color: { ref: "palette.none" as const },
-      media: { assetId: "backdrop", bounds: "theme" as const },
+      media: {
+        assetId: "backdrop",
+        color: { ref: "palette.none" as const },
+        bounds: "theme" as const,
+      },
     },
     globals: {
       palette: {

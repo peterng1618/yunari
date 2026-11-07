@@ -224,8 +224,11 @@ function packageFor(scene: Scene, backdrop: Backdrop): Uint8Array {
         contentFit: "contain" as const,
       },
       background: {
-        color: { ref: "palette.none" as const },
-        media: { assetId: asset.id, bounds: "theme" as const },
+        media: {
+          assetId: asset.id,
+          color: { ref: "palette.none" as const },
+          bounds: "theme" as const,
+        },
       },
       globals: {
         palette: {

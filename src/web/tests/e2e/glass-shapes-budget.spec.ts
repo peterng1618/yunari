@@ -131,8 +131,11 @@ function envelope(kinds: readonly Kind[]) {
       contentFit: "contain" as const,
     },
     background: {
-      color: { ref: "palette.none" as const },
-      media: { assetId: "stripes", bounds: "theme" as const },
+      media: {
+        assetId: "stripes",
+        color: { ref: "palette.none" as const },
+        bounds: "theme" as const,
+      },
     },
     globals: {
       palette: {

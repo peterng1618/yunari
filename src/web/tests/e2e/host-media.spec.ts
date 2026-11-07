@@ -58,8 +58,11 @@ const envelope = (id: string) => ({
     contentFit: "cover" as const,
   },
   background: {
-    color: { ref: "palette.none" as const },
-    media: { assetId: "loop", bounds: "theme" as const },
+    media: {
+      assetId: "loop",
+      color: { ref: "palette.none" as const },
+      bounds: "theme" as const,
+    },
   },
   globals: {
     palette: {

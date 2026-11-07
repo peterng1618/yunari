@@ -98,8 +98,11 @@ export const GLASS_ENVELOPE = {
   // Transparent, or the background paint would hide the media layer the glass
   // has to sample, on screen and in the sampled region alike.
   background: {
-    color: { ref: "palette.none" as const },
-    media: { assetId: "stripes", bounds: "theme" as const },
+    media: {
+      assetId: "stripes",
+      color: { ref: "palette.none" as const },
+      bounds: "theme" as const,
+    },
   },
   globals: {
     palette: {

@@ -93,7 +93,7 @@ describe("readBackgroundMediaMemory", () => {
   it("drops an entry whose colour names a token the palette does not declare", () => {
     // The sidecar can outlive a token deletion. Restoring the dangling ref
     // would write a colour the document cannot resolve, so the entry is
-    // dropped and the asset falls back to its geometry without that paint.
+    // dropped whole — its geometry included — and the asset starts afresh.
     expect(
       readBackgroundMediaMemory(
         {
