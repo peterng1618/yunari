@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { HeldUpdate } from "../components/held-update.js";
 import { uiCopy } from "../ui-copy.js";
 import { type InstallControl, installItem } from "./install-item.js";
 import type { ItemSource, StoreItem } from "./local-source.js";
@@ -37,6 +38,16 @@ export function useInstall(options: {
   /** What the live region says when a press succeeded: the cell redraws as
    *  *Installed*, which a screen reader cannot see. A refusal outranks it. */
   const [installed, setInstalled] = useState<string | undefined>(undefined);
+  /** The update the host held for review, with the item its approval press
+   *  names. A hold writes nothing, so the listing is unchanged. */
+  const [held, setHeld] = useState<
+    | {
+        readonly id: string;
+        readonly item: StoreItem;
+        readonly held: HeldUpdate;
+      }
+    | undefined
+  >(undefined);
 
   /**
    * **A refusal changes nothing but its reason**: the control's state stays the
@@ -44,16 +55,23 @@ export function useInstall(options: {
    * re-list the host could not serve is stated too — the theme is installed
    * even when this surface could not read the library back.
    */
-  const onInstall = (item: StoreItem): void => {
+  const press = (item: StoreItem, approveUpdate: boolean): void => {
     if (inFlight.current.has(item.id)) return;
     inFlight.current.add(item.id);
     setInstallingIds(new Set(inFlight.current));
     setRefusal(undefined);
-    // A new press clears the last success: the region must not still be saying
-    // the previous item landed while this one is being installed.
+    // A new press clears the last success and the last hold: the region must
+    // not still be saying the previous item landed while this one installs.
     setInstalled(undefined);
-    void installItem(item)
+    setHeld(undefined);
+    void installItem(item, approveUpdate ? { approveUpdate: true } : undefined)
       .then(async (outcome) => {
+        if (!outcome.ok && "held" in outcome) {
+          // Nothing was written: keep the item so its approval press can be
+          // sent again, and draw the review notice in the region.
+          setHeld({ id: item.id, item, held: outcome.held });
+          return;
+        }
         if (outcome.ok) {
           setInstalled(uiCopy.store.install.installed(item.name));
           const listed = await options.source.list().catch(() => undefined);
@@ -84,8 +102,22 @@ export function useInstall(options: {
       });
   };
 
+  const onInstall = (item: StoreItem): void => press(item, false);
+  const onApproveUpdate = (): void => {
+    if (held === undefined) return;
+    press(held.item, true);
+  };
+  const onDismissUpdate = (): void => setHeld(undefined);
+
   return {
-    control: { onInstall, installingIds, refusal },
+    control: {
+      onInstall,
+      installingIds,
+      refusal,
+      held: held === undefined ? undefined : { id: held.id, held: held.held },
+      onApproveUpdate,
+      onDismissUpdate,
+    },
     announcement: refusal?.message ?? installed ?? "",
   };
 }

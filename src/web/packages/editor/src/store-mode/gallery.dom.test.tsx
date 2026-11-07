@@ -176,6 +176,9 @@ const NO_INSTALL: InstallControl = {
   onInstall: () => undefined,
   installingIds: new Set(),
   refusal: undefined,
+  held: undefined,
+  onApproveUpdate: () => undefined,
+  onDismissUpdate: () => undefined,
 };
 
 /** The submission control a gallery mount that is not about publishing hands

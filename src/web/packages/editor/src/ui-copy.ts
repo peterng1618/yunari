@@ -217,6 +217,16 @@ export const uiCopy = {
       contributions: "Contributions",
       devices: "Device ids",
       commands: "Panel commands",
+      publisher: "Publisher",
+      /** The kill list names this plugin: it stops loading, and the advisory is
+       *  the store's own HTTPS link to why. */
+      revoked: "The store revoked this plugin.",
+      revokedAdvisory: "Read the advisory",
+      /** A held update: the same facts the update policy held it for. */
+      reviewHeading: "Update held for review",
+      reviewReasons: "This update asks for something new:",
+      reviewApprove: "Install update",
+      reviewDismiss: "Keep the installed version",
       consent: {
         "not-required": "No consent needed · descriptor only",
         granted: "Approved",
@@ -1296,6 +1306,12 @@ export const uiCopy = {
         `The host refused the install (${status}).`,
       notRefreshed:
         "The theme was installed, but the library could not be refreshed.",
+      /** A held update: the host read the package and answered with the plugin
+       *  it names and the growth that held it. */
+      reviewHeading: "Update held for review",
+      reviewReasons: "This update asks for something new:",
+      reviewApprove: "Install update",
+      reviewDismiss: "Dismiss",
       /** The one sentence the live region hears when there is no refusal: a
        *  press that succeeded is otherwise silent to a screen reader, which
        *  cannot see the cell redraw as *Installed*. */

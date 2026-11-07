@@ -1,5 +1,6 @@
 import type { InstalledExtension } from "@yunari/extension-api";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { type HeldUpdate, isHeldUpdate } from "../components/held-update.js";
 
 /**
  * The editor's half of the extension manager routes.
@@ -16,11 +17,15 @@ export interface EditorProviderOrder {
 
 export type ClientAnswer =
   | { readonly ok: true; readonly message?: string }
-  | { readonly ok: false; readonly message: string };
+  | { readonly ok: false; readonly message: string }
+  | { readonly ok: false; readonly held: HeldUpdate };
 
 export interface ExtensionClient {
   list(): Promise<readonly InstalledExtension[]>;
-  install(bytes: Uint8Array): Promise<ClientAnswer>;
+  install(
+    bytes: Uint8Array,
+    options?: { readonly approve?: boolean },
+  ): Promise<ClientAnswer>;
   grant(key: string, fingerprint: string): Promise<ClientAnswer>;
   remove(key: string): Promise<void>;
   readProviderOrder(): Promise<EditorProviderOrder>;
@@ -72,6 +77,9 @@ async function readAnswer(response: Response): Promise<ClientAnswer> {
       : { ok: true };
   }
 
+  const held = record?.["held"];
+  if (isHeldUpdate(held)) return { ok: false, held };
+
   const message = record?.["message"];
   return {
     ok: false,
@@ -102,17 +110,21 @@ export function createExtensionClient(
       return body.extensions as readonly InstalledExtension[];
     },
 
-    async install(bytes) {
+    async install(bytes, installOptions) {
       // A fresh ArrayBuffer-backed copy: `fetch` accepts a BufferSource, and a
       // view over a possibly shared buffer is not one.
       const body = new Uint8Array(bytes.byteLength);
       body.set(bytes);
-      const response = await fetcher(url("/api/extensions/install"), {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/octet-stream" },
-        body,
-      });
+      const approve = installOptions?.approve === true;
+      const response = await fetcher(
+        url(`/api/extensions/install${approve ? "?approve=1" : ""}`),
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/octet-stream" },
+          body,
+        },
+      );
       return readAnswer(response);
     },
 
@@ -162,13 +174,23 @@ export function createExtensionClient(
   };
 }
 
+/** A held update, and the package it came from: the approval press re-sends
+ *  the same bytes rather than asking the person to choose the file again. */
+export interface PendingUpdate {
+  readonly held: HeldUpdate;
+  readonly file: File;
+}
+
 export interface ExtensionsState {
   readonly extensions: readonly InstalledExtension[];
   readonly providerOrder: EditorProviderOrder;
   readonly error: string | undefined;
   readonly busy: boolean;
+  readonly pendingUpdate: PendingUpdate | undefined;
   readonly refresh: () => Promise<void>;
   readonly install: (file: File) => Promise<void>;
+  readonly approveUpdate: () => Promise<void>;
+  readonly dismissUpdate: () => void;
   readonly grant: (key: string, fingerprint: string) => Promise<void>;
   readonly remove: (key: string) => Promise<void>;
   readonly reorderProvider: (key: string, direction: -1 | 1) => Promise<void>;
@@ -189,6 +211,9 @@ export function useExtensions(client?: ExtensionClient): ExtensionsState {
     useState<EditorProviderOrder>(EMPTY_ORDER);
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | undefined>(
+    undefined,
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -214,7 +239,9 @@ export function useExtensions(client?: ExtensionClient): ExtensionsState {
       try {
         const answer = await work();
         if (answer !== undefined && !answer.ok) {
-          setError(answer.message);
+          // Only refusals reach this path; a held update is the install's own
+          // answer and is handled there.
+          if ("message" in answer) setError(answer.message);
           return;
         }
         setError(undefined);
@@ -230,13 +257,61 @@ export function useExtensions(client?: ExtensionClient): ExtensionsState {
 
   const install = useCallback(
     async (file: File): Promise<void> => {
-      await run(async () => {
+      setBusy(true);
+      try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        return api.install(bytes);
-      });
+        const answer = await api.install(bytes);
+        if ("held" in answer) {
+          // A hold is an answer, not a failure: keep the package and let the
+          // review notice's approval press send it again.
+          setPendingUpdate({ held: answer.held, file });
+          setError(undefined);
+          return;
+        }
+        if (!answer.ok) {
+          setError(answer.message);
+          return;
+        }
+        setPendingUpdate(undefined);
+        setError(undefined);
+        await refresh();
+      } catch (failure: unknown) {
+        setError(messageOf(failure));
+      } finally {
+        setBusy(false);
+      }
     },
-    [api, run],
+    [api, refresh],
   );
+
+  const approveUpdate = useCallback(async (): Promise<void> => {
+    if (pendingUpdate === undefined) return;
+    const { file } = pendingUpdate;
+    setBusy(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const answer = await api.install(bytes, { approve: true });
+      if ("held" in answer) {
+        setPendingUpdate({ held: answer.held, file });
+        return;
+      }
+      if (!answer.ok) {
+        setError(answer.message);
+        return;
+      }
+      setPendingUpdate(undefined);
+      setError(undefined);
+      await refresh();
+    } catch (failure: unknown) {
+      setError(messageOf(failure));
+    } finally {
+      setBusy(false);
+    }
+  }, [api, pendingUpdate, refresh]);
+
+  const dismissUpdate = useCallback((): void => {
+    setPendingUpdate(undefined);
+  }, []);
 
   const grant = useCallback(
     async (key: string, fingerprint: string): Promise<void> => {
@@ -278,18 +353,24 @@ export function useExtensions(client?: ExtensionClient): ExtensionsState {
       providerOrder,
       error,
       busy,
+      pendingUpdate,
       refresh,
       install,
+      approveUpdate,
+      dismissUpdate,
       grant,
       remove,
       reorderProvider,
     }),
     [
+      approveUpdate,
       busy,
+      dismissUpdate,
       error,
       extensions,
       grant,
       install,
+      pendingUpdate,
       providerOrder,
       refresh,
       remove,

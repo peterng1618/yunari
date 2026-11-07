@@ -1920,6 +1920,14 @@ function installHost(options: {
   readonly entries: readonly unknown[];
   readonly refusal?: string;
   readonly hold?: boolean;
+  /** Answers the first install with a held update; the approval press (the
+   *  second post) succeeds. */
+  readonly held?: {
+    readonly key: string;
+    readonly name: string;
+    readonly publisher: string;
+    readonly reasons: readonly string[];
+  };
   readonly onInstall?: () => void;
 }): {
   readonly fetch: typeof fetch;
@@ -1944,6 +1952,11 @@ function installHost(options: {
     if (options.hold === true) {
       await new Promise<void>((resolve) => {
         releases.push(resolve);
+      });
+    }
+    if (options.held !== undefined && posts.length === 1) {
+      return new Response(JSON.stringify({ ok: false, held: options.held }), {
+        status: 409,
       });
     }
     return options.refusal === undefined
@@ -2435,6 +2448,65 @@ it("installs from the cell's Install and re-lists so the cell reads Installed", 
       ?.textContent,
     "the cell does not read the listing's own word after the install",
   ).toContain(uiCopy.store.cell.installStates.installed);
+});
+
+/**
+ * **A held update is drawn as a review notice, and approving it installs.**
+ * The host read the package and wrote nothing, so the cell still reads
+ * *Install*; the notice names the plugin and every reason, and its press
+ * re-posts the same item with the approval flag.
+ */
+it("draws a held update's review notice and installs it on approval", async () => {
+  const library: ThemeLibraryEntry[] = [];
+  const held = {
+    key: "acme/office-wall",
+    name: "Office wall",
+    publisher: "acme",
+    reasons: ["capability:sensor:provide"],
+  };
+  const host = installHost({
+    entries: [catalogueEntry("office-wall", "1.3.0")],
+    held,
+    onInstall: () => library.push(installedCopy("office-wall")),
+  });
+  vi.stubGlobal("fetch", host.fetch);
+  await mountStore(library);
+  await showOnline();
+
+  await act(async () => installControl("office-wall").click());
+  await settle();
+
+  const notice = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-held-update]"),
+    "held-update notice",
+  );
+  expect(notice.textContent).toContain("acme/office-wall");
+  expect(notice.textContent).toContain("Office wall");
+  expect(notice.textContent).toContain("acme");
+  expect(notice.textContent).toContain("capability:sensor:provide");
+  expect(
+    installReadings(),
+    "a held update changed the listing though nothing was written",
+  ).toEqual([["office-wall", "install"]]);
+
+  const approve = must(
+    document.body.querySelector<HTMLButtonElement>(
+      "[data-yunari-held-approve]",
+    ),
+    "approval press",
+  );
+  await act(async () => approve.click());
+  await settle();
+
+  expect(
+    host.posts[1],
+    "the approval press did not re-post the same item with the flag",
+  ).toMatchObject({ catalogueId: "office-wall", approveUpdate: true });
+  expect(
+    document.body.querySelector("[data-yunari-held-update]"),
+    "the notice outlived the install it approved",
+  ).toBeNull();
+  expect(installReadings()).toEqual([["office-wall", "installed"]]);
 });
 
 /**

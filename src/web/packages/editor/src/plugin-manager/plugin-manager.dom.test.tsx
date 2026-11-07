@@ -4,7 +4,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { PluginManager } from "./plugin-manager.js";
-import type { EditorProviderOrder } from "./use-extensions.js";
+import type { EditorProviderOrder, PendingUpdate } from "./use-extensions.js";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -41,6 +41,7 @@ function extension(
   return {
     key: "local/acme-sensors",
     name: "Acme Sensors",
+    publisher: "local",
     version: "1.2.0",
     execution: "trusted-worker",
     capabilities: ["sensor:provide"],
@@ -58,7 +59,10 @@ function render(
     readonly providerOrder?: EditorProviderOrder;
     readonly busy?: boolean;
     readonly error?: string;
+    readonly pendingUpdate?: PendingUpdate;
     readonly onInstall?: (file: File) => void;
+    readonly onApproveUpdate?: () => void;
+    readonly onDismissUpdate?: () => void;
     readonly onGrant?: (key: string, fingerprint: string) => void;
     readonly onRemove?: (key: string) => void;
     readonly onReorderProvider?: (key: string, direction: -1 | 1) => void;
@@ -70,7 +74,10 @@ function render(
       providerOrder={overrides.providerOrder ?? ORDER}
       busy={overrides.busy ?? false}
       error={overrides.error}
+      pendingUpdate={overrides.pendingUpdate}
       onInstall={overrides.onInstall ?? vi.fn()}
+      onApproveUpdate={overrides.onApproveUpdate ?? vi.fn()}
+      onDismissUpdate={overrides.onDismissUpdate ?? vi.fn()}
       onGrant={overrides.onGrant ?? vi.fn()}
       onRemove={overrides.onRemove ?? vi.fn()}
       onReorderProvider={overrides.onReorderProvider ?? vi.fn()}
@@ -171,4 +178,70 @@ it("shows the host's error verbatim", () => {
   expect(document.body.textContent).toContain(
     "That plugin could not be installed.",
   );
+});
+
+it("shows each plugin's publisher", () => {
+  render({ extensions: [extension({ publisher: "acme-signals" })] });
+
+  expect(document.body.textContent).toContain("Publisher: acme-signals");
+});
+
+it("links a revoked plugin's HTTPS advisory", () => {
+  render({
+    extensions: [
+      extension({
+        revoked: { advisory: "https://store.test/advisories/acme-sensors" },
+      }),
+    ],
+  });
+
+  const row = document.querySelector("[data-yunari-extension-revoked]");
+  expect(row?.textContent).toContain("revoked");
+  const link = document.querySelector<HTMLAnchorElement>(
+    "[data-yunari-extension-revoked] a",
+  );
+  expect(link?.getAttribute("href")).toBe(
+    "https://store.test/advisories/acme-sensors",
+  );
+  expect(link?.getAttribute("target")).toBe("_blank");
+  expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+});
+
+it("never links an advisory that is not HTTPS", () => {
+  render({
+    extensions: [extension({ revoked: { advisory: "javascript:alert(1)" } })],
+  });
+
+  expect(
+    document.querySelector("[data-yunari-extension-revoked]"),
+  ).not.toBeNull();
+  expect(
+    document.querySelector("[data-yunari-extension-revoked] a"),
+  ).toBeNull();
+});
+
+it("draws a held update's review notice and approves it", () => {
+  const onApproveUpdate = vi.fn();
+  render({
+    pendingUpdate: {
+      held: {
+        key: "local/acme-sensors",
+        name: "Acme Sensors",
+        publisher: "local",
+        reasons: ["device:hid:1234:5678"],
+      },
+      file: new File([new Uint8Array([1])], "acme.zip"),
+    },
+    onApproveUpdate,
+  });
+
+  const notice = document.querySelector("[data-yunari-held-update]");
+  expect(notice?.textContent).toContain("local/acme-sensors");
+  expect(notice?.textContent).toContain("Acme Sensors");
+  expect(notice?.textContent).toContain("device:hid:1234:5678");
+
+  act(() => {
+    button("Install update")?.click();
+  });
+  expect(onApproveUpdate).toHaveBeenCalledTimes(1);
 });

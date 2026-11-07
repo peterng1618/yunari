@@ -3,21 +3,40 @@ import type {
   PluginContributions,
 } from "@yunari/extension-api";
 import type * as React from "react";
+import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
 import { Page } from "../settings-mode/page.js";
 import { Group } from "../settings-mode/section-group.js";
 import { uiCopy } from "../ui-copy.js";
-import { type EditorProviderOrder, useExtensions } from "./use-extensions.js";
+import {
+  type EditorProviderOrder,
+  type PendingUpdate,
+  useExtensions,
+} from "./use-extensions.js";
 
 export interface PluginManagerProps {
   readonly extensions: readonly InstalledExtension[];
   readonly providerOrder: EditorProviderOrder;
   readonly busy: boolean;
   readonly error: string | undefined;
+  readonly pendingUpdate: PendingUpdate | undefined;
   readonly onInstall: (file: File) => void;
+  readonly onApproveUpdate: () => void;
+  readonly onDismissUpdate: () => void;
   readonly onGrant: (key: string, fingerprint: string) => void;
   readonly onRemove: (key: string) => void;
   readonly onReorderProvider: (key: string, direction: -1 | 1) => void;
+}
+
+/** The advisory as a link only when it is an HTTPS URL. The host validated it
+ *  before serving it; this refuses anything a hand-edited listing could carry. */
+function advisoryUrl(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return new URL(value).protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const CONTRIBUTION_GROUPS = [
@@ -68,9 +87,11 @@ function ExtensionRow(props: {
   readonly onRemove: (key: string) => void;
 }): React.JSX.Element {
   const { extension } = props;
+  const copy = uiCopy.settings.extensions;
   const names = contributionNames(extension.contributions);
   const devices = deviceIds(extension.contributions);
   const commands = panelCommands(extension.contributions);
+  const advisory = advisoryUrl(extension.revoked?.advisory);
 
   return (
     <div
@@ -81,6 +102,27 @@ function ExtensionRow(props: {
       <p className="m-0 text-xs text-muted">
         {extension.key} · {extension.version} · {extension.execution}
       </p>
+      <p className="m-0 text-xs text-muted">
+        {copy.publisher}: {extension.publisher}
+      </p>
+      {extension.revoked === undefined ? null : (
+        <p data-yunari-extension-revoked="" className="m-0 text-xs text-warn">
+          {copy.revoked}
+          {advisory === undefined ? null : (
+            <>
+              {" "}
+              <a
+                href={advisory}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline"
+              >
+                {copy.revokedAdvisory}
+              </a>
+            </>
+          )}
+        </p>
+      )}
       <p className="m-0 text-xs text-muted">
         {uiCopy.settings.extensions.capabilities}:{" "}
         {extension.capabilities.join(", ")}
@@ -164,6 +206,18 @@ export function PluginManager(props: PluginManagerProps): React.JSX.Element {
             }}
           />
         </label>
+        {props.pendingUpdate === undefined ? null : (
+          <HeldUpdateNotice
+            held={props.pendingUpdate.held}
+            heading={copy.reviewHeading}
+            reasonsLabel={copy.reviewReasons}
+            approveLabel={copy.reviewApprove}
+            dismissLabel={copy.reviewDismiss}
+            disabled={props.busy}
+            onApprove={props.onApproveUpdate}
+            onDismiss={props.onDismissUpdate}
+          />
+        )}
       </Group>
 
       <Group testId="extensions-installed" name={copy.installedHeading}>
@@ -233,9 +287,14 @@ export function ExtensionsPage(): React.JSX.Element {
       providerOrder={state.providerOrder}
       busy={state.busy}
       error={state.error}
+      pendingUpdate={state.pendingUpdate}
       onInstall={(file) => {
         void state.install(file);
       }}
+      onApproveUpdate={() => {
+        void state.approveUpdate();
+      }}
+      onDismissUpdate={state.dismissUpdate}
       onGrant={(key, fingerprint) => {
         void state.grant(key, fingerprint);
       }}

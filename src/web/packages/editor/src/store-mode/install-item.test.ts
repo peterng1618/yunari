@@ -109,6 +109,44 @@ it("refuses a library item without posting an install of nothing", async () => {
   );
 });
 
+/** A held update is the host's answer that it read the package and wrote
+ *  nothing: the outcome carries the facts the review notice draws. */
+it("returns a held update as its own outcome", async () => {
+  const held = {
+    key: "local/office-wall",
+    name: "Office wall",
+    publisher: "local",
+    reasons: ["capability:sensor:provide"],
+  };
+  const outcome = await installItem(ITEM, {
+    fetch: (async () =>
+      new Response(JSON.stringify({ ok: false, held }), {
+        status: 409,
+      })) as unknown as typeof fetch,
+  });
+
+  expect(outcome).toEqual({ ok: false, held });
+});
+
+it("posts the approval flag when the held update is approved", async () => {
+  let posted: Record<string, unknown> | undefined;
+  const outcome = await installItem(ITEM, {
+    approveUpdate: true,
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      posted = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ ok: true, id: "office-wall" }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch,
+  });
+
+  expect(outcome).toEqual({ ok: true });
+  expect(posted).toMatchObject({
+    catalogueId: "office-wall",
+    approveUpdate: true,
+  });
+});
+
 /** A refusal with no body still says the host refused, rather than answering an
  *  empty string the surface would draw as a blank line. */
 it("states the refusal when the host sends no sentence", async () => {

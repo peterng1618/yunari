@@ -5,6 +5,7 @@ import {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlWell } from "../components/ui/control-well.js";
@@ -1047,6 +1048,23 @@ function StoreRegion(props: {
           <div ref={sentinel} data-yunari-store-more="" aria-hidden="true" />
         ) : null}
       </div>
+
+      {/* An update the host held for review: nothing was written, so the
+          notice sits beside the listing it did not change and its approval
+          press re-posts the same item with the flag. */}
+      {install.control.held === undefined ? null : (
+        <div className="flex-none px-[var(--space-16)] pt-[var(--space-8)]">
+          <HeldUpdateNotice
+            held={install.control.held.held}
+            heading={uiCopy.store.install.reviewHeading}
+            reasonsLabel={uiCopy.store.install.reviewReasons}
+            approveLabel={uiCopy.store.install.reviewApprove}
+            dismissLabel={uiCopy.store.install.reviewDismiss}
+            onApprove={install.control.onApproveUpdate}
+            onDismiss={install.control.onDismissUpdate}
+          />
+        </div>
+      )}
 
       {/* The host's refusal of a removal, beside the listing it did not change:
           the theme is still there, so a sentence saying why is the whole of the

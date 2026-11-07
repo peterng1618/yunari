@@ -424,6 +424,7 @@ describe("AssetFinder tabs", () => {
         {
           key: "local/acme",
           name: "Acme",
+          publisher: "local",
           version: "1.0.0",
           execution: "declarative",
           capabilities: ["asset:provide"],

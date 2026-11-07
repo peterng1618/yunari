@@ -171,6 +171,9 @@ const NO_INSTALL: InstallControl = {
   onInstall: () => undefined,
   installingIds: new Set(),
   refusal: undefined,
+  held: undefined,
+  onApproveUpdate: () => undefined,
+  onDismissUpdate: () => undefined,
 };
 
 /** The submit control a case that is not about submitting hands down: idle,

@@ -1,3 +1,4 @@
+import { type HeldUpdate, isHeldUpdate } from "../components/held-update.js";
 import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
@@ -6,7 +7,9 @@ const INSTALL_PATH = "/api/store/install";
 
 export type InstallOutcome =
   | { readonly ok: true }
-  | { readonly ok: false; readonly message: string };
+  | { readonly ok: false; readonly message: string }
+  /** The host read the package, held the update, and wrote nothing. */
+  | { readonly ok: false; readonly held: HeldUpdate };
 
 /**
  * What both install controls need from the region that owns the press: the
@@ -24,6 +27,12 @@ export interface InstallControl {
   readonly refusal:
     | { readonly id: string; readonly message: string }
     | undefined;
+  /** The update a press was held for, and the item it names. */
+  readonly held: { readonly id: string; readonly held: HeldUpdate } | undefined;
+  /** Presses the held item again with the approval flag. */
+  readonly onApproveUpdate: () => void;
+  /** Leaves the notice standing on nothing; nothing was written. */
+  readonly onDismissUpdate: () => void;
 }
 
 /**
@@ -41,7 +50,11 @@ export interface InstallControl {
  */
 export async function installItem(
   item: StoreItem,
-  options?: { readonly fetch?: typeof fetch },
+  options?: {
+    readonly fetch?: typeof fetch;
+    /** The approval press for an update the host held. */
+    readonly approveUpdate?: boolean;
+  },
 ): Promise<InstallOutcome> {
   const catalogue = item.catalogue;
   const version = item.version;
@@ -70,6 +83,7 @@ export async function installItem(
         ...(catalogue.publisher === undefined
           ? {}
           : { publisher: catalogue.publisher }),
+        ...(options?.approveUpdate === true ? { approveUpdate: true } : {}),
       }),
     });
   } catch (error) {
@@ -81,6 +95,14 @@ export async function installItem(
 
   if (!response.ok) {
     const reason = await response.text().catch(() => "");
+    // A held update is an answer, not a refusal: the body names the plugin and
+    // the growth that held it, and the region draws that as a review notice.
+    try {
+      const body = JSON.parse(reason) as { held?: unknown };
+      if (isHeldUpdate(body.held)) return { ok: false, held: body.held };
+    } catch {
+      // Not the held shape: fall through to the host's own sentence.
+    }
     return {
       ok: false,
       message:
