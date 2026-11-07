@@ -6,6 +6,7 @@ import {
   type Page,
   test,
 } from "@playwright/test";
+import { chooseIn } from "./control-set.js";
 import {
   HOST_DISK_THEME_ID,
   HOST_PORT,
@@ -15,13 +16,14 @@ import {
 } from "./host-theme.js";
 import { isDesktopSurface } from "./surface.js";
 
-/** Drives the consumer settings page against the real host. The page is the
- * only surface where global settings and a theme's own questions meet, and the
- * difference is invisible anywhere else: reading `/api/devices` cannot tell a
- * choice the page hid from one the consumer saved.
+/** Drives the consumer settings surface against the real host. `/settings`
+ * forwards to the editor's Settings mode, and that surface is the only one
+ * where global settings and a theme's own questions meet — a difference
+ * invisible anywhere else, because reading `/api/devices` cannot tell a choice
+ * the surface hid from one the consumer saved.
  *
- * The last describe drives the chooser the host serves at `/` rather than this
- * page, because the theme list its two cases are about is that page's now. */
+ * The second describe drives the chooser the host serves at `/` rather than
+ * this surface, because the theme list its cases are about is that page's. */
 
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
 
@@ -118,12 +120,17 @@ async function assignedSystemDisk(request: APIRequestContext): Promise<string> {
   return (await deviceState(request)).assigned["system-disk"] ?? "";
 }
 
-/** One theme's answers, for the display this page answers for. */
+/** One theme's answers, for the display the Settings surface answers for.
+ *  The editor's list always leads with the Host, and it is the row the surface
+ *  selects until another is pressed. */
 async function answersFor(
   request: APIRequestContext,
   id: string,
+  display = "this-pc",
 ): Promise<Record<string, string>> {
-  const response = await request.get(`${HOST}/api/themes/${id}/answers`);
+  const response = await request.get(
+    `${HOST}/api/themes/${id}/answers?display=${display}`,
+  );
   const body = (await response.json()) as { answers: Record<string, string> };
   return body.answers;
 }
@@ -158,7 +165,37 @@ async function setActiveTheme(
   if (!response.ok()) throw new Error(await response.text());
 }
 
-const questions = (page: Page) => page.locator("#questions-section");
+/** The section a theme's unanswered slots raise, on the Displays page. */
+const questions = (page: Page) =>
+  page.locator('[data-yunari-host-section="questions"]');
+
+/** The Settings mode's published status line, in the shell's footer. */
+const status = (page: Page) => page.locator("[data-yunari-host-status]");
+
+/**
+ * Opens the one settings surface. `/settings` forwards to the editor's React
+ * Settings mode, so every case waits for that mode to be the one showing
+ * rather than for a host-served document.
+ */
+async function openSettings(page: Page): Promise<void> {
+  await page.goto(`${HOST}/settings`);
+  await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
+    "data-yunari-mode-region",
+    "settings",
+  );
+}
+
+/** Opens Settings on one of its pages, and waits for that panel to show. */
+async function openPage(
+  page: Page,
+  id: "displays" | "hardware" | "units",
+): Promise<void> {
+  await openSettings(page);
+  await page.locator(`[data-yunari-settings-nav-item="${id}"]`).click();
+  await expect(
+    page.locator(`[data-yunari-settings-panel="${id}"]`),
+  ).toBeVisible();
+}
 
 test.describe("the settings page a consumer configures", () => {
   // One host process and one set of stores, so these states are travelled in
@@ -166,13 +203,14 @@ test.describe("the settings page a consumer configures", () => {
   test.describe.configure({ mode: "serial" });
 
   /**
-   * The removal this task is (R116): the page keeps this PC's own sections and
-   * the questions a theme raises, and no longer lists themes. The listing is the
-   * chooser's (`/`) and the store mode's local half.
+   * `/settings` is the editor's Settings mode now — one settings surface rather
+   * than a second hand-written document. The page keeps this PC's own sections
+   * and the questions a theme raises, and still lists no themes: the listing is
+   * the chooser's (`/`) and the store mode's local half.
    *
-   * The devices are asserted first on purpose: `toHaveCount(0)` is satisfied by
-   * a page that never rendered at all, so the section that is still there is
-   * what says the page ran.
+   * The nav is asserted first on purpose: `toHaveCount(0)` is satisfied by a
+   * page that never rendered at all, so the surface that is still there is what
+   * says the page ran.
    */
   test("lists no themes, and keeps this PC's own sections", async ({
     page,
@@ -183,9 +221,17 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     resetStores();
-    await page.goto(`${HOST}/settings`);
-    await expect(page.locator("#devices-heading")).toBeVisible();
-    await expect(page.locator("#status")).toHaveText(
+    await openSettings(page);
+    await expect(
+      page.locator('[data-yunari-settings-panel="displays"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-yunari-settings-nav-item="hardware"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-yunari-settings-nav-item="units"]'),
+    ).toBeVisible();
+    await expect(status(page)).toHaveText(
       "Changes apply to every display immediately.",
     );
 
@@ -206,24 +252,34 @@ test.describe("the settings page a consumer configures", () => {
     test.skip(disks.length === 0, "this machine reports no disks");
 
     resetStores();
-    await page.goto(`${HOST}/settings`);
-    const legends = page.locator("#groups fieldset legend");
-    await expect(legends.first()).toBeVisible();
-    const before = await legends.allTextContents();
+    await openPage(page, "hardware");
+    const groups = page.locator("[data-yunari-host-device-group]");
+    await expect(groups.first()).toBeVisible();
+    const before = await groups.evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("data-yunari-host-device-group")),
+    );
 
     // The bug this guards: filtering the machine's own settings by the active
     // theme hides a drive the consumer chose and cannot reach again. The theme
     // is the host's state now rather than a press on this page, so the page is
     // loaded again under it — which is the read the filter would have to survive.
     await setActiveTheme(request, HOST_DISK_THEME_ID);
-    await page.reload();
-    await expect(legends.first()).toBeVisible();
-    expect(await legends.allTextContents()).toEqual(before);
+    await openPage(page, "hardware");
+    await expect(groups.first()).toBeVisible();
+    expect(
+      await groups.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute("data-yunari-host-device-group")),
+      ),
+    ).toEqual(before);
 
     await setActiveTheme(request, HOST_THEME_ID);
-    await page.reload();
-    await expect(legends.first()).toBeVisible();
-    expect(await legends.allTextContents()).toEqual(before);
+    await openPage(page, "hardware");
+    await expect(groups.first()).toBeVisible();
+    expect(
+      await groups.evaluateAll((rows) =>
+        rows.map((row) => row.getAttribute("data-yunari-host-device-group")),
+      ),
+    ).toEqual(before);
   });
 
   test("saves this PC's device choice with no theme chosen", async ({
@@ -239,18 +295,24 @@ test.describe("the settings page a consumer configures", () => {
     test.skip(disks.length === 0, "this machine reports no disks");
 
     resetStores();
-    await page.goto(`${HOST}/settings`);
-    await expect(questions(page)).toBeHidden();
+    await openPage(page, "hardware");
+    await expect(questions(page)).toHaveCount(0);
 
     const chosen = disks[0]!;
-    await page.locator('select[data-group="system-disk"]').selectOption(chosen);
-    await expect(page.locator("#status")).toHaveText(
+    const control = page.locator(
+      '[data-yunari-host-device-group="system-disk"]',
+    );
+    // The page draws no controls until the host has answered the device read.
+    await expect(control).toBeVisible();
+    await chooseIn(page, control, chosen);
+    await expect(status(page)).toHaveText(
       "Saved. Displays update on their next frame.",
     );
     expect(await assignedSystemDisk(request)).toBe(chosen);
 
-    await page.reload();
-    await expect(page.locator('select[data-group="system-disk"]')).toHaveValue(
+    await openPage(page, "hardware");
+    await expect(control.locator("[data-yunari-value]")).toHaveAttribute(
+      "data-yunari-value",
       chosen,
     );
   });
@@ -279,25 +341,27 @@ test.describe("the settings page a consumer configures", () => {
     });
 
     try {
-      await page.goto(`${HOST}/settings`);
+      await openPage(page, "hardware");
 
       // One field per reported device, labelled by that device. The bug this
       // guards: a group following the default points at no single device, and a
       // name field hung off the group renamed whichever device came first.
-      const field = page.locator(`#groups input[data-name="${other}"]`);
-      await expect(page.locator("#groups input[data-name]")).toHaveCount(
+      const field = page.locator(`input[data-yunari-host-name="${other}"]`);
+      await expect(page.locator("input[data-yunari-host-name]")).toHaveCount(
         before.available.gpus.length + before.available.disks.length,
       );
       await expect(
-        page.locator(`label:has(input[data-name="${other}"])`),
+        page.locator(`label[for="yunari-host-name-${other}"]`),
       ).toHaveText(reported);
-      await expect(page.locator('select[data-group="data-disk"]')).toHaveValue(
-        "",
-      );
+      await expect(
+        page.locator(
+          '[data-yunari-host-device-group="data-disk"] [data-yunari-value]',
+        ),
+      ).toHaveAttribute("data-yunari-value", "");
 
       await field.fill("Archive");
       await field.blur();
-      await expect(page.locator("#status")).toHaveText(
+      await expect(status(page)).toHaveText(
         "Saved. Displays update on their next frame.",
       );
 
@@ -323,19 +387,30 @@ test.describe("the settings page a consumer configures", () => {
     // `display.json` is in the same directory but not in `resetStores`, so this
     // clears it too.
     await request.put(`${HOST}/api/display`, { data: {} });
-    await page.goto(`${HOST}/settings`);
-    await expect(page.locator("#timezone option").first()).toBeAttached();
+    await openPage(page, "units");
 
     try {
-      await page.locator("#measurement").selectOption("imperial");
-      await expect(page.locator("#status")).toHaveText(
+      // The controls arrive with the display read, after the panel is showing.
+      await expect(
+        page.locator("[data-yunari-host-measurement]"),
+      ).toBeVisible();
+      await chooseIn(
+        page,
+        page.locator("[data-yunari-host-measurement]"),
+        "imperial",
+      );
+      await expect(status(page)).toHaveText(
         "Saved. Displays already open keep their old units until they reload.",
       );
 
       // The host replaces the whole settings object, so a page that sent one
       // field at a time would drop the other without saying so.
-      await page.locator("#timezone").selectOption("Asia/Tokyo");
-      await expect(page.locator("#status")).toHaveText(
+      await chooseIn(
+        page,
+        page.locator("[data-yunari-host-time-zone]"),
+        "Asia/Tokyo",
+      );
+      await expect(status(page)).toHaveText(
         "Saved. Displays update on their next frame.",
       );
 
@@ -347,9 +422,13 @@ test.describe("the settings page a consumer configures", () => {
         measurement: "imperial",
       });
 
-      await page.reload();
-      await expect(page.locator("#timezone")).toHaveValue("Asia/Tokyo");
-      await expect(page.locator("#measurement")).toHaveValue("imperial");
+      await openPage(page, "units");
+      await expect(
+        page.locator("[data-yunari-host-time-zone] [data-yunari-value]"),
+      ).toHaveAttribute("data-yunari-value", "Asia/Tokyo");
+      await expect(
+        page.locator("[data-yunari-host-measurement] [data-yunari-value]"),
+      ).toHaveAttribute("data-yunari-value", "imperial");
     } finally {
       await request.put(`${HOST}/api/display`, { data: {} });
     }
@@ -374,54 +453,59 @@ test.describe("the settings page a consumer configures", () => {
     const other = disks.find((disk) => disk !== global) ?? disks[0]!;
 
     await setActiveTheme(request, HOST_DISK_THEME_ID);
-    await page.goto(`${HOST}/settings`);
+    await openSettings(page);
     await expect(questions(page)).toBeVisible();
     // The theme reads a disk and nothing else, so one question, once.
-    await expect(page.locator("#questions fieldset legend")).toHaveText([
-      "System disk",
-    ]);
+    await expect(questions(page).locator("h3")).toContainText("needs");
+    await expect(
+      page.locator('[data-yunari-host-answer="system-disk"]'),
+    ).toBeVisible();
 
-    await page
-      .locator('select[data-question="system-disk"]')
-      .selectOption(other);
-    await expect(page.locator("#status")).toHaveText(
+    await chooseIn(
+      page,
+      page.locator('[data-yunari-host-answer="system-disk"]'),
+      other,
+    );
+    await expect(status(page)).toHaveText(
       "Saved. Only this theme is affected.",
     );
 
     // Answered: the question stops being asked, and the answer is stored
-    // against the theme rather than against the machine.
-    await expect(questions(page)).toBeHidden();
+    // against the theme and the display the surface speaks for — not against
+    // the machine's own device choice.
+    await expect(questions(page)).toHaveCount(0);
     expect(await answersFor(request, HOST_DISK_THEME_ID)).toEqual({
       "system-disk": other,
     });
     expect(await assignedSystemDisk(request)).toBe(global);
 
-    await page.reload();
-    await expect(questions(page)).toBeHidden();
-    await expect(page.locator('select[data-group="system-disk"]')).toHaveValue(
-      global,
-    );
+    // The answer survives a fresh read of the host, not only this render.
+    await openSettings(page);
+    await expect(questions(page)).toHaveCount(0);
+    await openPage(page, "hardware");
+    await expect(
+      page.locator(
+        '[data-yunari-host-device-group="system-disk"] [data-yunari-value]',
+      ),
+    ).toHaveAttribute("data-yunari-value", global);
   });
 
   /**
-   * The answers URL resolves end to end, for the display this page answers for,
-   * and the page says which one that is.
+   * The answers URL resolves end to end, for the display the Settings surface
+   * speaks for.
    *
-   * The page builds it as
-   * `/api/themes/<theme>/answers?display=<the display it answers for>`, so this
-   * is where the page's own copy, the query, the route's `display` parameter and
-   * the store's key all have to agree. A URL that dropped the query would still
-   * answer 200 and still save; it would just save under a key the page never
+   * The surface builds it as
+   * `/api/themes/<theme>/answers?display=<the selected display>`, so this is
+   * where its own copy, the query, the route's `display` parameter and the
+   * store's key all have to agree. A URL that dropped the query would still
+   * answer 200 and still save; it would just save under a key the surface never
    * named.
    *
-   * **The page answers for the default and can answer for no other.** The column
-   * that used to move it lived inside the theme list, and the listing is the
-   * chooser's now (R153), so **the per-display half of this case rests on
-   * `vg-649`** — answering for a display other than the default, on a page with
-   * no editor open, is the capability the removal costs, and it is the user's to
-   * decide rather than this case's to keep.
+   * **The display is the row selected in the list**, which opens on the Host.
+   * The section's own sentence names what a theme needs rather than the default
+   * display the old hand-written page could answer for.
    */
-  test("answers a theme's question for the default display, and says so", async ({
+  test("answers a theme's question for the display the surface speaks for", async ({
     page,
     request,
   }, testInfo) => {
@@ -437,18 +521,23 @@ test.describe("the settings page a consumer configures", () => {
     const chosen = disks[0]!;
     await setActiveTheme(request, HOST_DISK_THEME_ID);
 
-    await page.goto(`${HOST}/settings`);
+    await openSettings(page);
     await expect(questions(page)).toBeVisible();
-    // Said rather than left to be assumed, which is the whole of what R153
-    // leaves the page to do about the display it answers for.
-    await expect(page.locator("#questions-hint")).toContainText(
-      "default display",
+    // The question belongs to the display the list has selected, and the Host
+    // is the first row.
+    await expect(
+      page.locator('[data-yunari-host-display="this-pc"]'),
+    ).toBeVisible();
+    await expect(questions(page).locator("p").first()).toContainText(
+      "reads hardware that has no answer yet",
     );
 
-    await page
-      .locator('select[data-question="system-disk"]')
-      .selectOption(chosen);
-    await expect(page.locator("#status")).toHaveText(
+    await chooseIn(
+      page,
+      page.locator('[data-yunari-host-answer="system-disk"]'),
+      chosen,
+    );
+    await expect(status(page)).toHaveText(
       "Saved. Only this theme is affected.",
     );
 
@@ -467,26 +556,27 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     resetStores();
-    // A theme that *does* read something goes first: the section is hidden on
-    // load, so `toBeHidden()` alone is satisfied by a page that never asked —
-    // and the whole claim is that this page asked and found nothing to draw.
+    // A theme that *does* read something goes first: the section is not drawn
+    // when there is nothing to ask, so `toHaveCount(0)` alone is satisfied by a
+    // surface that never asked — and the whole claim is that this one asked and
+    // found nothing to draw.
     await setActiveTheme(request, HOST_DISK_THEME_ID);
-    await page.goto(`${HOST}/settings`);
+    await openSettings(page);
     await expect(questions(page)).toBeVisible();
 
     await setActiveTheme(request, HOST_THEME_ID);
-    await page.reload();
-    await expect(questions(page)).toBeHidden();
+    await openSettings(page);
+    await expect(questions(page)).toHaveCount(0);
   });
 });
 
 /**
  * The chooser the host serves at `/` while this browser's own screen has no
- * theme: the page a phone, or a browser with no editor open, reaches. It draws
- * the same rows from the same `/settings/theme-list.js` the settings page did,
- * so the two cases whose subject *is* that list live here now (R116).
+ * theme: the page a phone, or a browser with no editor open, reaches. It is the
+ * React admin entry (`src/admin/chooser.tsx`), which owns its rows now that the
+ * old hand-written list is deleted.
  *
- * **`/library` is not a route.** The chooser document is `library.html`, and the
+ * **`/library` is not a route.** The chooser document is `chooser.html`, and the
  * host serves it at `/` — through the admin bundle, and only while nothing is
  * chosen for the caller and the theme list is not empty. A press that gives the
  * caller's own screen a theme hands it to that screen's dashboard instead, so a
@@ -689,13 +779,15 @@ test.describe("the settings page in a screenshot", () => {
 
     resetStores();
     await setActiveTheme(request, HOST_DISK_THEME_ID);
-    await page.goto(`${HOST}/settings`);
-    // The page reads its three sections at once; a capture is the settled page,
-    // not whichever section happened to arrive first.
-    await expect(page.locator("#status")).toHaveText(
+    await openSettings(page);
+    // The surface reads its host state on mount; a capture is the settled page,
+    // not whichever read happened to arrive first.
+    await expect(status(page)).toHaveText(
       "Changes apply to every display immediately.",
     );
-    await expect(page.locator("#timezone option").first()).toBeAttached();
+    await expect(
+      page.locator('[data-yunari-host-display="this-pc"]'),
+    ).toBeVisible();
 
     await expect(questions(page)).toBeVisible();
 

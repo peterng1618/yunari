@@ -20,16 +20,13 @@ import { createHostServer } from "./server.js";
  * a separate root, and the test below is what notices when one drifts.
  */
 
-/** The two files on disk, and the first-run page the host composes. */
+/** The one source document that is not composed, and the first-run page. */
 const ADMIN_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const EDITOR_MARK = fileURLToPath(
   new URL("../../editor/public/favicon.svg", import.meta.url),
 );
 
-const FILES = [
-  { name: "chooser", document: join(ADMIN_DIR, "library.html") },
-  { name: "settings", document: join(ADMIN_DIR, "settings.html") },
-];
+const FILES = [{ name: "chooser", document: join(ADMIN_DIR, "chooser.html") }];
 
 /** The first-run page is a template literal, not a file, so it is read off a
  *  real host: the browser proof is that a page load fetches the icon, and this
@@ -70,18 +67,17 @@ describe("the host's own pages name an icon", () => {
   }
 
   it("the first-run page declares one a display on the LAN can fetch", async () => {
-    // `/` is served to a paired display over the LAN, unlike `/settings`, so
-    // the first-run page must name the bundle-exempt root rather than the
-    // loopback-only settings path.
+    // `/` is served to a paired display over the LAN, so the first-run page
+    // must name the bundle-exempt root rather than a loopback-only path.
     expect(href(await firstRunHtml())).toBe("/favicon.svg");
   });
 });
 
 describe("the icon is the mark the host already ships", () => {
   it("is served from the bundle-exempt root, so a LAN display can fetch it", () => {
-    // All three pages name the same path, and it is the one the display guard
-    // exempts. `/settings` is loopback-only, so a display served the chooser or
-    // the first-run page over the LAN was refused the icon those pages declared.
+    // Both pages name the same path, and it is the one the display guard
+    // exempts, so a display served the chooser or the first-run page over the
+    // LAN can fetch the icon those pages declare.
     for (const site of FILES) {
       expect(href(readFileSync(site.document, "utf8"))).toBe("/favicon.svg");
     }

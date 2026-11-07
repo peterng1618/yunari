@@ -14,10 +14,13 @@
     // base config and is harmless — but `types` must include node, or every
     // `node:` import is unresolved.
     "types": ["node"],
+    // The chooser admin entry is React, bundled separately from the Node host
+    // by `vite.admin.config.ts`.
+    "jsx": "react-jsx",
     "paths": {
       "@yunari/renderer-core": ["../renderer-core/src/index.ts"],
       "@yunari/theme-kit": ["../theme-kit/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

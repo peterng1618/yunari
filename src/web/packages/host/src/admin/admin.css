@@ -1,7 +1,6 @@
-/* Chrome shared by the host's own pages: the chooser it serves at `/` and
-   `/settings`. Each page keeps the controls it alone owns. Deliberately
-   dependency-free: these files are served by the host itself, so they must
-   not need a build step or a network fetch. */
+/* The chooser's chrome. Deliberately plain CSS: this file is bundled by the
+   admin build and served from `/admin`, and it must not depend on the editor's
+   Tailwind pass or on `/settings`, which is loopback-only. */
 :root {
   --ink: #14120e;
   --paper: #f5f1e8;
@@ -31,7 +30,8 @@ body {
     sans-serif;
 }
 main {
-  max-width: 640px;
+  /* One decision, so one column of choices and no navigation. */
+  max-width: 30em;
   margin: 0 auto;
 }
 h1 {
@@ -39,26 +39,10 @@ h1 {
   letter-spacing: 0.02em;
   margin: 0 0 4px;
 }
-h2 {
-  font-size: 15px;
-  margin: 0 0 8px;
-  letter-spacing: 0.02em;
-}
 p.lead {
   color: var(--muted);
   margin: 0 0 24px;
 }
-.hint {
-  color: var(--muted);
-  font-size: 13px;
-  margin: 6px 0 0;
-}
-section {
-  margin-bottom: 28px;
-}
-/* A link is the only control on these pages that leaves them, so it is
-   styled like text and told apart by its underline rather than by a box that
-   would read as a second button. */
 a {
   color: inherit;
 }
@@ -87,8 +71,10 @@ a {
    own, and its accessible name collapses into the button's. */
 .theme-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  margin-top: 8px;
 }
 .theme-row .theme-option {
   flex: 1;
@@ -124,12 +110,9 @@ a {
   opacity: 0.6;
 }
 /* The row stays exactly where it was when a trash refuses, so the reason is
-   said here, under the button that asked. The row wraps for it, and the note
-   takes a line of its own. A cost warning is a note of the same shape: it
-   belongs to the row it sits under, and it is read before the row is pressed. */
-.theme-row {
-  flex-wrap: wrap;
-}
+   said here, under the button that asked. A cost warning is a note of the same
+   shape: it belongs to the row it sits under, and it is read before the row is
+   pressed. */
 .theme-delete-note,
 .theme-cost-note {
   flex-basis: 100%;
@@ -216,7 +199,7 @@ a {
 }
 .theme-shot {
   flex: none;
-  width: 96px;
+  width: 128px;
   aspect-ratio: 16 / 9;
   /* Contained, not cropped: the shot is the theme's own picture, and a theme
      whose ratio is not 16:9 must show whole rather than lose its edges to the
@@ -237,8 +220,7 @@ a {
   );
 }
 /* A template is a thing the product offers rather than one this PC saved, so
-   the list names which group a row is in. A heading with no rows under it is
-   why the empty group is not drawn at all. */
+   the list names which group a row is in. */
 .theme-group-label {
   margin: 16px 0 6px;
   color: var(--muted);
@@ -251,9 +233,15 @@ a {
 }
 /* A template row leaves the page — the editor is where a template lives — so
    it is underlined like every other link here rather than drawn as a second
-   button. The underline is the tell that it is not a choice of what the
-   displays show. */
+   button. */
 .theme-option[data-template] {
   text-decoration: underline;
   text-underline-offset: 2px;
+  margin-bottom: 8px;
+}
+#status {
+  margin-top: 16px;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
 }

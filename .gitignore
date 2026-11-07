@@ -2,6 +2,9 @@
 node_modules/
 dist/
 dist-ssr/
+# The host's React admin entry (the theme chooser). A second build from the
+# Node host, kept out of `dist/` so neither build clears the other.
+dist-admin/
 .vite/
 *.local
 .eslintcache

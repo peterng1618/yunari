@@ -23,7 +23,7 @@ export interface PageRouteDeps {
 
 /**
  * The dashboard's first-run state. Plain HTML with no build step and no
- * dependency, matching the settings page.
+ * dependency, matching the pairing page.
  */
 function firstRunPage(): string {
   return `<!doctype html>
@@ -132,8 +132,8 @@ export function createPageRoutes(deps: PageRouteDeps): {
     }
 
     // The page a device with no credential opens, so it answers before every
-    // gate below. It is served from the admin root the settings page shares —
-    // source, not a bundle — and it carries no reading of its own: the code it
+    // gate below. It is served from the admin root the chooser document shares
+    // — source, not a bundle — and it carries no reading of its own: the code it
     // was opened with is what pairs the device, and the exchange is its only
     // call.
     if (url.pathname === "/pair" && request.method === "GET") {
@@ -244,6 +244,11 @@ export function createPageRoutes(deps: PageRouteDeps): {
       // The browser probes this unprompted and without a token, and the repo
       // already links the mark deliberately so it does not.
       url.pathname === "/favicon.svg" ||
+      // The chooser's React bundle. It is the chooser's own bytes — no
+      // reading, no theme, no device — and the page that loads it is served to
+      // a display over the LAN, so its scripts must survive the same
+      // credential races the player's assets do.
+      url.pathname.startsWith("/admin/") ||
       // The two files an installable display needs, and the browser fetches
       // both itself: `register()` carries no session and a `<link
       // rel="manifest">` fetch carries none either, so a paired phone was
@@ -295,27 +300,45 @@ export function createPageRoutes(deps: PageRouteDeps): {
     response: http.ServerResponse,
     url: URL,
   ): Promise<boolean> {
-    // The settings page is an admin surface: it changes what every display
-    // shows, so it stays on this PC like the editor and pairing.
-    if (url.pathname === "/settings" || url.pathname.startsWith("/settings/")) {
+    // Settings is an admin surface: it changes what every display shows, so it
+    // stays on this PC like the editor. **The editor's Settings mode is the one
+    // settings surface** — the host no longer ships a second, hand-written copy
+    // — so `/settings` forwards to it and the gate stays in front of the
+    // forward. The URL is kept as the entry point a bookmark and the docs name.
+    if (url.pathname === "/settings" || url.pathname === "/settings/") {
       if (!isLoopbackRemote(request.socket.remoteAddress)) {
         sendText(response, 403, "Settings are available on this PC only.");
         return true;
       }
 
-      if (bundles.admin === undefined) {
-        sendText(response, 404, "No settings page is installed.");
+      response.writeHead(302, {
+        location: "/editor/?mode=settings",
+        "cache-control": "no-store",
+      });
+      response.end();
+      return true;
+    }
+
+    // The chooser's React bundle, built by `vite.admin.config.ts`. The
+    // document itself is source (`/chooser.html`); only its one script and
+    // stylesheet are built.
+    if (url.pathname.startsWith("/admin/")) {
+      if (bundles.adminUi === undefined) {
+        sendText(
+          response,
+          404,
+          "The admin bundle is not built. Run: npx vite build --config packages/host/vite.admin.config.ts",
+        );
         return true;
       }
 
       await serveStatic(
         request,
         response,
-        bundles.admin,
-        url.pathname === "/settings"
-          ? "/settings.html"
-          : url.pathname.slice("/settings".length),
-        "The settings page is missing from this installation.",
+        bundles.adminUi,
+        url.pathname.slice("/admin".length),
+        "The admin bundle is not built. Run: npx vite build --config packages/host/vite.admin.config.ts",
+        false,
       );
       return true;
     }
@@ -386,14 +409,15 @@ export function createPageRoutes(deps: PageRouteDeps): {
         // the consumer somewhere they can act rather than to an error.
         if (available.length > 0) {
           // Several themes and none chosen. The chooser is one of the host's
-          // own pages, sharing the settings page's theme rows, so both show a
-          // thumbnail; a second list here would be the copy without one.
+          // own pages: a source document that loads the React admin entry. Its
+          // rows are the one owner of a theme row, so it draws the thumbnail
+          // and the hatched stand-in nobody else re-spells.
           if (bundles.admin !== undefined) {
             await serveStatic(
               request,
               response,
               bundles.admin,
-              "/library.html",
+              "/chooser.html",
               "The theme chooser is missing from this installation.",
             );
             return true;

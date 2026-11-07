@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Yunari — choose a theme</title>
+    <!-- The host's own pages are separate documents from the two bundles, so
+         they need their own copy of the mark: without a link the browser
+         probes `/favicon.ico` and logs a 404 on every load. This page is served
+         to a display over the LAN, so it names the bundle-exempt path rather
+         than `/settings`, which is loopback-only. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The React admin entry. It is its own bundle (`vite.admin.config.ts` →
+         `dist-admin`), never the player's: the player stays React-free and
+         size-budgeted, and this page is served over the LAN. The filenames are
+         stable because this document is served from source with no build step;
+         `serveStatic` answers them with `no-cache` and an ETag. -->
+    <link rel="stylesheet" href="/admin/chooser.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      <main>
+        <h1>Choose a theme</h1>
+        <p class="lead">
+          This page needs JavaScript. The Host has several saved themes; open
+          the editor on this PC to choose one.
+        </p>
+      </main>
+    </noscript>
+    <script type="module" src="/admin/chooser.js"></script>
+  </body>
+</html>

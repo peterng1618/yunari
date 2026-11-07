@@ -600,8 +600,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     bundles: {
       player: path.join(packagesDir, "player", "dist"),
       editor: path.join(packagesDir, "editor", "dist"),
-      // Served from source: the settings page has no build step.
+      // Served from source: the pairing page and the chooser document have no
+      // build step. The chooser's React code is the separate `adminUi` build.
       admin: path.join(packagesDir, "host", "public"),
+      adminUi: path.join(packagesDir, "host", "dist-admin"),
     },
     themeStore,
     // Local plugin trees live beside the settings that admit them; the consent

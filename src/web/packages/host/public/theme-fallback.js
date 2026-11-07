@@ -1,13 +1,13 @@
 /**
  * The theme a display shows: its own choice, else the default's.
  *
- * One rule, imported by the host's `assignedThemeFor` and by the pages that
- * draw the display column (`theme-list.js`). The alternative — each side
- * spelling it — is two answers to "what is this display showing" that agree
- * only until one of them changes.
+ * One rule, imported by the host's `assignedThemeFor` and by the chooser's
+ * React entry (`src/admin/chooser.tsx`). The alternative — each side spelling
+ * it — is two answers to "what is this display showing" that agree only until
+ * one of them changes.
  *
- * Served as-is at `/settings/theme-fallback.js` and imported by the server
- * bundle from source, so it carries no TypeScript, no DOM and no imports.
+ * Imported by the server bundle from source and bundled into the admin
+ * chooser, so it carries no TypeScript, no DOM and no imports.
  */
 
 /**

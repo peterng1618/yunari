@@ -7995,6 +7995,22 @@ describe("The display map", () => {
     ).toBeUndefined();
   });
 
+  it("keeps the settings forward on this PC, whatever credential arrives", async () => {
+    // The forward is to the editor's Settings mode, which is an admin surface;
+    // the gate stays in front of it rather than moving to the editor alone.
+    const session = as(await paired("Kitchen tablet"));
+    const res = await request(
+      hosted.server,
+      "GET",
+      "/settings",
+      undefined,
+      session,
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.text()).toBe("Settings are available on this PC only.");
+  });
+
   it("refuses a token that matches no display", async () => {
     const res = await request(
       hosted.server,
@@ -8015,13 +8031,6 @@ describe("The display map", () => {
 
 /** The host's own pages, served from source with no build step. */
 const ADMIN_DIR = fileURLToPath(new URL("../public", import.meta.url));
-
-/** The text of every link to the editor, which is also its accessible name. */
-function editorLinkText(html: string): string[] {
-  return [
-    ...html.matchAll(/<a\b[^>]*href="\/editor\/"[^>]*>([^<]*)<\/a>/g),
-  ].map((match) => match[1] ?? "");
-}
 
 describe("The pages a consumer lands on", () => {
   let tmpDir: string;
@@ -8047,45 +8056,25 @@ describe("The pages a consumer lands on", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("lists the chooser's themes through the owner that already draws them", async () => {
+  it("serves the chooser document, whose React entry draws the rows", async () => {
     const res = await request(hosted.server, "GET", "/");
     const html = res.text();
 
     expect(res.status).toBe(200);
-    // `/settings` renders a theme with its thumbnail and a hatched stand-in;
-    // a chooser that draws its own rows ships the same list twice, and the
-    // copy that arrives second is the one without the picture.
-    expect(html).toContain("theme-list.js");
+    // The rows are the React entry's, not the server's: the document names the
+    // admin bundle and ships no theme markup of its own.
+    expect(html).toContain("/admin/chooser.js");
+    expect(html).toContain("/admin/chooser.css");
     expect(html).not.toContain("data-theme=");
   });
 
-  it("reaches the editor from the chooser, in a name a screen reader reads", async () => {
-    const html = (await request(hosted.server, "GET", "/")).text();
-    const labels = editorLinkText(html);
+  it("forwards settings to the editor's one settings surface", async () => {
+    const res = await request(hosted.server, "GET", "/settings");
 
-    expect(labels.length).toBeGreaterThan(0);
-    // An anchor is focusable and follows, so the link needs no extra wiring;
-    // an icon-only one would be reachable and still nameless.
-    expect(labels.every((label) => label.trim().length > 0)).toBe(true);
-  });
-
-  it("reaches the editor from the settings page too", async () => {
-    const html = (await request(hosted.server, "GET", "/settings")).text();
-    const labels = editorLinkText(html);
-
-    expect(html).not.toBe("Settings are available on this PC only.");
-    expect(labels.length).toBeGreaterThan(0);
-    expect(labels.every((label) => label.trim().length > 0)).toBe(true);
-  });
-
-  it("names the automatic device choice as a rule, not as a graphics card", async () => {
-    const html = (await request(hosted.server, "GET", "/settings")).text();
-
-    // The empty answer is "nothing was chosen", and what the host then does is
-    // take the first card the machine names. A control showing that as a
-    // product name beside real model numbers misreports what is in use.
-    expect(html).not.toContain("First card found (default)");
-    expect(html).toContain("Automatic (the first card the Host reports)");
+    // The editor's React Settings mode is the only settings surface; the host
+    // keeps the URL and the loopback-only gate in front of the forward.
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe("/editor/?mode=settings");
   });
 
   it("serves a pair page that asks for the screen shape and rotation", async () => {
