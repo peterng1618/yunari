@@ -98,14 +98,14 @@ async function start(): Promise<void> {
     },
   });
   const host = layout.hosts.canvas;
-  const status = layout.hosts.status;
+  const statusMessage = layout.statusMessage;
   // The template every boot path that builds a document reaches for. Loaded
   // before anything is mounted: a broken bundle is reported on the status line
   // and stops the boot rather than opening an empty document in its place.
   try {
     await loadBundledStarter();
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : String(error);
+    statusMessage.set(error instanceof Error ? error.message : String(error));
     return;
   }
   /** The installed packs could not be read. Held until a shell exists to report
@@ -220,7 +220,7 @@ async function start(): Promise<void> {
       onStatus: (sourceStatus, detail) => {
         const label =
           mode === "preview" ? uiCopy.view.preview : uiCopy.view.live;
-        status.textContent = `${label}: ${detail ?? sourceStatus}`;
+        statusMessage.set(`${label}: ${detail ?? sourceStatus}`);
       },
     });
 
@@ -262,7 +262,7 @@ async function start(): Promise<void> {
       assets: next.envelope.assets ?? [],
       bytes: next.assets ?? {},
       onError: (message) => {
-        status.textContent = message;
+        statusMessage.set(message);
       },
     });
     const source = createSource(next.input);
@@ -298,7 +298,7 @@ async function start(): Promise<void> {
       manager: assetManager,
       canvas: shell.editor.canvas,
       onError: (message) => {
-        status.textContent = message;
+        statusMessage.set(message);
       },
     });
     const options = {
@@ -339,7 +339,7 @@ async function start(): Promise<void> {
         // reads the catalogue lens nearest this artboard's aspect and opens
         // fitted, so the new theme is never seen through the old document's
         // frame.
-        status.textContent = "New theme";
+        statusMessage.set("New theme");
       },
       // The reference composition, reachable as what it is: a template the
       // product ships, not what a new document means.
@@ -350,7 +350,7 @@ async function start(): Promise<void> {
           envelope: fresh,
           assets: bundledStarterAssets(),
         });
-        status.textContent = "New theme from the starter";
+        statusMessage.set("New theme from the starter");
       },
       onImportPackage: () => picker.click(),
       onShowShortcuts: () => layout.showShortcuts(),
@@ -396,10 +396,12 @@ async function start(): Promise<void> {
           ...(credits === undefined ? {} : { credits }),
           ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
         });
-        status.textContent = openedStatusText({
-          name: envelope.metadata?.name,
-          id: envelope.id,
-        });
+        statusMessage.set(
+          openedStatusText({
+            name: envelope.metadata?.name,
+            id: envelope.id,
+          }),
+        );
       },
       onSaved: (msg: string | undefined) => {
         // Every save in the editor reports here — the package, the library and
@@ -407,10 +409,10 @@ async function start(): Promise<void> {
         // than each of them having to remember. Work the author has kept is not
         // work to recover, and a draft left behind offers to restore it.
         draftStore.clear();
-        status.textContent = msg ?? "Theme saved";
+        statusMessage.set(msg ?? "Theme saved");
       },
       onError: (msg: string) => {
-        status.textContent = msg;
+        statusMessage.set(msg);
       },
     };
     const extensions = new EditorSession(options);
@@ -517,9 +519,11 @@ async function start(): Promise<void> {
       // An import is a library write, not a document: the theme lands where it
       // survives the editor closing, and whatever is open stays open.
       const imported = await importThemePackage(new Uint8Array(buffer));
-      status.textContent = imported.ok
-        ? uiCopy.themeImport.landed(imported.id)
-        : uiCopy.themeImport.refused(imported.message);
+      statusMessage.set(
+        imported.ok
+          ? uiCopy.themeImport.landed(imported.id)
+          : uiCopy.themeImport.refused(imported.message),
+      );
     });
   });
 
@@ -561,10 +565,12 @@ async function start(): Promise<void> {
           envelope: draft.content,
           unsaved: true,
         });
-        status.textContent = openedStatusText({
-          name: draft.content.metadata?.name,
-          id: draft.content.id,
-        });
+        statusMessage.set(
+          openedStatusText({
+            name: draft.content.metadata?.name,
+            id: draft.content.id,
+          }),
+        );
         return;
       } catch (error) {
         // A draft this build cannot render is not a boot failure: the boot opens
@@ -601,10 +607,12 @@ async function start(): Promise<void> {
           ? {}
           : { backgroundMedia: content.backgroundMedia }),
       });
-      status.textContent = openedStatusText({
-        name: content.envelope.metadata?.name,
-        id: content.envelope.id,
-      });
+      statusMessage.set(
+        openedStatusText({
+          name: content.envelope.metadata?.name,
+          id: content.envelope.id,
+        }),
+      );
       return;
     }
     // A theme the URL named that is stored and does not validate is not a
@@ -617,9 +625,11 @@ async function start(): Promise<void> {
         envelope: theme,
         assets: bundledStarterAssets(),
       });
-      status.textContent = `Could not open the saved theme: ${requested.issues
-        .map((issue) => issue.message)
-        .join(" ")}`;
+      statusMessage.set(
+        `Could not open the saved theme: ${requested.issues
+          .map((issue) => issue.message)
+          .join(" ")}`,
+      );
       return;
     }
     // A theme the URL named that is stored but past the size the host will read
@@ -633,8 +643,9 @@ async function start(): Promise<void> {
         envelope: theme,
         assets: bundledStarterAssets(),
       });
-      status.textContent =
-        "Could not open the saved theme: it is too large to open.";
+      statusMessage.set(
+        "Could not open the saved theme: it is too large to open.",
+      );
       return;
     }
     case "none": {
@@ -644,7 +655,7 @@ async function start(): Promise<void> {
         envelope: theme,
         assets: bundledStarterAssets(),
       });
-      status.textContent = "Editor ready";
+      statusMessage.set("Editor ready");
       return;
     }
     default: {

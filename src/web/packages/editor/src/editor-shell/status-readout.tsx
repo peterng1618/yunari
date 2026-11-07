@@ -4,11 +4,11 @@ import { type SelectionStore, useSelection } from "./shell-stores.js";
 /**
  * The left readouts: the scene's object total and the selection's size.
  *
- * These are the strip's resting content. The message span beside them carries
- * nothing until `editor-main` has something to report, and a report is a moment
- * rather than a reading — so the counts are what the left holds when the editor
- * is simply open, and a message is added to them rather than standing in their
- * place.
+ * These are the strip's resting content. The message beside them carries
+ * nothing until `editor-main` publishes a report through the status store, and
+ * a report is a moment rather than a reading — so the counts are what the left
+ * holds when the editor is simply open, and a message is added to them rather
+ * than standing in their place.
  *
  * Both numbers come from the bridge's one snapshot, so the strip, the layer
  * list and the dock's arrange eligibility cannot disagree about what is on the

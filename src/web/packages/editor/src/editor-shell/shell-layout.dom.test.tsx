@@ -905,7 +905,9 @@ it("keeps panel hosts mounted outside React's control", async () => {
   // pane is the exception: React renders that tree, so it owns no host node.
   expect(layout.hosts.add).toBeInstanceOf(HTMLElement);
   expect(layout.hosts.document.parentElement).not.toBeNull();
-  expect(layout.hosts.status.parentElement).not.toBeNull();
+  // The message is React's now, not a host: the footer renders it from the
+  // store `editor-main` publishes through.
+  expect(root.querySelector("#status-message")?.parentElement).not.toBeNull();
   // The selection column holds a panel, not a sentence: its appearance section
   // needs a host the same way the panes do. And it is the right column that
   // holds it — the theme's own panels are the left one's.
@@ -944,11 +946,11 @@ it("keeps the diagnostic surface in the footer, and it still reports a refusal",
   layout.setBridge(bridge, undefined);
   await Promise.resolve();
   const line = root.querySelector("#status");
-  // The footer keeps its readings — the counts, the status host's message, the
+  // The footer keeps its readings — the counts, the published message, the
   // diagnostic and the save state — and the live mark joins them only when the
   // host reports the LAN on. No host is behind this shell, so no mark is drawn
   // rather than "not live".
-  expect(line?.contains(layout.hosts.status)).toBe(true);
+  expect(line?.contains(root.querySelector("#status-message"))).toBe(true);
   expect(line?.querySelector(".editor-shell-save-state")).not.toBeNull();
   expect(line?.querySelector(".editor-shell-live")).toBeNull();
   // The footer already carries the free-running status text, so the refusal has
@@ -965,6 +967,26 @@ it("keeps the diagnostic surface in the footer, and it still reports a refusal",
 
   layout.destroy();
   logged.mockRestore();
+});
+
+it("renders the message editor-main publishes, and the footer owns the element", async () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+
+  // Before anything mounts, the address exists and is empty: a report that
+  // arrives first — a broken starter bundle, a refused draft — still reaches
+  // the footer.
+  expect(root.querySelector("#status-message")?.textContent).toBe("");
+
+  await act(async () => layout.statusMessage.set("Editor ready"));
+  const message = root.querySelector("#status-message");
+  expect(message?.textContent).toBe("Editor ready");
+  expect(root.querySelector("#status")?.contains(message)).toBe(true);
+
+  await act(async () => layout.statusMessage.set("Theme saved"));
+  expect(root.querySelector("#status-message")?.textContent).toBe("Theme saved");
+
+  layout.destroy();
 });
 
 it("reads the scene's counts on the left, and draws none before a bridge is set", async () => {

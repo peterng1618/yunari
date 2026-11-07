@@ -69,6 +69,7 @@ import {
   PublishSurfaceStore,
   SelectionStore,
   SheetStore,
+  StatusMessageStore,
   TokenSelectionStore,
   useFinder,
   usePaneRequest,
@@ -76,6 +77,7 @@ import {
   useSheet,
 } from "./shell-stores.js";
 import { ShortcutReference } from "./shortcut-reference.js";
+import { StatusMessage } from "./status-message.js";
 import { StatusReadout } from "./status-readout.js";
 
 /**
@@ -201,7 +203,6 @@ interface ShellHosts {
   /** Properties of the selected object. A chart's family settings and bindings
       are part of that column, not a panel of their own. */
   readonly selection: HTMLElement;
-  readonly status: HTMLElement;
   readonly dock: HTMLElement;
 }
 
@@ -216,6 +217,9 @@ export interface ShellLayout {
   /** The token the Tokens pane has selected for the inspector. Exclusive with
    *  the canvas selection in both directions; it lives as long as the shell. */
   readonly tokenSelection: TokenSelectionStore;
+  /** The message the footer shows. `editor-main` publishes through it; the
+   *  footer renders it from the same store the rest of the strip reads. */
+  readonly statusMessage: StatusMessageStore;
   setBridge(
     bridge: EditorShellBridge | undefined,
     view: EditorViewControls | undefined,
@@ -320,15 +324,9 @@ export function createShellLayout(
     tokens: element("yunariPanelHostTokens"),
     document: element("yunariPanelHostDocument"),
     selection: element("yunariPanelHostSelection"),
-    status: document.createElement("span"),
     dock: document.createElement("div"),
   };
   hosts.canvas.id = "canvas-host";
-  // The status line's address. `editor-main` writes every report the editor
-  // makes into this span, and the footer around it now also carries the counts,
-  // the diagnostic, the save state and the live mark — so a reader that means
-  // the message has to name the message rather than the footer.
-  hosts.status.id = "status-message";
 
   let view: EditorViewControls | undefined;
   let reactRoot: Root | undefined;
@@ -337,6 +335,9 @@ export function createShellLayout(
   // every document it opens.
   const tokenSelection = new TokenSelectionStore(store);
   const sheet = new SheetStore();
+  // `editor-main` publishes every report the editor makes through this store;
+  // the footer renders it as an ordinary React value.
+  const statusMessage = new StatusMessageStore();
   const publishSurface = new PublishSurfaceStore();
   const finder = new FinderStore();
   // A pane a surface inside the editor asked to see — the token inspector's
@@ -924,7 +925,7 @@ export function createShellLayout(
           ) : (
             <>
               <StatusReadout store={store} />
-              <Host node={hosts.status} />
+              <StatusMessage store={statusMessage} />
               <DiagnosticMessage canvas={store.bridge?.editor.canvas} />
               <SaveState session={store.bridge?.session} />
               {/* The host's own fact, beside the save state: an unknown host
@@ -1020,6 +1021,7 @@ export function createShellLayout(
     dock,
     selection: store,
     tokenSelection,
+    statusMessage,
     setBridge(nextBridge, nextView) {
       // The store notifies subscribers, so React re-renders the inspector and
       // menus without a manual root re-render — and it keeps working when the

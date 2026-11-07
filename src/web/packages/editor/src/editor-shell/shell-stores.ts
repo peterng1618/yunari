@@ -186,6 +186,31 @@ export function useTokenSelection(
   );
 }
 
+/** The editor's status line: the report `editor-main` last made, or nothing.
+ *
+ * `editor-main` is the boot and the document's verbs, and it never sees React,
+ * so the message is published here rather than written into a mounted span —
+ * the same seam `SheetStore` uses for the `?` gesture. The footer renders it.
+ */
+export class StatusMessageStore {
+  #message = "";
+  readonly #listeners = new Set<() => void>();
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  };
+  readonly get = (): string => this.#message;
+  set(message: string): void {
+    if (this.#message === message) return;
+    this.#message = message;
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+export function useStatusMessage(store: StatusMessageStore): string {
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
 /** Whether the `?` sheet is open, as external state.
  *
  * The dispatcher lives in `EditorSession`, which never sees React, so the
