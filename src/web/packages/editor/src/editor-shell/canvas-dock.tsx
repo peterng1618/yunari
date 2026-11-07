@@ -83,8 +83,9 @@ export function CanvasDock({
   // them, and this surface filters.
   const [, setRevision] = useState(0);
   // And the chords the tooltips print follow the live binding table, for the
-  // same reason: `tooltip()` is rebuilt from the chord on every change, so a
-  // rebind has to re-render this surface rather than only reach the dispatcher.
+  // same reason: `ControlTooltip` reads its `shortcut` from the registry on
+  // render, so a rebind has to re-render this surface rather than only reach
+  // the dispatcher.
   useActiveShortcuts();
   useEffect(
     () => bridge?.subscribe(() => setRevision((revision) => revision + 1)),

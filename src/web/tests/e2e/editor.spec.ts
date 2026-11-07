@@ -1750,8 +1750,9 @@ test.describe("Fabric editor route", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect.poll(() => injectedTransition(positioner)).toBe("0s");
 
-    // The dock tooltip is portalled under its own class, and its positioner carries
-    // no class at all — so `.editor-shell-tooltip` is the whole of its coverage. The
+    // The dock tooltip is portalled under its own class, and its positioner
+    // carries `.editor-shell-tooltip-positioner` (that is where its layer
+    // lives) — so `.editor-shell-tooltip` is the whole of its coverage. The
     // dock renders no triggers until something is selected.
     await page.keyboard.press("Escape");
     await expect(popup).toBeHidden();

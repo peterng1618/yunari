@@ -85,7 +85,8 @@ after it reports `90`, above the popup and the select positioner.
 ## Decision
 
 The tooltip is the top layer of the shell's floating scale: `z-index: 90`,
-above the dialog pair (`70`/`71`) and the select positioner (`80`). It keeps
+above the dialog layer (`70` for the scrim, popup and dialog layer alike; DOM
+order nests them) and the select positioner (`80`). It keeps
 `pointer-events: none`, so being above a modal cannot steal a press. The layer
 order is stated in `editor-shell.css` and in `control-select.tsx`, where the
 next reader looks.

@@ -100,10 +100,10 @@ describe("the canvas dock's tooltips", () => {
 
   it("re-reads the chord after a rebind rather than holding the one it rendered with", async () => {
     // Review Focus 3 on this surface: the tooltip is the second of the four
-    // things that print a chord. `tooltip()` is rebuilt from the chord on every
-    // change, so what this proves is that the *component* re-rendered — a
-    // render-time copy would keep printing the old mark, and the dock would
-    // name a key that no longer runs the action beside it.
+    // things that print a chord. `ControlTooltip` reads its `shortcut` from the
+    // registry on render, so what this proves is that the *component*
+    // re-rendered — a render-time copy would keep printing the old mark, and
+    // the dock would name a key that no longer runs the action beside it.
     const container = await mount(bridgeOver("object"));
     await focusButton(container, uiCopy.actions.duplicate);
     expect(

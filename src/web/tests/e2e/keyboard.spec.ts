@@ -421,6 +421,124 @@ test("every canvas action's tooltip names the chord that runs it", async ({
   await captureVisualReview(page, testInfo, "keyboard-tooltip");
 });
 
+test("the asset finder's toolbar tooltip paints above the dialog that owns it", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+  // A keyed source's failure is what draws the toolbar's Connections control
+  // (`finder-controls.tsx`), and a toolbar control is what carries a tooltip
+  // inside the finder's modal. The search answer is the smallest one that keeps
+  // the grid alive beside the failure.
+  await page.route("**/api/assets/sources", (route) =>
+    route.fulfill({
+      json: {
+        sources: [
+          {
+            id: "lucide",
+            label: "Lucide",
+            category: "icon",
+            body: "grid",
+            plugin: null,
+            requires: null,
+            configurable: true,
+            presetKind: null,
+            host: "lucide.dev",
+          },
+          {
+            id: "keyed-icons",
+            label: "Keyed Icons",
+            category: "icon",
+            body: "grid",
+            plugin: null,
+            requires: "unsplash",
+            configurable: true,
+            presetKind: null,
+            host: "api.unsplash.com",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/assets/search", (route) =>
+    route.fulfill({
+      json: {
+        pages: [
+          {
+            source: "lucide",
+            results: [
+              {
+                id: "lucide:house",
+                name: "house",
+                kind: "icon",
+                preview: "",
+                licence: "ISC",
+                sourceUrl: "https://lucide.dev/icons/house",
+              },
+            ],
+            totalPages: undefined,
+            failure: undefined,
+          },
+          {
+            source: "keyed-icons",
+            results: [],
+            totalPages: undefined,
+            failure: { reason: "needs-credential", credential: "unsplash" },
+          },
+        ],
+      },
+    }),
+  );
+
+  await page.goto(EDITOR);
+  await page.waitForFunction(() => "yunariEditorBridge" in window);
+  await page.keyboard.press("Control+Shift+F");
+  const dialog = page.getByRole("dialog", { name: "Assets" });
+  await expect(dialog).toBeVisible();
+
+  const connections = dialog.locator("[data-yunari-asset-connections]");
+  await expect(connections).toBeVisible();
+  await connections.hover();
+
+  const tooltip = page.locator(".editor-shell-tooltip");
+  await expect(tooltip).toBeVisible();
+  // The layer lives on the positioner, the portalled element. A number on the
+  // static `.editor-shell-tooltip` popup would never paint, which is the defect
+  // this reads for.
+  await expect(page.locator(".editor-shell-tooltip-positioner")).toHaveCSS(
+    "z-index",
+    "90",
+  );
+
+  // Paint order, read from the browser rather than from the declaration: the
+  // tooltip is the element at its own centre, not the dialog beneath it. A
+  // readout is `pointer-events: none`, so the probe grants it for this one
+  // read (and restores it) — the stacking it reports is the stylesheet's.
+  const hit = await page.evaluate(() => {
+    const element = document.querySelector(".editor-shell-tooltip");
+    if (!(element instanceof HTMLElement)) return null;
+    const previous = element.style.pointerEvents;
+    element.style.pointerEvents = "auto";
+    const box = element.getBoundingClientRect();
+    const atCentre = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    element.style.pointerEvents = previous;
+    return {
+      inside:
+        atCentre !== null &&
+        (atCentre === element || element.contains(atCentre)),
+      atCentre: atCentre === null ? "nothing" : atCentre.className,
+    };
+  });
+  expect(hit, "the tooltip laid nothing out").not.toBeNull();
+  expect(
+    hit!.inside,
+    `the tooltip's centre hit ${String(hit!.atCentre)} instead`,
+  ).toBe(true);
+});
+
 test("? opens the sheet, and the document behind it does not change", async ({
   page,
 }, testInfo) => {
