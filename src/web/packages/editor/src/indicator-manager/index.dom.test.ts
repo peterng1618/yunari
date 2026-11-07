@@ -2,6 +2,7 @@
 import { Canvas, Rect } from "fabric/es";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createIndicatorManager, formatAngle, formatSize } from "./index.js";
+import { IndicatorStore } from "./store.js";
 
 function pointer(): MouseEvent {
   return new MouseEvent("mousemove", { clientX: 40, clientY: 60 });
@@ -73,28 +74,25 @@ describe("formatSize", () => {
 });
 
 describe("IndicatorManager", () => {
-  it("shows the angle while rotating and hides it when modified", () => {
+  it("publishes the angle while rotating and clears it when modified", () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const object = new Rect({ id: "shape", width: 10, height: 10, angle: 30 });
     canvas.add(object);
-    const indicators = createIndicatorManager({ canvas });
+    const store = new IndicatorStore();
+    const indicators = createIndicatorManager({ canvas, store });
 
     canvas.fire(
       "object:rotating" as never,
       { transform: { target: object }, e: pointer() } as never,
     );
-    const element = document.querySelector<HTMLElement>(
-      ".yunari-angle-indicator",
-    );
-    expect(element?.textContent).toBe("30°");
-    expect(element?.style.display).not.toBe("none");
+    expect(store.get().angle).toEqual({ visible: true, text: "30°" });
 
     canvas.fire("object:modified" as never, { target: object } as never);
-    expect(element?.style.display).toBe("none");
+    expect(store.get().angle.visible).toBe(false);
     indicators.destroy();
   });
 
-  it("shows the scaled size while scaling", () => {
+  it("publishes the scaled size while scaling", () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const object = new Rect({
       id: "shape",
@@ -103,17 +101,15 @@ describe("IndicatorManager", () => {
       strokeWidth: 0,
     });
     canvas.add(object);
-    const indicators = createIndicatorManager({ canvas });
+    const store = new IndicatorStore();
+    const indicators = createIndicatorManager({ canvas, store });
 
     canvas.fire(
       "object:scaling" as never,
       { transform: { target: object }, e: pointer() } as never,
     );
 
-    expect(
-      document.querySelector<HTMLElement>(".yunari-size-indicator")
-        ?.textContent,
-    ).toBe("100 × 50");
+    expect(store.get().size).toEqual({ visible: true, text: "100 × 50" });
     indicators.destroy();
   });
 
@@ -121,8 +117,10 @@ describe("IndicatorManager", () => {
     const canvas = new Canvas(document.createElement("canvas"));
     const object = new Rect({ id: "shape", width: 10, height: 10, angle: 30 });
     canvas.add(object);
+    const store = new IndicatorStore();
     const indicators = createIndicatorManager({
       canvas,
+      store,
       showRotationAngle: false,
     });
 
@@ -131,10 +129,7 @@ describe("IndicatorManager", () => {
       { transform: { target: object }, e: pointer() } as never,
     );
 
-    expect(
-      document.querySelector<HTMLElement>(".yunari-angle-indicator")?.style
-        .display,
-    ).toBe("none");
+    expect(store.get().angle.visible).toBe(false);
     indicators.destroy();
   });
 
@@ -147,28 +142,33 @@ describe("IndicatorManager", () => {
       locked: true,
     });
     canvas.add(object);
-    const indicators = createIndicatorManager({ canvas });
+    const store = new IndicatorStore();
+    const indicators = createIndicatorManager({ canvas, store });
 
     canvas.fire(
       "object:scaling" as never,
       { transform: { target: object }, e: pointer() } as never,
     );
 
-    expect(
-      document.querySelector<HTMLElement>(".yunari-size-indicator")?.style
-        .display,
-    ).toBe("none");
+    expect(store.get().size.visible).toBe(false);
     indicators.destroy();
   });
 
-  it("removes both elements on destroy", () => {
+  it("clears a reading left over from the session it is releasing", () => {
     const canvas = new Canvas(document.createElement("canvas"));
-    const indicators = createIndicatorManager({ canvas });
+    const object = new Rect({ id: "shape", width: 10, height: 10, angle: 30 });
+    canvas.add(object);
+    const store = new IndicatorStore();
+    const indicators = createIndicatorManager({ canvas, store });
+    canvas.fire(
+      "object:rotating" as never,
+      { transform: { target: object }, e: pointer() } as never,
+    );
 
     indicators.destroy();
 
-    expect(document.querySelector(".yunari-angle-indicator")).toBeNull();
-    expect(document.querySelector(".yunari-size-indicator")).toBeNull();
+    expect(store.get().angle).toEqual({ visible: false, text: "" });
+    expect(store.get().size).toEqual({ visible: false, text: "" });
   });
 
   it("reports scene size rather than screen size when the camera is zoomed", () => {
@@ -183,17 +183,15 @@ describe("IndicatorManager", () => {
     // Zoom the CAMERA, not the object: `getScaledWidth()` must ignore this, or the
     // readout would report the on-screen size and disagree with the inspector.
     canvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
-    const indicators = createIndicatorManager({ canvas });
+    const store = new IndicatorStore();
+    const indicators = createIndicatorManager({ canvas, store });
 
     canvas.fire(
       "object:scaling" as never,
       { transform: { target: object }, e: pointer() } as never,
     );
 
-    expect(
-      document.querySelector<HTMLElement>(".yunari-size-indicator")
-        ?.textContent,
-    ).toBe("100 × 50");
+    expect(store.get().size.text).toBe("100 × 50");
     indicators.destroy();
   });
 });

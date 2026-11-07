@@ -12,6 +12,7 @@ import type {
 } from "./editor-shell/shell-stores.js";
 import type { EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
+import type { IndicatorStore } from "./indicator-manager/store.js";
 import type { NewDocumentAnswer } from "./new-document-chooser.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
@@ -52,6 +53,10 @@ export interface EditorSessionOptions {
    *  collection every later import is added to. */
   readonly credits?: readonly ThemeCreditsEntry[];
   readonly panelHosts: EditorPanelHosts;
+  /** The transform readouts' state. The overlay is the shell's React tree and
+   *  this session publishes into it; a session built without chrome keeps its
+   *  own store, which nothing renders. */
+  readonly indicators?: IndicatorStore;
   readonly libraryClient?: ThemeLibraryClient;
   /** The readings the editor's pickers offer, from the host's sensor wire. A
    *  session built without one still offers the built-in vocabulary, which is

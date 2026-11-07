@@ -322,6 +322,7 @@ async function start(): Promise<void> {
         document: layout.hosts.document,
         selection: layout.hosts.selection,
       },
+      indicators: layout.indicators,
       libraryClient,
       favoritesClient,
       sensors,

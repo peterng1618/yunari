@@ -10,6 +10,8 @@ import {
   readPreviewRatioTokens,
   setActivePreviewRatios,
 } from "../display-lens.js";
+import { IndicatorOverlay } from "../indicator-manager/cursor-indicator.js";
+import { IndicatorStore } from "../indicator-manager/store.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
@@ -220,6 +222,9 @@ export interface ShellLayout {
   /** The message the footer shows. `editor-main` publishes through it; the
    *  footer renders it from the same store the rest of the strip reads. */
   readonly statusMessage: StatusMessageStore;
+  /** The transform readouts' state. The session publishes the readings into
+   *  it through the same Fabric handlers, and the stage renders them. */
+  readonly indicators: IndicatorStore;
   setBridge(
     bridge: EditorShellBridge | undefined,
     view: EditorViewControls | undefined,
@@ -338,6 +343,9 @@ export function createShellLayout(
   // `editor-main` publishes every report the editor makes through this store;
   // the footer renders it as an ordinary React value.
   const statusMessage = new StatusMessageStore();
+  // Beside the shell for the same reason the selection store is: it outlives
+  // every document, and the session that fills it comes and goes.
+  const indicators = new IndicatorStore();
   const publishSurface = new PublishSurfaceStore();
   const finder = new FinderStore();
   // A pane a surface inside the editor asked to see — the token inspector's
@@ -757,6 +765,10 @@ export function createShellLayout(
             aria-label={uiCopy.stage.label}
           >
             <Host node={hosts.canvas} />
+            {/* The rotate and scale readings. The session's Fabric handlers
+                publish them; this layer draws them beside the pointer, and it
+                never intercepts one. */}
+            <IndicatorOverlay store={indicators} />
             {/* The two top corners in one row, which is what keeps the overflow rule's
                 "clusters cannot collide" true without either knowing the
                 other's width. The row is `pointer-events: none`; the two
@@ -1021,6 +1033,7 @@ export function createShellLayout(
     selection: store,
     tokenSelection,
     statusMessage,
+    indicators,
     setBridge(nextBridge, nextView) {
       // The store notifies subscribers, so React re-renders the inspector and
       // menus without a manual root re-render — and it keeps working when the

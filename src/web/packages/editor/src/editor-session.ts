@@ -46,6 +46,7 @@ import {
   createIndicatorManager,
   type IndicatorManager,
 } from "./indicator-manager/index.js";
+import { IndicatorStore } from "./indicator-manager/store.js";
 import { LiveRuntime } from "./live-runtime.js";
 import {
   constructing,
@@ -189,6 +190,9 @@ export class EditorSession {
     });
     this.#indicators = createIndicatorManager({
       canvas: options.shell.editor.canvas,
+      // The shell's store when there is a shell to draw the readings; a
+      // session with no chrome keeps a private one so the handlers stay total.
+      store: options.indicators ?? new IndicatorStore(),
     });
     this.#artboard = createArtboardPanel(
       options.panelHosts.document,
