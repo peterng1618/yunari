@@ -2,6 +2,7 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import { PluginFrame, pluginFrameSrc } from "./plugin-frame.js";
 
 (
@@ -61,6 +62,73 @@ it("draws a script-only sandbox pointing at the plugin's own UI route", () => {
   expect(frame?.getAttribute("src")).toBe(
     "/api/extensions/local/acme/ui/index.html",
   );
+});
+
+it("mints the gesture a sandboxed settings write needs", async () => {
+  const onRequest = vi.fn(async () => ({ ok: true }));
+  mount(
+    <PluginFrame
+      pluginKey="local/acme"
+      entry="settings/index.html"
+      title="Acme"
+      settings={{}}
+      theme={THEME}
+      onRequest={onRequest as never}
+      allowWrites
+    />,
+  );
+
+  const control = [...document.querySelectorAll("button")].find(
+    (button) =>
+      button.textContent === uiCopy.settings.extensions.frameEnableControls,
+  );
+  expect(control).toBeDefined();
+
+  const frame = document.querySelector("iframe") as HTMLIFrameElement;
+  const post = vi.spyOn(frame.contentWindow as Window, "postMessage");
+  await act(async () => {
+    control?.click();
+  });
+
+  const gesture = post.mock.calls
+    .map(([message]) => message as { type?: string; nonce?: string; token?: string })
+    .find((message) => message.type === "yunari.frame.gesture");
+  expect(gesture).toMatchObject({
+    nonce: expect.any(String),
+    token: expect.any(String),
+  });
+
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          type: "yunari.frame.request",
+          nonce: gesture?.nonce,
+          id: "save-1",
+          method: "settings.set",
+          params: { mode: "dark" },
+          gestureToken: gesture?.token,
+        },
+        source: frame.contentWindow,
+      }),
+    );
+    await Promise.resolve();
+  });
+
+  expect(onRequest).toHaveBeenCalledWith(
+    expect.objectContaining({ method: "settings.set", id: "save-1" }),
+    gesture?.token,
+  );
+});
+
+it("draws no host control on a read-only frame", () => {
+  renderFrame();
+  expect(
+    [...document.querySelectorAll("button")].some(
+      (button) =>
+        button.textContent === uiCopy.settings.extensions.frameEnableControls,
+    ),
+  ).toBe(false);
 });
 
 it("encodes a nested entry and keeps a plugin key in two segments", () => {

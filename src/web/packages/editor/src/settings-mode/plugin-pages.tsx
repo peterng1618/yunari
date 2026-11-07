@@ -334,6 +334,7 @@ export function PluginSettingsView(props: {
         settings={{}}
         theme={props.theme}
         onRequest={props.onRequest}
+        allowWrites
       />
     );
 

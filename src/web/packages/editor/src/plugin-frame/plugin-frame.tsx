@@ -1,6 +1,7 @@
 import type { FrameInit, FrameRequest } from "@yunari/extension-api";
 import { useEffect, useRef, useState } from "react";
 import { ACTION_BUTTON } from "../components/ui/dialog.js";
+import { uiCopy } from "../ui-copy.js";
 import { usePluginFrame } from "./use-plugin-frame.js";
 
 export interface PluginFrameProps {
@@ -14,6 +15,10 @@ export interface PluginFrameProps {
     gestureToken: string | undefined,
   ) => Promise<unknown>;
   readonly onHeight?: (height: number) => void;
+  /** A settings frame saves through `settings.set`, a write method. Only a
+   *  control the host draws may mint the gesture token the write needs, so this
+   *  option adds that control above the frame. A read-only body omits it. */
+  readonly allowWrites?: boolean;
 }
 
 /** The route a plugin's own UI files are served from. The entry is a manifest
@@ -89,14 +94,29 @@ export function PluginFrame(props: PluginFrameProps): React.JSX.Element {
     );
 
   return (
-    <iframe
-      key={attempt}
-      ref={iframe}
-      title={props.title}
-      src={pluginFrameSrc(props.pluginKey, props.entry)}
-      sandbox="allow-scripts"
-      className="min-h-0 w-full flex-1 border-0"
-      style={height === undefined ? undefined : { height }}
-    />
+    <div className="flex min-h-0 flex-1 flex-col">
+      {props.allowWrites === true ? (
+        <div className="flex items-center justify-end p-[var(--space-8)]">
+          <button
+            type="button"
+            className={ACTION_BUTTON}
+            onClick={() => {
+              session.grantGesture();
+            }}
+          >
+            {uiCopy.settings.extensions.frameEnableControls}
+          </button>
+        </div>
+      ) : null}
+      <iframe
+        key={attempt}
+        ref={iframe}
+        title={props.title}
+        src={pluginFrameSrc(props.pluginKey, props.entry)}
+        sandbox="allow-scripts"
+        className="min-h-0 w-full flex-1 border-0"
+        style={height === undefined ? undefined : { height }}
+      />
+    </div>
   );
 }

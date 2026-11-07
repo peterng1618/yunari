@@ -218,6 +218,10 @@ export const uiCopy = {
       devices: "Device ids",
       commands: "Panel commands",
       publisher: "Publisher",
+      /** A sandboxed settings frame saves through `settings.set`, which is a
+       *  write: the frame cannot mint the gesture itself, so the host draws
+       *  this one control. */
+      frameEnableControls: "Enable controls",
       /** The kill list names this plugin: it stops loading, and the advisory is
        *  the store's own HTTPS link to why. */
       revoked: "The store revoked this plugin.",

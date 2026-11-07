@@ -3,6 +3,7 @@ import type { InstalledExtension } from "@yunari/extension-api";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import {
   type PluginSettingsClient,
   PluginSettingsForm,
@@ -171,4 +172,10 @@ it("renders a sandboxed page as a frame", () => {
   expect(frame?.getAttribute("src")).toBe(
     "/api/extensions/local/acme/ui/settings/index.html",
   );
+
+  // A settings frame saves through `settings.set`, a write method: the host
+  // draws the only control that may mint its gesture token.
+  expect(
+    [...document.querySelectorAll("button")].map((button) => button.textContent),
+  ).toContain(uiCopy.settings.extensions.frameEnableControls);
 });
