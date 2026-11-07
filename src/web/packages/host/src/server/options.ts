@@ -47,7 +47,7 @@ export interface BundleRoots {
   /** Admin pages served from source with no build step: the pairing page, the
    *  chooser document and the fallback rule the server imports. */
   readonly admin?: string;
-  /** The built React admin entry (`vite.admin.config.ts` → `dist-admin`),
+  /** The built React admin entry (`vite.admin.config.ts` → `dist/admin`),
    *  served from `/admin/`. Optional so a test that never opens the chooser
    *  needs no build. */
   readonly adminUi?: string;

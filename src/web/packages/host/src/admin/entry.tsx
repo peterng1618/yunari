@@ -9,7 +9,7 @@ import "./admin.css";
  *
  * **Why a second build.** The host's other pages (`pair.html`, `rotation.js`)
  * are served from source with no build step, but a React entry needs bundling.
- * It is its own Vite build (`vite.admin.config.ts`) into `dist-admin`, never the
+ * It is its own Vite build (`vite.admin.config.ts`) into `dist/admin`, never the
  * player's: the player bundle is React-free and size-budgeted, while this page
  * is served to a display over the LAN. `/settings` is not here either — it
  * routes to the editor's React settings mode, so one settings surface owns the

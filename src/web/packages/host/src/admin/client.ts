@@ -3,7 +3,7 @@
  * its rows make.
  *
  * It lives in the host package because the host serves this bundle, and it is
- * bundled into `dist-admin` rather than the player: the player stays React-free
+ * bundled into `dist/admin` rather than the player: the player stays React-free
  * and size-budgeted, and this page is served to a display over the LAN.
  */
 
