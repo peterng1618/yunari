@@ -355,7 +355,10 @@ function placeMedia(
     width: source.width * factor,
     height: source.height * factor,
   };
-  const dest = visibleArea(cover, box);
+  // The area layer clips, so what the box shows is the area it lets through —
+  // not the larger cover the area was cut from, which spills beyond the band
+  // on the axis the source is shorter than.
+  const dest = visibleArea(region, box);
   const x = clamp(
     Math.round((dest.left - cover.left) / factor),
     0,

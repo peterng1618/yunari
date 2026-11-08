@@ -1,8 +1,9 @@
 import {
   artboardGradientLine,
   type BackgroundMask,
+  BLEND_RAMP_STOPS,
   backgroundGeometry,
-  blendRampStops,
+  blendRamp,
   type CompositionRect,
   type PalettePaint,
   resolveBackgroundComposition,
@@ -139,18 +140,21 @@ export function composeFilterGraph(
   // so applying them one after another would keep only the last; multiply the
   // grayscale masks first, which is the DOM's `intersect`.
   let overlayInput = "media";
-  if (composition.masks.length > 0) {
-    for (const [index, mask] of composition.masks.entries()) {
-      parts.push(
-        `${maskSource(mask, x, y, width, height)}[mask${String(index)}]`,
-      );
+  // A ramp the box cannot see fades nothing the box shows, so it is dropped
+  // before it can become a zero-length gradient.
+  const masks = composition.masks
+    .map((mask) => maskSource(mask, x, y, width, height))
+    .filter((source): source is string => source !== undefined);
+  if (masks.length > 0) {
+    for (const [index, mask] of masks.entries()) {
+      parts.push(`${mask}[mask${String(index)}]`);
     }
 
     // `alphamerge` copies luma into the alpha channel, so merging one mask per
     // source would leave only the last ramp. Multiply the grayscale masks into
     // one first: a centred box fades into the fill on both opposite gaps.
     let maskInput = "mask0";
-    for (let index = 1; index < composition.masks.length; index += 1) {
+    for (let index = 1; index < masks.length; index += 1) {
       const combined = `masks${String(index)}`;
       parts.push(
         `[${maskInput}][mask${String(index)}]blend=all_mode=multiply[${combined}]`,
@@ -315,10 +319,15 @@ function ffmpegColor(color: string): string {
 }
 
 /**
- * One alpha ramp, sized to the region and shifted by the region's own offset.
- * The stops are the shared eased ramp in grayscale, so the bake draws the same
- * curve as the DOM and the glass instead of a linear ramp with visible ends.
- * The source turns by default, so its first frame is looped still.
+ * One alpha ramp, in the frame the media is laid in, or nothing when the box
+ * cannot see the ramp at all.
+ *
+ * The ramp belongs to the media's area, whose edges may lie outside the box. A
+ * ramp that lies wholly outside fades nothing the box shows, and ffmpeg draws a
+ * zero-length gradient as black — `alphamerge` then erases the picture instead
+ * of fading it. A ramp the box cuts keeps the alpha its visible end already
+ * needs, so the baked fade is the one the page draws. The stops are the shared
+ * eased ramp in grayscale. The source turns by default, so it is held still.
  */
 function maskSource(
   mask: BackgroundMask,
@@ -326,21 +335,60 @@ function maskSource(
   y: number,
   width: number,
   height: number,
-): string {
-  const stops = blendRampStops();
-  const colors = stops
-    .map((stop, index) => {
-      const value = Math.round(stop.alpha * 255)
-        .toString(16)
-        .padStart(2, "0");
-      return `c${String(index)}=0x${value}${value}${value}`;
-    })
-    .join(":");
-  return (
-    `gradients=s=${width}x${height}:${colors}:nb_colors=${String(stops.length)}` +
-    `:x0=${point(mask.x1 - x, width)}:y0=${point(mask.y1 - y, height)}` +
-    `:x1=${point(mask.x2 - x, width)}:y1=${point(mask.y2 - y, height)},${FROZEN}`
+): string | undefined {
+  const vertical = mask.x1 === mask.x2;
+  const size = vertical ? height : width;
+  const from = (vertical ? mask.y1 : mask.x1) - (vertical ? y : x);
+  const to = (vertical ? mask.y2 : mask.x2) - (vertical ? y : x);
+  const ramp = visibleRamp(from, to, size);
+  if (ramp === undefined) return undefined;
+
+  const colors = Array.from({ length: BLEND_RAMP_STOPS }, (_, index) => {
+    const fraction =
+      ramp.t0 + ((ramp.t1 - ramp.t0) * index) / (BLEND_RAMP_STOPS - 1);
+    const value = Math.round(blendRamp(fraction) * 255)
+      .toString(16)
+      .padStart(2, "0");
+    return `c${String(index)}=0x${value}${value}${value}`;
+  }).join(":");
+  const head = `gradients=s=${width}x${height}:${colors}:nb_colors=${String(
+    BLEND_RAMP_STOPS,
+  )}`;
+  const across = point(
+    vertical ? mask.x1 - x : mask.y1 - y,
+    vertical ? width : height,
   );
+  const start = point(ramp.start, size);
+  const end = point(ramp.end, size);
+
+  return vertical
+    ? `${head}:x0=${across}:y0=${start}:x1=${across}:y1=${end},${FROZEN}`
+    : `${head}:x0=${start}:y0=${across}:x1=${end}:y1=${across},${FROZEN}`;
+}
+
+/** The part of a ramp that lies inside a frame, with the ramp fraction it
+ *  covers. The frame is read as `0..size` here: a ramp that ends on the far
+ *  edge spans the whole curve, and only its emitted coordinate is pulled inside
+ *  the pixel grid (`point`). */
+function visibleRamp(
+  from: number,
+  to: number,
+  size: number,
+):
+  | {
+      readonly start: number;
+      readonly end: number;
+      readonly t0: number;
+      readonly t1: number;
+    }
+  | undefined {
+  const span = to - from;
+  if (size <= 0 || Math.abs(span) < 1e-9) return undefined;
+  const at = (value: number): number => (value - from) / span;
+  const t0 = span > 0 ? Math.max(0, at(0)) : Math.max(0, at(size));
+  const t1 = span > 0 ? Math.min(1, at(size)) : Math.min(1, at(0));
+  if (!(t1 > t0)) return undefined;
+  return { start: from + span * t0, end: from + span * t1, t0, t1 };
 }
 
 /**

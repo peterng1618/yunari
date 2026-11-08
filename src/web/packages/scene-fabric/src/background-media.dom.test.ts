@@ -247,6 +247,54 @@ describe("background media", () => {
     handle.destroy();
   });
 
+  it("clips an edge band's picture to the band, not to its cover", () => {
+    // A 4:1 box with a 16:9 picture: the band is 8:1, so the cover that fills
+    // it is three times taller than the band. The region layer is what the page
+    // shows, so the cover's spill has to be clipped here — the panel bake reads
+    // the same band, which is why the two agree.
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        mode: "advanced",
+        media: {
+          assetId: "loop",
+          bounds: "theme",
+          composition: { anchor: "top", extent: 0.5 },
+        },
+      },
+      artboard: { width: 400, height: 100 },
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const child = host.querySelector<HTMLVideoElement>(
+      "[data-yunari-background-media] video",
+    );
+    if (region === null || child === null)
+      throw new Error("the layer mounted no video");
+    Object.defineProperty(child, "videoWidth", { value: 160 });
+    Object.defineProperty(child, "videoHeight", { value: 90 });
+    Object.defineProperty(child, "readyState", { value: 1 });
+    child.dispatchEvent(new Event("loadedmetadata"));
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 100 },
+    });
+
+    expect(region.style.left).toBe("0px");
+    expect(region.style.top).toBe("0px");
+    expect(region.style.width).toBe("400px");
+    expect(region.style.height).toBe("50px");
+    expect(child.style.left).toBe("0px");
+    expect(child.style.top).toBe("-87.5px");
+    expect(child.style.width).toBe("400px");
+    expect(child.style.height).toBe("225px");
+    handle.destroy();
+  });
+
   it("lays a host-baked clip over the box it was baked for", () => {
     // The host composes the whole media area — fill, picture and fade — into
     // this clip, so the page shows it 1:1 over the layer's box and applies no

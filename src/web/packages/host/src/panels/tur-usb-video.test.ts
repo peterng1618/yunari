@@ -1,3 +1,4 @@
+import { blendRamp } from "@yunari/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   clipSeconds,
@@ -138,6 +139,88 @@ describe("panelH264Args", () => {
     expect(args).toContain("-filter_complex");
     expect(args[args.indexOf("-map") + 1]).toBe("[out]");
     expect(args).not.toContain("-vf");
+  });
+
+  it("bakes the band the layout shows, not the cover it was cut from", () => {
+    // A 16:9 source in a 1920x232 band: the cover that fills the band is 1080
+    // tall, so it spills 424px above and below the band. The page clips that
+    // spill; the bake has to, or the device paints the picture over the fill.
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          composition: { anchor: "top", extent: 0.5 },
+        },
+        "cw",
+        SOURCE,
+      ),
+    );
+
+    expect(filter).toContain("crop=3840:464:0:848");
+    expect(filter).toContain("scale=1920:232:force_divisible_by=2");
+    expect(filter).toContain("overlay=x=0:y=0");
+  });
+
+  it("drops a ramp the box cannot see", () => {
+    // Scaling the area four times puts both of its edges outside the box, so
+    // nothing inside the frame fades. A zero-length ramp is ffmpeg's black
+    // gradient, and `alphamerge` would then erase the picture entirely.
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          scale: 4,
+          composition: { anchor: "center", fade: 0.2 },
+        },
+        "cw",
+        SOURCE,
+      ),
+    );
+
+    expect(filter).not.toContain("gradients=");
+    expect(filter).not.toContain("alphamerge");
+  });
+
+  it("starts a cut ramp at the alpha the box edge needs", () => {
+    // The area is 510.4px wide in a 464px box, so the box sees only the far end
+    // of the fade. That end is already a fifth of the way along the shared
+    // eased ramp, and the bake must draw it there rather than restart at zero.
+    const filter = complexOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        {
+          offsetX: 0,
+          offsetY: 0,
+          scale: 2.2,
+          composition: { anchor: "left", extent: 0.5, fade: 0.5 },
+        },
+        "none",
+        SOURCE,
+      ),
+    );
+
+    const edge = GEOMETRY.width;
+    const areaRight = GEOMETRY.width * 0.5 * 2.2;
+    const rampEnd = areaRight - 0.5 * GEOMETRY.width;
+    const fraction = (edge - areaRight) / (rampEnd - areaRight);
+    const alpha = Math.round(blendRamp(fraction) * 255)
+      .toString(16)
+      .padStart(2, "0");
+
+    // The first pixel of the frame carries the alpha the cut is at, and the
+    // coordinate is pulled onto the pixel grid.
+    expect(filter).toContain(`x0=${String(edge - 1)}`);
+    expect(filter).toContain(`c0=0x${alpha}${alpha}${alpha}`);
   });
 
   it("intersects a centred band's two masks instead of replacing one", () => {

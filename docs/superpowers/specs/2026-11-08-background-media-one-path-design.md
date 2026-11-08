@@ -87,13 +87,16 @@ The picture covers the area. From that:
 
 - `cover` — the cover rect of the area in box pixels; may extend past the box.
   A live DOM element is placed here and clipped by the area layer.
-- `dest` — `cover ∩ box`: the visible rect, in box pixels.
+- `dest` — `region ∩ box`: the rect the area layer actually shows, in box
+  pixels. Never `cover ∩ box`: a cover spills past the band on the axis the
+  source is shorter than, and that spill is outside the area layer.
 - `crop` — the source window that fills `dest`, integer pixels, clamped inside
   the source.
 
 `crop → dest` is the one mapping every encoder, the page-clip transcode and the
-glass sampler use. A pre-baked clip is encoded at `dest` size and placed at
-`dest`, so the host never encodes more pixels than the panel can show.
+glass sampler use. A pre-baked clip is encoded at the area's box size, which is
+`dest` for every authored composition, so the host never encodes more pixels
+than the panel can show.
 
 For `center` the area keeps the source aspect, so `crop` is the whole frame and
 only the panel edge crops. For an edge band the picture still covers the band,
@@ -104,7 +107,10 @@ as today.
 The fade geometry is unchanged in meaning: masks are still one ramp per side
 that meets the fill, computed from the final area in absolute box coordinates.
 Consumers that encode a ramp map it onto `dest` instead of the area, so no
-negative overlay is needed.
+negative overlay is needed. A ramp that lies wholly outside `dest` fades nothing
+the panel shows, so an encoder drops it rather than emitting a zero-length
+gradient (which ffmpeg draws black, erasing the picture); a ramp `dest` cuts
+keeps the alpha its visible end already has.
 
 When the source size is unknown, the resolver reports `media: undefined`;
 consumers place the media at the area as they do today and re-place once the
@@ -162,8 +168,8 @@ it too. `backgroundGeometry` is the single clamp for authored values, replacing
 | `scene-fabric` `backdrop().paint()` (glass) | `region`/`masks`; `crop` → `dest` via `drawImage` |
 | `panel-video-composition.ts` `composeFilterGraph` (USB and TURZX) | `crop` → `scale` to `dest`; overlay at `dest`; masks mapped onto `dest`; fill across the box |
 | shared `panelFilter()` (new) | composed → `composeFilterGraph`; plain → `crop` + `scale` + flip + turn as `-vf`; facts missing → the shared aspect-unknown fallback |
-| `theme-media.ts` `panelVideo` + `video-frame.ts` `transcodeVideo` | `crop` → `dest`; output is `dest`-sized |
-| player `framed` clip | `media.dest` |
+| `theme-media.ts` `panelVideo` + `video-frame.ts` `transcodeVideo` | the shared `panelFilter` at the layer's box, no turn; output is the whole box's picture and the page lays it 1:1 |
+| player `framed` clip | the host-baked clip, over the layer's box |
 
 `tur-usb-video.ts` and `turzx-video.ts` keep only their encoder invocation,
 their turn/flip application and their cache behaviour; both call the shared
@@ -214,7 +220,11 @@ meets the limit above, and a larger magnitude saturates there.
 - Host: shared `panelFilter` for plain and composed at scale 2 and offset;
   filter graph crops to `crop` and scales to `dest`; no negative overlay;
   tur-usb and turzx tests keep only device-specific expectations.
-- `theme-media`/`video-frame`: clip is `dest`-sized and cropped by `crop`.
+- Host: an edge band whose cover is taller than the band bakes only the band; a
+  ramp outside `dest` is dropped, and a cut ramp starts at the alpha its visible
+  end needs.
+- `theme-media`/`video-frame`: the clip is the box's picture, encoded through
+  the shared filter.
 - `npm run gate` exits 0.
 - Manual: editor preview, a USB Lian Li panel and a TURZX panel show the same
   crop for the 16:9-on-4:1 theme at 200%.

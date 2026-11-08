@@ -116,6 +116,38 @@ describe("resolveBackgroundComposition", () => {
     });
   });
 
+  it("shows the band, not the whole cover it was cut from", () => {
+    // A 4:1 box with a 16:9 source: the band is 8:1, so the cover that fills it
+    // is three times taller than the band itself. The page clips that cover to
+    // the band, so the source window an encoder is given must be the band too.
+    const resolved = resolveBackgroundComposition(
+      BOX,
+      {
+        anchor: "top",
+        extent: 0.5,
+      },
+      SOURCE,
+    );
+    expect(resolved.region).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 50,
+    });
+    expect(resolved.media?.dest).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 50,
+    });
+    expect(resolved.media?.crop).toEqual({
+      x: 0,
+      y: 35,
+      width: 160,
+      height: 20,
+    });
+  });
+
   it("reports no media until the source size is known", () => {
     const resolved = resolveBackgroundComposition(
       BOX,
