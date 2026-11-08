@@ -1529,7 +1529,7 @@ body,
 /* The column keeps its owners mounted while folded, so a draft survives. Only
    the handle stays visible and reachable. */
 .editor-shell-inspector[data-collapsed="true"]
-> :not(.editor-shell-inspector-toggle) {
+  > :not(.editor-shell-inspector-toggle) {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -1639,7 +1639,7 @@ body,
    and no utility can win against it because it is unlayered. A label that is not a row's own belongs to `.yunari-field`,
    which already writes its own `margin-top: 0`. */
 .editor-shell-panel
-section:not(.editor-shell-pane):not(.editor-shell-pane-content),
+  section:not(.editor-shell-pane):not(.editor-shell-pane-content),
 .editor-shell-inspector section {
   display: block;
   margin-top: 12px;
@@ -2097,7 +2097,7 @@ section:not(.editor-shell-pane):not(.editor-shell-pane-content),
    so its hover has to name the same three: the shared close hover is two and
    loses to the rest rule whatever the source order. */
 .editor-shell-dialog.editor-shell-dialog--asset-preview
-.editor-shell-dialog-close:hover {
+  .editor-shell-dialog-close:hover {
   border-color: var(--shell-muted);
   background: color-mix(in srgb, var(--shell-text) 8%, transparent);
   color: var(--shell-text);
