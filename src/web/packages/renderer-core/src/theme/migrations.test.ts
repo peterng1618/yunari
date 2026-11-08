@@ -341,8 +341,17 @@ describe("the 2 → 3 background migration", () => {
   });
 
   it("stamps a 2.1.0 document without changing its background", () => {
+    const background = {
+      mode: "advanced",
+      media: {
+        assetId: "clip",
+        bounds: "theme",
+        color: { ref: "palette.board" },
+        composition: { anchor: "top", extent: 0.4 },
+      },
+    };
     const input: Record<string, unknown> = {
-      ...envelope(),
+      ...legacy2(background),
       schemaVersion: "2.1.0",
     };
     const result = migrateFabricThemeEnvelope(input);
@@ -350,7 +359,7 @@ describe("the 2 → 3 background migration", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected the document to stamp");
     expect(result.document["schemaVersion"]).toBe("3.0.0");
-    expect(result.document["background"]).toEqual(input["background"]);
+    expect(result.document["background"]).toEqual(background);
   });
 });
 
