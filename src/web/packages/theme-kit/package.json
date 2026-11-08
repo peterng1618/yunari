@@ -19,7 +19,7 @@
     "@yunari/theme-package": "*"
   },
   "devDependencies": {
-    "@types/node": "^22.12.0",
+    "@types/node": "^26.6.6",
     "fabric": "7.4.0",
     "fflate": "0.8.3"
   },
