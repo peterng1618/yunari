@@ -388,6 +388,27 @@ describe("ThemeStore", () => {
       ]).toEqual([1, 2, 3]);
     });
 
+    it("keeps theme.json's mtime when it repairs the document", async () => {
+      const store = createThemeStore(tmpDir);
+      await writeFolder("legacy", legacyDocument("legacy", "Legacy"));
+      const document = path.join(tmpDir, "legacy", "theme.json");
+      // An old date, so a rewrite that leaves the file's clock at the
+      // migration time is years away rather than milliseconds.
+      const original = new Date("2020-01-02T03:04:05.000Z");
+      await fs.utimes(document, original, original);
+
+      await store.list();
+
+      const repaired = JSON.parse(await fs.readFile(document, "utf8"));
+      expect(repaired.schemaVersion).toBe("3.0.0");
+      const after = (await fs.stat(document)).mtime;
+      // Windows rounds the timestamp it stores; the original is years old, so
+      // two seconds of slack still tells a preserved time from a fresh one.
+      expect(
+        Math.abs(after.getTime() - original.getTime()),
+      ).toBeLessThanOrEqual(2000);
+    });
+
     it("leaves a document that does not validate byte-for-byte", async () => {
       const store = createThemeStore(tmpDir);
       const broken = legacyDocument("broken", "Broken");
@@ -474,6 +495,71 @@ describe("ThemeStore", () => {
       expect(stored.metadata.name).toBe("Saved");
       expect(stored.schemaVersion).toBe("3.0.0");
     });
+  });
+
+  it("keeps the id owned while any save of it is still in flight", async () => {
+    // Two saves of one id overlap. A guard that the first save's release
+    // clears would let `remove` — and a repair — touch the folder while the
+    // second save is still swapping it.
+    const id = "living-room";
+    let reachedA!: () => void;
+    const heldA = new Promise<void>((resolve) => {
+      reachedA = resolve;
+    });
+    let releaseA!: () => void;
+    const gateA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let reachedB!: () => void;
+    const heldB = new Promise<void>((resolve) => {
+      reachedB = resolve;
+    });
+    let releaseB!: () => void;
+    const gateB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    let staged = 0;
+    const store = createThemeStore(tmpDir, {
+      rename: async (from, to) => {
+        if (
+          path.basename(from).startsWith(".staging-") &&
+          path.basename(to) === id
+        ) {
+          staged += 1;
+          if (staged === 1) {
+            reachedA();
+            await gateA;
+          } else if (staged === 2) {
+            reachedB();
+            await gateB;
+          }
+        }
+        await fs.rename(from, to);
+      },
+    });
+
+    const savingA = store.write(id, {
+      envelope: envelopeFor(id, "First"),
+      assets: {},
+    });
+    await heldA;
+
+    const savingB = store.write(
+      id,
+      { envelope: envelopeFor(id, "Second"), assets: {} },
+      { overwrite: true },
+    );
+
+    releaseA();
+    await savingA;
+    await heldB;
+
+    // B still owns the id, so the removal must be refused: the first save's
+    // release is not the second save's to make.
+    await expect(store.remove(id)).rejects.toThrow("being saved right now");
+
+    releaseB();
+    await savingB;
   });
 
   it("round-trips a theme's assets through the folder", async () => {

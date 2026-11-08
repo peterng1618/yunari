@@ -1,7 +1,7 @@
 # Theme document schema versioning and 2 → 3 migration
 
 - **Date:** 2026-11-08
-- **Status:** design approved, awaiting spec review
+- **Status:** accepted; implemented as schema 3.0.0
 - **Decision record:** `docs/decisions/0127-theme-schema-version-rule.md`
 - **Paths:** `src/web/packages/renderer-core/src/theme/fabric-envelope.ts`,
   `src/web/packages/renderer-core/src/theme/migrations.ts`,

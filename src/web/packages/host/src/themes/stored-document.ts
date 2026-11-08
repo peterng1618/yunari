@@ -41,19 +41,32 @@ export function storedDocumentNeedsRewrite(raw: unknown): boolean {
  * Replaces a folder's `theme.json` with `envelope` atomically: the new bytes
  * are written to a temp member of the same folder, then renamed over the
  * document, so a reader sees either the whole old file or the whole new one.
+ *
+ * The document's times are carried onto the replacement. `entryFor` reads
+ * `theme.json`'s mtime as the library's "Updated" date and the editor's boot
+ * choice is the greatest one, so a migration that wrote a fresh file would
+ * restamp the whole library with the migration time. The caller refuses a
+ * folder with no document, so a missing stat here means only that the folder
+ * went away mid-repair; the rewrite then proceeds without the times rather
+ * than failing a listing.
  */
 export async function rewriteStoredDocument(
   folder: string,
   envelope: FabricThemeEnvelope,
   rename: (from: string, to: string) => Promise<void> = fs.rename,
 ): Promise<void> {
+  const document = path.join(folder, THEME_FILE);
+  const before = await fs.stat(document).catch(() => undefined);
   const temp = path.join(
     folder,
     `.${THEME_FILE}.${randomBytes(3).toString("hex")}.tmp`,
   );
   try {
     await fs.writeFile(temp, JSON.stringify(envelope), { flag: "wx" });
-    await rename(temp, path.join(folder, THEME_FILE));
+    if (before !== undefined) {
+      await fs.utimes(temp, before.atime, before.mtime);
+    }
+    await rename(temp, document);
   } finally {
     await fs.rm(temp, { force: true });
   }

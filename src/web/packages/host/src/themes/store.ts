@@ -538,7 +538,7 @@ function scratchTarget(
 async function repairScratch(
   library: string,
   entries: readonly Dirent[],
-  saving: ReadonlySet<string>,
+  saving: ReadonlyMap<string, number>,
 ): Promise<boolean> {
   let repaired = false;
   await Promise.all(
@@ -976,9 +976,23 @@ export function createThemeStore(
   // test renaming folders it believes it replaced.
   const rename = (from: string, to: string): Promise<void> =>
     (options?.rename ?? fs.rename)(from, to);
-  // The ids with a save in flight, so a listing landing inside one does not
-  // mistake that save's scratch folders for the debris of a dead one.
-  const saving = new Set<string>();
+  // The ids with a save in flight, and how many, so a listing landing inside
+  // one does not mistake that save's scratch folders for the debris of a dead
+  // one. A count rather than a set: two saves of one id overlap, and a set's
+  // first delete would hand the id to a repair while the second save is still
+  // pre-swap.
+  const saving = new Map<string, number>();
+  function acquireSaving(id: string): void {
+    saving.set(id, (saving.get(id) ?? 0) + 1);
+  }
+  function releaseSaving(id: string): void {
+    const count = saving.get(id) ?? 0;
+    if (count <= 1) {
+      saving.delete(id);
+    } else {
+      saving.set(id, count - 1);
+    }
+  }
   /**
    * The saves whose folder swap a reader must wait out, by id.
    *
@@ -1258,8 +1272,10 @@ export function createThemeStore(
       }
       // The save owns the id from here, before the first await, so a repair
       // that lands while it reads sees the save and skips rather than racing
-      // the folder the save is about to swap in.
-      saving.add(id);
+      // the folder the save is about to swap in. Released once, in the outer
+      // `finally`: a second release while another save still holds the id
+      // would take that save's ownership with it.
+      acquireSaving(id);
       try {
         // Before anything is created on disk, and before the base is compared:
         // the claim is about the folder, not about a document, so it is settled
@@ -1451,7 +1467,6 @@ export function createThemeStore(
           await fs.rm(staging, { recursive: true, force: true });
           throw error;
         } finally {
-          saving.delete(id);
           pending.delete(swapped);
           if (pending.size === 0 && swapping.get(id) === pending) {
             swapping.delete(id);
@@ -1473,7 +1488,7 @@ export function createThemeStore(
         // second chance for something else to have moved underneath.
         return { ...entry, base: contentId(serialized) };
       } finally {
-        saving.delete(id);
+        releaseSaving(id);
       }
     },
 
