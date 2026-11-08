@@ -143,9 +143,12 @@ export function blendRampStops(): readonly {
  *
  * The base area is the box for a simple background, the picture's contain-fit
  * for a centred one, and an extent band for an edge. Scale multiplies that
- * area about its anchor, then the offset slides it until the fill side is
- * reachable. The picture covers the final area; `dest` is what the box lets
- * through and `crop` is the source window that fills it.
+ * area about its anchor — an edge anchor keeps its own edge flush, always. The
+ * authored offset pans the *picture inside* the area rather than moving the
+ * area: on an edge anchor the area's edge is the anchor, so moving the area
+ * would open fill between the picture and the edge it is pinned to. The picture
+ * covers the area; `dest` is what the box lets through and `crop` is the source
+ * window that fills it.
  */
 export function resolveBackgroundComposition(
   box: { readonly width: number; readonly height: number },
@@ -157,13 +160,9 @@ export function resolveBackgroundComposition(
   const known = knownSize(source, box);
 
   if (composition === undefined) {
-    const region = slid(
-      scaled(boxRect(box), "center", authored.scale, box),
-      box,
-      authored,
-    );
+    const region = scaled(boxRect(box), "center", authored.scale, box);
     return known
-      ? { region, masks: [], media: placeMedia(region, box, known) }
+      ? { region, masks: [], media: placeMedia(region, box, known, authored) }
       : { region, masks: [] };
   }
 
@@ -176,24 +175,20 @@ export function resolveBackgroundComposition(
       known === undefined || mode === undefined
         ? boxRect(box)
         : centreRect(box, known);
-    const region = slid(
-      scaled(base, "center", authored.scale, box),
-      box,
-      authored,
-    );
+    const region = scaled(base, "center", authored.scale, box);
     const masks =
       mode === undefined ? [] : centreMasks(region, box, fade, mode.wide);
     return known === undefined
       ? { region, masks }
-      : { region, masks, media: placeMedia(region, box, known) };
+      : { region, masks, media: placeMedia(region, box, known, authored) };
   }
 
   const base = edgeBand(box, anchor, extentOf(composition.extent));
-  const region = slid(scaled(base, anchor, authored.scale, box), box, authored);
+  const region = scaled(base, anchor, authored.scale, box);
   const masks = edgeMasks(region, box, anchor, fade);
   return known === undefined
     ? { region, masks }
-    : { region, masks, media: placeMedia(region, box, known) };
+    : { region, masks, media: placeMedia(region, box, known, authored) };
 }
 
 /** The source size when both it and the box can be divided by. */
@@ -304,23 +299,6 @@ function scaled(
   }
 }
 
-/** The offset slides the area over the box and stops where its far edge meets
- *  the box's opposite edge. */
-function slid(
-  region: CompositionRect,
-  box: { readonly width: number; readonly height: number },
-  geometry: BackgroundMediaGeometry,
-): CompositionRect {
-  const travelX = Math.abs(box.width - region.width) / 2;
-  const travelY = Math.abs(box.height - region.height) / 2;
-  return {
-    left: region.left + clamp(geometry.offsetX * box.width, -travelX, travelX),
-    top: region.top + clamp(geometry.offsetY * box.height, -travelY, travelY),
-    width: region.width,
-    height: region.height,
-  };
-}
-
 /** The part of `region` the box lets through, never smaller than a pixel.
  *  Every surface that draws the final picture reads this one intersect. */
 export function visibleArea(
@@ -339,21 +317,44 @@ export function visibleArea(
   };
 }
 
-/** The source window that fills `dest`, and the cover rect it was cut from. */
+/**
+ * The picture that covers `region`, panned by the authored offsets, and the
+ * source window the box sees.
+ *
+ * The offset never moves the area: the picture's cover is inflated just enough
+ * for the pan the offset asks for — `1 + 2·|offset|` of the area's own span, one
+ * uniform factor so nothing distorts — and the pan then stops at the overhang
+ * that inflation made. A picture that already overhangs can pan without any
+ * inflation at all.
+ */
 function placeMedia(
   region: CompositionRect,
   box: { readonly width: number; readonly height: number },
   source: { readonly width: number; readonly height: number },
+  geometry: BackgroundMediaGeometry,
 ): CompositionMedia {
   const factor = Math.max(
     region.width / source.width,
     region.height / source.height,
+    (region.width * (1 + 2 * Math.abs(geometry.offsetX))) / source.width,
+    (region.height * (1 + 2 * Math.abs(geometry.offsetY))) / source.height,
   );
-  const cover: CompositionRect = {
-    left: region.left + (region.width - source.width * factor) / 2,
-    top: region.top + (region.height - source.height * factor) / 2,
+  const painted = {
     width: source.width * factor,
     height: source.height * factor,
+  };
+  const travelX = Math.max(0, (painted.width - region.width) / 2);
+  const travelY = Math.max(0, (painted.height - region.height) / 2);
+  const cover: CompositionRect = {
+    left:
+      region.left +
+      (region.width - painted.width) / 2 +
+      clamp(geometry.offsetX * region.width, -travelX, travelX),
+    top:
+      region.top +
+      (region.height - painted.height) / 2 +
+      clamp(geometry.offsetY * region.height, -travelY, travelY),
+    ...painted,
   };
   // The area layer clips, so what the box shows is the area it lets through —
   // not the larger cover the area was cut from, which spills beyond the band

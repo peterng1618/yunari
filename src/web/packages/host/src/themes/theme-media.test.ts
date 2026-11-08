@@ -402,7 +402,10 @@ describe("createThemeMedia", () => {
     expect(transcode).toHaveBeenCalledWith(
       fixture("vfr.mp4"),
       {
-        filter: "crop=45:45:46:45,scale=320:320:force_divisible_by=2,setsar=1",
+        // The offsets inflate the picture until their pan fits: at 1.5× and 2×
+        // the cover is 2275.6×1280 for a 640×640 area, so the box sees a 22.5px
+        // window of the source, cut 58 px in and 56 px down.
+        filter: "crop=23:23:58:56,scale=320:320:force_divisible_by=2,setsar=1",
         complex: false,
       },
       undefined,

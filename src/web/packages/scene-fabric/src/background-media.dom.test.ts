@@ -197,11 +197,11 @@ describe("background media", () => {
       display: { left: 0, top: 0, width: 200, height: 100 },
     });
 
-    // 200×100 box, 100×100 source, scale 1: the area is the box itself, so the
-    // offset has no overhang to slide through and the cover rect is the whole
-    // picture centred on it.
+    // 200×100 box, 100×100 source, scale 1: the picture covers the box at 2× and
+    // the quarter offset inflates it to leave a 25px pan, which it then takes —
+    // the area itself is the box and does not move.
     expect(child.style.left).toBe("0px");
-    expect(child.style.top).toBe("-50px");
+    expect(child.style.top).toBe("-25px");
     expect(child.style.width).toBe("200px");
     expect(child.style.height).toBe("200px");
     handle.destroy();
@@ -451,12 +451,13 @@ describe("background media", () => {
       display: { left: 0, top: 0, width: 400, height: 200 },
     });
 
-    // 400×200 box, 100×100 source, scale 1: the area is the box, so the picture
-    // covers it at 4× and is centred; the offset has no overhang to move it.
+    // 400×200 box, 100×100 source, scale 1: the picture covers the box at 4×,
+    // and the quarter offset inflates it to 6× so the 100px pan it asks for is
+    // reachable — it takes all of it, so the box sees the picture's right edge.
     expect(child.style.left).toBe("0px");
-    expect(child.style.top).toBe("-100px");
-    expect(child.style.width).toBe("400px");
-    expect(child.style.height).toBe("400px");
+    expect(child.style.top).toBe("-200px");
+    expect(child.style.width).toBe("600px");
+    expect(child.style.height).toBe("600px");
     handle.destroy();
   });
 
@@ -899,9 +900,9 @@ describe("background media as a glass backdrop", () => {
     withIntrinsic(host, 100, 100);
 
     const { calls, ctx } = recordingContext();
-    // 200×100 box, 100×100 source: doubling the area leaves a 100×50 overhang
-    // each way, so the quarter offsets slide it 50/25 px, and the picture covers
-    // the moved area at 400×400.
+    // 200×100 box, 100×100 source, scale 2: the area is 400×200, the picture
+    // covers it at 4×, and the quarter offsets inflate it to 6× so their pan
+    // fits — 100px across and 50px down from the centred 600×600.
     const painted = handle
       .backdrop()
       ?.paint(
@@ -911,7 +912,7 @@ describe("background media as a glass backdrop", () => {
         "dynamic",
       );
     expect(painted).toBe(true);
-    expect(calls[0]?.slice(-4)).toEqual([-50, -125, 400, 400]);
+    expect(calls[0]?.slice(-4)).toEqual([-100, -200, 600, 600]);
     handle.destroy();
   });
 

@@ -52,7 +52,7 @@ describe("panelH264Args", () => {
     expect(upsideDown.endsWith(",hflip,vflip")).toBe(true);
   });
 
-  it("slides the themed area only as far as its grown overhang allows", () => {
+  it("pans the themed picture inside the area its zoom grew", () => {
     const centred = filterOf(
       panelH264Args(
         "in.mp4",
@@ -74,10 +74,12 @@ describe("panelH264Args", () => {
       ),
     );
 
-    // Doubling the area leaves half a box of overhang each way; the authored
-    // offsets move the window inside it, so the panel shows the player's edge.
+    // Doubling the area leaves half a box of overhang each way and the picture
+    // is already larger than the box, so the offsets pan inside it. Where that
+    // overhang runs out, the offsets ask for more and the picture inflates to
+    // 1.5×: a 1280×309 window instead of the whole 1920×464 area.
     expect(centred).toContain("crop=1920:464:960:848");
-    expect(panned).toContain("crop=1920:464:480:1010");
+    expect(panned).toContain("crop=1280:309:640:1142");
   });
 
   it("applies the theme's authored zoom on the plain path too", () => {

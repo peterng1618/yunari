@@ -33,7 +33,7 @@ One pure resolver in `renderer-core` returns everything every surface needs; no
 other module derives media geometry.
 
 - `renderer-core/src/theme/background-composition.ts` owns the base area, the
-  scale anchor, the offset slide, the cover rect, the visible rect and the
+  scale anchor, the offset pan inside the cover, the visible rect and the
   source window.
 - `scene-fabric`, both host panel encoders, the page-clip transcode and the
   player all consume that result.
@@ -71,15 +71,25 @@ The area may exceed the box. The bounds box clips; nothing shrinks it back.
 
 ### Offset
 
-`offsetX`/`offsetY` translate the area:
+`offsetX`/`offsetY` pan the **picture inside the area**; they never move the
+area. For an edge anchor the area's own edge is the anchor, so moving the area
+would open fill between the picture and the edge it is pinned to — a gap an
+author must never see.
+
+The picture's cover is inflated until the pan the offset asks for fits, one
+uniform factor on both axes so nothing distorts:
 
 ```
-t = clamp(offset × boxSize, ±|boxSize − areaSize| / 2)
+factor = max(areaW / srcW, areaH / srcH,
+             areaW × (1 + 2|offsetX|) / srcW,
+             areaH × (1 + 2|offsetY|) / srcH)
+pan    = clamp(offset × areaSize, ±(coverSize − areaSize) / 2)
 ```
 
-`0` is centred, `±1` is flush with the opposite box edge, larger magnitudes
-saturate. The old `panFloor` zoom inflation is gone: an offset moves the area
-and never secretly zooms the picture.
+A picture that already overhangs the area pans without any inflation. `0` is
+the centred window, `±1` moves a box-width of pan, larger magnitudes saturate at
+the source edge. Decision 0095's `panFloor` inflation is therefore back, but it
+raises the *cover*, not the area and not the authored scale.
 
 ### Media placement
 
@@ -213,8 +223,10 @@ meets the limit above, and a larger magnitude saturates there.
 ## Verification
 
 - Resolver: base areas (simple, centre, every edge anchor), scale anchor per
-  area, offset clamp and saturation, `cover`/`dest`/`crop`, source unknown,
-  area larger than the box, masks at an offset area.
+  area, the offset's pan and its inflation, saturation at the source edge, an
+  edge band that keeps its anchored edge flush under an offset, `cover`/`dest`/
+  `crop`, source unknown, an area larger than the box, masks that do not move
+  with a pan.
 - `scene-fabric`: live element at `cover`, framed clip at `dest`, mask CSS,
   glass `drawImage` uses `crop`/`dest`, flips still outside the rect.
 - Host: shared `panelFilter` for plain and composed at scale 2 and offset;

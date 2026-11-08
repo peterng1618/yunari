@@ -87,12 +87,57 @@ describe("resolveBackgroundComposition", () => {
     });
   });
 
-  it("slides the centred area until it is flush and saturates", () => {
+  it("pans a centred picture inside its area and saturates at the source edge", () => {
     const once = at({ offsetX: 1 });
     const far = at({ offsetX: 5 });
-    expect(once.region.left).toBeCloseTo(222.222, 3);
+    // The area is the contain fit and never moves: only the picture does.
+    expect(once.region.left).toBeCloseTo(111.111, 3);
     expect(far.region.left).toBeCloseTo(once.region.left, 6);
-    expect(once.media?.dest.left).toBeCloseTo(222.222, 3);
+    // The pan runs out of source before the offset runs out of range.
+    expect(once.media?.crop.x).toBe(0);
+    expect(far.media?.crop.x).toBe(0);
+  });
+
+  it("pans the picture inside a band without moving the band off its edge", () => {
+    // An offset on an edge-anchored band has to mean "show another part of the
+    // picture". Sliding the band itself would open fill between the picture and
+    // the edge it is pinned to, which is the gap an author must never see.
+    const bottom = { anchor: "bottom", extent: 0.5 } as const;
+    const still = resolveBackgroundComposition(BOX, bottom, SOURCE);
+    const panned = resolveBackgroundComposition(BOX, bottom, SOURCE, {
+      scale: 1,
+      offsetX: 0,
+      offsetY: -0.5,
+    });
+
+    expect(panned.region).toEqual(still.region);
+    expect(panned.region.top + panned.region.height).toBe(BOX.height);
+    // The window the box sees moved inside the source, so the picture panned.
+    expect(panned.media?.crop.y).not.toBe(still.media?.crop.y);
+  });
+
+  it("keeps a top band flush while its picture pans", () => {
+    const top = { anchor: "top", extent: 0.5 } as const;
+    const panned = resolveBackgroundComposition(BOX, top, SOURCE, {
+      scale: 1,
+      offsetX: 0,
+      offsetY: -0.5,
+    });
+
+    expect(panned.region).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 50,
+    });
+    // 1 + 2·0.5 leaves the pan reachable; the source window is cut higher up
+    // the picture, and the band itself has not moved.
+    expect(panned.media?.crop).toEqual({
+      x: 0,
+      y: 45,
+      width: 160,
+      height: 20,
+    });
   });
 
   it("grows an edge band across the box and keeps it flush", () => {
@@ -164,17 +209,25 @@ describe("resolveBackgroundComposition", () => {
     });
   });
 
-  it("moves the masks with the final area", () => {
-    const resolved = resolveBackgroundComposition(
+  it("keeps the masks on the area's edges while the picture pans", () => {
+    const still = resolveBackgroundComposition(
+      BOX,
+      { anchor: "center", fade: 0.25 },
+      SOURCE,
+      ZERO,
+    );
+    const panned = resolveBackgroundComposition(
       BOX,
       { anchor: "center", fade: 0.25 },
       SOURCE,
       { ...ZERO, offsetX: 1 },
     );
-    expect(resolved.masks).toHaveLength(2);
-    expect(resolved.masks[0]?.x1).toBeCloseTo(222.222, 3);
-    expect(resolved.masks[0]?.x2).toBeCloseTo(322.222, 3);
-    expect(resolved.masks[1]?.x1).toBeCloseTo(400, 6);
+    // A mask fades the area into the fill; the picture pans behind it, so the
+    // ramp must stay where the area's own edge is.
+    expect(panned.masks).toEqual(still.masks);
+    expect(panned.masks[0]?.x1).toBeCloseTo(111.111, 3);
+    expect(panned.masks[0]?.x2).toBeCloseTo(211.111, 3);
+    expect(panned.masks[1]?.x1).toBeCloseTo(288.889, 3);
   });
 
   it("centres a wide picture on its long edge and fills the two gaps", () => {
