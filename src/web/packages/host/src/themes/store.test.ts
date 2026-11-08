@@ -311,6 +311,144 @@ describe("ThemeStore", () => {
     );
   });
 
+  /**
+   * A stored document older than the current schema major is rewritten in
+   * place the one time it becomes visible: `list()` is the call through which a
+   * theme enters the library, so it is where an old file converges. A document
+   * the strict validator refuses after migration is the author's file still, and
+   * is left exactly as it was.
+   */
+  describe("migrating a stored document", () => {
+    /** A 2.0.0 document with a palette, a background media and a video asset,
+     *  so the migrated shape is a real one rather than the version alone. */
+    function legacyDocument(id: string, name: string): Record<string, unknown> {
+      const envelope = envelopeFor(id, name);
+      return {
+        ...envelope,
+        schemaVersion: "2.0.0",
+        assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+        globals: {
+          ...envelope.globals,
+          palette: {
+            none: {
+              name: "None",
+              value: { kind: "solid", color: "transparent" },
+            },
+            board: {
+              name: "Board",
+              value: { kind: "solid", color: "#101216" },
+            },
+          },
+        },
+        background: {
+          color: { ref: "palette.board" },
+          media: { assetId: "clip", bounds: "theme" },
+        },
+      };
+    }
+
+    /** Writes a theme folder by hand, as a previous build would have left it;
+     *  answers the document's exact bytes. */
+    async function writeFolder(
+      id: string,
+      document: unknown,
+      assetBytes?: Uint8Array,
+    ): Promise<string> {
+      const folder = path.join(tmpDir, id);
+      await fs.mkdir(path.join(folder, "assets"), { recursive: true });
+      const written = JSON.stringify(document);
+      await fs.writeFile(path.join(folder, "theme.json"), written);
+      if (assetBytes !== undefined) {
+        await fs.writeFile(path.join(folder, "assets", "clip.mp4"), assetBytes);
+      }
+      return written;
+    }
+
+    it("migrates an older document in place when the library lists it", async () => {
+      const store = createThemeStore(tmpDir);
+      await writeFolder(
+        "legacy",
+        legacyDocument("legacy", "Legacy"),
+        Uint8Array.of(1, 2, 3),
+      );
+
+      const entries = await store.list();
+      expect(entries.map((entry) => entry.id)).toContain("legacy");
+
+      const stored = JSON.parse(
+        await fs.readFile(path.join(tmpDir, "legacy", "theme.json"), "utf8"),
+      );
+      expect(stored.schemaVersion).toBe("3.0.0");
+      expect(stored.background.media.color).toEqual({ ref: "palette.board" });
+      // The repair rewrites the document, never the folder around it.
+      expect([
+        ...(await fs.readFile(
+          path.join(tmpDir, "legacy", "assets", "clip.mp4"),
+        )),
+      ]).toEqual([1, 2, 3]);
+    });
+
+    it("leaves a document that does not validate byte-for-byte", async () => {
+      const store = createThemeStore(tmpDir);
+      const broken = legacyDocument("broken", "Broken");
+      broken.background = { nope: true };
+      const written = await writeFolder("broken", broken, Uint8Array.of(1));
+
+      await store.list();
+      expect(
+        await fs.readFile(path.join(tmpDir, "broken", "theme.json"), "utf8"),
+      ).toBe(written);
+    });
+
+    it("leaves a current document byte-for-byte", async () => {
+      const store = createThemeStore(tmpDir);
+      const written = await writeFolder(
+        "current",
+        envelopeFor("current", "Current"),
+      );
+
+      await store.list();
+      expect(
+        await fs.readFile(path.join(tmpDir, "current", "theme.json"), "utf8"),
+      ).toBe(written);
+    });
+
+    it("never overwrites the bytes of a save that started first", async () => {
+      await writeFolder("legacy", legacyDocument("legacy", "Legacy"));
+
+      let held = false;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const store = createThemeStore(tmpDir, {
+        rename: async (from, to) => {
+          if (!held && path.basename(from).startsWith(".staging-")) {
+            held = true;
+            await gate;
+          }
+          await fs.rename(from, to);
+        },
+      });
+      const saving = store.write(
+        "legacy",
+        { envelope: envelopeFor("legacy", "Saved"), assets: {} },
+        { overwrite: true },
+      );
+      while (!held) await new Promise((resolve) => setImmediate(resolve));
+      // `list()` waits out an in-flight folder swap, which is the very rename
+      // this test holds, so the listing is left pending until the gate opens.
+      const listing = store.list();
+      release();
+      await saving;
+      await listing;
+      const stored = JSON.parse(
+        await fs.readFile(path.join(tmpDir, "legacy", "theme.json"), "utf8"),
+      );
+      expect(stored.metadata.name).toBe("Saved");
+    });
+  });
+
   it("round-trips a theme's assets through the folder", async () => {
     const store = createThemeStore(tmpDir);
     const content = withAsset(

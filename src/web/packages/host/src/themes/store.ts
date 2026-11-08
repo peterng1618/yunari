@@ -25,6 +25,11 @@ import {
   type ThemeCredits,
 } from "@yunari/theme-package";
 import { readContainedFile } from "./contained-read.js";
+import {
+  rewriteStoredDocument,
+  storedDocumentNeedsRewrite,
+  THEME_FILE,
+} from "./stored-document.js";
 import { moveToTrash } from "./trash.js";
 
 /**
@@ -336,7 +341,6 @@ export interface ThemeStore {
 }
 
 const NONCE_REGEX = /^[0-9a-z]+$/;
-const THEME_FILE = "theme.json";
 const ASSETS_DIR = "assets";
 /** The editor's per-asset background geometry, kept beside the document as
  *  working data. It never enters the document, a package or a display's read. */
@@ -1006,6 +1010,55 @@ export function createThemeStore(
     }
   }
 
+  /**
+   * Rewrites `id`'s stored document when it is one an older build wrote, and
+   * never else.
+   *
+   * It takes the store's own per-id exclusion: it waits out a swap already
+   * running, skips when a save owns the folder, and registers itself in
+   * `swapping` so a save that starts while it reads waits for the rewrite
+   * instead of racing it. A refusal — absent, oversized, unparseable, invalid,
+   * or already current — is the folder's own file, left exactly as it was. A
+   * repair that cannot finish is not allowed to cost the listing.
+   */
+  async function repairStoredTheme(id: string): Promise<void> {
+    await awaitSwap(id);
+    if (saving.has(id)) return;
+    let finish!: () => void;
+    const running = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const pending = swapping.get(id) ?? new Set<Promise<void>>();
+    pending.add(running);
+    swapping.set(id, pending);
+    try {
+      const folder = path.join(directory, id);
+      const bytes = await readContainedFile(
+        folder,
+        THEME_FILE,
+        MAX_THEME_FILE_BYTES,
+      );
+      if (bytes === undefined) return;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(bytes.toString("utf8"));
+      } catch {
+        return;
+      }
+      const validation = readFabricThemeEnvelope(raw);
+      if (!validation.ok) return;
+      if (!storedDocumentNeedsRewrite(raw)) return;
+      await rewriteStoredDocument(folder, validation.envelope);
+    } catch {
+      // A repair that cannot finish must not cost the listing.
+    } finally {
+      finish();
+      pending.delete(running);
+      if (pending.size === 0 && swapping.get(id) === pending)
+        swapping.delete(id);
+    }
+  }
+
   return {
     /**
      * Names, authors and modified times, from `theme.json` alone. The archive
@@ -1032,6 +1085,7 @@ export function createThemeStore(
               if (!isValidThemeId(entry.name)) {
                 return undefined;
               }
+              await repairStoredTheme(entry.name);
               const envelope = await storedEnvelope(directory, entry.name);
               return envelope === undefined
                 ? undefined
@@ -1201,8 +1255,11 @@ export function createThemeStore(
       const claiming = options?.expectFree === true;
       if (claiming) {
         if (saving.has(id)) throw new ThemeIdTakenError(id);
-        saving.add(id);
       }
+      // The save owns the id from here, before the first await, so a repair
+      // that lands while it reads sees the save and skips rather than racing
+      // the folder the save is about to swap in.
+      saving.add(id);
       try {
         // Before anything is created on disk, and before the base is compared:
         // the claim is about the folder, not about a document, so it is settled
@@ -1210,6 +1267,9 @@ export function createThemeStore(
         if (claiming && (await occupied(directory, id))) {
           throw new ThemeIdTakenError(id);
         }
+        // A swap already in flight owns the folder, so the document this save
+        // is based on is not read from the gap between its two renames.
+        await awaitSwap(id);
         const stored = await readStoredOrAbsent(directory, id);
         // Neither a base nor an overwrite says "first save", so a first save onto
         // a stored id is a refusal rather than a silent replacement: the
@@ -1249,7 +1309,6 @@ export function createThemeStore(
         // a crash between the two leaves the theme recoverable under its
         // `.retired-` name rather than gone.
         let hadPrevious = false;
-        saving.add(id);
         let finishSwap!: () => void;
         const swapped = new Promise<void>((resolve) => {
           finishSwap = resolve;
@@ -1414,7 +1473,7 @@ export function createThemeStore(
         // second chance for something else to have moved underneath.
         return { ...entry, base: contentId(serialized) };
       } finally {
-        if (claiming) saving.delete(id);
+        saving.delete(id);
       }
     },
 

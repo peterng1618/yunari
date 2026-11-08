@@ -455,7 +455,11 @@ export type {
   FabricThemeEnvelope,
   FabricThemeEnvelopeInput,
 } from "./theme/fabric-envelope.js";
-export { SUPPORTED_SCHEMA_VERSION } from "./theme/fabric-envelope.js";
+export {
+  parseSchemaMajor,
+  SUPPORTED_SCHEMA_MAJOR,
+  SUPPORTED_SCHEMA_VERSION,
+} from "./theme/fabric-envelope.js";
 export type {
   FabricEnvelopeValidationOptions,
   FabricEnvelopeValidationResult,
