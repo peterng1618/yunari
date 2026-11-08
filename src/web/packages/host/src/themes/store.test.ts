@@ -413,39 +413,66 @@ describe("ThemeStore", () => {
       ).toBe(written);
     });
 
-    it("never overwrites the bytes of a save that started first", async () => {
+    it("does not rewrite a document a save owns, and the save's bytes are last", async () => {
       await writeFolder("legacy", legacyDocument("legacy", "Legacy"));
 
-      let held = false;
+      // The save is held between `saving.add(id)` and the folder swap: its
+      // stored-document read is paused, so `saving` owns the id while
+      // `swapping` is still empty. That is the window the exclusion exists
+      // for — `list()` runs, sees a save in flight, and must leave the folder
+      // alone rather than migrate the bytes the save is about to replace.
+      let reached!: () => void;
+      const saveReading = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
       let release!: () => void;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      const store = createThemeStore(tmpDir, {
-        rename: async (from, to) => {
-          if (!held && path.basename(from).startsWith(".staging-")) {
-            held = true;
-            await gate;
-          }
-          await fs.rename(from, to);
-        },
+      let holding = true;
+      const realRealpath = fs.realpath;
+      const spy = vi.spyOn(fs, "realpath").mockImplementation(async (file) => {
+        if (holding && String(file).endsWith("theme.json")) {
+          holding = false;
+          reached();
+          await gate;
+        }
+        return realRealpath(file);
       });
-      const saving = store.write(
-        "legacy",
-        { envelope: envelopeFor("legacy", "Saved"), assets: {} },
-        { overwrite: true },
-      );
-      while (!held) await new Promise((resolve) => setImmediate(resolve));
-      // `list()` waits out an in-flight folder swap, which is the very rename
-      // this test holds, so the listing is left pending until the gate opens.
-      const listing = store.list();
-      release();
-      await saving;
-      await listing;
+
+      try {
+        const store = createThemeStore(tmpDir);
+        const saving = store.write(
+          "legacy",
+          { envelope: envelopeFor("legacy", "Saved"), assets: {} },
+          { overwrite: true },
+        );
+        await saveReading;
+
+        // The listing does not wait on this save (it has registered no swap
+        // yet), so it settles while the save is still held — which is the
+        // point: repair had its chance to touch the folder and must not.
+        await store.list();
+
+        // The repair declined while the save owns the folder: the document the
+        // save is based on is untouched, still the 2.0.0 file on disk.
+        const whileSaving = JSON.parse(
+          await fs.readFile(path.join(tmpDir, "legacy", "theme.json"), "utf8"),
+        );
+        expect(whileSaving.schemaVersion).toBe("2.0.0");
+        expect(whileSaving.metadata.name).toBe("Legacy");
+
+        release();
+        await saving;
+      } finally {
+        spy.mockRestore();
+      }
+
       const stored = JSON.parse(
         await fs.readFile(path.join(tmpDir, "legacy", "theme.json"), "utf8"),
       );
       expect(stored.metadata.name).toBe("Saved");
+      expect(stored.schemaVersion).toBe("3.0.0");
     });
   });
 

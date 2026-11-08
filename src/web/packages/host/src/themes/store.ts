@@ -1048,7 +1048,7 @@ export function createThemeStore(
       const validation = readFabricThemeEnvelope(raw);
       if (!validation.ok) return;
       if (!storedDocumentNeedsRewrite(raw)) return;
-      await rewriteStoredDocument(folder, validation.envelope);
+      await rewriteStoredDocument(folder, validation.envelope, rename);
     } catch {
       // A repair that cannot finish must not cost the listing.
     } finally {

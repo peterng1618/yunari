@@ -45,6 +45,7 @@ export function storedDocumentNeedsRewrite(raw: unknown): boolean {
 export async function rewriteStoredDocument(
   folder: string,
   envelope: FabricThemeEnvelope,
+  rename: (from: string, to: string) => Promise<void> = fs.rename,
 ): Promise<void> {
   const temp = path.join(
     folder,
@@ -52,7 +53,7 @@ export async function rewriteStoredDocument(
   );
   try {
     await fs.writeFile(temp, JSON.stringify(envelope), { flag: "wx" });
-    await fs.rename(temp, path.join(folder, THEME_FILE));
+    await rename(temp, path.join(folder, THEME_FILE));
   } finally {
     await fs.rm(temp, { force: true });
   }
