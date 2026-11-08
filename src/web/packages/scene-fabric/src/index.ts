@@ -27,8 +27,6 @@ export {
   type BackgroundMediaSource,
   type MediaBox,
   mountBackgroundMedia,
-  type PlacementInput,
-  placement,
 } from "./background-media.js";
 export {
   type ImageBindingHooks,

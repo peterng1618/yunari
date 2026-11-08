@@ -117,13 +117,15 @@ describe("extractVideoFrame", () => {
 });
 
 describe("transcodeVideo", () => {
-  it("crops the painted rect and scales it to the panel box", async () => {
+  const FILTER = "crop=180:180:70:0,scale=160:160:flags=lanczos";
+
+  it("runs the shared filter and writes the clip", async () => {
     const encoded = fixture("conforming.mp4");
     const run = runWriting(encoded);
 
     const result = await transcodeVideo(
       encoded,
-      { width: 160, height: 160 },
+      { filter: FILTER, complex: false },
       options(run),
     );
 
@@ -132,68 +134,42 @@ describe("transcodeVideo", () => {
     expect(result.bytes).toEqual(encoded);
 
     const args = run.mock.calls[0]?.[0] ?? [];
-    // 320×180 cover of a square box: the square source window is 180×180 at
-    // x=70, then encoded at the box's own 160×160.
-    expect(String(args[args.indexOf("-vf") + 1])).toBe(
-      "crop=180:180:70:0,scale=160:160:flags=lanczos",
-    );
+    expect(String(args[args.indexOf("-vf") + 1])).toBe(FILTER);
+    expect(args).not.toContain("-filter_complex");
   });
 
-  it("keeps the authored pan and zoom in the crop", async () => {
-    const encoded = fixture("conforming.mp4");
-    const run = runWriting(encoded);
-
-    const result = await transcodeVideo(
-      encoded,
-      { width: 160, height: 160, offsetX: 0.25, scale: 2 },
-      options(run),
-    );
-
-    expect(result.ok).toBe(true);
-    const args = run.mock.calls[0]?.[0] ?? [];
-    // The 2× zoom and quarter-box pan select a 90×90 window, moved 92 px right
-    // and 44 px up from the centred crop. The source window is smaller than the
-    // panel here, so it is left for the page to magnify.
-    expect(String(args[args.indexOf("-vf") + 1])).toBe(
-      "crop=90:90:92:44,scale=90:90:flags=lanczos",
-    );
-  });
-
-  it("never upscales a clip past the source window", async () => {
-    const encoded = fixture("conforming.mp4");
-    const run = runWriting(encoded);
-
-    const result = await transcodeVideo(
-      encoded,
-      { width: 4096, height: 4096 },
-      options(run),
-    );
-
-    expect(result.ok).toBe(true);
-    const args = run.mock.calls[0]?.[0] ?? [];
-    // The source window is 180×180; the page may magnify it, but the encoder
-    // adds no pixels of its own.
-    expect(String(args[args.indexOf("-vf") + 1])).toBe(
-      "crop=180:180:70:0,scale=180:180:flags=lanczos",
-    );
-  });
-
-  it("refuses a target that is not a pixel size", async () => {
+  it("runs a composed graph through filter_complex and bounds it", async () => {
     const run = runWriting(fixture("conforming.mp4"));
 
-    for (const target of [
-      { width: 0, height: 320 },
-      { width: 320, height: -1 },
-      { width: Number.NaN, height: 320 },
-      { width: 320.5, height: 320 },
-    ]) {
-      const result = await transcodeVideo(
-        fixture("conforming.mp4"),
-        target,
-        options(run),
-      );
-      expect(result.ok).toBe(false);
-    }
-    expect(run).not.toHaveBeenCalled();
+    const result = await transcodeVideo(
+      fixture("conforming.mp4"),
+      {
+        filter: "[0:v]scale=160:160[media];[fill][media]overlay[out]",
+        complex: true,
+        durationSeconds: 2.5,
+      },
+      options(run),
+    );
+
+    expect(result.ok).toBe(true);
+    const args = run.mock.calls[0]?.[0] ?? [];
+    expect(String(args[args.indexOf("-filter_complex") + 1])).toBe(
+      "[0:v]scale=160:160[media];[fill][media]overlay[out]",
+    );
+    expect(args[args.indexOf("-map") + 1]).toBe("[out]");
+    expect(String(args[args.indexOf("-t") + 1])).toBe("2.5");
+    expect(args).not.toContain("-vf");
+  });
+
+  it("reports a filter that produced no picture", async () => {
+    const run = vi.fn(async () => ({ code: 1, stderr: "" }));
+
+    const result = await transcodeVideo(
+      fixture("conforming.mp4"),
+      { filter: FILTER, complex: false },
+      options(run),
+    );
+
+    expect(result.ok).toBe(false);
   });
 });

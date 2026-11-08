@@ -1,14 +1,13 @@
 import {
   type AssetReference,
   activeBackgroundComposition,
-  BACKGROUND_MEDIA_DEFAULTS,
   type Background,
+  type BackgroundComposition,
+  backgroundGeometry,
   type BackgroundMask,
   type BackgroundMedia,
   blendRampStops,
   type CompositionRect,
-  MAX_BACKGROUND_SCALE,
-  MIN_BACKGROUND_SCALE,
   resolveBackgroundComposition,
 } from "@yunari/renderer-core";
 import type { BackdropMedia } from "./glass.js";
@@ -76,97 +75,10 @@ export interface MediaBounds {
  *  showing on this display, or the one the theme alone defines. */
 export type BackdropFit = "authored" | "theme";
 
-export interface PlacementInput {
-  readonly box: { readonly width: number; readonly height: number };
-  readonly source:
-    | { readonly width: number; readonly height: number }
-    | undefined;
-  readonly offsetX: number;
-  readonly offsetY: number;
-  /** Zoom over the cover fit, from `MIN_BACKGROUND_SCALE` to
-   *  `MAX_BACKGROUND_SCALE`; absent means 1. */
-  readonly scale?: number;
-}
-
-/** Finite, non-negative. A refused reading leaves nothing to draw. */
-const size = (value: number): number =>
-  Number.isFinite(value) ? Math.max(0, value) : 0;
-
 /**
- * The one media placement. The source always `cover`s the box — the larger axis
- * scale, so the rect is never smaller than the box on either axis — and the
- * offsets pan within the overhang the placed rect leaves. The result may extend
- * outside the box; the box is the caller's clip.
- *
- * **An offset implies the zoom it needs**. A pan of `|o|·box` needs an
- * overhang of `|o|·box`, so that axis needs a rect of `box·(1 + 2|o|)`; the
- * factor is the largest of the cover factor and those per-axis floors, times
- * the author's own `scale`. Without it a picture whose aspect matches the box
- * covers it exactly, leaves no overhang, and every offset clamps to zero — the
- * starter backdrop's case. One factor for both axes, so the picture never
- * distorts.
- *
- * The pan stays bounded by the overhang, so an offset can never uncover colour
- * inside the box: the rect has at least the overhang the offset asks for.
+ * A paint-time mirror about the element's own centre — the placed rect's
+ * centre — as a CSS transform. Empty when neither flip is set.
  */
-export function placement(input: PlacementInput): MediaBox {
-  const boxWidth = size(input.box.width);
-  const boxHeight = size(input.box.height);
-  const sourceWidth = input.source === undefined ? 0 : size(input.source.width);
-  const sourceHeight =
-    input.source === undefined ? 0 : size(input.source.height);
-
-  // No intrinsic size yet: there is nothing to cover or translate, so the box
-  // itself is the rect. Offsets are ignored, or the load window shows a strip.
-  if (sourceWidth <= 0 || sourceHeight <= 0) {
-    return { left: 0, top: 0, width: boxWidth, height: boxHeight };
-  }
-
-  const offsetX = Number.isFinite(input.offsetX) ? input.offsetX : 0;
-  const offsetY = Number.isFinite(input.offsetY) ? input.offsetY : 0;
-  const zoom = boundedScale(input.scale);
-  const factor =
-    Math.max(
-      boxWidth / sourceWidth,
-      boxHeight / sourceHeight,
-      panFloor(boxWidth, sourceWidth, offsetX),
-      panFloor(boxHeight, sourceHeight, offsetY),
-    ) * zoom;
-  const width = size(sourceWidth * factor);
-  const height = size(sourceHeight * factor);
-  const panX = bounded(boxWidth * offsetX, (width - boxWidth) / 2);
-  const panY = bounded(boxHeight * offsetY, (height - boxHeight) / 2);
-  return {
-    left: (boxWidth - width) / 2 + panX,
-    top: (boxHeight - height) / 2 + panY,
-    width,
-    height,
-  };
-}
-
-/** The factor that leaves `|offset|·box` of overhang on one axis, so the pan the
- *  offset asks for is reachable instead of clamping to nothing. */
-function panFloor(box: number, source: number, offset: number): number {
-  return source <= 0 ? 0 : (box * (1 + 2 * Math.abs(offset))) / source;
-}
-
-/** A stored scale outside the authored range is refused at the document
- *  boundary; a caller that arrives with one anyway still paints in range. */
-function boundedScale(scale: number | undefined): number {
-  if (scale === undefined || !Number.isFinite(scale)) {
-    return MIN_BACKGROUND_SCALE;
-  }
-  return Math.min(MAX_BACKGROUND_SCALE, Math.max(MIN_BACKGROUND_SCALE, scale));
-}
-
-/** A requested pan, stopped where the placed rect's own edge meets the box's. */
-function bounded(pan: number, overhang: number): number {
-  const limit = Math.max(0, overhang);
-  return Math.max(-limit, Math.min(limit, pan));
-}
-
-/** A paint-time mirror about the element's own centre — the placed rect's
- *  centre — as a CSS transform. Empty when neither flip is set. */
 function flipTransform(media: BackgroundMedia | undefined): string {
   const scales: string[] = [];
   if (media?.flipX === true) scales.push("scaleX(-1)");
@@ -309,25 +221,10 @@ export function mountBackgroundMedia(
     else frames?.stop();
   };
 
-  /** The geometry `placement` applies to the picture. A host-framed clip asks
-   *  for none: its pan and zoom are already in the pixels. */
-  const geometry = (
-    media: BackgroundMedia | undefined,
-  ): Pick<PlacementInput, "offsetX" | "offsetY" | "scale"> => ({
-    offsetX: framed
-      ? BACKGROUND_MEDIA_DEFAULTS.offsetX
-      : (media?.offsetX ?? BACKGROUND_MEDIA_DEFAULTS.offsetX),
-    offsetY: framed
-      ? BACKGROUND_MEDIA_DEFAULTS.offsetY
-      : (media?.offsetY ?? BACKGROUND_MEDIA_DEFAULTS.offsetY),
-    scale: framed
-      ? BACKGROUND_MEDIA_DEFAULTS.scale
-      : (media?.scale ?? BACKGROUND_MEDIA_DEFAULTS.scale),
-  });
-
   /**
-   * The layer is the clip: one of the two bounds boxes. The child is placed
-   * inside it by `placement`, which may extend past the clip on purpose.
+   * The layer is the clip: one of the two bounds boxes. A live picture is
+   * placed by the resolver inside it; a host-baked clip already carries the
+   * whole picture for that box and covers it.
    */
   const place = (): void => {
     const media = background?.media;
@@ -354,6 +251,31 @@ export function mountBackgroundMedia(
       : "";
     layer.style.transform = turned ? `rotate(${box.angle}deg)` : "";
     const child = element;
+
+    // The host's clip is the whole background picture for this box — fill,
+    // picture and fade — so the page lays it down 1:1 and adds no geometry,
+    // mask or mirror of its own.
+    if (framed) {
+      regionLayer.style.left = "0px";
+      regionLayer.style.top = "0px";
+      regionLayer.style.width = `${box.width}px`;
+      regionLayer.style.height = `${box.height}px`;
+      regionLayer.style.maskImage = "";
+      regionLayer.style.webkitMaskImage = "";
+      regionLayer.style.maskSize = "";
+      regionLayer.style.maskRepeat = "";
+      regionLayer.style.maskComposite = "";
+      regionLayer.style.webkitMaskComposite = "";
+      if (child !== undefined) {
+        child.style.left = "0px";
+        child.style.top = "0px";
+        child.style.width = `${box.width}px`;
+        child.style.height = `${box.height}px`;
+        child.style.transform = "";
+      }
+      return;
+    }
+
     // A centred band fits the picture's long edge, so the resolver needs the
     // source's own size; until the bytes arrive it covers the box and the
     // intrinsic listener re-places it.
@@ -361,6 +283,7 @@ export function mountBackgroundMedia(
       { width: box.width, height: box.height },
       activeBackgroundComposition(background),
       child === undefined ? undefined : intrinsic(child),
+      backgroundGeometry(media),
     );
     const region = composition.region;
     regionLayer.style.left = `${region.left}px`;
@@ -379,21 +302,15 @@ export function mountBackgroundMedia(
     regionLayer.style.webkitMaskComposite =
       composition.masks.length > 1 ? "source-in" : "";
     if (child === undefined || media === undefined) return;
-    // A host-framed clip was encoded for this region's own box, so it is laid
-    // down at that size. Cover-fitting it again would crop the source twice and
-    // show a picture the player never shows.
-    const rect = framed
-      ? { left: 0, top: 0, width: region.width, height: region.height }
-      : placement({
-          box: { width: region.width, height: region.height },
-          source: intrinsic(child),
-          ...geometry(media),
-        });
-    child.style.left = `${rect.left}px`;
-    child.style.top = `${rect.top}px`;
-    child.style.width = `${rect.width}px`;
-    child.style.height = `${rect.height}px`;
-    // Flip never enters `placement`: the rect, and the no-gap proof, stay put.
+    // The picture covers the area; the area layer clips it to the picture's own
+    // rect. A child placed in region-local pixels is the same picture without
+    // the area's offset.
+    const cover = composition.media?.cover ?? region;
+    child.style.left = `${cover.left - region.left}px`;
+    child.style.top = `${cover.top - region.top}px`;
+    child.style.width = `${cover.width}px`;
+    child.style.height = `${cover.height}px`;
+    // Flip never enters the rect, and stays inside the area's own frame.
     child.style.transform = flipTransform(media);
   };
 
@@ -662,18 +579,30 @@ export function mountBackgroundMedia(
         display === undefined ? bounds?.artboard.angle : display.angle;
       // The authored composition is expressed in the box the layer paints, so
       // it is resolved against the same rect the glass maps and the DOM places
-      // in; a centred band fits the mounted picture's long edge.
+      // in; a centred band fits the mounted picture's long edge. A host-baked
+      // clip is the whole box's picture, so its area is the box itself.
       const authored = activeBackgroundComposition(background);
-      const composition = resolveBackgroundComposition(
-        { width: rect.width, height: rect.height },
-        authored,
-        intrinsic(mounted),
-      );
+      const composition: BackgroundComposition = framed
+        ? {
+            region: {
+              left: 0,
+              top: 0,
+              width: rect.width,
+              height: rect.height,
+            },
+            masks: [],
+          }
+        : resolveBackgroundComposition(
+            { width: rect.width, height: rect.height },
+            authored,
+            intrinsic(mounted),
+            backgroundGeometry(background?.media),
+          );
       return {
         rect,
         ...(angle === undefined ? {} : { angle }),
         ...(display === undefined ? {} : { screenRect: display }),
-        ...(authored === undefined
+        ...(authored === undefined && !framed
           ? {}
           : {
               region: composition.region,
@@ -697,33 +626,21 @@ export function mountBackgroundMedia(
           // rect, a frame is what `drawImage` accepts.
           if (source === undefined || !drawable(drawSource)) return false;
           const media = background?.media;
-          // The child is placed inside this rect, the layer's box in artboard
-          // units; the glass maps that box onto the device rect it samples, so
-          // the sampler and the element cannot show different crops. A region
-          // narrows the placement to the same box the DOM wrapper uses.
-          const placed = placement({
-            box: {
-              width: composition.region.width,
-              height: composition.region.height,
-            },
-            source,
-            ...geometry(media),
-          });
+          // The picture's own rect in the layer's units: the whole box for a
+          // host-baked clip, otherwise the resolved cover. A source whose size
+          // is not known yet is the area itself.
+          const cover: CompositionRect = framed
+            ? { left: 0, top: 0, width: rect.width, height: rect.height }
+            : (composition.media?.cover ?? composition.region);
           const scaleX = rect.width > 0 ? device.width / rect.width : 0;
           const scaleY = rect.height > 0 ? device.height / rect.height : 0;
-          const left =
-            device.left -
-            region.left +
-            (composition.region.left + placed.left) * scaleX;
-          const top =
-            device.top -
-            region.top +
-            (composition.region.top + placed.top) * scaleY;
-          const width = placed.width * scaleX;
-          const height = placed.height * scaleY;
+          const left = device.left - region.left + cover.left * scaleX;
+          const top = device.top - region.top + cover.top * scaleY;
+          const width = cover.width * scaleX;
+          const height = cover.height * scaleY;
           // Five arguments: the whole source, placed. A source window is the
           // defect cropped the file with.
-          if (media?.flipX === true || media?.flipY === true) {
+          if (!framed && (media?.flipX === true || media?.flipY === true)) {
             // `drawImage` does not flip a negative destination width, so the
             // mirror is the same context transform the DOM child carries:
             // about the placed rect's centre.

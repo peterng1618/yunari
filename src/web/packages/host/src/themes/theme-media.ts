@@ -4,21 +4,17 @@ import {
   type AssetReference,
   activeBackgroundComposition,
   artboardSolidColor,
-  BACKGROUND_MEDIA_DEFAULTS,
+  backgroundGeometry,
   computeArtboardTransform,
   type FabricThemeEnvelope,
   type Globals,
   isArtboardGradient,
-  MAX_BACKGROUND_OFFSET,
-  MAX_BACKGROUND_SCALE,
-  MIN_BACKGROUND_OFFSET,
-  MIN_BACKGROUND_SCALE,
   type PalettePaint,
-  resolveBackgroundComposition,
   resolveStyleValue,
 } from "@yunari/renderer-core";
 import { readVideoFacts } from "@yunari/theme-package";
 import type { PanelVideoPlacement } from "../panels/panel-device.js";
+import { panelFilter } from "../panels/panel-video-composition.js";
 import { readContainedFile } from "./contained-read.js";
 import { isValidThemeId } from "./store.js";
 import {
@@ -55,7 +51,7 @@ const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
  * composed graph that leaves the authored inputs alone still has to move the
  * name; otherwise a host keeps serving the previous picture from its cache.
  */
-const PANEL_CLIP_REVISION = 2;
+const PANEL_CLIP_REVISION = 3;
 /** Long asset names keep their frame or size suffix; the rest is hashed. */
 const MAX_ASSET_LENGTH = 96;
 
@@ -100,7 +96,7 @@ export function panelVideoMediaName(
 ): string | undefined {
   const video = backgroundVideoOf(envelope);
   if (video === undefined) return undefined;
-  const geometry = backgroundGeometryOf(envelope);
+  const geometry = backgroundGeometry(envelope?.background?.media);
   // The authored pan and zoom are part of the picture, so a cache written for
   // another offset or scale is a different clip. `o`/`s` also invalidate the
   // earlier cover-only copies under the same pixel size; `c` is the composition
@@ -126,7 +122,7 @@ export function panelVideoMediaName(
 export function panelVideoPlacement(
   envelope: FabricThemeEnvelope | undefined,
 ): PanelVideoPlacement {
-  const geometry = backgroundGeometryOf(envelope);
+  const geometry = backgroundGeometry(envelope?.background?.media);
   const background = envelope?.background;
   const media = background?.media;
   const flips = {
@@ -175,39 +171,6 @@ function compositionKey(placement: PanelVideoPlacement): string {
     return "";
   }
   return `-c${digest(JSON.stringify([placement.composition, placement.fill]))}`;
-}
-
-/** The authored geometry the page would have applied itself. */
-export interface BackgroundGeometry {
-  readonly offsetX: number;
-  readonly offsetY: number;
-  readonly scale: number;
-}
-
-export function backgroundGeometryOf(
-  envelope: FabricThemeEnvelope | undefined,
-): BackgroundGeometry {
-  const media = envelope?.background?.media;
-  return {
-    offsetX: bounded(
-      media?.offsetX,
-      BACKGROUND_MEDIA_DEFAULTS.offsetX,
-      MIN_BACKGROUND_OFFSET,
-      MAX_BACKGROUND_OFFSET,
-    ),
-    offsetY: bounded(
-      media?.offsetY,
-      BACKGROUND_MEDIA_DEFAULTS.offsetY,
-      MIN_BACKGROUND_OFFSET,
-      MAX_BACKGROUND_OFFSET,
-    ),
-    scale: bounded(
-      media?.scale,
-      BACKGROUND_MEDIA_DEFAULTS.scale,
-      MIN_BACKGROUND_SCALE,
-      MAX_BACKGROUND_SCALE,
-    ),
-  };
 }
 
 /**
@@ -433,34 +396,25 @@ export function createThemeMedia(options: ThemeMediaOptions): ThemeMedia {
     },
 
     async panelVideo(id, envelope, viewport) {
-      // The page composes the media, fill and fade itself, and lays this clip
-      // down inside the media's box as-is: encoding the whole layer here would
-      // make the page cover-fit the clip a second time and crop the source
-      // twice. A centred band fits the picture's long edge, so the source's
-      // own size decides the box before the clip is encoded.
+      // The page composes the theme around this layer, so the clip is exactly
+      // the background picture for the layer's box: the same filter graph the
+      // panel's own device bake uses. The page lays it down 1:1, and its fill
+      // and fade arrive in the clip's pixels rather than being drawn again.
       const video = backgroundVideoOf(envelope);
       if (video === undefined) return undefined;
       const bytes = await videoBytes(id, video);
       if (bytes === undefined) return undefined;
       const box = panelMediaBox(envelope, viewport);
-      const composition = resolveBackgroundComposition(
+      const filter = panelFilter(
         box,
-        activeBackgroundComposition(envelope.background),
+        panelVideoPlacement(envelope),
         readVideoFacts(bytes),
+        { kind: "turn", turn: "none" },
       );
-      const size = {
-        width: Math.max(1, Math.round(composition.region.width)),
-        height: Math.max(1, Math.round(composition.region.height)),
-      };
-      const geometry = backgroundGeometryOf(envelope);
-      const name = panelVideoMediaName(id, envelope, size.width, size.height);
+      const name = panelVideoMediaName(id, envelope, box.width, box.height);
       if (name === undefined) return undefined;
       return cached(name, MAX_VIDEO_BYTES, async () => {
-        const scaled = await transcode(
-          bytes,
-          { ...size, ...geometry },
-          undefined,
-        );
+        const scaled = await transcode(bytes, filter, undefined);
         if (!scaled.ok) {
           report(scaled.message);
           return undefined;

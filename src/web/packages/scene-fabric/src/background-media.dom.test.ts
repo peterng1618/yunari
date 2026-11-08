@@ -197,19 +197,106 @@ describe("background media", () => {
       display: { left: 0, top: 0, width: 200, height: 100 },
     });
 
-    // 200×100 box, 100×100 source: cover makes it 200×200, and a quarter-box
-    // offset pans it 25px within the half-box overhang.
+    // 200×100 box, 100×100 source, scale 1: the area is the box itself, so the
+    // offset has no overhang to slide through and the cover rect is the whole
+    // picture centred on it.
     expect(child.style.left).toBe("0px");
-    expect(child.style.top).toBe("-25px");
+    expect(child.style.top).toBe("-50px");
     expect(child.style.width).toBe("200px");
     expect(child.style.height).toBe("200px");
     handle.destroy();
   });
 
-  it("places a host-framed clip in the region it was baked for", () => {
-    // The host bakes the region's own cover into the clip, so the page lays it
-    // down at the region's size. Cover-fitting it again would crop the source a
-    // second time and show a picture the player never shows.
+  it("grows the media area and places the picture over it", () => {
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: { media: { assetId: "loop", bounds: "theme", scale: 2 } },
+      artboard: { width: 400, height: 100 },
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+    });
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const child = host.querySelector<HTMLVideoElement>(
+      "[data-yunari-background-media] video",
+    );
+    if (region === null || child === null)
+      throw new Error("the layer mounted no video");
+    // jsdom decodes nothing: the size the cover needs has to be stated.
+    Object.defineProperty(child, "videoWidth", { value: 160 });
+    Object.defineProperty(child, "videoHeight", { value: 90 });
+    Object.defineProperty(child, "readyState", { value: 1 });
+    child.dispatchEvent(new Event("loadedmetadata"));
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 100 },
+    });
+
+    // A simple background grows its area about the centre; the picture covers
+    // that area, so only the box's own edge clips anything.
+    expect(region.style.left).toBe("-200px");
+    expect(region.style.top).toBe("-50px");
+    expect(region.style.width).toBe("800px");
+    expect(region.style.height).toBe("200px");
+    expect(child.style.left).toBe("0px");
+    expect(child.style.top).toBe("-125px");
+    expect(child.style.width).toBe("800px");
+    expect(child.style.height).toBe("450px");
+    handle.destroy();
+  });
+
+  it("lays a host-baked clip over the box it was baked for", () => {
+    // The host composes the whole media area — fill, picture and fade — into
+    // this clip, so the page shows it 1:1 over the layer's box and applies no
+    // geometry or mask of its own.
+    const host = document.createElement("div");
+    const handle = mountBackgroundMedia({
+      host,
+      background: {
+        mode: "advanced",
+        media: {
+          assetId: "loop",
+          bounds: "theme",
+          scale: 2,
+          composition: { anchor: "center", fade: 0.2 },
+        },
+      },
+      artboard: { width: 400, height: 100 },
+      assets: [LOOP],
+      resolveAsset: () => ({ url: "blob:loop" }),
+      backgroundSource: { url: "/api/theme/panel-video", kind: "video" },
+    });
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    const child = host.querySelector<HTMLVideoElement>(
+      "[data-yunari-background-media] video",
+    );
+    if (region === null || child === null)
+      throw new Error("the layer mounted no video");
+
+    handle.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 100 },
+    });
+
+    expect(child.src).toContain("/api/theme/panel-video");
+    expect(region.style.left).toBe("0px");
+    expect(region.style.top).toBe("0px");
+    expect(region.style.width).toBe("400px");
+    expect(region.style.height).toBe("100px");
+    expect(region.style.maskImage).toBe("");
+    expect(child.style.left).toBe("0px");
+    expect(child.style.top).toBe("0px");
+    expect(child.style.width).toBe("400px");
+    expect(child.style.height).toBe("100px");
+    handle.destroy();
+  });
+
+  it("lays a host-baked clip over the box, fill and fade included", () => {
+    // The host composes the whole background picture for the box, so the page
+    // lays it down 1:1; only the clip's own pixels show the band and its fade.
     const host = document.createElement("div");
     const handle = mountBackgroundMedia({
       host,
@@ -238,8 +325,7 @@ describe("background media", () => {
 
     expect(child.style.left).toBe("0px");
     expect(child.style.top).toBe("0px");
-    // A half-width right band keeps the box's full height.
-    expect(child.style.width).toBe("100px");
+    expect(child.style.width).toBe("200px");
     expect(child.style.height).toBe("100px");
     handle.destroy();
   });
@@ -317,12 +403,12 @@ describe("background media", () => {
       display: { left: 0, top: 0, width: 400, height: 200 },
     });
 
-    // 400×200 box, 100×100 source: cover is 4×, and a quarter-box pan on x needs
-    // box*(1 + 0.5)/source = 6×, so the rect is 600×600 and pans 100px.
+    // 400×200 box, 100×100 source, scale 1: the area is the box, so the picture
+    // covers it at 4× and is centred; the offset has no overhang to move it.
     expect(child.style.left).toBe("0px");
-    expect(child.style.top).toBe("-200px");
-    expect(child.style.width).toBe("600px");
-    expect(child.style.height).toBe("600px");
+    expect(child.style.top).toBe("-100px");
+    expect(child.style.width).toBe("400px");
+    expect(child.style.height).toBe("400px");
     handle.destroy();
   });
 
@@ -755,6 +841,7 @@ describe("background media as a glass backdrop", () => {
           bounds: "theme",
           offsetX: 0.25,
           offsetY: 0.25,
+          scale: 2,
         },
       },
       artboard: { width: 200, height: 100 },
@@ -764,9 +851,9 @@ describe("background media as a glass backdrop", () => {
     withIntrinsic(host, 100, 100);
 
     const { calls, ctx } = recordingContext();
-    // 200×100 box, 100×100 source: cover is 200×200, and the quarter-box offsets
-    // ask for a 50 px horizontal pan, which needs the 1.5× rect (300×300)
-    // describes; the 25 px vertical pan then sits inside the extra overhang.
+    // 200×100 box, 100×100 source: doubling the area leaves a 100×50 overhang
+    // each way, so the quarter offsets slide it 50/25 px, and the picture covers
+    // the moved area at 400×400.
     const painted = handle
       .backdrop()
       ?.paint(
@@ -776,7 +863,7 @@ describe("background media as a glass backdrop", () => {
         "dynamic",
       );
     expect(painted).toBe(true);
-    expect(calls[0]?.slice(-4)).toEqual([0, -75, 300, 300]);
+    expect(calls[0]?.slice(-4)).toEqual([-50, -125, 400, 400]);
     handle.destroy();
   });
 

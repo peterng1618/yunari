@@ -787,6 +787,89 @@ describe("glass composition", () => {
     expect(pixel[0], "not the corner's left half").toBeLessThan(60);
   });
 
+  it("draws the whole source into the cover rect the DOM places", () => {
+    // The layer and the sampler must resolve one picture: the media area, the
+    // cover rect inside it, and the ramps. Each half is asserted on its own
+    // elsewhere; this is the join, and a wrong region would show the picture at
+    // the wrong offset rather than fail.
+    const host = document.createElement("div");
+    const media = mountBackgroundMedia({
+      host,
+      background: {
+        mode: "advanced",
+        media: {
+          assetId: "hero",
+          bounds: "theme",
+          scale: 2,
+          composition: { anchor: "center" },
+        },
+      },
+      artboard: { width: 400, height: 100 },
+      assets: [{ id: "hero", kind: "image", path: "assets/hero.png" }],
+      resolveAsset: () => ({ url: "blob:hero" }),
+    });
+    const image = host.querySelector<HTMLImageElement>("img");
+    const region = host.querySelector<HTMLElement>(
+      "[data-yunari-background-region]",
+    );
+    if (image === null || region === null)
+      throw new Error("the layer mounted no image");
+    // jsdom decodes nothing: state the size the cover needs and land it.
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 160 });
+    Object.defineProperty(image, "naturalHeight", { value: 90 });
+    image.dispatchEvent(new Event("load"));
+    media.setBounds({
+      artboard: { left: 0, top: 0, width: 400, height: 100 },
+    });
+
+    const backdrop = media.backdrop();
+    const resolved = backdrop?.region;
+    if (resolved === undefined) throw new Error("the backdrop has no region");
+    // The authored scale grows the area itself, so the seeded picture is twice
+    // the contain-fit of a 16:9 source in a 4:1 box.
+    expect(resolved.left).toBeCloseTo(22.222, 3);
+    expect(resolved.top).toBeCloseTo(-50, 6);
+    expect(resolved.width).toBeCloseTo(355.556, 3);
+    expect(resolved.height).toBeCloseTo(200, 6);
+    // The DOM's area layer and the sampled region are the same rect.
+    expect(resolved.left).toBeCloseTo(Number.parseFloat(region.style.left), 3);
+    expect(resolved.top).toBeCloseTo(Number.parseFloat(region.style.top), 3);
+    expect(resolved.width).toBeCloseTo(
+      Number.parseFloat(region.style.width),
+      3,
+    );
+    expect(resolved.height).toBeCloseTo(
+      Number.parseFloat(region.style.height),
+      3,
+    );
+
+    const draws: number[][] = [];
+    const context = {
+      save() {},
+      restore() {},
+      translate() {},
+      scale() {},
+      drawImage(_source: unknown, ...args: number[]) {
+        draws.push(args);
+      },
+    } as unknown as CanvasRenderingContext2D;
+    const device = { left: 0, top: 0, width: 400, height: 100 };
+    expect(backdrop?.paint(context, device, device, "dynamic")).toBe(true);
+
+    // Five arguments: the whole source at the cover rect, mapped into the
+    // sampler's device pixels — the same rect the DOM child is given.
+    expect(draws).toHaveLength(1);
+    const [left = 0, top = 0, width = 0, height = 0] = draws[0]!;
+    expect(left).toBeCloseTo(22.222, 3);
+    expect(top).toBeCloseTo(-50, 6);
+    expect(width).toBeCloseTo(355.556, 3);
+    expect(height).toBeCloseTo(200, 6);
+
+    media.destroy();
+    host.remove();
+  });
+
   it("walks a display-filled layer from its own box to the device rect", () => {
     // Three numbers in one place: the box the layer sits on, the rect the
     // media reports for it in artboard units, and the device rect the sampler

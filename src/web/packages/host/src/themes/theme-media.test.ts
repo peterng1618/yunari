@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
@@ -10,6 +11,7 @@ import {
   panelVideoPlacement,
   stillMediaName,
   type ThemeMediaOptions,
+  type ThemeMediaSource,
 } from "./theme-media.js";
 
 const PNG = Uint8Array.from([
@@ -25,6 +27,15 @@ const VIDEO_ASSET = {
   path: "assets/4K loop.mp4",
   kind: "video",
 };
+
+/** A real MP4 from the theme package's fixtures, so the source facts are read. */
+function fixture(name: string): Uint8Array {
+  return new Uint8Array(
+    readFileSync(
+      new URL(`../../../theme-package/test-fixtures/${name}`, import.meta.url),
+    ),
+  );
+}
 
 function envelopeWith(
   background: unknown,
@@ -89,7 +100,7 @@ describe("media names", () => {
   it("name a panel clip by its pixel size and baked geometry", () => {
     expect(
       panelVideoMediaName("theme", envelopeWith(BACKGROUND), 320, 320),
-    ).toBe("theme~4K_loop~320x320-o0_0-s1-f-v2.mp4");
+    ).toBe("theme~4K_loop~320x320-o0_0-s1-f-v3.mp4");
   });
 
   it("change the clip name when the authored pan or zoom changes", () => {
@@ -228,10 +239,12 @@ describe("createThemeMedia", () => {
   function media(options: {
     extract?: ReturnType<typeof vi.fn>;
     transcode?: ReturnType<typeof vi.fn>;
+    readAsset?: ThemeMediaSource["readAsset"];
   }) {
     return createThemeMedia({
       directory,
-      readAsset: async () => ({ bytes: new Uint8Array([9, 9, 9]) }),
+      readAsset:
+        options.readAsset ?? (async () => ({ bytes: new Uint8Array([9, 9, 9]) })),
       extract: (options.extract ??
         (async () => ({
           ok: true as const,
@@ -316,18 +329,26 @@ describe("createThemeMedia", () => {
       height: 1920,
     });
 
-    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-f-v2.mp4");
-    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-f-v2.mp4");
+    expect(phone?.name).toBe("theme~4K_loop~320x320-o0_0-s1-f-v3.mp4");
+    expect(panel?.name).toBe("theme~4K_loop~464x464-o0_0-s1-f-v3.mp4");
     expect(transcode).toHaveBeenCalledTimes(2);
     expect(transcode).toHaveBeenLastCalledWith(
       new Uint8Array([9, 9, 9]),
-      expect.objectContaining({ width: 464, height: 464 }),
+      {
+        filter:
+          "scale=464:464:force_original_aspect_ratio=increase:force_divisible_by=2,crop=464:464,setsar=1",
+        complex: false,
+      },
       undefined,
     );
   });
 
-  it("encodes a composed page clip at the media's box, not the whole layer", async () => {
-    const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
+  it("bakes an advanced composition's fill and fade into the page clip", async () => {
+    // Two declared parameters so `mock.calls` carries the encode target.
+    const transcode = vi.fn(async (_bytes: Uint8Array, _target: unknown) => ({
+      ok: true as const,
+      bytes: MP4,
+    }));
     const service = media({ transcode });
 
     await service.panelVideo(
@@ -343,36 +364,46 @@ describe("createThemeMedia", () => {
       { width: 640, height: 360 },
     );
 
-    // The page lays this clip down inside the media's band as-is, so its pixels
-    // are the band's cover of the source. Encoding the whole 640×360 layer here
-    // would make the page crop the source a second time.
-    expect(transcode).toHaveBeenCalledWith(
-      new Uint8Array([9, 9, 9]),
-      { width: 320, height: 360, offsetX: 0, offsetY: 0, scale: 1 },
-      undefined,
-    );
+    // The page shows this clip 1:1 over its media box, so the clip is the whole
+    // box's picture: a half-width band over the authored fill.
+    const filter = transcode.mock.calls[0]?.[1] as {
+      readonly filter: string;
+      readonly complex: boolean;
+    };
+    expect(filter.complex).toBe(true);
+    expect(filter.filter).toContain("scale=320:360");
+    expect(filter.filter).toContain("color=c=0x000000:s=640x360");
   });
 
   it("bakes the theme's authored pan and zoom into the clip", async () => {
     const transcode = vi.fn(async () => ({ ok: true as const, bytes: MP4 }));
-    const service = media({ transcode });
+    const service = media({
+      transcode,
+      // The one fixture whose picture is 160×90: the source facts decide the
+      // window the grown area sees.
+      readAsset: async () => ({ bytes: fixture("vfr.mp4") }),
+    });
 
     await service.panelVideo(
       "theme",
       envelopeWith({
-        media: { assetId: "bg", offsetX: 0.25, offsetY: -0.5, scale: 2 },
+        media: {
+          assetId: "bg",
+          bounds: "display",
+          offsetX: 0.25,
+          offsetY: -0.5,
+          scale: 2,
+        },
       }),
       { width: 320, height: 320 },
     );
 
     expect(transcode).toHaveBeenCalledWith(
-      new Uint8Array([9, 9, 9]),
+      fixture("vfr.mp4"),
       {
-        width: 320,
-        height: 320,
-        offsetX: 0.25,
-        offsetY: -0.5,
-        scale: 2,
+        filter:
+          "crop=45:45:46:45,scale=320:320:force_divisible_by=2,setsar=1",
+        complex: false,
       },
       undefined,
     );
