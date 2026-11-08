@@ -1,11 +1,13 @@
 import {
   artboardGradientLine,
+  backgroundGeometry,
   type BackgroundMask,
   blendRampStops,
+  type CompositionRect,
   type PalettePaint,
   resolveBackgroundComposition,
+  visibleArea,
 } from "@yunari/renderer-core";
-import { placement } from "@yunari/scene-fabric";
 import type { PanelVideoPlacement } from "./panel-device.js";
 import {
   angleFilter,
@@ -15,21 +17,13 @@ import {
 } from "./panel-video-turn.js";
 
 /**
- * The composed background graph both device-played panel families bake.
+ * The picture both device-played panel families bake.
  *
  * The TURZX and the TUR USB differ in wire geometry and encoder flags, not in
- * what a composition looks like. One graph here keeps the fill, the media
+ * what a composition looks like. One filter here keeps the fill, the media
  * region and the eased fade identical on every panel, and lets the caller turn
  * the finished picture onto its own wire frame last.
  */
-
-/** The source-pixel window a panel's box sees, from `scene-fabric`'s placement. */
-export interface PanelCrop {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
 
 /** The source facts a region's cover and a finite output need. */
 export interface VideoSourceFacts {
@@ -38,52 +32,75 @@ export interface VideoSourceFacts {
   readonly durationMs?: number;
 }
 
-export function panelCrop(
-  source: { readonly width: number; readonly height: number },
-  offsetX: number,
-  offsetY: number,
-  box: { readonly width: number; readonly height: number },
-  scale?: number,
-): PanelCrop {
-  const rect = placement({
-    box,
-    source,
-    offsetX: Number.isFinite(offsetX) ? offsetX : 0,
-    offsetY: Number.isFinite(offsetY) ? offsetY : 0,
-    ...(scale === undefined ? {} : { scale }),
-  });
+/** One ffmpeg picture, ready to be passed as `-vf` or `-filter_complex`. */
+export interface EncodeFilter {
+  readonly filter: string;
+  readonly complex: boolean;
+  /** The composed graph's fill and mask never end, so the output needs the
+   *  source's own duration; the plain path takes its length from the input. */
+  readonly durationSeconds?: number;
+}
 
-  const scaleX = rect.width / source.width;
-  const scaleY = rect.height / source.height;
-  const width = Math.max(1, Math.round(box.width / scaleX));
-  const height = Math.max(1, Math.round(box.height / scaleY));
+/**
+ * The filter that puts `source` onto the panel's `box`, already turned.
+ *
+ * `box` is the layout box the mount asks for (`rotationBox`). Both device
+ * families call this, so the panel, the glass and the DOM all read one
+ * geometry: the resolver decides the area, the source window and the fill.
+ */
+export function panelFilter(
+  box: { readonly width: number; readonly height: number },
+  placement: PanelVideoPlacement,
+  source: VideoSourceFacts | undefined,
+  rotation: PanelVideoRotation,
+): EncodeFilter {
+  if (placement.composition !== undefined || placement.fill !== undefined) {
+    const seconds = composedSeconds(source);
+    return {
+      filter: composeFilterGraph(box, placement, source, rotation),
+      complex: true,
+      ...(seconds === undefined ? {} : { durationSeconds: seconds }),
+    };
+  }
+
+  const composition = resolveBackgroundComposition(
+    box,
+    placement.composition,
+    source,
+    backgroundGeometry(placement),
+  );
+  const media = composition.media;
+  const picture =
+    media === undefined
+      ? `scale=${box.width}:${box.height}:force_original_aspect_ratio=increase` +
+        `:force_divisible_by=2,crop=${box.width}:${box.height}`
+      : `crop=${media.crop.width}:${media.crop.height}:${media.crop.x}:${media.crop.y}` +
+        `,scale=${box.width}:${box.height}:force_divisible_by=2`;
 
   return {
-    x: clamp(
-      Math.round(-rect.left / scaleX),
-      0,
-      Math.max(0, source.width - width),
-    ),
-    y: clamp(
-      Math.round(-rect.top / scaleY),
-      0,
-      Math.max(0, source.height - height),
-    ),
-    width,
-    height,
+    // `setsar=1` pins the output to square pixels: `scale` keeps the source's
+    // display aspect and would otherwise hand a non-square sample aspect on.
+    filter: `${picture},setsar=1${flipFilter(placement)}${turnOf(rotation, box)}`,
+    complex: false,
   };
 }
 
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(high, value));
+/** The display's turn, as the fragment that composes it onto the wire frame. */
+function turnOf(
+  rotation: PanelVideoRotation,
+  box: { readonly width: number; readonly height: number },
+): string {
+  return rotation.kind === "turn"
+    ? turnFilter(rotation.turn)
+    : angleFilter(rotation.degrees, box);
 }
 
 /**
  * The composed graph, in `box` and with the turn applied last.
  *
- * The fill covers the whole box; the media is cropped to the region's cover,
- * scaled to the region, masked, and laid over the fill at the region's offset.
- * The resolver's own geometry is used rather than re-deriving the ramp, so the
+ * The fill covers the whole box; the media's source window fills the area the
+ * box lets through, is masked, and is laid over the fill where it sits. The
+ * resolver's own geometry is used rather than re-deriving the ramp, so the
  * device and the page describe one picture.
  */
 export function composeFilterGraph(
@@ -96,31 +113,25 @@ export function composeFilterGraph(
     box,
     placement.composition,
     source,
+    backgroundGeometry(placement),
   );
-  const region = composition.region;
-  const width = Math.max(1, Math.round(region.width));
-  const height = Math.max(1, Math.round(region.height));
-  const x = Math.max(0, Math.round(region.left));
-  const y = Math.max(0, Math.round(region.top));
+  const media = composition.media;
+  const dest: CompositionRect =
+    media?.dest ?? visibleArea(composition.region, box);
+  const width = Math.max(1, Math.round(dest.width));
+  const height = Math.max(1, Math.round(dest.height));
+  const x = Math.round(dest.left);
+  const y = Math.round(dest.top);
 
-  const media =
-    source === undefined || source.width <= 0 || source.height <= 0
+  const picture =
+    media === undefined
       ? `scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop=${width}:${height}`
-      : (() => {
-          const crop = panelCrop(
-            { width: source.width, height: source.height },
-            placement.offsetX,
-            placement.offsetY,
-            { width: region.width, height: region.height },
-            placement.scale,
-          );
-          return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${width}:${height}`;
-        })();
+      : `crop=${media.crop.width}:${media.crop.height}:${media.crop.x}:${media.crop.y},scale=${width}:${height}:force_divisible_by=2`;
 
   const parts = [
     // The mirror belongs to the media, not the fill behind it, so it is applied
     // before the overlay and before the display's turn.
-    `[0:v]${media}${flipFilter(placement)}[media]`,
+    `[0:v]${picture},setsar=1${flipFilter(placement)}[media]`,
     `${fillSource(placement.fill, box.width, box.height)}[fill]`,
   ];
 
@@ -155,10 +166,7 @@ export function composeFilterGraph(
     overlayInput = "composed";
   }
 
-  const turnStep =
-    rotation.kind === "turn"
-      ? turnFilter(rotation.turn)
-      : angleFilter(rotation.degrees, box);
+  const turnStep = turnOf(rotation, box);
   parts.push(
     `[fill][${overlayInput}]overlay=x=${x}:y=${y}:shortest=1[turned]`,
     `[turned]${turnStep === "" ? "null" : turnStep.slice(1)}[out]`,

@@ -329,6 +329,24 @@ function slid(
   };
 }
 
+/** The part of `region` the box lets through, never smaller than a pixel.
+ *  Every surface that draws the final picture reads this one intersect. */
+export function visibleArea(
+  region: CompositionRect,
+  box: { readonly width: number; readonly height: number },
+): CompositionRect {
+  const left = Math.max(0, region.left);
+  const top = Math.max(0, region.top);
+  const right = Math.min(box.width, region.left + region.width);
+  const bottom = Math.min(box.height, region.top + region.height);
+  return {
+    left,
+    top,
+    width: Math.max(1, Math.min(box.width - left, right - left)),
+    height: Math.max(1, Math.min(box.height - top, bottom - top)),
+  };
+}
+
 /** The source window that fills `dest`, and the cover rect it was cut from. */
 function placeMedia(
   region: CompositionRect,
@@ -345,16 +363,7 @@ function placeMedia(
     width: source.width * factor,
     height: source.height * factor,
   };
-  const left = Math.max(0, cover.left);
-  const top = Math.max(0, cover.top);
-  const right = Math.min(box.width, cover.left + cover.width);
-  const bottom = Math.min(box.height, cover.top + cover.height);
-  const dest: CompositionRect = {
-    left,
-    top,
-    width: Math.max(1, Math.min(box.width - left, right - left)),
-    height: Math.max(1, Math.min(box.height - top, bottom - top)),
-  };
+  const dest = visibleArea(cover, box);
   const x = clamp(
     Math.round((dest.left - cover.left) / factor),
     0,

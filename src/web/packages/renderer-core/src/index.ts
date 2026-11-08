@@ -323,6 +323,7 @@ export {
   type CompositionMedia,
   type CompositionRect,
   resolveBackgroundComposition,
+  visibleArea,
 } from "./theme/background-composition.js";
 export type { CapabilityGroup } from "./theme/capabilities.js";
 export {

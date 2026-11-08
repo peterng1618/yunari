@@ -9,17 +9,13 @@ import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelGeometry, PanelVideoPlacement } from "./panel-device.js";
 import {
-  composedSeconds,
-  composeFilterGraph,
+  panelFilter,
   type VideoSourceFacts,
 } from "./panel-video-composition.js";
 import {
-  angleFilter,
-  flipFilter,
   type PanelVideoRotation,
   type PanelVideoTurn,
   rotationBox,
-  turnFilter,
   turnRefusal,
   videoRotation,
 } from "./panel-video-turn.js";
@@ -88,24 +84,12 @@ export function panelH264Args(
     typeof turnOrAngle === "string"
       ? { kind: "turn", turn: turnOrAngle }
       : turnOrAngle;
-  const composed =
-    placement.composition !== undefined || placement.fill !== undefined;
-  const filter = composed
-    ? {
-        complex: true,
-        text: composeFilterGraph(
-          rotationBox(geometry, rotation),
-          placement,
-          source,
-          rotation,
-        ),
-        seconds: composedSeconds(source),
-      }
-    : {
-        complex: false,
-        text: panelFilter(geometry, placement, rotation),
-        seconds: undefined,
-      };
+  const filter = panelFilter(
+    rotationBox(geometry, rotation),
+    placement,
+    source,
+    rotation,
+  );
 
   return [
     "-hide_banner",
@@ -117,10 +101,12 @@ export function panelH264Args(
     // Formatting the panel's own picture: cover the glass, pan the way the
     // theme authored it, then turn onto the wire's portrait frame.
     ...(filter.complex
-      ? ["-filter_complex", filter.text, "-map", "[out]"]
-      : ["-vf", filter.text]),
+      ? ["-filter_complex", filter.filter, "-map", "[out]"]
+      : ["-vf", filter.filter]),
     // The fill source never ends; the source's own length bounds the output.
-    ...(filter.seconds === undefined ? [] : ["-t", String(filter.seconds)]),
+    ...(filter.durationSeconds === undefined
+      ? []
+      : ["-t", String(filter.durationSeconds)]),
     // The vendor's encode, verbatim. It fixes no frame rate, no bitrate and
     // no keyframe interval: the panel takes the stream's own pacing.
     "-c:v",
@@ -138,59 +124,6 @@ export function panelH264Args(
     "h264",
     output,
   ];
-}
-
-/**
- * The composition, fitted to the glass and panned the way the theme authored
- * it, then turned onto the wire's portrait frame.
- *
- * **The pan is `scene-fabric`'s `placement`, in ffmpeg expressions.** The same
- * rule applies here because the device, not the player page, is drawing: cover,
- * then pan within the overhang, and zoom first when the source's own aspect
- * leaves no overhang to pan through.
- *
- * **The box is the one the mount puts the layer in.** A quarter turn swaps the
- * wire geometry's edges, so the crop is the landscape 1920×464 on the attached
- * 9.2" — whose record is 90° — and the turn comes after the crop.
- */
-function panelFilter(
-  geometry: PanelGeometry,
-  placement: {
-    readonly offsetX: number;
-    readonly offsetY: number;
-    readonly scale?: number;
-    readonly flipX?: boolean;
-    readonly flipY?: boolean;
-  },
-  rotation: PanelVideoRotation,
-): string {
-  const box = rotationBox(geometry, rotation);
-  const boxWidth = box.width;
-  const boxHeight = box.height;
-  const offsetX = Number.isFinite(placement.offsetX) ? placement.offsetX : 0;
-  const offsetY = Number.isFinite(placement.offsetY) ? placement.offsetY : 0;
-  const zoom =
-    placement.scale !== undefined && Number.isFinite(placement.scale)
-      ? placement.scale
-      : 1;
-
-  const floorX = boxWidth * (1 + 2 * Math.abs(offsetX));
-  const floorY = boxHeight * (1 + 2 * Math.abs(offsetY));
-  // ffmpeg's `max` takes two arguments, so the four-way choice nests.
-  const factor = `max(max(${boxWidth}/iw,${boxHeight}/ih),max(${floorX}/iw,${floorY}/ih))*${zoom}`;
-
-  return (
-    [
-      `scale=w='iw*${factor}':h='ih*${factor}'`,
-      `crop=${boxWidth}:${boxHeight}:` +
-        `x='clip((in_w-${boxWidth})/2-${boxWidth}*${offsetX},0,in_w-${boxWidth})':` +
-        `y='clip((in_h-${boxHeight})/2-${boxHeight}*${offsetY},0,in_h-${boxHeight})'`,
-    ].join(",") +
-    flipFilter(placement) +
-    (rotation.kind === "turn"
-      ? turnFilter(rotation.turn)
-      : angleFilter(rotation.degrees, box))
-  );
 }
 
 /** One clip, ready to feed: the elementary stream and how long it plays. */

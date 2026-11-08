@@ -3,10 +3,9 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { blendRampStops } from "@yunari/renderer-core";
-import { placement } from "@yunari/scene-fabric";
 import { describe, expect, it } from "vitest";
 import type { PanelDevice, PanelVideoPlacement } from "./panel-device.js";
-import { panelCrop } from "./panel-video-composition.js";
+import { panelFilter } from "./panel-video-composition.js";
 import type { SerialTransport } from "./serial-transport.js";
 import { openTurzxPanel, type TurzxOptions } from "./turzx-panel.js";
 import { transcodeForPanel } from "./turzx-video.js";
@@ -208,7 +207,7 @@ describe("transcodeForPanel", () => {
         verifyForTest: true,
       });
       expect(filterOf(upright.calls[0]!)).toBe(
-        "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480",
+        "scale=800:480:force_original_aspect_ratio=increase:force_divisible_by=2,crop=800:480,setsar=1",
       );
 
       // A quarter turn swaps the layer's box before it turns, so the crop is
@@ -221,7 +220,7 @@ describe("transcodeForPanel", () => {
         rotation: 90,
       });
       expect(filterOf(turned.calls[0]!)).toBe(
-        "scale=480:800:force_original_aspect_ratio=increase:force_divisible_by=2,crop=480:800,transpose=1",
+        "scale=480:800:force_original_aspect_ratio=increase:force_divisible_by=2,crop=480:800,setsar=1,transpose=1",
       );
 
       const counter = recordingRun();
@@ -479,46 +478,60 @@ describe("the composed panel clip", () => {
   });
 });
 
-describe("panelCrop", () => {
-  const box = { width: 800, height: 480 };
+describe("panelFilter", () => {
+  const box = { width: 400, height: 100 } as const;
+  const source = { width: 160, height: 90 } as const;
+  const still = { kind: "turn", turn: "none" } as const;
 
-  it("crops to the same edge the player places", () => {
-    // An ultrawide source leaves an overhang the offset pans through without
-    // the pan floor taking over, so the placed rect's edge is not the box edge.
-    const source = { width: 2560, height: 1080 };
-    const rect = placement({
+  it("crops the plain bake to the visible area", () => {
+    const filter = panelFilter(
       box,
+      { offsetX: 0, offsetY: 0, scale: 2 },
       source,
-      offsetX: 0.1,
-      offsetY: 0,
-    });
-    const crop = panelCrop(source, 0.1, 0, box);
+      still,
+    );
 
-    // The scaled crop edge is the placed rect's left edge, expressed in source
-    // pixels; the same pan the player composes is what the panel encodes.
-    const scale = rect.width / source.width;
-    expect(Math.round(crop.x * scale)).toBe(Math.round(-rect.left));
-    expect(crop).toEqual({ x: 200, y: 0, width: 1800, height: 1080 });
-    expect(crop.x + crop.width).toBeLessThanOrEqual(source.width);
+    // The area grew to 800×200 about the centre, so the box sees this window.
+    expect(filter).toMatchObject({ complex: false });
+    expect(filter.filter).toBe(
+      "crop=80:20:40:35,scale=400:100:force_divisible_by=2,setsar=1",
+    );
   });
 
-  it("crops the box the mounting angle puts the layer in", () => {
-    // A 90° mount lays the layer out in 480×800 before turning it onto the
-    // glass, so the source window is portrait too.
-    const crop = panelCrop({ width: 1920, height: 1080 }, 0, 0, {
-      width: 480,
-      height: 800,
-    });
+  it("bakes the composed area at dest and overlays it at dest", () => {
+    const filter = panelFilter(
+      box,
+      {
+        offsetX: 0,
+        offsetY: 0,
+        scale: 2,
+        composition: { anchor: "center" },
+      },
+      source,
+      still,
+    );
 
-    expect(crop.width / crop.height).toBeCloseTo(480 / 800, 2);
-    expect(crop.x + crop.width).toBeLessThanOrEqual(1920);
+    expect(filter.complex).toBe(true);
+    expect(filter.filter).toContain(
+      "crop=160:45:0:23,scale=356:100:force_divisible_by=2",
+    );
+    // The overlay is where the box lets the area through, not the region's
+    // own (clipped) edge, so nothing is drawn at a negative position.
+    expect(filter.filter).toContain("overlay=x=22:y=0");
+    expect(filter.filter).not.toContain("overlay=x=-");
   });
 
-  it("treats a non-finite offset as centred", () => {
-    const source = { width: 1920, height: 1080 };
-    expect(
-      panelCrop(source, Number.NaN, Number.POSITIVE_INFINITY, box),
-    ).toEqual(panelCrop(source, 0, 0, box));
+  it("falls back to a centred cover when the source size is unknown", () => {
+    const filter = panelFilter(
+      box,
+      { offsetX: 0.25, offsetY: 0 },
+      undefined,
+      still,
+    );
+
+    expect(filter.filter).toBe(
+      "scale=400:100:force_original_aspect_ratio=increase:force_divisible_by=2,crop=400:100,setsar=1",
+    );
   });
 });
 

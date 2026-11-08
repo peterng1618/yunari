@@ -22,16 +22,12 @@ import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelVideoPlacement } from "./panel-device.js";
 import {
-  composedSeconds,
-  composeFilterGraph,
-  panelCrop,
+  type EncodeFilter,
+  panelFilter,
 } from "./panel-video-composition.js";
 import {
-  angleFilter,
-  flipFilter,
   type PanelVideoRotation,
-  turnedBox,
-  turnFilter,
+  rotationBox,
   turnRefusal,
   videoRotation,
 } from "./panel-video-turn.js";
@@ -60,7 +56,7 @@ const MAX_STDERR_BYTES = 4 * 1024 * 1024;
 const DEFAULT_CACHE_DIRECTORY = path.join(os.tmpdir(), "yunari-panel-video");
 /** Moves whenever the ffmpeg arguments or filter change: an output encoded by
  *  an older transform is not this clip, so it must not be served. */
-const TRANSCODE_VERSION = "v4";
+const TRANSCODE_VERSION = "v5";
 /**
  * The cache's byte bound. Theme clips are multi-megabyte, so a count cap alone
  * could hold gigabytes; 256 MiB keeps dozens of distinct clips and evicts by
@@ -145,7 +141,16 @@ export async function transcodeForPanel(
     await writeFile(input, bytes);
 
     const outcome = await (options.run ?? runFfmpeg(executable))(
-      encodeArgs(input, output, panelFilter(bytes, placement, rotation)),
+      encodeArgs(
+        input,
+        output,
+        panelFilter(
+          rotationBox(BOX, rotation),
+          placement,
+          readVideoFacts(bytes),
+          rotation,
+        ),
+      ),
     );
     if (outcome.code !== 0) {
       return {
@@ -282,92 +287,11 @@ function sha256(
 }
 
 /**
- * The source-pixel window the panel's 800×480 box sees, from the one placement
- * owner `scene-fabric` uses.
- *
- * The player scales the source to `placement()`'s rect and clips it to the box;
- * a crop of the same window in source pixels, scaled to the box, shows the same
- * picture. Deriving it here rather than re-stating the pan formula is what keeps
- * the panel and the player on the same edge.
+ * The panel's 800×480 glass. A quarter turn swaps the box the layer is laid out
+ * in, so the filter is built in the turned box — 480×800 on a 90° mount — and
+ * the turn itself is composed last.
  */
 const BOX = { width: 800, height: 480 } as const;
-
-/**
- * The decode-and-fit filter: the authored pan when the source size is known,
- * centred cover when the facts cannot be read, then the display's own turn.
- *
- * **A quarter turn swaps the box the layer is laid out in.** The player fits a
- * display-bounded media layer to a box turned with the composition — 480×800
- * on a 90° mount, then the layer itself turns about its centre and covers the
- * 800×480 glass. Turning the source before the crop would show a different part
- * of the clip, so the crop window is the turned box's and the turn comes last.
- *
- * A composition is one question more: where the media sits, what fills the rest
- * and how the seam fades. That graph is built in the same turned box, so the
- * bake and the page describe one picture.
- */
-interface EncodeFilter {
-  readonly filter: string;
-  readonly complex: boolean;
-  /** The composed graph's fill and mask never end, so the output needs the
-   *  source's own duration; the plain path takes its length from the input. */
-  readonly durationSeconds?: number;
-}
-
-function panelFilter(
-  bytes: Uint8Array,
-  placement: PanelVideoPlacement,
-  rotation: PanelVideoRotation,
-): EncodeFilter {
-  const box = rotation.kind === "turn" ? turnedBox(BOX, rotation.turn) : BOX;
-  const facts = readVideoFacts(bytes);
-  const composed =
-    placement.composition !== undefined || placement.fill !== undefined;
-
-  if (!composed) {
-    return {
-      filter: plainFilter(facts, placement, box, rotation),
-      complex: false,
-    };
-  }
-
-  const seconds = composedSeconds(facts);
-  return {
-    filter: composeFilterGraph(box, placement, facts, rotation),
-    complex: true,
-    ...(seconds === undefined ? {} : { durationSeconds: seconds }),
-  };
-}
-
-function plainFilter(
-  facts: { readonly width: number; readonly height: number } | undefined,
-  placement: PanelVideoPlacement,
-  box: { readonly width: number; readonly height: number },
-  rotation: PanelVideoRotation,
-): string {
-  const rotationSuffix =
-    rotation.kind === "turn"
-      ? turnFilter(rotation.turn)
-      : angleFilter(rotation.degrees, box);
-  const flipSuffix = flipFilter(placement);
-
-  if (facts === undefined || facts.width <= 0 || facts.height <= 0) {
-    return (
-      `scale=${box.width}:${box.height}:force_original_aspect_ratio=increase` +
-      `:force_divisible_by=2,crop=${box.width}:${box.height}${flipSuffix}${rotationSuffix}`
-    );
-  }
-
-  const crop = panelCrop(
-    { width: facts.width, height: facts.height },
-    placement.offsetX,
-    placement.offsetY,
-    box,
-    placement.scale,
-  );
-
-  return `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${box.width}:${box.height}${flipSuffix}${rotationSuffix}`;
-}
 
 function encodeArgs(
   input: string,

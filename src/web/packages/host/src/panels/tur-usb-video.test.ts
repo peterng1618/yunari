@@ -7,6 +7,7 @@ import {
 } from "./tur-usb-video.js";
 
 const GEOMETRY = { width: 464, height: 1920 };
+const SOURCE = { width: 3840, height: 2160 } as const;
 const NO_PAN = { offsetX: 0, offsetY: 0 };
 
 /** The `-vf` argument, which is where the picture's composition is decided. */
@@ -24,56 +25,86 @@ describe("panelH264Args", () => {
     // The attached 9.2" is upright with a 90° record: the composition is laid
     // out landscape, cropped there, and turned onto the portrait wire last.
     const quarterTurn = filterOf(
-      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "cw"),
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        NO_PAN,
+        "cw",
+        SOURCE,
+      ),
     );
-    expect(quarterTurn).toContain("crop=1920:464:");
+    expect(quarterTurn).toContain("crop=3840:928:0:616");
     expect(quarterTurn.endsWith(",transpose=1")).toBe(true);
 
     const counterTurn = filterOf(
-      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "ccw"),
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        NO_PAN,
+        "ccw",
+        SOURCE,
+      ),
     );
-    expect(counterTurn).toContain("crop=1920:464:");
+    expect(counterTurn).toContain("crop=3840:928:0:616");
     expect(counterTurn.endsWith(",transpose=2")).toBe(true);
 
     // Upright keeps the wire's own portrait box, and 180 is the same box
     // turned over.
     const upright = filterOf(
-      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "none"),
-    );
-    expect(upright).toContain("crop=464:1920:");
-    expect(upright).not.toContain("transpose");
-
-    const upsideDown = filterOf(
-      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "half"),
-    );
-    expect(upsideDown).toContain("crop=464:1920:");
-    expect(upsideDown.endsWith(",hflip,vflip")).toBe(true);
-  });
-
-  it("pans the theme's authored offsets inside the crop", () => {
-    const filter = filterOf(
       panelH264Args(
         "in.mp4",
         "out.h264",
         GEOMETRY,
-        { offsetX: 0.25, offsetY: -0.35 },
+        NO_PAN,
+        "none",
+        SOURCE,
+      ),
+    );
+    expect(upright).toContain("crop=522:2160:1659:0");
+    expect(upright).not.toContain("transpose");
+
+    const upsideDown = filterOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        NO_PAN,
+        "half",
+        SOURCE,
+      ),
+    );
+    expect(upsideDown).toContain("crop=522:2160:1659:0");
+    expect(upsideDown.endsWith(",hflip,vflip")).toBe(true);
+  });
+
+  it("slides the themed area only as far as its grown overhang allows", () => {
+    const centred = filterOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        { offsetX: 0, offsetY: 0, scale: 2 },
         "cw",
+        SOURCE,
+      ),
+    );
+    const panned = filterOf(
+      panelH264Args(
+        "in.mp4",
+        "out.h264",
+        GEOMETRY,
+        { offsetX: 0.25, offsetY: -0.35, scale: 2 },
+        "cw",
+        SOURCE,
       ),
     );
 
-    // The device draws the picture, so the owner's pan has to be in the
-    // conversion or the panel shows a centred cover instead.
-    expect(filter).toContain("-1920*0.25");
-    expect(filter).toContain("-464*-0.35");
-  });
-
-  it("centres the crop when the theme asks for no offset", () => {
-    const filter = filterOf(
-      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "cw"),
-    );
-
-    expect(filter).toContain("-1920*0");
-    expect(filter).toContain("-464*0");
+    // Doubling the area leaves half a box of overhang each way; the authored
+    // offsets move the window inside it, so the panel shows the player's edge.
+    expect(centred).toContain("crop=1920:464:960:848");
+    expect(panned).toContain("crop=1920:464:480:1010");
   });
 
   it("applies the theme's authored zoom on the plain path too", () => {
@@ -84,12 +115,16 @@ describe("panelH264Args", () => {
         GEOMETRY,
         { offsetX: 0, offsetY: 0, scale: 1.4 },
         "cw",
+        SOURCE,
       ),
     );
 
     // The device draws the picture, so the owner's zoom has to be in the
-    // conversion or the panel shows an unscaled cover instead.
-    expect(filter).toContain("*1.4");
+    // conversion or the panel shows an unscaled cover instead. The area grew
+    // to 2688×649.6, so the box sees this smaller source window.
+    expect(filter).toContain(
+      "crop=2743:663:549:749,scale=1920:464:force_divisible_by=2,setsar=1",
+    );
   });
 
   it("encodes with the vendor's exact arguments", () => {
