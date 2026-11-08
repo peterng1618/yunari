@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
@@ -244,7 +244,8 @@ describe("createThemeMedia", () => {
     return createThemeMedia({
       directory,
       readAsset:
-        options.readAsset ?? (async () => ({ bytes: new Uint8Array([9, 9, 9]) })),
+        options.readAsset ??
+        (async () => ({ bytes: new Uint8Array([9, 9, 9]) })),
       extract: (options.extract ??
         (async () => ({
           ok: true as const,
@@ -401,8 +402,7 @@ describe("createThemeMedia", () => {
     expect(transcode).toHaveBeenCalledWith(
       fixture("vfr.mp4"),
       {
-        filter:
-          "crop=45:45:46:45,scale=320:320:force_divisible_by=2,setsar=1",
+        filter: "crop=45:45:46:45,scale=320:320:force_divisible_by=2,setsar=1",
         complex: false,
       },
       undefined,

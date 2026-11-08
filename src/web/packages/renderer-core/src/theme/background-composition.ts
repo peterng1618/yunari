@@ -2,7 +2,6 @@ import {
   BACKGROUND_MEDIA_DEFAULTS,
   type Background,
   type BackgroundAnchor,
-  type BackgroundMedia,
   type BackgroundMediaComposition,
   DEFAULT_BACKGROUND_EXTENT,
   MAX_BACKGROUND_EXTENT,
@@ -190,11 +189,7 @@ export function resolveBackgroundComposition(
   }
 
   const base = edgeBand(box, anchor, extentOf(composition.extent));
-  const region = slid(
-    scaled(base, anchor, authored.scale, box),
-    box,
-    authored,
-  );
+  const region = slid(scaled(base, anchor, authored.scale, box), box, authored);
   const masks = edgeMasks(region, box, anchor, fade);
   return known === undefined
     ? { region, masks }
@@ -319,11 +314,8 @@ function slid(
   const travelX = Math.abs(box.width - region.width) / 2;
   const travelY = Math.abs(box.height - region.height) / 2;
   return {
-    left:
-      region.left +
-      clamp(geometry.offsetX * box.width, -travelX, travelX),
-    top:
-      region.top + clamp(geometry.offsetY * box.height, -travelY, travelY),
+    left: region.left + clamp(geometry.offsetX * box.width, -travelX, travelX),
+    top: region.top + clamp(geometry.offsetY * box.height, -travelY, travelY),
     width: region.width,
     height: region.height,
   };
@@ -374,16 +366,8 @@ function placeMedia(
     0,
     source.height - 1,
   );
-  const width = clamp(
-    Math.round(dest.width / factor),
-    1,
-    source.width - x,
-  );
-  const height = clamp(
-    Math.round(dest.height / factor),
-    1,
-    source.height - y,
-  );
+  const width = clamp(Math.round(dest.width / factor), 1, source.width - x);
+  const height = clamp(Math.round(dest.height / factor), 1, source.height - y);
   return { cover, dest, crop: { x, y, width, height } };
 }
 

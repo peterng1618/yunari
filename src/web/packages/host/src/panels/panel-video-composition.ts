@@ -1,7 +1,7 @@
 import {
   artboardGradientLine,
-  backgroundGeometry,
   type BackgroundMask,
+  backgroundGeometry,
   blendRampStops,
   type CompositionRect,
   type PalettePaint,

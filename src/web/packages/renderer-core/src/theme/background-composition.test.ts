@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  type BackgroundMediaGeometry,
   backgroundGeometry,
   blendRampStops,
-  type BackgroundMediaGeometry,
   resolveBackgroundComposition,
 } from "./background-composition.js";
 
@@ -20,14 +20,24 @@ const ZERO = { scale: 1, offsetX: 0, offsetY: 0 } as const;
 describe("resolveBackgroundComposition", () => {
   it("keeps the simple background identical to the old cover at defaults", () => {
     const resolved = resolveBackgroundComposition(BOX, undefined, SOURCE);
-    expect(resolved.region).toEqual({ left: 0, top: 0, width: 400, height: 100 });
+    expect(resolved.region).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 100,
+    });
     expect(resolved.media?.dest).toEqual({
       left: 0,
       top: 0,
       width: 400,
       height: 100,
     });
-    expect(resolved.media?.crop).toEqual({ x: 0, y: 25, width: 160, height: 40 });
+    expect(resolved.media?.crop).toEqual({
+      x: 0,
+      y: 25,
+      width: 160,
+      height: 40,
+    });
     expect(resolved.masks).toEqual([]);
   });
 
@@ -42,7 +52,12 @@ describe("resolveBackgroundComposition", () => {
       width: 800,
       height: 200,
     });
-    expect(resolved.media?.crop).toEqual({ x: 40, y: 35, width: 80, height: 20 });
+    expect(resolved.media?.crop).toEqual({
+      x: 40,
+      y: 35,
+      width: 80,
+      height: 20,
+    });
   });
 
   it("letterboxes a narrower source at the centre anchor", () => {
@@ -50,7 +65,12 @@ describe("resolveBackgroundComposition", () => {
     expect(resolved.region.left).toBeCloseTo(111.111, 3);
     expect(resolved.region.width).toBeCloseTo(177.778, 3);
     expect(resolved.region.height).toBe(100);
-    expect(resolved.media?.crop).toEqual({ x: 0, y: 0, width: 160, height: 90 });
+    expect(resolved.media?.crop).toEqual({
+      x: 0,
+      y: 0,
+      width: 160,
+      height: 90,
+    });
   });
 
   it("keeps the full width and clips top and bottom at scale 2", () => {
@@ -59,7 +79,12 @@ describe("resolveBackgroundComposition", () => {
     expect(resolved.media?.dest.top).toBe(0);
     expect(resolved.media?.dest.width).toBeCloseTo(355.556, 3);
     expect(resolved.media?.dest.height).toBe(100);
-    expect(resolved.media?.crop).toEqual({ x: 0, y: 23, width: 160, height: 45 });
+    expect(resolved.media?.crop).toEqual({
+      x: 0,
+      y: 23,
+      width: 160,
+      height: 45,
+    });
   });
 
   it("slides the centred area until it is flush and saturates", () => {
@@ -77,8 +102,18 @@ describe("resolveBackgroundComposition", () => {
       SOURCE,
       { ...ZERO, scale: 2 },
     );
-    expect(resolved.region).toEqual({ left: 0, top: 0, width: 400, height: 100 });
-    expect(resolved.media?.crop).toEqual({ x: 0, y: 25, width: 160, height: 40 });
+    expect(resolved.region).toEqual({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 100,
+    });
+    expect(resolved.media?.crop).toEqual({
+      x: 0,
+      y: 25,
+      width: 160,
+      height: 40,
+    });
   });
 
   it("reports no media until the source size is known", () => {

@@ -25,27 +25,13 @@ describe("panelH264Args", () => {
     // The attached 9.2" is upright with a 90° record: the composition is laid
     // out landscape, cropped there, and turned onto the portrait wire last.
     const quarterTurn = filterOf(
-      panelH264Args(
-        "in.mp4",
-        "out.h264",
-        GEOMETRY,
-        NO_PAN,
-        "cw",
-        SOURCE,
-      ),
+      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "cw", SOURCE),
     );
     expect(quarterTurn).toContain("crop=3840:928:0:616");
     expect(quarterTurn.endsWith(",transpose=1")).toBe(true);
 
     const counterTurn = filterOf(
-      panelH264Args(
-        "in.mp4",
-        "out.h264",
-        GEOMETRY,
-        NO_PAN,
-        "ccw",
-        SOURCE,
-      ),
+      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "ccw", SOURCE),
     );
     expect(counterTurn).toContain("crop=3840:928:0:616");
     expect(counterTurn.endsWith(",transpose=2")).toBe(true);
@@ -53,27 +39,13 @@ describe("panelH264Args", () => {
     // Upright keeps the wire's own portrait box, and 180 is the same box
     // turned over.
     const upright = filterOf(
-      panelH264Args(
-        "in.mp4",
-        "out.h264",
-        GEOMETRY,
-        NO_PAN,
-        "none",
-        SOURCE,
-      ),
+      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "none", SOURCE),
     );
     expect(upright).toContain("crop=522:2160:1659:0");
     expect(upright).not.toContain("transpose");
 
     const upsideDown = filterOf(
-      panelH264Args(
-        "in.mp4",
-        "out.h264",
-        GEOMETRY,
-        NO_PAN,
-        "half",
-        SOURCE,
-      ),
+      panelH264Args("in.mp4", "out.h264", GEOMETRY, NO_PAN, "half", SOURCE),
     );
     expect(upsideDown).toContain("crop=522:2160:1659:0");
     expect(upsideDown.endsWith(",hflip,vflip")).toBe(true);

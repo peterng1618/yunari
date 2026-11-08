@@ -209,16 +209,6 @@ function panelMediaBox(
   }
 }
 
-function bounded(
-  value: number | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  if (value === undefined || !Number.isFinite(value)) return fallback;
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
 /** A number written the same way every time, as part of a cache name. */
 function number(value: number): string {
   return value === 0 ? "0" : String(value);

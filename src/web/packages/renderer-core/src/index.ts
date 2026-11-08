@@ -312,11 +312,11 @@ export {
 } from "./theme/assets.js";
 export {
   activeBackgroundComposition,
-  backgroundGeometry,
   type BackgroundComposition,
   type BackgroundMask,
   type BackgroundMediaGeometry,
   BLEND_RAMP_STOPS,
+  backgroundGeometry,
   blendRamp,
   blendRampStops,
   type CompositionCrop,

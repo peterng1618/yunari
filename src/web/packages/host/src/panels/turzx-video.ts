@@ -21,10 +21,7 @@ import ffmpegStatic from "ffmpeg-static";
 import ffmpegHashes from "../../../../../../ffmpeg-static-hashes.json";
 import { verifyFfmpeg } from "../themes/ffmpeg-hash.mjs";
 import type { PanelVideoPlacement } from "./panel-device.js";
-import {
-  type EncodeFilter,
-  panelFilter,
-} from "./panel-video-composition.js";
+import { type EncodeFilter, panelFilter } from "./panel-video-composition.js";
 import {
   type PanelVideoRotation,
   rotationBox,
