@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import {
   type Binding,
+  type FabricGlobals,
+  type FabricPalette,
+  formatColor,
   SEMANTIC_KEYS,
   SETTINGS_SECTIONS,
 } from "@yunari/renderer-core";
@@ -15,9 +18,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChartEdits } from "../chart-manager/chart-fields.js";
+import type { TokenRef } from "../editor-shell/shell-stores.js";
 import { uiCopy } from "../ui-copy.js";
 import { backgroundColumn } from "./background-column.js";
 import { SelectionColumn } from "./column.js";
+import { paintTokenPort } from "./design-token-port.fixture.js";
 import { idleCrop, idleCropEdits } from "./idle-crop.test-stage.js";
 import { type ColumnContext, perKindColumn } from "./per-kind-column.js";
 import {
@@ -546,6 +551,84 @@ describe("SelectionColumn", () => {
       "[data-yunari-background-extent]",
     )!;
     expect(extent.value).toBe("65");
+  });
+
+  it("edits the selected paint token from the background row and creates one from its list", async () => {
+    const commit = vi.fn(() => true);
+    const port: SelectionEdits = {
+      commit,
+      preview: () => false,
+      cancelPreview: () => {},
+    };
+    const palette: FabricPalette = {
+      ink: {
+        name: "Ink",
+        value: {
+          kind: "solid",
+          color: formatColor({ r: 232, g: 236, b: 243, a: 1 }),
+        },
+      },
+    };
+    const revealed: TokenRef[] = [];
+    const designTokens = paintTokenPort({
+      palette,
+      created: "created",
+      revealed,
+    });
+    const view: SelectionView = {
+      targetRevision: 1,
+      subject: {
+        name: "Background",
+        authoredName: "",
+        kind: "background",
+        key: undefined,
+      },
+      locked: false,
+      sections: backgroundColumn({
+        background: { color: { ref: "palette.ink" } },
+        assets: [],
+        globals: { palette, typeTokens: {} } as FabricGlobals,
+      }),
+    };
+    act(() => {
+      root.render(
+        <SelectionColumn
+          view={view}
+          edits={port}
+          runs={runs}
+          chart={chart}
+          crop={crop}
+          font={font}
+          designTokens={designTokens}
+        />,
+      );
+    });
+
+    // The row's own action edits the token it names, without the Tokens pane.
+    expect(host.querySelector("[data-yunari-paint-token-edit]")).not.toBeNull();
+
+    const trigger = host.querySelector<HTMLElement>("[data-yunari-background]");
+    expect(trigger).toBeTruthy();
+    await act(async () => {
+      trigger?.click();
+    });
+    const labels = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].map((option) => option.textContent);
+    expect(labels.at(-1)).toBe(uiCopy.inspectorFields.addNewPaintToken);
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((option) => option.textContent === labels.at(-1))
+        ?.click();
+    });
+
+    // The creation is applied to this row and revealed in the pane that owns it.
+    expect(commit).toHaveBeenCalledWith(
+      1,
+      "background.color",
+      "palette.created",
+    );
+    expect(revealed).toEqual([{ kind: "paint", id: "created" }]);
   });
 
   /**

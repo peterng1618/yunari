@@ -10,6 +10,8 @@ import { ControlNumber } from "../components/ui/control-number.js";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSelect } from "../components/ui/control-select.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
+import type { DesignTokenPort } from "../selection-inspector/design-token-editor.js";
+import { paintTokenPicker } from "../selection-inspector/design-token-editor.js";
 import { SettingField } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
 
@@ -469,8 +471,9 @@ export function ChartContentFields(props: {
 export function ChartPaintFields(props: {
   readonly view: ChartPaintFieldsView;
   readonly edits: ChartEdits;
+  readonly designTokens?: DesignTokenPort | undefined;
 }): React.JSX.Element {
-  const { view, edits } = props;
+  const { view, edits, designTokens } = props;
   const settings = view.content.settings;
 
   return (
@@ -478,20 +481,30 @@ export function ChartPaintFields(props: {
       data-yunari-chart-fields="paint"
       className="flex flex-col gap-[var(--space-6)]"
     >
-      {view.rows.map((row) => (
-        <ControlSelect
-          key={row.key}
-          label={row.label}
-          id={row.id}
-          data={{ "data-yunari-chart-paint": row.key }}
-          value={row.ref}
-          options={row.options}
-          disabled={row.refused}
-          onChange={(ref) =>
-            edits.onSettings(view.chartId, paintSettings(settings, row, ref))
-          }
-        />
-      ))}
+      {view.rows.map((row) => {
+        const picker = paintTokenPicker({
+          tokens: designTokens,
+          value: row.ref,
+          options: row.options,
+          apply: (ref) => {
+            edits.onSettings(view.chartId, paintSettings(settings, row, ref));
+            return true;
+          },
+        });
+        return (
+          <ControlSelect
+            key={row.key}
+            label={row.label}
+            id={row.id}
+            data={{ "data-yunari-chart-paint": row.key }}
+            value={row.ref}
+            options={picker.options}
+            disabled={row.refused}
+            onChange={picker.onChange}
+            action={picker.action}
+          />
+        );
+      })}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import type {
 import type { ReactNode } from "react";
 import { ColourPickerPanel } from "../components/ui/colour-picker.js";
 import { controlIconButtonClass } from "../components/ui/control-icon-button.js";
+import type { ControlOption } from "../components/ui/control-select.js";
 import { ControlTooltip } from "../editor-shell/controls/tooltip.js";
 import { Glyph, PENCIL_GLYPH } from "../editor-shell/icons.js";
 import type { TokenRef } from "../editor-shell/shell-stores.js";
@@ -119,7 +120,7 @@ export function TypeTokenEditAction(props: {
 }
 
 /**
- * A paint token's kind and paint, edited where the run names it. The picker's
+ * A paint token's kind and paint, edited where a picker names it. The picker's
  * body is rendered directly rather than through `ColourPicker`'s own trigger:
  * this surface is already the anchored popover.
  */
@@ -139,7 +140,7 @@ export function PaintTokenEditAction(props: {
     <EditAction
       label={uiCopy.inspectorFields.editToken(entry.name)}
       title={entry.name}
-      hook="data-yunari-run-colour-edit"
+      hook="data-yunari-paint-token-edit"
     >
       <PaintKindField
         entry={entry}
@@ -167,4 +168,62 @@ export function PaintTokenEditAction(props: {
       )}
     </EditAction>
   );
+}
+
+/**
+ * Every paint-token picker's two conveniences, in one place: the edit action
+ * that opens the selected token's own fields at the row, and the list's last
+ * entry that creates a token, applies it to this row, and reveals it in the
+ * Tokens pane.
+ *
+ * The caller keeps its own write: `apply` is the same commit the row's list
+ * selection already uses, so the added reference and the chosen one cannot
+ * disagree. A picker built without the design-token port (a column mounted
+ * without a session) draws neither.
+ */
+export function paintTokenPicker(props: {
+  readonly tokens: DesignTokenPort | undefined;
+  readonly value: string;
+  readonly options: readonly ControlOption[];
+  readonly apply: (ref: string) => boolean;
+}): {
+  readonly options: readonly ControlOption[];
+  readonly action: ReactNode | undefined;
+  readonly onChange: (ref: string) => void;
+} {
+  const { tokens, value, options, apply } = props;
+  const id = value.startsWith("palette.")
+    ? value.slice("palette.".length)
+    : undefined;
+  return {
+    options:
+      tokens === undefined
+        ? options
+        : [
+            ...options,
+            {
+              id: ADD_NEW_TOKEN_ID,
+              name: uiCopy.inspectorFields.addNewPaintToken,
+            },
+          ],
+    action:
+      tokens === undefined || id === undefined ? undefined : (
+        <PaintTokenEditAction
+          id={id}
+          palette={tokens.palette()}
+          actions={tokens.actions}
+        />
+      ),
+    onChange: (ref) => {
+      if (ref !== ADD_NEW_TOKEN_ID) {
+        apply(ref);
+        return;
+      }
+      if (tokens === undefined) return;
+      const created = tokens.create("paint", (token) =>
+        apply(`palette.${token.id}`),
+      );
+      if (created !== undefined) tokens.reveal(created);
+    },
+  };
 }

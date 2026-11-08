@@ -267,7 +267,7 @@ describe("editing the paint token a run is set in", () => {
       designTokens,
     });
 
-    await clickHook(box.host, "data-yunari-run-colour-edit");
+    await clickHook(box.host, "data-yunari-paint-token-edit");
     await flush();
 
     expect(
@@ -310,7 +310,7 @@ describe("editing the paint token a run is set in", () => {
       designTokens,
     });
 
-    await clickHook(box.host, "data-yunari-run-colour-edit");
+    await clickHook(box.host, "data-yunari-paint-token-edit");
     await flush();
     await choose(document.body, "data-yunari-palette-kind", "Linear gradient");
     await flush();
@@ -394,7 +394,7 @@ describe("adding a design token from a run's token list", () => {
     await choose(
       box.host,
       'data-yunari-run-colour="0"',
-      uiCopy.inspectorFields.addNewToken,
+      uiCopy.inspectorFields.addNewPaintToken,
     );
 
     expect(box.runs()[0]?.style?.["color"]).toEqual({
@@ -449,7 +449,7 @@ describe("adding a design token from a run's token list", () => {
     });
 
     expect(box.host.querySelector("[data-yunari-run-token-edit]")).toBeNull();
-    expect(box.host.querySelector("[data-yunari-run-colour-edit]")).toBeNull();
+    expect(box.host.querySelector("[data-yunari-paint-token-edit]")).toBeNull();
     expect(await optionsOf(box.host, 'data-yunari-run-preset="0"')).toEqual([
       "[Heading] Inter 600",
       "[Body] Inter 400",
@@ -459,7 +459,7 @@ describe("adding a design token from a run's token list", () => {
     );
     expect(
       await optionsOf(box.host, 'data-yunari-run-colour="0"'),
-    ).not.toContain(uiCopy.inspectorFields.addNewToken);
+    ).not.toContain(uiCopy.inspectorFields.addNewPaintToken);
     return box.dispose();
   });
 });

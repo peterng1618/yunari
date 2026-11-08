@@ -6,8 +6,13 @@
   `src/web/packages/editor/src/components/ui/use-colour-picker.ts`,
   `src/web/packages/editor/src/components/ui/control-select.tsx`,
   `src/web/packages/editor/src/components/ui/control-well.tsx`,
+  `src/web/packages/editor/src/chart-manager/chart-fields.tsx`,
   `src/web/packages/editor/src/editor-session.ts`,
-  `src/web/packages/editor/src/editor-shell/shell-layout.tsx`
+  `src/web/packages/editor/src/editor-shell/shell-layout.tsx`,
+  `src/web/packages/editor/src/selection-inspector/column.tsx`,
+  `src/web/packages/editor/src/selection-inspector/design-token-editor.tsx`,
+  `src/web/packages/editor/src/selection-inspector/runs.tsx`,
+  `src/web/packages/editor/src/ui-copy.ts`
 
 ## Problem
 
@@ -94,10 +99,14 @@ the probe that the extraction did not change behaviour.
 
 Extract the picker's popup body into `ColourPickerPanel` and the family/weight
 controls into `TokenFaceFields`; render each directly inside one Base UI
-`Popover` anchored at the run row's Edit trigger. Both surfaces call the same
-`TokenInspectorActions` object the token inspector already receives — no second
-mutation path. Creation moves to `addPaintToken` / `addTypeToken` in
-`editor-session-tokens.ts`, and the Tokens pane and the run row both call them.
+`Popover` anchored at the row's Edit trigger. `paintTokenPicker` composes the
+edit action and the add-new list entry once, and every paint-token picker uses
+it: the run colour row, the background colour row, a material paint row and a
+chart's paint rows. A row keeps its own write as `apply`, so the token it
+references and the token a picker edits cannot disagree. Both surfaces call the
+same `TokenInspectorActions` object the token inspector already receives — no
+second mutation path. Creation moves to `addPaintToken` / `addTypeToken` in
+`editor-session-tokens.ts`, and the Tokens pane and every row use them.
 Selection stays `TokenSelectionStore.set`, and the Tokens pane is revealed
 through a new `ShellLayout.showTokens()` that asks the same
 `PaneRequestStore` as `showLayers`. The session runs creation and the run's new

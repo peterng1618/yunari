@@ -1,6 +1,7 @@
 import { act } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import type { DesignTokenPort } from "../selection-inspector/design-token-editor.js";
 import {
   ChartContentFields,
   type ChartContentFieldsView,
@@ -66,6 +67,7 @@ export function mountChartFields(options: {
   readonly content: () => ChartContentFieldsView | undefined;
   readonly paint: () => ChartPaintFieldsView | undefined;
   readonly edits: ChartEdits;
+  readonly designTokens?: DesignTokenPort | undefined;
 }): ChartFieldsStage {
   // A popup renders into `document.body`, not the host, so a case that failed
   // before disposing would leave its list open for the next one to pick an
@@ -86,7 +88,11 @@ export function mountChartFields(options: {
             <ChartContentFields view={content} edits={options.edits} />
           )}
           {paint === undefined ? null : (
-            <ChartPaintFields view={paint} edits={options.edits} />
+            <ChartPaintFields
+              view={paint}
+              edits={options.edits}
+              designTokens={options.designTokens}
+            />
           )}
         </>,
       );

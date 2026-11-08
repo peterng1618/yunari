@@ -12,6 +12,9 @@ import {
 } from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { TokenRef } from "../editor-shell/shell-stores.js";
+import type { DesignTokenPort } from "../selection-inspector/design-token-editor.js";
+import { paintTokenPort } from "../selection-inspector/design-token-port.fixture.js";
 import { isSettingVisible } from "../selection-inspector/setting-field.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ChartEdits } from "./chart-fields.js";
@@ -117,7 +120,11 @@ interface Calls {
  * for. The target is replaced rather than mutated, so a case can answer an edit
  * the way the owner would and re-render the controls over it.
  */
-function stageFor(target: ChartFieldTarget, tokens: FabricPalette | undefined) {
+function stageFor(
+  target: ChartFieldTarget,
+  tokens: FabricPalette | undefined,
+  designTokens?: DesignTokenPort | undefined,
+) {
   let current = target;
   const calls: Calls = {
     settings: [],
@@ -137,6 +144,7 @@ function stageFor(target: ChartFieldTarget, tokens: FabricPalette | undefined) {
     content: () => chartContentView(current),
     paint: () => chartPaintView(current, tokens),
     edits,
+    designTokens,
   });
   return {
     stage,
@@ -690,6 +698,37 @@ describe("what a chart paints its data with", () => {
     expect(lastSettings(calls)).toMatchObject({
       track: { ref: "palette.ram" },
     });
+  });
+
+  it("edits the named token at the row and creates one from its list", async () => {
+    const revealed: TokenRef[] = [];
+    const designTokens = paintTokenPort({
+      palette: CHART_PALETTE,
+      created: "created",
+      revealed,
+    });
+    const box = stageFor(gauge, CHART_PALETTE, designTokens);
+    stages.push(box.stage);
+
+    expect(
+      await optionsOf(box.stage.host, 'data-yunari-chart-paint="track"'),
+    ).toEqual(["CPU", "GPU", "RAM", "Add new paint token"]);
+
+    await clickHook(box.stage.host, "data-yunari-paint-token-edit");
+    await flush();
+    expect(
+      document.querySelector("[data-yunari-token-edit-popover]"),
+    ).not.toBeNull();
+
+    await choose(
+      box.stage.host,
+      'data-yunari-chart-paint="track"',
+      "Add new paint token",
+    );
+    expect(lastSettings(box.calls)).toMatchObject({
+      track: { ref: "palette.created" },
+    });
+    expect(revealed).toEqual([{ kind: "paint", id: "created" }]);
   });
 
   it("writes one entry of a repeated paint, leaving its neighbours alone", async () => {

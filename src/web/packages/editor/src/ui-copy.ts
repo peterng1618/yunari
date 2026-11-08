@@ -467,10 +467,13 @@ export const uiCopy = {
     /** The row action that edits the token a run references, named by the
         token it opens so two runs' rows are not two identical buttons. */
     editToken: (name: string) => `Edit ${name}`,
-    /** The token dropdown's last entry: it creates a token through the same
-        creation the Tokens pane's add uses, applies it to the run, and opens
-        the token inspector on it. */
+    /** The type-token dropdown's last entry: it creates a token through the
+        same creation the Tokens pane's add uses, applies it to the run, and
+        opens the token inspector on it. */
     addNewToken: "Add new token",
+    /** The paint-token dropdown's last entry, named for its kind so a row that
+        offers one token kind cannot be mistaken for the other. */
+    addNewPaintToken: "Add new paint token",
     runSource: "Reads",
     staticText: "Static text",
     /** What the dot before a reading says about this PC. The accessible name

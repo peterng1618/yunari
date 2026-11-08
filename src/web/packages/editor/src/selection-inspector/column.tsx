@@ -19,6 +19,7 @@ import { InspectorSection } from "../components/ui/inspector-section.js";
 import { uiCopy } from "../ui-copy.js";
 import { CROP_ASPECTS } from "./crop.js";
 import type { DesignTokenPort } from "./design-token-editor.js";
+import { paintTokenPicker } from "./design-token-editor.js";
 import { FontFaceField } from "./font-face-field.js";
 import { rendersExtra } from "./per-kind-column.js";
 import { RunEditor } from "./runs.js";
@@ -76,6 +77,7 @@ function fieldControl(
   field: FieldView,
   edits: SelectionEdits,
   revision: number,
+  designTokens: DesignTokenPort | undefined,
 ): React.JSX.Element {
   const commit = (value: string | number | boolean): void => {
     edits.commit(revision, field.id, value);
@@ -173,7 +175,17 @@ function fieldControl(
           {...refused}
         />
       );
-    case "swatch":
+    case "swatch": {
+      // Every swatch field is a paint-token reference: the background's colour
+      // and an object's material paints. The picker's edit action and its
+      // add-new entry come from the one design-token owner, so every paint row
+      // behaves like the run rows do.
+      const picker = paintTokenPicker({
+        tokens: designTokens,
+        value: field.value,
+        options: field.options,
+        apply: (value) => edits.commit(revision, field.id, value),
+      });
       // The swatch well: the list is the only way to change the value, and the
       // picture is the resolved colour the projection handed over — never a
       // second resolver here.
@@ -182,7 +194,7 @@ function fieldControl(
           label={field.label}
           data={field.data}
           value={field.value}
-          options={field.options}
+          options={picker.options}
           swatch={
             <span
               aria-hidden
@@ -190,10 +202,12 @@ function fieldControl(
               style={{ background: field.colour }}
             />
           }
-          onChange={(value) => commit(value)}
+          onChange={picker.onChange}
+          action={picker.action}
           {...refused}
         />
       );
+    }
     case "slider":
       return (
         <ControlSlider
@@ -335,7 +349,7 @@ function Section(props: {
     >
       {section.fields.map((field) => (
         <Fragment key={`${revision}:${field.id}`}>
-          {fieldControl(field, edits, revision)}
+          {fieldControl(field, edits, revision, designTokens)}
         </Fragment>
       ))}
       {section.extras.filter(rendersExtra).map((extra) => {
@@ -366,6 +380,7 @@ function Section(props: {
                 key={`${revision}:chartPaint`}
                 view={extra.paint}
                 edits={chart}
+                designTokens={designTokens}
               />
             );
           case "crop":

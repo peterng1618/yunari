@@ -1930,6 +1930,48 @@ test.describe("Fabric editor route", () => {
     await captureVisualReview(page, testInfo, "editor-layer-arrange");
   });
 
+  test("edits and creates a paint token from the background colour row", async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+
+    await page.goto(EDITOR);
+    await selectLayer(page, "Background");
+    await chooseIn(page, "[data-yunari-background]", "palette.panel");
+    const trigger = page.locator("[data-yunari-background]");
+    await expect(trigger.locator("[data-yunari-value]")).toHaveAttribute(
+      "data-yunari-value",
+      "palette.panel",
+    );
+
+    // The row's own action edits the token it names, in place.
+    await page.locator("[data-yunari-paint-token-edit]").click();
+    await expect(
+      page.locator("[data-yunari-token-edit-popover]"),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // The list's last row creates a token, applies it here and reveals it.
+    await trigger.click();
+    const options = page.locator('[role="option"]');
+    await expect(options.last()).toHaveText("Add new paint token");
+    await options.last().click();
+    await expect(page.locator("[data-yunari-palette-fields]")).toBeVisible();
+
+    const envelope = (await saveEnvelope(page)) as {
+      background?: {
+        color?: { ref?: string };
+        media?: { color?: { ref?: string } };
+      };
+    };
+    // The colour's slot follows the owner's rule: a picture owns it when one
+    // exists, the page paint otherwise.
+    const ref =
+      envelope.background?.media?.color?.ref ?? envelope.background?.color?.ref;
+    expect(ref).toMatch(/^palette\./);
+    expect(ref).not.toBe("palette.panel");
+  });
+
   test("captures changed artboard controls for visual review", async ({
     page,
   }, testInfo) => {

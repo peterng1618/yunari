@@ -59,7 +59,7 @@ import {
 import {
   ADD_NEW_TOKEN_ID,
   type DesignTokenPort,
-  PaintTokenEditAction,
+  paintTokenPicker,
   TypeTokenEditAction,
 } from "./design-token-editor.js";
 import { runIdentity } from "./run-identity.js";
@@ -575,24 +575,12 @@ function RunRow(props: {
   const typeTokenId = row.typeToken.startsWith("typeTokens.")
     ? row.typeToken.slice("typeTokens.".length)
     : undefined;
-  // The row carries the stored reference (`palette.<id>`); the editor names the
-  // palette entry itself.
-  const paintId = row.colour.startsWith("palette.")
-    ? row.colour.slice("palette.".length)
-    : undefined;
   const typeTokenOptions: readonly ControlOption[] =
     tokens === undefined
       ? [...view.presets, ...fontActionOptions(edits)]
       : [
           ...view.presets,
           ...fontActionOptions(edits),
-          { id: ADD_NEW_TOKEN_ID, name: uiCopy.inspectorFields.addNewToken },
-        ];
-  const colourOptions: readonly ControlOption[] =
-    tokens === undefined
-      ? view.palettes
-      : [
-          ...view.palettes,
           { id: ADD_NEW_TOKEN_ID, name: uiCopy.inspectorFields.addNewToken },
         ];
 
@@ -626,6 +614,13 @@ function RunRow(props: {
     }
     edits.setRunPreset(index, ref);
   };
+
+  const colour = paintTokenPicker({
+    tokens,
+    value: row.colour,
+    options: view.palettes,
+    apply: (ref) => edits.setRunColour(index, ref),
+  });
 
   return (
     // A row group, not a `<section>`: the inspector's section rule sets
@@ -698,7 +693,7 @@ function RunRow(props: {
         label={uiCopy.inspectorFields.runColour}
         data={{ "data-yunari-run-colour": String(index) }}
         value={row.colour}
-        options={colourOptions}
+        options={colour.options}
         swatch={
           <span
             aria-hidden
@@ -706,25 +701,8 @@ function RunRow(props: {
             style={{ background: colourValueOf(view, row.colour) }}
           />
         }
-        onChange={(ref) => {
-          if (ref === ADD_NEW_TOKEN_ID && tokens !== undefined) {
-            const created = tokens.create("paint", (token) =>
-              edits.setRunColour(index, `palette.${token.id}`),
-            );
-            if (created !== undefined) tokens.reveal(created);
-            return;
-          }
-          edits.setRunColour(index, ref);
-        }}
-        action={
-          tokens === undefined || paintId === undefined ? undefined : (
-            <PaintTokenEditAction
-              id={paintId}
-              palette={tokens.palette()}
-              actions={tokens.actions}
-            />
-          )
-        }
+        onChange={colour.onChange}
+        action={colour.action}
       />
 
       {view.bindable ? (

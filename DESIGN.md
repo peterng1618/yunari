@@ -388,15 +388,17 @@ thing actually raises**, and describes what the thing *is*:
 - **There is no per-card column.** A card is a `Group`; groups get name,
   transform and opacity. The question "which sensor" is asked on the element
   that carries the binding.
-- **A token row's edit action sits at the right of its value cell.** A run's
-  type-token and paint rows each carry one icon button after the select, named
-  for the token it edits, opening the value's editor in a popover anchored at
-  that row — the colour area, channels and presets for a paint, family and
-  weight for a type token. The button edits the referenced token, not the
-  reference; it is the same write the token inspector performs. The token lists
-  end with an **Add new token** entry, the action-row grammar the font rows
-  already use: it creates through the Tokens pane's own rule, applies the new
-  token to the run, and opens the Tokens pane with the token selected.
+- **A token row's edit action sits at the right of its value cell.** Every row
+  that references a design token — a run's type-token or paint row, the
+  background's colour, a material paint, a chart's paint — carries one icon
+  button after the select, named for the token it edits, opening the value's
+  editor in a popover anchored at that row: the colour area, channels and
+  presets for a paint, family and weight for a type token. The button edits the
+  referenced token, not the reference; it is the same write the token inspector
+  performs. Every paint-token list ends with an **Add new paint token** entry,
+  and a type-token list with **Add new token** — the action-row grammar the font
+  rows already use: it creates through the Tokens pane's own rule, applies the
+  new token to the row, and opens the Tokens pane with the token selected.
 - With nothing selected the column is empty and says where to choose from.
 
 ### The stage
