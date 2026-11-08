@@ -39,6 +39,38 @@ function envelope(
   };
 }
 
+/** A 2.0.0 document with a palette and an asset, so a converted background validates. */
+function legacy2(background: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...envelope("2.0.0"),
+    globals: {
+      ...(envelope("2.0.0")["globals"] as Record<string, unknown>),
+      palette: {
+        none: { name: "None", value: { kind: "solid", color: "transparent" } },
+        board: { name: "Board", value: { kind: "solid", color: "#101216" } },
+        band: { name: "Band", value: { kind: "solid", color: "#202428" } },
+      },
+    },
+    assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
+    background,
+  };
+}
+
+/** Migrates, then proves the result passes the strict validator writes use. */
+function migratedDocument(input: unknown): Record<string, unknown> {
+  const result = migrateFabricThemeEnvelope(input);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error("expected the document to migrate");
+  expect(validateFabricThemeEnvelope(result.document).ok).toBe(true);
+  return result.document;
+}
+
+function backgroundOf(
+  document: Record<string, unknown>,
+): Record<string, unknown> {
+  return document["background"] as Record<string, unknown>;
+}
+
 function migrationIssue(result: MigrationResult): ValidationIssue {
   if (result.ok) throw new Error("expected a refusal");
   return result.issue;
@@ -117,7 +149,7 @@ describe("runSchemaMigrations", () => {
   });
 
   it("refuses a malformed schemaVersion with the strict validator's own sentence", () => {
-    for (const schemaVersion of [3, "2", "v2.0.0", {}, null, undefined]) {
+    for (const schemaVersion of [4, "2", "v2.0.0", {}, null, undefined]) {
       const input = { ...envelope(), schemaVersion };
       expect(migrationIssue(migrateFabricThemeEnvelope(input))).toEqual(
         strictIssue(input),
@@ -159,8 +191,24 @@ describe("migrateFabricThemeEnvelope", () => {
     }
   });
 
+  it("migrates the legacy integer one major below the current one", () => {
+    const input = {
+      ...legacy2({
+        color: { ref: "palette.board" },
+        media: { assetId: "clip", bounds: "theme" },
+      }),
+      schemaVersion: 2,
+    };
+    const result = migrateFabricThemeEnvelope(input);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected the legacy integer to migrate");
+    expect(result.document["schemaVersion"]).toBe(SUPPORTED_SCHEMA_VERSION);
+    expect(result.fromMajor).toBe(2);
+  });
+
   it("refuses a newer major and a major below the supported floor", () => {
-    const newer = { ...envelope(), schemaVersion: "3.0.0" };
+    const newer = { ...envelope(), schemaVersion: "4.0.0" };
     expect(migrationIssue(migrateFabricThemeEnvelope(newer))).toEqual(
       strictIssue(newer),
     );
@@ -172,6 +220,137 @@ describe("migrateFabricThemeEnvelope", () => {
     expect(migrationIssue(migrateFabricThemeEnvelope(below))).toEqual(
       strictIssue(below),
     );
+  });
+});
+
+describe("the 2 → 3 background migration", () => {
+  it("moves the background paint onto a declared media", () => {
+    const document = migratedDocument(
+      legacy2({
+        color: { ref: "palette.board" },
+        media: { assetId: "clip", bounds: "theme" },
+      }),
+    );
+    const background = backgroundOf(document);
+
+    expect(background).not.toHaveProperty("color");
+    expect(background["media"]).toMatchObject({
+      color: { ref: "palette.board" },
+    });
+    expect(document["schemaVersion"]).toBe("3.0.0");
+  });
+
+  it("prefers fill over color when both painted the media", () => {
+    const document = migratedDocument(
+      legacy2({
+        color: { ref: "palette.board" },
+        fill: { ref: "palette.band" },
+        media: { assetId: "clip", bounds: "theme" },
+      }),
+    );
+    const background = backgroundOf(document);
+
+    expect(background).not.toHaveProperty("color");
+    expect(background).not.toHaveProperty("fill");
+    expect(background["media"]).toMatchObject({
+      color: { ref: "palette.band" },
+    });
+  });
+
+  it("keeps the page paint when no media is declared", () => {
+    const document = migratedDocument(
+      legacy2({
+        color: { ref: "palette.board" },
+        fill: { ref: "palette.band" },
+      }),
+    );
+    const background = backgroundOf(document);
+
+    expect(background["color"]).toEqual({ ref: "palette.board" });
+    expect(background).not.toHaveProperty("fill");
+  });
+
+  it("moves fill onto the page when color is absent", () => {
+    const document = migratedDocument(
+      legacy2({ fill: { ref: "palette.band" } }),
+    );
+
+    expect(backgroundOf(document)["color"]).toEqual({ ref: "palette.band" });
+  });
+
+  it("converts a linear region into an anchored composition", () => {
+    const document = migratedDocument(
+      legacy2({
+        media: {
+          assetId: "clip",
+          bounds: "display",
+          region: {
+            bottom: 0.53,
+            blend: { shape: "linear", edge: "bottom", length: 0.05 },
+          },
+        },
+      }),
+    );
+    const background = backgroundOf(document);
+    const media = background["media"] as Record<string, unknown>;
+
+    expect(media["composition"]).toEqual({
+      anchor: "top",
+      extent: 0.47,
+      fade: 0.05,
+    });
+    expect(media).not.toHaveProperty("region");
+    expect(background["mode"]).toBe("advanced");
+  });
+
+  it("converts opposite insets to a centred composition", () => {
+    const document = migratedDocument(
+      legacy2({
+        media: {
+          assetId: "clip",
+          bounds: "theme",
+          region: { left: 0.2, right: 0.3 },
+        },
+      }),
+    );
+    const media = backgroundOf(document)["media"] as Record<string, unknown>;
+
+    expect(media["composition"]).toMatchObject({ anchor: "center" });
+  });
+
+  it("renames a basic background mode", () => {
+    const document = migratedDocument(
+      legacy2({ mode: "basic", color: { ref: "palette.board" } }),
+    );
+
+    expect(backgroundOf(document)["mode"]).toBe("simple");
+  });
+
+  it("is idempotent on a current document", () => {
+    const current = migratedDocument(
+      legacy2({
+        color: { ref: "palette.board" },
+        media: { assetId: "clip", bounds: "theme" },
+      }),
+    );
+    const result = migrateFabricThemeEnvelope(current);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected the document to migrate");
+    expect(result.document).toEqual(current);
+  });
+
+  it("stamps a 2.1.0 document without changing its background", () => {
+    const input: Record<string, unknown> = {
+      ...envelope(),
+      schemaVersion: "2.1.0",
+    };
+    const result = migrateFabricThemeEnvelope(input);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected the document to stamp");
+    expect(result.document["schemaVersion"]).toBe("3.0.0");
+    expect(result.document["background"]).toEqual(input["background"]);
   });
 });
 
@@ -244,7 +423,8 @@ describe("the shipped migration table", () => {
         "function",
       );
 
-    // The loop is a forward obligation: at 2.0.0 it names no major.
+    // The loop is a forward obligation: it names every major the registry
+    // must bridge before a reader accepts the document.
     expect(accepted).toEqual(
       Array.from(
         {

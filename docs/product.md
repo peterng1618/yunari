@@ -5,7 +5,7 @@ PC reads its own sensors and serves dashboards to paired phones and local
 monitors, and renders dashboards directly to supported USB display panels.
 
 Current release line: pre-release `0.1.0`. Theme documents carry
-`schemaVersion: "2.1.0"`. The npm package is not published yet.
+`schemaVersion: "3.0.0"`. The npm package is not published yet.
 
 ## The three surfaces
 
@@ -141,9 +141,9 @@ grant says; a failed fetch keeps the cached list and no cache kills nothing.
   editor working data, not authored state: it lives in the library folder's
   `background-media.json`, is not exported or imported, and is dropped when the
   theme is deleted.
-- **The previous major is the compatibility floor.** Schema `2.1.0` is current.
-  The reader accepts major `2`; an older document with no migration, or any
-  newer major, is refused rather than guessed at.
+- **The previous major is the compatibility floor.** Schema `3.0.0` is current.
+  The reader accepts major `3`, migrates major `2` upward, and refuses an older
+  document with no migration, or any newer major, rather than guessing.
 - **Data packs are host state.** Installed widget packs and the path-preset
   list live in the host's settings folder, and every surface that offers them
   reads them through the host. A pack adds widgets or shapes; it never adds a

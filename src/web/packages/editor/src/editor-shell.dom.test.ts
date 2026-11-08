@@ -817,7 +817,7 @@ function envelopeWith(
   assets: readonly AssetReference[] = [],
 ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "background-probe",
     artboard: ARTBOARD,
@@ -847,7 +847,7 @@ function legacyTextEnvelope(): NonNullable<
   Parameters<typeof mountEditorShell>[0]["envelope"]
 > {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "legacy-text",
     artboard: ARTBOARD,
@@ -1715,7 +1715,7 @@ describe("editor shell schema versions", () => {
         envelope: documentWithVersion("1.0.0"),
       }),
     ).rejects.toThrow(
-      "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
+      "Schema version 1.0.0 is not supported by this build (expected 3.0.0).",
     );
   });
 
@@ -1724,10 +1724,10 @@ describe("editor shell schema versions", () => {
       mount({
         host: sizedHost(),
         artboard: ARTBOARD,
-        envelope: documentWithVersion("3.0.0"),
+        envelope: documentWithVersion("4.0.0"),
       }),
     ).rejects.toThrow(
-      "This theme was made with a newer version of Yunari (schema 3.0.0).",
+      "This theme was made with a newer version of Yunari (schema 4.0.0).",
     );
   });
 });

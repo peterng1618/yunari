@@ -68,7 +68,7 @@ import { ROLE_TOKENS, withRoleTokens } from "./theme-fixture.js";
  *  `{label: "CPU", family: "system"}` is a stub that answers something the host
  *  never would — the trap A.4a's review found in this file. */
 const LISTED_THEME: FabricThemeEnvelope = {
-  schemaVersion: "2.1.0",
+  schemaVersion: "3.0.0",
   fabricVersion: "7.4.0",
   id: "graphite-desk",
   artboard: { width: 1920, height: 1080 },
@@ -2010,7 +2010,7 @@ test.describe("Fabric editor route", () => {
     await setUncheckedThemePackage(
       page,
       {
-        schemaVersion: "2.1.0",
+        schemaVersion: "3.0.0",
         fabricVersion: "7.4.0",
         id: "literal-bars",
         metadata: { themeLanguage: "en" },
@@ -2035,7 +2035,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "gradient-artboard",
       metadata: { themeLanguage: "en" },
@@ -2733,7 +2733,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "live-text",
       metadata: { themeLanguage: "en" },
@@ -2938,7 +2938,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     const envelope = {
-      schemaVersion: "2.1.0" as const,
+      schemaVersion: "3.0.0" as const,
       fabricVersion: "7.4.0",
       id: "opened",
       metadata: { themeLanguage: "en" },
@@ -3017,7 +3017,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "unnamed",
       metadata: { themeLanguage: "en" },
@@ -3049,7 +3049,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "source",
       metadata: { themeLanguage: "en" },
@@ -3365,7 +3365,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "movable",
       metadata: { themeLanguage: "en" },
@@ -3447,7 +3447,7 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "grouping",
       metadata: { themeLanguage: "en" },
@@ -3893,7 +3893,7 @@ test.describe("Fabric editor route", () => {
     // would pass while any other non-selectable object stayed draggable.
     await page.goto(EDITOR);
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "unselectable",
       metadata: { themeLanguage: "en" },
@@ -4062,7 +4062,7 @@ test.describe("Fabric editor route", () => {
     await setUncheckedThemePackage(
       page,
       {
-        schemaVersion: "2.1.0",
+        schemaVersion: "3.0.0",
         fabricVersion: "7.4.0",
         id: "unrevivable",
         metadata: { themeLanguage: "en" },
@@ -5213,7 +5213,7 @@ test.describe("Fabric editor route", () => {
       originY: "top",
     });
     await setThemePackage(page, {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "reorder",
       metadata: { themeLanguage: "en" },
@@ -5649,7 +5649,7 @@ function groupDimEnvelope(): Parameters<
   typeof writeThemePackage
 >[0]["envelope"] {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "group-dim",
     metadata: { themeLanguage: "en" },

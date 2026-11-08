@@ -36,7 +36,7 @@ const THEME_ID = "e2e-host-move";
 /** One bound clock: the stream asks for a key the host always answers, so
  *  "live" is a reading that moved rather than an open socket with no frames. */
 const envelope = {
-  schemaVersion: "2.1.0" as const,
+  schemaVersion: "3.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E host move", themeLanguage: "en" },

@@ -98,7 +98,7 @@ function skeleton(): HTMLElement {
  */
 function servedEnvelope(): unknown {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "0.0.1",
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
@@ -1023,7 +1023,7 @@ describe("the units a display paints with", () => {
   /** One text object bound to `cpu.clock`, saved as a theme would save it. */
   function unitsEnvelope(): unknown {
     return {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "units",
       artboard: { width: 1920, height: 1080 },
@@ -1128,7 +1128,7 @@ describe("an image reading on the display", () => {
 
   function imageEnvelope(): unknown {
     return {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "images",
       artboard: { width: 1920, height: 1080 },
@@ -1259,7 +1259,7 @@ describe("an image reading on the display", () => {
  *  the point where its chrome is built. */
 function mountedEnvelope(): unknown {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
@@ -1303,7 +1303,7 @@ function painted(
  */
 function lineEnvelope(): unknown {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "living-room",
     artboard: { width: 1920, height: 1080 },
@@ -1344,7 +1344,7 @@ function lineEnvelope(): unknown {
  */
 function textOnlyEnvelope(): unknown {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "text-only",
     artboard: { width: 1920, height: 1080 },
@@ -1957,7 +1957,7 @@ describe("the work one refresh frame does", () => {
     lineKey = "cpu.load.total",
   ): unknown {
     return {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "revisions",
       artboard: { width: 1920, height: 1080 },

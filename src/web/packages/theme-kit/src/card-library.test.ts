@@ -415,7 +415,7 @@ describe("a theme whose vocabulary is not the starter's", () => {
     });
 
     const envelope = {
-      schemaVersion: "2.1.0" as const,
+      schemaVersion: "3.0.0" as const,
       fabricVersion: "7.4.0",
       id: "theme",
       artboard: { width: 1672, height: 941 },

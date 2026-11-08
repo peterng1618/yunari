@@ -4,10 +4,7 @@ import {
   SUPPORTED_SCHEMA_MAJOR,
   SUPPORTED_SCHEMA_VERSION,
 } from "./fabric-envelope.js";
-import {
-  readFabricThemeEnvelope,
-  validateFabricThemeEnvelope,
-} from "./fabric-envelope-validate.js";
+import { validateFabricThemeEnvelope } from "./fabric-envelope-validate.js";
 
 /** The smallest document the strict validator accepts, with the version given. */
 function envelope(schemaVersion: unknown): Record<string, unknown> {
@@ -37,19 +34,19 @@ function firstIssue(result: ReturnType<typeof validateFabricThemeEnvelope>) {
 
 describe("the schema version is semantic", () => {
   it("pins the supported version and derives its major rather than writing it twice", () => {
-    expect(SUPPORTED_SCHEMA_VERSION).toBe("2.1.0");
-    expect(SUPPORTED_SCHEMA_MAJOR).toBe(2);
+    expect(SUPPORTED_SCHEMA_VERSION).toBe("3.0.0");
+    expect(SUPPORTED_SCHEMA_MAJOR).toBe(3);
     expect(parseSchemaMajor(SUPPORTED_SCHEMA_VERSION)).toBe(
       SUPPORTED_SCHEMA_MAJOR,
     );
   });
 
   it("accepts the current version", () => {
-    expect(validateFabricThemeEnvelope(envelope("2.1.0")).ok).toBe(true);
+    expect(validateFabricThemeEnvelope(envelope("3.0.0")).ok).toBe(true);
   });
 
   it("accepts a later minor and patch of the same major", () => {
-    expect(validateFabricThemeEnvelope(envelope("2.4.9")).ok).toBe(true);
+    expect(validateFabricThemeEnvelope(envelope("3.4.9")).ok).toBe(true);
   });
 
   it("refuses the legacy integer, naming the shape it wants", () => {
@@ -60,7 +57,7 @@ describe("the schema version is semantic", () => {
     expect(issue.message).toContain("major.minor.patch");
   });
 
-  it.each(["2", "2.0", "2.0.0.0", "v2.0.0"])(
+  it.each(["3", "3.0", "3.0.0.0", "v3.0.0"])(
     "refuses the malformed version %s",
     (version) => {
       const issue = firstIssue(validateFabricThemeEnvelope(envelope(version)));
@@ -72,9 +69,9 @@ describe("the schema version is semantic", () => {
   );
 
   it("refuses a newer major as newer, comparing numerically", () => {
-    // `"10.0.0" < "2.0.0"` is true as strings, so a lexicographic compare
+    // `"10.0.0" < "3.0.0"` is true as strings, so a lexicographic compare
     // would call a newer document unsupported instead of newer.
-    for (const version of ["3.0.0", "10.0.0"]) {
+    for (const version of ["4.0.0", "10.0.0"]) {
       const issue = firstIssue(validateFabricThemeEnvelope(envelope(version)));
 
       expect(issue.code).toBe("newer-schema-version");
@@ -89,34 +86,7 @@ describe("the schema version is semantic", () => {
     expect(issue.code).toBe("unsupported-schema-version");
     expect(issue.path).toBe("/schemaVersion");
     expect(issue.message).toContain("1.0.0");
-    expect(issue.message).toContain("2.1.0");
-  });
-
-  it("refuses a 2.0.0 document that declares the colour beside its media", () => {
-    // The shape this bump exists for. `2.0.0` is the same major, so the reader
-    // accepts the version and reaches the validator; the old combined
-    // background is what it refuses, at the load boundary a stored theme or a
-    // package crosses.
-    const result = readFabricThemeEnvelope({
-      ...envelope("2.0.0"),
-      globals: {
-        ...(envelope("2.0.0")["globals"] as Record<string, unknown>),
-        palette: {
-          ink: { name: "Ink", value: { kind: "solid", color: "#101216" } },
-        },
-      },
-      assets: [{ id: "clip", kind: "video", path: "assets/clip.mp4" }],
-      background: {
-        color: { ref: "palette.ink" },
-        media: { assetId: "clip", bounds: "theme" },
-      },
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.issues.map((issue) => issue.code)).toContain(
-      "duplicate-background-color",
-    );
+    expect(issue.message).toContain("3.0.0");
   });
 
   it("reads a major numerically, and nothing else", () => {

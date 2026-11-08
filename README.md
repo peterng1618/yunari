@@ -17,7 +17,7 @@ Three processes:
 
 **Pre-release `0.x`.** The current version is `0.1.0`, and the theme format may
 still change before `1.0.0`. A theme document carries
-`schemaVersion: "2.1.0"`.
+`schemaVersion: "3.0.0"`.
 
 Before the first release a format change may break cleanly. **From the first tag
 on, the previous schema major is migrated on open**; a document two or more

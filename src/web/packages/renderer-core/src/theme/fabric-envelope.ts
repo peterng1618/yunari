@@ -17,7 +17,7 @@ import type { ValidationIssue } from "./envelope-semantics.js";
  * About tab reports cannot drift from the version a save writes. It is a
  * semantic version, and the reader compares majors only.
  */
-export const SUPPORTED_SCHEMA_VERSION = "2.1.0";
+export const SUPPORTED_SCHEMA_VERSION = "3.0.0";
 
 /** The major half of {@link SUPPORTED_SCHEMA_VERSION}, derived so it has one home. */
 export const SUPPORTED_SCHEMA_MAJOR: number = Number.parseInt(

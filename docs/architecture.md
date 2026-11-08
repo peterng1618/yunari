@@ -173,9 +173,10 @@ provider or display that falls behind is dropped rather than growing memory.
   bake composites region, colour and mask in the video plane, so a fade never
   rides the coarse overlay; `panel-video-composition.ts` is the one graph both
   the TURZX and the TUR USB encode.
-- Current schema is `2.1.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`; migrations are
-  keyed by the major they migrate from. Missing migration or newer major is a
-  refusal, never a best-effort read.
+- Current schema is `3.0.0`. `MIN_SUPPORTED_SCHEMA_MAJOR` is `2`, so the
+  previous major is the compatibility floor; migrations are keyed by the major
+  they migrate from. Missing migration or newer major is a refusal, never a
+  best-effort read.
 - Artboard maximum is 16384 px per dimension; node depth is 32, node count 5000;
   IDs use `[A-Za-z0-9_-]{1,64}`; asset paths use `assets/…`.
 - A package is a ZIP containing `manifest.json`, `theme.json`, optional
@@ -371,7 +372,7 @@ pack is a host API call in this phase; no import control ships yet.
   posts it once; the local rows are kept until the host accepts them and cleared
   after, so a host that cannot be reached still has the only list that browser
   knows.
-- Packs are not scene state. The theme envelope and its schema (`2.1.0`) are
+- Packs are not scene state. The theme envelope and its schema (`3.0.0`) are
   unchanged, and Fabric JSON in the envelope remains the only persisted scene
   model.
 

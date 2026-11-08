@@ -374,7 +374,7 @@ describe("version requests", () => {
     expect(await own.json()).toEqual({
       version: "1.0.0",
       createdAt: "2026-10-01T00:00:00.000Z",
-      envelope: { schemaVersion: "2.1.0", metadata: {} },
+      envelope: { schemaVersion: "3.0.0", metadata: {} },
       status: "unpublished",
     });
 
@@ -414,9 +414,9 @@ describe("version requests", () => {
     expect(
       ((await baseline.json()) as { envelope: { schemaVersion: string } })
         .envelope.schemaVersion,
-    ).toBe("2.1.0");
+    ).toBe("3.0.0");
 
-    // Renaming the theme is a patch. A raw integer `2` against `"2.1.0"` would
+    // Renaming the theme is a patch. A raw integer `2` against `"3.0.0"` would
     // read as a schema change and publish a false major.
     const response = await createVersion(headers, ITEM_ID, {
       envelope: {

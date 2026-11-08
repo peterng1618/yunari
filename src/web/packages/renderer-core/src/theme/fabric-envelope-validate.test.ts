@@ -38,7 +38,7 @@ const TRIO = {
 
 function envelope(): Record<string, unknown> {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "theme",
     metadata: { themeLanguage: "en" },
@@ -298,7 +298,7 @@ describe("Fabric theme envelope validation", () => {
   it("reports an unknown version alone before interpreting the envelope", () => {
     const result = validateFabricThemeEnvelope({
       ...envelope(),
-      schemaVersion: "3.0.0",
+      schemaVersion: "4.0.0",
       artboard: "wrong",
     });
 

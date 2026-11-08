@@ -29,7 +29,7 @@ function submission(
 function widgetPack(): Uint8Array {
   const written = writeWidgetPackage({
     document: {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "starter",
       metadata: { themeLanguage: "en", name: "Starter Cards" },

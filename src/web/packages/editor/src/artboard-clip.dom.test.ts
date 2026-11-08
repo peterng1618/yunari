@@ -370,7 +370,7 @@ describe("the stage's artboard paint", () => {
     assets: readonly AssetReference[] = [],
   ): NonNullable<Parameters<typeof mountEditorShell>[0]["envelope"]> {
     return {
-      schemaVersion: "2.1.0",
+      schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
       id: "paint-probe",
       artboard: ARTBOARD,

@@ -10,7 +10,7 @@ import {
 } from "./theme-loader.js";
 
 const envelope: FabricThemeEnvelope = {
-  schemaVersion: "2.1.0",
+  schemaVersion: "3.0.0",
   fabricVersion: "7.4.0",
   id: "living-room",
   artboard: { width: 1920, height: 1080 },
@@ -111,7 +111,7 @@ describe("loadHostedTheme", () => {
   it("rejects an invalid hosted envelope", async () => {
     await expect(
       loadHostedTheme("living-room", async () =>
-        Response.json({ ...envelope, schemaVersion: "3.0.0" }),
+        Response.json({ ...envelope, schemaVersion: "4.0.0" }),
       ),
     ).rejects.toThrow("newer version");
   });
@@ -121,7 +121,7 @@ describe("loadHostedTheme", () => {
 
     await expect(
       loadHostedTheme("living-room", async () => Response.json(legacy)),
-    ).resolves.toMatchObject({ schemaVersion: "2.1.0" });
+    ).resolves.toMatchObject({ schemaVersion: "3.0.0" });
   });
 
   it("rejects a document from a schema major it cannot migrate", async () => {
@@ -130,7 +130,7 @@ describe("loadHostedTheme", () => {
         Response.json({ ...envelope, schemaVersion: "1.0.0" }),
       ),
     ).rejects.toThrow(
-      "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
+      "Schema version 1.0.0 is not supported by this build (expected 3.0.0).",
     );
   });
 

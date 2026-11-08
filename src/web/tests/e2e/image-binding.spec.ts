@@ -50,7 +50,7 @@ const LIVE_URL = `/api/themes/${THEME_ID}/assets/live.svg`;
 const ABSOLUTE_URL = "https://evil.example/never.png";
 
 const envelope = {
-  schemaVersion: "2.1.0" as const,
+  schemaVersion: "3.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E image binding", themeLanguage: "en" },

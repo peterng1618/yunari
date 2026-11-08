@@ -228,7 +228,7 @@ test("an unreadable package is refused with the reader's own sentence and leaves
           theme: "theme.json",
         }),
       ),
-      "theme.json": strToU8(JSON.stringify({ schemaVersion: "2.1.0" })),
+      "theme.json": strToU8(JSON.stringify({ schemaVersion: "3.0.0" })),
     }),
   );
   const badEnvelopeReading = readThemePackage(badEnvelope);

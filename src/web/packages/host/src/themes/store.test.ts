@@ -38,7 +38,7 @@ vi.mock("node:crypto", async (importOriginal) => {
 
 function envelopeFor(id: string, name: string): FabricThemeEnvelope {
   return {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id,
     artboard: { width: 1920, height: 1080 },
@@ -275,7 +275,7 @@ describe("ThemeStore", () => {
     );
 
     const read = await store.read("legacy");
-    expect(read?.envelope.schemaVersion).toBe("2.1.0");
+    expect(read?.envelope.schemaVersion).toBe("3.0.0");
     expect(read?.envelope.metadata?.name).toBe("Legacy");
   });
 
@@ -291,7 +291,7 @@ describe("ThemeStore", () => {
     );
 
     await expect(store.read("ancient")).rejects.toThrow(
-      "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
+      "Schema version 1.0.0 is not supported by this build (expected 3.0.0).",
     );
   });
 
@@ -302,12 +302,12 @@ describe("ThemeStore", () => {
       path.join(tmpDir, "future", "theme.json"),
       JSON.stringify({
         ...envelopeFor("future", "Future"),
-        schemaVersion: "3.0.0",
+        schemaVersion: "4.0.0",
       }),
     );
 
     await expect(store.read("future")).rejects.toThrow(
-      "This theme was made with a newer version of Yunari (schema 3.0.0).",
+      "This theme was made with a newer version of Yunari (schema 4.0.0).",
     );
   });
 

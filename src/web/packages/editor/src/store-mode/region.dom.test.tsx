@@ -552,7 +552,7 @@ function clientWithList(
     // crops and nothing to bake.
     open: async (id) => ({
       envelope: {
-        schemaVersion: "2.1.0",
+        schemaVersion: "3.0.0",
         fabricVersion: "7.0.0",
         id,
         artboard: { width: 1920, height: 1080 },

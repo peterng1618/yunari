@@ -70,7 +70,7 @@ test.describe.configure({ timeout: 120_000 });
  * the renderer's missing-reading mark.
  */
 const envelope = {
-  schemaVersion: "2.1.0" as const,
+  schemaVersion: "3.0.0" as const,
   fabricVersion: "7.4.0",
   id: THEME_ID,
   metadata: { name: "E2E custom source", themeLanguage: "en" },

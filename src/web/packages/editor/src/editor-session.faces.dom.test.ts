@@ -86,7 +86,7 @@ const ROLES = {
 } as const;
 
 const envelope: FabricThemeEnvelope = {
-  schemaVersion: "2.1.0",
+  schemaVersion: "3.0.0",
   fabricVersion: "7.4.0",
   id: "theme",
   metadata: { themeLanguage: "en" },

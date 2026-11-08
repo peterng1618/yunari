@@ -10,7 +10,7 @@ import {
 } from "./index.js";
 
 const envelope = {
-  schemaVersion: "2.1.0" as const,
+  schemaVersion: "3.0.0" as const,
   fabricVersion: "7.4.0",
   id: "demo",
   artboard: { width: 400, height: 300 },
@@ -91,7 +91,7 @@ describe("theme package", () => {
 
     expect(read.ok).toBe(true);
     if (!read.ok) return;
-    expect(read.envelope.schemaVersion).toBe("2.1.0");
+    expect(read.envelope.schemaVersion).toBe("3.0.0");
   });
 
   it("refuses a package from a schema major it cannot migrate", () => {
@@ -100,17 +100,17 @@ describe("theme package", () => {
     ).toMatchObject({
       ok: false,
       message:
-        "Schema version 1.0.0 is not supported by this build (expected 2.1.0).",
+        "Schema version 1.0.0 is not supported by this build (expected 3.0.0).",
     });
   });
 
   it("refuses a package from a newer schema major", () => {
     expect(
-      readThemePackage(packageWith({ ...envelope, schemaVersion: "3.0.0" })),
+      readThemePackage(packageWith({ ...envelope, schemaVersion: "4.0.0" })),
     ).toMatchObject({
       ok: false,
       message:
-        "This theme was made with a newer version of Yunari (schema 3.0.0). Update Yunari to open it.",
+        "This theme was made with a newer version of Yunari (schema 4.0.0). Update Yunari to open it.",
     });
   });
 

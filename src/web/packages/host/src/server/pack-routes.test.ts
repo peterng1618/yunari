@@ -24,7 +24,7 @@ import { handlePackRoutes } from "./pack-routes.js";
 
 function widgetPackageBytes(): Uint8Array {
   const document: WidgetDocument = {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "pack-one",
     metadata: { name: "Pack One", version: "1.0.0", themeLanguage: "en" },

@@ -57,7 +57,7 @@ const DRAFT: Draft = {
   name: "Ops board",
   savedAt: SAVED_AT,
   content: {
-    schemaVersion: "2.1.0",
+    schemaVersion: "3.0.0",
     fabricVersion: "7.4.0",
     id: "ops-board",
     artboard: { width: 1920, height: 1080 },

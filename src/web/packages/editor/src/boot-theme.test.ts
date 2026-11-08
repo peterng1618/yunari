@@ -34,7 +34,7 @@ import {
  * the baked-in default and a saved copy of it have the same number of objects,
  * which is exactly how this hid. */
 const SAVED: FabricThemeEnvelope = {
-  schemaVersion: "2.1.0",
+  schemaVersion: "3.0.0",
   fabricVersion: "7.4.0",
   id: "edited-by-hand",
   artboard: { width: 1920, height: 1080 },
