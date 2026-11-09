@@ -1921,10 +1921,9 @@ test.describe("Fabric editor route", () => {
       page.locator('[data-yunari-layer="group-ram-card"]'),
     ).toHaveAttribute("aria-selected", "true");
     // One dense line per layer: the row's own controls, not the old six text
-    // buttons. The pointer rests on the row, so both are drawn — visibility and
-    // lock. It was three until `vg-462` took the rename pen off the row, since
-    // double-clicking the name already opens it for typing.
-    await expect(layer.locator("button")).toHaveCount(2);
+    // buttons. The pointer rests on the row, so all of them are drawn —
+    // rename, visibility and lock.
+    await expect(layer.locator("button")).toHaveCount(3);
     await expect(layer.locator('[aria-label="Hide"]')).toBeVisible();
 
     await captureVisualReview(page, testInfo, "editor-layer-arrange");

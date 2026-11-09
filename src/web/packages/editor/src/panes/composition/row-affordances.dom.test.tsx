@@ -93,8 +93,8 @@ it("shows the row's own controls on the attended row and on a row whose state is
   // control at all — 104 icons reading "visible, unlocked" was the measured
   // defect, and it grows with the row count.
   //
-  // Rename is not a column here and is not a case: there is no pen, so
-  // no control's presence is a row-state decision.
+  // Rename is not a column here and is not a case: the pen answers attention
+  // and nothing else, so no control's presence is a row-state decision.
   const cases: readonly {
     readonly what: string;
     readonly row: LayerRow;
@@ -111,7 +111,11 @@ it("shows the row's own controls on the attended row and on a row whose state is
       what: "the attended row",
       row: row(),
       attended: true,
-      shows: [uiCopy.panels.hide, uiCopy.actions.lock],
+      shows: [
+        `${uiCopy.panels.rename} loose-0`,
+        uiCopy.panels.hide,
+        uiCopy.actions.lock,
+      ],
     },
     {
       what: "a selected row",
@@ -177,7 +181,11 @@ it("reaches visibility and lock from the keyboard, with a name each", async () =
     ...host.querySelectorAll<HTMLButtonElement>(".yunari-layer-state button"),
   ];
   expect(controls.map((control) => control.getAttribute("aria-label"))).toEqual(
-    [uiCopy.panels.hide, uiCopy.actions.lock],
+    [
+      `${uiCopy.panels.rename} loose-0`,
+      uiCopy.panels.hide,
+      uiCopy.actions.lock,
+    ],
   );
   for (const control of controls) {
     expect(
@@ -203,7 +211,11 @@ it("reaches visibility and lock from the keyboard, with a name each", async () =
   expect(
     affordanceLabels(host),
     "focus that stays inside the row does not stand the controls down",
-  ).toEqual([uiCopy.panels.hide, uiCopy.actions.lock]);
+  ).toEqual([
+    `${uiCopy.panels.rename} loose-0`,
+    uiCopy.panels.hide,
+    uiCopy.actions.lock,
+  ]);
 
   // The other half, so the case above is not vacuous: focus that leaves the row
   // entirely does stand them down.
@@ -244,11 +256,11 @@ it("reaches visibility and lock from the keyboard, with a name each", async () =
   host.remove();
 });
 
-it("draws no rename control on an attended row, and the name still opens for typing", async () => {
-  // There is no pen: the name it acted on is the row's own, so a
-  // control beside it would be a second route to what a double-click opens.
-  // The failure mode to guard is the other half — the pointer and keyboard
-  // routes going with it.
+it("draws a rename control on the attended row, and the name still opens for typing", async () => {
+  // The pen says a layer's name can change, which nothing on a row at rest
+  // says. Double-click and F2 still open the field — the pen is the pointer's
+  // discoverable route to the same field, not a second editor — so both are
+  // checked here.
   const host = await renderPane([row()]);
   // In the document, because the case proves where focus lands.
   document.body.append(host);
@@ -257,44 +269,53 @@ it("draws no rename control on an attended row, and the name still opens for typ
   )!;
   await hover(host, "loose-0");
 
-  // Attended, so every control this row draws at all is on screen: none of them
-  // is a rename, and none wears the pen's own name.
-  expect(affordanceLabels(host)).not.toContain(uiCopy.panels.rename);
-  expect(
-    host.querySelector(`[aria-label="${uiCopy.panels.rename} loose-0"]`),
-    "no control opens the field on the author's behalf",
-  ).toBeNull();
-  expect(host.querySelector('[aria-label="Rename loose-0"]')).toBeNull();
-
-  // The name itself is the route: a double-click on the row opens the field.
-  await act(async () =>
-    line.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  const pen = host.querySelector<HTMLButtonElement>(
+    ".yunari-layer-state button[data-yunari-layer-rename]",
   );
+  expect(pen?.getAttribute("aria-label")).toBe(
+    `${uiCopy.panels.rename} loose-0`,
+  );
+  await act(async () => pen?.click());
   expect(
-    host.querySelector<HTMLInputElement>('[aria-label="Rename loose-0"]'),
+    host.querySelector<HTMLInputElement>('input[aria-label="Rename loose-0"]'),
+    "the pen opens the same field the row does",
   ).not.toBeNull();
+  // A press on the pen is not a press on the row.
+  expect(host.querySelector<HTMLElement>('[data-yunari-layer="loose-0"]')).toBe(
+    line,
+  );
 
-  // Escape cancels the draft and returns focus to the row it was renaming, not
+  // Escape cancels that draft and returns focus to the row it was renaming, not
   // to the document body.
   await act(async () =>
     host
-      .querySelector<HTMLInputElement>('[aria-label="Rename loose-0"]')
+      .querySelector<HTMLInputElement>('input[aria-label="Rename loose-0"]')
       ?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
       ),
   );
-  expect(host.querySelector('[aria-label="Rename loose-0"]')).toBeNull();
+  expect(host.querySelector('input[aria-label="Rename loose-0"]')).toBeNull();
   expect(document.activeElement).toBe(line);
+
+  // The row itself is still a route: a double-click on it opens the field even
+  // with no pointer on the pen.
+  await act(async () =>
+    line.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  expect(
+    host.querySelector<HTMLInputElement>('input[aria-label="Rename loose-0"]'),
+  ).not.toBeNull();
   host.remove();
 });
 
-it("draws at most three controls in the state slot, whatever the row's state", async () => {
-  // The ceiling `editor-shell.css`'s reserve is written against: the
-  // two state controls, and the pane's one entry control beside them. The row is
-  // drawn in the one state that shows all three — entered, so the entry control
-  // is up without attention, and selected, hidden and locked, so each state
-  // control says something. A fourth `:has` arm cannot match against this count,
-  // which is why the arm's own case reads the stylesheet rather than a render.
+it("draws at most four controls in the state slot, whatever the row's state", async () => {
+  // The ceiling `editor-shell.css`'s reserve is written against: the rename
+  // pen, the two state controls, and the pane's one entry control beside them.
+  // The row is drawn in the one state that shows all four — attended, so the
+  // pen and both state controls are up, entered, so the entry control is up
+  // without attention, and hidden and locked, so each state control says
+  // something. A fifth `:has` arm cannot match against this count, which is why
+  // the arm's own case reads the stylesheet rather than a render.
   const host = await renderPane(
     [
       row({
@@ -311,11 +332,13 @@ it("draws at most three controls in the state slot, whatever the row's state", a
     ],
     { groupContext: () => ["group-a"] },
   );
+  await hover(host, "group-a");
 
   expect(
     affordanceLabels(host),
     "the state slot draws a control the row's reserve is not written for",
   ).toEqual([
+    `${uiCopy.panels.rename} group-a`,
     `${uiCopy.panels.leave} group-a`,
     uiCopy.panels.show,
     uiCopy.actions.unlock,

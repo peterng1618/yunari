@@ -15,6 +15,7 @@ import {
   ENTER_GLYPH,
   Glyph,
   LEAVE_GLYPH,
+  PENCIL_GLYPH,
   TWISTY_GLYPHS,
 } from "../../editor-shell/icons.js";
 import type { LayerRole, LayerRow } from "../../editor-shell/layer-tree.js";
@@ -495,6 +496,10 @@ export function CompositionPane({
               // repeating it. The stylesheet dims on this rather than on a
               // class, so the state survives the row's own class list changing.
               data-kind={row.kind}
+              // The row being renamed is a field, not a list row: it hides the
+              // columns the field replaces and says so to the stylesheet rather
+              // than leaving the author to guess which of the glyphs is theirs.
+              data-editing={editing === row.id}
               role="treeitem"
               aria-selected={row.selected}
               aria-level={row.depth + 1}
@@ -808,11 +813,30 @@ export function CompositionPane({
                   lock are `RowAffordances`' own, and the pane hands it the
                   attention it computed rather than letting it ask again.
 
-                  There is no rename control: the name the pen acted on is this
-                  row's own, so the field opens from the row itself — a
-                  double-click on it, or F2/Enter from the keyboard
-                 . */}
+                  There is also a rename control, drawn on the row the author is
+                  on: the name the pen acts on is this row's own, so the field
+                  also opens from the row itself — a double-click on it, or
+                  F2/Enter from the keyboard — and the pen is the pointer's way
+                  of finding that out. */}
               <span className="yunari-layer-state">
+                {/* The rename affordance. Double-click and F2 still open the
+                    field — this is the discoverable route, drawn where the
+                    row's other actions already sit so a pointer finds it the
+                    same way. It is absent while the row is a field: the
+                    control would name a state the row is already in. */}
+                {!isBackground && attended && editing !== row.id ? (
+                  <RowIconButton
+                    label={`${uiCopy.panels.rename} ${row.name}`}
+                    data={{ "data-yunari-layer-rename": "" }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      cancelled.current = false;
+                      setEditing(row.id);
+                    }}
+                  >
+                    <Glyph icon={PENCIL_GLYPH} size={13} />
+                  </RowIconButton>
+                ) : null}
                 {showEnter ? (
                   <RowIconButton
                     label={`${entry} ${row.name}`}

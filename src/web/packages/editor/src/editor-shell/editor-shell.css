@@ -2925,7 +2925,7 @@ body,
    key does not take, with every other row holding still. That is the price of
    not taking it from every row in every theme, and it is charged to the one row
    the author is looking at. */
-/* The three arms carry their reasons: the reason is the only
+/* The four arms carry their reasons: the reason is the only
    thing that stops a later pass "correcting" a reservation to a spacing scale step. 36 is
    the slot's own 4px offset from the row's right edge plus its footprint for
    one control — 6px of lead-in, a 26px square, and a 4px gap per further
@@ -2933,12 +2933,12 @@ body,
    a step would move the reserved width and let the slot cover the role again
    The reservation is the row's `padding-right` rather than a margin
    on the key column because the column under the slot is the role on a row
-   whose selection reads nothing. 66 and 96 are the same arithmetic at two and
-   three controls, so the three are one class and not three exceptions. There is
-   no fourth arm: the slot holds at most three buttons — the eye and the lock,
-   and the pane's one entry control beside them — so a `:has(…nth-child(4))` arm
-   could not match. `calc()` states the arithmetic rather than hiding it behind
-   a number. */
+   whose selection reads nothing. 66, 96 and 126 are the same arithmetic at two,
+   three and four controls, so the four are one class and not four exceptions.
+   There is no fifth arm: the slot holds at most four buttons — the rename pen,
+   the eye and the lock, and the pane's one entry control beside them — so a
+   `:has(…nth-child(5))` arm could not match. `calc()` states the arithmetic
+   rather than hiding it behind a number. */
 .yunari-layer-row:has(.yunari-layer-state button) {
   padding-right: calc(4px + 6px + 26px * 1);
 }
@@ -2948,11 +2948,30 @@ body,
 .yunari-layer-row:has(.yunari-layer-state button:nth-child(3)) {
   padding-right: calc(4px + 6px + 26px * 3 + 8px);
 }
+.yunari-layer-row:has(.yunari-layer-state button:nth-child(4)) {
+  padding-right: calc(4px + 6px + 26px * 4 + 12px);
+}
 .yunari-layer-rename {
   flex: 1;
   min-width: 0;
   min-height: var(--layer-rename-min-height);
   margin: 0;
+}
+/* **The row being renamed is a field.** Its other columns are what the field
+   replaces, so they stand down rather than compete with it for the line, and
+   the row keeps the accent so the author sees the row is still the one they
+   chose. The input's own border is accent, not `--edge`: on a list of rows the
+   only box on the row has to read as the active control. */
+.yunari-layer-row[data-editing="true"] {
+  background: color-mix(in srgb, var(--shell-accent) 12%, transparent);
+}
+.yunari-layer-row[data-editing="true"] .yunari-layer-role,
+.yunari-layer-row[data-editing="true"] .yunari-layer-bound,
+.yunari-layer-row[data-editing="true"] .yunari-layer-state {
+  display: none;
+}
+.yunari-layer-row[data-editing="true"] .yunari-layer-rename {
+  border-color: var(--shell-accent);
 }
 .editor-shell-stage {
   min-width: 0;

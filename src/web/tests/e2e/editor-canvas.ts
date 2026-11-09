@@ -170,10 +170,9 @@ export async function objectHandleScenePoint(
  * click rather than a shut tree.
  *
  * `button[aria-expanded]` rather than a label prefix: an attended group row
- * carries four buttons — the twisty, Hide, Lock and the entry control — so
- * `button[aria-label]` is a strict-mode violation, and only the twisty declares
- * expansion at all. (It was five until `vg-462` took the rename pen off the
- * row; the reason the twisty is needed has not changed.)
+ * carries five buttons — the twisty, the rename pen, Hide, Lock and the entry
+ * control — so `button[aria-label]` is a strict-mode violation, and only the
+ * twisty declares expansion at all.
  */
 export async function expandLayer(page: Page, groupId: string): Promise<void> {
   const twisty = page.locator(

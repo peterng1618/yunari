@@ -1662,9 +1662,8 @@ it("shows the state icons on hover, on focus and on selection", async () => {
   await act(async () =>
     row.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })),
   );
-  // The eye and the lock: the whole of what a row at rest withholds. The pen
-  // used to be the third and is gone.
-  expect(icons()).toBe(2);
+  // Rename, the eye and the lock: the whole of what a row at rest withholds.
+  expect(icons()).toBe(3);
 
   await act(async () =>
     row.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })),
@@ -1676,7 +1675,7 @@ it("shows the state icons on hover, on focus and on selection", async () => {
   await act(async () =>
     row.dispatchEvent(new FocusEvent("focusin", { bubbles: true })),
   );
-  expect(icons()).toBe(2);
+  expect(icons()).toBe(3);
 
   await act(async () =>
     row.dispatchEvent(new FocusEvent("focusout", { bubbles: true })),

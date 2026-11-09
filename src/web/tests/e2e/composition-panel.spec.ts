@@ -55,13 +55,13 @@ import { withRoleTokens } from "./theme-fixture.js";
 
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
-/** The layer row's third `:has` arm — the one that reserves room for three
- *  controls, which is the most a row can draw — read from the stylesheet so the
- *  arm's reservation and this spec's expectation stay one fact rather than two
- *  numbers kept in step by hand. **It was the fourth arm until `vg-462` took the
- *  rename pen off the row**; the fourth arm is still in the stylesheet with no
- *  row that can match it, filed rather than deleted because the register's own
- *  recordings cite it. */
+/** The layer row's third `:has` arm — the reservation for three controls. Four
+ *  is the most a row can draw, because the attended row adds the rename pen to
+ *  the entry control, the eye and the lock; the row measured below is selected
+ *  but not attended, so three is what it draws and the third arm is the one its
+ *  room comes from. Read from the stylesheet so the arm's reservation and this
+ *  spec's expectation stay one fact rather than two numbers kept in step by
+ *  hand. */
 const THREE_CONTROL_ARM =
   ".yunari-layer-row:has(.yunari-layer-state button:nth-child(3))";
 
@@ -71,8 +71,7 @@ const LAYER_ROW_PADDING_PX = 4;
 
 /** The slot's own footprint with three controls: 6px of padding, three
  *  26px squares on the spacing rhythm and two 4px gaps — the arm's reservation less the
- *  row's own padding. The four-control figures this replaces were taken while
- *  the rename pen existed, and `vg-260` carries the measurement. */
+ *  row's own padding. */
 const THREE_CONTROL_SLOT_PX =
   rulePx(THREE_CONTROL_ARM, "padding-right") - LAYER_ROW_PADDING_PX;
 
@@ -1460,11 +1459,11 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
   await expect.poll(() => activeId(page)).toBe("inside-2");
   const selectMs = msSince(selectStarted);
 
-  // **The row that draws the whole state slot**, which nothing before Task 2
-  // ever put on a row: the entry control, the eye and the lock — three controls
-  // at the 26px square, and three is the most a row can draw since `vg-462`
-  // took the rename pen off it. The stylesheet asks for the room they need out
-  // of the *bound* column, one `:has` arm per control count.
+  // **The row that draws the whole state slot short of the rename pen**, which
+  // an attended row adds: the entry control, the eye and the lock — three
+  // controls at the 26px square, all of them up on a selected row the pointer is
+  // not on. The stylesheet asks for the room they need out of the *bound*
+  // column, one `:has` arm per control count.
   await selectLayer(page, "group-large");
   await expect.poll(() => activeId(page)).toBe("group-large");
   const groupRow = page.locator('[data-yunari-layer="group-large"]');
@@ -1509,9 +1508,10 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
       // row's cost has (`vg-260` carries the measurement; Task 10's ratchet and
       // Task 12's register own the decision). Asserting that the room stayed
       // whole would assert a defect as a pass condition, which is a red proof
-      // against its own fix. **`vg-462` took 26px of the reservation away and
-      // did not end the overrun**: the four-control figures this replaces are
-      // 122px on a 205px row.
+      // against its own fix. The row measured here is selected but not
+      // attended, so it draws three controls; the attended row adds the rename
+      // pen and takes the fourth arm's 126px, which no row measured here
+      // carries.
       rowWidth: Math.round(row.getBoundingClientRect().width),
       roomKept: Math.round(
         row.getBoundingClientRect().right - bound.getBoundingClientRect().right,

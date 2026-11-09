@@ -563,11 +563,12 @@ describe("the scrollers' scrollbar", () => {
 /** The layer row's reserve: one arm per control the row can draw, and none past
  *  that count.
  *
- *  **The row draws at most three controls, so a fourth arm could not match.**
+ *  **The row draws at most four controls, so a fifth arm could not match.**
  *  `RowAffordances` renders a visibility control and, where the row is attended,
  *  selected or locked, a lock control; `composition-pane.tsx` adds at most one
- *  entry control beside them. There is no rename pen: the caret's job is the
- *  row's own, so `padding-right: 126px` is unreachable.
+ *  entry control beside them, and the rename pen on an attended row. The four
+ *  together are the ceiling, so `padding-right: 126px` is the last reachable
+ *  reservation.
  *
  *  **A dead selector moves no pixel, which is why this reads the text.** Nothing
  *  can redden for a rule that cannot match: every rendered reading of the layer
@@ -586,8 +587,8 @@ describe("the layer row's control reserve", () => {
     expect(
       counts,
       "the arms are not one per control the row draws — the row's ceiling is " +
-        "three (the eye and the lock, and at most one entry control beside them)",
-    ).toEqual(["1", "2", "3"]);
+        "four (the rename pen, the eye and the lock, and at most one entry control beside them)",
+    ).toEqual(["1", "2", "3", "4"]);
   });
 });
 
